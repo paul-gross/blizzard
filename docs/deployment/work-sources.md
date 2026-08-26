@@ -88,18 +88,32 @@ Set `annotate = true` on at most one hub per forge repo: two sweeps against one 
 coordination — only the canonical instance opts in; every dev, staging, or snapshot hub pointed at the repo leaves it
 false.
 
-## Delivery closure (`close`)
+## Delivery closure
 
-`close` (default false) opts a source into the delivery closure sweep: the hub periodically closes every landed,
-non-grouped chunk's still-open work refs through that source's binding — the guarantee half of closing delivered work,
-where a worker's own commit metadata is only an opportunistic hint that may beat the sweep on a fast-forward landing.
-The same `annotation_interval_seconds` paces the closure sweep; there is no second interval knob. Set `close = true` on
-at most one hub per forge repo, for the same uncoordinated-writers race as `annotate`.
+Closure is unconditional per source — there is no per-source `close` flag to set. The transaction that lands a chunk
+(or completes it by hand) enqueues one durable close intent per still-open work ref, through whichever source owns that
+ref; a fixed drain sweep, on its own short interval and independent of `annotation_interval_seconds`, then retires
+every pending intent through that source's binding — the guarantee half of closing delivered work, where a worker's own
+commit metadata is only an opportunistic hint that may beat the drain on a fast-forward landing. Unlike `annotate`,
+closing carries no *multi-writer* canonical constraint: a close is idempotent at the forge, so more than one hub
+pointed at the same repo closing the same item is not a race to coordinate around.
+
+It does carry an instance-level one: `close_forge_writes_enabled` (default `true`) gates whether *this hub* writes to
+any configured source's forge at all. A non-canonical hub — dev, staging, or a restored snapshot — set it `false`;
+the built-in `hub` source is unaffected (it writes no forge, so there is no live item to close in error), but every
+configured `[[work_source]]`'s closer is seated nowhere, and its pending intents stay pending, logged, exactly like an
+intent for a source removed from config (D4 below) — never dropped, never retried against the forge. This is the knob
+`annotate`'s own canonical-instance discipline three paragraphs up has no equivalent for on the closing side: closing
+still needs no per-repo single-writer coordination, but it does need a way for a hub that should never touch a live
+forge to decline writing to one at all — adding a `[[work_source]]` block for label rendering (the next section) would
+otherwise also silently grant close authority.
 
 A stopped chunk that never landed closes nothing; a chunk that landed and was later stopped still closes — landing, not
-chunk status, is what the closure sweep gates on. Closing is best-effort and non-atomic: each ref is attempted
-independently, one failure never blocks another, and a failed attempt retries on the next pass — no bound on how many
-passes a transient forge outage costs, only eventual convergence.
+chunk status, is what the drain gates on. Closing is best-effort and non-atomic: each ref is attempted independently,
+one failure never blocks another, and a failed attempt retries on the next pass — no bound on how many passes a
+transient forge outage costs, only eventual convergence. An intent whose source has since been removed from
+`blizzard-hub.toml` stays pending rather than failing or being dropped; a pending intent with no matching source is the
+operator-visible sign of a source removed too early.
 
 Each ref's outcome (closed, gone, or failed) is recorded as a durable fact and, the first time recorded, one
 chunk-visible event: work-item-closed at info, or work-item-close-failed at warning, the latter covering both a retried
@@ -117,3 +131,16 @@ wheel, before migrate and restart ([install.md](./install.md) owns the sequence)
 Verify after the upgrade by reading a pre-existing chunk's work items (`GET /api/chunks/<id>/work-items`) and confirming
 every entry's `error` is null; a non-null error naming a source means the name does not match the backfilled repo tail —
 fix it, or add a second block under the correct tail, and restart.
+
+## Upgrading past the `close` flag
+
+A hub whose `blizzard-hub.toml` still hand-carries `close = true` (or `close = false`) on any `[[work_source]]` block
+fails to boot on the wheel that removes it, naming the offending source and the key to delete — closure is unconditional
+now, so the flag has nothing left to opt into. Delete every `close` line before restarting on the new wheel; there is no
+migration for this, since it is a config edit, not a schema change.
+
+The migration that ships beside this wheel backfills a close intent for every already-landed or hand-completed work ref
+still carrying no terminal outcome, regardless of whether its source ever set `close = true` — because no deployment
+ever did, this closes the whole accumulated backlog of delivered forge items in one pass on the first drain after
+upgrade. That is the intended repair, not a bug: expect a burst of `work-item-closed` events, one per backlog ref, in
+the minutes after the restart.

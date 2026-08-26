@@ -33,6 +33,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.hub.delivery.hub_node",
     "blizzard.hub.domain.claim",
     "blizzard.hub.domain.apply",
+    "blizzard.hub.domain.work_closure",
 )
 
 

@@ -53,12 +53,13 @@ class WorkSourceEntry:
         users: IReadUserRepository,
         work_item_store: IWriteWorkItemRepository,
         delete: DeleteService,
+        close_forge_writes_enabled: bool = True,
     ) -> WorkSourceRegistry:
         """One credentialed client + binding per configured source, plus the built-in
-        ``hub`` source (issue #357) — always seated, both an editor (blizzard#358) and a
-        closer (issue #360), neither opt-in. A source's ``token_env`` naming an unset
-        variable fails here, at boot. ``users``/``work_item_store``/``delete`` are the
-        composition root's own instances, threaded through rather than rebuilt (#362, #364)."""
+        ``hub`` source (issue #357) — always seated, both an editor and a closer, neither
+        opt-in. ``close_forge_writes_enabled=False`` seats no closer for a *configured*
+        source (never the unaffected `hub` one) — see ``docs/deployment/work-sources.md``.
+        A source's ``token_env`` naming an unset variable fails here, at boot."""
         built: dict[str, IWorkSource] = {}
         annotators: dict[str, IWorkAnnotator] = {}
         closers: dict[str, IWorkCloser] = {}
@@ -68,7 +69,7 @@ class WorkSourceEntry:
             built[config.name] = adapter
             if config.annotate:
                 annotators[config.name] = cast(IWorkAnnotator, adapter)
-            if config.close:
+            if close_forge_writes_enabled:
                 closers[config.name] = cast(IWorkCloser, adapter)
         seat_hub_work_source(
             built, editors, closers, engine=engine, clock=clock, users=users, items=work_item_store, delete=delete

@@ -19,7 +19,6 @@ class WorkSourceSummary(BaseModel):
 
     name: str
     annotate: bool
-    close: bool
     edit: bool
 
 

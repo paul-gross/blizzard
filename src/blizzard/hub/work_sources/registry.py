@@ -49,9 +49,6 @@ class WorkSourceRegistry:
     def closer(self, name: str) -> IWorkCloser | None:
         return self._closers.get(name)
 
-    def closing_names(self) -> list[str]:
-        return list(self._closers.keys())
-
     def editor(self, name: str) -> IWorkEditor | None:
         return self._editors.get(name)
 

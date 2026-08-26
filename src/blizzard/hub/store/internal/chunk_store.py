@@ -31,7 +31,6 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     ChunkStatus,
-    ClosableWorkRef,
     DecisionChoice,
     DecisionFact,
     DecisionRow,
@@ -47,6 +46,7 @@ from blizzard.hub.domain.work import (
     MigrationMode,
     MigrationSource,
     PauseFact,
+    PendingCloseIntent,
     PrOpenedFact,
     QuestionFact,
     QuestionRow,
@@ -69,6 +69,10 @@ _ROUTE_PREFIX = "route"
 # The hub coordinator's own reserved ``transitions.runner_id`` (issue #213) — the only
 # fact-table difference between a ``hub-advanced`` and a ``node-completed`` transition.
 _HUB_RUNNER_ID = "hub"
+
+# The generic ``merged/<repo>`` landing marker (issue #67) — mirrors domain/work.py's own
+# copy (``LandedRepos``'s), which reads it back; each side owns its own constant.
+_MARKER_PREFIX = "merged/"
 
 
 @dataclass(frozen=True)
@@ -810,37 +814,19 @@ class ChunkStore:
             result[WorkRef(source=row.source, ref=row.ref)] = status
         return result
 
-    def closable_work_refs(self) -> list[ClosableWorkRef]:
+    def pending_close_intents(self) -> list[PendingCloseIntent]:
         with self._engine.connect() as conn:
             ephemeral = self._ephemeral_ids(conn)
             rows = conn.execute(
-                select(s.chunk_work_refs.c.chunk_id, s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref)
+                select(s.close_intents.c.chunk_id, s.close_intents.c.source, s.close_intents.c.ref)
+                .where(s.close_intents.c.retired_at.is_(None))
+                .order_by(s.close_intents.c.id)  # D2's explicit total order (`bzh:sql-portable`)
             ).all()
-            terminal = {
-                (r.chunk_id, r.source, r.ref)
-                for r in conn.execute(
-                    select(
-                        s.work_item_closures.c.chunk_id, s.work_item_closures.c.source, s.work_item_closures.c.ref
-                    ).where(
-                        s.work_item_closures.c.outcome.in_(
-                            [WorkItemCloseOutcome.CLOSED.value, WorkItemCloseOutcome.GONE.value]
-                        )
-                    )
-                ).all()
-            }
-        result: list[ClosableWorkRef] = []
-        for row in rows:
-            if row.chunk_id in ephemeral:
-                continue  # grouped away or deleted; the chunk owes nothing
-            if (row.chunk_id, row.source, row.ref) in terminal:
-                continue
-            facts = self.load_facts(row.chunk_id)
-            if facts is None or not (
-                facts.has_landed_repos(self.load_artifacts(row.chunk_id)) or facts.operator_completed
-            ):
-                continue  # landed, or hand-completed by an operator (issue #294) — never chunk status
-            result.append(ClosableWorkRef(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref)))
-        return result
+        return [
+            PendingCloseIntent(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref))
+            for row in rows
+            if row.chunk_id not in ephemeral  # grouped away or deleted since it enqueued; owes nothing
+        ]
 
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
         with self._engine.begin() as conn:
@@ -1656,6 +1642,8 @@ class ChunkStore:
                     )
                 )
             self._insert_proposals(conn, proposals, at=at)
+            if any(row.name.startswith(_MARKER_PREFIX) for row in artifacts):
+                self._enqueue_close_intents(conn, chunk_id, at=at)
 
     @staticmethod
     def _insert_proposals(conn: Connection, proposals: list[WorkItemProposalRow], *, at: datetime) -> None:
@@ -1675,6 +1663,46 @@ class ChunkStore:
                 )
             )
 
+    @staticmethod
+    def _enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> None:
+        """Enqueue one pending close intent per this chunk's still-open work ref (D1,
+        blizzard#383) — called, inside the caller's own transaction, from every write
+        that lands or completes a chunk. A chunk in the ephemeral set enqueues nothing;
+        a ref already carrying a terminal ``work_item_closures`` outcome is skipped; a
+        replayed landing writes nothing new (unique on ``chunk_id, source, ref``)."""
+        if chunk_id in ChunkStore._ephemeral_ids(conn):
+            return
+        refs = conn.execute(
+            select(s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref).where(s.chunk_work_refs.c.chunk_id == chunk_id)
+        ).all()
+        if not refs:
+            return
+        terminal = {
+            (r.source, r.ref)
+            for r in conn.execute(
+                select(s.work_item_closures.c.source, s.work_item_closures.c.ref).where(
+                    (s.work_item_closures.c.chunk_id == chunk_id)
+                    & s.work_item_closures.c.outcome.in_(
+                        [WorkItemCloseOutcome.CLOSED.value, WorkItemCloseOutcome.GONE.value]
+                    )
+                )
+            ).all()
+        }
+        already = {
+            (r.source, r.ref)
+            for r in conn.execute(
+                select(s.close_intents.c.source, s.close_intents.c.ref).where(s.close_intents.c.chunk_id == chunk_id)
+            ).all()
+        }
+        for row in refs:
+            if (row.source, row.ref) in terminal or (row.source, row.ref) in already:
+                continue
+            conn.execute(
+                insert(s.close_intents).values(
+                    chunk_id=chunk_id, source=row.source, ref=row.ref, enqueued_at=at, retired_at=None
+                )
+            )
+
     def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None:
         with self._engine.begin() as conn:
             conn.execute(
@@ -1682,16 +1710,21 @@ class ChunkStore:
                     chunk_id=chunk_id, repo=repo, commit_hash=commit_hash, landed_at=at
                 )
             )
+            self._enqueue_close_intents(conn, chunk_id, at=at)
 
     def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None:
         with self._engine.begin() as conn:
             conn.execute(insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
+            self._enqueue_close_intents(conn, chunk_id, at=at)
 
     def record_work_item_closure(
         self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: datetime
     ) -> bool:
         """Idempotent per ``(chunk_id, source, ref, outcome)`` — mirrors
-        :meth:`record_hub_artifact`'s own already-existed-row contract."""
+        :meth:`record_hub_artifact`'s own already-existed-row contract. A ``closed``/``gone``
+        outcome also retires the matching pending ``close_intents`` row, same transaction,
+        whether or not this call wrote a fresh outcome row — a replay finishes an
+        interrupted retirement. See ``blizzard-context/architecture/crash-correctness/hub.md``."""
         with self._engine.begin() as conn:
             already = conn.execute(
                 select(s.work_item_closures.c.id).where(
@@ -1701,19 +1734,30 @@ class ChunkStore:
                     & (s.work_item_closures.c.outcome == outcome.value)
                 )
             ).first()
-            if already is not None:
-                return False
-            conn.execute(
-                insert(s.work_item_closures).values(
-                    chunk_id=chunk_id,
-                    source=pointer.source,
-                    ref=pointer.ref,
-                    outcome=outcome.value,
-                    reason=reason,
-                    recorded_at=at,
+            wrote = already is None
+            if wrote:
+                conn.execute(
+                    insert(s.work_item_closures).values(
+                        chunk_id=chunk_id,
+                        source=pointer.source,
+                        ref=pointer.ref,
+                        outcome=outcome.value,
+                        reason=reason,
+                        recorded_at=at,
+                    )
                 )
-            )
-            return True
+            if outcome in (WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE):
+                conn.execute(
+                    update(s.close_intents)
+                    .where(
+                        (s.close_intents.c.chunk_id == chunk_id)
+                        & (s.close_intents.c.source == pointer.source)
+                        & (s.close_intents.c.ref == pointer.ref)
+                        & (s.close_intents.c.retired_at.is_(None))
+                    )
+                    .values(retired_at=at)
+                )
+            return wrote
 
     def record_work_item_materialization(
         self,
@@ -1774,6 +1818,7 @@ class ChunkStore:
                     chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
                 )
             )
+            self._enqueue_close_intents(conn, chunk_id, at=at)
             return True
 
     def record_bounce(self, chunk_id: str, *, epoch: int, cause: str, envelope: str, at: datetime) -> bool:
@@ -2024,6 +2069,8 @@ class ChunkStore:
                     )
                 )
             self._insert_proposals(conn, proposals, at=at)
+            if any(row.name.startswith(_MARKER_PREFIX) for row in artifacts):
+                self._enqueue_close_intents(conn, chunk_id, at=at)
 
     def record_decision_resolution(
         self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, struck: Sequence[str] = ()
@@ -2246,6 +2293,8 @@ class ChunkStore:
                     )
                 )
             self._insert_proposals(conn, proposals, at=at)
+            if any(row.name.startswith(_MARKER_PREFIX) for row in artifacts):
+                self._enqueue_close_intents(conn, chunk_id, at=at)
             return resolved_migration_id
 
     @staticmethod
@@ -2350,6 +2399,7 @@ class ChunkStore:
                 .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
                 .values(released_at=at)
             )
+            self._enqueue_close_intents(conn, chunk_id, at=at)
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
 
@@ -2475,6 +2525,8 @@ class ChunkStore:
                     produced_at=at,
                 )
             )
+            if name.startswith(_MARKER_PREFIX):
+                self._enqueue_close_intents(conn, chunk_id, at=at)
             return True
 
     def record_hub_step_transition(
@@ -2547,6 +2599,8 @@ class ChunkStore:
                         chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
                     )
                 )
+            if any(row.name.startswith(_MARKER_PREFIX) for row in artifacts):
+                self._enqueue_close_intents(conn, chunk_id, at=at)
             return True
 
     def record_hub_node_poll(self, chunk_id: str, *, node_id: str, epoch: int, at: datetime) -> None:

@@ -6244,10 +6244,6 @@
             "title": "Annotate",
             "type": "boolean"
           },
-          "close": {
-            "title": "Close",
-            "type": "boolean"
-          },
           "edit": {
             "title": "Edit",
             "type": "boolean"
@@ -6260,7 +6256,6 @@
         "required": [
           "name",
           "annotate",
-          "close",
           "edit"
         ],
         "title": "WorkSourceSummary",

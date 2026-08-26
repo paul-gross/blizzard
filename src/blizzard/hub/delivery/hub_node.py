@@ -65,6 +65,12 @@ _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE = crashpoint(
     "hubnode.after-poll.before-slot-release",
     "the poll-attempt fact is durable; the fleet-wide slot is not yet released",
 )
+# The close-intent outbox's first window — fires right after a landing marker and its
+# enqueued intents are both durable (same transaction), before any drain has run.
+_CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN = crashpoint(
+    "close.after-enqueue.before-drain", "a landing marker and its close intents are durable; no drain has run yet"
+)
+_MARKER_PREFIX = "merged/"
 
 
 @dataclass(frozen=True)
@@ -414,6 +420,8 @@ class HubNodeExecutor:
                         at=self._clock.now(),
                     )
                 _CP_HUBNODE_AFTER_MARKER_BEFORE_NEXT.reached()
+                if step.produces and step.produces.startswith(_MARKER_PREFIX):
+                    _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN.reached()
                 if printed:
                     chosen = printed
                     break
