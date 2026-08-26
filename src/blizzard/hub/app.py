@@ -75,9 +75,8 @@ EVENT_DERIVATION_INTERVAL_SECONDS = 30
 #: sharing the work-source-gated ``annotation_interval_seconds``.
 WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS = 30
 
-#: The close-intent drain sweep's own interval (blizzard#383 D3) — unconditional, like
-#: its two siblings above: the enqueue is source-agnostic, so the drain runs whether or
-#: not any source is close-capable today.
+#: The close-intent drain sweep's own interval — unconditional like its two siblings
+#: above, so it runs whether or not any source is close-capable today.
 CLOSE_DRAIN_INTERVAL_SECONDS = 30
 
 
@@ -234,7 +233,13 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         chunks=ChunkStore(engine, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
     )
     work_source_registry = WorkSourceEntry.registry(
-        config.work_sources, engine, clock, users=user_store, work_item_store=work_item_store, delete=delete_service
+        config.work_sources,
+        engine,
+        clock,
+        users=user_store,
+        work_item_store=work_item_store,
+        delete=delete_service,
+        close_forge_writes_enabled=config.close_forge_writes_enabled,
     )
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 

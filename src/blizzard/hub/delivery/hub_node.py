@@ -65,10 +65,8 @@ _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE = crashpoint(
     "hubnode.after-poll.before-slot-release",
     "the poll-attempt fact is durable; the fleet-wide slot is not yet released",
 )
-# The close-intent outbox's own family (blizzard#383) — its first window. The enqueue
-# rides the same transaction as the `merged/<repo>` marker just above, so it has no
-# window of its own; this fires only on a landing marker, right after both are durable
-# and before any drain has run.
+# The close-intent outbox's first window — fires right after a landing marker and its
+# enqueued intents are both durable (same transaction), before any drain has run.
 _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN = crashpoint(
     "close.after-enqueue.before-drain", "a landing marker and its close intents are durable; no drain has run yet"
 )

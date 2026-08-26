@@ -818,29 +818,15 @@ class ChunkStore:
         with self._engine.connect() as conn:
             ephemeral = self._ephemeral_ids(conn)
             rows = conn.execute(
-                select(s.close_intents.c.chunk_id, s.close_intents.c.source, s.close_intents.c.ref).where(
-                    s.close_intents.c.retired_at.is_(None)
-                )
+                select(s.close_intents.c.chunk_id, s.close_intents.c.source, s.close_intents.c.ref)
+                .where(s.close_intents.c.retired_at.is_(None))
+                .order_by(s.close_intents.c.id)  # D2's explicit total order (`bzh:sql-portable`)
             ).all()
         return [
             PendingCloseIntent(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref))
             for row in rows
             if row.chunk_id not in ephemeral  # grouped away or deleted since it enqueued; owes nothing
         ]
-
-    def retire_close_intent(self, chunk_id: str, *, pointer: WorkRef, at: datetime) -> bool:
-        with self._engine.begin() as conn:
-            result = conn.execute(
-                update(s.close_intents)
-                .where(
-                    (s.close_intents.c.chunk_id == chunk_id)
-                    & (s.close_intents.c.source == pointer.source)
-                    & (s.close_intents.c.ref == pointer.ref)
-                    & (s.close_intents.c.retired_at.is_(None))
-                )
-                .values(retired_at=at)
-            )
-            return result.rowcount > 0
 
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
         with self._engine.begin() as conn:
@@ -1735,7 +1721,10 @@ class ChunkStore:
         self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: datetime
     ) -> bool:
         """Idempotent per ``(chunk_id, source, ref, outcome)`` — mirrors
-        :meth:`record_hub_artifact`'s own already-existed-row contract."""
+        :meth:`record_hub_artifact`'s own already-existed-row contract. A ``closed``/``gone``
+        outcome also retires the matching pending ``close_intents`` row, same transaction,
+        whether or not this call wrote a fresh outcome row — a replay finishes an
+        interrupted retirement. See ``blizzard-context/architecture/crash-correctness/hub.md``."""
         with self._engine.begin() as conn:
             already = conn.execute(
                 select(s.work_item_closures.c.id).where(
@@ -1745,19 +1734,30 @@ class ChunkStore:
                     & (s.work_item_closures.c.outcome == outcome.value)
                 )
             ).first()
-            if already is not None:
-                return False
-            conn.execute(
-                insert(s.work_item_closures).values(
-                    chunk_id=chunk_id,
-                    source=pointer.source,
-                    ref=pointer.ref,
-                    outcome=outcome.value,
-                    reason=reason,
-                    recorded_at=at,
+            wrote = already is None
+            if wrote:
+                conn.execute(
+                    insert(s.work_item_closures).values(
+                        chunk_id=chunk_id,
+                        source=pointer.source,
+                        ref=pointer.ref,
+                        outcome=outcome.value,
+                        reason=reason,
+                        recorded_at=at,
+                    )
                 )
-            )
-            return True
+            if outcome in (WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE):
+                conn.execute(
+                    update(s.close_intents)
+                    .where(
+                        (s.close_intents.c.chunk_id == chunk_id)
+                        & (s.close_intents.c.source == pointer.source)
+                        & (s.close_intents.c.ref == pointer.ref)
+                        & (s.close_intents.c.retired_at.is_(None))
+                    )
+                    .values(retired_at=at)
+                )
+            return wrote
 
     def record_work_item_materialization(
         self,

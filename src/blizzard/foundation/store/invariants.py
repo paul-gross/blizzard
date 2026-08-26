@@ -481,6 +481,63 @@ class NoPendingIntentAgainstATerminalRef(QueryCheck):
         return violations
 
 
+class NoUnenqueuedClosableRef(QueryCheck):
+    """A non-ephemeral chunk that has landed or been hand-completed owes a ``close_intents``
+    row for every still-open ``chunk_work_refs`` ref (D1, blizzard#383) — the nine
+    call-site-guarded ``_enqueue_close_intents`` invocations' own derived invariant. A terminal
+    outcome or any ``close_intents`` row (retired or not) satisfies it; neither is a missed call."""
+
+    def run(self) -> list[Violation]:
+        violations: list[Violation] = []
+        ephemeral = {row[0] for row in self.conn.execute(select(hub.chunk_grouped.c.chunk_id))} | {
+            row[0] for row in self.conn.execute(select(hub.chunk_deleted.c.chunk_id))
+        }
+        landed = (
+            {row[0] for row in self.conn.execute(select(hub.delivery_landed.c.chunk_id))}
+            | {row[0] for row in self.conn.execute(select(hub.delivery_repo_landed.c.chunk_id))}
+            | {
+                row[0]
+                for row in self.conn.execute(
+                    select(hub.artifacts.c.chunk_id).where(hub.artifacts.c.name.like("merged/%"))
+                )
+            }
+        )
+        completed = {row[0] for row in self.conn.execute(select(hub.chunk_completed.c.chunk_id))}
+        eligible = (landed | completed) - ephemeral
+        if not eligible:
+            return violations
+        terminal = {
+            (row.chunk_id, row.source, row.ref)
+            for row in self.conn.execute(
+                select(
+                    hub.work_item_closures.c.chunk_id, hub.work_item_closures.c.source, hub.work_item_closures.c.ref
+                ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone"]))
+            )
+        }
+        enqueued = {
+            (row.chunk_id, row.source, row.ref)
+            for row in self.conn.execute(
+                select(hub.close_intents.c.chunk_id, hub.close_intents.c.source, hub.close_intents.c.ref)
+            )
+        }
+        for row in self.conn.execute(
+            select(hub.chunk_work_refs.c.chunk_id, hub.chunk_work_refs.c.source, hub.chunk_work_refs.c.ref).where(
+                hub.chunk_work_refs.c.chunk_id.in_(list(eligible))
+            )
+        ):
+            key = (row.chunk_id, row.source, row.ref)
+            if key in terminal or key in enqueued:
+                continue
+            violations.append(
+                Violation(
+                    "hub:no-unenqueued-closable-ref",
+                    f"chunk {row.chunk_id} ref {row.source}#{row.ref} is landed or completed but has "
+                    "no close_intents row and no terminal closure outcome",
+                )
+            )
+        return violations
+
+
 class OneLiveExecSlot(QueryCheck):
     """At most one hub_exec_slot row is live (``released_at IS NULL``) at a time (#65;
     pinned by tests/test_pin_foundation.py)."""
@@ -670,6 +727,7 @@ class HubInvariants:
                 OneLiveExecSlot(conn),
                 NoDoubleTerminalClosure(conn),
                 NoPendingIntentAgainstATerminalRef(conn),
+                NoUnenqueuedClosableRef(conn),
             )
             for check in checks:
                 violations.extend(check.run())

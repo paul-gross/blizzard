@@ -1,5 +1,5 @@
 """The close-intent outbox's drain (blizzard#383). ``ChunkStore.pending_close_intents()``/
-``retire_close_intent()`` are exercised against a real, migrated store. The enqueue side
+``record_work_item_closure()`` are exercised against a real, migrated store. The enqueue side
 (landing/completion, D1) is covered by ``tests/test_close_intents_enqueue.py``; this file
 covers the drain that retires what the enqueue queued."""
 
@@ -51,46 +51,77 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     )
 
 
-# ChunkStore.retire_close_intent() — the idempotent-bool contract
+# ChunkStore.record_work_item_closure() — retires its matching intent in the same
+# transaction (blizzard#383, F8/F9) whenever the outcome is closed/gone.
 
 
 @pytest.mark.component
-def test_retire_close_intent_returns_true_on_the_first_write(tmp_path: Path) -> None:
+def test_record_work_item_closure_retires_the_matching_pending_intent(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
 
-    retired = _writable(hub).retire_close_intent(
-        chunk_id, pointer=WorkRef(source="default", ref="1"), at=hub.clock.now()
+    wrote = _writable(hub).record_work_item_closure(
+        chunk_id,
+        pointer=WorkRef(source="default", ref="1"),
+        outcome=WorkItemCloseOutcome.CLOSED,
+        reason=None,
+        at=hub.clock.now(),
     )
 
-    assert retired is True
+    assert wrote is True
     assert hub.services.chunks.pending_close_intents() == []
 
 
 @pytest.mark.component
-def test_retire_close_intent_is_idempotent(tmp_path: Path) -> None:
+def test_record_work_item_closure_replay_still_retires_an_interrupted_intent(tmp_path: Path) -> None:
+    """The crash-recovery case (F9): the outcome was already recorded on a prior pass — the
+    crash landed before retirement — and a replay finishes the retirement even though it
+    writes no fresh outcome row."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    _land(hub, chunk_id)
+    pointer = WorkRef(source="default", ref="1")
+    _writable(hub).record_work_item_closure(
+        chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
+    )
+
+    wrote = _writable(hub).record_work_item_closure(
+        chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
+    )
+
+    assert wrote is False  # no fresh outcome row — this is a replay
+    assert hub.services.chunks.pending_close_intents() == []  # retirement still finished
+
+
+@pytest.mark.component
+def test_record_work_item_closure_against_a_never_enqueued_ref_writes_no_intent_row(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    wrote = _writable(hub).record_work_item_closure(
+        "ch_nonexistent",
+        pointer=WorkRef(source="default", ref="1"),
+        outcome=WorkItemCloseOutcome.CLOSED,
+        reason=None,
+        at=hub.clock.now(),
+    )
+
+    assert wrote is True  # the outcome fact itself is unconditional
+    assert hub.services.chunks.pending_close_intents() == []
+
+
+@pytest.mark.component
+def test_record_work_item_closure_failed_outcome_leaves_the_intent_pending(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
     pointer = WorkRef(source="default", ref="1")
 
-    first = _writable(hub).retire_close_intent(chunk_id, pointer=pointer, at=hub.clock.now())
-    second = _writable(hub).retire_close_intent(chunk_id, pointer=pointer, at=hub.clock.now())
-
-    assert first is True
-    assert second is False
-
-
-@pytest.mark.component
-def test_retire_close_intent_against_a_never_enqueued_ref_is_a_no_op(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-
-    retired = _writable(hub).retire_close_intent(
-        "ch_nonexistent", pointer=WorkRef(source="default", ref="1"), at=hub.clock.now()
+    _writable(hub).record_work_item_closure(
+        chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.FAILED, reason="boom", at=hub.clock.now()
     )
 
-    assert retired is False
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.pending_close_intents()
 
 
 # CloseIntentDrainer.sweep() — fakes (unit tier)
@@ -106,10 +137,9 @@ class _RecordedEvent:
 
 
 class _FakeCloseChunks:
-    """The minimal slice of :class:`IWriteChunkRepository` :class:`CloseIntentDrainer`
-    calls — ``pending_close_intents`` returns a fixed candidate list;
-    ``record_work_item_closure``/``retire_close_intent``/``record_event`` are recorded
-    rather than persisted."""
+    """The minimal slice of :class:`IWriteChunkRepository` :class:`CloseIntentDrainer` calls.
+    ``record_work_item_closure`` also retires the matching intent — recorded rather than
+    persisted, matching the real store's own folded transaction."""
 
     def __init__(self, candidates: list[PendingCloseIntent]) -> None:
         self._candidates = candidates
@@ -124,15 +154,13 @@ class _FakeCloseChunks:
     def record_work_item_closure(
         self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: object
     ) -> bool:
+        if outcome in (WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE):
+            self.retired.append((chunk_id, pointer))
         key = (chunk_id, pointer.source, pointer.ref, outcome.value)
         if key in self._written:
             return False
         self._written.add(key)
         self.closures.append((chunk_id, pointer, outcome, reason))
-        return True
-
-    def retire_close_intent(self, chunk_id: str, *, pointer: WorkRef, at: object) -> bool:
-        self.retired.append((chunk_id, pointer))
         return True
 
     def record_event(

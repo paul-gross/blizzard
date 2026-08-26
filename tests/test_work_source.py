@@ -607,8 +607,8 @@ def test_registry_closer_returns_the_bound_closer() -> None:
     assert registry.closer("widget") is widget
 
 
-# The factory's unconditional wiring (blizzard#383): a closer is built for every
-# configured source, alongside the always-seated `hub` source (issue #360).
+# The factory's unconditional wiring: a closer is built for every configured source
+# while `close_forge_writes_enabled` is true, alongside the always-seated `hub` source.
 
 
 def test_factory_builds_a_closer_for_every_configured_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -635,6 +635,49 @@ def test_factory_seats_the_hub_closer_with_zero_configured_sources(tmp_path: Pat
     work_item_store, delete = _work_deps(engine)
     registry = WorkSourceEntry.registry(
         [], engine, _clock(), users=_users(engine), work_item_store=work_item_store, delete=delete
+    )
+
+    closer = registry.closer("hub")
+
+    assert closer is not None
+    assert closer is registry.get("hub")
+
+
+# `close_forge_writes_enabled=False`: a non-canonical hub declines every configured
+# source's forge writes — never the built-in `hub` source's, which writes no forge.
+
+
+def test_factory_seats_no_configured_closer_when_forge_writes_are_disabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("_TEST_TOKEN_DECLINE", "token")
+    engine = _engine(tmp_path)
+    work_item_store, delete = _work_deps(engine)
+    registry = WorkSourceEntry.registry(
+        [WorkSourceConfig(name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_DECLINE")],
+        engine,
+        _clock(),
+        users=_users(engine),
+        work_item_store=work_item_store,
+        delete=delete,
+        close_forge_writes_enabled=False,
+    )
+
+    assert registry.closer("widget") is None
+    assert registry.get("widget") is not None  # the read-only source is still built
+
+
+def test_factory_seats_the_hub_closer_even_when_forge_writes_are_disabled(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    work_item_store, delete = _work_deps(engine)
+    registry = WorkSourceEntry.registry(
+        [],
+        engine,
+        _clock(),
+        users=_users(engine),
+        work_item_store=work_item_store,
+        delete=delete,
+        close_forge_writes_enabled=False,
     )
 
     closer = registry.closer("hub")

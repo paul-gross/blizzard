@@ -764,3 +764,110 @@ def test_a_pending_intent_against_a_non_terminal_ref_is_not_a_violation(tmp_path
         )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:no-pending-intent-against-terminal-ref" not in slugs
+
+
+def test_a_landed_refs_pending_close_intent_is_not_a_violation(tmp_path: Path) -> None:
+    """The legal history: ``_enqueue_close_intents`` fired for the landed chunk's still-open
+    ref, so it carries a ``close_intents`` row (blizzard#383)."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
+        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+        )
+        conn.execute(
+            insert(hub.close_intents).values(
+                chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None
+            )
+        )
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-unenqueued-closable-ref" not in slugs
+
+
+def test_a_landed_refs_retired_close_intent_is_not_a_violation(tmp_path: Path) -> None:
+    """A retired intent still proves the enqueue fired once; only a ref with no
+    ``close_intents`` row at all is the violation."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
+        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+        )
+        conn.execute(
+            insert(hub.close_intents).values(
+                chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=_NOW
+            )
+        )
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-unenqueued-closable-ref" not in slugs
+
+
+def test_a_landed_ref_already_terminal_with_no_intent_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
+        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+        )
+        conn.execute(
+            insert(hub.work_item_closures).values(
+                chunk_id="ch_1", source="default", ref="1", outcome="closed", reason=None, recorded_at=_NOW
+            )
+        )
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-unenqueued-closable-ref" not in slugs
+
+
+def test_a_non_landed_refs_missing_intent_is_not_a_violation(tmp_path: Path) -> None:
+    """A ref on a chunk that has neither landed nor been hand-completed owes no intent yet."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
+        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-unenqueued-closable-ref" not in slugs
+
+
+def test_a_landed_ref_with_no_close_intent_and_no_terminal_outcome_is_a_violation(tmp_path: Path) -> None:
+    """The exact bug this check exists to catch: a landing fact written directly to the
+    store, bypassing ``ChunkStore._enqueue_close_intents`` — simulating a future landing-fact
+    writer that forgot the call (blizzard#383, F3)."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
+        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+        )
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-unenqueued-closable-ref" in slugs
+
+
+def test_a_hand_completed_refs_missing_intent_is_a_violation(tmp_path: Path) -> None:
+    """The completion path owes the same coverage as landing does."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
+        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
+        conn.execute(insert(hub.chunk_completed).values(chunk_id="ch_1", completed_at=_NOW, completed_by="test"))
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-unenqueued-closable-ref" in slugs
+
+
+def test_a_grouped_chunks_missing_intent_is_not_a_violation(tmp_path: Path) -> None:
+    """An ephemeral (grouped-away) chunk enqueues nothing by design (issue #364); it owes
+    no coverage either."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_2", graph_id="gr_triage", minted_at=_NOW, model="m"))
+        conn.execute(insert(hub.chunk_work_refs).values(chunk_id="ch_1", source="default", ref="1"))
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
+        )
+        conn.execute(insert(hub.chunk_grouped).values(chunk_id="ch_1", grouped_into="ch_2", grouped_at=_NOW))
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-unenqueued-closable-ref" not in slugs

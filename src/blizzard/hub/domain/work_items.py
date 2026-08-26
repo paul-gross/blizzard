@@ -218,9 +218,10 @@ class WorkItemEditService:
         )
 
     def deliver(self, item: WorkItemRecord) -> WorkItemRecord:
-        """Close ``item`` as delivered (issue #360) — the delivery-closure sweep's own
-        write path. No business rule beyond the store's own idempotency guard: a live
-        chunk holding the pointer is the expected caller, not a conflict to block."""
+        """Close ``item`` as delivered (issue #360) — the close-intent drainer's own
+        write path (blizzard#383). No business rule beyond the store's own idempotency
+        guard: a live chunk holding the pointer is the expected caller, not a conflict
+        to block."""
         return self._items.close(item.source, item.ref, closure=WorkItemClosure.DELIVERED, at=self._clock.now())
 
     def _require_open(self, item: WorkItemRecord) -> None:

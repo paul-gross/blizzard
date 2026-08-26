@@ -1007,6 +1007,46 @@ def test_follow_latest_non_boolean_raises(tmp_path: Path, value: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# `close_forge_writes_enabled` — the instance-level forge-write posture for closing.
+
+
+@pytest.mark.unit
+def test_close_forge_writes_enabled_defaults_to_true(tmp_path: Path) -> None:
+    assert _hub_config(tmp_path).close_forge_writes_enabled is True
+
+
+@pytest.mark.unit
+def test_close_forge_writes_enabled_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    config = _hub_config(tmp_path)
+    config.config_path.write_text(config.to_toml())
+    loaded = HubConfig.load(config.root)
+    assert loaded.close_forge_writes_enabled is True
+
+    edited = dataclasses.replace(loaded, close_forge_writes_enabled=False)
+    edited.config_path.write_text(edited.to_toml())
+    reloaded = HubConfig.load(edited.root)
+    assert reloaded.close_forge_writes_enabled is False
+
+
+@pytest.mark.unit
+def test_close_forge_writes_enabled_absent_from_toml_defaults_to_true(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
+    assert HubConfig.load(root).close_forge_writes_enabled is True
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ['"true"', '"yes"', "1", "[]"])
+def test_close_forge_writes_enabled_non_boolean_raises(tmp_path: Path, value: str) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///x"\nclose_forge_writes_enabled = {value}\n')
+    with pytest.raises(HubConfigError, match="close_forge_writes_enabled"):
+        HubConfig.load(root)
+
+
+# --------------------------------------------------------------------------- #
 # `BZ_HUB_DB_URL` / `BZ_HUB_HOST` / `BZ_HUB_PORT` — load-time env overrides (issue #187).
 
 

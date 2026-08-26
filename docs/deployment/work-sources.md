@@ -90,13 +90,23 @@ false.
 
 ## Delivery closure
 
-Closure is unconditional (blizzard#383) — there is no `close` flag to set. The transaction that lands a chunk (or
-completes it by hand) enqueues one durable close intent per still-open work ref, through whichever source owns that ref;
-a fixed drain sweep, on its own 30-second interval and independent of `annotation_interval_seconds`, then retires every
-pending intent through that source's binding — the guarantee half of closing delivered work, where a worker's own commit
-metadata is only an opportunistic hint that may beat the drain on a fast-forward landing. Unlike `annotate`, closing
-carries no canonical-writer constraint: a close is idempotent at the forge, so more than one hub pointed at the same
-repo closing the same item is not a race to coordinate around.
+Closure is unconditional per source — there is no per-source `close` flag to set. The transaction that lands a chunk
+(or completes it by hand) enqueues one durable close intent per still-open work ref, through whichever source owns that
+ref; a fixed drain sweep, on its own short interval and independent of `annotation_interval_seconds`, then retires
+every pending intent through that source's binding — the guarantee half of closing delivered work, where a worker's own
+commit metadata is only an opportunistic hint that may beat the drain on a fast-forward landing. Unlike `annotate`,
+closing carries no *multi-writer* canonical constraint: a close is idempotent at the forge, so more than one hub
+pointed at the same repo closing the same item is not a race to coordinate around.
+
+It does carry an instance-level one: `close_forge_writes_enabled` (default `true`) gates whether *this hub* writes to
+any configured source's forge at all. A non-canonical hub — dev, staging, or a restored snapshot — set it `false`;
+the built-in `hub` source is unaffected (it writes no forge, so there is no live item to close in error), but every
+configured `[[work_source]]`'s closer is seated nowhere, and its pending intents stay pending, logged, exactly like an
+intent for a source removed from config (D4 below) — never dropped, never retried against the forge. This is the knob
+`annotate`'s own canonical-instance discipline three paragraphs up has no equivalent for on the closing side: closing
+still needs no per-repo single-writer coordination, but it does need a way for a hub that should never touch a live
+forge to decline writing to one at all — adding a `[[work_source]]` block for label rendering (the next section) would
+otherwise also silently grant close authority.
 
 A stopped chunk that never landed closes nothing; a chunk that landed and was later stopped still closes — landing, not
 chunk status, is what the drain gates on. Closing is best-effort and non-atomic: each ref is attempted independently,

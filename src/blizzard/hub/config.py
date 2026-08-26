@@ -386,6 +386,10 @@ class HubConfig:
     follow_latest: bool = False
     #: Forge-status sweep cadence in seconds (issue #179); consulted only when a source annotates.
     annotation_interval_seconds: int = 120
+    #: Instance-level forge-write posture for closing (blizzard#383) — false declines every
+    #: configured source's closer (never the built-in hub source's, which writes no forge)
+    #: so a non-canonical hub can't close real items; true (the default) is unconditional.
+    close_forge_writes_enabled: bool = True
     auth: AuthConfig = field(default_factory=AuthConfig)
     #: Transcript ingest cap overrides (blizzard#338); every field None = the domain defaults.
     transcripts: TranscriptCapsConfig = field(default_factory=TranscriptCapsConfig)
@@ -465,6 +469,11 @@ class HubConfig:
             "# least one [[work_source]] below sets annotate = true; a hub with none starts\n"
             "# no sweep loop regardless of this value.\n",
             f"annotation_interval_seconds = {self.annotation_interval_seconds}\n",
+            "\n# Forge-write posture for closing delivered work items (blizzard#383). true (the\n"
+            "# default) closes through every configured [[work_source]]; set false on a\n"
+            "# non-canonical hub — dev, staging, or a restored snapshot — so it never writes to\n"
+            "# a live forge repo. The built-in hub source is unaffected: it writes no forge.\n",
+            f"close_forge_writes_enabled = {str(self.close_forge_writes_enabled).lower()}\n",
             "\n# Reverse-proxy trust set (issue #130): proxy IPs/CIDRs whose forwarded\n"
             "# X-Forwarded-Proto/-For headers are honored (cookie Secure flag, login-throttle\n"
             "# key, auth-fact actor IP). Empty = ignore those headers from every peer.\n",
@@ -540,6 +549,9 @@ class HubConfig:
             # Validated rather than coerced: `follow_latest = "true"` is a plausible typo,
             # and truthy-coercing it would silently arm a fleet-wide migration policy.
             raise ConfigError(f"follow_latest must be a boolean, got {follow_latest!r}")
+        close_forge_writes_enabled = raw.get("close_forge_writes_enabled", True)
+        if not isinstance(close_forge_writes_enabled, bool):
+            raise ConfigError(f"close_forge_writes_enabled must be a boolean, got {close_forge_writes_enabled!r}")
         if RENAMED_WORK_SOURCE_KEY in raw:
             raise ConfigError(
                 f"[[{RENAMED_WORK_SOURCE_KEY}]] is now [[work_source]] — rename the block(s) in "
@@ -562,6 +574,7 @@ class HubConfig:
             produces_mode=produces_mode,
             follow_latest=follow_latest,
             annotation_interval_seconds=int(raw.get("annotation_interval_seconds", 120)),
+            close_forge_writes_enabled=close_forge_writes_enabled,
             auth=AuthConfig.of(raw.get("auth", {})),
             transcripts=TranscriptCapsConfig.of(raw.get("transcripts", {})),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),

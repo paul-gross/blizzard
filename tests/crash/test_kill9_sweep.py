@@ -2477,12 +2477,10 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
 
 
 def _close_intent_graph_yaml() -> str:
-    """Named ``default-delivery`` so ``ensure_default`` (the hub work source's own mint
-    path) resolves to it. A trivial no-op ``build`` (executor: runner, mock-harness
-    ``verdict()`` judged — no real agent turn) hands off to ``land``, a hub node whose
-    ``run:`` step marks ``merged/<repo>`` with no git or forge involved and routes
-    straight to ``done`` — the runner must claim ``build`` at least once before it holds
-    and polls a hub node (#65), so both ``close.*`` windows only open after that handoff."""
+    """Named ``default-delivery`` so ``ensure_default`` resolves to it. A no-op ``build``
+    hands off to ``land``, a hub node whose ``run:`` step marks ``merged/<repo>`` with no
+    git or forge involved and routes straight to ``done`` — the runner must claim ``build``
+    once before it holds a hub node (#65), so both ``close.*`` windows open only after that."""
     import yaml
 
     graph = {
@@ -2552,9 +2550,8 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
 
-    # Both close.* windows fire inside the HUB — its hub-command-node executor and its
-    # own drain sweep. No configured work source at all: the built-in `hub` source,
-    # always seated, is the only one.
+    # Both close.* windows fire inside the HUB; no configured work source at all — the
+    # always-seated built-in `hub` source is the only one.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point, work_sources=())
     runner_proc = None
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)

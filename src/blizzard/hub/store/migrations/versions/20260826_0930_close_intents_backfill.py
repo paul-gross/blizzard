@@ -1,11 +1,5 @@
-"""Back-fill ``close_intents`` for every already-landed or hand-completed, non-ephemeral
-chunk whose refs carry no terminal ``work_item_closures`` outcome (D7) — the
-source-agnostic set the retired whole-history reconciler once scanned for at read time,
-stamped at the landing or completion instant that made each chunk closable.
-
-Because no deployment ever set ``close = true`` (a later revision removes the key), this
-back-fill closes the whole accumulated delivered backlog in one pass on first drain — the
-repair blizzard#383 exists to make, not a side effect.
+"""Back-fill ``close_intents`` for every landed or hand-completed, non-ephemeral chunk with
+no terminal outcome (D7) — closing the whole accumulated backlog in one pass, blizzard#383.
 
 Revision ID: 20260826_0930_close_intents_backfill
 Revises: 20260826_0900_close_intents

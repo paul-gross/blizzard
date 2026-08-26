@@ -1467,13 +1467,9 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     ) -> bool:
         """Append one closure-attempt outcome fact, idempotent per ``(chunk_id,
         pointer.source, pointer.ref, outcome)``. ``reason`` carries the failure/gone
-        detail; ``None`` for ``closed``. Returns True iff it wrote a fresh row."""
-        ...
-
-    def retire_close_intent(self, chunk_id: str, *, pointer: WorkRef, at: datetime) -> bool:
-        """Retire one pending ``close_intents`` row (blizzard#383) — a ``closed``/``gone``
-        outcome's own side effect, never a ``failed`` one's. Idempotent: retiring an
-        already-retired or nonexistent intent is a no-op. Returns True iff it wrote."""
+        detail; ``None`` for ``closed``. A ``closed``/``gone`` outcome also retires the
+        matching pending ``close_intents`` row, in the same transaction — never a
+        ``failed`` one's. Returns True iff it wrote a fresh outcome row."""
         ...
 
     def record_work_item_materialization(

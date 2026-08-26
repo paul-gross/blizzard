@@ -1,13 +1,8 @@
-"""The close-intent drain sweep (blizzard#383): retiring every pending ``close_intents``
-row the durable outbox holds. Unconditional, like the event-derivation and
-delivery-materialization sweeps — the enqueue is source-agnostic, so the drain runs
-whether or not any source is close-capable today, and an intent for a source with no
-closer stays pending rather than failing (D4).
-
-Dependency-free (``bzh:domain-core``): every collaborator is an injected Protocol, so
-:meth:`sweep` is one complete, directly-callable step (``bzh:steppable-loop``). A per-ref
-failure is recorded as a ``failed`` fact and retried next sweep
-(``blizzard-context:/architecture/crash-correctness.md``)."""
+"""The close-intent drain sweep (blizzard#383): retires every pending ``close_intents`` row,
+unconditionally like the event-derivation and delivery-materialization sweeps. Dependency-free
+(``bzh:domain-core``): every collaborator is an injected Protocol, so :meth:`sweep` is one
+complete, directly-callable step (``bzh:steppable-loop``); ground is
+``blizzard-context:/architecture/crash-correctness/hub.md``'s own."""
 
 from __future__ import annotations
 
@@ -20,10 +15,8 @@ from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _log = get_logger("blizzard.hub.work_closure")
 
-# The close-intent outbox's own family (blizzard#383) — its second window: the forge (or
-# built-in) close returned, but the outcome is not yet recorded and the intent not yet
-# retired. A crash here is recovered by the next pass: the closer's own contract is
-# idempotent, so a re-attempt against an already-closed item is a clean no-op.
+# The close-intent outbox's second window (blizzard#383) — the forge close returned but the
+# atomic record-and-retire write hasn't landed yet; recovered by a re-attempt next pass.
 _CP_CLOSE_AFTER_CLOSE_BEFORE_RECORD = crashpoint(
     "close.after-close.before-record",
     "the close attempt returned; its outcome is not yet recorded and the intent is not yet retired",
@@ -33,9 +26,6 @@ _HUB_RUNNER_ID = "hub"
 
 _EVENT_CLOSED = "work-item-closed"
 _EVENT_CLOSE_FAILED = "work-item-close-failed"
-
-# Retirement outcomes (D4) — `FAILED` leaves the intent pending for the next pass.
-_RETIRING_OUTCOMES = (WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE)
 
 
 class CloseIntentDrainer:
@@ -74,9 +64,7 @@ class CloseIntentDrainer:
             _CP_CLOSE_AFTER_CLOSE_BEFORE_RECORD.reached()
             wrote = self._chunks.record_work_item_closure(
                 intent.chunk_id, pointer=intent.ref, outcome=outcome, reason=reason, at=at
-            )
-            if outcome in _RETIRING_OUTCOMES:
-                self._chunks.retire_close_intent(intent.chunk_id, pointer=intent.ref, at=at)
+            )  # retires the intent too, in the same transaction, when the outcome is terminal
             if not wrote:
                 continue  # a redelivered sweep already recorded this outcome
             if outcome is WorkItemCloseOutcome.CLOSED:

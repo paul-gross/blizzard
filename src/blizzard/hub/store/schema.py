@@ -400,10 +400,8 @@ work_item_closures = Table(
     UniqueConstraint("chunk_id", "source", "ref", "outcome", name="uq_work_item_closures_chunk_source_ref_outcome"),
 )
 
-# --- Close intent outbox (close_intents — blizzard#383) ------------------------
-# One row per work ref a landing or completion owes a closure attempt — enqueued inside
-# the same transaction as the landing/completion fact it rides. `retired_at` NULL is
-# pending, mirroring `outbound_buffer.acked_at` (runner store); a row is never deleted.
+# --- Close intent outbox (close_intents) ---------------------------------------
+# One row per work ref a landing or completion owes a closure attempt; `retired_at` NULL is pending, never deleted.
 
 close_intents = Table(
     "close_intents",
