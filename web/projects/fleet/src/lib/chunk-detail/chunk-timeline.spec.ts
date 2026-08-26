@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter, Router } from '@angular/router';
 
 import type { ChunkDetail } from '../api/hub';
 import { formatAbsolute } from '../when';
@@ -142,7 +143,10 @@ describe('ChunkTimeline', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ChunkTimeline],
-      providers: [provideZonelessChangeDetection()],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([{ path: 'board', children: [{ path: 'chunk/:id', children: [] }] }]),
+      ],
     }).compileComponents();
   });
 
@@ -326,9 +330,9 @@ describe('ChunkTimeline', () => {
     expect(usageRowStyle.flexWrap).toBe('wrap');
   });
 
-  it('carries no activation affordance and emits nothing when activatable is false (the default)', async () => {
+  it('links a keyed row to the chunk detail page’s Node history tab when activatable is false (the default), carrying no role/tabindex and emitting nothing', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
-    fixture.componentRef.setInput('detail', TWO_GRAPH_DETAIL);
+    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'running' });
     const emitted: (string | null)[] = [];
     fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
     await fixture.whenStable();
@@ -338,8 +342,80 @@ describe('ChunkTimeline', () => {
       expect(row.getAttribute('role')).toBeNull();
       expect(row.getAttribute('tabindex')).toBeNull();
     }
+
+    const transitionLink = el.querySelector('[data-testid="history-step"] a.step-link') as HTMLAnchorElement;
+    expect(transitionLink.getAttribute('href')).toBe(
+      `/board/chunk/${TWO_GRAPH_DETAIL.chunk_id}?tab=node-history&step=nd_s_build:1`,
+    );
+    const activeLink = el.querySelector('[data-testid="history-active"] a.step-link') as HTMLAnchorElement;
+    expect(activeLink.getAttribute('href')).toBe(
+      `/board/chunk/${TWO_GRAPH_DETAIL.chunk_id}?tab=node-history&step=nd_t_build:1`,
+    );
+
     (el.querySelector('[data-testid="history-step"]') as HTMLElement).click();
     expect(emitted).toEqual([]);
+  });
+
+  it('builds the link under a custom linkBase, the same contract chunk-artifacts.ts establishes', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    fixture.componentRef.setInput('linkBase', ['/mobile', 'chunk']);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const link = el.querySelector('[data-testid="history-step"] a.step-link') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe(`/mobile/chunk/${REVIEW_FAIL_DETAIL.chunk_id}?tab=node-history&step=nd_build:1`);
+  });
+
+  it('takes focus and navigates on its own — an anchor’s own behavior, not a re-implemented one', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const router = TestBed.inject(Router);
+
+    const link = el.querySelector('[data-testid="history-step"] a.step-link') as HTMLAnchorElement;
+    expect(link.tagName).toBe('A');
+    link.focus();
+    expect(document.activeElement).toBe(link);
+
+    link.click();
+    await fixture.whenStable();
+    expect(router.url).toBe(`/board/chunk/${REVIEW_FAIL_DETAIL.chunk_id}?tab=node-history&step=nd_build:1`);
+    expect(emitted).toEqual([]);
+  });
+
+  it('renders a null-keyed row inert — no anchor, no tabindex, no hover-responsive class (a migration, or an active row with no epoch yet)', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'ready' });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const migration = el.querySelector('[data-testid="history-migration-step"]') as HTMLElement;
+    expect(migration.querySelector('a.step-link')).toBeNull();
+    expect(migration.getAttribute('tabindex')).toBeNull();
+    expect(migration.classList.contains('responsive')).toBe(false);
+  });
+
+  it('draws no link and no route change for the General tab’s own activatable rows — they still just emit pickStep', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    fixture.componentRef.setInput('activatable', true);
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const router = TestBed.inject(Router);
+    const startUrl = router.url;
+
+    expect(el.querySelector('a.step-link')).toBeNull();
+    const transition = el.querySelector('[data-testid="history-step"]') as HTMLElement;
+    expect(transition.classList.contains('responsive')).toBe(true);
+    transition.click();
+    expect(emitted).toEqual(['nd_build:1']);
+    expect(router.url).toBe(startUrl);
   });
 
   it('makes a transition row and the active row activatable, but never a migration row (D1)', async () => {

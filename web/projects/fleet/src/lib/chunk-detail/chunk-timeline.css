@@ -63,11 +63,15 @@
   border-left: 2px solid transparent;
   font-size: var(--fs-sm);
   line-height: 1.5;
+  position: relative;
 }
 /* Hover is a background step alone — no border of its own. The left-edge
    accent is reserved for `.selected` (below), the same split
-   `chunk-artifacts-tab.css`'s `.art-item`/`.art-item.active` already draws. */
-.step:hover {
+   `chunk-artifacts-tab.css`'s `.art-item`/`.art-item.active` already draws.
+   Scoped to `.responsive` (a row carrying a real join key, drawn whether it
+   emits or links — `chunk-timeline.ts`'s own `activatable` doc) so a row that
+   does nothing draws nothing. */
+.step.responsive:hover {
   background: var(--surface-hover);
 }
 .step[role='button'] {
@@ -78,6 +82,30 @@
 .step[role='button']:focus-visible {
   outline: 1px solid var(--cyan);
   outline-offset: -2px;
+}
+/* A non-activatable keyed row's own link — stretched over the whole `.step`
+   rather than `.step` itself made an anchor, since a multi-graph row already
+   nests its own graph-badge anchor inside `.step` and an anchor cannot nest
+   one (`chunk-timeline.ts`'s own class comment). The same whole-row-link-over-
+   plain-content pattern `glance-view.css`'s `.hit` establishes. */
+.step-link {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  cursor: pointer;
+}
+.step-link:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -2px;
+}
+/* Every other direct child rides above the stretched link, visually, but
+   `pointer-events: none` (inherited by descendants) hands every click that
+   isn't otherwise claimed through to it — the graph badge below is the one
+   descendant that reclaims its own click. */
+.step:has(.step-link) > *:not(.step-link) {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
 }
 .step.selected {
   border-left-color: var(--cyan);
@@ -138,9 +166,12 @@
 }
 /* Only an `<a>` when `graphLinkBase` is set (a `<span>` otherwise) — the shared rule
    above already colors either; this just adds the link affordance the `<span>` case
-   never matches. */
+   never matches. `pointer-events: auto` reclaims the click a stretched `.step-link`
+   (above) would otherwise hand through — `.nd`'s own `pointer-events: none` inherits
+   to every descendant, this badge included, unless it opts back in. */
 a.gr {
   text-decoration: none;
+  pointer-events: auto;
 }
 a.gr:hover,
 a.gr:focus-visible {

@@ -18,8 +18,13 @@ import {
  * or the parked state's own verb), plus each step's own summed usage
  * (issue #60). Row derivation ({@link HistoryRow}, {@link ActiveRow}, usage
  * summing) lives in `chunk-timeline-rows.ts` (`canon:one-owner`) — this
- * component only renders it. Presentational: {@link ChunkTimeline.pickStep}
- * emits, it does not route.
+ * component only renders it. Presentational either way a row responds:
+ * {@link activatable} makes a keyed row emit {@link ChunkTimeline.pickStep}
+ * (the chunk detail page's own tabs, already on the right route); the
+ * default, non-activatable mode instead links a keyed row to the chunk
+ * detail page's Node history tab under {@link linkBase} (the board dock,
+ * on a different page), the same plain-`routerLink`-no-injected-`Router`
+ * contract `chunk-artifacts.ts`'s own `linkBase` establishes.
  *
  * Each `<li>` stays a bare grid item — its own listitem role is what lets a
  * screen reader announce `.timeline` as an `<ol>` with the right item count.
@@ -30,6 +35,14 @@ import {
  * against it: `.step` subgrids a second time from the bare `<li>`'s own
  * subgrid, so the verdict column stays aligned exactly as it did with one
  * subgrid level.
+ *
+ * A non-activatable keyed row's own link is a `.step-link` anchor stretched over
+ * the whole `.step` (`position: absolute; inset: 0`), not `.step` itself made an
+ * anchor — a multi-graph row already nests its own graph-badge anchor inside
+ * `.step`, and an anchor cannot itself nest one. The badge is raised above the
+ * stretched link with its own `pointer-events: auto` (`chunk-timeline.css`), the
+ * same pattern `glance-view.css`'s `.hit` establishes for a whole-row link over
+ * plain content.
  */
 @Component({
   selector: 'fleet-chunk-detail-timeline',
@@ -50,15 +63,24 @@ export class ChunkTimeline {
    * (issue #205) sets this `false`. */
   readonly heading = input(true);
 
-  /** Whether a row carrying a real join key activates by mouse/Enter/Space — gates
-   * only the affordance (role/tabindex/cursor/keyboard); the hover wash stays
-   * unconditional so the three composition sites render it identically regardless.
-   * `false` (the default) is every existing consumer's current behavior. */
+  /** Whether a row carrying a real join key activates by mouse/Enter/Space, emitting
+   * {@link pickStep}, instead of linking to the chunk detail page's Node history tab
+   * under {@link linkBase}. Either way, a keyed row draws the hover wash and takes the
+   * focus/keyboard affordance — a keyless row (a migration, or an active row with no
+   * epoch yet) draws neither, regardless of this input. `false` (the default) is the
+   * board dock's own mode; the chunk detail page's own tabs, already on the route a
+   * link would point at, set this `true`. */
   readonly activatable = input(false);
 
   /** The currently selected row's own key, or `null` — visual only, drawn from the
    * URL by the consumer that owns selection; this component injects no router. */
   readonly selectedKey = input<string | null>(null);
+
+  /** The chunk detail route's own path segments, before the chunk id — the same
+   * `linkBase` contract `chunk-artifacts.ts` establishes, on the link a non-activatable
+   * keyed row builds to reach that node on the full chunk detail page. Unused while
+   * {@link activatable} is `true`, since an activatable row emits instead of linking. */
+  readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
   /** The graphs view's own path segments, before the graph id — when set, a
    * multi-graph row's own graph badge links there (`/graphs/:graphId`), the same
@@ -77,6 +99,8 @@ export class ChunkTimeline {
 
   protected readonly formatCost = formatCost;
   protected readonly formatTokens = formatTokens;
+
+  protected readonly chunkId = computed(() => this.detail().chunk_id);
 
   protected onActivate(key: string | null, event?: Event): void {
     if (!this.activatable() || key === null) return;

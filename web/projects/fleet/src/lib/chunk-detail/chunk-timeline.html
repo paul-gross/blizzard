@@ -10,6 +10,7 @@
         <div
           class="step"
           [class.selected]="row.key !== null && row.key === selectedKey()"
+          [class.responsive]="row.key !== null"
           [attr.data-testid]="row.kind === 'migration' ? 'history-migration-step' : 'history-step'"
           [attr.data-choice]="row.kind === 'migration' ? 'migrated' : row.verdict"
           [attr.role]="activatable() && row.key !== null ? 'button' : null"
@@ -18,6 +19,15 @@
           (keydown.enter)="onActivate(row.key, $event)"
           (keydown.space)="onActivate(row.key, $event)"
         >
+          @if (!activatable() && row.key !== null) {
+            <a
+              class="step-link"
+              data-testid="history-link"
+              [routerLink]="[...linkBase(), chunkId()]"
+              [queryParams]="{ tab: 'node-history', step: row.key }"
+              [attr.aria-label]="row.nodeName + ' — ' + (row.verdict ?? row.kind)"
+            ></a>
+          }
           <span class="att">{{ row.kind === 'migration' ? '⤳' : row.epoch }}</span>
           <span class="nd" [attr.title]="row.nodeId">
             @if (multiGraph() && row.graphName) {
@@ -76,6 +86,7 @@
           class="step"
           data-testid="history-active"
           [class.selected]="a.key !== null && a.key === selectedKey()"
+          [class.responsive]="a.key !== null"
           [attr.data-choice]="a.choice"
           [attr.role]="activatable() && a.key !== null ? 'button' : null"
           [attr.tabindex]="activatable() && a.key !== null ? 0 : null"
@@ -83,6 +94,15 @@
           (keydown.enter)="onActivate(a.key, $event)"
           (keydown.space)="onActivate(a.key, $event)"
         >
+          @if (!activatable() && a.key !== null) {
+            <a
+              class="step-link"
+              data-testid="history-link"
+              [routerLink]="[...linkBase(), chunkId()]"
+              [queryParams]="{ tab: 'node-history', step: a.key }"
+              [attr.aria-label]="a.nodeName + ' — ' + a.label"
+            ></a>
+          }
           <span class="att">{{ a.epoch ?? '·' }}</span>
           <span class="nd" [attr.title]="a.nodeId">{{ a.nodeName }}</span>
           <span class="jg">
