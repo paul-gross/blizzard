@@ -1,5 +1,5 @@
 {
-  "minimal": {
+  "bound": {
     "chunk_id": "ch_1",
     "environment_id": "env-a",
     "cause": "bound"

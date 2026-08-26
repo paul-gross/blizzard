@@ -3,8 +3,7 @@
  * by the runner's own SSE stream (blizzard#317 Phase 4) — mirrors `fleet`'s
  * `LIVE_COVERED_POLL_BACKSTOP_MS` (issue #316) in intent, but not in value: this
  * panel is a single machine-local operator surface, not a shared board — so the
- * floor here is deliberately coarser than 45s, but not as coarse as a first pass
- * chose. 1 minute, not 5: `leases.query.ts` feeds
+ * floor here is deliberately coarser than 45s. 1 minute: `leases.query.ts` feeds
  * `local-heartbeat-freshness`'s own decay curve, whose documented checkpoint is
  * "≈50% at one minute" — a slower backstop leaves that rendering stale relative to its
  * own claim for most of a healthy node-step's life (the elapsed-time-derived state a

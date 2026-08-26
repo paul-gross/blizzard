@@ -1,5 +1,5 @@
 {
-  "minimal": {
+  "created": {
     "lease_id": "ls_1",
     "chunk_id": "ch_1",
     "cause": "created"

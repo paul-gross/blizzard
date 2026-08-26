@@ -734,8 +734,8 @@
   },
   "blizzard/foundation/events/stream.py": {
    "comments": 5,
-   "docstrings": 17,
-   "total": 100
+   "docstrings": 16,
+   "total": 99
   },
   "blizzard/foundation/forwarded.py": {
    "comments": 0,
@@ -2234,8 +2234,8 @@
   },
   "blizzard/runner/events/publisher.py": {
    "comments": 0,
-   "docstrings": 7,
-   "total": 38
+   "docstrings": 6,
+   "total": 37
   },
   "blizzard/runner/harness/__init__.py": {
    "comments": 0,
@@ -2719,8 +2719,8 @@
   },
   "blizzard/runner/store/repository.py": {
    "comments": 9,
-   "docstrings": 434,
-   "total": 1127
+   "docstrings": 427,
+   "total": 1120
   },
   "blizzard/runner/store/schema.py": {
    "comments": 148,
@@ -2894,8 +2894,8 @@
   },
   "blizzard/wire/sse_runner.py": {
    "comments": 10,
-   "docstrings": 9,
-   "total": 97
+   "docstrings": 8,
+   "total": 96
   },
   "blizzard/wire/takeover.py": {
    "comments": 0,

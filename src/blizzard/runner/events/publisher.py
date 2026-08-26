@@ -1,8 +1,7 @@
 """The runner event-publishing seam (D2/D4, blizzard#317) — the inner-layer Protocol every
 publishing mutation seam holds in place of the concrete
 :class:`~blizzard.runner.events.broker.EventBroker` (``bzh:dependency-inversion``), which
-stays a composition-root-only import. ``scripts/runner_event_census.py`` owns the
-inventory of who holds this seam."""
+stays a composition-root-only import."""
 
 from __future__ import annotations
 

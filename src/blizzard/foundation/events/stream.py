@@ -1,7 +1,6 @@
 """The kind-agnostic SSE stream-response machinery (D1) — cursor resolution, the
 replay-then-live handoff, keepalive, and disconnect/shutdown handling. A daemon's own
-route binds :class:`Stream` to its own broker and reserved comment — the reserved
-open-of-stream comment's text is the only per-daemon difference; both production
+route binds :class:`Stream` to its own broker and reserved comment; both production
 routes idle at the one shared keepalive cadence, ``DEFAULT_KEEPALIVE_SECONDS``. A
 test binds a short ``keepalive_seconds`` so an emission is observable without waiting
 out the real interval. Names no daemon's own vocabulary."""

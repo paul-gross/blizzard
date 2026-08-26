@@ -119,7 +119,7 @@ route is not required, so stop is allowed on `not_ready`, `ready`, and already-d
 
 Stopping an escalated chunk closes its escalation (reaching `done` does the same): the chunk leaves the critical
 needs-human feed and the holding runner drops it from `blizzard runner status` and its panel on the next PULL — taking
-the composed resume command for the parked session with it — worth knowing before you stop.
+the composed resume command for the parked session with it, worth knowing before you stop.
 
 `chunk done`, or the board's Complete control (`POST /api/chunks/{id}/complete`, gated by `CHUNK_CONTROL` like every
 control verb here), writes its own `chunk.completed` fact — a hand-completion, not a synthetic reading of another fact —

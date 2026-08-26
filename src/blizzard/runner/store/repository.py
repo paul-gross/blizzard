@@ -779,9 +779,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Close a lease — a clean transition or a failure/escalation.
 
         When ``event_kind``/``event_payload`` are given (issue #125), the event is
-        enqueued to the outbound buffer **in the same transaction** as the closure, so
-        the two land together or not at all; return the buffered event's seq, or
-        ``None`` when no event was given."""
+        enqueued to the outbound buffer **in the same transaction** as the closure —
+        the two land together or not at all; return its seq, ``None`` when no event."""
         ...
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
@@ -924,11 +923,9 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         self, runner_id: str, *, paused: bool, at: datetime, by: str, report_kind: str, report_payload: str
     ) -> int:
         """Append a local pause/start fact **and** its hub-bound report, atomically
-        (issue #43); return the buffered report's seq.
-
-        Appends rather than upserts: this is a locally-minted fact, not a mirror. Taking
-        the buffer entry here is what makes the brake and its report crash-atomic (pinned
-        by ``tests/test_ingest_and_pause_verbs.py``)."""
+        (issue #43), and return the buffered report's seq. Appends rather than upserts:
+        a locally-minted fact, not a mirror; taking the buffer entry here makes the
+        brake and its report crash-atomic (``tests/test_ingest_and_pause_verbs.py``)."""
         ...
 
     def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
@@ -1012,11 +1009,9 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         recorded_at: datetime,
     ) -> int | None:
         """Idempotently record one usage fact **and** buffer its outbound report,
-        atomically (issue #58); return the buffered report's seq.
-
-        Keyed on ``(lease_id, generation, sample.kind)``: a resume within the same lease
-        is a genuinely new row; an exact replay writes nothing, buffers nothing, and
-        returns ``None``."""
+        atomically (issue #58); return the buffered report's seq. Keyed on
+        ``(lease_id, generation, sample.kind)``: a resume within the same lease is a
+        genuinely new row; an exact replay writes nothing, buffers nothing, returns ``None``."""
         ...
 
     def record_context_sample(
@@ -1030,23 +1025,21 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         report_kind: str = "",
         report_payload: str = "",
     ) -> int | None:
-        """Append one context-sample attempt, and buffer its outbound report when one is given,
-        atomically; return the buffered report's seq.
-        ``context_tokens is None`` records an attempt that measured nothing, which
-        still advances the cadence anchor. An empty ``report_kind`` records the sample alone —
-        the ordinary case, since only a first crossing reports — and returns ``None`` then,
-        since no report was buffered."""
+        """Append one context-sample attempt and, when a report is given, buffer it and
+        return its seq, atomically. ``context_tokens is None`` records an attempt that
+        measured nothing, which still advances the cadence anchor. An empty
+        ``report_kind`` records the sample alone — the ordinary case, since only a
+        first crossing reports — and returns ``None``, no report buffered."""
         ...
 
     def record_external_usage_attempt(
         self, *, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
     ) -> int | None:
         """Append one external-subscription-usage sampling attempt **and**, only when it
-        produced a sample, buffer its outbound report — atomically (issue #218).
-
-        The attempt row is always appended, whether or not the harness had anything to
-        report; the outbound fact exists only when ``payload`` is not ``None`` — return
-        its seq then, ``None`` otherwise."""
+        produced a sample, buffer its outbound report — atomically (issue #218). The
+        attempt row is always appended, whether or not the harness had anything to
+        report; the outbound fact exists only when ``payload`` is not ``None``, its seq
+        returned then and ``None`` otherwise."""
         ...
 
     def record_attachment(
