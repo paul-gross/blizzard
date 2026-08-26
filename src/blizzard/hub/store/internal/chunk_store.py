@@ -34,6 +34,7 @@ from blizzard.hub.domain.work import (
     DecisionChoice,
     DecisionFact,
     DecisionRow,
+    DocketEntry,
     EscalationFact,
     EscalationOpen,
     EventRow,
@@ -612,22 +613,61 @@ class ChunkStore:
                 ).all()
             }
             judged = {r.proposal_id for r in conn.execute(select(s.work_item_materializations.c.proposal_id)).all()}
+            struck = {r.proposal_id for r in conn.execute(select(s.work_item_strikes.c.proposal_id)).all()}
             rows = conn.execute(select(s.work_item_proposals)).all()
         return [
-            WorkItemProposalRow(
-                proposal_id=row.proposal_id,
-                chunk_id=row.chunk_id,
-                node_id=row.node_id,
-                node_name=row.node_name,
-                epoch=row.epoch,
-                ordinal=row.ordinal,
-                kind=row.kind,
-                data=row.data,
-                runner_id=row.runner_id,
+            self._proposal_row(row)
+            for row in rows
+            if row.chunk_id in delivered
+            and row.chunk_id not in ephemeral
+            and row.proposal_id not in judged
+            and row.proposal_id not in struck
+        ]
+
+    def pending_proposals(self, chunk_id: str) -> list[DocketEntry]:
+        with self._engine.connect() as conn:
+            return self._pending_proposals(conn, chunk_id)
+
+    @staticmethod
+    def _pending_proposals(conn, chunk_id: str) -> list[DocketEntry]:  # type: ignore[no-untyped-def]
+        """The docket read (blizzard#367), on a caller-supplied ``conn`` so
+        :meth:`_decision_row` can fold it into its own already-open read."""
+        judged = {r.proposal_id for r in conn.execute(select(s.work_item_materializations.c.proposal_id)).all()}
+        strikes = {
+            r.proposal_id: r
+            for r in conn.execute(
+                select(s.work_item_strikes).where(
+                    s.work_item_strikes.c.proposal_id.in_(
+                        select(s.work_item_proposals.c.proposal_id).where(s.work_item_proposals.c.chunk_id == chunk_id)
+                    )
+                )
+            ).all()
+        }
+        rows = conn.execute(select(s.work_item_proposals).where(s.work_item_proposals.c.chunk_id == chunk_id)).all()
+        return [
+            DocketEntry(
+                proposal=ChunkStore._proposal_row(row),
+                struck=row.proposal_id in strikes,
+                struck_by=strikes[row.proposal_id].struck_by if row.proposal_id in strikes else None,
+                struck_at=strikes[row.proposal_id].struck_at if row.proposal_id in strikes else None,
             )
             for row in rows
-            if row.chunk_id in delivered and row.chunk_id not in ephemeral and row.proposal_id not in judged
+            if row.proposal_id not in judged
         ]
+
+    @staticmethod
+    def _proposal_row(row) -> WorkItemProposalRow:  # type: ignore[no-untyped-def]
+        return WorkItemProposalRow(
+            proposal_id=row.proposal_id,
+            chunk_id=row.chunk_id,
+            node_id=row.node_id,
+            node_name=row.node_name,
+            epoch=row.epoch,
+            ordinal=row.ordinal,
+            kind=row.kind,
+            data=row.data,
+            runner_id=row.runner_id,
+        )
 
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
         with self._engine.connect() as conn:
@@ -1750,18 +1790,26 @@ class ChunkStore:
                 )
             self._insert_proposals(conn, proposals, at=at)
 
-    def record_decision_resolution(self, decision_id: str, *, choice: str, resolved_by: str, at: datetime) -> bool:
+    def record_decision_resolution(
+        self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, struck: Sequence[str] = ()
+    ) -> bool:
         with self._engine.begin() as conn:
             existing = conn.execute(
                 select(s.decision_resolutions.c.decision_id).where(s.decision_resolutions.c.decision_id == decision_id)
             ).one_or_none()
             if existing is not None:
-                return False  # first-write-wins: the loser is told who won
+                return False  # first-write-wins: the loser is told who won, and writes no strike
             conn.execute(
                 insert(s.decision_resolutions).values(
                     decision_id=decision_id, choice=choice, resolved_by=resolved_by, resolved_at=at
                 )
             )
+            for proposal_id in struck:
+                conn.execute(
+                    insert(s.work_item_strikes).values(
+                        proposal_id=proposal_id, decision_id=decision_id, struck_by=resolved_by, struck_at=at
+                    )
+                )
             return True
 
     def record_requeue(self, chunk_id: str, *, at: datetime) -> int:
@@ -2394,6 +2442,7 @@ class ChunkStore:
             resolved_by=resolution.resolved_by if resolution is not None else None,
             resolved_at=resolution.resolved_at if resolution is not None else None,
             transitioned=transitioned,
+            docket=self._pending_proposals(conn, row.chunk_id),
         )
 
     @staticmethod

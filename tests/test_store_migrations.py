@@ -149,6 +149,29 @@ def test_work_items_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     assert _has_tables()
 
 
+def test_work_item_strikes_table_survives_migration_roundtrip(tmp_path: Path) -> None:
+    """``work_item_strikes`` (blizzard#367) — downgrades to this revision's own parent
+    by id, so the drop half is asserted rather than inferred from a revision marker a
+    no-op ``downgrade()`` would satisfy just as well."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+
+    def _has_table() -> bool:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return "work_item_strikes" in sa.inspect(engine).get_table_names()
+        finally:
+            engine.dispose()
+
+    assert _has_table()
+
+    runner.downgrade("20260825_1250_hub_transitions_to_node_id")
+    assert not _has_table()
+
+    runner.upgrade("head")
+    assert _has_table()
+
+
 def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """The runner's own graph-artifact mirror table — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from a
