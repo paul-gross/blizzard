@@ -49,7 +49,7 @@ def _require_editor(source: str, services: HubServices) -> tuple[IWorkSource, IW
     409 for a known one with no editor — a structural refusal for every source but
     ``hub``, since no ``[[work_source]]`` field could ever opt a configured source into
     editing (``blizzard-context:/architecture/system-shape.md``), not merely "not opted
-    in" the way ``annotate``/``close`` are."""
+    in" the way ``annotate`` is."""
     source_obj = services.work_sources.get(source)
     if source_obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown work source {source!r}")
@@ -101,7 +101,6 @@ def list_work_sources(services: Annotated[HubServices, Depends(get_services)]) -
             WorkSourceSummary(
                 name=name,
                 annotate=services.work_sources.annotator(name) is not None,
-                close=services.work_sources.closer(name) is not None,
                 edit=services.work_sources.editor(name) is not None,
             )
             for name in services.work_sources.names()

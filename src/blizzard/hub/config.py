@@ -88,9 +88,6 @@ _WORK_SOURCE_EXAMPLE_COMMENT = """
 # annotate = false            # opt into the forge-status label sweep; only the canonical
 #                              # instance for a repo should ever set this to true — two
 #                              # writers against the same forge repo will fight
-# close = false                # opt into the delivery closure sweep; only the canonical
-#                              # instance for a repo should ever set this to true — two
-#                              # writers against the same forge repo will fight
 # api_base = "https://ghe.example.internal/api/v3"  # optional: override the API origin (e.g. GHE)
 # web_base = "https://ghe.example.internal"          # optional: override the web origin; derives from api_base
 """
@@ -191,8 +188,6 @@ class WorkSourceConfig:
     token_env: str
     #: Opt into the forge-status label sweep (issue #179) — canonical instance only; two writers fight.
     annotate: bool = False
-    #: Opt into the delivery closure sweep (issue #216) — canonical instance only; two writers fight.
-    close: bool = False
     api_base: str | None = None
     web_base: str | None = None
 
@@ -225,6 +220,13 @@ class WorkSourceConfig:
             if name in seen_names:
                 raise ConfigError(f"duplicate [[work_source]] name {name!r}")
             seen_names.add(name)
+            if "close" in entry:
+                # blizzard#383: closure is unconditional now — the flag that used to opt a
+                # source into it is gone, not defaulted or silently ignored.
+                raise ConfigError(
+                    f"[[work_source]] {name!r} still carries a close key; closing every "
+                    "delivered work item is unconditional now — delete the key"
+                )
             provider_repo = (provider, repo)
             if provider_repo in seen_provider_repo:
                 # Two names for one (provider, repo) would let the same item be ingested twice
@@ -241,10 +243,6 @@ class WorkSourceConfig:
                 # Validated rather than coerced, mirroring `follow_latest`: a source that opts
                 # into writing to a shared forge deserves an explicit boolean, not a truthy guess.
                 raise ConfigError(f"[[work_source]] {name!r} has annotate={annotate!r}, must be a boolean")
-            close = entry.get("close", False)
-            if not isinstance(close, bool):
-                # Mirrors `annotate`'s own validated-not-coerced rationale.
-                raise ConfigError(f"[[work_source]] {name!r} has close={close!r}, must be a boolean")
             api_base = str(entry["api_base"]) if entry.get("api_base") else None
             web_base = str(entry["web_base"]) if entry.get("web_base") else None
             sources.append(
@@ -254,7 +252,6 @@ class WorkSourceConfig:
                     repo=repo,
                     token_env=token_env,
                     annotate=annotate,
-                    close=close,
                     api_base=api_base,
                     web_base=web_base,
                 )
@@ -483,7 +480,6 @@ class HubConfig:
             lines.append(f'repo = "{source.repo}"\n')
             lines.append(f'token_env = "{source.token_env}"\n')
             lines.append(f"annotate = {str(source.annotate).lower()}\n")
-            lines.append(f"close = {str(source.close).lower()}\n")
             if source.api_base is not None:
                 lines.append(f'api_base = "{source.api_base}"\n')
             if source.web_base is not None:

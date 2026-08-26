@@ -56,8 +56,9 @@ class WorkSourceEntry:
     ) -> WorkSourceRegistry:
         """One credentialed client + binding per configured source, plus the built-in
         ``hub`` source (issue #357) — always seated, both an editor (blizzard#358) and a
-        closer (issue #360), neither opt-in. A source's ``token_env`` naming an unset
-        variable fails here, at boot. ``users``/``work_item_store``/``delete`` are the
+        closer (issue #360), neither opt-in. Closing is unconditional for every source
+        (blizzard#383): only ``annotate`` stays opt-in. A source's ``token_env`` naming an
+        unset variable fails here, at boot. ``users``/``work_item_store``/``delete`` are the
         composition root's own instances, threaded through rather than rebuilt (#362, #364)."""
         built: dict[str, IWorkSource] = {}
         annotators: dict[str, IWorkAnnotator] = {}
@@ -68,8 +69,7 @@ class WorkSourceEntry:
             built[config.name] = adapter
             if config.annotate:
                 annotators[config.name] = cast(IWorkAnnotator, adapter)
-            if config.close:
-                closers[config.name] = cast(IWorkCloser, adapter)
+            closers[config.name] = cast(IWorkCloser, adapter)
         seat_hub_work_source(
             built, editors, closers, engine=engine, clock=clock, users=users, items=work_item_store, delete=delete
         )

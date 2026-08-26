@@ -590,14 +590,13 @@ def test_close_scope_failure_degrades_to_work_close_error() -> None:
         source.close(WorkRef(source="widget", ref="1"))
 
 
-def test_registry_closer_is_none_for_a_source_not_opted_in() -> None:
-    """A source configured but not bound into the closer map — the structural
-    ``registry.closer(name) is None`` a non-opted-in ``[[work_source]]`` gets."""
+def test_registry_closer_is_none_when_no_closer_is_bound() -> None:
+    """A source built with no closer entry — the structural ``registry.closer(name) is
+    None`` an outbox intent whose source dropped out of config would find."""
     widget = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
     registry = WorkSourceRegistry({"widget": widget})
 
     assert registry.closer("widget") is None
-    assert registry.closing_names() == []
     assert registry.get("widget") is widget  # `get` still resolves the read-only source
 
 
@@ -606,47 +605,18 @@ def test_registry_closer_returns_the_bound_closer() -> None:
     registry = WorkSourceRegistry({"widget": widget}, closers={"widget": widget})
 
     assert registry.closer("widget") is widget
-    assert registry.closing_names() == ["widget"]
 
 
-# The factory's opt-in wiring (issue #216): a closer is built only for a source
-# configured with close=True.
+# The factory's unconditional wiring (blizzard#383): a closer is built for every
+# configured source, alongside the always-seated `hub` source (issue #360).
 
 
-def test_factory_builds_no_closer_for_a_non_opted_in_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """The structural "never closed" property: a configured-but-not-opted source
-    has no entry in the closer map at all. The built-in ``hub`` source is the one
-    exception — it is always seated as a closer (issue #360)."""
-    monkeypatch.setenv("_TEST_TOKEN_NOT_CLOSE_OPTED", "token")
+def test_factory_builds_a_closer_for_every_configured_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("_TEST_TOKEN_CLOSE", "token")
     engine = _engine(tmp_path)
     work_item_store, delete = _work_deps(engine)
     registry = WorkSourceEntry.registry(
-        [
-            WorkSourceConfig(
-                name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_NOT_CLOSE_OPTED"
-            )
-        ],
-        engine,
-        _clock(),
-        users=_users(engine),
-        work_item_store=work_item_store,
-        delete=delete,
-    )
-    assert registry.get("widget") is not None
-    assert registry.closer("widget") is None
-    assert registry.closing_names() == ["hub"]
-
-
-def test_factory_builds_a_closer_for_an_opted_in_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("_TEST_TOKEN_CLOSE_OPTED", "token")
-    engine = _engine(tmp_path)
-    work_item_store, delete = _work_deps(engine)
-    registry = WorkSourceEntry.registry(
-        [
-            WorkSourceConfig(
-                name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_CLOSE_OPTED", close=True
-            )
-        ],
+        [WorkSourceConfig(name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_CLOSE")],
         engine,
         _clock(),
         users=_users(engine),
@@ -655,13 +625,12 @@ def test_factory_builds_a_closer_for_an_opted_in_source(monkeypatch: pytest.Monk
     )
     closer = registry.closer("widget")
     assert closer is not None
-    assert closer is registry.get("widget")  # one instance, every opted-in Protocol
-    assert set(registry.closing_names()) == {"widget", "hub"}
+    assert closer is registry.get("widget")  # one instance, every closing Protocol
 
 
 def test_factory_seats_the_hub_closer_with_zero_configured_sources(tmp_path: Path) -> None:
-    """The built-in ``hub`` source needs no ``[[work_source]]`` stanza at all — let
-    alone a ``close = true`` one — to be seated as a closer (issue #360)."""
+    """The built-in ``hub`` source needs no ``[[work_source]]`` stanza at all to be
+    seated as a closer (issue #360)."""
     engine = _engine(tmp_path)
     work_item_store, delete = _work_deps(engine)
     registry = WorkSourceEntry.registry(
@@ -672,4 +641,3 @@ def test_factory_seats_the_hub_closer_with_zero_configured_sources(tmp_path: Pat
 
     assert closer is not None
     assert closer is registry.get("hub")
-    assert "hub" in registry.closing_names()

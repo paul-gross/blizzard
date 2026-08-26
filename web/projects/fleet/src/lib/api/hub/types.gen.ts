@@ -4034,10 +4034,6 @@ export type WorkSourceSummary = {
      */
     annotate: boolean;
     /**
-     * Close
-     */
-    close: boolean;
-    /**
      * Edit
      */
     edit: boolean;

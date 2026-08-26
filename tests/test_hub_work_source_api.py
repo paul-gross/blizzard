@@ -53,7 +53,7 @@ def test_sources_listing_renders_capability_booleans(tmp_path: Path) -> None:
     assert sources["hub"]["edit"] is True
     assert sources["forge"]["edit"] is False
     assert sources["forge"]["annotate"] is False
-    assert sources["forge"]["close"] is False
+    assert "close" not in sources["forge"]
 
 
 # --------------------------------------------------------------------------- #

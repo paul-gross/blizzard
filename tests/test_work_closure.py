@@ -310,8 +310,8 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_p
     assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.pending_close_intents()
 
 
-# CloseIntentDrainer.sweep() against the built-in `hub` source (issue #360) — no
-# `close = true` opt-in exists for it, so `build_hub`'s own registry already seats it.
+# CloseIntentDrainer.sweep() against the built-in `hub` source (issue #360) — always
+# seated as a closer, so `build_hub`'s own registry already carries it with no setup.
 
 
 @pytest.mark.component

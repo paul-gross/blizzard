@@ -119,14 +119,10 @@ class IWorkSourceRegistry(Protocol):
         ...
 
     def closer(self, name: str) -> IWorkCloser | None:
-        """The binding declared under ``name``'s close half, or ``None`` when
-        that source is unconfigured or not opted into closing — the structural
-        "never closed" a non-opted source gets."""
-        ...
-
-    def closing_names(self) -> list[str]:
-        """Every source name with a closer built — the opted-in subset of
-        :meth:`names`."""
+        """The binding declared under ``name``'s close half, unconditional for every
+        configured source (blizzard#383) — ``None`` only when ``name`` names no source
+        at all, which a pending intent can still outlive if its source is later removed
+        from config."""
         ...
 
     def editor(self, name: str) -> IWorkEditor | None:
