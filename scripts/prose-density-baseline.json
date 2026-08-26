@@ -884,8 +884,8 @@
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
-   "docstrings": 12,
-   "total": 101
+   "docstrings": 14,
+   "total": 131
   },
   "blizzard/hub/api/deps.py": {
    "comments": 0,
@@ -1258,9 +1258,9 @@
    "total": 29
   },
   "blizzard/hub/domain/decisions.py": {
-   "comments": 10,
-   "docstrings": 23,
-   "total": 203
+   "comments": 11,
+   "docstrings": 26,
+   "total": 214
   },
   "blizzard/hub/domain/delete.py": {
    "comments": 2,
@@ -1389,8 +1389,8 @@
   },
   "blizzard/hub/domain/work.py": {
    "comments": 54,
-   "docstrings": 548,
-   "total": 1894
+   "docstrings": 562,
+   "total": 1923
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 4,
@@ -1483,9 +1483,9 @@
    "total": 397
   },
   "blizzard/hub/store/internal/chunk_store.py": {
-   "comments": 61,
-   "docstrings": 151,
-   "total": 2405
+   "comments": 63,
+   "docstrings": 153,
+   "total": 2454
   },
   "blizzard/hub/store/internal/graph_store.py": {
    "comments": 9,
@@ -1857,15 +1857,20 @@
    "docstrings": 8,
    "total": 40
   },
+  "blizzard/hub/store/migrations/versions/20260825_1300_work_item_strikes.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "total": 33
+  },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
    "docstrings": 0,
    "total": 0
   },
   "blizzard/hub/store/schema.py": {
-   "comments": 325,
+   "comments": 330,
    "docstrings": 6,
-   "total": 1024
+   "total": 1039
   },
   "blizzard/hub/work_sources/__init__.py": {
    "comments": 0,
@@ -2799,8 +2804,8 @@
   },
   "blizzard/wire/decision.py": {
    "comments": 4,
-   "docstrings": 17,
-   "total": 82
+   "docstrings": 26,
+   "total": 105
   },
   "blizzard/wire/envelope.py": {
    "comments": 25,
@@ -3539,10 +3544,15 @@
    "docstrings": 10,
    "total": 209
   },
+  "test_decision_strikes.py": {
+   "comments": 0,
+   "docstrings": 4,
+   "total": 177
+  },
   "test_decisions_api.py": {
-   "comments": 5,
-   "docstrings": 8,
-   "total": 154
+   "comments": 9,
+   "docstrings": 16,
+   "total": 326
   },
   "test_default_graph.py": {
    "comments": 9,
@@ -4056,8 +4066,8 @@
   },
   "test_pin_wire.py": {
    "comments": 2,
-   "docstrings": 36,
-   "total": 136
+   "docstrings": 39,
+   "total": 144
   },
   "test_pkce.py": {
    "comments": 0,
@@ -4560,9 +4570,9 @@
    "total": 201
   },
   "test_store_migrations.py": {
-   "comments": 17,
-   "docstrings": 26,
-   "total": 311
+   "comments": 18,
+   "docstrings": 29,
+   "total": 334
   },
   "test_subprocess_check_runner.py": {
    "comments": 3,
