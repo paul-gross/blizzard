@@ -198,6 +198,15 @@ class GraphMintService:
         graph, _ = self.mint(doc, definition_yaml=definition_yaml)
         return graph
 
+    def ensure_default_or_none(self, doc: GraphDoc, *, definition_yaml: str) -> Graph | None:
+        """:meth:`ensure_default`, with retirement mapped to ``None`` rather than raised —
+        for a caller that treats retirement as a transient condition to defer on (the
+        materialization sweep's mint path), not one to surface as an error."""
+        try:
+            return self.ensure_default(doc, definition_yaml=definition_yaml)
+        except DefaultGraphRetired:
+            return None
+
     def ensure_default(self, doc: GraphDoc, *, definition_yaml: str) -> Graph:
         """Mint the configured default graph if no graph of its name has ever existed.
 

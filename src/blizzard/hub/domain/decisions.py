@@ -118,7 +118,9 @@ class DecisionService:
             choices=[DecisionChoice(name=c.name, description=c.description) for c in node.choices],
             at=self._clock.now(),
             artifacts=[self._row(chunk, node, submission.epoch, a) for a in submission.artifacts],
-            proposals=self._proposal_rows(chunk, node, submission.epoch, submission.proposals),
+            proposals=self._proposal_rows(
+                chunk, node, submission.epoch, submission.proposals, runner_id=submission.runner_id
+            ),
         )
         return DecisionSubmitResult(
             response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`"),
@@ -144,7 +146,7 @@ class DecisionService:
         )
 
     def _proposal_rows(
-        self, chunk: Chunk, node: Node, epoch: int, proposals: list[WorkItemProposal]
+        self, chunk: Chunk, node: Node, epoch: int, proposals: list[WorkItemProposal], *, runner_id: str
     ) -> list[WorkItemProposalRow]:
         """Twin of :meth:`~blizzard.hub.domain.apply.ApplyService._proposal_rows`."""
         return [
@@ -156,6 +158,7 @@ class DecisionService:
                 node_name=node.name,
                 epoch=epoch,
                 ordinal=ordinal,
+                runner_id=runner_id,
             )
             for ordinal, p in enumerate(proposals)
         ]

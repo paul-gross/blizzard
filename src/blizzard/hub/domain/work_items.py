@@ -8,14 +8,17 @@ two members, so every closing write — withdraw or deliver — shares one guard
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.delete import ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.edit import UNSET, UnsetType
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import require_no_live_holder
 from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import (
+    Chunk,
     ChunkFacts,
     IReadChunkRepository,
     IWriteWorkItemRepository,
@@ -115,11 +118,7 @@ class WorkItemEditService:
         allocated pointer for a live holder before minting: an out-of-band ingest of the
         same ref can pre-empt it, raising :class:`~blizzard.hub.domain.ingest.IngestConflict`
         and burning the ref."""
-        ref = self._items.allocate_ref(source)
-        pointer = WorkRef(source=source, ref=ref)
-        require_no_live_holder(self._chunks, pointer)
-        at = self._clock.now()
-        chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=at)
+        pointer, chunk, at = self._prepare_mint(source, graph=graph)
         item = self._items.create_with_chunk(
             pointer=pointer,
             title=title,
@@ -130,6 +129,46 @@ class WorkItemEditService:
             chunk=chunk,
         )
         return CreatedWorkItem(item=item, chunk_id=chunk.chunk_id)
+
+    def materialize_create(
+        self,
+        proposal_id: str,
+        *,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        stated_priority: str | None,
+        graph: Graph,
+    ) -> bool:
+        """The materialization sweep's own ``create`` path (D1, D7, D8): :meth:`create`'s
+        guard sequence, always into the reserved hub source, landing through
+        :meth:`~blizzard.hub.domain.work.IWriteWorkItemRepository.materialize_create` so
+        the mint and the outcome fact are one transaction. Raises
+        :class:`~blizzard.hub.domain.ingest.IngestConflict` exactly as :meth:`create`
+        does; returns ``False`` when ``proposal_id`` was already judged."""
+        pointer, chunk, at = self._prepare_mint(RESERVED_HUB_SOURCE_NAME, graph=graph)
+        return self._items.materialize_create(
+            proposal_id=proposal_id,
+            pointer=pointer,
+            title=title,
+            body=body,
+            author=author,
+            stated_priority=stated_priority,
+            at=at,
+            chunk=chunk,
+        )
+
+    def _prepare_mint(self, source: str, *, graph: Graph) -> tuple[WorkRef, Chunk, datetime]:
+        """The guard sequence every item-minting create path shares: allocate the ref,
+        refuse a live holder, mint the resting chunk. Shared by :meth:`create` and
+        :meth:`materialize_create` (D8) so the two diverge only in which store method
+        finishes the write."""
+        ref = self._items.allocate_ref(source)
+        pointer = WorkRef(source=source, ref=ref)
+        require_no_live_holder(self._chunks, pointer)
+        at = self._clock.now()
+        chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=at)
+        return pointer, chunk, at
 
     def edit(self, item: WorkItemRecord, edit: WorkItemEdit) -> WorkItemRecord:
         """Resolve ``edit``'s sentinel-tagged fields against ``item`` — the record this

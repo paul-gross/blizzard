@@ -62,6 +62,12 @@ only while its chunk is genuinely acquired and still live — stop the chunk fir
 `not_ready` or `ready`) is deleted along with the withdrawal instead of blocking it
 ([control-verbs.md](./control-verbs.md#delete) owns the pairing's own mechanics).
 
+A worker's node-step may also propose work items as it completes — new items to file, or evidence to append to one
+already open — and the hub materializes every accumulated proposal of a chunk once that chunk actually delivers, minting
+a fleet-authored hub item (or appending the evidence) best-effort and eventually convergent, never blocking the delivery
+itself. An unresolvable proposal — its target closed, withdrawn, gone, or sourced somewhere with no editor — is recorded
+with its reason rather than retried forever.
+
 ## Forge-status labels (`annotate`)
 
 `annotate` (default false) opts a source into the forge-status label sweep: a periodic hub background sweep projects

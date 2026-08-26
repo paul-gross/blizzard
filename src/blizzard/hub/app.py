@@ -70,6 +70,11 @@ DEFAULT_FORGE_BASE_BRANCH = "main"
 #: constant, not an operator config key, in this slice.
 EVENT_DERIVATION_INTERVAL_SECONDS = 30
 
+#: The delivery-materialization sweep's own interval (blizzard#366 D9) — unconditional,
+#: like the event-derivation sweep, so it earns its own dedicated constant rather than
+#: sharing the work-source-gated ``annotation_interval_seconds``.
+WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS = 30
+
 
 class _Sweepable(Protocol):
     """The one capability :class:`Sweep` needs — structural, so any reconciler
@@ -104,6 +109,12 @@ class Sweep:
             EVENT_DERIVATION_INTERVAL_SECONDS,
             app.state.shutdown,
             "blizzard.hub.transcript_events",
+        )
+        yield cls(
+            services.work_item_materialization,
+            WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS,
+            app.state.shutdown,
+            "blizzard.hub.work_item_materialization",
         )
 
     async def run(self) -> None:

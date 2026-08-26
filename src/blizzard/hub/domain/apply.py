@@ -300,7 +300,9 @@ class ApplyService:
             runner_id=submission.runner_id,
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in submission.artifacts],
-            proposals=self._proposal_rows(chunk, from_node, submission.epoch, submission.proposals),
+            proposals=self._proposal_rows(
+                chunk, from_node, submission.epoch, submission.proposals, runner_id=submission.runner_id
+            ),
         )
         return self._respond(
             chunk,
@@ -560,7 +562,9 @@ class ApplyService:
             epoch=submission.epoch,
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in artifacts],
-            proposals=self._proposal_rows(chunk, from_node, submission.epoch, proposals),
+            proposals=self._proposal_rows(
+                chunk, from_node, submission.epoch, proposals, runner_id=submission.runner_id
+            ),
             release_route=not lands_on_hub,
             clear_intent=clear_intent,
             migration_id=Id.mint(MIGRATION_PREFIX, self._clock).value,
@@ -665,7 +669,7 @@ class ApplyService:
         )
 
     def _proposal_rows(
-        self, chunk: Chunk, from_node: Node, epoch: int, proposals: list[WorkItemProposal]
+        self, chunk: Chunk, from_node: Node, epoch: int, proposals: list[WorkItemProposal], *, runner_id: str
     ) -> list[WorkItemProposalRow]:
         return [
             WorkItemProposalRow.of(
@@ -676,6 +680,7 @@ class ApplyService:
                 node_name=from_node.name,
                 epoch=epoch,
                 ordinal=ordinal,
+                runner_id=runner_id,
             )
             for ordinal, p in enumerate(proposals)
         ]

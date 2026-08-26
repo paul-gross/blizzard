@@ -978,9 +978,9 @@
    "total": 258
   },
   "blizzard/hub/app.py": {
-   "comments": 20,
+   "comments": 23,
    "docstrings": 31,
-   "total": 287
+   "total": 298
   },
   "blizzard/hub/auth/__init__.py": {
    "comments": 0,
@@ -1148,9 +1148,9 @@
    "total": 310
   },
   "blizzard/hub/composition.py": {
-   "comments": 39,
+   "comments": 41,
    "docstrings": 12,
-   "total": 305
+   "total": 322
   },
   "blizzard/hub/config.py": {
    "comments": 42,
@@ -1240,7 +1240,7 @@
   "blizzard/hub/domain/apply.py": {
    "comments": 39,
    "docstrings": 56,
-   "total": 681
+   "total": 686
   },
   "blizzard/hub/domain/artifacts.py": {
    "comments": 2,
@@ -1260,7 +1260,7 @@
   "blizzard/hub/domain/decisions.py": {
    "comments": 10,
    "docstrings": 23,
-   "total": 200
+   "total": 203
   },
   "blizzard/hub/domain/delete.py": {
    "comments": 2,
@@ -1309,8 +1309,8 @@
   },
   "blizzard/hub/domain/graph_authoring.py": {
    "comments": 4,
-   "docstrings": 35,
-   "total": 213
+   "docstrings": 38,
+   "total": 222
   },
   "blizzard/hub/domain/graph_lifecycle.py": {
    "comments": 0,
@@ -1349,8 +1349,8 @@
   },
   "blizzard/hub/domain/proposals.py": {
    "comments": 0,
-   "docstrings": 10,
-   "total": 54
+   "docstrings": 12,
+   "total": 59
   },
   "blizzard/hub/domain/questions.py": {
    "comments": 0,
@@ -1389,18 +1389,23 @@
   },
   "blizzard/hub/domain/work.py": {
    "comments": 54,
-   "docstrings": 524,
-   "total": 1832
+   "docstrings": 548,
+   "total": 1894
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 4,
    "docstrings": 13,
    "total": 93
   },
+  "blizzard/hub/domain/work_item_materialization.py": {
+   "comments": 0,
+   "docstrings": 26,
+   "total": 158
+  },
   "blizzard/hub/domain/work_items.py": {
    "comments": 0,
-   "docstrings": 40,
-   "total": 189
+   "docstrings": 50,
+   "total": 228
   },
   "blizzard/hub/events/__init__.py": {
    "comments": 0,
@@ -1479,8 +1484,8 @@
   },
   "blizzard/hub/store/internal/chunk_store.py": {
    "comments": 61,
-   "docstrings": 146,
-   "total": 2330
+   "docstrings": 151,
+   "total": 2405
   },
   "blizzard/hub/store/internal/graph_store.py": {
    "comments": 9,
@@ -1504,8 +1509,8 @@
   },
   "blizzard/hub/store/internal/work_item_store.py": {
    "comments": 3,
-   "docstrings": 30,
-   "total": 233
+   "docstrings": 38,
+   "total": 303
   },
   "blizzard/hub/store/migrations/__init__.py": {
    "comments": 0,
@@ -1833,9 +1838,24 @@
    "total": 37
   },
   "blizzard/hub/store/migrations/versions/20260825_1100_work_item_proposals.py": {
+   "comments": 2,
+   "docstrings": 7,
+   "total": 53
+  },
+  "blizzard/hub/store/migrations/versions/20260825_1150_work_item_proposals_runner_id.py": {
    "comments": 0,
    "docstrings": 6,
-   "total": 33
+   "total": 37
+  },
+  "blizzard/hub/store/migrations/versions/20260825_1200_work_item_materializations.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "total": 32
+  },
+  "blizzard/hub/store/migrations/versions/20260825_1250_transitions_to_node_id_index.py": {
+   "comments": 0,
+   "docstrings": 8,
+   "total": 40
   },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
@@ -1843,9 +1863,9 @@
    "total": 0
   },
   "blizzard/hub/store/schema.py": {
-   "comments": 316,
+   "comments": 325,
    "docstrings": 6,
-   "total": 1000
+   "total": 1024
   },
   "blizzard/hub/work_sources/__init__.py": {
    "comments": 0,
@@ -3235,9 +3255,9 @@
    "total": 357
   },
   "test_annotation_loop.py": {
-   "comments": 9,
-   "docstrings": 18,
-   "total": 167
+   "comments": 11,
+   "docstrings": 22,
+   "total": 185
   },
   "test_apps.py": {
    "comments": 5,
@@ -3697,7 +3717,7 @@
   "test_graph_authoring.py": {
    "comments": 8,
    "docstrings": 22,
-   "total": 370
+   "total": 331
   },
   "test_graph_domain.py": {
    "comments": 6,
@@ -4542,7 +4562,7 @@
   "test_store_migrations.py": {
    "comments": 17,
    "docstrings": 26,
-   "total": 310
+   "total": 311
   },
   "test_subprocess_check_runner.py": {
    "comments": 3,
@@ -4674,10 +4694,20 @@
    "docstrings": 12,
    "total": 190
   },
+  "test_work_item_materialization.py": {
+   "comments": 13,
+   "docstrings": 12,
+   "total": 287
+  },
+  "test_work_item_materialization_store.py": {
+   "comments": 13,
+   "docstrings": 6,
+   "total": 521
+  },
   "test_work_item_proposals_apply.py": {
-   "comments": 14,
-   "docstrings": 18,
-   "total": 503
+   "comments": 16,
+   "docstrings": 19,
+   "total": 511
   },
   "test_work_item_proposals_wire.py": {
    "comments": 2,

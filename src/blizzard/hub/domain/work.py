@@ -140,6 +140,17 @@ class WorkItemCloseOutcome(StrEnum):
     FAILED = "failed"
 
 
+class WorkItemMaterializationOutcome(StrEnum):
+    """One proposal's terminal judgment (D5, blizzard#366) — recorded once in
+    ``work_item_materializations`` and never re-judged. A transient failure (a graph
+    retired out from under a ``create``, a store error) records nothing and is retried
+    on the next sweep, so no ``failed`` member exists here."""
+
+    CREATED = "created"
+    UPDATED = "updated"
+    UNRESOLVED = "unresolved"
+
+
 @dataclass(frozen=True)
 class ClosableWorkRef:
     """One ``(chunk_id, ref)`` pair a landed, non-grouped chunk still owes a closure
@@ -1274,6 +1285,16 @@ class IReadChunkRepository(Protocol):
         (``closed``/``gone``) closure fact is excluded; one carrying only ``failed`` is not."""
         ...
 
+    def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
+        """Every not-yet-judged proposal of a chunk that has delivered — a
+        ``transitions`` row at ``to_node_id == RESERVED_TERMINAL``, regardless of whether
+        a runner-node's own transition or a hub-node's ``release_route`` transition wrote
+        it, excluding the ephemeral (grouped/deleted) and any proposal already carrying a
+        ``work_item_materializations`` row. Reads status nowhere: a hand-completed or
+        later-stopped chunk is included or excluded purely by whether it actually
+        delivered."""
+        ...
+
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
         """The ``to_node_id`` of an already-accepted transition out of ``from_node_id`` at
         ``epoch`` — the idempotency probe for a re-applied completion, or None."""
@@ -1424,6 +1445,21 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Append one closure-attempt outcome fact, idempotent per ``(chunk_id,
         pointer.source, pointer.ref, outcome)``. ``reason`` carries the failure/gone
         detail; ``None`` for ``closed``. Returns True iff it wrote a fresh row."""
+        ...
+
+    def record_work_item_materialization(
+        self,
+        proposal_id: str,
+        *,
+        outcome: WorkItemMaterializationOutcome,
+        pointer: WorkRef | None,
+        reason: str | None,
+        at: datetime,
+    ) -> bool:
+        """Append one proposal's terminal judgment (D5), idempotent per ``proposal_id`` —
+        the standalone recorder for an ``unresolved`` outcome, which mints or mutates no
+        work item. ``pointer`` is the targeted item for an unresolvable ``update``, and
+        ``None`` for an unresolvable ``create``. Returns True iff it wrote a fresh row."""
         ...
 
     def finalize_delivery(
@@ -1829,4 +1865,30 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         (issue #364, :class:`~blizzard.hub.domain.delete.DeleteService`). A ``forge:``
         pointer on the same chunk is left untouched. Returns the freshly-written
         ``chunk_deleted.id``."""
+        ...
+
+    def materialize_create(
+        self,
+        *,
+        proposal_id: str,
+        pointer: WorkRef,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        stated_priority: str | None,
+        at: datetime,
+        chunk: Chunk,
+    ) -> bool:
+        """Mint the item, its resting ``not_ready`` chunk, and ``proposal_id``'s
+        ``created`` outcome fact, atomically in one transaction (D8) — mirrors
+        :meth:`create_with_chunk`, plus the outcome row. Returns ``False`` and writes
+        nothing when ``proposal_id`` was already judged (idempotent replay)."""
+        ...
+
+    def materialize_update(self, *, proposal_id: str, source: str, ref: str, evidence: str, at: datetime) -> bool:
+        """Append ``evidence`` to an open item's body, stamp ``edited_at``, and record
+        ``proposal_id``'s ``updated`` outcome fact, atomically in one transaction (D8).
+        Returns ``False`` and writes nothing when ``proposal_id`` was already judged, or
+        when the item is no longer open (closed since the caller resolved it — left for
+        the next sweep to classify as unresolved)."""
         ...
