@@ -1204,7 +1204,8 @@ export type DecisionChoiceModel = {
 /**
  * DecisionResolutionRequest
  *
- * A person's choice for an open decision — first-write-wins CAS.
+ * A person's choice for an open decision — first-write-wins CAS. ``struck`` names
+ * the chunk's proposal ids to refuse (blizzard#367); omitted, it passes every proposal.
  */
 export type DecisionResolutionRequest = {
     /**
@@ -1215,6 +1216,10 @@ export type DecisionResolutionRequest = {
      * Resolved By
      */
     resolved_by?: string;
+    /**
+     * Struck
+     */
+    struck?: Array<string>;
 };
 
 /**
@@ -1281,7 +1286,9 @@ export type DecisionSubmission = {
  * A gate decision in full.
  *
  * ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the
- * resolving transition has been recorded.
+ * resolving transition has been recorded. ``docket`` is the *chunk's* pending proposals
+ * (blizzard#367), not just this decision's own — every gate on the same chunk shares one
+ * strike record.
  */
 export type DecisionView = {
     /**
@@ -1296,6 +1303,10 @@ export type DecisionView = {
      * Decision Id
      */
     decision_id: string;
+    /**
+     * Docket
+     */
+    docket?: Array<DocketEntryView>;
     /**
      * Epoch
      */
@@ -1328,6 +1339,51 @@ export type DecisionView = {
      * Transitioned
      */
     transitioned?: boolean;
+};
+
+/**
+ * DocketEntryView
+ *
+ * One of a chunk's not-yet-materialized proposals, as it stands at a gate — the
+ * proposing node, its kind-shaped ``payload``, and whether an operator has struck it.
+ * Under ``malformed`` no field but ``proposal_id``, ``node_name``, and ``kind`` may be
+ * relied on: a stored proposal this hub version can no longer parse renders bare
+ * rather than failing the whole gate read. ``struck_by``/``struck_at`` are set only
+ * when ``struck`` is true.
+ */
+export type DocketEntryView = {
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Malformed
+     */
+    malformed?: boolean;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Payload
+     */
+    payload?: CreateWorkItemProposal | UpdateWorkItemProposal | null;
+    /**
+     * Proposal Id
+     */
+    proposal_id: string;
+    /**
+     * Struck
+     */
+    struck?: boolean;
+    /**
+     * Struck At
+     */
+    struck_at?: string | null;
+    /**
+     * Struck By
+     */
+    struck_by?: string | null;
 };
 
 /**

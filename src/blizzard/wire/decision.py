@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.wire.completion import SubmittedArtifact, WorkItemProposal
+from blizzard.wire.completion import CreateWorkItemProposal, SubmittedArtifact, UpdateWorkItemProposal, WorkItemProposal
 
 
 class DecisionChoiceModel(BaseModel):
@@ -16,6 +16,24 @@ class DecisionChoiceModel(BaseModel):
 
     name: str
     description: str
+
+
+class DocketEntryView(BaseModel):
+    """One of a chunk's not-yet-materialized proposals, as it stands at a gate — the
+    proposing node, its kind-shaped ``payload``, and whether an operator has struck it.
+    Under ``malformed`` no field but ``proposal_id``, ``node_name``, and ``kind`` may be
+    relied on: a stored proposal this hub version can no longer parse renders bare
+    rather than failing the whole gate read. ``struck_by``/``struck_at`` are set only
+    when ``struck`` is true."""
+
+    proposal_id: str
+    node_name: str
+    kind: str
+    payload: CreateWorkItemProposal | UpdateWorkItemProposal | None = None
+    malformed: bool = False
+    struck: bool = False
+    struck_by: str | None = None
+    struck_at: str | None = None
 
 
 class DecisionSubmission(BaseModel):
@@ -37,7 +55,9 @@ class DecisionView(BaseModel):
     """A gate decision in full.
 
     ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the
-    resolving transition has been recorded."""
+    resolving transition has been recorded. ``docket`` is the *chunk's* pending proposals
+    (blizzard#367), not just this decision's own — every gate on the same chunk shares one
+    strike record."""
 
     decision_id: str
     chunk_id: str
@@ -50,6 +70,7 @@ class DecisionView(BaseModel):
     resolved_by: str | None = None
     resolved_at: str | None = None
     transitioned: bool = False
+    docket: list[DocketEntryView] = []
 
 
 class OpenDecisionsResponse(BaseModel):
@@ -59,10 +80,12 @@ class OpenDecisionsResponse(BaseModel):
 
 
 class DecisionResolutionRequest(BaseModel):
-    """A person's choice for an open decision — first-write-wins CAS."""
+    """A person's choice for an open decision — first-write-wins CAS. ``struck`` names
+    the chunk's proposal ids to refuse (blizzard#367); omitted, it passes every proposal."""
 
     choice: str
     resolved_by: str = "operator"
+    struck: list[str] = []
 
 
 class DecisionResolutionResponse(BaseModel):
