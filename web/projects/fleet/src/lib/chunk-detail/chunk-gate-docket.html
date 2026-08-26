@@ -2,15 +2,15 @@
   <div class="docket" data-testid="gate-docket">
     <div class="s-head"><span class="tag">Proposed work</span></div>
     @for (entry of entries(); track entry.proposal_id) {
-      <div class="entry" [class.struck]="isStruck(entry.proposal_id)" data-testid="docket-entry">
-        @if (canResolve()) {
+      <div class="entry" [class.struck]="isStruck(entry)" data-testid="docket-entry">
+        @if (canResolve() && !entry.struck) {
           <input
             type="checkbox"
             class="sel"
             data-testid="docket-strike"
             [attr.aria-label]="'Strike ' + title(entry)"
-            [checked]="isStruck(entry.proposal_id)"
-            (change)="toggle(entry.proposal_id)"
+            [checked]="isStruck(entry)"
+            (change)="toggle(entry)"
           />
         }
         <div class="entry-body">

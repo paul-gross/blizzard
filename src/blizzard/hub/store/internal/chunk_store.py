@@ -624,14 +624,10 @@ class ChunkStore:
             and row.proposal_id not in struck
         ]
 
-    def pending_proposals(self, chunk_id: str) -> list[DocketEntry]:
-        with self._engine.connect() as conn:
-            return self._pending_proposals(conn, chunk_id)
-
     @staticmethod
-    def _pending_proposals(conn, chunk_id: str) -> list[DocketEntry]:  # type: ignore[no-untyped-def]
-        """The docket read (blizzard#367), on a caller-supplied ``conn`` so
-        :meth:`_decision_row` can fold it into its own already-open read."""
+    def _pending_proposals(conn: Connection, chunk_id: str) -> list[DocketEntry]:
+        """The docket read, on a caller-supplied ``conn`` so :meth:`_decision_row` can
+        fold it into its own already-open read."""
         judged = {r.proposal_id for r in conn.execute(select(s.work_item_materializations.c.proposal_id)).all()}
         strikes = {
             r.proposal_id: r
@@ -1805,11 +1801,20 @@ class ChunkStore:
                 )
             )
             for proposal_id in struck:
-                conn.execute(
-                    insert(s.work_item_strikes).values(
-                        proposal_id=proposal_id, decision_id=decision_id, struck_by=resolved_by, struck_at=at
-                    )
-                )
+                # `proposal_id` is a bare primary key, not scoped to this decision — a
+                # chunk can carry more than one unresolved decision sharing the same
+                # docket, and a concurrently resolved sibling may have struck this same
+                # id first. A savepoint keeps that a no-op instead of raising and rolling
+                # back this decision's own resolution too.
+                try:
+                    with conn.begin_nested():
+                        conn.execute(
+                            insert(s.work_item_strikes).values(
+                                proposal_id=proposal_id, decision_id=decision_id, struck_by=resolved_by, struck_at=at
+                            )
+                        )
+                except IntegrityError:
+                    pass
             return True
 
     def record_requeue(self, chunk_id: str, *, at: datetime) -> int:

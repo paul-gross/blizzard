@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import type { CreateWorkItemProposal, DocketEntryView, UpdateWorkItemProposal } from '../api/hub';
 
@@ -7,14 +7,16 @@ function isCreate(payload: CreateWorkItemProposal | UpdateWorkItemProposal): pay
 }
 
 /**
- * The chunk's gate docket (blizzard#367) — every one of its not-yet-materialized
- * proposals, each with a per-entry strike toggle. A malformed stored proposal renders
- * bare (kind and proposing node only) rather than hiding or failing the gate.
+ * The chunk's gate docket — every one of a chunk's not-yet-materialized proposals,
+ * each with a per-entry strike toggle. A malformed stored proposal renders bare (kind
+ * and proposing node only) rather than hiding or failing the gate. An entry already
+ * struck (from a prior resolve, or another open gate on the same chunk) renders struck
+ * with no toggle of its own — there is nothing left for this session to strike.
  *
- * Presentational only, and it owns the toggle set as local UI state
- * (`bzh:frontend-container-presentational`): {@link ChunkAwaitingHuman} reads
- * {@link struckIds} through a view child at the moment it emits `resolveDecision`,
- * rather than the selection round-tripping back up through an output on every toggle.
+ * Presentational only, and it owns the not-yet-submitted toggle set as local UI state
+ * (`bzh:frontend-container-presentational`): every toggle emits {@link struckChange} so
+ * the container can carry it into `resolveDecision` without reaching back into this
+ * component's state.
  */
 @Component({
   selector: 'fleet-chunk-detail-gate-docket',
@@ -30,20 +32,27 @@ export class ChunkGateDocket {
    * strike toggles when `false`; the entries themselves still show. */
   readonly canResolve = input(false);
 
+  /** Emitted with the full toggled-id set every time a toggle changes. */
+  readonly struckChange = output<readonly string[]>();
+
   private readonly struck = signal<ReadonlySet<string>>(new Set());
 
-  /** The currently toggled proposal ids — read by the parent at resolve time. */
+  /** The currently toggled proposal ids. */
   readonly struckIds = computed<readonly string[]>(() => [...this.struck()]);
 
-  protected isStruck(proposalId: string): boolean {
-    return this.struck().has(proposalId);
+  /** Whether the entry renders struck — already struck server-side, or toggled this
+   * session. */
+  protected isStruck(entry: DocketEntryView): boolean {
+    return entry.struck === true || this.struck().has(entry.proposal_id);
   }
 
-  protected toggle(proposalId: string): void {
+  protected toggle(entry: DocketEntryView): void {
+    if (entry.struck) return; // already struck server-side — nothing left to toggle
     const next = new Set(this.struck());
-    if (next.has(proposalId)) next.delete(proposalId);
-    else next.add(proposalId);
+    if (next.has(entry.proposal_id)) next.delete(entry.proposal_id);
+    else next.add(entry.proposal_id);
     this.struck.set(next);
+    this.struckChange.emit([...next]);
   }
 
   /** The entry's display title — its create title, its update target, or a placeholder

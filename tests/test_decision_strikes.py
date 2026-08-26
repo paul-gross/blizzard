@@ -1,6 +1,6 @@
-"""blizzard#367 Phase 1 — the strike fact and its atomicity: ``DecisionService.resolve``'s
-struck-id set, validated against the chunk's pending proposals (D2, D4) and written
-inside ``record_decision_resolution``'s own transaction, against a real, migrated store."""
+"""The strike fact and its atomicity: ``DecisionService.resolve``'s struck-id set,
+validated against the chunk's pending proposals and written inside
+``record_decision_resolution``'s own transaction, against a real, migrated store."""
 
 from __future__ import annotations
 
@@ -117,7 +117,9 @@ def test_resolving_with_a_subset_strikes_exactly_those_and_leaves_the_rest_pendi
     assert set(strikes) == {ids["strike"]}
     assert strikes[ids["strike"]] == (decision_id, "alice")
 
-    pending = {e.proposal.proposal_id for e in hub.services.chunks.pending_proposals(chunk_id) if not e.struck}
+    decision = hub.services.chunks.get_decision(decision_id)
+    assert decision is not None
+    pending = {e.proposal.proposal_id for e in decision.docket if not e.struck}
     assert pending == {ids["keep"]}
 
 
@@ -145,7 +147,7 @@ def test_a_proposal_id_not_pending_for_the_chunk_is_rejected_and_writes_nothing(
     assert decision is not None and not decision.resolved
 
 
-def test_the_cas_loser_writes_no_strike_and_the_winners_set_stands_whole(tmp_path: Path) -> None:
+def test_the_cas_loser_writes_no_strike_when_its_ids_are_disjoint_from_the_winners(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id = _ingest(hub)
     decision_id = _submit_decision(
@@ -155,6 +157,28 @@ def test_the_cas_loser_writes_no_strike_and_the_winners_set_stands_whole(tmp_pat
 
     won = hub.services.decisions.resolve(decision_id, choice="pass", resolved_by="alice", struck=[ids["one"]])
     lost = hub.services.decisions.resolve(decision_id, choice="fail", resolved_by="bob", struck=[ids["two"]])
+
+    assert won is not None and won.resolved
+    assert lost is not None and not lost.resolved
+    assert set(_strike_rows(hub)) == {ids["one"]}
+
+
+def test_the_cas_loser_writes_no_strike_even_when_its_ids_overlap_the_winners(tmp_path: Path) -> None:
+    """The realistic race: both operators saw the same open docket and each toggled
+    "one". The loser's resolve call must not 400 on an id the winner just struck out
+    from under it — it should fall through to the CAS and be told who won, exactly as
+    a resolve naming no overlapping ids would."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _ingest(hub)
+    decision_id = _submit_decision(
+        hub, chunk_id, node_id, proposals=[_create_proposal(title="one"), _create_proposal(title="two")]
+    )
+    ids = _proposal_ids_by_title(hub, chunk_id)
+
+    won = hub.services.decisions.resolve(decision_id, choice="pass", resolved_by="alice", struck=[ids["one"]])
+    lost = hub.services.decisions.resolve(
+        decision_id, choice="fail", resolved_by="bob", struck=[ids["one"], ids["two"]]
+    )
 
     assert won is not None and won.resolved
     assert lost is not None and not lost.resolved

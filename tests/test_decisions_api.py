@@ -7,10 +7,13 @@ headers; a runner bearer token is rejected on both."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 
+from blizzard.hub.store import schema as s
 from tests.support import build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
@@ -154,7 +157,7 @@ def test_runner_bearer_token_is_rejected_on_resolutions(tmp_path: Path) -> None:
     )
 
 
-# --- The gate docket (blizzard#367) ------------------------------------------
+# --- The gate docket ----------------------------------------------------------
 
 _GATE_WITH_PROPOSALS_YAML = """
 name: default-delivery
@@ -194,7 +197,7 @@ def _open_decision_with_proposals(
     hub, build_node_id: str, *, ref: str, proposals: list[dict], runner_id: str = "r1", seq: int = 1
 ) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     """Drive a chunk on the already-minted gate graph to an open decision carrying
-    ``proposals`` (D2); return ``(chunk_id, decision_id)``. ``seq`` must be distinct per
+    ``proposals``; return ``(chunk_id, decision_id)``. ``seq`` must be distinct per
     call sharing a ``runner_id`` — it is that runner's own monotonic fact sequence, not
     per-chunk, and a repeated value replays as an idempotent no-op."""
     chunk_id = hub.client.post(
@@ -245,6 +248,44 @@ def test_docket_carries_pending_proposals_on_both_open_decisions_and_chunk_detai
         assert entry["payload"] == {"kind": "create", "title": "fix it", "body": "do it", "stated_priority": "normal"}
         assert entry["malformed"] is False
         assert entry["struck"] is False
+
+
+def test_a_stored_proposal_this_hub_version_cannot_parse_renders_bare_not_failing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    build_node_id = _mint_gate_graph(hub)
+    chunk_id, decision_id = _open_decision_with_proposals(
+        hub, build_node_id, ref="367f", proposals=[_create_proposal(title="fine")]
+    )
+    with hub.engine.begin() as conn:
+        conn.execute(
+            sa.insert(s.work_item_proposals).values(
+                proposal_id="wip_unparseable",
+                chunk_id=chunk_id,
+                node_id=build_node_id,
+                node_name="build",
+                epoch=1,
+                ordinal=99,
+                kind="create",
+                data="{}",  # missing every required field — model_validate_json raises
+                proposed_at=datetime.now(UTC),
+            )
+        )
+
+    for read in (
+        lambda: next(
+            d for d in hub.client.get("/api/decisions").json()["decisions"] if d["decision_id"] == decision_id
+        ),
+        lambda: hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"],
+    ):
+        docket = read()["docket"]
+        assert len(docket) == 2
+        bare = next(e for e in docket if e["proposal_id"] == "wip_unparseable")
+        assert bare["node_name"] == "build"
+        assert bare["kind"] == "create"
+        assert bare["malformed"] is True
+        assert bare["payload"] is None
+        fine = next(e for e in docket if e["proposal_id"] != "wip_unparseable")
+        assert fine["malformed"] is False
 
 
 def test_a_chunk_with_no_pending_proposals_reads_an_empty_docket(tmp_path: Path) -> None:

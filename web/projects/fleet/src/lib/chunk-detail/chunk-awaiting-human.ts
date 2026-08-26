@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import type { ChunkDetail, ChunkStatus, DecisionView, QuestionView } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
@@ -13,8 +13,7 @@ export interface AnswerQuestionEvent {
 }
 
 /** Emitted when the operator resolves a chunk's open gate decision from the dock.
- * `struck` names the docket proposals toggled to refuse (blizzard#367); empty passes
- * every proposal. */
+ * `struck` names the docket proposals toggled to refuse; empty passes every proposal. */
 export interface ResolveDecisionEvent {
   readonly decisionId: string;
   readonly choice: string;
@@ -54,9 +53,6 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
   styleUrl: './chunk-awaiting-human.css',
 })
 export class ChunkAwaitingHuman {
-  /** The mounted docket, when the gate is open — its own toggle set is read here at
-   * resolve time rather than round-tripped back up through an output. */
-  private readonly docket = viewChild(ChunkGateDocket);
   /** The chunk aggregate to render (open questions, gate decision, escalation). */
   readonly detail = input.required<ChunkDetail>();
 
@@ -76,6 +72,10 @@ export class ChunkAwaitingHuman {
 
   /** Emitted when the operator resolves an open gate decision. */
   readonly resolveDecision = output<ResolveDecisionEvent>();
+
+  /** The docket's toggled ids, carried up via its `struckChange` output — read at
+   * resolve time rather than reaching back into the docket's own state. */
+  private readonly struckIds = signal<readonly string[]>([]);
 
   /** The chunk's open (unanswered) questions — the ask a parked chunk waits on. */
   protected readonly openQuestions = computed<readonly QuestionView[]>(() =>
@@ -145,7 +145,12 @@ export class ChunkAwaitingHuman {
       decisionId,
       choice,
       chunkId: this.detail().chunk_id,
-      struck: this.docket()?.struckIds() ?? [],
+      struck: this.struckIds(),
     });
+  }
+
+  /** The docket's toggle set changed — record it for the next resolve. */
+  protected onDocketStruckChange(ids: readonly string[]): void {
+    this.struckIds.set(ids);
   }
 }

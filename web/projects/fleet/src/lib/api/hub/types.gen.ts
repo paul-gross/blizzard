@@ -1205,7 +1205,7 @@ export type DecisionChoiceModel = {
  * DecisionResolutionRequest
  *
  * A person's choice for an open decision — first-write-wins CAS. ``struck`` names
- * the chunk's proposal ids to refuse (blizzard#367); omitted, it passes every proposal.
+ * the chunk's proposal ids to refuse; omitted, it passes every proposal.
  */
 export type DecisionResolutionRequest = {
     /**
@@ -1286,9 +1286,8 @@ export type DecisionSubmission = {
  * A gate decision in full.
  *
  * ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the
- * resolving transition has been recorded. ``docket`` is the *chunk's* pending proposals
- * (blizzard#367), not just this decision's own — every gate on the same chunk shares one
- * strike record.
+ * resolving transition has been recorded. ``docket`` is the *chunk's* pending proposals,
+ * not just this decision's own — every gate on the same chunk shares one strike record.
  */
 export type DecisionView = {
     /**

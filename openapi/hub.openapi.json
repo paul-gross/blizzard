@@ -1850,7 +1850,7 @@
         "type": "object"
       },
       "DecisionResolutionRequest": {
-        "description": "A person's choice for an open decision \u2014 first-write-wins CAS. ``struck`` names\nthe chunk's proposal ids to refuse (blizzard#367); omitted, it passes every proposal.",
+        "description": "A person's choice for an open decision \u2014 first-write-wins CAS. ``struck`` names\nthe chunk's proposal ids to refuse; omitted, it passes every proposal.",
         "properties": {
           "choice": {
             "title": "Choice",
@@ -1971,7 +1971,7 @@
         "type": "object"
       },
       "DecisionView": {
-        "description": "A gate decision in full.\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the\nresolving transition has been recorded. ``docket`` is the *chunk's* pending proposals\n(blizzard#367), not just this decision's own \u2014 every gate on the same chunk shares one\nstrike record.",
+        "description": "A gate decision in full.\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the\nresolving transition has been recorded. ``docket`` is the *chunk's* pending proposals,\nnot just this decision's own \u2014 every gate on the same chunk shares one strike record.",
         "properties": {
           "choices": {
             "default": [],

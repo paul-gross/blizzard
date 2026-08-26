@@ -31,6 +31,17 @@ const MALFORMED_ENTRY: DocketEntryView = {
   struck: false,
 };
 
+const STRUCK_ENTRY: DocketEntryView = {
+  proposal_id: 'wip_04',
+  node_name: 'build',
+  kind: 'create',
+  payload: { kind: 'create', title: 'already refused', body: 'details here', stated_priority: 'normal' },
+  malformed: false,
+  struck: true,
+  struck_by: 'alice',
+  struck_at: '2026-08-25T00:00:00Z',
+};
+
 describe('ChunkGateDocket', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -61,7 +72,7 @@ describe('ChunkGateDocket', () => {
     expect(el.querySelector('[data-testid="docket-node"]')?.textContent).toContain('build');
   });
 
-  it('renders a malformed proposal bare rather than failing (D5)', async () => {
+  it('renders a malformed proposal bare rather than failing', async () => {
     const fixture = TestBed.createComponent(ChunkGateDocket);
     fixture.componentRef.setInput('entries', [MALFORMED_ENTRY]);
     await fixture.whenStable();
@@ -105,6 +116,35 @@ describe('ChunkGateDocket', () => {
     fixture.componentRef.setInput('canResolve', true);
     await fixture.whenStable();
 
+    expect(fixture.componentInstance.struckIds()).toEqual([]);
+  });
+
+  it('emits struckChange with the full toggled-id set on every toggle', async () => {
+    const fixture = TestBed.createComponent(ChunkGateDocket);
+    fixture.componentRef.setInput('entries', [CREATE_ENTRY, UPDATE_ENTRY]);
+    fixture.componentRef.setInput('canResolve', true);
+    const emissions: (readonly string[])[] = [];
+    fixture.componentInstance.struckChange.subscribe((ids) => emissions.push(ids));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const toggles = el.querySelectorAll<HTMLInputElement>('[data-testid="docket-strike"]');
+    toggles[0].click();
+    toggles[1].click();
+
+    expect(emissions).toEqual([['wip_01'], ['wip_01', 'wip_02']]);
+  });
+
+  it('renders an already-struck entry as struck with no toggle, and never re-strikes it', async () => {
+    const fixture = TestBed.createComponent(ChunkGateDocket);
+    fixture.componentRef.setInput('entries', [CREATE_ENTRY, STRUCK_ENTRY]);
+    fixture.componentRef.setInput('canResolve', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const entries = el.querySelectorAll('[data-testid="docket-entry"]');
+    expect(entries[1].classList.contains('struck')).toBe(true);
+    expect(el.querySelectorAll('[data-testid="docket-strike"]').length).toBe(1); // only CREATE_ENTRY's
     expect(fixture.componentInstance.struckIds()).toEqual([]);
   });
 });

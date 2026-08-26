@@ -1,5 +1,5 @@
 """work_item_strikes — a gate resolution's refusal of a proposal, before
-materialization ever judges it (D1, blizzard#367). One new table.
+materialization ever judges it. One new table.
 
 Revision ID: 20260825_1300_work_item_strikes
 Revises: 20260825_1250_hub_transitions_to_node_id

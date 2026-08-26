@@ -624,10 +624,9 @@ class DecisionChoice:
 
 @dataclass(frozen=True)
 class DocketEntry:
-    """One of a chunk's not-yet-materialized proposals, as it stands at a gate
-    (blizzard#367) — a :class:`~blizzard.hub.domain.proposals.WorkItemProposalRow` plus
-    whether an operator has struck it. ``struck_by``/``struck_at`` are set only when
-    :attr:`struck` is true."""
+    """One of a chunk's not-yet-materialized proposals, as it stands at a gate — a
+    :class:`~blizzard.hub.domain.proposals.WorkItemProposalRow` plus whether an operator
+    has struck it. ``struck_by``/``struck_at`` are set only when :attr:`struck` is true."""
 
     proposal: WorkItemProposalRow
     struck: bool = False
@@ -641,8 +640,8 @@ class DecisionRow:
 
     Resolution state is **derived**: ``resolved_choice`` is set once a resolution row
     exists, and ``transitioned`` is true once a transition references this decision.
-    ``docket`` is the *chunk's* pending proposals (blizzard#367), not just this
-    decision's own — every gate on the same chunk shares one strike record."""
+    ``docket`` is the *chunk's* pending proposals, not just this decision's own — every
+    gate on the same chunk shares one strike record."""
 
     decision_id: str
     chunk_id: str
@@ -1305,19 +1304,10 @@ class IReadChunkRepository(Protocol):
         """Every not-yet-judged proposal of a chunk that has delivered — a
         ``transitions`` row at ``to_node_id == RESERVED_TERMINAL``, regardless of whether
         a runner-node's own transition or a hub-node's ``release_route`` transition wrote
-        it, excluding the ephemeral (grouped/deleted) and any proposal already carrying a
-        ``work_item_materializations`` row. Reads status nowhere: a hand-completed or
-        later-stopped chunk is included or excluded purely by whether it actually
-        delivered."""
-        ...
-
-    def pending_proposals(self, chunk_id: str) -> list[DocketEntry]:
-        """A chunk's proposals not yet carrying a ``work_item_materializations`` row —
-        the gate docket (blizzard#367), regardless of whether the chunk has delivered.
-        Unlike :meth:`unmaterialized_proposals`, this is not gated on delivery: a gate
-        resolves *before* delivery, so the docket must read a not-yet-delivered chunk.
-        Each entry carries its own strike state; a struck entry stays in this set
-        forever (a strike never materializes, so it never gains a materialization row)."""
+        it, excluding the ephemeral (grouped/deleted), any proposal already carrying a
+        ``work_item_materializations`` row, and any struck proposal. Reads status nowhere:
+        a hand-completed or later-stopped chunk is included or excluded purely by whether
+        it actually delivered."""
         ...
 
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
@@ -1638,9 +1628,8 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, struck: Sequence[str] = ()
     ) -> bool:
         """First-write-wins CAS: record the person's choice and ``struck``'s proposal
-        ids as a strike each, in one transaction (D2, blizzard#367), or return ``False``
-        if the decision was already resolved (the loser is told who won — and writes no
-        strike at all)."""
+        ids as a strike each, in one transaction, or return ``False`` if the decision
+        was already resolved (the loser is told who won — and writes no strike at all)."""
         ...
 
     def record_requeue(self, chunk_id: str, *, at: datetime) -> int:

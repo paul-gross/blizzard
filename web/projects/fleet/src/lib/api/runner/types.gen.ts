@@ -565,9 +565,8 @@ export type DecisionChoiceModel = {
  * A gate decision in full.
  *
  * ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the
- * resolving transition has been recorded. ``docket`` is the *chunk's* pending proposals
- * (blizzard#367), not just this decision's own — every gate on the same chunk shares one
- * strike record.
+ * resolving transition has been recorded. ``docket`` is the *chunk's* pending proposals,
+ * not just this decision's own — every gate on the same chunk shares one strike record.
  */
 export type DecisionView = {
     /**

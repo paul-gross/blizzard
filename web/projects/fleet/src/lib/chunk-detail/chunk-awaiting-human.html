@@ -60,7 +60,11 @@
             }
           </div>
         }
-        <fleet-chunk-detail-gate-docket [entries]="d.docket ?? []" [canResolve]="canResolve()" />
+        <fleet-chunk-detail-gate-docket
+          [entries]="d.docket ?? []"
+          [canResolve]="canResolve()"
+          (struckChange)="onDocketStruckChange($event)"
+        />
       </div>
     }
   </div>

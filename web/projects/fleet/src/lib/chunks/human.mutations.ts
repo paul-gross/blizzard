@@ -96,7 +96,7 @@ export interface ResolveVars {
   readonly choice: string;
   /** The chunk this decision parks, so the detail re-reads on success. */
   readonly chunkId: string;
-  /** The docket proposals to strike (blizzard#367) — empty passes every proposal. */
+  /** The docket proposals to strike — empty passes every proposal. */
   readonly struck: readonly string[];
 }
 

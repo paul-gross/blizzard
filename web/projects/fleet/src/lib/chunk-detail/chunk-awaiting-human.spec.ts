@@ -277,7 +277,7 @@ describe('ChunkAwaitingHuman', () => {
     });
   });
 
-  it('carries the docket’s toggled proposal ids into resolveDecision (blizzard#367)', async () => {
+  it('carries the docket’s toggled proposal ids into resolveDecision', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', {
       ...WAITING_DECISION_DETAIL,

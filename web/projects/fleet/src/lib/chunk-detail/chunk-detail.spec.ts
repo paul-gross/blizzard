@@ -222,7 +222,7 @@ describe('ChunkDetail container', () => {
     expect(calls[0].body).toMatchObject({ choice: 'approve', struck: [] });
   });
 
-  it('forwards the docket’s toggled proposal ids to the resolve-decision client call (blizzard#367)', async () => {
+  it('forwards the docket’s toggled proposal ids to the resolve-decision client call', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_gate');
     await settle(fixture);

@@ -150,7 +150,7 @@ def test_work_items_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
 
 
 def test_work_item_strikes_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``work_item_strikes`` (blizzard#367) — downgrades to this revision's own parent
+    """``work_item_strikes`` — downgrades to this revision's own parent
     by id, so the drop half is asserted rather than inferred from a revision marker a
     no-op ``downgrade()`` would satisfy just as well."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head

@@ -113,9 +113,9 @@ def test_tool_call_segment_view_defaults_a_missing_input_truncated_to_false() ->
 
 
 def test_decision_resolution_request_struck_defaults_empty() -> None:
-    """A resolution naming no ``struck`` ids passes every proposal (blizzard#367) — the
-    field must default to ``[]``, not be required, or a caller unaware of striking would
-    fail every resolve."""
+    """A resolution naming no ``struck`` ids passes every proposal — the field must
+    default to ``[]``, not be required, or a caller unaware of striking would fail
+    every resolve."""
     assert DecisionResolutionRequest(choice="go").struck == []
 
 
