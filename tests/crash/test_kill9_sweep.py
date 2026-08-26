@@ -75,6 +75,7 @@ _DEDICATED_PREFIXES = (
     "declare-commit.",
     "checks.",
     "preempt.",
+    "close.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -101,6 +102,9 @@ _CHECKS_POINTS = [p for p in _ALL_POINTS if p.startswith("checks.")]
 # `preempt.*` fires in the RUNNER's PULL step, inside the teardown an operator restart forces
 # (#370). Swept by `test_kill9_at_preempt_crash_point`.
 _PREEMPT_POINTS = [p for p in _ALL_POINTS if p.startswith("preempt.")]
+# `close.*` fires inside the HUB — the close-intent outbox's own enqueue-then-drain
+# windows (blizzard#383). Swept by `test_kill9_at_close_crash_point`.
+_CLOSE_POINTS = [p for p in _ALL_POINTS if p.startswith("close.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -161,6 +165,10 @@ _CHECKS_CI_SUBSET = ("checks.after-results.before-marker",)
 # The preempt CI subset (#370): the family's lone member is its own CI representative.
 _PREEMPT_CI_SUBSET = ("preempt.after-kill.before-closure",)
 
+# The close CI subset (blizzard#383): the recovery-critical member — the drain's own
+# after-close, before-record window — is its own CI representative.
+_CLOSE_CI_SUBSET = ("close.after-close.before-record",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -186,6 +194,7 @@ _NUDGE_SWEEP = _select(_NUDGE_POINTS, _NUDGE_CI_SUBSET)
 _CHECKS_SWEEP = _select(_CHECKS_POINTS, _CHECKS_CI_SUBSET)
 _DECLARE_COMMIT_SWEEP = _select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSET)
 _PREEMPT_SWEEP = _select(_PREEMPT_POINTS, _PREEMPT_CI_SUBSET)
+_CLOSE_SWEEP = _select(_CLOSE_POINTS, _CLOSE_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -207,6 +216,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_CHECKS_POINTS, _CHECKS_CI_SUBSET))
         | set(_select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSET))
         | set(_select(_PREEMPT_POINTS, _PREEMPT_CI_SUBSET))
+        | set(_select(_CLOSE_POINTS, _CLOSE_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -2456,6 +2466,139 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+# --- The close-intent outbox (blizzard#383) — no forge: driven entirely through the ---
+# --- built-in `hub` work source, whose landing marker and whose closer are both local ---
+
+
+def _close_intent_graph_yaml() -> str:
+    """Named ``default-delivery`` so ``ensure_default`` (the hub work source's own mint
+    path) resolves to it. A trivial no-op ``build`` (executor: runner, mock-harness
+    ``verdict()`` judged — no real agent turn) hands off to ``land``, a hub node whose
+    ``run:`` step marks ``merged/<repo>`` with no git or forge involved and routes
+    straight to ``done`` — the runner must claim ``build`` at least once before it holds
+    and polls a hub node (#65), so both ``close.*`` windows only open after that handoff."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": "pass\n",
+                "judgement": {
+                    "prompt": "verdict('pass', 'nothing to build')\n",
+                    "choices": {"pass": {"description": "Nothing to build; hand off to land.", "to": "land"}},
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "land": {
+                "executor": "hub",
+                "run": [{"command": "true", "produces": f"merged/{REPO_NAME}"}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "land"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def _ingest_close_intent_chunk(hub: httpx.Client) -> tuple[str, str]:
+    """Mint the close-intent graph as the packaged default's own name, then create a
+    hub-owned work item (issue #360/#359) — no forge issue, no configured work source at
+    all. Returns ``(chunk_id, ref)``."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": _close_intent_graph_yaml()})
+    assert minted.status_code == 201, minted.text
+    created = hub.post("/api/work-sources/hub/items", json={"title": "close-intent crash chunk", "body": "b"})
+    assert created.status_code == 201, created.text
+    body = created.json()
+    chunk_id, ref = body["chunk_id"], body["ref"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id, ref
+
+
+def _wait_item_delivered(hub: httpx.Client, ref: str, *, timeout: float) -> dict | None:
+    """Poll the hub-owned item until its closure is durable — the drain sweep's own
+    cadence, not a request/response round trip (D3: unconditional, no config knob to
+    shorten). Returns the last-read item, or ``None`` if it never answered."""
+    deadline = time.monotonic() + timeout
+    item = None
+    while time.monotonic() < deadline:
+        resp = hub.get(f"/api/work-sources/hub/items/{ref}")
+        if resp.status_code == 200:
+            item = resp.json()
+            if item.get("closure") == "delivered":
+                return item
+        time.sleep(0.5)
+    return item
+
+
+@pytest.mark.parametrize("point", _CLOSE_SWEEP)
+def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` inside the close-intent outbox's own windows (blizzard#383) still
+    converges: the pending intent survives the crash and the item closes exactly once,
+    driven entirely through the built-in ``hub`` work source — no forge involved."""
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    # Both close.* windows fire inside the HUB — its hub-command-node executor and its
+    # own drain sweep. No configured work source at all: the built-in `hub` source,
+    # always seated, is the only one.
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point, work_sources=())
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id, ref = _ingest_close_intent_chunk(hub)
+
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        # The runner's own poll loop is what drives the held chunk's hub-advance calls
+        # (#65/#66) — no work for it to claim otherwise, since `land` is hub-executed.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        code = wait_death(hub_proc)
+        assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+
+        # Restart the hub UNARMED; the runner's replayed hub-advance poll resumes the
+        # interrupted run, and the always-on drain sweep retires the surviving intent.
+        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
+        await_http(hub, "/api/health", proc=hub_proc)
+
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+        assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+
+        item = _wait_item_delivered(hub, ref, timeout=60.0)
+        assert item is not None and item.get("closure") == "delivered", (
+            f"item {ref} did not close after kill at {point} (last read: {item!r})"
+        )
+
+        # Exactly-once: the drain never double-closes a ref it already retired.
+        hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+        with hub_engine.connect() as conn:
+            outcomes = conn.execute(
+                select(hub_schema.work_item_closures.c.outcome).where(
+                    (hub_schema.work_item_closures.c.chunk_id == chunk_id)
+                    & (hub_schema.work_item_closures.c.source == "hub")
+                    & (hub_schema.work_item_closures.c.ref == ref)
+                    & (hub_schema.work_item_closures.c.outcome.in_(["closed", "gone"]))
+                )
+            ).all()
+        assert len(outcomes) == 1, f"ref {ref} carries {len(outcomes)} terminal closure outcomes, not exactly one"
     finally:
         hub.close()
         terminate(runner_proc)

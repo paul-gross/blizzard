@@ -68,7 +68,7 @@ from blizzard.hub.domain.restart import RestartService
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptCaps, TranscriptIngestService
 from blizzard.hub.domain.work import IReadChunkRepository
-from blizzard.hub.domain.work_closure import DeliveryClosureReconciler
+from blizzard.hub.domain.work_closure import CloseIntentDrainer
 from blizzard.hub.domain.work_item_materialization import WorkItemMaterializationReconciler
 from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.events.broker import EventBroker
@@ -128,9 +128,9 @@ class HubServices:
     default_graph_doc: GraphDoc
     default_graph_yaml: str
     work_sources: IWorkSourceRegistry
-    #: The delivery closure reconciler (issue #216) — built here because it needs the
+    #: The close-intent drain sweep (blizzard#383) — built here because it needs the
     #: write-capable chunk repository, which only the composition root holds.
-    delivery_closure: DeliveryClosureReconciler
+    close_drain: CloseIntentDrainer
     #: The delivery-materialization reconciler (blizzard#366) — built here for the same
     #: reason: it needs the write-capable chunk and work-item repositories.
     work_item_materialization: WorkItemMaterializationReconciler
@@ -294,7 +294,7 @@ def build_services(
         default_graph_doc=PACKAGED.default.doc,
         default_graph_yaml=PACKAGED.default.text,
         work_sources=work_sources,
-        delivery_closure=DeliveryClosureReconciler(chunks=chunk_store, work_sources=work_sources, clock=clock),
+        close_drain=CloseIntentDrainer(chunks=chunk_store, work_sources=work_sources, clock=clock),
         work_item_materialization=WorkItemMaterializationReconciler(
             chunks=chunk_store,
             items=work_item_store,

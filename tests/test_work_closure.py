@@ -1,8 +1,7 @@
-"""The delivery closure fact and reconciler (issue #216).
-
-``ChunkStore.closable_work_refs()``/``record_work_item_closure()`` are exercised
-against a real, migrated store. The landing gate is ``has_landed_repos`` alone, not
-chunk status — a landed-then-stopped chunk still owes a closure attempt."""
+"""The close-intent outbox's drain (blizzard#383). ``ChunkStore.pending_close_intents()``/
+``retire_close_intent()`` are exercised against a real, migrated store. The enqueue side
+(landing/completion, D1) is covered by ``tests/test_close_intents_enqueue.py``; this file
+covers the drain that retires what the enqueue queued."""
 
 from __future__ import annotations
 
@@ -15,13 +14,13 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.work import (
-    ClosableWorkRef,
     IWriteChunkRepository,
+    PendingCloseIntent,
     WorkItemCloseOutcome,
     WorkItemClosure,
     WorkRef,
 )
-from blizzard.hub.domain.work_closure import DeliveryClosureReconciler
+from blizzard.hub.domain.work_closure import CloseIntentDrainer
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from tests.support import FakeCloser, HubHarness, build_hub, ingest
@@ -39,7 +38,8 @@ def _writable(hub: HubHarness) -> IWriteChunkRepository:
 def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     """Simulate a generic hub command node's mid-run ``merged/<repo>`` marker —
     the current landing truth :func:`~blizzard.hub.domain.work.has_landed_repos` reads
-    (issue #67), independent of any real graph/node machinery."""
+    (issue #67), independent of any real graph/node machinery. Enqueues a pending close
+    intent (D1) as a side effect of the same write."""
     _writable(hub).record_hub_artifact(
         chunk_id,
         node_id="nd_deliver",
@@ -51,206 +51,49 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     )
 
 
-# IReadChunkRepository.closable_work_refs() — real ChunkStore, real migrations
+# ChunkStore.retire_close_intent() — the idempotent-bool contract
 
 
 @pytest.mark.component
-def test_closable_work_refs_includes_a_landed_chunks_refs(tmp_path: Path) -> None:
+def test_retire_close_intent_returns_true_on_the_first_write(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
 
-    refs = hub.services.chunks.closable_work_refs()
+    retired = _writable(hub).retire_close_intent(
+        chunk_id, pointer=WorkRef(source="default", ref="1"), at=hub.clock.now()
+    )
 
-    assert ClosableWorkRef(chunk_id=chunk_id, ref=WorkRef(source="default", ref="1")) in refs
-
-
-@pytest.mark.component
-def test_closable_work_refs_excludes_an_unlanded_chunk(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-
-    assert hub.services.chunks.closable_work_refs() == []
+    assert retired is True
+    assert hub.services.chunks.pending_close_intents() == []
 
 
 @pytest.mark.component
-def test_closable_work_refs_excludes_a_stopped_chunk_that_never_landed(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    chunk = hub.services.chunks.get(chunk_id)
-    assert chunk is not None
-    hub.services.stop.stop(chunk, by="test")
-
-    assert hub.services.chunks.closable_work_refs() == []
-
-
-@pytest.mark.component
-def test_closable_work_refs_includes_a_landed_chunk_later_stopped(tmp_path: Path) -> None:
-    """The plan's own recorded deviation: ``has_landed_repos`` is the sole gate, not
-    chunk status — a chunk that landed and was *then* stopped still owes a closure
-    attempt, since it was in fact delivered."""
-    hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    _land(hub, chunk_id)
-    chunk = hub.services.chunks.get(chunk_id)
-    assert chunk is not None
-    hub.services.stop.stop(chunk, by="test")
-
-    refs = hub.services.chunks.closable_work_refs()
-
-    assert ClosableWorkRef(chunk_id=chunk_id, ref=WorkRef(source="default", ref="1")) in refs
-
-
-@pytest.mark.component
-def test_closable_work_refs_includes_an_operator_completed_chunk_with_no_landed_repos(tmp_path: Path) -> None:
-    """D4: an operator completion joins landing as a closure trigger — a hand-completed
-    chunk owes a closure attempt even though ``has_landed_repos`` is false."""
-    hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    chunk = hub.services.chunks.get(chunk_id)
-    assert chunk is not None
-    hub.services.complete.complete(chunk, by="test")
-
-    refs = hub.services.chunks.closable_work_refs()
-
-    assert ClosableWorkRef(chunk_id=chunk_id, ref=WorkRef(source="default", ref="1")) in refs
-
-
-@pytest.mark.component
-def test_closable_work_refs_excludes_a_grouped_chunk(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    survivor_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=False)
-    merged_id = ingest(hub, [{"source": "default", "ref": "2"}], promote=False)
-    _land(hub, merged_id)
-
-    hub.services.group.group(survivor_id, [merged_id])
-
-    refs = hub.services.chunks.closable_work_refs()
-    assert WorkRef(source="default", ref="2") not in {r.ref for r in refs}
-
-
-@pytest.mark.component
-def test_completing_an_already_done_chunk_writes_no_second_fact(tmp_path: Path) -> None:
-    """D5: idempotent by no-op. Completing twice records the closure once — the second
-    ``complete()`` call is a no-op, not a second ``chunk_completed`` row."""
-    hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    chunk = hub.services.chunks.get(chunk_id)
-    assert chunk is not None
-
-    first = hub.services.complete.complete(chunk, by="test")
-    second = hub.services.complete.complete(chunk, by="test")
-
-    assert first is not None
-    assert second is None
-
-
-@pytest.mark.component
-def test_closable_work_refs_excludes_a_ref_with_a_closed_fact(tmp_path: Path) -> None:
+def test_retire_close_intent_is_idempotent(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
     pointer = WorkRef(source="default", ref="1")
-    _writable(hub).record_work_item_closure(
-        chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
-    )
 
-    refs = hub.services.chunks.closable_work_refs()
-
-    assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) not in refs
-
-
-@pytest.mark.component
-def test_closable_work_refs_excludes_a_ref_with_a_gone_fact(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    _land(hub, chunk_id)
-    pointer = WorkRef(source="default", ref="1")
-    _writable(hub).record_work_item_closure(
-        chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.GONE, reason="deleted", at=hub.clock.now()
-    )
-
-    refs = hub.services.chunks.closable_work_refs()
-
-    assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) not in refs
-
-
-@pytest.mark.component
-def test_closable_work_refs_still_includes_a_ref_with_only_a_failed_fact(tmp_path: Path) -> None:
-    """``failed`` is not terminal — the reconciler retries it on the next sweep."""
-    hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    _land(hub, chunk_id)
-    pointer = WorkRef(source="default", ref="1")
-    _writable(hub).record_work_item_closure(
-        chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.FAILED, reason="boom", at=hub.clock.now()
-    )
-
-    refs = hub.services.chunks.closable_work_refs()
-
-    assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) in refs
-
-
-# IWriteChunkRepository.record_work_item_closure() — the idempotent-bool contract
-
-
-@pytest.mark.component
-def test_record_work_item_closure_returns_true_on_the_first_write(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-
-    wrote = _writable(hub).record_work_item_closure(
-        chunk_id,
-        pointer=WorkRef(source="default", ref="1"),
-        outcome=WorkItemCloseOutcome.CLOSED,
-        reason=None,
-        at=hub.clock.now(),
-    )
-
-    assert wrote is True
-
-
-@pytest.mark.component
-def test_record_work_item_closure_is_idempotent_per_chunk_source_ref_outcome(tmp_path: Path) -> None:
-    """Driven twice, then re-read: the second write is a no-op and returns False —
-    the mutation-review re-read (``bzh:mutation-review-selection``)."""
-    hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    pointer = WorkRef(source="default", ref="1")
-
-    first = _writable(hub).record_work_item_closure(
-        chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
-    )
-    second = _writable(hub).record_work_item_closure(
-        chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
-    )
+    first = _writable(hub).retire_close_intent(chunk_id, pointer=pointer, at=hub.clock.now())
+    second = _writable(hub).retire_close_intent(chunk_id, pointer=pointer, at=hub.clock.now())
 
     assert first is True
     assert second is False
-    _land(hub, chunk_id)
-    assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.closable_work_refs()
 
 
 @pytest.mark.component
-def test_record_work_item_closure_allows_a_distinct_outcome_for_the_same_ref(tmp_path: Path) -> None:
-    """A ``failed`` attempt followed by a later ``closed`` one is two distinct rows —
-    the unique key is ``(chunk_id, source, ref, outcome)``, not ``(chunk_id, source, ref)``."""
+def test_retire_close_intent_against_a_never_enqueued_ref_is_a_no_op(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    pointer = WorkRef(source="default", ref="1")
 
-    failed = _writable(hub).record_work_item_closure(
-        chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.FAILED, reason="boom", at=hub.clock.now()
-    )
-    closed = _writable(hub).record_work_item_closure(
-        chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
+    retired = _writable(hub).retire_close_intent(
+        "ch_nonexistent", pointer=WorkRef(source="default", ref="1"), at=hub.clock.now()
     )
 
-    assert failed is True
-    assert closed is True
+    assert retired is False
 
 
-# DeliveryClosureReconciler.sweep() — fakes (unit tier)
+# CloseIntentDrainer.sweep() — fakes (unit tier)
 
 
 @dataclass
@@ -262,19 +105,20 @@ class _RecordedEvent:
     detail: dict | None
 
 
-class _FakeClosureChunks:
-    """The minimal slice of :class:`IWriteChunkRepository`
-    :class:`DeliveryClosureReconciler` calls — ``closable_work_refs`` returns a fixed
-    candidate list; ``record_work_item_closure``/``record_event`` are recorded rather
-    than persisted."""
+class _FakeCloseChunks:
+    """The minimal slice of :class:`IWriteChunkRepository` :class:`CloseIntentDrainer`
+    calls — ``pending_close_intents`` returns a fixed candidate list;
+    ``record_work_item_closure``/``retire_close_intent``/``record_event`` are recorded
+    rather than persisted."""
 
-    def __init__(self, candidates: list[ClosableWorkRef]) -> None:
+    def __init__(self, candidates: list[PendingCloseIntent]) -> None:
         self._candidates = candidates
         self.closures: list[tuple[str, WorkRef, WorkItemCloseOutcome, str | None]] = []
+        self.retired: list[tuple[str, WorkRef]] = []
         self.events: list[_RecordedEvent] = []
         self._written: set[tuple[str, str, str, str]] = set()
 
-    def closable_work_refs(self) -> list[ClosableWorkRef]:
+    def pending_close_intents(self) -> list[PendingCloseIntent]:
         return list(self._candidates)
 
     def record_work_item_closure(
@@ -285,6 +129,10 @@ class _FakeClosureChunks:
             return False
         self._written.add(key)
         self.closures.append((chunk_id, pointer, outcome, reason))
+        return True
+
+    def retire_close_intent(self, chunk_id: str, *, pointer: WorkRef, at: object) -> bool:
+        self.retired.append((chunk_id, pointer))
         return True
 
     def record_event(
@@ -306,36 +154,37 @@ class _FakeClosureChunks:
         return len(self.events)
 
 
-def _reconciler(chunks: _FakeClosureChunks, closers: dict[str, FakeCloser]) -> DeliveryClosureReconciler:
+def _drainer(chunks: _FakeCloseChunks, closers: dict[str, FakeCloser]) -> CloseIntentDrainer:
     registry = WorkSourceRegistry({}, closers=closers)  # type: ignore[arg-type]
     clock = FixedClock(datetime(2026, 8, 1, tzinfo=UTC))
-    return DeliveryClosureReconciler(chunks=cast(IWriteChunkRepository, chunks), work_sources=registry, clock=clock)
+    return CloseIntentDrainer(chunks=cast(IWriteChunkRepository, chunks), work_sources=registry, clock=clock)
 
 
-def test_sweep_closes_a_landed_refs_pointer_and_records_an_info_event() -> None:
+def test_sweep_closes_a_pending_intents_pointer_and_records_an_info_event() -> None:
     pointer = WorkRef(source="default", ref="1")
     closer = FakeCloser()
-    chunks = _FakeClosureChunks([ClosableWorkRef(chunk_id="ch_1", ref=pointer)])
+    chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id="ch_1", ref=pointer)])
 
-    _reconciler(chunks, {"default": closer}).sweep()
+    _drainer(chunks, {"default": closer}).sweep()
 
     assert closer.closed == [pointer]
     assert chunks.closures == [("ch_1", pointer, WorkItemCloseOutcome.CLOSED, None)]
+    assert chunks.retired == [("ch_1", pointer)]
     assert len(chunks.events) == 1
     assert chunks.events[0].severity == "info"
     assert chunks.events[0].kind == "work-item-closed"
 
 
-def test_sweep_closes_each_ref_through_its_own_sources_binding() -> None:
+def test_sweep_closes_each_intent_through_its_own_sources_binding() -> None:
     alpha_ref = WorkRef(source="alpha", ref="1")
     beta_ref = WorkRef(source="beta", ref="2")
     alpha_closer = FakeCloser()
     beta_closer = FakeCloser()
-    chunks = _FakeClosureChunks(
-        [ClosableWorkRef(chunk_id="ch_1", ref=alpha_ref), ClosableWorkRef(chunk_id="ch_2", ref=beta_ref)]
+    chunks = _FakeCloseChunks(
+        [PendingCloseIntent(chunk_id="ch_1", ref=alpha_ref), PendingCloseIntent(chunk_id="ch_2", ref=beta_ref)]
     )
 
-    _reconciler(chunks, {"alpha": alpha_closer, "beta": beta_closer}).sweep()
+    _drainer(chunks, {"alpha": alpha_closer, "beta": beta_closer}).sweep()
 
     assert alpha_closer.closed == [alpha_ref]
     assert beta_closer.closed == [beta_ref]
@@ -345,53 +194,66 @@ def test_sweep_continues_past_one_ref_that_raises() -> None:
     good = WorkRef(source="default", ref="1")
     bad = WorkRef(source="default", ref="2")
     closer = FakeCloser(fail_refs={"2"})
-    chunks = _FakeClosureChunks([ClosableWorkRef(chunk_id="ch_1", ref=good), ClosableWorkRef(chunk_id="ch_2", ref=bad)])
+    chunks = _FakeCloseChunks(
+        [PendingCloseIntent(chunk_id="ch_1", ref=good), PendingCloseIntent(chunk_id="ch_2", ref=bad)]
+    )
 
-    _reconciler(chunks, {"default": closer}).sweep()  # must not raise
+    _drainer(chunks, {"default": closer}).sweep()  # must not raise
 
     assert closer.closed == [good]
     outcomes = {ref.ref: outcome for _cid, ref, outcome, _reason in chunks.closures}
     assert outcomes["1"] is WorkItemCloseOutcome.CLOSED
     assert outcomes["2"] is WorkItemCloseOutcome.FAILED
     assert {e.kind for e in chunks.events} == {"work-item-closed", "work-item-close-failed"}
+    assert chunks.retired == [("ch_1", good)]  # the failed one stays pending — never retired
 
 
 def test_sweep_records_a_gone_ref_distinctly_from_a_failed_one() -> None:
     ref = WorkRef(source="default", ref="1")
     closer = FakeCloser(gone_refs={"1"})
-    chunks = _FakeClosureChunks([ClosableWorkRef(chunk_id="ch_1", ref=ref)])
+    chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id="ch_1", ref=ref)])
 
-    _reconciler(chunks, {"default": closer}).sweep()
+    _drainer(chunks, {"default": closer}).sweep()
 
     assert chunks.closures == [("ch_1", ref, WorkItemCloseOutcome.GONE, "1 no longer exists")]
+    assert chunks.retired == [("ch_1", ref)]  # gone retires the intent, same as closed
     assert chunks.events[0].severity == "warning"
     assert chunks.events[0].kind == "work-item-close-failed"
 
 
-def test_sweep_skips_a_ref_whose_source_has_no_closer_bound() -> None:
-    """A candidate from a source not in ``closing_names()`` is never attempted —
-    ``closing_names()`` is the only iteration space."""
-    unopted_ref = WorkRef(source="unopted", ref="1")
-    chunks = _FakeClosureChunks([ClosableWorkRef(chunk_id="ch_1", ref=unopted_ref)])
+def test_sweep_leaves_a_failed_intent_pending_and_retries_it() -> None:
+    ref = WorkRef(source="default", ref="1")
+    closer = FakeCloser(fail_refs={"1"})
+    chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id="ch_1", ref=ref)])
 
-    _reconciler(chunks, {}).sweep()
+    _drainer(chunks, {"default": closer}).sweep()
+
+    assert chunks.closures == [("ch_1", ref, WorkItemCloseOutcome.FAILED, "boom closing 1")]
+    assert chunks.retired == []
+
+
+def test_sweep_skips_an_intent_whose_source_has_no_closer_bound() -> None:
+    """D4: an intent from a source not seated as a closer stays pending, untouched —
+    the sweep neither closes it nor retires it, and issues no forge call."""
+    unopted_ref = WorkRef(source="unopted", ref="1")
+    chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id="ch_1", ref=unopted_ref)])
+
+    _drainer(chunks, {}).sweep()
 
     assert chunks.closures == []
+    assert chunks.retired == []
     assert chunks.events == []
 
 
-def test_sweep_over_no_candidates_does_nothing() -> None:
-    """A stopped-and-never-landed chunk contributes nothing to ``closable_work_refs``
-    (Phase 3's own concern); this proves the reconciler is a clean no-op over an empty
-    candidate set."""
+def test_sweep_over_an_empty_queue_issues_no_forge_call() -> None:
     closer = FakeCloser()
 
-    _reconciler(_FakeClosureChunks([]), {"default": closer}).sweep()
+    _drainer(_FakeCloseChunks([]), {"default": closer}).sweep()
 
     assert closer.closed == []
 
 
-# DeliveryClosureReconciler.sweep() — real store + FakeCloser (component tier)
+# CloseIntentDrainer.sweep() — real store + FakeCloser (component tier)
 
 
 @pytest.mark.component
@@ -403,36 +265,52 @@ def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Pat
     _land(hub, chunk_id)
     closer = FakeCloser()
     registry = WorkSourceRegistry({}, closers={"default": closer})
-    reconciler = DeliveryClosureReconciler(chunks=_writable(hub), work_sources=registry, clock=hub.clock)
+    drainer = CloseIntentDrainer(chunks=_writable(hub), work_sources=registry, clock=hub.clock)
 
-    reconciler.sweep()
-    reconciler.sweep()
+    drainer.sweep()
+    drainer.sweep()
 
     assert closer.closed == [WorkRef(source="default", ref="1")]  # only the first pass actually closed it
-    assert hub.services.chunks.closable_work_refs() == []
+    assert hub.services.chunks.pending_close_intents() == []
 
 
 @pytest.mark.component
-def test_sweep_retries_a_failed_ref_on_the_next_pass_until_it_converges(tmp_path: Path) -> None:
+def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
     pointer = WorkRef(source="default", ref="1")
     closer = FakeCloser(fail_refs={"1"})
     registry = WorkSourceRegistry({}, closers={"default": closer})
-    reconciler = DeliveryClosureReconciler(chunks=_writable(hub), work_sources=registry, clock=hub.clock)
+    drainer = CloseIntentDrainer(chunks=_writable(hub), work_sources=registry, clock=hub.clock)
 
-    reconciler.sweep()
-    assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.closable_work_refs()
+    drainer.sweep()
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.pending_close_intents()
 
     closer.fail_refs.clear()  # simulate the transient failure clearing before the next sweep
-    reconciler.sweep()
+    drainer.sweep()
 
-    assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.closable_work_refs()
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.pending_close_intents()
     assert closer.closed == [pointer]
 
 
-# DeliveryClosureReconciler.sweep() against the built-in `hub` source (issue #360) — no
+@pytest.mark.component
+def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_path: Path) -> None:
+    """D4: a source removed from config after a landing — the only way this arises —
+    leaves a stuck pending row rather than dead-lettering it."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    _land(hub, chunk_id)
+    registry = WorkSourceRegistry({}, closers={})  # no closer seated for any source
+    drainer = CloseIntentDrainer(chunks=_writable(hub), work_sources=registry, clock=hub.clock)
+
+    drainer.sweep()
+
+    pointer = WorkRef(source="default", ref="1")
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.pending_close_intents()
+
+
+# CloseIntentDrainer.sweep() against the built-in `hub` source (issue #360) — no
 # `close = true` opt-in exists for it, so `build_hub`'s own registry already seats it.
 
 
@@ -446,12 +324,12 @@ def test_sweep_closes_a_landed_hub_born_chunks_item(tmp_path: Path) -> None:
     chunk_id = created["chunk_id"]
     _land(hub, chunk_id)
 
-    hub.services.delivery_closure.sweep()
+    hub.services.close_drain.sweep()
 
     row = WorkItemStore(hub.engine).get("hub", created["ref"])
     assert row is not None
     assert row.closure is WorkItemClosure.DELIVERED
-    assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.closable_work_refs()
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.pending_close_intents()
 
 
 @pytest.mark.component
@@ -463,8 +341,8 @@ def test_sweep_replayed_over_an_already_delivered_hub_item_is_a_clean_no_op(tmp_
     chunk_id = created["chunk_id"]
     _land(hub, chunk_id)
 
-    hub.services.delivery_closure.sweep()
-    hub.services.delivery_closure.sweep()
+    hub.services.close_drain.sweep()
+    hub.services.close_drain.sweep()
 
     pointer = WorkRef(source="hub", ref=created["ref"])
-    assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.closable_work_refs()
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.pending_close_intents()

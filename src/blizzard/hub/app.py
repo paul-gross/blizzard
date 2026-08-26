@@ -75,6 +75,11 @@ EVENT_DERIVATION_INTERVAL_SECONDS = 30
 #: sharing the work-source-gated ``annotation_interval_seconds``.
 WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS = 30
 
+#: The close-intent drain sweep's own interval (blizzard#383 D3) — unconditional, like
+#: its two siblings above: the enqueue is source-agnostic, so the drain runs whether or
+#: not any source is close-capable today.
+CLOSE_DRAIN_INTERVAL_SECONDS = 30
+
 
 class _Sweepable(Protocol):
     """The one capability :class:`Sweep` needs — structural, so any reconciler
@@ -94,7 +99,9 @@ class Sweep:
 
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
-        """Every sweep a work source has opted this app into — none on the store-free app."""
+        """The forge-status sweep a work source opts into, plus the always-on
+        event-derivation, delivery-materialization, and close-drain sweeps — none on the
+        store-free app."""
         services: HubServices | None = app.state.services
         if services is None:
             return
@@ -102,8 +109,6 @@ class Sweep:
         if services.work_sources.annotating_names():
             annotator = AnnotationReconciler(chunks=services.chunks, work_sources=services.work_sources)
             yield cls(annotator, interval, app.state.shutdown, "blizzard.hub.forge_status")
-        if services.work_sources.closing_names():
-            yield cls(services.delivery_closure, interval, app.state.shutdown, "blizzard.hub.work_closure")
         yield cls(
             services.event_derivation,
             EVENT_DERIVATION_INTERVAL_SECONDS,
@@ -116,6 +121,7 @@ class Sweep:
             app.state.shutdown,
             "blizzard.hub.work_item_materialization",
         )
+        yield cls(services.close_drain, CLOSE_DRAIN_INTERVAL_SECONDS, app.state.shutdown, "blizzard.hub.work_closure")
 
     async def run(self) -> None:
         """Call ``sweep()``, then wait out the interval. Races ``shutdown`` so it wakes

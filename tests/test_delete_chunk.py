@@ -20,7 +20,7 @@ from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import (
     Chunk,
-    ClosableWorkRef,
+    PendingCloseIntent,
     WorkItemAuthor,
     WorkItemClosure,
     WorkRef,
@@ -65,9 +65,10 @@ def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
     chunks.record_hub_artifact(
         "ch_1", node_id="nd_deliver", node_name="deliver", epoch=1, name="merged/widget", content="sha", at=_T0
     )
-    # Sanity: landed and closable *before* the delete — proves the post-delete emptiness
-    # below is the ephemeral exclusion at work, not a vacuously-empty read.
-    assert chunks.closable_work_refs() == [ClosableWorkRef(chunk_id="ch_1", ref=pointer)]
+    # Sanity: landed and carrying a pending intent *before* the delete — proves the
+    # post-delete emptiness below is the ephemeral exclusion at work, not a
+    # vacuously-empty read.
+    assert chunks.pending_close_intents() == [PendingCloseIntent(chunk_id="ch_1", ref=pointer)]
 
     delete.delete(chunk, by="operator")
 
@@ -76,7 +77,7 @@ def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
     assert chunks.list_all() == []
     assert chunks.find_live_holder(pointer) is None
     assert chunks.live_work_refs() == {}
-    assert chunks.closable_work_refs() == []
+    assert chunks.pending_close_intents() == []
 
 
 # --- refusal at every status outside GROUPABLE_STATUSES, success at both members ---

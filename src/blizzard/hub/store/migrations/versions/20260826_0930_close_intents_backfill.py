@@ -1,7 +1,7 @@
 """Back-fill ``close_intents`` for every already-landed or hand-completed, non-ephemeral
 chunk whose refs carry no terminal ``work_item_closures`` outcome (D7) — the
-source-agnostic set ``closable_work_refs()`` itself named, stamped at the landing or
-completion instant that made each chunk closable.
+source-agnostic set the retired whole-history reconciler once scanned for at read time,
+stamped at the landing or completion instant that made each chunk closable.
 
 Because no deployment ever set ``close = true`` (a later revision removes the key), this
 back-fill closes the whole accumulated delivered backlog in one pass on first drain — the

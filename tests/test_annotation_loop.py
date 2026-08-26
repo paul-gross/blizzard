@@ -1,6 +1,6 @@
 """Unit tests for the hub's sweep-loop background driver (``Sweep``), shared by the
-forge-status annotation loop (issue #179) and the delivery closure loop (issue #216),
-and for ``_lifespan``'s closure-task-starting gate (issue #216).
+forge-status annotation loop (issue #179) and the close-intent drain loop (blizzard#383),
+and for ``_lifespan``'s task-starting conditions.
 """
 
 from __future__ import annotations
@@ -79,41 +79,37 @@ async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# _lifespan's closure-task-starting condition (issue #216)
+# _lifespan's task-starting conditions
 
 
 class _FakeWorkSources:
-    """A minimal stand-in for ``IWorkSourceRegistry`` — only the two ``*_names()``
-    methods ``Sweep.all`` consults to decide whether to start each loop."""
+    """A minimal stand-in for ``IWorkSourceRegistry`` — only ``annotating_names()``,
+    the one method ``Sweep.all`` still consults to decide whether to start a loop."""
 
-    def __init__(self, *, annotating: tuple[str, ...] = (), closing: tuple[str, ...] = ()) -> None:
+    def __init__(self, *, annotating: tuple[str, ...] = ()) -> None:
         self._annotating = annotating
-        self._closing = closing
 
     def annotating_names(self) -> list[str]:
         return list(self._annotating)
 
-    def closing_names(self) -> list[str]:
-        return list(self._closing)
-
 
 class _FakeServices:
     """A minimal stand-in for ``HubServices`` — only the attributes ``_lifespan``
-    reads: ``work_sources`` (the start-condition), ``delivery_closure`` (the
-    already-built reconciler it starts or not, mirroring the composition root),
-    ``event_derivation`` (blizzard#254 — started unconditionally, no source gate), and
-    ``work_item_materialization`` (blizzard#366 D9 — started unconditionally too)."""
+    reads: ``work_sources`` (the forge-status start-condition), ``close_drain``
+    (blizzard#383 — started unconditionally, no source gate), ``event_derivation``
+    (blizzard#254 — started unconditionally too), and ``work_item_materialization``
+    (blizzard#366 D9 — the same)."""
 
     def __init__(
         self,
         *,
         work_sources: _FakeWorkSources,
-        delivery_closure: _CountingReconciler,
+        close_drain: _CountingReconciler | None = None,
         event_derivation: _CountingReconciler | None = None,
         work_item_materialization: _CountingReconciler | None = None,
     ) -> None:
         self.work_sources = work_sources
-        self.delivery_closure = delivery_closure
+        self.close_drain = close_drain or _CountingReconciler()
         self.event_derivation = event_derivation or _CountingReconciler()
         self.work_item_materialization = work_item_materialization or _CountingReconciler()
         self.chunks = None  # unread unless annotating_names() is non-empty, which these tests never set
@@ -134,33 +130,11 @@ class _FakeApp:
         self.state = _FakeState(services, config)
 
 
-async def test_lifespan_does_not_start_the_closure_loop_when_no_source_opts_in(tmp_path: Path) -> None:
-    closure = _CountingReconciler()
-    services = _FakeServices(work_sources=_FakeWorkSources(), delivery_closure=closure)
-    app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
-
-    async with _lifespan(app):  # type: ignore[arg-type]
-        await asyncio.sleep(0)
-
-    assert closure.calls == 0
-
-
-async def test_lifespan_starts_the_closure_loop_when_a_source_opts_in(tmp_path: Path) -> None:
-    closure = _CountingReconciler()
-    services = _FakeServices(work_sources=_FakeWorkSources(closing=("default",)), delivery_closure=closure)
-    app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:", annotation_interval_seconds=3600))
-
-    async with _lifespan(app):  # type: ignore[arg-type]
-        await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
-
-    assert closure.calls == 1
-
-
 async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_path: Path) -> None:
     """blizzard#254 D1: no work source opts a chunk's transcript events into anything —
     the sweep is yielded and started regardless."""
     event_derivation = _CountingReconciler()
-    services = _FakeServices(work_sources=_FakeWorkSources(), delivery_closure=_CountingReconciler())
+    services = _FakeServices(work_sources=_FakeWorkSources())
     services.event_derivation = event_derivation
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
@@ -175,7 +149,7 @@ async def test_lifespan_starts_the_work_item_materialization_loop_unconditionall
     store, so there is nothing a work-source opt-in would protect — the sweep is yielded
     and started regardless, the same ground ``event_derivation`` stands on."""
     materialization = _CountingReconciler()
-    services = _FakeServices(work_sources=_FakeWorkSources(), delivery_closure=_CountingReconciler())
+    services = _FakeServices(work_sources=_FakeWorkSources())
     services.work_item_materialization = materialization
     app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
 
@@ -183,3 +157,18 @@ async def test_lifespan_starts_the_work_item_materialization_loop_unconditionall
         await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
 
     assert materialization.calls == 1
+
+
+async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Path) -> None:
+    """blizzard#383 D3: the enqueue is source-agnostic, so the drain runs whether or not
+    any source is close-capable today — the sweep is yielded and started regardless,
+    like its two siblings above."""
+    close_drain = _CountingReconciler()
+    services = _FakeServices(work_sources=_FakeWorkSources())
+    services.close_drain = close_drain
+    app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
+
+    async with _lifespan(app):  # type: ignore[arg-type]
+        await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
+
+    assert close_drain.calls == 1

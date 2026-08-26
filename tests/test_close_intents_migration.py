@@ -1,8 +1,8 @@
 """The ``close_intents`` table create and its D7 back-fill (blizzard#383).
 
 The back-fill enqueues one pending intent per already-landed or hand-completed,
-non-ephemeral chunk's still-open work ref — ``closable_work_refs()``'s own predicate,
-narrowed to no source: an opted-in and a never-opted-in source both back-fill alike."""
+non-ephemeral chunk's still-open work ref, narrowed to no source: an opted-in and a
+never-opted-in source both back-fill alike."""
 
 from __future__ import annotations
 

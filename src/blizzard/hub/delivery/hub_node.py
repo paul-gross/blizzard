@@ -65,6 +65,14 @@ _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE = crashpoint(
     "hubnode.after-poll.before-slot-release",
     "the poll-attempt fact is durable; the fleet-wide slot is not yet released",
 )
+# The close-intent outbox's own family (blizzard#383) — its first window. The enqueue
+# rides the same transaction as the `merged/<repo>` marker just above, so it has no
+# window of its own; this fires only on a landing marker, right after both are durable
+# and before any drain has run.
+_CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN = crashpoint(
+    "close.after-enqueue.before-drain", "a landing marker and its close intents are durable; no drain has run yet"
+)
+_MARKER_PREFIX = "merged/"
 
 
 @dataclass(frozen=True)
@@ -414,6 +422,8 @@ class HubNodeExecutor:
                         at=self._clock.now(),
                     )
                 _CP_HUBNODE_AFTER_MARKER_BEFORE_NEXT.reached()
+                if step.produces and step.produces.startswith(_MARKER_PREFIX):
+                    _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN.reached()
                 if printed:
                     chosen = printed
                     break

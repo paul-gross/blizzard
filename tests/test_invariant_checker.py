@@ -693,3 +693,74 @@ def test_two_migrations_at_one_node_epoch_is_a_violation(tmp_path: Path) -> None
             )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:one-migration-per-node-epoch" in slugs
+
+
+def test_a_ref_closed_and_gone_both_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        for outcome in ("closed", "gone"):
+            conn.execute(
+                insert(hub.work_item_closures).values(
+                    chunk_id="ch_1", source="default", ref="1", outcome=outcome, reason=None, recorded_at=_NOW
+                )
+            )
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-double-terminal-closure" in slugs
+
+
+def test_a_ref_closed_just_once_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.work_item_closures).values(
+                chunk_id="ch_1", source="default", ref="1", outcome="closed", reason=None, recorded_at=_NOW
+            )
+        )
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-double-terminal-closure" not in slugs
+
+
+def test_a_pending_intent_against_an_already_terminal_ref_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.work_item_closures).values(
+                chunk_id="ch_1", source="default", ref="1", outcome="closed", reason=None, recorded_at=_NOW
+            )
+        )
+        conn.execute(
+            insert(hub.close_intents).values(
+                chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None
+            )
+        )
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-pending-intent-against-terminal-ref" in slugs
+
+
+def test_a_retired_intent_against_a_terminal_ref_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.work_item_closures).values(
+                chunk_id="ch_1", source="default", ref="1", outcome="closed", reason=None, recorded_at=_NOW
+            )
+        )
+        conn.execute(
+            insert(hub.close_intents).values(
+                chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=_NOW
+            )
+        )
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-pending-intent-against-terminal-ref" not in slugs
+
+
+def test_a_pending_intent_against_a_non_terminal_ref_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.close_intents).values(
+                chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None
+            )
+        )
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:no-pending-intent-against-terminal-ref" not in slugs

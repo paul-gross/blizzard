@@ -152,11 +152,11 @@ class WorkItemMaterializationOutcome(StrEnum):
 
 
 @dataclass(frozen=True)
-class ClosableWorkRef:
-    """One ``(chunk_id, ref)`` pair a landed, non-grouped chunk still owes a closure
-    attempt — :meth:`IReadChunkRepository.closable_work_refs`'s own row shape. Pairs,
-    not a ``WorkRef``-keyed dict: two chunks can name the same ref, and a dict would
-    silently drop one."""
+class PendingCloseIntent:
+    """One ``(chunk_id, ref)`` pair carrying a pending ``close_intents`` row (blizzard#383)
+    — :meth:`IReadChunkRepository.pending_close_intents`'s own row shape. Pairs, not a
+    ``WorkRef``-keyed dict: two chunks can name the same ref, and a dict would silently
+    drop one."""
 
     chunk_id: str
     ref: WorkRef
@@ -1301,11 +1301,11 @@ class IReadChunkRepository(Protocol):
         forge-status reconciler's desired-state sweep (issue #179)."""
         ...
 
-    def closable_work_refs(self) -> list[ClosableWorkRef]:
-        """Every ``(chunk_id, ref)`` pair a landed, non-grouped chunk still owes a closure
-        attempt — :meth:`ChunkFacts.has_landed_repos` is the sole landing gate, so a chunk that landed
-        and was *later* stopped still closes. A ref already carrying a terminal
-        (``closed``/``gone``) closure fact is excluded; one carrying only ``failed`` is not."""
+    def pending_close_intents(self) -> list[PendingCloseIntent]:
+        """Every ``(chunk_id, ref)`` pair still carrying a pending ``close_intents`` row
+        (blizzard#383) — the enqueue side (D1) is the sole gate, so this reads what a
+        landing or completion transaction already decided; a chunk in the ephemeral set
+        is excluded even if its intent enqueued before it was grouped or deleted."""
         ...
 
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
@@ -1468,6 +1468,12 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Append one closure-attempt outcome fact, idempotent per ``(chunk_id,
         pointer.source, pointer.ref, outcome)``. ``reason`` carries the failure/gone
         detail; ``None`` for ``closed``. Returns True iff it wrote a fresh row."""
+        ...
+
+    def retire_close_intent(self, chunk_id: str, *, pointer: WorkRef, at: datetime) -> bool:
+        """Retire one pending ``close_intents`` row (blizzard#383) — a ``closed``/``gone``
+        outcome's own side effect, never a ``failed`` one's. Idempotent: retiring an
+        already-retired or nonexistent intent is a no-op. Returns True iff it wrote."""
         ...
 
     def record_work_item_materialization(

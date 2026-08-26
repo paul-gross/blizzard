@@ -423,6 +423,64 @@ class NoDoubleDelivery(QueryCheck):
         return violations
 
 
+class NoDoubleTerminalClosure(QueryCheck):
+    """At most one terminal (``closed``/``gone``) ``work_item_closures`` outcome per
+    ``(chunk, source, ref)`` — the drain's idempotency guard (blizzard#383) is a
+    ``retired_at`` check, not a store-level constraint, so a bug there would otherwise
+    go unseen: the schema itself permits ``closed`` and ``gone`` to coexist."""
+
+    def run(self) -> list[Violation]:
+        violations: list[Violation] = []
+        key = Counter(
+            (row.chunk_id, row.source, row.ref)
+            for row in self.conn.execute(
+                select(
+                    hub.work_item_closures.c.chunk_id, hub.work_item_closures.c.source, hub.work_item_closures.c.ref
+                ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone"]))
+            )
+        )
+        for (chunk_id, source, ref), n in key.items():
+            if n > 1:
+                violations.append(
+                    Violation(
+                        "hub:no-double-terminal-closure",
+                        f"chunk {chunk_id} ref {source}#{ref} has {n} terminal closure outcomes",
+                    )
+                )
+        return violations
+
+
+class NoPendingIntentAgainstATerminalRef(QueryCheck):
+    """A pending (``retired_at IS NULL``) ``close_intents`` row whose ``(chunk, source,
+    ref)`` already carries a terminal closure outcome is a stuck retirement — the drain
+    recorded the outcome but never retired the intent that rode it (blizzard#383)."""
+
+    def run(self) -> list[Violation]:
+        violations: list[Violation] = []
+        terminal = {
+            (row.chunk_id, row.source, row.ref)
+            for row in self.conn.execute(
+                select(
+                    hub.work_item_closures.c.chunk_id, hub.work_item_closures.c.source, hub.work_item_closures.c.ref
+                ).where(hub.work_item_closures.c.outcome.in_(["closed", "gone"]))
+            )
+        }
+        for row in self.conn.execute(
+            select(hub.close_intents.c.chunk_id, hub.close_intents.c.source, hub.close_intents.c.ref).where(
+                hub.close_intents.c.retired_at.is_(None)
+            )
+        ):
+            if (row.chunk_id, row.source, row.ref) in terminal:
+                violations.append(
+                    Violation(
+                        "hub:no-pending-intent-against-terminal-ref",
+                        f"chunk {row.chunk_id} ref {row.source}#{row.ref} has a pending close intent "
+                        "but a terminal closure outcome",
+                    )
+                )
+        return violations
+
+
 class OneLiveExecSlot(QueryCheck):
     """At most one hub_exec_slot row is live (``released_at IS NULL``) at a time (#65;
     pinned by tests/test_pin_foundation.py)."""
@@ -610,6 +668,8 @@ class HubInvariants:
                 PrOpenedIdempotent(conn),
                 NoDoubleDelivery(conn),
                 OneLiveExecSlot(conn),
+                NoDoubleTerminalClosure(conn),
+                NoPendingIntentAgainstATerminalRef(conn),
             )
             for check in checks:
                 violations.extend(check.run())

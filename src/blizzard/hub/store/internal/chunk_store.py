@@ -31,7 +31,6 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     ChunkStatus,
-    ClosableWorkRef,
     DecisionChoice,
     DecisionFact,
     DecisionRow,
@@ -47,6 +46,7 @@ from blizzard.hub.domain.work import (
     MigrationMode,
     MigrationSource,
     PauseFact,
+    PendingCloseIntent,
     PrOpenedFact,
     QuestionFact,
     QuestionRow,
@@ -814,37 +814,33 @@ class ChunkStore:
             result[WorkRef(source=row.source, ref=row.ref)] = status
         return result
 
-    def closable_work_refs(self) -> list[ClosableWorkRef]:
+    def pending_close_intents(self) -> list[PendingCloseIntent]:
         with self._engine.connect() as conn:
             ephemeral = self._ephemeral_ids(conn)
             rows = conn.execute(
-                select(s.chunk_work_refs.c.chunk_id, s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref)
+                select(s.close_intents.c.chunk_id, s.close_intents.c.source, s.close_intents.c.ref).where(
+                    s.close_intents.c.retired_at.is_(None)
+                )
             ).all()
-            terminal = {
-                (r.chunk_id, r.source, r.ref)
-                for r in conn.execute(
-                    select(
-                        s.work_item_closures.c.chunk_id, s.work_item_closures.c.source, s.work_item_closures.c.ref
-                    ).where(
-                        s.work_item_closures.c.outcome.in_(
-                            [WorkItemCloseOutcome.CLOSED.value, WorkItemCloseOutcome.GONE.value]
-                        )
-                    )
-                ).all()
-            }
-        result: list[ClosableWorkRef] = []
-        for row in rows:
-            if row.chunk_id in ephemeral:
-                continue  # grouped away or deleted; the chunk owes nothing
-            if (row.chunk_id, row.source, row.ref) in terminal:
-                continue
-            facts = self.load_facts(row.chunk_id)
-            if facts is None or not (
-                facts.has_landed_repos(self.load_artifacts(row.chunk_id)) or facts.operator_completed
-            ):
-                continue  # landed, or hand-completed by an operator (issue #294) — never chunk status
-            result.append(ClosableWorkRef(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref)))
-        return result
+        return [
+            PendingCloseIntent(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref))
+            for row in rows
+            if row.chunk_id not in ephemeral  # grouped away or deleted since it enqueued; owes nothing
+        ]
+
+    def retire_close_intent(self, chunk_id: str, *, pointer: WorkRef, at: datetime) -> bool:
+        with self._engine.begin() as conn:
+            result = conn.execute(
+                update(s.close_intents)
+                .where(
+                    (s.close_intents.c.chunk_id == chunk_id)
+                    & (s.close_intents.c.source == pointer.source)
+                    & (s.close_intents.c.ref == pointer.ref)
+                    & (s.close_intents.c.retired_at.is_(None))
+                )
+                .values(retired_at=at)
+            )
+            return result.rowcount > 0
 
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
         with self._engine.begin() as conn:
