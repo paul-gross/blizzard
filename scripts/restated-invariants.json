@@ -201,6 +201,30 @@
    ]
   },
   {
+   "id": "sse-keepalive-cadence-shared",
+   "statement": "Both daemons' SSE routes idle at the one shared keepalive cadence — neither the hub's nor the runner's route overrides DEFAULT_KEEPALIVE_SECONDS; the per-daemon difference is the reserved open-of-stream comment's text alone.",
+   "owner": "src/blizzard/foundation/events/stream.py#<module>",
+   "owner_kind": "module",
+   "owner_assert": {
+    "quote": "both production routes idle at the one shared keepalive cadence"
+   },
+   "markers": [
+    "keepalive cadence",
+    "keepalive adjacent"
+   ],
+   "marker_acknowledgments": {
+    "keepalive cadence": "R1: 2 words, kept short because any prose claiming the cadences differ per daemon must name the cadence to claim it; verified via a check --owners run to match only the owner in-tree, with no false positive observed.",
+    "keepalive adjacent": "R1: 2 words, the exact coinage of the contradicting restatement this fact was declared against (polling.ts's since-removed 'keepalive-adjacent guarantee' clause, blizzard#329); kept so a re-introduction of that phrasing trips the sweep at the site that revives it."
+   },
+   "sites": [
+    {
+     "file": "src/blizzard/foundation/events/stream.py",
+     "symbol": "<module>",
+     "role": "owner"
+    }
+   ]
+  },
+  {
    "id": "crash-sweep-whole-process-case",
    "statement": "A whole-process case is a crash-sweep case that signals a whole daemon process or process group rather than arming a single registry crash point; a graceful SIGTERM qualifies as readily as a kill -9.",
    "owner": "blizzard-context:/verification/blizzard/commands/test-tiers/crash-sweep.md#blizzardcrash-sweep",

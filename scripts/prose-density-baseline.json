@@ -734,8 +734,8 @@
   },
   "blizzard/foundation/events/stream.py": {
    "comments": 5,
-   "docstrings": 15,
-   "total": 98
+   "docstrings": 17,
+   "total": 100
   },
   "blizzard/foundation/forwarded.py": {
    "comments": 0,
@@ -879,8 +879,8 @@
   },
   "blizzard/hub/api/chunks.py": {
    "comments": 15,
-   "docstrings": 63,
-   "total": 561
+   "docstrings": 64,
+   "total": 558
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -1389,8 +1389,8 @@
   },
   "blizzard/hub/domain/work.py": {
    "comments": 54,
-   "docstrings": 556,
-   "total": 1914
+   "docstrings": 561,
+   "total": 1922
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 5,
@@ -1483,9 +1483,9 @@
    "total": 397
   },
   "blizzard/hub/store/internal/chunk_store.py": {
-   "comments": 69,
-   "docstrings": 161,
-   "total": 2513
+   "comments": 72,
+   "docstrings": 167,
+   "total": 2752
   },
   "blizzard/hub/store/internal/graph_store.py": {
    "comments": 9,
@@ -1965,12 +1965,12 @@
   "blizzard/runner/api/control.py": {
    "comments": 6,
    "docstrings": 18,
-   "total": 107
+   "total": 105
   },
   "blizzard/runner/api/dashboard.py": {
-   "comments": 4,
+   "comments": 7,
    "docstrings": 11,
-   "total": 62
+   "total": 65
   },
   "blizzard/runner/api/environments.py": {
    "comments": 0,
@@ -2019,8 +2019,8 @@
   },
   "blizzard/runner/api/hub_proxy.py": {
    "comments": 1,
-   "docstrings": 14,
-   "total": 88
+   "docstrings": 16,
+   "total": 110
   },
   "blizzard/runner/api/lease_scope.py": {
    "comments": 0,
@@ -2190,7 +2190,7 @@
   "blizzard/runner/domain/takeover.py": {
    "comments": 19,
    "docstrings": 25,
-   "total": 217
+   "total": 215
   },
   "blizzard/runner/environments/__init__.py": {
    "comments": 0,
@@ -2230,12 +2230,12 @@
   "blizzard/runner/events/broker.py": {
    "comments": 3,
    "docstrings": 15,
-   "total": 102
+   "total": 82
   },
   "blizzard/runner/events/publisher.py": {
    "comments": 0,
-   "docstrings": 8,
-   "total": 53
+   "docstrings": 7,
+   "total": 38
   },
   "blizzard/runner/harness/__init__.py": {
    "comments": 0,
@@ -2325,7 +2325,7 @@
   "blizzard/runner/loop/attempt.py": {
    "comments": 43,
    "docstrings": 51,
-   "total": 369
+   "total": 362
   },
   "blizzard/runner/loop/build.py": {
    "comments": 16,
@@ -2340,7 +2340,7 @@
   "blizzard/runner/loop/claim.py": {
    "comments": 38,
    "docstrings": 31,
-   "total": 301
+   "total": 299
   },
   "blizzard/runner/loop/context.py": {
    "comments": 37,
@@ -2350,17 +2350,17 @@
   "blizzard/runner/loop/dormant.py": {
    "comments": 32,
    "docstrings": 34,
-   "total": 245
+   "total": 240
   },
   "blizzard/runner/loop/drain.py": {
    "comments": 19,
    "docstrings": 20,
-   "total": 174
+   "total": 173
   },
   "blizzard/runner/loop/env_release.py": {
    "comments": 2,
    "docstrings": 11,
-   "total": 55
+   "total": 53
   },
   "blizzard/runner/loop/git_commits.py": {
    "comments": 2,
@@ -2410,7 +2410,7 @@
   "blizzard/runner/loop/outbound.py": {
    "comments": 1,
    "docstrings": 11,
-   "total": 129
+   "total": 127
   },
   "blizzard/runner/loop/process.py": {
    "comments": 2,
@@ -2430,12 +2430,12 @@
   "blizzard/runner/loop/spawn.py": {
    "comments": 16,
    "docstrings": 26,
-   "total": 254
+   "total": 250
   },
   "blizzard/runner/loop/steps.py": {
    "comments": 58,
    "docstrings": 96,
-   "total": 641
+   "total": 634
   },
   "blizzard/runner/loop/tick.py": {
    "comments": 12,
@@ -2460,7 +2460,7 @@
   "blizzard/runner/loop/usage.py": {
    "comments": 8,
    "docstrings": 10,
-   "total": 93
+   "total": 92
   },
   "blizzard/runner/loop/worker_stdout.py": {
    "comments": 0,
@@ -2719,8 +2719,8 @@
   },
   "blizzard/runner/store/repository.py": {
    "comments": 9,
-   "docstrings": 429,
-   "total": 1122
+   "docstrings": 434,
+   "total": 1127
   },
   "blizzard/runner/store/schema.py": {
    "comments": 148,
@@ -2894,8 +2894,8 @@
   },
   "blizzard/wire/sse_runner.py": {
    "comments": 10,
-   "docstrings": 10,
-   "total": 105
+   "docstrings": 9,
+   "total": 97
   },
   "blizzard/wire/takeover.py": {
    "comments": 0,
@@ -3376,8 +3376,8 @@
   },
   "test_chunk_complete.py": {
    "comments": 4,
-   "docstrings": 7,
-   "total": 212
+   "docstrings": 10,
+   "total": 231
   },
   "test_chunk_delete_route.py": {
    "comments": 3,
@@ -3561,8 +3561,8 @@
   },
   "test_dashboard_route.py": {
    "comments": 4,
-   "docstrings": 10,
-   "total": 209
+   "docstrings": 14,
+   "total": 234
   },
   "test_decision_strikes.py": {
    "comments": 0,
@@ -3696,8 +3696,8 @@
   },
   "test_fleet_summary_proxy.py": {
    "comments": 0,
-   "docstrings": 12,
-   "total": 137
+   "docstrings": 14,
+   "total": 156
   },
   "test_follow_latest_policy.py": {
    "comments": 36,
@@ -3973,6 +3973,11 @@
    "comments": 0,
    "docstrings": 6,
    "total": 40
+  },
+  "test_load_all_facts_store.py": {
+   "comments": 24,
+   "docstrings": 12,
+   "total": 405
   },
   "test_logging.py": {
    "comments": 1,
@@ -4312,7 +4317,7 @@
   "test_runner_event_publish.py": {
    "comments": 34,
    "docstrings": 36,
-   "total": 838
+   "total": 821
   },
   "test_runner_events_stream.py": {
    "comments": 5,

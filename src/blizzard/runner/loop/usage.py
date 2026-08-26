@@ -68,7 +68,6 @@ class UsageRecorder:
                 kind=USAGE_RECORDED,
                 chunk_id=lease.chunk_id,
                 lease_id=lease.lease_id,
-                key=f"outbound_buffer:{seq}",
             )
 
     def _worker_sample(

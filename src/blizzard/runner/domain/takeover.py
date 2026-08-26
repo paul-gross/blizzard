@@ -148,7 +148,7 @@ class TakeoverService:
             opened_at=now,
         )
         if self._events is not None:
-            self._events.publish_takeover_changed(chunk_id, takeover_id, cause="opened", key=f"takeovers:{takeover_id}")
+            self._events.publish_takeover_changed(chunk_id, takeover_id, cause="opened")
 
         if live and active is not None:
             # The fence bump: reported like a fresh lease mint, so the killed worker's
@@ -161,9 +161,7 @@ class TakeoverService:
                 created_at=now,
             )
             if self._events is not None:
-                self._events.publish_fact_changed(
-                    seq=seq, kind=LEASE_MINTED, chunk_id=chunk_id, lease_id=None, key=f"outbound_buffer:{seq}"
-                )
+                self._events.publish_fact_changed(seq=seq, kind=LEASE_MINTED, chunk_id=chunk_id, lease_id=None)
             if active.pid is not None:
                 self._process.kill(active.pid)  # the reap machinery's own best-effort kill
 
@@ -214,4 +212,4 @@ class TakeoverService:
             return
         self._store.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())
         if self._events is not None:
-            self._events.publish_takeover_changed(chunk_id, takeover_id, cause="closed", key=f"takeovers:{takeover_id}")
+            self._events.publish_takeover_changed(chunk_id, takeover_id, cause="closed")

@@ -124,6 +124,4 @@ class OutboundFacts:
             kind=kind, chunk_id=chunk_id, lease_id=lease_id, payload=json.dumps(payload), created_at=at
         )
         if self.ctx.events is not None:
-            self.ctx.events.publish_fact_changed(
-                seq=seq, kind=kind, chunk_id=chunk_id, lease_id=lease_id, key=f"outbound_buffer:{seq}"
-            )
+            self.ctx.events.publish_fact_changed(seq=seq, kind=kind, chunk_id=chunk_id, lease_id=lease_id)

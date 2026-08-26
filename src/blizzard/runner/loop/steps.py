@@ -139,9 +139,7 @@ class SpendCeiling(Step):
             ),
         )
         if ctx.events is not None:
-            ctx.events.publish_fact_changed(
-                seq=seq, kind=RUNNER_LOCALLY_PAUSED, chunk_id=None, lease_id=None, key=f"outbound_buffer:{seq}"
-            )
+            ctx.events.publish_fact_changed(seq=seq, kind=RUNNER_LOCALLY_PAUSED, chunk_id=None, lease_id=None)
 
 
 class Reap(Step):
@@ -381,7 +379,6 @@ class Pull(Step):
                     escalation.chunk_id,
                     cause="closed",
                     lease_id=escalation.lease_id,
-                    key=f"escalations:{escalation.chunk_id}",
                 )
 
     def _reconcile_takeovers(self) -> None:
@@ -403,9 +400,7 @@ class Pull(Step):
                 continue
             ctx.store.record_takeover_end(takeover_id=takeover.takeover_id, ended_at=ctx.clock.now())
             if ctx.events is not None:
-                ctx.events.publish_takeover_changed(
-                    takeover.chunk_id, takeover.takeover_id, cause="closed", key=f"takeovers:{takeover.takeover_id}"
-                )
+                ctx.events.publish_takeover_changed(takeover.chunk_id, takeover.takeover_id, cause="closed")
 
 
 class Fill(Step):
@@ -551,7 +546,6 @@ class ContextSample(Step):
                 kind=EVENT_RECORDED,
                 chunk_id=lease.chunk_id,
                 lease_id=lease.lease_id,
-                key=f"outbound_buffer:{seq}",
             )
 
     @staticmethod
@@ -616,7 +610,6 @@ class ExternalUsageSample(Step):
                     kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
                     chunk_id=None,
                     lease_id=None,
-                    key=f"outbound_buffer:{seq}",
                 )
         except Exception as exc:  # second line of defense — the adapter contract already promises this
             _log.warning("external subscription usage sample step failed", detail=str(exc))

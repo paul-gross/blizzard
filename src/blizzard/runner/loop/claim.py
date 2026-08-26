@@ -132,9 +132,7 @@ class ReadyQueue:
                 chunk_id=chunk_id, environment_id=env.environment_id, workdir=env.workdir, bound_at=now
             )
             if self.ctx.events is not None:
-                self.ctx.events.publish_environment_changed(
-                    chunk_id, env.environment_id, cause="bound", key=f"environments:{env.environment_id}"
-                )
+                self.ctx.events.publish_environment_changed(chunk_id, env.environment_id, cause="bound")
         _CP_AFTER_BIND.reached()
 
     def _route_claim(self, chunk_id: str, acquired: list[AcquiredEnvironment]) -> RouteClaim:

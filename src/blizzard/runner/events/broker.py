@@ -47,56 +47,36 @@ class EventBroker(_EventBroker):
     (:class:`blizzard.foundation.events.broker.EventBroker`), adding only the
     runner's own event shapes."""
 
-    def publish_lease_changed(
-        self,
-        lease_id: str,
-        chunk_id: str,
-        *,
-        cause: LeaseChangeCause,
-        node_name: str | None = None,
-        key: str | None = None,
-    ) -> int:
+    def publish_lease_changed(self, lease_id: str, chunk_id: str, *, cause: LeaseChangeCause) -> int:
         """A lease was minted or closed."""
-        payload = LeaseChangedPayload(
-            lease_id=lease_id, chunk_id=chunk_id, cause=cause, node_name=node_name, key=key
-        ).to_payload()
+        payload = LeaseChangedPayload(lease_id=lease_id, chunk_id=chunk_id, cause=cause).to_payload()
         return self.publish(LEASE_CHANGED, payload)
 
-    def publish_ask_changed(
-        self, lease_id: str, chunk_id: str, question_id: str, *, cause: AskChangeCause, key: str | None = None
-    ) -> int:
+    def publish_ask_changed(self, lease_id: str, chunk_id: str, question_id: str, *, cause: AskChangeCause) -> int:
         """A worker's ask was recorded, or its answer landed."""
         payload = AskChangedPayload(
-            lease_id=lease_id, chunk_id=chunk_id, question_id=question_id, cause=cause, key=key
+            lease_id=lease_id, chunk_id=chunk_id, question_id=question_id, cause=cause
         ).to_payload()
         return self.publish(ASK_CHANGED, payload)
 
     def publish_escalation_changed(
-        self, chunk_id: str, *, cause: EscalationChangeCause, lease_id: str | None = None, key: str | None = None
+        self, chunk_id: str, *, cause: EscalationChangeCause, lease_id: str | None = None
     ) -> int:
         """A chunk escalated to needs-human, or that escalation was superseded/closed."""
-        payload = EscalationChangedPayload(chunk_id=chunk_id, cause=cause, lease_id=lease_id, key=key).to_payload()
+        payload = EscalationChangedPayload(chunk_id=chunk_id, cause=cause, lease_id=lease_id).to_payload()
         return self.publish(ESCALATION_CHANGED, payload)
 
-    def publish_takeover_changed(
-        self, chunk_id: str, takeover_id: str, *, cause: TakeoverChangeCause, key: str | None = None
-    ) -> int:
+    def publish_takeover_changed(self, chunk_id: str, takeover_id: str, *, cause: TakeoverChangeCause) -> int:
         """An operator takeover opened or closed."""
-        payload = TakeoverChangedPayload(chunk_id=chunk_id, takeover_id=takeover_id, cause=cause, key=key).to_payload()
+        payload = TakeoverChangedPayload(chunk_id=chunk_id, takeover_id=takeover_id, cause=cause).to_payload()
         return self.publish(TAKEOVER_CHANGED, payload)
 
-    def publish_environment_changed(
-        self, chunk_id: str, environment_id: str, *, cause: EnvironmentChangeCause, key: str | None = None
-    ) -> int:
+    def publish_environment_changed(self, chunk_id: str, environment_id: str, *, cause: EnvironmentChangeCause) -> int:
         """An environment-pool slot was bound to a chunk, or released."""
-        payload = EnvironmentChangedPayload(
-            chunk_id=chunk_id, environment_id=environment_id, cause=cause, key=key
-        ).to_payload()
+        payload = EnvironmentChangedPayload(chunk_id=chunk_id, environment_id=environment_id, cause=cause).to_payload()
         return self.publish(ENVIRONMENT_CHANGED, payload)
 
-    def publish_fact_changed(
-        self, *, seq: int, kind: str, chunk_id: str | None, lease_id: str | None, key: str | None = None
-    ) -> int:
+    def publish_fact_changed(self, *, seq: int, kind: str, chunk_id: str | None, lease_id: str | None) -> int:
         """A hub-bound fact was enqueued onto the outbound buffer."""
-        payload = FactChangedPayload(seq=seq, kind=kind, chunk_id=chunk_id, lease_id=lease_id, key=key).to_payload()
+        payload = FactChangedPayload(seq=seq, kind=kind, chunk_id=chunk_id, lease_id=lease_id).to_payload()
         return self.publish(FACT_CHANGED, payload)

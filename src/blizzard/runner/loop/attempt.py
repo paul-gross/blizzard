@@ -214,8 +214,6 @@ class Attempt:
                 lease.lease_id,
                 lease.chunk_id,
                 cause="dormant",
-                node_name=lease.node_name,
-                key=f"leases:{lease.lease_id}",
             )
         _log.info(
             "parked chunk on an operator pause — claim retained",
@@ -314,15 +312,11 @@ class Attempt:
                 lease_id,
                 self.lease.chunk_id,
                 cause=reason,
-                node_name=self.lease.node_name,
-                key=f"leases:{lease_id}",
             )
             if reason == ESCALATED:
                 # `open_escalations()`'s derivation (D4) — a closed-`escalated` lease not yet
                 # superseded — begins reading open at exactly this instant.
-                self.ctx.events.publish_escalation_changed(
-                    self.lease.chunk_id, cause="opened", lease_id=lease_id, key=f"escalations:{self.lease.chunk_id}"
-                )
+                self.ctx.events.publish_escalation_changed(self.lease.chunk_id, cause="opened", lease_id=lease_id)
             if event_seq is not None:
                 # The optional operational event `record_closure` buffered alongside the
                 # closure — its own fact-log row, distinct from the lease-changed frame above.
@@ -331,7 +325,6 @@ class Attempt:
                     kind=EVENT_RECORDED,
                     chunk_id=self.lease.chunk_id,
                     lease_id=lease_id,
-                    key=f"outbound_buffer:{event_seq}",
                 )
 
     def _pump_lease_before_close(self) -> None:

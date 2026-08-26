@@ -35,7 +35,6 @@ export {
   type LeaseChanged,
   type RunnerEventPayload,
   type RunnerEventType,
-  type RunnerKeyedEvent,
   type TakeoverChangeCause,
   type TakeoverChanged,
 } from './runner-events';

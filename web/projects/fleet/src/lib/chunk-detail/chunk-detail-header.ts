@@ -106,7 +106,7 @@ export class ChunkDetailHeader {
   protected readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
 
   /** Whether Complete has anything left to do (issue #294) — mirrors the hub
-   * `CompleteService`'s no-op on an already-`done` chunk (D5), so the dock withholds a
+   * `CompleteService`'s no-op on an already-`done` chunk, so the dock withholds a
    * click that would write nothing. Every other status is completable, independent of
    * `pausable`/`route`: Complete does not hang off a live route the way Detach does. */
   protected readonly completable = computed<boolean>(() => !NOT_COMPLETABLE.has(this.detail().status));

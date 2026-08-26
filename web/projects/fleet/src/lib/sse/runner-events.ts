@@ -49,8 +49,7 @@ export type TakeoverChangeCause = 'opened' | 'closed';
 /** What caused an `environment-changed` frame. */
 export type EnvironmentChangeCause = 'bound' | 'released';
 
-/** A `lease-changed` frame's payload. `key`/`node_name` are present-when-meaningful,
- * omitted rather than `null` when they do not apply. `cause` is typed `string`, not
+/** A `lease-changed` frame's payload. `cause` is typed `string`, not
  * {@link LeaseChangeCause}, for the same reason `fleet-live.ts`'s `RunnerEvent.kind`
  * is: {@link RunnerEventPayload} intersects every payload interface here, and each
  * carries its own disjoint `cause` literal union — intersecting those collapses the
@@ -59,7 +58,6 @@ export interface LeaseChanged {
   lease_id: string;
   chunk_id: string;
   cause: string;
-  node_name?: string;
 }
 /** An `ask-changed` frame's payload — a worker's question recorded, or its answer
  * landing (the park resume the answer drives). `cause` typed `string` — see
@@ -101,13 +99,6 @@ export interface FactChanged {
   chunk_id: string | null;
   lease_id: string | null;
 }
-/** The fact-identity stamp a runner frame carries when one durable fact backs it —
- * mirrors the hub's own {@link "./fleet-live".KeyedEvent}. Omitted on a frame with no
- * such fact. */
-export interface RunnerKeyedEvent {
-  key?: string;
-}
-
 export type RunnerEventPayload = Partial<
-  LeaseChanged & AskChanged & EscalationChanged & TakeoverChanged & EnvironmentChanged & FactChanged & RunnerKeyedEvent
+  LeaseChanged & AskChanged & EscalationChanged & TakeoverChanged & EnvironmentChanged & FactChanged
 >;

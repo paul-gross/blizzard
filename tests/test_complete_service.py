@@ -97,7 +97,7 @@ def test_complete_allows_every_non_done_status(facts_factory: object) -> None:
     ids=["done_via_transition", "done_via_operator_completion"],
 )
 def test_complete_is_a_no_op_on_an_already_done_chunk(facts_factory: object) -> None:
-    """D5: idempotent by no-op — no second fact, never refused."""
+    """Idempotent by no-op — no second fact, never refused."""
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
     service = CompleteService(chunks=_as_write_repo(repo), clock=clock)

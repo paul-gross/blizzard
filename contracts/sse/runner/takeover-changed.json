@@ -4,10 +4,9 @@
     "takeover_id": "tk_1",
     "cause": "opened"
   },
-  "keyed": {
+  "closed": {
     "chunk_id": "ch_1",
     "takeover_id": "tk_1",
-    "cause": "closed",
-    "key": "takeovers:tk_1"
+    "cause": "closed"
   }
 }

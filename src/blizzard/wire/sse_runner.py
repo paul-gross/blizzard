@@ -1,9 +1,8 @@
 """Per-kind SSE frame wire models for the runner's stream (blizzard#317 Phase 2), beside the
 hub's own vocabulary in :mod:`blizzard.wire.sse`; mirrored by the golden corpus's runner scope
 at ``contracts/sse/runner/``. D6: frames are thin id-and-cause notifications, and every model
-reuses :class:`~blizzard.wire.sse.SseFramePayload`'s present-when-meaningful serialization.
-``key``/``node_name`` mirror the hub's own frame shape for a future runner event log; no
-runner-side consumer reads either today — `local-panel` invalidates by ``chunk_id`` alone."""
+reuses :class:`~blizzard.wire.sse.SseFramePayload`'s present-when-meaningful serialization —
+`local-panel` invalidates by ``chunk_id`` alone."""
 
 from __future__ import annotations
 
@@ -45,8 +44,6 @@ class LeaseChangedPayload(SseFramePayload):
     lease_id: str
     chunk_id: str
     cause: LeaseChangeCause
-    node_name: str | None = None
-    key: str | None = None
 
 
 class AskChangedPayload(SseFramePayload):
@@ -54,28 +51,24 @@ class AskChangedPayload(SseFramePayload):
     chunk_id: str
     question_id: str
     cause: AskChangeCause
-    key: str | None = None
 
 
 class EscalationChangedPayload(SseFramePayload):
     chunk_id: str
     cause: EscalationChangeCause
     lease_id: str | None = None
-    key: str | None = None
 
 
 class TakeoverChangedPayload(SseFramePayload):
     chunk_id: str
     takeover_id: str
     cause: TakeoverChangeCause
-    key: str | None = None
 
 
 class EnvironmentChangedPayload(SseFramePayload):
     chunk_id: str
     environment_id: str
     cause: EnvironmentChangeCause
-    key: str | None = None
 
 
 class FactChangedPayload(SseFramePayload):
@@ -88,7 +81,6 @@ class FactChangedPayload(SseFramePayload):
     kind: str
     chunk_id: str | None
     lease_id: str | None
-    key: str | None = None
 
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "lease_id"})
 

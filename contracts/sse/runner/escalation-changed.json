@@ -6,7 +6,6 @@
   "full": {
     "chunk_id": "ch_1",
     "cause": "closed",
-    "lease_id": "ls_1",
-    "key": "escalations:ch_1"
+    "lease_id": "ls_1"
   }
 }

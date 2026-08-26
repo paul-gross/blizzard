@@ -43,23 +43,26 @@ function dashboardBody(fleetSummary: runnerApi.FleetSummaryView | null): runnerA
 
 /** Render `LocalInfo` with `/api/dashboard` answered by `fleetSummary` — the canned
  * counts, or `null` for the degraded path (a hub outage is a 200 with a null slot
- * under the aggregate, never a failed request). */
-async function render(fleetSummary: runnerApi.FleetSummaryView | null) {
+ * under the aggregate, never a failed request). Pass a function to answer each read
+ * from live state — with the returned `queryClient`, that drives one instance
+ * through successive reads carrying different slots. */
+async function render(
+  fleetSummary: runnerApi.FleetSummaryView | null | (() => runnerApi.FleetSummaryView | null),
+) {
+  const summaryOf = typeof fleetSummary === 'function' ? fleetSummary : () => fleetSummary;
   const stub = stubRequestClient(runnerClient, (method, path) => {
     if (method !== 'GET') return {};
-    if (path === '/api/dashboard') return dashboardBody(fleetSummary);
+    if (path === '/api/dashboard') return dashboardBody(summaryOf());
     return {};
   });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await TestBed.configureTestingModule({
     imports: [LocalInfo],
-    providers: [
-      provideZonelessChangeDetection(),
-      provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-    ],
+    providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalInfo);
   await settle(fixture);
-  return { fixture, stub };
+  return { fixture, stub, queryClient };
 }
 
 describe('LocalInfo fleet-summary strip', () => {
@@ -106,6 +109,33 @@ describe('LocalInfo fleet-summary strip', () => {
     expect(el.querySelector('[data-testid="fleet-ready"]')?.textContent).toContain('—');
     // The rest of the panel stays lit — the hub-link facts still render.
     expect(el.querySelector('[data-testid="hub-endpoint"]')?.textContent).toContain('http://127.0.0.1:8421');
+  });
+
+  it('keeps the prior counts, dimmed, when a later read of the same instance carries fleet_summary: null', async () => {
+    // The latch's own transition (issue #311): real counts land, then a hub blip
+    // resolves the same route with a null slot — the strip must degrade to the
+    // *prior* counts, not blank to the never-loaded dashes above.
+    let fleetSummary: runnerApi.FleetSummaryView | null = COUNTS;
+    const { fixture, stub: s, queryClient } = await render(() => fleetSummary);
+    stub = s;
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="fleet-ready"]')?.textContent).toContain('4');
+
+    fleetSummary = null;
+    await queryClient.invalidateQueries();
+    await settle(fixture);
+
+    // Two reads actually happened against one instance.
+    expect(stub.forRoute('/api/dashboard', 'GET').length).toBeGreaterThan(1);
+    // The first read's counts survive, no bucket blanks to a dash.
+    expect(el.querySelector('[data-testid="fleet-ready"]')?.textContent).toContain('4');
+    expect(el.querySelector('[data-testid="fleet-running"]')?.textContent).toContain('3');
+    expect(el.querySelector('[data-testid="fleet-waiting"]')?.textContent).toContain('2');
+    expect(el.querySelector('[data-testid="fleet-needs"]')?.textContent).toContain('1');
+    expect(el.querySelector('[data-testid="fleet-ready"]')?.textContent).not.toContain('—');
+    // Dimmed, with the last-known banner — degraded, not live.
+    expect(el.querySelector('[data-testid="fleet-strip"]')?.classList.contains('stale')).toBe(true);
+    expect(el.querySelector('[data-testid="fleet-age"]')?.textContent).toContain('last known');
   });
 });
 

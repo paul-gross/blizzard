@@ -4,25 +4,19 @@
     "chunk_id": "ch_1",
     "cause": "created"
   },
-  "full": {
+  "transitioned": {
     "lease_id": "ls_1",
     "chunk_id": "ch_1",
-    "cause": "transitioned",
-    "node_name": "build",
-    "key": "leases:ls_1"
+    "cause": "transitioned"
   },
   "spawned": {
     "lease_id": "ls_1",
     "chunk_id": "ch_1",
-    "cause": "spawned",
-    "node_name": "build",
-    "key": "leases:ls_1"
+    "cause": "spawned"
   },
   "dormant": {
     "lease_id": "ls_1",
     "chunk_id": "ch_1",
-    "cause": "dormant",
-    "node_name": "build",
-    "key": "leases:ls_1"
+    "cause": "dormant"
   }
 }

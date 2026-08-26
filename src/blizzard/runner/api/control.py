@@ -61,9 +61,7 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
     )
     events = wiring.events()
     if events is not None:
-        events.publish_fact_changed(
-            seq=seq, kind=report_kind, chunk_id=None, lease_id=None, key=f"outbound_buffer:{seq}"
-        )
+        events.publish_fact_changed(seq=seq, kind=report_kind, chunk_id=None, lease_id=None)
     return _view(store, config.runner_id)
 
 

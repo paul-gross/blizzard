@@ -780,7 +780,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
         When ``event_kind``/``event_payload`` are given (issue #125), the event is
         enqueued to the outbound buffer **in the same transaction** as the closure, so
-        the two land together or not at all."""
+        the two land together or not at all; return the buffered event's seq, or
+        ``None`` when no event was given."""
         ...
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
@@ -922,7 +923,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, report_kind: str, report_payload: str
     ) -> int:
-        """Append a local pause/start fact **and** its hub-bound report, atomically (issue #43).
+        """Append a local pause/start fact **and** its hub-bound report, atomically
+        (issue #43); return the buffered report's seq.
 
         Appends rather than upserts: this is a locally-minted fact, not a mirror. Taking
         the buffer entry here is what makes the brake and its report crash-atomic (pinned
@@ -1010,10 +1012,11 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         recorded_at: datetime,
     ) -> int | None:
         """Idempotently record one usage fact **and** buffer its outbound report,
-        atomically (issue #58).
+        atomically (issue #58); return the buffered report's seq.
 
         Keyed on ``(lease_id, generation, sample.kind)``: a resume within the same lease
-        is a genuinely new row; an exact replay writes nothing and buffers nothing."""
+        is a genuinely new row; an exact replay writes nothing, buffers nothing, and
+        returns ``None``."""
         ...
 
     def record_context_sample(
@@ -1028,7 +1031,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         report_payload: str = "",
     ) -> int | None:
         """Append one context-sample attempt, and buffer its outbound report when one is given,
-        atomically. ``context_tokens is None`` records an attempt that measured nothing, which
+        atomically; return the buffered report's seq.
+        ``context_tokens is None`` records an attempt that measured nothing, which
         still advances the cadence anchor. An empty ``report_kind`` records the sample alone —
         the ordinary case, since only a first crossing reports — and returns ``None`` then,
         since no report was buffered."""
@@ -1041,7 +1045,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         produced a sample, buffer its outbound report — atomically (issue #218).
 
         The attempt row is always appended, whether or not the harness had anything to
-        report; the outbound fact exists only when ``payload`` is not ``None``."""
+        report; the outbound fact exists only when ``payload`` is not ``None`` — return
+        its seq then, ``None`` otherwise."""
         ...
 
     def record_attachment(

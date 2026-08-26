@@ -129,8 +129,6 @@ class Spawner:
                 lease.lease_id,
                 chunk_id,
                 cause="spawned",
-                node_name=envelope.node.node_name,
-                key=f"leases:{lease.lease_id}",
             )
         # Keyed on the HANDLE's session id — the authoritative continuation id (issue #149).
         # Written after the spawn, so a durable fingerprint always implies the prose was sent.
@@ -208,9 +206,7 @@ class Spawner:
             )
         )
         if self.ctx.events is not None:
-            self.ctx.events.publish_lease_changed(
-                lease_id, chunk_id, cause="created", node_name=node.node_name, key=f"leases:{lease_id}"
-            )
+            self.ctx.events.publish_lease_changed(lease_id, chunk_id, cause="created")
         # A per-lease capability token (issue #113): only its hash is stashed durably, the
         # plaintext carried forward to the spawn preamble alone and never persisted.
         token, token_hash = LeaseToken.mint()

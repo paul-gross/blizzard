@@ -50,6 +50,4 @@ class EnvironmentRelease:
 
     def _publish_released(self, chunk_id: str, environment_id: str) -> None:
         if self.events is not None:
-            self.events.publish_environment_changed(
-                chunk_id, environment_id, cause="released", key=f"environments:{environment_id}"
-            )
+            self.events.publish_environment_changed(chunk_id, environment_id, cause="released")

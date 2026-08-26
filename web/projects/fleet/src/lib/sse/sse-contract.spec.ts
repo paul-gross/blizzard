@@ -22,7 +22,6 @@ import {
   type FactChanged,
   type LeaseChanged,
   type RunnerEventPayload,
-  type RunnerKeyedEvent,
   type TakeoverChanged,
 } from './runner-events';
 import { SseService, type SseEvent } from './sse.service';
@@ -191,46 +190,39 @@ const RUNNER_GOLDENS: Readonly<Record<string, GoldenCases>> = {
 };
 const RUNNER_CASES = casesOf(runnerManifest, RUNNER_GOLDENS);
 
-type LeaseChangedFrame = LeaseChanged & RunnerKeyedEvent;
-type AskChangedFrame = AskChanged & RunnerKeyedEvent;
-type EscalationChangedFrame = EscalationChanged & RunnerKeyedEvent;
-type TakeoverChangedFrame = TakeoverChanged & RunnerKeyedEvent;
-type EnvironmentChangedFrame = EnvironmentChanged & RunnerKeyedEvent;
-type FactChangedFrame = FactChanged & RunnerKeyedEvent;
-
 interface RunnerFrameFieldSpecs {
-  'lease-changed': FrameFieldSpec<LeaseChangedFrame>;
-  'ask-changed': FrameFieldSpec<AskChangedFrame>;
-  'escalation-changed': FrameFieldSpec<EscalationChangedFrame>;
-  'takeover-changed': FrameFieldSpec<TakeoverChangedFrame>;
-  'environment-changed': FrameFieldSpec<EnvironmentChangedFrame>;
-  'fact-changed': FrameFieldSpec<FactChangedFrame>;
+  'lease-changed': FrameFieldSpec<LeaseChanged>;
+  'ask-changed': FrameFieldSpec<AskChanged>;
+  'escalation-changed': FrameFieldSpec<EscalationChanged>;
+  'takeover-changed': FrameFieldSpec<TakeoverChanged>;
+  'environment-changed': FrameFieldSpec<EnvironmentChanged>;
+  'fact-changed': FrameFieldSpec<FactChanged>;
 }
 
 const RUNNER_FRAME_FIELD_SPECS: RunnerFrameFieldSpecs = {
   'lease-changed': {
     required: { lease_id: true, chunk_id: true, cause: true },
-    optional: { node_name: true, key: true },
+    optional: {},
   },
   'ask-changed': {
     required: { lease_id: true, chunk_id: true, question_id: true, cause: true },
-    optional: { key: true },
+    optional: {},
   },
   'escalation-changed': {
     required: { chunk_id: true, cause: true },
-    optional: { lease_id: true, key: true },
+    optional: { lease_id: true },
   },
   'takeover-changed': {
     required: { chunk_id: true, takeover_id: true, cause: true },
-    optional: { key: true },
+    optional: {},
   },
   'environment-changed': {
     required: { chunk_id: true, environment_id: true, cause: true },
-    optional: { key: true },
+    optional: {},
   },
   'fact-changed': {
     required: { seq: true, kind: true, chunk_id: true, lease_id: true },
-    optional: { key: true },
+    optional: {},
   },
 };
 

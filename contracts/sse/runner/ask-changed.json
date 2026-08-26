@@ -5,11 +5,10 @@
     "question_id": "qn_1",
     "cause": "asked"
   },
-  "keyed": {
+  "answered": {
     "lease_id": "ls_1",
     "chunk_id": "ch_1",
     "question_id": "qn_1",
-    "cause": "answered",
-    "key": "asks:qn_1"
+    "cause": "answered"
   }
 }

@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from sqlalchemy import func, select
 
 from blizzard.hub.domain.work import IWriteChunkRepository
+from blizzard.hub.store import schema as s
 from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, ingest, report_lease
 
 pytestmark = pytest.mark.component
@@ -149,6 +151,23 @@ def test_double_complete_is_a_no_op_not_an_error(tmp_path: Path) -> None:
 
     assert resp.status_code == 202, resp.text
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
+
+
+def test_completing_an_already_done_chunk_writes_no_second_fact(tmp_path: Path) -> None:
+    """Idempotent in the table, not only in the response: after a second ``complete``,
+    ``chunk_completed`` holds exactly one row for the chunk — a guard that inserted a
+    second row while still answering 202/``done`` would pass every derived-status read."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+
+    assert hub.client.post(f"/api/chunks/{chunk_id}/complete", json={"by": "operator"}).status_code == 202
+    assert hub.client.post(f"/api/chunks/{chunk_id}/complete", json={"by": "operator"}).status_code == 202
+
+    with hub.engine.connect() as conn:
+        count = conn.execute(
+            select(func.count()).select_from(s.chunk_completed).where(s.chunk_completed.c.chunk_id == chunk_id)
+        ).scalar_one()
+    assert count == 1
 
 
 def test_complete_while_running_releases_the_live_route(tmp_path: Path) -> None:

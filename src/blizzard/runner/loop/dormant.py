@@ -61,8 +61,6 @@ class DormantSession:
                 lease.lease_id,
                 lease.chunk_id,
                 cause="dormant",
-                node_name=lease.node_name,
-                key=f"leases:{lease.lease_id}",
             )
         _log.info("chunk parked on question", chunk_id=lease.chunk_id, question_id=ask.question_id)
 
@@ -124,7 +122,6 @@ class DormantSession:
                 lease.chunk_id,
                 park.question_id,
                 cause="answered",
-                key=f"asks:{park.question_id}",
             )
         OutboundFacts(self.ctx).answer_delivered(lease, park.question_id, at=now)
         _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
@@ -239,7 +236,5 @@ class DormantSession:
                 lease.lease_id,
                 lease.chunk_id,
                 cause="spawned",
-                node_name=lease.node_name,
-                key=f"leases:{lease.lease_id}",
             )
         return pid, stamped

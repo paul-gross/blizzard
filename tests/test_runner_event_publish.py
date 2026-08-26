@@ -109,14 +109,13 @@ def test_fill_claim_publishes_lease_created_environment_bound_and_fact_changed(t
     assert lease_frames, "no lease-changed frame published on mint"
     assert lease_frames[0]["cause"] == "created"
     assert lease_frames[0]["chunk_id"] == "ch_1"
-    assert lease_frames[0]["key"] == f"leases:{lease_frames[0]['lease_id']}"
     # The pid-recorded flip to `running` gets its own frame — the 'created' mint alone
     # leaves a re-reader seeing `spawning` until the next backstop poll (blizzard#317 review).
     assert lease_frames[1]["cause"] == "spawned"
     assert lease_frames[1]["lease_id"] == lease_frames[0]["lease_id"]
 
     env_frames = _frames(events, "environment-changed")
-    assert env_frames == [{"chunk_id": "ch_1", "environment_id": "e1", "cause": "bound", "key": "environments:e1"}]
+    assert env_frames == [{"chunk_id": "ch_1", "environment_id": "e1", "cause": "bound"}]
 
     fact_frames = _frames(events, "fact-changed")
     assert any(f["kind"] == "lease.minted" for f in fact_frames), "the mint's own lease.minted fact never published"
@@ -147,15 +146,13 @@ def test_attempt_escalate_publishes_lease_escalated_and_escalation_opened(tmp_pa
     assert lease_frames[-1]["lease_id"] == "lease_1"
 
     escalation_frames = _frames(events, "escalation-changed")
-    assert escalation_frames == [
-        {"chunk_id": "ch_1", "cause": "opened", "lease_id": "lease_1", "key": "escalations:ch_1"}
-    ]
+    assert escalation_frames == [{"chunk_id": "ch_1", "cause": "opened", "lease_id": "lease_1"}]
 
 
 def test_attempt_close_publishes_lease_changed_with_the_closure_reason_as_cause(tmp_path: Path) -> None:
-    """A retry closes ``transitioned``... no — a retry closes with the *failure* reason
-    itself (``reason`` threads straight through `Attempt.fail`'s retry branch); pinned
-    here against the plain retry branch, distinct from the escalate branch above."""
+    """A retry closes with the *failure* reason itself (``reason`` threads straight
+    through `Attempt.fail`'s retry branch); pinned here against the plain retry
+    branch, distinct from the escalate branch above."""
     store = _store(tmp_path)
     events = EventBroker()
     _seed_lease(store, retries_max=2)  # retried=0 < 2 -> retry, closes with reason="failed"
@@ -208,7 +205,7 @@ def test_pull_abandon_publishes_environment_released(tmp_path: Path) -> None:
     Pull(ctx).run()
 
     env_frames = _frames(events, "environment-changed")
-    assert env_frames == [{"chunk_id": "ch_1", "environment_id": "e1", "cause": "released", "key": "environments:e1"}]
+    assert env_frames == [{"chunk_id": "ch_1", "environment_id": "e1", "cause": "released"}]
     lease_frames = _frames(events, "lease-changed")
     assert lease_frames[-1]["cause"] == "released"
 
@@ -232,7 +229,7 @@ def test_env_release_release_binding_publishes_environment_released(tmp_path: Pa
     ctx.env_release.release_binding("ch_1", [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")])
 
     env_frames = _frames(events, "environment-changed")
-    assert env_frames == [{"chunk_id": "ch_1", "environment_id": "e1", "cause": "released", "key": "environments:e1"}]
+    assert env_frames == [{"chunk_id": "ch_1", "environment_id": "e1", "cause": "released"}]
 
 
 # --- ask-changed(asked) — the API route ------------------------------------------------- #
@@ -263,7 +260,6 @@ def test_asks_api_route_publishes_ask_asked(tmp_path: Path) -> None:
             "chunk_id": "ch_1",
             "question_id": question_id,
             "cause": "asked",
-            "key": f"asks:{question_id}",
         }
     ]
 
@@ -306,9 +302,7 @@ def test_dormant_on_answer_publishes_ask_answered(tmp_path: Path) -> None:
     Advance(ctx).run()
 
     ask_frames = _frames(events, "ask-changed")
-    assert ask_frames == [
-        {"lease_id": "lease_1", "chunk_id": "ch_1", "question_id": "qn_1", "cause": "answered", "key": "asks:qn_1"}
-    ]
+    assert ask_frames == [{"lease_id": "lease_1", "chunk_id": "ch_1", "question_id": "qn_1", "cause": "answered"}]
     # The resumed session's own flip back to a live pid (`DormantSession._wake`) gets the
     # same 'spawned' frame the fresh-spawn path publishes.
     lease_frames = _frames(events, "lease-changed")
@@ -397,8 +391,6 @@ def test_dormant_park_on_ask_publishes_lease_changed_dormant(tmp_path: Path) -> 
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
         "cause": "dormant",
-        "node_name": "build",
-        "key": "leases:lease_1",
     }
 
 
@@ -434,8 +426,6 @@ def test_pull_reconcile_leases_publishes_lease_changed_dormant_on_operator_pause
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
         "cause": "dormant",
-        "node_name": "build",
-        "key": "leases:lease_1",
     }
 
 
@@ -485,9 +475,7 @@ def test_pull_reconcile_escalations_publishes_escalation_closed(tmp_path: Path) 
 
     assert store.open_escalations() == []
     escalation_frames = _frames(events, "escalation-changed")
-    assert escalation_frames == [
-        {"chunk_id": "ch_1", "cause": "closed", "lease_id": "lease_1", "key": "escalations:ch_1"}
-    ]
+    assert escalation_frames == [{"chunk_id": "ch_1", "cause": "closed", "lease_id": "lease_1"}]
 
 
 # --- takeover-changed(opened/closed) — via the domain service directly ------------------ #
@@ -514,7 +502,6 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
             "chunk_id": "ch_1",
             "takeover_id": opened.takeover_id,
             "cause": "opened",
-            "key": f"takeovers:{opened.takeover_id}",
         }
     ]
 
@@ -524,7 +511,6 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
         "chunk_id": "ch_1",
         "takeover_id": opened.takeover_id,
         "cause": "closed",
-        "key": f"takeovers:{opened.takeover_id}",
     }
 
 
@@ -583,9 +569,7 @@ def test_pull_reconcile_takeovers_publishes_takeover_closed(tmp_path: Path) -> N
     Pull(ctx).run()
 
     takeover_frames = _frames(events, "takeover-changed")
-    assert takeover_frames == [
-        {"chunk_id": "ch_1", "takeover_id": "tko_1", "cause": "closed", "key": "takeovers:tko_1"}
-    ]
+    assert takeover_frames == [{"chunk_id": "ch_1", "takeover_id": "tko_1", "cause": "closed"}]
 
 
 def test_outbound_drain_ack_republishes_fact_changed_on_the_same_seq(tmp_path: Path) -> None:
@@ -812,7 +796,6 @@ def test_attempt_retry_closure_publishes_fact_changed_for_its_own_event(tmp_path
     written = [f for f in store.pending_outbound() if f.kind == EVENT_RECORDED and f.chunk_id == "ch_1"]
     assert len(written) == 1
     assert fact_frames[0]["seq"] == written[0].seq > 1
-    assert fact_frames[0]["key"] == f"outbound_buffer:{written[0].seq}"
 
 
 # --- a broker-less context publishes nothing, degrading cleanly (D2) -------------------- #

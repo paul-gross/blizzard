@@ -170,5 +170,4 @@ class OutboundDrain:
                 kind=fact.kind,
                 chunk_id=fact.chunk_id,
                 lease_id=fact.lease_id,
-                key=f"outbound_buffer:{fact.seq}",
             )
