@@ -291,6 +291,21 @@ work_item_materializations = Table(
     UniqueConstraint("proposal_id", name="uq_work_item_materializations_proposal_id"),
 )
 
+# --- Proposal strikes -------------------------------------------
+# A gate resolution's refusal of a proposal, recorded before materialization ever
+# judges it — never a `work_item_materializations` outcome, never a mutation of
+# the proposal's own row. `unmaterialized_proposals` excludes a struck proposal_id
+# forever, so the sweep never materializes it.
+
+work_item_strikes = Table(
+    "work_item_strikes",
+    metadata,
+    Column("proposal_id", String, ForeignKey("work_item_proposals.proposal_id"), primary_key=True),
+    Column("decision_id", String, ForeignKey("decisions.decision_id"), nullable=False),
+    Column("struck_by", String, nullable=False),
+    Column("struck_at", UtcDateTime, nullable=False),
+)
+
 # --- Lease facts (lease.minted, runner-reported) -------------------------------
 
 lease_facts = Table(

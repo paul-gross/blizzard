@@ -7,6 +7,7 @@ node and resolves first-write-wins; :class:`RequeueService` closes an escalation
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
@@ -163,20 +164,33 @@ class DecisionService:
             for ordinal, p in enumerate(proposals)
         ]
 
-    def resolve(self, decision_id: str, *, choice: str, resolved_by: str) -> ResolutionResult | None:
-        """Record a person's choice, first-write-wins. ``None`` if no such decision."""
+    def resolve(
+        self, decision_id: str, *, choice: str, resolved_by: str, struck: Sequence[str] = ()
+    ) -> ResolutionResult | None:
+        """Record a person's choice, first-write-wins, striking ``struck``'s proposal ids
+        in the same write. ``None`` if no such decision. A struck id naming anything but
+        one of the decision's chunk's own pending, unstruck proposals raises — the same
+        rejection class as an invalid ``choice``. Skipped once this decision is already
+        resolved, so a retry or duplicate submission falls straight through to the CAS
+        and is told who won, instead of 400ing on ids this same decision already struck."""
         decision = self._chunks.get_decision(decision_id)
         if decision is None:
             return None
         if choice not in {c.name for c in decision.choices}:
             valid = ", ".join(c.name for c in decision.choices)
             raise ValueError(f"`{choice}` is not a choice of this decision (one of: {valid})")
+        if decision.resolved_choice is None:
+            strikeable = {e.proposal.proposal_id for e in decision.docket if not e.struck}
+            unknown = set(struck) - strikeable
+            if unknown:
+                raise ValueError(f"not a pending proposal of chunk {decision.chunk_id}: {', '.join(sorted(unknown))}")
         won = self._chunks.record_decision_resolution(
-            decision_id, choice=choice, resolved_by=resolved_by, at=self._clock.now()
+            decision_id, choice=choice, resolved_by=resolved_by, at=self._clock.now(), struck=struck
         )
         if won:
             return ResolutionResult(resolved=True, choice=choice, resolved_by=resolved_by)
-        # Lost the CAS — report the winner so the loser is told who resolved.
+        # Lost the CAS — report the winner so the loser is told who resolved. No strike
+        # was written either: the loser's whole write, not just the choice, applies nothing.
         current = self._chunks.get_decision(decision_id)
         assert current is not None and current.resolved_choice is not None
         return ResolutionResult(resolved=False, choice=current.resolved_choice, resolved_by=current.resolved_by or "")

@@ -1,0 +1,29 @@
+@if (entries().length > 0) {
+  <div class="docket" data-testid="gate-docket">
+    <div class="s-head"><span class="tag">Proposed work</span></div>
+    @for (entry of entries(); track entry.proposal_id) {
+      <div class="entry" [class.struck]="isStruck(entry)" data-testid="docket-entry">
+        @if (canResolve() && !entry.struck) {
+          <input
+            type="checkbox"
+            class="sel"
+            data-testid="docket-strike"
+            [attr.aria-label]="'Strike ' + title(entry)"
+            [checked]="isStruck(entry)"
+            (change)="toggle(entry)"
+          />
+        }
+        <div class="entry-body">
+          <div class="entry-head">
+            <span class="kind" data-testid="docket-kind">{{ entry.kind }}</span>
+            <span class="node" data-testid="docket-node">{{ entry.node_name }}</span>
+          </div>
+          <p class="entry-title" data-testid="docket-title">{{ title(entry) }}</p>
+          @if (detail(entry); as body) {
+            <p class="entry-detail" data-testid="docket-detail">{{ body }}</p>
+          }
+        </div>
+      </div>
+    }
+  </div>
+}

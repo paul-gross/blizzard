@@ -505,6 +505,27 @@ export type ChunkUsageView = {
 };
 
 /**
+ * CreateWorkItemProposal
+ *
+ * A proposed new work item — a title, a markdown body, and a stated priority.
+ */
+export type CreateWorkItemProposal = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Kind
+     */
+    kind?: 'create';
+    stated_priority?: WorkItemPriority;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
  * DashboardView
  *
  * ``GET /api/dashboard`` — the panel's seven status reads composed into one
@@ -544,7 +565,8 @@ export type DecisionChoiceModel = {
  * A gate decision in full.
  *
  * ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the
- * resolving transition has been recorded.
+ * resolving transition has been recorded. ``docket`` is the *chunk's* pending proposals,
+ * not just this decision's own — every gate on the same chunk shares one strike record.
  */
 export type DecisionView = {
     /**
@@ -559,6 +581,10 @@ export type DecisionView = {
      * Decision Id
      */
     decision_id: string;
+    /**
+     * Docket
+     */
+    docket?: Array<DocketEntryView>;
     /**
      * Epoch
      */
@@ -591,6 +617,51 @@ export type DecisionView = {
      * Transitioned
      */
     transitioned?: boolean;
+};
+
+/**
+ * DocketEntryView
+ *
+ * One of a chunk's not-yet-materialized proposals, as it stands at a gate — the
+ * proposing node, its kind-shaped ``payload``, and whether an operator has struck it.
+ * Under ``malformed`` no field but ``proposal_id``, ``node_name``, and ``kind`` may be
+ * relied on: a stored proposal this hub version can no longer parse renders bare
+ * rather than failing the whole gate read. ``struck_by``/``struck_at`` are set only
+ * when ``struck`` is true.
+ */
+export type DocketEntryView = {
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Malformed
+     */
+    malformed?: boolean;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Payload
+     */
+    payload?: CreateWorkItemProposal | UpdateWorkItemProposal | null;
+    /**
+     * Proposal Id
+     */
+    proposal_id: string;
+    /**
+     * Struck
+     */
+    struck?: boolean;
+    /**
+     * Struck At
+     */
+    struck_at?: string | null;
+    /**
+     * Struck By
+     */
+    struck_by?: string | null;
 };
 
 /**
@@ -1824,6 +1895,32 @@ export type TurnSegmentView = {
      * Truncated
      */
     truncated: boolean;
+};
+
+/**
+ * UpdateWorkItemProposal
+ *
+ * A proposed update to an existing work item — its ``{source, ref}`` pointer plus
+ * evidence to append. Unresolvable at apply time (a closed, withdrawn, or nonexistent
+ * item) is recorded, not refused (D5) — resolving the pointer is left to materialization.
+ */
+export type UpdateWorkItemProposal = {
+    /**
+     * Evidence
+     */
+    evidence: string;
+    /**
+     * Kind
+     */
+    kind?: 'update';
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Source
+     */
+    source: string;
 };
 
 /**

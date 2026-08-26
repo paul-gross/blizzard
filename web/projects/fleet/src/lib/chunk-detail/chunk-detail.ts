@@ -160,7 +160,12 @@ export class ChunkDetail {
   }
 
   protected onResolve(event: ResolveDecisionEvent): void {
-    this.resolveMutation.mutate({ decisionId: event.decisionId, choice: event.choice, chunkId: event.chunkId });
+    this.resolveMutation.mutate({
+      decisionId: event.decisionId,
+      choice: event.choice,
+      chunkId: event.chunkId,
+      struck: event.struck,
+    });
   }
 
   protected onDetach(chunkId: string): void {

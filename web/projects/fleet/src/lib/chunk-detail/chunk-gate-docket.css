@@ -1,0 +1,66 @@
+:host {
+  display: contents;
+}
+.docket {
+  margin-top: 6px;
+}
+.tag {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.s-head {
+  margin-bottom: 6px;
+}
+.entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--overlay-20);
+  padding: 4px 6px;
+}
+.entry + .entry {
+  margin-top: 4px;
+}
+.entry.struck {
+  opacity: 0.5;
+}
+.sel {
+  margin: 2px 0 0;
+  accent-color: var(--cyan);
+}
+.entry-body {
+  min-width: 0;
+  flex: 1;
+}
+.entry-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.kind {
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.node {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
+.entry-title {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.entry-detail {
+  margin: 2px 0 0;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

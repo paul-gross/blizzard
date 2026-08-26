@@ -63,10 +63,13 @@ only while its chunk is genuinely acquired and still live — stop the chunk fir
 ([control-verbs.md](./control-verbs.md#delete) owns the pairing's own mechanics).
 
 A worker's node-step may also propose work items as it completes — new items to file, or evidence to append to one
-already open — and the hub materializes every accumulated proposal of a chunk once that chunk actually delivers, minting
-a fleet-authored hub item (or appending the evidence) best-effort and eventually convergent, never blocking the delivery
-itself. An unresolvable proposal — its target closed, withdrawn, gone, or sourced somewhere with no editor — is recorded
-with its reason rather than retried forever.
+already open — and the hub materializes every accumulated, unstruck proposal of a chunk once that chunk actually
+delivers, minting a fleet-authored hub item (or appending the evidence) best-effort and eventually convergent, never
+blocking the delivery itself. An unresolvable proposal — its target closed, withdrawn, gone, or sourced somewhere with
+no editor — is recorded with its reason rather than retried forever. An operator resolving a runner-config gate may
+strike some of a chunk's pending proposals so they never materialize at all; striking, and materialization generally, is
+owned by blizzard-context's
+[`domain/work/chunk.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/work/chunk.md#materialization).
 
 ## Forge-status labels (`annotate`)
 

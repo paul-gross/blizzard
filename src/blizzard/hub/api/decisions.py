@@ -19,17 +19,46 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, resolved_username
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import DecisionRow
+from blizzard.hub.domain.work import DecisionRow, DocketEntry
+from blizzard.wire.completion import CreateWorkItemProposal, UpdateWorkItemProposal
 from blizzard.wire.decision import (
     DecisionChoiceModel,
     DecisionResolutionConflict,
     DecisionResolutionRequest,
     DecisionResolutionResponse,
     DecisionView,
+    DocketEntryView,
     OpenDecisionsResponse,
 )
 
 router = APIRouter(prefix="/api", tags=["decisions"], dependencies=[Depends(reject_runner_principal)])
+
+
+def _docket_entry_view(entry: DocketEntry) -> DocketEntryView:
+    """Map one :class:`DocketEntry` to its wire view — a malformed stored payload
+    renders bare rather than failing the whole gate read (D5)."""
+    proposal = entry.proposal
+    payload: CreateWorkItemProposal | UpdateWorkItemProposal | None = None
+    malformed = False
+    try:
+        if proposal.kind == "create":
+            payload = CreateWorkItemProposal.model_validate_json(proposal.data)
+        elif proposal.kind == "update":
+            payload = UpdateWorkItemProposal.model_validate_json(proposal.data)
+        else:
+            malformed = True
+    except ValueError:
+        malformed = True
+    return DocketEntryView(
+        proposal_id=proposal.proposal_id,
+        node_name=proposal.node_name,
+        kind=proposal.kind,
+        payload=payload,
+        malformed=malformed,
+        struck=entry.struck,
+        struck_by=entry.struck_by,
+        struck_at=iso_utc(entry.struck_at) if entry.struck_at is not None else None,
+    )
 
 
 def to_decision_view(row: DecisionRow) -> DecisionView:
@@ -46,6 +75,7 @@ def to_decision_view(row: DecisionRow) -> DecisionView:
         resolved_by=row.resolved_by,
         resolved_at=iso_utc(row.resolved_at) if row.resolved_at is not None else None,
         transitioned=row.transitioned,
+        docket=[_docket_entry_view(e) for e in row.docket],
     )
 
 
@@ -74,7 +104,7 @@ def resolve_decision(
     change = chunk_events.ChunkChanged.before(services, pre_decision.chunk_id) if pre_decision is not None else None
     try:
         result = services.decisions.resolve(
-            decision_id, choice=request.choice, resolved_by=resolved_username(http_request)
+            decision_id, choice=request.choice, resolved_by=resolved_username(http_request), struck=request.struck
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

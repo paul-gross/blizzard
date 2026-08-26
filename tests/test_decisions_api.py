@@ -7,10 +7,13 @@ headers; a runner bearer token is rejected on both."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 
+from blizzard.hub.store import schema as s
 from tests.support import build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
@@ -152,3 +155,213 @@ def test_runner_bearer_token_is_rejected_on_resolutions(tmp_path: Path) -> None:
         ).status_code
         == 403
     )
+
+
+# --- The gate docket ----------------------------------------------------------
+
+_GATE_WITH_PROPOSALS_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: Build.
+    proposes_work_items: true
+    judgement:
+      prompt: Assess.
+      choices:
+        pass:
+          description: Ready.
+          to: done
+        fail:
+          description: Retry.
+          to: build
+"""
+
+
+def _create_proposal(*, title: str) -> dict:
+    return {"kind": "create", "title": title, "body": "do it", "stated_priority": "normal"}
+
+
+def _mint_gate_graph(hub) -> str:  # type: ignore[no-untyped-def]
+    """Register the runner-config-gated graph once; return its ``build`` node id. A
+    second identical registration is idempotent store-side, but re-parsing the same
+    YAML twice yields a fresh candidate node id that does not match what actually
+    landed — so every chunk in a test shares one mint."""
+    graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_WITH_PROPOSALS_YAML})
+    assert graph.status_code == 201, graph.text
+    return next(n["node_id"] for n in graph.json()["nodes"] if n["name"] == "build")
+
+
+def _open_decision_with_proposals(
+    hub, build_node_id: str, *, ref: str, proposals: list[dict], runner_id: str = "r1", seq: int = 1
+) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+    """Drive a chunk on the already-minted gate graph to an open decision carrying
+    ``proposals``; return ``(chunk_id, decision_id)``. ``seq`` must be distinct per
+    call sharing a ``runner_id`` — it is that runner's own monotonic fact sequence, not
+    per-chunk, and a repeated value replays as an idempotent no-op."""
+    chunk_id = hub.client.post(
+        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": ref})]}
+    ).json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": runner_id, "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+    report_lease(hub, chunk_id, epoch=1, seq=seq)
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/decisions",
+        json={
+            "from_node_id": build_node_id,
+            "epoch": 1,
+            "runner_id": runner_id,
+            "artifacts": [],
+            "proposals": proposals,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    decision = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]
+    assert decision is not None
+    return chunk_id, str(decision["decision_id"])
+
+
+def _proposal_id_by_title(docket: list[dict], title: str) -> str:
+    return next(e["proposal_id"] for e in docket if e["payload"]["title"] == title)
+
+
+def test_docket_carries_pending_proposals_on_both_open_decisions_and_chunk_detail_reads(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    build_node_id = _mint_gate_graph(hub)
+    chunk_id, decision_id = _open_decision_with_proposals(
+        hub, build_node_id, ref="367a", proposals=[_create_proposal(title="fix it")]
+    )
+
+    open_decisions = hub.client.get("/api/decisions").json()["decisions"]
+    open_decision = next(d for d in open_decisions if d["decision_id"] == decision_id)
+    detail_decision = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]
+
+    for decision in (open_decision, detail_decision):
+        assert len(decision["docket"]) == 1
+        entry = decision["docket"][0]
+        assert entry["kind"] == "create"
+        assert entry["node_name"] == "build"
+        assert entry["payload"] == {"kind": "create", "title": "fix it", "body": "do it", "stated_priority": "normal"}
+        assert entry["malformed"] is False
+        assert entry["struck"] is False
+
+
+def test_a_stored_proposal_this_hub_version_cannot_parse_renders_bare_not_failing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    build_node_id = _mint_gate_graph(hub)
+    chunk_id, decision_id = _open_decision_with_proposals(
+        hub, build_node_id, ref="367f", proposals=[_create_proposal(title="fine")]
+    )
+    with hub.engine.begin() as conn:
+        conn.execute(
+            sa.insert(s.work_item_proposals).values(
+                proposal_id="wip_unparseable",
+                chunk_id=chunk_id,
+                node_id=build_node_id,
+                node_name="build",
+                epoch=1,
+                ordinal=99,
+                kind="create",
+                data="{}",  # missing every required field — model_validate_json raises
+                proposed_at=datetime.now(UTC),
+            )
+        )
+
+    for read in (
+        lambda: next(
+            d for d in hub.client.get("/api/decisions").json()["decisions"] if d["decision_id"] == decision_id
+        ),
+        lambda: hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"],
+    ):
+        docket = read()["docket"]
+        assert len(docket) == 2
+        bare = next(e for e in docket if e["proposal_id"] == "wip_unparseable")
+        assert bare["node_name"] == "build"
+        assert bare["kind"] == "create"
+        assert bare["malformed"] is True
+        assert bare["payload"] is None
+        fine = next(e for e in docket if e["proposal_id"] != "wip_unparseable")
+        assert fine["malformed"] is False
+
+
+def test_a_chunk_with_no_pending_proposals_reads_an_empty_docket(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    decision_id = _open_decision(hub)  # the plain graph-gate fixture, no proposals
+
+    decisions = hub.client.get("/api/decisions").json()["decisions"]
+    entry = next(d for d in decisions if d["decision_id"] == decision_id)
+    assert entry["docket"] == []
+
+
+def test_a_struck_entry_reads_back_carrying_its_striking_identity_after_resolve(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    build_node_id = _mint_gate_graph(hub)
+    chunk_id, decision_id = _open_decision_with_proposals(
+        hub, build_node_id, ref="367b", proposals=[_create_proposal(title="keep"), _create_proposal(title="strike")]
+    )
+    docket = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["docket"]
+    strike_id = _proposal_id_by_title(docket, "strike")
+
+    resolved = hub.client.post(
+        f"/api/decisions/{decision_id}/resolutions", json={"choice": "pass", "struck": [strike_id]}
+    )
+    assert resolved.status_code == 200, resolved.text
+
+    docket = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["docket"]
+    struck_entry = next(e for e in docket if e["proposal_id"] == strike_id)
+    assert struck_entry["struck"] is True
+    assert struck_entry["struck_by"] == "operator"
+    assert struck_entry["struck_at"] is not None
+    kept_entry = next(e for e in docket if e["proposal_id"] != strike_id)
+    assert kept_entry["struck"] is False
+
+
+def test_an_unknown_or_foreign_proposal_id_answers_400_and_strikes_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    build_node_id = _mint_gate_graph(hub)
+    _, decision_id = _open_decision_with_proposals(
+        hub, build_node_id, ref="367c", proposals=[_create_proposal(title="only")]
+    )
+    other_chunk_id, other_decision_id = _open_decision_with_proposals(
+        hub, build_node_id, ref="367d", proposals=[_create_proposal(title="foreign")], seq=2
+    )
+    other_docket = hub.client.get(f"/api/chunks/{other_chunk_id}").json()["decision"]["docket"]
+    foreign_id = _proposal_id_by_title(other_docket, "foreign")
+
+    unknown = hub.client.post(
+        f"/api/decisions/{decision_id}/resolutions", json={"choice": "pass", "struck": ["wip_bogus"]}
+    )
+    assert unknown.status_code == 400, unknown.text
+
+    foreign = hub.client.post(
+        f"/api/decisions/{decision_id}/resolutions", json={"choice": "pass", "struck": [foreign_id]}
+    )
+    assert foreign.status_code == 400, foreign.text
+
+    still_open = next(
+        d for d in hub.client.get("/api/decisions").json()["decisions"] if d["decision_id"] == decision_id
+    )
+    assert still_open["resolved_choice"] is None
+    other_still_open = next(
+        d for d in hub.client.get("/api/decisions").json()["decisions"] if d["decision_id"] == other_decision_id
+    )
+    assert all(not e["struck"] for e in other_still_open["docket"])
+
+
+def test_resolution_omitting_struck_resolves_and_passes_every_proposal(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    build_node_id = _mint_gate_graph(hub)
+    chunk_id, decision_id = _open_decision_with_proposals(
+        hub, build_node_id, ref="367e", proposals=[_create_proposal(title="one"), _create_proposal(title="two")]
+    )
+
+    resolved = hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "pass"})
+    assert resolved.status_code == 200, resolved.text
+
+    docket = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["docket"]
+    assert len(docket) == 2
+    assert all(not e["struck"] for e in docket)

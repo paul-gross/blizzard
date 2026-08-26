@@ -623,11 +623,25 @@ class DecisionChoice:
 
 
 @dataclass(frozen=True)
+class DocketEntry:
+    """One of a chunk's not-yet-materialized proposals, as it stands at a gate — a
+    :class:`~blizzard.hub.domain.proposals.WorkItemProposalRow` plus whether an operator
+    has struck it. ``struck_by``/``struck_at`` are set only when :attr:`struck` is true."""
+
+    proposal: WorkItemProposalRow
+    struck: bool = False
+    struck_by: str | None = None
+    struck_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class DecisionRow:
     """A gate decision in full — the surfacing/read model.
 
     Resolution state is **derived**: ``resolved_choice`` is set once a resolution row
-    exists, and ``transitioned`` is true once a transition references this decision."""
+    exists, and ``transitioned`` is true once a transition references this decision.
+    ``docket`` is the *chunk's* pending proposals, not just this decision's own — every
+    gate on the same chunk shares one strike record."""
 
     decision_id: str
     chunk_id: str
@@ -640,6 +654,7 @@ class DecisionRow:
     resolved_by: str | None = None
     resolved_at: datetime | None = None
     transitioned: bool = False
+    docket: list[DocketEntry] = field(default_factory=list)
 
     @property
     def resolved(self) -> bool:
@@ -1289,10 +1304,10 @@ class IReadChunkRepository(Protocol):
         """Every not-yet-judged proposal of a chunk that has delivered — a
         ``transitions`` row at ``to_node_id == RESERVED_TERMINAL``, regardless of whether
         a runner-node's own transition or a hub-node's ``release_route`` transition wrote
-        it, excluding the ephemeral (grouped/deleted) and any proposal already carrying a
-        ``work_item_materializations`` row. Reads status nowhere: a hand-completed or
-        later-stopped chunk is included or excluded purely by whether it actually
-        delivered."""
+        it, excluding the ephemeral (grouped/deleted), any proposal already carrying a
+        ``work_item_materializations`` row, and any struck proposal. Reads status nowhere:
+        a hand-completed or later-stopped chunk is included or excluded purely by whether
+        it actually delivered."""
         ...
 
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
@@ -1609,9 +1624,12 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         where the step's transition would have written them."""
         ...
 
-    def record_decision_resolution(self, decision_id: str, *, choice: str, resolved_by: str, at: datetime) -> bool:
-        """First-write-wins CAS: record the person's choice, or return ``False`` if
-        the decision was already resolved (the loser is told who won)."""
+    def record_decision_resolution(
+        self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, struck: Sequence[str] = ()
+    ) -> bool:
+        """First-write-wins CAS: record the person's choice and ``struck``'s proposal
+        ids as a strike each, in one transaction, or return ``False`` if the decision
+        was already resolved (the loser is told who won — and writes no strike at all)."""
         ...
 
     def record_requeue(self, chunk_id: str, *, at: datetime) -> int:

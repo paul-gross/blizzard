@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import type { ChunkDetail, ChunkStatus, DecisionView, QuestionView } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
 import { ChunkEscalation } from './chunk-escalation';
+import { ChunkGateDocket } from './chunk-gate-docket';
 
 /** Emitted when the operator answers a chunk's open question from the dock. */
 export interface AnswerQuestionEvent {
@@ -11,11 +12,13 @@ export interface AnswerQuestionEvent {
   readonly chunkId: string;
 }
 
-/** Emitted when the operator resolves a chunk's open gate decision from the dock. */
+/** Emitted when the operator resolves a chunk's open gate decision from the dock.
+ * `struck` names the docket proposals toggled to refuse; empty passes every proposal. */
 export interface ResolveDecisionEvent {
   readonly decisionId: string;
   readonly choice: string;
   readonly chunkId: string;
+  readonly struck: readonly string[];
 }
 
 /** How many recently answered questions the dock keeps a trail for (issue #165). */
@@ -45,7 +48,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
 @Component({
   selector: 'fleet-chunk-detail-awaiting-human',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkEscalation, KitButton],
+  imports: [ChunkEscalation, ChunkGateDocket, KitButton],
   templateUrl: './chunk-awaiting-human.html',
   styleUrl: './chunk-awaiting-human.css',
 })
@@ -69,6 +72,10 @@ export class ChunkAwaitingHuman {
 
   /** Emitted when the operator resolves an open gate decision. */
   readonly resolveDecision = output<ResolveDecisionEvent>();
+
+  /** The docket's toggled ids, carried up via its `struckChange` output — read at
+   * resolve time rather than reaching back into the docket's own state. */
+  private readonly struckIds = signal<readonly string[]>([]);
 
   /** The chunk's open (unanswered) questions — the ask a parked chunk waits on. */
   protected readonly openQuestions = computed<readonly QuestionView[]>(() =>
@@ -131,8 +138,19 @@ export class ChunkAwaitingHuman {
     this.answerQuestion.emit({ questionId, answer: trimmed, chunkId: this.detail().chunk_id });
   }
 
-  /** Emit a resolution for the open gate decision. */
+  /** Emit a resolution for the open gate decision, carrying whatever the docket's
+   * toggle set currently holds. */
   protected resolve(decisionId: string, choice: string): void {
-    this.resolveDecision.emit({ decisionId, choice, chunkId: this.detail().chunk_id });
+    this.resolveDecision.emit({
+      decisionId,
+      choice,
+      chunkId: this.detail().chunk_id,
+      struck: this.struckIds(),
+    });
+  }
+
+  /** The docket's toggle set changed — record it for the next resolve. */
+  protected onDocketStruckChange(ids: readonly string[]): void {
+    this.struckIds.set(ids);
   }
 }
