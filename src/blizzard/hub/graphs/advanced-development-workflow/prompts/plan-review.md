@@ -58,7 +58,8 @@ adjudicated every refutation and every finding carrying:
 - **severity** — `blocking` for must-fix; on `acceptable`, `folded` for one you fixed in `reviewed-plan`, `should-fix`
   for one riding to build.
 - **anchor** — `<repo>/<path>:<line>`, `<repo>/<path>::<symbol>`, or `<asset-name>::<section>`.
-- one or two specific, actionable sentences.
+- a **description** held to the docket's bound: one or two sentences, at most 300 characters — the defect and its
+  consequence, never the derivation that established it.
 
 The fields are restated from the docket; read it in full with
 `blizzard runner artifact get docket --scope graph --content`. If that command fails, proceed on the restatement above

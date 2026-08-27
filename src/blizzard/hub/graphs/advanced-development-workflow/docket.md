@@ -10,7 +10,11 @@ Every finding recorded in a `plan-findings` or `review-findings` asset carries:
   entry.)
 - **anchor** — `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>`; a finding targeting a chunk asset rather than a repo
   file anchors as `<asset-name>::<section>`, e.g. `plan::Acceptance criteria`.
-- a one- or two-sentence description, specific and actionable.
+- a **description** — one or two sentences, **at most 300 characters**: what is wrong and why it matters, specific and
+  actionable. The derivation that established the finding — cross-references, confirming lookups, quotations — stays in
+  the responder's reasoning, never in the entry. A finding that genuinely needs more to be actionable puts the excess in
+  a `detail:` continuation *after* the description, so a reader can stop at the claim; the bound binds the description
+  alone.
 
 Example, inside a `review-findings` asset:
 
@@ -19,6 +23,20 @@ F1 — should-fix — payments-api/src/payments/worker.py:142
   Retry counter isn't reset after a successful heartbeat, so a flaky-then-recovered
   worker still escalates on its next transient failure.
 ```
+
+The same finding over-long — its derivation transcribed into the entry instead of summarized by it:
+
+```text
+F1 — should-fix — payments-api/src/payments/worker.py:142
+  `Worker.heartbeat` returns early at line 138 when the lease is healthy, and `retries` is
+  only reset on the fallthrough at line 151; `test_heartbeat_ok` pins the early return
+  (payments-api/tests/test_worker.py:88), and the retry counter is declared cumulative in
+  `openapi/worker.json`, so after a successful heartbeat the counter still holds its old
+  value, which means a worker that was flaky and then recovered still escalates...
+```
+
+Everything after the claim is reasoning the reviewer already did — compressing it back to the two-sentence form above
+loses nothing a responder acts on.
 
 ## Refutation record
 
