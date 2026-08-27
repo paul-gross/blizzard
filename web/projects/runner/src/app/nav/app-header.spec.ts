@@ -1,13 +1,20 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { type Provider, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi } from 'fleet';
+import { runnerClient, type runnerApi, type SseStatus } from 'fleet';
 import { type RequestClientStub, hiddenAtContainerWidth, settle, stubError, stubRequestClient } from 'fleet/testing';
-import { LocalIdentity } from 'local-panel';
+import { LocalIdentity, RunnerLiveUpdates } from 'local-panel';
 import { vi } from 'vitest';
 
 import { AppHeader } from './app-header';
+
+/** A `RunnerLiveUpdates` stand-in so a spec can drive {@link AppHeader}'s
+ * `connection` fold (blizzard#333) without opening a real stream — the header
+ * only ever reads `status`/`authFailed`, never starts or restarts it. */
+function fakeLiveUpdates(status: SseStatus, authFailed = false): Provider {
+  return { provide: RunnerLiveUpdates, useValue: { status: signal(status), authFailed: signal(authFailed) } };
+}
 
 /** A full `DashboardView` body (issue #311) — every field this header's own
  * dashboard read touches (`runner.capacities`, `environments`), plus every
@@ -32,13 +39,14 @@ function dashboardBody(overrides: Partial<runnerApi.DashboardView> = {}): runner
   };
 }
 
-async function render() {
+async function render(extraProviders: Provider[] = []) {
   await TestBed.configureTestingModule({
     imports: [AppHeader],
     providers: [
       provideZonelessChangeDetection(),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideRouter([]),
+      ...extraProviders,
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(AppHeader);
@@ -71,6 +79,20 @@ describe('AppHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('offline');
+  });
+
+  it('shows reconnecting… while the live stream retries a drop, even though the dashboard read is ok (blizzard#333)', async () => {
+    const fixture = await render([fakeLiveUpdates('reconnecting')]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('reconnecting…');
+  });
+
+  it('shows degraded once the stream has exhausted its bounded re-arm, even though the dashboard read is ok (blizzard#333)', async () => {
+    const fixture = await render([fakeLiveUpdates('closed', true)]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('degraded');
   });
 
   it('folds the runner status and environments reads into the header stat cells (issue #131)', async () => {

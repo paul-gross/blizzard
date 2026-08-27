@@ -18,6 +18,21 @@ import { appConfig } from './app.config';
 describe('runner appConfig wires session recovery (issue #312)', () => {
   let stub: RequestClientStub;
 
+  beforeEach(() => {
+    // blizzard#347: this project's specs share one jsdom/module registry under
+    // single-worker scheduling (Angular's unit-test builder defaults Vitest to
+    // `isolate: false`), so a sibling spec's leaked renewal mark could otherwise
+    // become this test's starting state. Seed the exact dirty state a leak
+    // leaves — the key `session-recovery.ts` sets (hardcoded, not imported: it
+    // is a private module constant) — so the hook below is proven to establish
+    // a clean precondition rather than merely inherit whatever came before it.
+    sessionStorage.setItem('blizzard.runner.session-renewal-attempted', '1');
+  });
+
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
   afterEach(() => {
     stub.restore();
     runnerClient.interceptors.response.clear();

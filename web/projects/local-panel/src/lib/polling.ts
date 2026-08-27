@@ -4,11 +4,12 @@
  * `LIVE_COVERED_POLL_BACKSTOP_MS` (issue #316) in intent, but not in value: this
  * panel is a single machine-local operator surface, not a shared board — so the
  * floor here is deliberately coarser than 45s. 1 minute: `leases.query.ts` feeds
- * `local-heartbeat-freshness`'s own decay curve, whose documented checkpoint is
- * "≈50% at one minute" — a slower backstop leaves that rendering stale relative to its
- * own claim for most of a healthy node-step's life (the elapsed-time-derived state a
- * heartbeat *is* rides no event at all, D7, so this interval is the only thing that
- * ever refreshes it), and `status.query.ts` feeds the dashboard's `runner` section
+ * `local-heartbeat-freshness`'s own decay curve, which anchors its resolution at this
+ * interval (blizzard#334 D4) — a slower backstop would widen the window that curve
+ * renders 100% instead of a real drain, without changing what it is actually able to
+ * resolve (the elapsed-time-derived state a heartbeat *is* rides no event at all, D7,
+ * so this interval is the only thing that ever refreshes it), and `status.query.ts`
+ * feeds the dashboard's `runner` section
  * (the daemon's own tick beat, also D7-silent, and the hub-pause mirror, which no kind
  * in the vocabulary represents either). Still a real backstop, not a return to
  * per-surface polling: 1 request/minute across two reads is negligible idle volume

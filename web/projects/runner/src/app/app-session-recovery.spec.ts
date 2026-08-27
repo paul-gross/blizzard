@@ -47,7 +47,14 @@ async function setUp(route: (method: string, path: string) => unknown) {
   return {
     recovery,
     navigateSpy,
-    restore: () => {
+    // blizzard#347: `async`, not because this teardown itself awaits anything,
+    // but so `await`-ing it (below, and in `afterEach`) always gives the event
+    // loop a turn before `sessionStorage.clear()` runs — the turn a 401 this
+    // test never explicitly awaited (a concurrent query's own interceptor
+    // call, the shape `App` mounting fires several of) needs to land its
+    // `setMark()` here, against this test's own state, rather than after,
+    // against the *next* test's clean slate instead.
+    restore: async () => {
       runnerClient.interceptors.response.eject(interceptorId);
       stub.restore();
     },
@@ -55,10 +62,10 @@ async function setUp(route: (method: string, path: string) => unknown) {
 }
 
 describe('runner App session-recovery fork (issue #312)', () => {
-  let restore: (() => void) | undefined;
+  let restore: (() => Promise<void>) | undefined;
 
-  afterEach(() => {
-    restore?.();
+  afterEach(async () => {
+    await restore?.();
     restore = undefined;
     sessionStorage.clear();
   });
@@ -118,5 +125,66 @@ describe('runner App session-recovery fork (issue #312)', () => {
     await fixture.whenStable();
 
     expect(navigateSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('drains a recovery genuinely still in flight when teardown runs, before sessionStorage clears (blizzard#347)', async () => {
+    // A session read under this test's own control — pending until this test
+    // resolves it, so the recovery it drives is provably still in flight, not
+    // just probably fast enough to have finished already.
+    let resolveSession!: () => void;
+    const pendingSession = new Promise<Response>((resolve) => {
+      resolveSession = () =>
+        resolve(
+          new Response(JSON.stringify({ auth_enabled: true, username: null }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+    });
+
+    const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter(routes),
+        { provide: EVENT_SOURCE_FACTORY, useValue: factory },
+      ],
+    }).compileComponents();
+    const recovery = TestBed.inject(SessionRecovery);
+    vi.spyOn(recovery as unknown as { navigate(url: string): void }, 'navigate').mockImplementation(() => undefined);
+    const interceptorId = runnerClient.interceptors.response.use((response, request) => recovery.handle(response, request));
+    const previousConfig = runnerClient.getConfig();
+    runnerClient.setConfig({
+      baseUrl: 'http://localhost',
+      fetch: (async (input: Request) => {
+        const path = new URL(input.url).pathname;
+        if (path === '/api/auth/session') return pendingSession;
+        return new Response(JSON.stringify({ detail: 'not authenticated' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof fetch,
+    });
+    restore = async () => {
+      runnerClient.interceptors.response.eject(interceptorId);
+      runnerClient.setConfig(previousConfig);
+    };
+
+    // Fire-and-forget — the shape a concurrent query's own interceptor call
+    // takes, never awaited by the test body itself.
+    void runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+
+    resolveSession();
+    // Exercised directly (not just via `afterEach`), mirroring exactly what
+    // teardown does. False if this is called without `await` (or `afterEach`
+    // reverts to the same): a synchronous teardown gives the now-unblocked
+    // recovery no turn to run before this assertion, the same gap that lets a
+    // still-settling `setMark()` leak into a sibling spec's clean `sessionStorage`.
+    await restore();
+    restore = undefined;
+
+    expect(sessionStorage.getItem('blizzard.runner.session-renewal-attempted')).not.toBeNull();
   });
 });

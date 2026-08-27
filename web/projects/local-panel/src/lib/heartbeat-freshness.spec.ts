@@ -38,13 +38,20 @@ describe('HeartbeatFreshness', () => {
     expect(el.querySelector('[data-testid="hb-age"]')?.textContent).toContain('-0s');
   });
 
-  it('drains logarithmically — visibly down within the first minute, not pinned at ~100%', async () => {
-    // A linear drain over the 1h reap threshold would leave a 60s-old beat at
-    // ~98%; the log drain puts it near half — the operator can see it move.
+  it('renders 100% for any age at or under the sampling interval, not just the instant a beat lands (blizzard#334 D4)', async () => {
+    // Exactly one RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS old (60s) — the bar cannot
+    // resolve an age this fine, so it claims no partial drain it cannot back.
     const el = await render('2026-07-16T11:59:00.000Z');
+    expect(percentOf(el)).toBe(100);
+  });
+
+  it('drains logarithmically once past the sampling interval — ≈78% at the floor, one beat gap past it (blizzard#334 D4)', async () => {
+    // 65s old: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS (60s) plus one 5s beat gap —
+    // the instant before the next backstop poll would refresh the anchor.
+    const el = await render('2026-07-16T11:58:55.000Z');
     const percent = percentOf(el);
-    expect(percent).toBeLessThan(70);
-    expect(percent).toBeGreaterThan(30);
+    expect(percent).toBeLessThan(85);
+    expect(percent).toBeGreaterThan(70);
   });
 
   it('reaches 0% at the reap staleness threshold', async () => {
@@ -96,7 +103,9 @@ describe('HeartbeatFreshness ticking (issue #178)', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(percentOf(el)).toBe(100);
 
-    vi.setSystemTime(REF + 60_000);
+    // Past the sampling interval (60s) plus a beat gap, so the tick alone — with
+    // no fresh `lastHeartbeatAt` — drives the age past what the bar renders 100% for.
+    vi.setSystemTime(REF + 70_000);
     await vi.advanceTimersByTimeAsync(1000);
     fixture.detectChanges();
 
@@ -110,7 +119,8 @@ describe('HeartbeatFreshness ticking (issue #178)', () => {
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
     const fixture = TestBed.createComponent(HeartbeatFreshness);
-    fixture.componentRef.setInput('lastHeartbeatAt', '2026-07-16T11:59:00.000Z');
+    // Past the sampling interval, so the initial render is already draining.
+    fixture.componentRef.setInput('lastHeartbeatAt', '2026-07-16T11:58:00.000Z');
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     expect(percentOf(el)).toBeLessThan(100);

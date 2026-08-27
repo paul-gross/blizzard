@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import {
+  backoffDelay,
   EVENT_SOURCE_FACTORY,
   type EventSourceFactory,
   type FleetEventSource,
@@ -10,7 +11,7 @@ import {
 import { vi } from 'vitest';
 
 import { runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from './query-keys';
-import { RunnerLiveUpdates } from './runner-live-updates';
+import { RunnerLiveUpdates, STREAM_REARM_MAX_ATTEMPTS } from './runner-live-updates';
 import { SessionRecovery } from './session-recovery';
 
 /** EventSource stand-in with named-listener and auth-failure support — jsdom ships
@@ -74,7 +75,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
       ],
     });
     const recovery = TestBed.inject(SessionRecovery);
-    recoverSpy = vi.spyOn(recovery, 'recoverFromUnauthenticated').mockResolvedValue(undefined);
+    recoverSpy = vi.spyOn(recovery, 'recoverFromUnauthenticated').mockResolvedValue('not-applicable');
   });
 
   afterEach(() => {
@@ -257,7 +258,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(runnerDashboardKey);
   });
 
-  it('re-GETs the whole query client after a reconnect to close the gap', () => {
+  it('re-GETs the whole query client on the confirmed reopen, not on drop detection (D1)', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
 
@@ -267,7 +268,15 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     vi.advanceTimersByTime(2000);
     TestBed.flushEffects();
 
-    // A blanket invalidation (no filter) fires after the reconnect.
+    // Still down: no blanket invalidation yet — moving the re-GET back to drop
+    // detection would fail this assertion.
+    expect(FakeEventSource.instances).toHaveLength(2);
+    expect(invalidate.mock.calls.some((call) => call[0] === undefined)).toBe(false);
+
+    FakeEventSource.instances[1].open();
+    TestBed.flushEffects();
+
+    // A blanket invalidation (no filter) fires once the reconnect is confirmed.
     expect(invalidate.mock.calls.some((call) => call[0] === undefined)).toBe(true);
   });
 
@@ -292,5 +301,62 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     live.start();
 
     expect(FakeEventSource.instances).toHaveLength(1);
+  });
+
+  describe('the daemon-restart shape (blizzard#333 D2/D3): stream 401, session-check fetch fails too', () => {
+    beforeEach(() => {
+      recoverSpy.mockResolvedValue('read-failed');
+    });
+
+    it('re-arms the stream on backoffDelay rather than staying dead or retrying unboundedly', async () => {
+      const live = TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates));
+      live.start();
+
+      const source = FakeEventSource.instances[0];
+      source.open();
+      source.authError();
+      TestBed.flushEffects();
+      await vi.advanceTimersByTimeAsync(0); // let the async onAuthFailed handler settle
+
+      expect(live.authFailed()).toBe(true);
+      // Not yet: the re-arm waits out its backoff delay first.
+      expect(FakeEventSource.instances).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(backoffDelay(1));
+      expect(FakeEventSource.instances).toHaveLength(2);
+      expect(live.authFailed()).toBe(false); // a fresh attempt, not the failed one
+
+      FakeEventSource.instances[1].open();
+      expect(live.status()).toBe('open');
+    });
+
+    it('gives up after STREAM_REARM_MAX_ATTEMPTS, leaving the degraded state standing rather than retrying forever', async () => {
+      const live = TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates));
+      live.start();
+
+      for (let attempt = 1; attempt <= STREAM_REARM_MAX_ATTEMPTS; attempt++) {
+        const source = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+        source.open();
+        source.authError();
+        TestBed.flushEffects();
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(backoffDelay(attempt));
+      }
+
+      // Every budgeted attempt is spent: one initial connection plus one per re-arm.
+      expect(FakeEventSource.instances).toHaveLength(STREAM_REARM_MAX_ATTEMPTS + 1);
+
+      const last = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+      last.open();
+      last.authError();
+      TestBed.flushEffects();
+      await vi.advanceTimersByTimeAsync(0);
+      // The cap is spent: advancing well past any backoff opens no further attempt,
+      // and the degraded state is left standing for the header to render.
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(FakeEventSource.instances).toHaveLength(STREAM_REARM_MAX_ATTEMPTS + 1);
+      expect(live.authFailed()).toBe(true);
+    });
   });
 });

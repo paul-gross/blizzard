@@ -94,6 +94,19 @@ describe('SessionRecovery (issue #312)', () => {
     expect(navigateSpy).toHaveBeenCalledWith(`/api/auth/login?return_to=${encodeURIComponent('/?chunk=ch_live')}`);
   });
 
+  it('reports read-failed, and does not navigate, when the session read itself errors (blizzard#333 D3)', async () => {
+    const { navigateSpy, recovery, restore: r } = setUp((_method, path) =>
+      path === '/api/auth/session' ? stubError(503, { detail: 'upstream unavailable' }) : unauthorized(),
+    );
+    restore = r;
+
+    const outcome = await recovery.recoverFromUnauthenticated();
+
+    expect(outcome).toBe('read-failed');
+    expect(navigateSpy).not.toHaveBeenCalled();
+    expect(recovery.recovering()).toBe(false);
+  });
+
   it('leaves a 401 untouched when the session read still resolves a username — an upstream rejection, not an expiry', async () => {
     const { navigateSpy, recovery, restore: r } = setUp((_method, path) =>
       path === '/api/auth/session' ? { auth_enabled: true, username: 'alice' } : unauthorized(),
