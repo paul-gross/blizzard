@@ -1,6 +1,5 @@
-"""The prompt-tree byte bars the prompt-authoring README legislates, asserted rather than
-printed: every packaged node prompt within 4,000 bytes, `blizzard_preamble.md` — frontloaded
-into every worker session in every deployment — within 2,252."""
+"""Asserts the prompt-tree byte bars over both trees they bind; the figures and their
+rationale are owned by `src/blizzard/hub/graphs/advanced-development-workflow/README.md`."""
 
 from __future__ import annotations
 
@@ -9,11 +8,10 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.graphs import PACKAGED
+from blizzard.runner.harness.preamble import PROMPTS
 
 NODE_PROMPT_BAR = 4_000
 PREAMBLE_BAR = 2_252
-
-_RUNNER_PROMPTS = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness" / "prompts"
 
 
 def _over(files: list[Path], bar: int) -> list[str]:
@@ -29,11 +27,11 @@ def test_every_packaged_graph_prompt_stays_within_the_byte_bar() -> None:
 
 @pytest.mark.unit
 def test_the_runner_prompt_tree_inherits_the_same_bar() -> None:
-    files = sorted(_RUNNER_PROMPTS.glob("*.md"))
+    files = sorted(PROMPTS.directory.glob("*.md"))
     assert files, "no runner prompt files found — the tree moved"
     assert _over(files, NODE_PROMPT_BAR) == []
 
 
 @pytest.mark.unit
 def test_the_blizzard_preamble_stays_within_its_own_tighter_bar() -> None:
-    assert _over([_RUNNER_PROMPTS / "blizzard_preamble.md"], PREAMBLE_BAR) == []
+    assert _over([PROMPTS.directory / "blizzard_preamble.md"], PREAMBLE_BAR) == []

@@ -27,17 +27,17 @@ class Prompts:
         return (self.directory / name).read_text().rstrip("\n")
 
 
-_PROMPTS = Prompts(Path(__file__).resolve().parent / "prompts")
+PROMPTS = Prompts(Path(__file__).resolve().parent / "prompts")
 
 #: Layer 1's text (issue #103) — the fallback when a configured ``runner_prompt`` is unset.
-DEFAULT_BLIZZARD_PREAMBLE = _PROMPTS.text("blizzard_preamble.md")
+DEFAULT_BLIZZARD_PREAMBLE = PROMPTS.text("blizzard_preamble.md")
 
 #: Layers 1 and 2 both unchanged (issue #149). Carries layer 1's pointer to the facts
 #: table, which layer 1's own prose would otherwise be the only thing to introduce.
-RESUME_STANDING_UNCHANGED = _PROMPTS.text("resume_standing_unchanged.md")
+RESUME_STANDING_UNCHANGED = PROMPTS.text("resume_standing_unchanged.md")
 
 #: The raw ``{node}``/``{prior_node}`` template behind :func:`resume_cross_node` (blizzard#340).
-_RESUME_CROSS_NODE = _PROMPTS.text("resume_cross_node.md")
+_RESUME_CROSS_NODE = PROMPTS.text("resume_cross_node.md")
 
 
 def resume_cross_node(*, node: str, prior_node: str) -> str:
@@ -48,18 +48,18 @@ def resume_cross_node(*, node: str, prior_node: str) -> str:
 
 #: Layer 1 unchanged while layer 2 is sent in full — carrying the same facts-table
 #: pointer, since the collapse rule is per layer (issue #149).
-RESUME_BLIZZARD_UNCHANGED = _PROMPTS.text("resume_blizzard_unchanged.md")
+RESUME_BLIZZARD_UNCHANGED = PROMPTS.text("resume_blizzard_unchanged.md")
 
 #: The mirror case (issue #149). No facts-table pointer: layer 1 is right there in full.
-RESUME_WORKSPACE_UNCHANGED = _PROMPTS.text("resume_workspace_unchanged.md")
+RESUME_WORKSPACE_UNCHANGED = PROMPTS.text("resume_workspace_unchanged.md")
 
 #: A change whose new text is nothing, so it needs prose of its own: silence would read
 #: as "unchanged" to a worker still holding the withdrawn policy (issue #149).
-RESUME_WORKSPACE_WITHDRAWN = _PROMPTS.text("resume_workspace_withdrawn.md")
+RESUME_WORKSPACE_WITHDRAWN = PROMPTS.text("resume_workspace_withdrawn.md")
 
 #: Without it, replacement prose arrives in the same position looking exactly like the
 #: block the worker was handed several spawns ago (issue #149).
-RESUME_UPDATED_NOTICE = _PROMPTS.text("resume_updated_notice.md")
+RESUME_UPDATED_NOTICE = PROMPTS.text("resume_updated_notice.md")
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,7 @@ class Preamble:
     table: str
     fingerprint: PreambleFingerprint
     prior: PreambleFingerprint | None
-    node: str | None = None
+    node: str
     prior_node: str | None = None
 
     @classmethod
@@ -86,15 +86,15 @@ class Preamble:
         lease_id: str,
         runner_id: str,
         chunk_id: str,
+        node: str,
         prior: PreambleFingerprint | None = None,
-        node: str | None = None,
         prior_node: str | None = None,
     ) -> Preamble:
         """``prior`` is the fingerprint of the standing prose the resumed session was last sent,
-        ``None`` for a spawn resuming nothing: it selects between the full three-layer render
-        and one where an unchanged layer collapses and a changed one is announced. ``node`` /
-        ``prior_node`` name this and the previous turn's node-step (blizzard#340) — known and
-        differing, they compose the role-change line in; a ``None`` reads as same-node."""
+        ``None`` for a spawn resuming nothing: it selects between the full three-layer render and
+        one where an unchanged layer collapses and a changed one is announced. ``node`` names this
+        turn's node-step — required, so no call site can silently suppress the role-change line —
+        and a ``prior_node`` known to differ from it composes that line in (blizzard#340)."""
         rows = [
             ("runner id", runner_id),
             ("chunk id", chunk_id),
@@ -135,7 +135,7 @@ class Preamble:
         # The role-change line leads every render whose nodes are known to differ (blizzard#340);
         # a differing recorded prior node already implies a resume, fingerprint or not.
         cross: list[str] = []
-        if self.node is not None and self.prior_node is not None and self.node != self.prior_node:
+        if self.prior_node is not None and self.node != self.prior_node:
             cross = [resume_cross_node(node=self.node, prior_node=self.prior_node)]
 
         if self.prior is None:

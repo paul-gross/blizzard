@@ -31,7 +31,7 @@ def _render(
     *,
     runner_prompt: str = "",
     prior: PreambleFingerprint | None = None,
-    node: str | None = None,
+    node: str = "build",
     prior_node: str | None = None,
 ) -> str:
     return Preamble.of(
@@ -60,6 +60,7 @@ def _fingerprint(
         lease_id="lease_1",
         runner_id="runner-local",
         chunk_id="ch_1",
+        node="build",
     ).fingerprint
 
 
@@ -389,6 +390,7 @@ def test_resume_still_carries_this_attempts_freshly_minted_lease_id() -> None:
         lease_id="lease_this_attempt",
         runner_id="runner-local",
         chunk_id="ch_1",
+        node="build",
         prior=prior,
     ).text
 
@@ -441,6 +443,7 @@ def test_fingerprint_is_the_same_whether_the_render_elided_or_not() -> None:
         lease_id="lease_1",
         runner_id="runner-local",
         chunk_id="ch_1",
+        node="build",
     )
     elided = Preamble.of(
         runner_prompt="Blizzard prose.",
@@ -449,6 +452,7 @@ def test_fingerprint_is_the_same_whether_the_render_elided_or_not() -> None:
         lease_id="lease_2",
         runner_id="runner-local",
         chunk_id="ch_1",
+        node="build",
         prior=fresh.fingerprint,
     )
 

@@ -14,14 +14,10 @@ arguments — read it before you review, and adjudicate it (below).
 
 ## Adjudicate the refutations first
 
-The newest `review-finding-refutes` asset is the whole record. Answer every entry explicitly — silence is not
-acceptance:
-
-- An entry already marked **`accepted`** stays accepted — carry it into your `review-findings`, naming the anchor.
-- **Accept** an `open` entry when the argument holds; do not raise the finding again.
-- **Reject** it when the argument does not hold: re-raise the finding and answer the argument.
-
-Match a refutation to a finding by its **anchor**, not its id — ids restart at `F1` every submission.
+The newest `review-finding-refutes` asset is the whole record — answer every entry explicitly, matched by **anchor**,
+never id (ids restart at `F1` every submission): an **`accepted`** entry stays accepted, carried into your
+`review-findings` with its anchor; **accept** an `open` entry whose argument holds and do not raise the finding again;
+**reject** one whose argument does not hold — re-raise the finding and answer the argument.
 
 ## The axes
 

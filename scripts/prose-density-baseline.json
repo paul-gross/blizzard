@@ -4126,8 +4126,8 @@
   },
   "test_prompt_byte_bars.py": {
    "comments": 0,
-   "docstrings": 3,
-   "total": 39
+   "docstrings": 2,
+   "total": 37
   },
   "test_public_origins.py": {
    "comments": 0,
@@ -4792,7 +4792,7 @@
   "test_worker_preamble.py": {
    "comments": 29,
    "docstrings": 46,
-   "total": 456
+   "total": 460
   },
   "test_workspace_prompt_api.py": {
    "comments": 3,

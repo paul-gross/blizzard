@@ -20,15 +20,15 @@ door — unlike `workspace_prompt`'s live PUT — so changing it means restartin
 a missing path raises a `ConfigError` at startup, the same fail-fast as the workspace file knob.
 
 Layer 3 is unconditional on every path, re-rendered per attempt around the freshly minted lease_id (a stale table would
-name a dead lease); a fresh spawn, or a node declared `session: fresh`, renders all three layers in full. Layers 1 and 2
-are standing prose, so a node-step resuming an existing session sends each only when it changed since that session last
-spawned; unchanged, the layer collapses to a single still-applies line — the ordinary case on
-advanced-development-workflow, whose worker nodes resume by default, only plan-review and review being declared fresh. A
-changed standing layer is re-sent in full, led by an explicit statement that the worker's standing instructions have
-been updated since its previous turn; a workspace prompt replaced with an empty one is announced as a withdrawal.
-Whatever became of the layers, a resume whose recorded prior node is known and differs from the current one carries a
-role-change line naming both nodes, first in the render; with no recorded prior node there is nothing to name, and no
-line renders.
+name a dead lease); a fresh spawn, a node declared `session: fresh`, or a resume with no record of what the session was
+last sent — nothing to safely elide against — renders all three layers in full. Layers 1 and 2 are standing prose, so a
+node-step resuming an existing session sends each only when it changed since that session last spawned; unchanged, the
+layer collapses to a single still-applies line — the ordinary case on advanced-development-workflow, whose worker nodes
+resume by default, only plan-review and review being declared fresh. A changed standing layer is re-sent in full, led by
+an explicit statement that the worker's standing instructions have been updated since its previous turn; a workspace
+prompt replaced with an empty one is announced as a withdrawal. Whatever became of the layers, a resume whose recorded
+prior node is known and differs from the current one carries a role-change line naming both nodes, first in the render;
+with no recorded prior node there is nothing to name, and no line renders.
 
 That announcement is why `PUT /api/workspace-prompt` is trustworthy mid-chunk: a replace applies at the chunk's next
 resumed node-step, and the worker is told it is reading something new. The workspace-prompt override is standing: it

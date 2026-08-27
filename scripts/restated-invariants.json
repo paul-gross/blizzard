@@ -291,13 +291,13 @@
      "file": "src/blizzard/hub/graphs/advanced-development-workflow/prompts/plan-review.md",
      "symbol": "submit",
      "role": "allowed",
-     "reason": "Node-prompt restatement at the point of submission, sanctioned by bzh:graph-artifact-pointer-fallback: the docket is a graph-scope read that can miss, so the pointer must be additive and the prompt itself states the bound the reviewer writes under."
+     "reason": "Published rendered surface: this node prompt is injected verbatim into a fleet worker's turn — a reader with no blizzard source tree to resolve a path into — so the bound is restated at the point of submission. The in-prompt docket read that would fetch the full spec is a graph-scope read that can miss, so the pointer beneath the restatement must stay additive (bzh:graph-artifact-pointer-fallback)."
     },
     {
      "file": "src/blizzard/hub/graphs/advanced-development-workflow/prompts/review.md",
      "symbol": "submit",
      "role": "allowed",
-     "reason": "Node-prompt restatement at the point of submission, sanctioned by bzh:graph-artifact-pointer-fallback: the docket is a graph-scope read that can miss, so the pointer must be additive and the prompt itself states the bound the reviewer writes under."
+     "reason": "Published rendered surface: this node prompt is injected verbatim into a fleet worker's turn — a reader with no blizzard source tree to resolve a path into — so the bound is restated at the point of submission. The in-prompt docket read that would fetch the full spec is a graph-scope read that can miss, so the pointer beneath the restatement must stay additive (bzh:graph-artifact-pointer-fallback)."
     }
    ]
   },
