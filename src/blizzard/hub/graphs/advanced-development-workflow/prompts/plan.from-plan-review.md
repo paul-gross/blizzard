@@ -19,4 +19,5 @@ re-raised.
 
 Record each refutation in the `plan-finding-refutes` asset: the finding's **anchor** copied verbatim, the cited id
 (`plan-review:<id>`), and the argument. Refuting is a claim the gate adjudicates, never a veto. The full record shape is
-in the docket: `blizzard runner artifact get docket --scope graph --content`.
+in the docket: `blizzard runner artifact get docket --scope graph --content`. If that read fails or comes back empty,
+proceed on the restatement above.

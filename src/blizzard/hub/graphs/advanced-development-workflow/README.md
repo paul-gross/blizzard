@@ -14,9 +14,10 @@ an explanatory document:
 - **A command surface is a cheat sheet** — a table of verb, purpose, and where to read more (usually the command's own
   `--help`) — never a paragraph per command.
 - **A node prompt stays within 4,000 bytes.** The bar is a cost tripwire, not a structure rule: a prompt over it moves
-  its excess behind a link read only on the branch that needs it, rather than growing a per-turn tax. Check with
-  `wc -c prompts/*.md`.
+  its excess behind a link read only on the branch that needs it, rather than growing a per-turn tax.
 
 The runner's fleet-worker preamble tree (`src/blizzard/runner/harness/prompts/`) is bound the same way and inherits the
 4,000-byte bar; `blizzard_preamble.md` itself is frontloaded into every worker session in every deployment, so it is
-held within 2,252 bytes (`wc -c src/blizzard/runner/harness/prompts/*.md`).
+held within 2,252 bytes — half the size of the explanatory form it was compressed from, pinned so the win is not
+silently given back. Both trees' bars are asserted by `tests/test_prompt_byte_bars.py` (`blizzard:unit-test`), so an
+edit over a bar fails the suite rather than waiting on a hand-run `wc -c`.

@@ -259,15 +259,28 @@ def test_resume_with_an_unknown_prior_node_falls_back_to_the_plain_collapse() ->
 
 @pytest.mark.unit
 def test_a_changed_standing_layer_carries_the_role_change_line_too() -> None:
-    """blizzard#340 in the updated-notice path: layer 1 is the one *not* re-arriving there,
-    so its collapse line would still read as continuity without the role-change line
-    between the announcement and the layers."""
+    """blizzard#340 in the updated-notice path: the role-change line still leads the render
+    — ahead of the announcement, whose "what follows supersedes" scope covers the layers it
+    introduces and not the role change."""
     prior = _fingerprint("Old policy.", _ENVS, runner_prompt="Blizzard prose.")
 
     out = _render("New policy.", _ENVS, runner_prompt="Blizzard prose.", prior=prior, node="build", prior_node="verify")
 
     cross = resume_cross_node(node="build", prior_node="verify")
-    assert out == f"{RESUME_UPDATED_NOTICE}\n\n{cross}\n\n{RESUME_BLIZZARD_UNCHANGED}\n\nNew policy.\n\n{_TABLE}"
+    assert out == f"{cross}\n\n{RESUME_UPDATED_NOTICE}\n\n{RESUME_BLIZZARD_UNCHANGED}\n\nNew policy.\n\n{_TABLE}"
+
+
+@pytest.mark.unit
+def test_a_cross_node_resume_with_no_recorded_fingerprint_still_announces_the_role_change() -> None:
+    """blizzard#340 on the full-render path: a resume whose fingerprint was never recorded
+    — a crash between the spawn and its fingerprint write — re-sends every layer, and a
+    recorded prior node that differs still leads it with the role-change line."""
+    prose = "Workspace-specific prose."
+
+    out = _render(prose, _ENVS, runner_prompt="Blizzard prose.", prior=None, node="build", prior_node="verify")
+
+    cross = resume_cross_node(node="build", prior_node="verify")
+    assert out == f"{cross}\n\nBlizzard prose.\n\n{prose}\n\n{_TABLE}"
 
 
 @pytest.mark.unit

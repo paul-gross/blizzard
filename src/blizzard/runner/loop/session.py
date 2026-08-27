@@ -15,6 +15,15 @@ _log = get_logger("blizzard.runner.loop")
 
 
 @dataclass(frozen=True)
+class ResumedSession:
+    """The session a spawn resumes, bound to its newest recorded lease — one value, so no
+    caller can pair one spawn's session with another's lease."""
+
+    session_id: str
+    lease: LeaseRecord | None
+
+
+@dataclass(frozen=True)
 class SessionResolver:
     """Resolves a spawn's session identity against the store's own session history."""
 
@@ -34,23 +43,26 @@ class SessionResolver:
             return self._pool_head(chunk_id, node, spawn_cwd)
         return self.store.latest_session_id(chunk_id, node.session_source)
 
-    def resumed_lease(self, resume_from: str | None) -> LeaseRecord | None:
-        """The newest recorded lease of the session this spawn resumes, or ``None`` for a
-        fresh mint (blizzard#340)."""
-        return self.store.lease_for_session(resume_from) if resume_from is not None else None
+    def resumption(self, resume_from: str | None) -> ResumedSession | None:
+        """The session this spawn resumes with its newest recorded lease, or ``None`` for a
+        fresh mint (blizzard#340). Empty matches the adapter's own predicate: a blank
+        ``resume_from`` is a brand-new session, never a lookup key (issue #149)."""
+        if not resume_from:
+            return None
+        return ResumedSession(session_id=resume_from, lease=self.store.lease_for_session(resume_from))
 
     def session_stamps(
-        self, node: NodeConfig, resume_from: str | None, prior: LeaseRecord | None
+        self, node: NodeConfig, resume: ResumedSession | None
     ) -> tuple[str | None, str | None, str | None]:
         """The (model, effort, compaction_window) this spawn runs under, and stamps (#144, blizzard#343).
 
         **The stamp describes the session, not the preference.** A spawn that *resumes* inherits
-        all three from ``prior`` — the resumed session's own recorded lease, from
-        :meth:`resumed_lease` — and an inherited ``None`` stays *unknown*."""
-        if resume_from is not None:
-            if prior is None:
+        all three from the resumed session's own recorded lease, riding ``resume`` from
+        :meth:`resumption` — and an inherited ``None`` stays *unknown*."""
+        if resume is not None:
+            if resume.lease is None:
                 return (None, None, None)
-            return (prior.resolved_model, prior.resolved_effort, prior.resolved_compaction_window)
+            return (resume.lease.resolved_model, resume.lease.resolved_effort, resume.lease.resolved_compaction_window)
         model = self.harness.resolve_model(node.session_model)
         return (
             model,

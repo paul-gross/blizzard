@@ -855,8 +855,8 @@ def _first_build_spawn(store, hub, provider, env, *, session, at, config=None): 
     return harness
 
 
-def _reenter_build(store, hub, provider, env, *, session, pid, at, config=None):  # type: ignore[no-untyped-def]
-    """One ADVANCE + PULL cycle re-entering `build` on its own prior session."""
+def _reenter_node(store, hub, provider, env, *, session, pid, at, config=None):  # type: ignore[no-untyped-def]
+    """One ADVANCE + PULL cycle re-entering the envelope's node on its own prior session."""
     hub.envelopes["ch_1"] = env
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=env)]
     harness = FakeHarness(
@@ -926,7 +926,7 @@ def test_resume_with_unchanged_prose_elides_and_keeps_eliding(tmp_path):  # type
     first_lease = store.active_lease_for_chunk("ch_1")
     assert first_lease is not None
 
-    second = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
+    second = _reenter_node(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
     assert second.resume_froms == ["sess-build-1"]
     second_prefix = second.spawns[0][1].prompt_prefix
     assert RESUME_STANDING_UNCHANGED in second_prefix
@@ -941,7 +941,7 @@ def test_resume_with_unchanged_prose_elides_and_keeps_eliding(tmp_path):  # type
     assert first_lease.lease_id not in second_prefix
     assert "| environment workdir | `/ws/e1` |" in second_prefix
 
-    third = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=300, at=_NOW + timedelta(minutes=2))
+    third = _reenter_node(store, hub, provider, env, session="sess-build-1", pid=300, at=_NOW + timedelta(minutes=2))
     third_prefix = third.spawns[0][1].prompt_prefix
     assert RESUME_STANDING_UNCHANGED in third_prefix
     assert RESUME_UPDATED_NOTICE not in third_prefix  # nothing changed — nothing announced
@@ -964,7 +964,7 @@ def test_resume_after_a_live_workspace_prompt_replace_announces_the_new_prose(tm
     # The local API's write, landing between the two spawns.
     store.set_workspace_prompt("ws1", prompt="REPLACED-POLICY", at=_NOW + timedelta(seconds=30))
 
-    second = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
+    second = _reenter_node(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
 
     prefix = second.spawns[0][1].prompt_prefix
     assert prefix.startswith(RESUME_UPDATED_NOTICE)
@@ -987,7 +987,7 @@ def test_resume_after_a_runner_prompt_change_announces_and_re_sends_layer_one(tm
 
     # The restarted runner's config — same workspace prompt, new blizzard framing.
     restarted = _preamble_config(runner_prompt="REFRAMED-BLIZZARD")
-    second = _reenter_build(
+    second = _reenter_node(
         store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1), config=restarted
     )
 
@@ -1035,7 +1035,7 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
     assert resume_harness.resumed  # the resume-with-message really ran
 
     # --- The next node entry on the same session still finds an honest fingerprint.
-    second = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
+    second = _reenter_node(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
 
     prefix = second.spawns[0][1].prompt_prefix
     assert RESUME_STANDING_UNCHANGED in prefix
@@ -1056,8 +1056,8 @@ def test_an_announced_change_is_announced_once_and_then_elided(tmp_path):  # typ
     _first_build_spawn(store, hub, provider, env, session="sess-build-1", at=_NOW)
     store.set_workspace_prompt("ws1", prompt="REPLACED-POLICY", at=_NOW + timedelta(seconds=30))
 
-    second = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
-    third = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=300, at=_NOW + timedelta(minutes=2))
+    second = _reenter_node(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
+    third = _reenter_node(store, hub, provider, env, session="sess-build-1", pid=300, at=_NOW + timedelta(minutes=2))
 
     p2 = second.spawns[0][1].prompt_prefix
     p3 = third.spawns[0][1].prompt_prefix
@@ -1093,7 +1093,7 @@ def test_a_cross_node_resume_names_the_node_transition_from_recorded_state(tmp_p
     verify_env = make_envelope(
         "ch_1", "verify", node_id="nd_verify", choices=_CHOICES, session=SessionMode.RESUME, session_source="build"
     )
-    second = _reenter_build(
+    second = _reenter_node(
         store, hub, provider, verify_env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1)
     )
 

@@ -16,6 +16,7 @@ from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
+from blizzard.runner.loop.session import ResumedSession
 from blizzard.runner.store.repository import EnvBindingRecord, GraphArtifactRecord, LeaseRecord, NewLease
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -92,16 +93,15 @@ class Spawner:
         if self.suppressed(via=via, chunk_id=chunk_id):
             return
         now = self.ctx.clock.now()
-        prior_lease = self.ctx.sessions.resumed_lease(resume_from)
-        lease = self._mint(chunk_id, envelope, resume_from=resume_from, prior_lease=prior_lease, at=now)
+        resumed = self.ctx.sessions.resumption(resume_from)
+        lease = self._mint(chunk_id, envelope, resume=resumed, at=now)
         _CP_AFTER_MINT.reached()
         rendered = self._render(
             chunk_id,
             lease.lease_id,
             environments,
             node_name=envelope.node.node_name,
-            prior_node=prior_lease.node_name if prior_lease else None,
-            resume_from=resume_from,
+            resume=resumed,
         )
         try:
             handle = self.ctx.harness.spawn(
@@ -181,8 +181,7 @@ class Spawner:
         chunk_id: str,
         envelope: NodeEnvelope,
         *,
-        resume_from: str | None,
-        prior_lease: LeaseRecord | None,
+        resume: ResumedSession | None,
         at: datetime,
     ) -> MintedLease:
         """Pin the mint's graph artifacts, record the lease, stash its capability-token
@@ -193,7 +192,7 @@ class Spawner:
         lease_id = Id.mint(LEASE_PREFIX, self.ctx.clock).value
         node = envelope.node
         retries_max = node.retries_max if node.retries_max is not None else self.ctx.config.default_retries_max
-        model, effort, compaction_window = self.ctx.sessions.session_stamps(node, resume_from, prior_lease)
+        model, effort, compaction_window = self.ctx.sessions.session_stamps(node, resume)
         # Before `record_lease`: a crash here leaves only an orphan row a retry
         # writes again identically — never a lease whose mint's declarations are absent.
         self.ctx.store.record_graph_artifacts(
@@ -239,8 +238,7 @@ class Spawner:
         environments: list[AcquiredEnvironment],
         *,
         node_name: str,
-        prior_node: str | None,
-        resume_from: str | None,
+        resume: ResumedSession | None,
     ) -> Preamble:
         # The store's runtime override when set, else the static config prompt — read here so a
         # replace applies to the next spawn with no restart.
@@ -254,9 +252,9 @@ class Spawner:
             lease_id=lease_id,
             runner_id=self.ctx.config.runner_id,
             chunk_id=chunk_id,
-            prior=self.ctx.store.session_preamble_fingerprint(resume_from) if resume_from else None,
+            prior=self.ctx.store.session_preamble_fingerprint(resume.session_id) if resume else None,
             node=node_name,
-            prior_node=prior_node,
+            prior_node=resume.lease.node_name if resume and resume.lease else None,
         )
 
     def _worker_preamble(

@@ -49,11 +49,11 @@ adjudicated every refutation, and every finding with:
 - **id** — `F1`, `F2`, …, stable within this submission only.
 - **severity** — `blocking` for anything that must be fixed before this passes, `should-fix` for a real defect below
   that bar.
-- **anchor** — `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>`.
+- **anchor** — `<repo>/<path>:<line>`, `<repo>/<path>::<symbol>`, or `<asset-name>::<section>`.
 - a **description** held to the docket's bound: one or two sentences, at most 300 characters — the defect and its
   consequence, never the derivation that established it; a fact needed to act on it — a reproduction command, an
   expected/actual pair — rides a `detail:` continuation, at most two lines.
 
 The fields are restated from the docket; read it in full with
-`blizzard runner artifact get docket --scope graph --content`. If that command fails, proceed on the restatement above
-and do not retry.
+`blizzard runner artifact get docket --scope graph --content`. If that read fails or comes back empty, proceed on the
+restatement above.

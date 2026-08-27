@@ -31,7 +31,7 @@ Continue from what you find.
 4. **The refutation channel is submitted, and it is cumulative.** Run
    `blizzard runner artifact create --name review-finding-refutes` with the content on stdin. Your newest submission is
    the entire record, so restate every refutation still standing — not just this round's. The full docket this restates
-   is retrievable directly: `blizzard runner artifact get docket --scope graph --content`; if that command fails — any
-   error, rather than the docket's text — proceed on the restatement above and do not retry.
+   is retrievable directly: `blizzard runner artifact get docket --scope graph --content`. If that read fails or comes
+   back empty, proceed on the restatement above.
 
 A green build or type-check is not the bar — the verify node closes your work against runtime behavior next.

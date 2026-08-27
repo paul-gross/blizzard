@@ -271,6 +271,37 @@
    ]
   },
   {
+   "id": "docket-finding-description-bound",
+   "statement": "A docket finding's description is one or two sentences, at most 300 characters, with any acting-on fact confined to a detail: continuation of at most two lines.",
+   "owner": "src/blizzard/hub/graphs/advanced-development-workflow/docket.md#docket-entry",
+   "owner_kind": "doc-section",
+   "owner_assert": {
+    "quote": "one or two sentences, at most 300 characters"
+   },
+   "markers": [
+    "one or two sentences at most 300 characters"
+   ],
+   "sites": [
+    {
+     "file": "src/blizzard/hub/graphs/advanced-development-workflow/docket.md",
+     "symbol": "docket-entry",
+     "role": "owner"
+    },
+    {
+     "file": "src/blizzard/hub/graphs/advanced-development-workflow/prompts/plan-review.md",
+     "symbol": "submit",
+     "role": "allowed",
+     "reason": "Node-prompt restatement at the point of submission, sanctioned by bzh:graph-artifact-pointer-fallback: the docket is a graph-scope read that can miss, so the pointer must be additive and the prompt itself states the bound the reviewer writes under."
+    },
+    {
+     "file": "src/blizzard/hub/graphs/advanced-development-workflow/prompts/review.md",
+     "symbol": "submit",
+     "role": "allowed",
+     "reason": "Node-prompt restatement at the point of submission, sanctioned by bzh:graph-artifact-pointer-fallback: the docket is a graph-scope read that can miss, so the pointer must be additive and the prompt itself states the bound the reviewer writes under."
+    }
+   ]
+  },
+  {
    "id": "work-item-proposal-materializes-at-delivery",
    "statement": "A node-step's proposed work items ride its completion inertly through the graph; once the chunk actually delivers, the hub materializes every accumulated proposal of that chunk, best-effort and eventually convergent, never blocking the delivery itself — a create mints a fleet-authored hub item resting on its own fresh not_ready chunk, an update appends its evidence to an open item and stamps its last-edit instant, and an unresolvable proposal (its target closed, withdrawn, gone, or sourced somewhere with no editor) is recorded with its reason rather than retried forever.",
    "owner": "blizzard-context:/domain/work/chunk.md#materialization",

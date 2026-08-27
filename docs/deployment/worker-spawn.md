@@ -26,9 +26,9 @@ spawned; unchanged, the layer collapses to a single still-applies line — the o
 advanced-development-workflow, whose worker nodes resume by default, only plan-review and review being declared fresh. A
 changed standing layer is re-sent in full, led by an explicit statement that the worker's standing instructions have
 been updated since its previous turn; a workspace prompt replaced with an empty one is announced as a withdrawal.
-Whatever became of the layers, any resume whose node differs from the one that produced the session's previous turn
-carries a role-change line naming both nodes — first in the render, except under the update announcement when one leads
-it.
+Whatever became of the layers, a resume whose recorded prior node is known and differs from the current one carries a
+role-change line naming both nodes, first in the render; with no recorded prior node there is nothing to name, and no
+line renders.
 
 That announcement is why `PUT /api/workspace-prompt` is trustworthy mid-chunk: a replace applies at the chunk's next
 resumed node-step, and the worker is told it is reading something new. The workspace-prompt override is standing: it

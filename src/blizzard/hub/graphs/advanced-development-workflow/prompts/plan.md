@@ -30,5 +30,5 @@ Before declaring done:
 - The plan: run `blizzard runner artifact create --name plan` with the content on stdin.
 - The refutation channel: run `blizzard runner artifact create --name plan-finding-refutes` with the content on stdin.
   Your newest submission is the entire record, so restate every refutation still standing — not just this round's. The
-  full docket this restates is retrievable directly: `blizzard runner artifact get docket --scope graph --content`; if
-  that command fails, proceed on the restatement above and do not retry.
+  full docket this restates is retrievable directly: `blizzard runner artifact get docket --scope graph --content`. If
+  that read fails or comes back empty, proceed on the restatement above.

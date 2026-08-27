@@ -132,14 +132,15 @@ class Preamble:
     @property
     def standing(self) -> list[str]:
         """Layers 1 and 2 as this spawn sends them — in full, collapsed, or announced (issue #149)."""
-        if self.prior is None:
-            return [self.blizzard, self.workspace] if self.workspace else [self.blizzard]
-
-        # The role-change line rides every resume render whose nodes are known to differ
-        # (blizzard#340), whatever became of the layers below it.
+        # The role-change line leads every render whose nodes are known to differ (blizzard#340);
+        # a differing recorded prior node already implies a resume, fingerprint or not.
         cross: list[str] = []
         if self.node is not None and self.prior_node is not None and self.node != self.prior_node:
             cross = [resume_cross_node(node=self.node, prior_node=self.prior_node)]
+
+        if self.prior is None:
+            full = [self.blizzard, self.workspace] if self.workspace else [self.blizzard]
+            return [*cross, *full]
 
         blizzard_held = self.prior.blizzard == self.fingerprint.blizzard
         workspace_held = self.prior.workspace == self.fingerprint.workspace
@@ -149,7 +150,9 @@ class Preamble:
             # to call "unchanged", since the fresh render never emits it either.
             return [*cross, RESUME_STANDING_UNCHANGED if self.workspace else RESUME_BLIZZARD_UNCHANGED]
 
-        layers = [RESUME_UPDATED_NOTICE, *cross]
+        # Ahead of the notice: the announcement's "what follows supersedes" scope covers the
+        # layers it introduces, and a role change is not one of them.
+        layers = [*cross, RESUME_UPDATED_NOTICE]
         layers.append(RESUME_BLIZZARD_UNCHANGED if blizzard_held else self.blizzard)
         if workspace_held:
             # Only collapses when there is prose to hold in mind; an empty layer 2 is silent.
