@@ -213,8 +213,8 @@
     "keepalive adjacent"
    ],
    "marker_acknowledgments": {
-    "keepalive cadence": "R1: 2 words, kept short because any prose claiming the cadences differ per daemon must name the cadence to claim it; verified via a check --owners run to match only the owner in-tree, with no false positive observed.",
-    "keepalive adjacent": "R1: 2 words, the exact coinage of the contradicting restatement this fact was declared against (polling.ts's since-removed 'keepalive-adjacent guarantee' clause, blizzard#329); kept so a re-introduction of that phrasing trips the sweep at the site that revives it."
+    "keepalive cadence": "R1: 2 words, kept short; markers match literal normalized bigrams, so this buys precision over recall — it catches a restatement using this exact phrasing, not any phrasing of the claim ('keepalive interval'/'keepalive period'/a bare figure would not fire it). Verified via a check --owners run to match only the owner in-tree, with no false positive observed.",
+    "keepalive adjacent": "R1: 2 words, the exact coinage of the contradicting restatement this fact was declared against (polling.ts's since-removed 'keepalive-adjacent guarantee' clause, blizzard#329); kept so a re-introduction of that phrasing at an in-repo site (this sweep's roots are src/tests/docs/README.md/web/projects plus ../blizzard-mock/src) trips the sweep there. ../blizzard-context is only this sweep's --context-root, used to resolve owner citations, never walked for sites — a restatement there is outside this sweep's reach regardless of phrasing."
    },
    "sites": [
     {

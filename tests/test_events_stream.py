@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS
 from blizzard.hub.api.auth_session import IMPLICIT_OPERATOR
 from blizzard.hub.api.events import _RESERVED_COMMENT, Cursor, Stream, events_stream
 from blizzard.hub.app import create_app_for_export
@@ -44,6 +45,23 @@ async def test_stream_endpoint_returns_an_sse_response() -> None:
         first = chunk.encode() if isinstance(chunk, str) else bytes(chunk)
         break
     assert first.startswith(b": blizzard hub event stream")
+
+
+async def test_stream_endpoint_binds_the_default_keepalive_cadence(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``events_stream`` constructs ``Stream`` with no ``keepalive_seconds`` override — it inherits
+    ``DEFAULT_KEEPALIVE_SECONDS``, the shared cadence the hub and runner routes are declared to share.
+    A route that started passing its own override would flip this assertion false."""
+    real_stream = Stream
+    bound: dict[str, float] = {}
+
+    def _capturing_stream(*args: object, **kwargs: object) -> Stream:
+        instance = real_stream(*args, **kwargs)  # type: ignore[arg-type]
+        bound["keepalive_seconds"] = instance.keepalive_seconds
+        return instance
+
+    monkeypatch.setattr("blizzard.hub.api.events.Stream", _capturing_stream)
+    await events_stream(_FakeRequest(EventBroker()), IMPLICIT_OPERATOR)  # type: ignore[arg-type]
+    assert bound["keepalive_seconds"] == DEFAULT_KEEPALIVE_SECONDS
 
 
 def test_events_stream_excluded_from_openapi() -> None:

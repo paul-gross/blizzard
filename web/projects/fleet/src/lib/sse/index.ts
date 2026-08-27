@@ -22,8 +22,13 @@ export {
 } from './fleet-live';
 export { LiveInvalidationSpine, type LiveInvalidationSpineOptions } from './live-invalidation-spine';
 export {
+  ASK_CHANGE_CAUSES,
+  ENVIRONMENT_CHANGE_CAUSES,
+  ESCALATION_CHANGE_CAUSES,
+  LEASE_CHANGE_CAUSES,
   RUNNER_EVENT_STREAM_URL,
   RUNNER_EVENT_TYPES,
+  TAKEOVER_CHANGE_CAUSES,
   type AskChangeCause,
   type AskChanged,
   type EnvironmentChangeCause,

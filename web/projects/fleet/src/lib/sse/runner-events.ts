@@ -29,25 +29,31 @@ export const RUNNER_EVENT_TYPES = [
 export type RunnerEventType = (typeof RUNNER_EVENT_TYPES)[number];
 
 /** What caused a `lease-changed` frame — the split is `sse_runner.py`'s own to state. */
-export type LeaseChangeCause =
-  | 'created'
-  | 'spawned'
-  | 'dormant'
-  | 'transitioned'
-  | 'reaped'
-  | 'failed'
-  | 'escalated'
-  | 'parked'
-  | 'released'
-  | 'preempted';
+export const LEASE_CHANGE_CAUSES = [
+  'created',
+  'spawned',
+  'dormant',
+  'transitioned',
+  'reaped',
+  'failed',
+  'escalated',
+  'parked',
+  'released',
+  'preempted',
+] as const;
+export type LeaseChangeCause = (typeof LEASE_CHANGE_CAUSES)[number];
 /** What caused an `ask-changed` frame. */
-export type AskChangeCause = 'asked' | 'answered';
+export const ASK_CHANGE_CAUSES = ['asked', 'answered'] as const;
+export type AskChangeCause = (typeof ASK_CHANGE_CAUSES)[number];
 /** What caused an `escalation-changed` frame. */
-export type EscalationChangeCause = 'opened' | 'closed';
+export const ESCALATION_CHANGE_CAUSES = ['opened', 'closed'] as const;
+export type EscalationChangeCause = (typeof ESCALATION_CHANGE_CAUSES)[number];
 /** What caused a `takeover-changed` frame. */
-export type TakeoverChangeCause = 'opened' | 'closed';
+export const TAKEOVER_CHANGE_CAUSES = ['opened', 'closed'] as const;
+export type TakeoverChangeCause = (typeof TAKEOVER_CHANGE_CAUSES)[number];
 /** What caused an `environment-changed` frame. */
-export type EnvironmentChangeCause = 'bound' | 'released';
+export const ENVIRONMENT_CHANGE_CAUSES = ['bound', 'released'] as const;
+export type EnvironmentChangeCause = (typeof ENVIRONMENT_CHANGE_CAUSES)[number];
 
 /** A `lease-changed` frame's payload. `cause` is typed `string`, not
  * {@link LeaseChangeCause}, for the same reason `fleet-live.ts`'s `RunnerEvent.kind`

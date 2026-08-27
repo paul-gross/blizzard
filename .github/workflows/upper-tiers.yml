@@ -153,7 +153,12 @@ jobs:
       - name: kill-9 sweep (CI profile) — arm each subset crash point, SIGKILL, assert recovery
         # `mise run crash-sweep-ci` == the FULL sweep gated to the representative CI subset:
         # `BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -m crash_sweep`.
-        # The FULL 22-point sweep is `mise run crash-sweep` (local + tag release).
+        # The FULL sweep is `mise run crash-sweep` (local + tag release).
+        #
+        # The ceiling is roughly double the subset's observed wall time, so a sweep that
+        # doubles fails here rather than drifting away from the figure the docs state —
+        # which is the only other home that figure has.
+        timeout-minutes: 15
         env:
           BLIZZARD_CRASH_SWEEP: "1"
           BLIZZARD_CRASH_SWEEP_CI: ${{ inputs.crash_sweep_ci }}

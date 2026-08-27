@@ -3660,9 +3660,9 @@
    "total": 128
   },
   "test_events_stream.py": {
-   "comments": 8,
-   "docstrings": 10,
-   "total": 78
+   "comments": 10,
+   "docstrings": 13,
+   "total": 96
   },
   "test_external_usage_facts_ingest.py": {
    "comments": 6,
@@ -4320,9 +4320,9 @@
    "total": 821
   },
   "test_runner_events_stream.py": {
-   "comments": 5,
-   "docstrings": 9,
-   "total": 60
+   "comments": 7,
+   "docstrings": 12,
+   "total": 78
   },
   "test_runner_external_usage.py": {
    "comments": 10,

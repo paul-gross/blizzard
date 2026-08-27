@@ -14,8 +14,13 @@ import {
   type RunnerEvent,
 } from './fleet-live';
 import {
+  ASK_CHANGE_CAUSES,
+  ENVIRONMENT_CHANGE_CAUSES,
+  ESCALATION_CHANGE_CAUSES,
+  LEASE_CHANGE_CAUSES,
   RUNNER_EVENT_STREAM_URL,
   RUNNER_EVENT_TYPES,
+  TAKEOVER_CHANGE_CAUSES,
   type AskChanged,
   type EnvironmentChanged,
   type EscalationChanged,
@@ -58,8 +63,11 @@ import runnerTakeoverChangedGolden from '../../../../../../contracts/sse/runner/
  *   its kind's real interface (a compile error the moment a field is renamed or deleted
  *   there), and every one of that interface's non-optional fields must appear in the
  *   spec's `required` object (`Record<RequiredKeys<T>, true>` — an object type with
- *   exactly those keys, so a missing or extra key is also a compile error). The runtime
- *   half below then checks each golden's own key set against it.
+ *   exactly those keys, so a missing or extra key is also a compile error). The
+ *   `optional` object holds to the same exactness through `exactOptional` (below), which
+ *   also catches a stale key for a kind with no optional fields of its own — a plain
+ *   `Record<OptionalKeys<T>, true>` alone cannot, since it degrades to `{}` there. The
+ *   runtime half below then checks each golden's own key set against it.
  * - **Runtime parse** (the `describes the real transport` spec): every golden, framed
  *   exactly as its daemon frames it, is fed through the real {@link SseService} /
  *   `FetchEventSource` byte-stream reader via a stubbed `fetch`, and the spec asserts on
@@ -108,12 +116,32 @@ type RequiredKeys<T> = { [K in keyof T]-?: undefined extends T[K] ? never : K }[
 type OptionalKeys<T> = { [K in keyof T]-?: undefined extends T[K] ? K : never }[keyof T];
 
 /** A per-kind field descriptor: `required`/`optional` are objects whose own keys must
- * be *exactly* `T`'s required/optional keys — renaming, adding, or dropping a field on
- * the interface changes `RequiredKeys<T>`/`OptionalKeys<T>`, which turns the object
- * literal below red at compile time (a missing or excess property). */
+ * be *exactly* `T`'s required/optional keys — renaming or adding a field on the
+ * interface turns the object literal below red at compile time (a missing key). Dropping
+ * one does too, *unless* the drop leaves the key set empty: `Record<never, true>` is `{}`,
+ * and TypeScript does not excess-property-check a literal against an object type with no
+ * properties to compare against, so a stale key then compiles clean. `optional` fields
+ * are authored through `exactOptional` below, which closes that gap. */
 interface FrameFieldSpec<T> {
   readonly required: Record<RequiredKeys<T>, true>;
   readonly optional: Record<OptionalKeys<T>, true>;
+}
+
+/** `Actual`'s key set must be exactly `Expected`'s, or this collapses to `never` — unlike
+ * `Actual extends Expected` alone, it still catches an excess key when `Expected` has none
+ * (`keyof {}` is `never`, so a plain structural check has nothing to compare against). */
+type Exact<Expected, Actual> = Actual extends Expected
+  ? Exclude<keyof Actual, keyof Expected> extends never
+    ? Actual
+    : never
+  : never;
+
+/** Authors a spec's `optional` object so a stale-after-drop or missing-after-add key is a
+ * compile error even when `OptionalKeys<T>` is `never` — see `FrameFieldSpec`'s doc. */
+function exactOptional<T>() {
+  return <O extends Record<OptionalKeys<T>, true>>(
+    obj: Exact<Record<OptionalKeys<T>, true>, O>,
+  ): Record<OptionalKeys<T>, true> => obj as Record<OptionalKeys<T>, true>;
 }
 
 type ChunkChangedFrame = ChunkChanged & KeyedEvent;
@@ -202,28 +230,41 @@ interface RunnerFrameFieldSpecs {
 const RUNNER_FRAME_FIELD_SPECS: RunnerFrameFieldSpecs = {
   'lease-changed': {
     required: { lease_id: true, chunk_id: true, cause: true },
-    optional: {},
+    optional: exactOptional<LeaseChanged>()({}),
   },
   'ask-changed': {
     required: { lease_id: true, chunk_id: true, question_id: true, cause: true },
-    optional: {},
+    optional: exactOptional<AskChanged>()({}),
   },
   'escalation-changed': {
     required: { chunk_id: true, cause: true },
-    optional: { lease_id: true },
+    optional: exactOptional<EscalationChanged>()({ lease_id: true }),
   },
   'takeover-changed': {
     required: { chunk_id: true, takeover_id: true, cause: true },
-    optional: {},
+    optional: exactOptional<TakeoverChanged>()({}),
   },
   'environment-changed': {
     required: { chunk_id: true, environment_id: true, cause: true },
-    optional: {},
+    optional: exactOptional<EnvironmentChanged>()({}),
   },
   'fact-changed': {
     required: { seq: true, kind: true, chunk_id: true, lease_id: true },
-    optional: {},
+    optional: exactOptional<FactChanged>()({}),
   },
+};
+
+/** Every runner kind's `cause` union, by name — `fact-changed` carries no `cause` and is
+ * absent. Four kinds' cases are key-set-identical to each other (`lease-changed`,
+ * `ask-changed`, `takeover-changed`, `environment-changed`), so this is what tells a
+ * `cause`-named case (e.g. `spawned`) apart from its sibling (e.g. `created`) — the
+ * `Object.keys`-only check above cannot. */
+const RUNNER_CAUSE_VALUES: Readonly<Record<string, readonly string[]>> = {
+  'lease-changed': LEASE_CHANGE_CAUSES,
+  'ask-changed': ASK_CHANGE_CAUSES,
+  'escalation-changed': ESCALATION_CHANGE_CAUSES,
+  'takeover-changed': TAKEOVER_CHANGE_CAUSES,
+  'environment-changed': ENVIRONMENT_CHANGE_CAUSES,
 };
 
 // ---- Shared runtime machinery --------------------------------------------------------
@@ -263,7 +304,10 @@ function textStream(text: string): ReadableStream<Uint8Array> {
 /** Registers the two runtime describe blocks (type satisfaction + real transport) one
  * scope's worth of goldens drives. `T` is the scope's own payload union
  * ({@link HubEventPayload}/{@link RunnerEventPayload}) — the real transport spec drives
- * {@link SseService.connect} with it, same as each scope's live consumer does. */
+ * {@link SseService.connect} with it, same as each scope's live consumer does.
+ * `causeValuesOf`, when given, checks a case's own `cause` value against its kind's
+ * declared union — the key-set check below cannot tell apart two cases with the same
+ * keys but a different `cause` (only the runner scope declares these unions). */
 function describeScopeContract<T>(
   scopeName: string,
   streamUrl: string,
@@ -271,6 +315,7 @@ function describeScopeContract<T>(
   manifest: Manifest,
   cases: readonly CorpusCase[],
   fieldSpecOf: (kind: string) => FrameFieldSpec<object>,
+  causeValuesOf?: (kind: string) => readonly string[] | undefined,
 ): void {
   describe(`${scopeName} scope`, () => {
     it('manifest kind list deep-equals the broker constants', () => {
@@ -290,6 +335,13 @@ function describeScopeContract<T>(
             expect(payloadKeys, `${kind}:${caseName} is missing required field "${key}"`).toContain(key);
           }
         });
+
+        const causeValues = causeValuesOf?.(kind);
+        if (causeValues !== undefined) {
+          it(`${kind}:${caseName} — cause is one of its declared values`, () => {
+            expect(causeValues).toContain((payload as { cause?: unknown }).cause);
+          });
+        }
       }
     });
 
@@ -350,5 +402,6 @@ describe('SSE frame shape contract', () => {
     runnerManifest,
     RUNNER_CASES,
     (kind) => RUNNER_FRAME_FIELD_SPECS[kind as keyof RunnerFrameFieldSpecs],
+    (kind) => RUNNER_CAUSE_VALUES[kind],
   );
 });
