@@ -16,6 +16,7 @@ from blizzard.runner.harness.preamble import (
     DEFAULT_BLIZZARD_PREAMBLE,
     RESUME_BLIZZARD_UNCHANGED,
     RESUME_STANDING_UNCHANGED,
+    RESUME_STANDING_UNCHANGED_CROSS_NODE,
     RESUME_UPDATED_NOTICE,
     RESUME_WORKSPACE_UNCHANGED,
     RESUME_WORKSPACE_WITHDRAWN,
@@ -30,6 +31,8 @@ def _render(
     *,
     runner_prompt: str = "",
     prior: PreambleFingerprint | None = None,
+    node: str | None = None,
+    prior_node: str | None = None,
 ) -> str:
     return Preamble.of(
         runner_prompt=runner_prompt,
@@ -39,6 +42,8 @@ def _render(
         runner_id="runner-local",
         chunk_id="ch_1",
         prior=prior,
+        node=node,
+        prior_node=prior_node,
     ).text
 
 
@@ -191,6 +196,60 @@ def test_resume_with_unchanged_standing_prose_collapses_both_layers() -> None:
     assert RESUME_UPDATED_NOTICE not in out
     # The collapse line still introduces the table layer 1's prose would have introduced.
     assert "facts table below" in RESUME_STANDING_UNCHANGED
+
+
+@pytest.mark.unit
+def test_same_node_resume_is_byte_identical_to_the_plain_collapse() -> None:
+    """blizzard#340: a resume by the node that produced the previous turn renders exactly
+    the notice a node-blind render always produced — the variant never leaks in."""
+    prose = "Workspace-specific prose."
+    prior = _fingerprint(prose, _ENVS, runner_prompt="Blizzard prose.")
+
+    out = _render(prose, _ENVS, runner_prompt="Blizzard prose.", prior=prior, node="build", prior_node="build")
+
+    assert out == f"{RESUME_STANDING_UNCHANGED}\n\n{_TABLE}"
+
+
+@pytest.mark.unit
+def test_cross_node_resume_names_both_nodes_and_keeps_the_layers_collapsed() -> None:
+    """blizzard#340: `build` resuming a session whose previous turn was `verify` — the
+    common shape when two nodes share a session pool. The notice names the transition;
+    the standing layers still collapse rather than re-send."""
+    prose = "Workspace-specific prose."
+    prior = _fingerprint(prose, _ENVS, runner_prompt="Blizzard prose.")
+
+    out = _render(prose, _ENVS, runner_prompt="Blizzard prose.", prior=prior, node="build", prior_node="verify")
+
+    assert out == f"{RESUME_STANDING_UNCHANGED_CROSS_NODE.format(node='build', prior_node='verify')}\n\n{_TABLE}"
+    assert "`verify` node-step" in out
+    assert "this turn works `build`" in out
+    assert "Blizzard prose." not in out
+    assert prose not in out
+    # The variant still owes what the plain collapse line owes: the facts-table introduction.
+    assert "facts table below" in out
+
+
+@pytest.mark.unit
+def test_resume_with_an_unknown_prior_node_falls_back_to_the_plain_collapse() -> None:
+    """blizzard#340: with no recorded node for the previous turn there is nothing to name,
+    so the safe direction is the wording that claims only what is known."""
+    prose = "Workspace-specific prose."
+    prior = _fingerprint(prose, _ENVS, runner_prompt="Blizzard prose.")
+
+    out = _render(prose, _ENVS, runner_prompt="Blizzard prose.", prior=prior, node="build", prior_node=None)
+
+    assert out == f"{RESUME_STANDING_UNCHANGED}\n\n{_TABLE}"
+
+
+@pytest.mark.unit
+def test_a_changed_standing_layer_outranks_the_cross_node_collapse() -> None:
+    """blizzard#340 leaves the updated-notice path alone: when a layer moved, the update
+    announcement renders even across a node change — the full prose is already arriving."""
+    prior = _fingerprint("Old policy.", _ENVS, runner_prompt="Blizzard prose.")
+
+    out = _render("New policy.", _ENVS, runner_prompt="Blizzard prose.", prior=prior, node="build", prior_node="verify")
+
+    assert out == f"{RESUME_UPDATED_NOTICE}\n\n{RESUME_BLIZZARD_UNCHANGED}\n\nNew policy.\n\n{_TABLE}"
 
 
 @pytest.mark.unit

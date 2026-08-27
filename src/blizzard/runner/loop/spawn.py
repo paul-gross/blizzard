@@ -94,7 +94,9 @@ class Spawner:
         now = self.ctx.clock.now()
         lease = self._mint(chunk_id, envelope, resume_from=resume_from, at=now)
         _CP_AFTER_MINT.reached()
-        rendered = self._render(chunk_id, lease.lease_id, environments, resume_from=resume_from)
+        rendered = self._render(
+            chunk_id, lease.lease_id, environments, node_name=envelope.node.node_name, resume_from=resume_from
+        )
         try:
             handle = self.ctx.harness.spawn(
                 envelope,
@@ -217,11 +219,20 @@ class Spawner:
         )
 
     def _render(
-        self, chunk_id: str, lease_id: str, environments: list[AcquiredEnvironment], *, resume_from: str | None
+        self,
+        chunk_id: str,
+        lease_id: str,
+        environments: list[AcquiredEnvironment],
+        *,
+        node_name: str,
+        resume_from: str | None,
     ) -> Preamble:
         # The store's runtime override when set, else the static config prompt — read here so a
         # replace applies to the next spawn with no restart.
         override = self.ctx.store.workspace_prompt_override(self.ctx.config.workspace_id)
+        # The previous turn's node is read from recorded lease rows (blizzard#340): the minted
+        # lease has no session row yet, so the newest lease that ran `resume_from` is the prior turn's.
+        prior_lease = self.ctx.store.lease_for_session(resume_from) if resume_from else None
         # `prior` is read ONLY when this spawn resumes a session (issue #149), so a fresh one can
         # never elide prose it has never seen; nothing recorded reads `None` and renders in full.
         return Preamble.of(
@@ -232,6 +243,8 @@ class Spawner:
             runner_id=self.ctx.config.runner_id,
             chunk_id=chunk_id,
             prior=self.ctx.store.session_preamble_fingerprint(resume_from) if resume_from else None,
+            node=node_name,
+            prior_node=prior_lease.node_name if prior_lease else None,
         )
 
     def _worker_preamble(

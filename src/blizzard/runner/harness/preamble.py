@@ -36,6 +36,10 @@ DEFAULT_BLIZZARD_PREAMBLE = _PROMPTS.text("blizzard_preamble.md")
 #: table, which layer 1's own prose would otherwise be the only thing to introduce.
 RESUME_STANDING_UNCHANGED = _PROMPTS.text("resume_standing_unchanged.md")
 
+#: The pair-collapse when the resuming node differs from the previous turn's (blizzard#340) —
+#: a template over ``{prior_node}``/``{node}``, so "unchanged" cannot read as turn continuity.
+RESUME_STANDING_UNCHANGED_CROSS_NODE = _PROMPTS.text("resume_standing_unchanged.cross_node.md")
+
 #: Layer 1 unchanged while layer 2 is sent in full — carrying the same facts-table
 #: pointer, since the collapse rule is per layer (issue #149).
 RESUME_BLIZZARD_UNCHANGED = _PROMPTS.text("resume_blizzard_unchanged.md")
@@ -63,6 +67,8 @@ class Preamble:
     table: str
     fingerprint: PreambleFingerprint
     prior: PreambleFingerprint | None
+    node: str | None = None
+    prior_node: str | None = None
 
     @classmethod
     def of(
@@ -75,10 +81,14 @@ class Preamble:
         runner_id: str,
         chunk_id: str,
         prior: PreambleFingerprint | None = None,
+        node: str | None = None,
+        prior_node: str | None = None,
     ) -> Preamble:
         """``prior`` is the fingerprint of the standing prose the resumed session was last sent,
         ``None`` for a spawn resuming nothing: it selects between the full three-layer render
-        and one where an unchanged layer collapses and a changed one is announced."""
+        and one where an unchanged layer collapses and a changed one is announced. ``node`` /
+        ``prior_node`` name this and the previous turn's node-step (blizzard#340) — a mismatch
+        selects the cross-node notice, and ``None`` reads as same-node, which has nothing to name."""
         rows = [
             ("runner id", runner_id),
             ("chunk id", chunk_id),
@@ -101,6 +111,8 @@ class Preamble:
             table="\n".join(table_lines),
             fingerprint=PreambleFingerprint(blizzard=cls.digest(blizzard), workspace=cls.digest(workspace)),
             prior=prior,
+            node=node,
+            prior_node=prior_node,
         )
 
     @staticmethod
@@ -123,7 +135,11 @@ class Preamble:
         if blizzard_held and workspace_held:
             # One line for the pair when there is a pair; an absent layer 2 is not something
             # to call "unchanged", since the fresh render never emits it either.
-            return [RESUME_STANDING_UNCHANGED if self.workspace else RESUME_BLIZZARD_UNCHANGED]
+            if not self.workspace:
+                return [RESUME_BLIZZARD_UNCHANGED]
+            if self.node is not None and self.prior_node is not None and self.node != self.prior_node:
+                return [RESUME_STANDING_UNCHANGED_CROSS_NODE.format(node=self.node, prior_node=self.prior_node)]
+            return [RESUME_STANDING_UNCHANGED]
 
         layers = [RESUME_UPDATED_NOTICE]
         layers.append(RESUME_BLIZZARD_UNCHANGED if blizzard_held else self.blizzard)
