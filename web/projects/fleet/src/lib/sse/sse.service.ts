@@ -275,6 +275,10 @@ export class SseService {
       source = es;
 
       es.onopen = () => {
+        // A confirmed reopen — not the drop that preceded it — is what `reopens`
+        // counts (D1): the point a live view's whole-tree re-GET can trust the
+        // stream is actually back, rather than firing while it is still down.
+        if (attempt > 0) reopens.update((n) => n + 1);
         attempt = 0;
         status.set('open');
       };
@@ -295,7 +299,6 @@ export class SseService {
         source = null;
         attempt += 1;
         status.set('reconnecting');
-        reopens.update((n) => n + 1);
         timer = setTimeout(open, backoffDelay(attempt, backoff));
       };
       // Only the fetch-based transport ever calls this (native `EventSource` cannot

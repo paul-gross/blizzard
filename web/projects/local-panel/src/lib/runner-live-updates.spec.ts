@@ -257,7 +257,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(runnerDashboardKey);
   });
 
-  it('re-GETs the whole query client after a reconnect to close the gap', () => {
+  it('re-GETs the whole query client on the confirmed reopen, not on drop detection (D1)', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
 
@@ -267,7 +267,15 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     vi.advanceTimersByTime(2000);
     TestBed.flushEffects();
 
-    // A blanket invalidation (no filter) fires after the reconnect.
+    // Still down: no blanket invalidation yet — moving the re-GET back to drop
+    // detection would fail this assertion.
+    expect(FakeEventSource.instances).toHaveLength(2);
+    expect(invalidate.mock.calls.some((call) => call[0] === undefined)).toBe(false);
+
+    FakeEventSource.instances[1].open();
+    TestBed.flushEffects();
+
+    // A blanket invalidation (no filter) fires once the reconnect is confirmed.
     expect(invalidate.mock.calls.some((call) => call[0] === undefined)).toBe(true);
   });
 

@@ -290,7 +290,7 @@ describe('FleetLiveUpdates', () => {
     expect(log[1].seq).toBeGreaterThan(log[0].seq);
   });
 
-  it('re-GETs the whole tree after a reconnect to close the gap', () => {
+  it('re-GETs the whole tree on the confirmed reopen, not on drop detection (D1)', () => {
     vi.useFakeTimers();
     try {
       const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
@@ -302,7 +302,16 @@ describe('FleetLiveUpdates', () => {
       vi.advanceTimersByTime(2000);
       TestBed.flushEffects();
 
-      // A blanket invalidation (no filter) fires after the reconnect.
+      // Still down: the second source exists but has not confirmed open yet, so
+      // no blanket invalidation has fired — moving the re-GET back to drop
+      // detection would fail this assertion.
+      expect(FakeEventSource.instances).toHaveLength(2);
+      expect(invalidate.mock.calls.some((call) => call[0] === undefined)).toBe(false);
+
+      FakeEventSource.instances[1].open();
+      TestBed.flushEffects();
+
+      // A blanket invalidation (no filter) fires once the reconnect is confirmed.
       expect(invalidate.mock.calls.some((call) => call[0] === undefined)).toBe(true);
     } finally {
       vi.useRealTimers();
@@ -336,6 +345,8 @@ describe('FleetLiveUpdates', () => {
         source.open();
         source.hardError();
         vi.advanceTimersByTime(2000);
+        TestBed.flushEffects();
+        FakeEventSource.instances[1].open();
         TestBed.flushEffects();
 
         expect(invalidate.mock.calls.some((call) => call[0] === undefined)).toBe(true);

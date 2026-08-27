@@ -91,13 +91,19 @@ describe('SseService', () => {
 
       first.hardError();
       expect(handle.status()).toBe('reconnecting');
-      expect(handle.reopens()).toBe(1);
+      // A drop is detected here, but `reopens` waits for the confirmed reopen (D1).
+      expect(handle.reopens()).toBe(0);
       expect(first.closed).toBe(true);
 
       // No new source is opened until the backoff delay elapses.
       expect(FakeEventSource.instances).toHaveLength(1);
       vi.advanceTimersByTime(10);
       expect(FakeEventSource.instances).toHaveLength(2);
+      expect(handle.reopens()).toBe(0);
+
+      FakeEventSource.instances[1].open();
+      expect(handle.status()).toBe('open');
+      expect(handle.reopens()).toBe(1);
 
       handle.close();
       expect(handle.status()).toBe('closed');
