@@ -86,15 +86,16 @@ describe('AgentRow', () => {
   });
 
   it('carries a heartbeat freshness bar fed by last_heartbeat_at', async () => {
-    const el = await render(lease());
+    // Past the bar's sampling-interval anchor (blizzard#334 D4) so it is
+    // genuinely draining rather than reading 100% inside that grace.
+    const el = await render(lease({ last_heartbeat_at: '2026-07-16T11:58:55.000Z' })); // -65s from REF
 
     const fill = el.querySelector('[data-testid="hb-fill"]');
     expect(fill).not.toBeNull();
-    // -34s old under a 1h log drain: partially drained, nowhere near empty.
     const percent = Number(fill?.getAttribute('data-hb-percent'));
     expect(percent).toBeGreaterThan(0);
     expect(percent).toBeLessThan(100);
-    expect(el.querySelector('[data-testid="hb-age"]')?.textContent).toContain('-34s');
+    expect(el.querySelector('[data-testid="hb-age"]')?.textContent).toContain('-1m');
   });
 
   it('colors the bar red for a server-derived stale lease', async () => {
