@@ -131,9 +131,12 @@ def test_empty_workspace_prompt_omits_that_layer() -> None:
 def test_baked_default_used_when_runner_prompt_unset() -> None:
     out = _render("", [AcquiredEnvironment("r1", "/ws/r1")])
     assert out.startswith(DEFAULT_BLIZZARD_PREAMBLE)
-    assert "blizzard runner ask" in out
-    assert "blizzard runner work-items" in out
-    assert "blizzard runner chunk history" in out
+    # The command surface is a reference table (blizzard#341): one row per worker verb,
+    # each pointing at its own `--help` for the detail the preamble no longer carries.
+    assert "| `work-items <chunk-id>` |" in out
+    assert "| `chunk history`" in out
+    assert "| `artifact …`" in out
+    assert '| `ask "<question>"`' in out
     assert "blizzard runner heartbeat" in out
     assert "blizzard runner session-end" in out
     # The worker surface is discovered from the CLI's own audience labels plus per-command
@@ -148,9 +151,10 @@ def test_baked_default_opens_with_a_title_and_declares_its_scope() -> None:
     # what it covers, so an operator's layer-2 prompt has no reason to re-establish it.
     out = _render("", [AcquiredEnvironment("r1", "/ws/r1")])
     assert out.startswith("# Blizzard fleet worker\n")
-    assert "## What this preamble covers" in out
-    # Names layer 2 as the home for deployment-specific prose, without supplying any.
-    assert "workspace prompt" in out
+    assert "holds identically in every deployment" in out
+    # Names layer 2 as the home for deployment-specific prose, without supplying any —
+    # matched on collapsed whitespace, since the 120-column wrap may split the phrase.
+    assert "workspace prompt" in " ".join(out.split())
 
 
 @pytest.mark.unit
