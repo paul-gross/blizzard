@@ -37,6 +37,18 @@ function loginUrl(): string {
 }
 
 /**
+ * {@link SessionRecovery.recoverFromUnauthenticated}'s classification outcome —
+ * lets a caller with no `Response`/`Request` of its own, namely
+ * {@link "./runner-live-updates".RunnerLiveUpdates}'s stream channel, tell "the session
+ * read itself failed" (`read-failed`) apart from every case where the read succeeded
+ * and answered the `401` definitively. Only `read-failed` is worth retrying — `skipped`
+ * is an in-flight guard suppressing a concurrent caller, `not-applicable` is a `401`
+ * this seam does not own, and `bounced`/`already-recovering` are a no-session `401`
+ * this seam already answered, by navigating or by setting {@link SessionRecovery.recovering}.
+ */
+export type RecoveryOutcome = 'skipped' | 'not-applicable' | 'read-failed' | 'bounced' | 'already-recovering';
+
+/**
  * The runner webapp's session-recovery seam (issue #312) — the response interceptor
  * body `provideSessionRecovery` (`session-recovery.provider.ts`) registers on
  * `runnerClient`, and (blizzard#317 D9) {@link "./runner-live-updates".RunnerLiveUpdates}'s stream
@@ -93,22 +105,29 @@ export class SessionRecovery {
    * repeat. Guarded exactly as `handle` always was: a logout in flight suspends the
    * seam, and the in-memory flag coalesces overlapping callers (a burst of `401`s,
    * or one racing the stream's own auth failure) into one classification.
+   *
+   * Returns its {@link RecoveryOutcome} so a caller that cannot render
+   * {@link recovering} directly — the stream channel — can tell a transient failure
+   * of the session read itself apart from a definitive answer, and act only on that
+   * one case (D3).
    */
-  async recoverFromUnauthenticated(): Promise<void> {
-    if (runnerLogoutInFlight() || this.inFlight) return;
+  async recoverFromUnauthenticated(): Promise<RecoveryOutcome> {
+    if (runnerLogoutInFlight() || this.inFlight) return 'skipped';
 
     this.inFlight = true;
     try {
       const { data } = await runnerApi.readSessionApiAuthSessionGet({ throwOnError: false });
-      const noSession = data !== undefined && data.auth_enabled && !data.username;
-      if (!noSession) return;
+      if (data === undefined) return 'read-failed';
+      const noSession = data.auth_enabled && !data.username;
+      if (!noSession) return 'not-applicable';
 
       if (markSet()) {
         this.attemptFailed.set(true);
-      } else {
-        setMark();
-        this.navigate(loginUrl());
+        return 'already-recovering';
       }
+      setMark();
+      this.navigate(loginUrl());
+      return 'bounced';
     } finally {
       this.inFlight = false;
     }

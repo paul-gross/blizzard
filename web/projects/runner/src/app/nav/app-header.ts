@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { BoardHeader, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, type StatCell, ViewportMenu } from 'fleet';
-import { injectRunnerDashboardQuery, LocalIdentity, LocalPauseControl } from 'local-panel';
+import { injectRunnerDashboardQuery, LocalIdentity, LocalPauseControl, RunnerLiveUpdates } from 'local-panel';
 
 /**
  * The runner's desktop app header (issue #325) — the shared 48px
@@ -20,7 +20,11 @@ import { injectRunnerDashboardQuery, LocalIdentity, LocalPauseControl } from 'lo
  * that it renders no header of its own. TanStack dedupes query-key
  * injections, so this component injecting the same dashboard query
  * `LocalPanel` (and several of its rails) also injects costs no extra
- * network request — one poll for the whole app, not two.
+ * network request — one poll for the whole app, not two. It also injects
+ * {@link RunnerLiveUpdates} directly (blizzard#333) — the same root-provided
+ * singleton `../app.ts` starts — purely to read its `status`/`authFailed` for
+ * {@link connection}; it maps them into `BoardHeader`'s input the same way it
+ * already maps the dashboard read, never starting or restarting the stream itself.
  *
  * The pause control ({@link LocalPauseControl}, issue #133), the identity
  * block ({@link LocalIdentity}), and the profile menu ride in the header's
@@ -41,12 +45,23 @@ import { injectRunnerDashboardQuery, LocalIdentity, LocalPauseControl } from 'lo
 })
 export class AppHeader {
   private readonly dashboardQuery = injectRunnerDashboardQuery();
+  private readonly liveUpdates = inject(RunnerLiveUpdates);
 
-  /** The header's connection cell — `ok` once the dashboard read resolves,
-   * `offline` on a failed read, `connecting…` for the pending gap before the
-   * first read settles. Moved verbatim from `LocalPanel`'s own computed
-   * (issue #131), which no longer renders a header to feed it. */
+  /** The header's connection cell — folds in the live stream's own state
+   * (blizzard#333), mirroring the hub app root's own `connection` computed
+   * (`../../hub/src/app/app.ts`): `reconnecting…` while `SseService` is retrying a
+   * drop, `degraded` once the stream's `401` channel has exhausted its bounded
+   * re-arm (`runner-live-updates.ts` D2/D3) and settled dead rather than merely
+   * blipping through one — no dashboard read ever surfaces that on its own, since
+   * every other `401` degrades in its own region and the dashboard poll itself can
+   * still be `ok`. Falls through to the dashboard read's own state — `ok` once it
+   * resolves, `offline` on a failed read, `connecting…` for the pending gap before
+   * the first read settles — otherwise. Moved verbatim from `LocalPanel`'s own
+   * computed (issue #131), which no longer renders a header to feed it. */
   protected readonly connection = computed<string>(() => {
+    const streamState = this.liveUpdates.status();
+    if (streamState === 'reconnecting') return 'reconnecting…';
+    if (this.liveUpdates.authFailed()) return 'degraded';
     if (this.dashboardQuery.isPending()) return 'connecting…';
     if (this.dashboardQuery.isError()) return 'offline';
     return 'ok';
