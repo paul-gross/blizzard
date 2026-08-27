@@ -16,14 +16,15 @@
 # discovery expects (`tests/service/support.py`, `tests/crash/support.py`:
 # `blizzard_root().parent / "blizzard-mock"`, `BLIZZARD_MOCK_WINTER_SOURCE`).
 #
-# The FULL 22-point kill-9 sweep runs ~130s locally and multiples of that on a 2-core
-# GitHub runner, so the pr/push callers run the sweep's bounded CI profile
-# (`crash_sweep_ci: "1"` — a representative crash point per boundary family plus the
-# whole-process cases and the recovery-critical windows); the FULL sweep stays the
-# documented local command (`mise run crash-sweep`) and runs in the tag `release`
-# workflow's own job. `crash_sweep_ci` is an explicit input — nothing varies between
-# today's two callers, but a future FULL-sweep caller of this reusable workflow can
-# pass an empty value to run the whole registry instead of the bounded subset.
+# The FULL kill-9 sweep is too slow to run as a per-PR gate, so the pr/push callers run
+# the sweep's bounded CI profile (`crash_sweep_ci: "1"` — a representative crash point
+# per boundary family plus the whole-process cases and the recovery-critical windows);
+# the FULL sweep stays the documented local command (`mise run crash-sweep`) and runs in
+# the tag `release` workflow's own job. The wall-time figures for both profiles are owned
+# by blizzard-context verification/blizzard/commands/test-tiers/crash-sweep.md, not here.
+# `crash_sweep_ci` is an explicit input — nothing varies between today's two callers, but
+# a future FULL-sweep caller of this reusable workflow can pass an empty value to run the
+# whole registry instead of the bounded subset.
 name: upper-tiers
 
 on:
@@ -155,10 +156,11 @@ jobs:
         # `BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -m crash_sweep`.
         # The FULL sweep is `mise run crash-sweep` (local + tag release).
         #
-        # The ceiling is roughly double the subset's observed wall time, so a sweep that
-        # doubles fails here rather than drifting away from the figure the docs state —
-        # which is the only other home that figure has.
-        timeout-minutes: 15
+        # The ceiling tracks `crash_sweep_ci`: the bounded CI profile the pr/push callers
+        # use gets a tight ceiling sized for its own wall time, while a FULL-sweep caller
+        # (crash_sweep_ci unset) gets enough headroom for the whole registry instead of
+        # being killed at the bounded profile's ceiling.
+        timeout-minutes: ${{ inputs.crash_sweep_ci == '1' && 15 || 60 }}
         env:
           BLIZZARD_CRASH_SWEEP: "1"
           BLIZZARD_CRASH_SWEEP_CI: ${{ inputs.crash_sweep_ci }}

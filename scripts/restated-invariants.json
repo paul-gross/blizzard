@@ -93,7 +93,7 @@
      "file": "src/blizzard/hub/cli.py",
      "symbol": "chunk_ingest",
      "role": "allowed",
-     "reason": "This docstring IS the `blizzard hub chunk ingest --help` text \u2014 an operator-facing published surface with no source tree to point at, the same structural cause as this fact's docs/deployment/ survivor below."
+     "reason": "This docstring IS the `blizzard hub chunk ingest --help` text — an operator-facing published surface with no source tree to point at, the same structural cause as this fact's docs/deployment/ survivor below."
     },
     {
      "file": "docs/deployment/work-sources.md",
@@ -143,7 +143,7 @@
      "file": "src/blizzard/hub/api/fleet.py",
      "symbol": "rekey_route_token",
      "role": "allowed",
-     "reason": "This docstring generates into openapi/ and thence the generated client \u2014 a published surface with no source tree to point at; restated inline per one-prose-home.md's published-surface clause, the same structural cause as the chunk_ingest survivor."
+     "reason": "This docstring generates into openapi/ and thence the generated client — a published surface with no source tree to point at; restated inline per one-prose-home.md's published-surface clause, the same structural cause as the chunk_ingest survivor."
     }
    ]
   },
@@ -214,13 +214,25 @@
    ],
    "marker_acknowledgments": {
     "keepalive cadence": "R1: 2 words, kept short; markers match literal normalized bigrams, so this buys precision over recall — it catches a restatement using this exact phrasing, not any phrasing of the claim ('keepalive interval'/'keepalive period'/a bare figure would not fire it). Verified via a check --owners run to match only the owner in-tree, with no false positive observed.",
-    "keepalive adjacent": "R1: 2 words, the exact coinage of the contradicting restatement this fact was declared against (polling.ts's since-removed 'keepalive-adjacent guarantee' clause, blizzard#329); kept so a re-introduction of that phrasing at an in-repo site (this sweep's roots are src/tests/docs/README.md/web/projects plus ../blizzard-mock/src) trips the sweep there. ../blizzard-context is only this sweep's --context-root, used to resolve owner citations, never walked for sites — a restatement there is outside this sweep's reach regardless of phrasing."
+    "keepalive adjacent": "R1: 2 words, the exact coinage of the contradicting restatement this fact was declared against (polling.ts's since-removed 'keepalive-adjacent guarantee' clause); kept so a re-introduction of that phrasing at an in-repo site (this sweep's roots are src/tests/docs/README.md/web/projects plus ../blizzard-mock/src) trips the sweep there. ../blizzard-context is only this sweep's --context-root, used to resolve owner citations, never walked for sites — a restatement there is outside this sweep's reach regardless of phrasing."
    },
    "sites": [
     {
      "file": "src/blizzard/foundation/events/stream.py",
      "symbol": "<module>",
      "role": "owner"
+    },
+    {
+     "file": "tests/test_events_stream.py",
+     "symbol": "test_stream_endpoint_binds_the_default_keepalive_cadence",
+     "role": "allowed",
+     "reason": "Pinning-test docstring stating what its own assertion verifies (the route constructs Stream with no keepalive_seconds override, so it inherits the shared default); documentation of the test's own check, not a second narrative copy of the module fact."
+    },
+    {
+     "file": "tests/test_runner_events_stream.py",
+     "symbol": "test_stream_endpoint_binds_the_default_keepalive_cadence",
+     "role": "allowed",
+     "reason": "Pinning-test docstring stating what its own assertion verifies (the route constructs Stream with no keepalive_seconds override, so it inherits the shared default); documentation of the test's own check, not a second narrative copy of the module fact."
     }
    ]
   },

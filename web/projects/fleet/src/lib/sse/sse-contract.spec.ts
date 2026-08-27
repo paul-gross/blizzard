@@ -27,6 +27,7 @@ import {
   type FactChanged,
   type LeaseChanged,
   type RunnerEventPayload,
+  type RunnerEventType,
   type TakeoverChanged,
 } from './runner-events';
 import { SseService, type SseEvent } from './sse.service';
@@ -57,17 +58,21 @@ import runnerTakeoverChangedGolden from '../../../../../../contracts/sse/runner/
  * whichever side has not caught up; changing this side's expectation without moving the
  * golden reddens this side.
  *
- * Two claims per scope, both proven against the real code rather than a hand-built stand-in:
+ * The claims, all proven against the real code rather than a hand-built stand-in:
  *
  * - **Type satisfaction** (`FRAME_FIELD_SPECS`): every key named in a spec is a `keyof`
  *   its kind's real interface (a compile error the moment a field is renamed or deleted
  *   there), and every one of that interface's non-optional fields must appear in the
  *   spec's `required` object (`Record<RequiredKeys<T>, true>` — an object type with
- *   exactly those keys, so a missing or extra key is also a compile error). The
- *   `optional` object holds to the same exactness through `exactOptional` (below), which
- *   also catches a stale key for a kind with no optional fields of its own — a plain
- *   `Record<OptionalKeys<T>, true>` alone cannot, since it degrades to `{}` there. The
- *   runtime half below then checks each golden's own key set against it.
+ *   exactly those keys, so a missing or extra key is also a compile error). Both slots
+ *   are authored through `exactRequired`/`exactOptional` (below), which also catch a
+ *   stale key for a kind with no fields of its own in that slot — the plain
+ *   `Record<…Keys<T>, true>` alone cannot, since it degrades to `{}` there. The runtime
+ *   half below then checks each golden's own key set against it.
+ * - **Cause naming** (runner scope only): each case of a kind that carries a `cause` is
+ *   named for that cause, and the payload must actually carry it — the key-set check
+ *   cannot separate two cases with identical keys, and the cases of four runner kinds
+ *   are exactly that.
  * - **Runtime parse** (the `describes the real transport` spec): every golden, framed
  *   exactly as its daemon frames it, is fed through the real {@link SseService} /
  *   `FetchEventSource` byte-stream reader via a stubbed `fetch`, and the spec asserts on
@@ -118,10 +123,11 @@ type OptionalKeys<T> = { [K in keyof T]-?: undefined extends T[K] ? K : never }[
 /** A per-kind field descriptor: `required`/`optional` are objects whose own keys must
  * be *exactly* `T`'s required/optional keys — renaming or adding a field on the
  * interface turns the object literal below red at compile time (a missing key). Dropping
- * one does too, *unless* the drop leaves the key set empty: `Record<never, true>` is `{}`,
- * and TypeScript does not excess-property-check a literal against an object type with no
- * properties to compare against, so a stale key then compiles clean. `optional` fields
- * are authored through `exactOptional` below, which closes that gap. */
+ * one does too, *unless* the drop leaves that slot's key set empty: `Record<never, true>`
+ * is `{}`, and TypeScript does not excess-property-check a literal against an object type
+ * with no properties to compare against, so a stale key then compiles clean. Both slots
+ * are therefore authored through `exactRequired`/`exactOptional` below, which close that
+ * gap; `queue-changed` is the live case, with no fields of its own in either slot. */
 interface FrameFieldSpec<T> {
   readonly required: Record<RequiredKeys<T>, true>;
   readonly optional: Record<OptionalKeys<T>, true>;
@@ -136,8 +142,15 @@ type Exact<Expected, Actual> = Actual extends Expected
     : never
   : never;
 
-/** Authors a spec's `optional` object so a stale-after-drop or missing-after-add key is a
- * compile error even when `OptionalKeys<T>` is `never` — see `FrameFieldSpec`'s doc. */
+/** Authors a spec's `required` object so a stale-after-drop or missing-after-add key is a
+ * compile error even when `RequiredKeys<T>` is `never` — see `FrameFieldSpec`'s doc. */
+function exactRequired<T>() {
+  return <O extends Record<RequiredKeys<T>, true>>(
+    obj: Exact<Record<RequiredKeys<T>, true>, O>,
+  ): Record<RequiredKeys<T>, true> => obj as Record<RequiredKeys<T>, true>;
+}
+
+/** The same exactness for a spec's `optional` object, over `OptionalKeys<T>`. */
 function exactOptional<T>() {
   return <O extends Record<OptionalKeys<T>, true>>(
     obj: Exact<Record<OptionalKeys<T>, true>, O>,
@@ -164,8 +177,8 @@ interface HubFrameFieldSpecs {
 
 const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
   'chunk-changed': {
-    required: { chunk_id: true, status: true },
-    optional: {
+    required: exactRequired<ChunkChangedFrame>()({ chunk_id: true, status: true }),
+    optional: exactOptional<ChunkChangedFrame>()({
       prev_status: true,
       prev_node: true,
       node: true,
@@ -174,35 +187,40 @@ const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
       graph_id: true,
       by: true,
       key: true,
-    },
+    }),
   },
   'question-asked': {
-    required: { chunk_id: true, question_id: true },
-    optional: { key: true },
+    required: exactRequired<QuestionFrame>()({ chunk_id: true, question_id: true }),
+    optional: exactOptional<QuestionFrame>()({ key: true }),
   },
   'question-answered': {
-    required: { chunk_id: true, question_id: true },
-    optional: { key: true },
+    required: exactRequired<QuestionFrame>()({ chunk_id: true, question_id: true }),
+    optional: exactOptional<QuestionFrame>()({ key: true }),
   },
   'decision-opened': {
-    required: { chunk_id: true, decision_id: true },
-    optional: { key: true },
+    required: exactRequired<DecisionFrame>()({ chunk_id: true, decision_id: true }),
+    optional: exactOptional<DecisionFrame>()({ key: true }),
   },
   'decision-resolved': {
-    required: { chunk_id: true, decision_id: true },
-    optional: { key: true },
+    required: exactRequired<DecisionFrame>()({ chunk_id: true, decision_id: true }),
+    optional: exactOptional<DecisionFrame>()({ key: true }),
   },
   'queue-changed': {
-    required: {},
-    optional: {},
+    required: exactRequired<QueueChangedFrame>()({}),
+    optional: exactOptional<QueueChangedFrame>()({}),
   },
   'runner-changed': {
-    required: { runner_id: true, kind: true },
-    optional: { by: true, reason: true, key: true },
+    required: exactRequired<RunnerFrame>()({ runner_id: true, kind: true }),
+    optional: exactOptional<RunnerFrame>()({ by: true, reason: true, key: true }),
   },
   'event-logged': {
-    required: { severity: true, kind: true, chunk_id: true, runner_id: true },
-    optional: { key: true },
+    required: exactRequired<EventLoggedFrame>()({
+      severity: true,
+      kind: true,
+      chunk_id: true,
+      runner_id: true,
+    }),
+    optional: exactOptional<EventLoggedFrame>()({ key: true }),
   },
 };
 
@@ -229,42 +247,49 @@ interface RunnerFrameFieldSpecs {
 
 const RUNNER_FRAME_FIELD_SPECS: RunnerFrameFieldSpecs = {
   'lease-changed': {
-    required: { lease_id: true, chunk_id: true, cause: true },
+    required: exactRequired<LeaseChanged>()({ lease_id: true, chunk_id: true, cause: true }),
     optional: exactOptional<LeaseChanged>()({}),
   },
   'ask-changed': {
-    required: { lease_id: true, chunk_id: true, question_id: true, cause: true },
+    required: exactRequired<AskChanged>()({ lease_id: true, chunk_id: true, question_id: true, cause: true }),
     optional: exactOptional<AskChanged>()({}),
   },
   'escalation-changed': {
-    required: { chunk_id: true, cause: true },
+    required: exactRequired<EscalationChanged>()({ chunk_id: true, cause: true }),
     optional: exactOptional<EscalationChanged>()({ lease_id: true }),
   },
   'takeover-changed': {
-    required: { chunk_id: true, takeover_id: true, cause: true },
+    required: exactRequired<TakeoverChanged>()({ chunk_id: true, takeover_id: true, cause: true }),
     optional: exactOptional<TakeoverChanged>()({}),
   },
   'environment-changed': {
-    required: { chunk_id: true, environment_id: true, cause: true },
+    required: exactRequired<EnvironmentChanged>()({ chunk_id: true, environment_id: true, cause: true }),
     optional: exactOptional<EnvironmentChanged>()({}),
   },
   'fact-changed': {
-    required: { seq: true, kind: true, chunk_id: true, lease_id: true },
+    required: exactRequired<FactChanged>()({ seq: true, kind: true, chunk_id: true, lease_id: true }),
     optional: exactOptional<FactChanged>()({}),
   },
 };
 
-/** Every runner kind's `cause` union, by name — `fact-changed` carries no `cause` and is
- * absent. Four kinds' cases are key-set-identical to each other (`lease-changed`,
- * `ask-changed`, `takeover-changed`, `environment-changed`), so this is what tells a
- * `cause`-named case (e.g. `spawned`) apart from its sibling (e.g. `created`) — the
- * `Object.keys`-only check above cannot. */
-const RUNNER_CAUSE_VALUES: Readonly<Record<string, readonly string[]>> = {
+/** Every runner kind's `cause` union, by name — keyed on {@link RunnerEventType} with an
+ * explicit `null` for a kind that carries no `cause`, so a seventh kind is a compile error
+ * here rather than a row that silently goes unchecked.
+ *
+ * Cases of these kinds are named for the `cause` they carry, and the runtime check below
+ * pins that: several kinds' cases are key-set-identical to each other (`lease-changed`,
+ * `ask-changed`, `takeover-changed`, `environment-changed`), so a case's name is the only
+ * thing separating `spawned` from `created` — and a name the body does not observe is the
+ * vacuous claim `bzh:case-pins-its-own-name` is about. The `Object.keys`-only check above
+ * cannot see it, and neither can union membership alone, since both values are in the
+ * union. */
+const RUNNER_CAUSE_VALUES: Readonly<Record<RunnerEventType, readonly string[] | null>> = {
   'lease-changed': LEASE_CHANGE_CAUSES,
   'ask-changed': ASK_CHANGE_CAUSES,
   'escalation-changed': ESCALATION_CHANGE_CAUSES,
   'takeover-changed': TAKEOVER_CHANGE_CAUSES,
   'environment-changed': ENVIRONMENT_CHANGE_CAUSES,
+  'fact-changed': null,
 };
 
 // ---- Shared runtime machinery --------------------------------------------------------
@@ -305,9 +330,10 @@ function textStream(text: string): ReadableStream<Uint8Array> {
  * scope's worth of goldens drives. `T` is the scope's own payload union
  * ({@link HubEventPayload}/{@link RunnerEventPayload}) — the real transport spec drives
  * {@link SseService.connect} with it, same as each scope's live consumer does.
- * `causeValuesOf`, when given, checks a case's own `cause` value against its kind's
- * declared union — the key-set check below cannot tell apart two cases with the same
- * keys but a different `cause` (only the runner scope declares these unions). */
+ * `causeValuesOf`, when given, binds a case's name to the `cause` its payload carries —
+ * the key-set check below cannot tell apart two cases with the same keys but a different
+ * `cause`, and a case named for a cause it does not carry pins nothing. It returns `null`
+ * for a kind with no `cause` at all (only the runner scope names its cases this way). */
 function describeScopeContract<T>(
   scopeName: string,
   streamUrl: string,
@@ -315,7 +341,7 @@ function describeScopeContract<T>(
   manifest: Manifest,
   cases: readonly CorpusCase[],
   fieldSpecOf: (kind: string) => FrameFieldSpec<object>,
-  causeValuesOf?: (kind: string) => readonly string[] | undefined,
+  causeValuesOf?: (kind: string) => readonly string[] | null | undefined,
 ): void {
   describe(`${scopeName} scope`, () => {
     it('manifest kind list deep-equals the broker constants', () => {
@@ -337,9 +363,15 @@ function describeScopeContract<T>(
         });
 
         const causeValues = causeValuesOf?.(kind);
-        if (causeValues !== undefined) {
-          it(`${kind}:${caseName} — cause is one of its declared values`, () => {
-            expect(causeValues).toContain((payload as { cause?: unknown }).cause);
+        if (causeValues != null) {
+          it(`${kind}:${caseName} — carries the cause its case name claims`, () => {
+            expect(causeValues, `"${caseName}" is not one of ${kind}'s declared causes`).toContain(
+              caseName,
+            );
+            expect(
+              (payload as { cause?: unknown }).cause,
+              `${kind}:${caseName} carries a cause its name does not claim`,
+            ).toBe(caseName);
           });
         }
       }
@@ -402,6 +434,6 @@ describe('SSE frame shape contract', () => {
     runnerManifest,
     RUNNER_CASES,
     (kind) => RUNNER_FRAME_FIELD_SPECS[kind as keyof RunnerFrameFieldSpecs],
-    (kind) => RUNNER_CAUSE_VALUES[kind],
+    (kind) => RUNNER_CAUSE_VALUES[kind as RunnerEventType],
   );
 });

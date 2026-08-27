@@ -49,7 +49,7 @@ async def test_stream_endpoint_returns_an_sse_response() -> None:
 
 async def test_stream_endpoint_binds_the_default_keepalive_cadence(monkeypatch: pytest.MonkeyPatch) -> None:
     """``events_stream`` constructs ``Stream`` with no ``keepalive_seconds`` override — it inherits
-    ``DEFAULT_KEEPALIVE_SECONDS``, the shared cadence the hub and runner routes are declared to share.
+    ``DEFAULT_KEEPALIVE_SECONDS``, the one keepalive cadence the hub and runner routes share.
     A route that started passing its own override would flip this assertion false."""
     real_stream = Stream
     bound: dict[str, float] = {}
