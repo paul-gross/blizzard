@@ -22,7 +22,8 @@ a missing path raises a `ConfigError` at startup, the same fail-fast as the work
 Layer 3 is unconditional on every path, re-rendered per attempt around the freshly minted lease_id (a stale table would
 name a dead lease); a fresh spawn, or a node declared `session: fresh`, renders all three layers in full. Layers 1 and 2
 are standing prose, so a node-step resuming an existing session sends each only when it changed since that session last
-spawned; unchanged, the layer collapses to a single still-applies line — the ordinary case on
+spawned; unchanged, the layer collapses to a single still-applies line — led by a role-change line naming both nodes
+when the resuming node differs from the one that produced the session's previous turn — the ordinary case on
 advanced-development-workflow, whose worker nodes resume by default, only plan-review and review being declared fresh. A
 changed standing layer is re-sent in full, led by an explicit statement that the worker's standing instructions have
 been updated since its previous turn; a workspace prompt replaced with an empty one is announced as a withdrawal.

@@ -2283,9 +2283,9 @@
    "total": 419
   },
   "blizzard/runner/harness/preamble.py": {
-   "comments": 19,
-   "docstrings": 17,
-   "total": 154
+   "comments": 21,
+   "docstrings": 20,
+   "total": 164
   },
   "blizzard/runner/harness/spawn_cwd.py": {
    "comments": 0,
@@ -2424,13 +2424,13 @@
   },
   "blizzard/runner/loop/session.py": {
    "comments": 9,
-   "docstrings": 17,
-   "total": 109
+   "docstrings": 21,
+   "total": 117
   },
   "blizzard/runner/loop/spawn.py": {
-   "comments": 18,
+   "comments": 16,
    "docstrings": 26,
-   "total": 263
+   "total": 275
   },
   "blizzard/runner/loop/steps.py": {
    "comments": 58,
@@ -4400,9 +4400,9 @@
    "total": 107
   },
   "test_runner_loop.py": {
-   "comments": 267,
-   "docstrings": 130,
-   "total": 2360
+   "comments": 268,
+   "docstrings": 133,
+   "total": 2385
   },
   "test_runner_loop_build.py": {
    "comments": 0,
@@ -4786,8 +4786,8 @@
   },
   "test_worker_preamble.py": {
    "comments": 29,
-   "docstrings": 40,
-   "total": 429
+   "docstrings": 43,
+   "total": 443
   },
   "test_workspace_prompt_api.py": {
    "comments": 3,

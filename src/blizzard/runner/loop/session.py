@@ -8,7 +8,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.runner.store.repository import IReadRunnerStore, PoolHead
+from blizzard.runner.store.repository import IReadRunnerStore, LeaseRecord, PoolHead
 from blizzard.wire.envelope import NodeConfig
 
 _log = get_logger("blizzard.runner.loop")
@@ -34,13 +34,21 @@ class SessionResolver:
             return self._pool_head(chunk_id, node, spawn_cwd)
         return self.store.latest_session_id(chunk_id, node.session_source)
 
-    def session_stamps(self, node: NodeConfig, resume_from: str | None) -> tuple[str | None, str | None, str | None]:
+    def resumed_lease(self, resume_from: str | None) -> LeaseRecord | None:
+        """The newest recorded lease of the session this spawn resumes, or ``None`` for a fresh
+        mint — the one read (blizzard#340) serving both the stamps and the resume notice's
+        prior node, so no caller re-derives it from the store or the transcript."""
+        return self.store.lease_for_session(resume_from) if resume_from is not None else None
+
+    def session_stamps(
+        self, node: NodeConfig, resume_from: str | None, prior: LeaseRecord | None
+    ) -> tuple[str | None, str | None, str | None]:
         """The (model, effort, compaction_window) this spawn runs under, and stamps (#144, blizzard#343).
 
         **The stamp describes the session, not the preference.** A spawn that *resumes* inherits
-        all three from the resumed session's own stamp, and an inherited ``None`` stays *unknown*."""
+        all three from ``prior`` — the resumed session's own recorded lease, from
+        :meth:`resumed_lease` — and an inherited ``None`` stays *unknown*."""
         if resume_from is not None:
-            prior = self.store.lease_for_session(resume_from)
             if prior is None:
                 return (None, None, None)
             return (prior.resolved_model, prior.resolved_effort, prior.resolved_compaction_window)

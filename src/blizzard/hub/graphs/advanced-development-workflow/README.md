@@ -1,6 +1,7 @@
-# Authoring this graph's prompts
+# Authoring node prompts
 
-Maintainer conventions for the prompt tree. A node prompt is injected into the worker's first turn and re-read by every
+Maintainer conventions for node-prompt trees — minted in this graph, the reference exemplar, and binding **every
+packaged graph's** `prompts/` directory. A node prompt is injected into the worker's first turn and re-read by every
 turn that follows, so frontloaded prose is the most expensive prose in the system — its cost is multiplied by the
 session's whole call count. Write every prompt as a terse operating reference with depth reachable on demand, never as
 an explanatory document:
@@ -16,5 +17,5 @@ an explanatory document:
   its excess behind a link read only on the branch that needs it, rather than growing a per-turn tax. Check with
   `wc -c prompts/*.md`.
 
-These conventions bind the runner's fleet-worker preamble (`blizzard/runner/harness/prompts/`) the same way: it is
-frontloaded into every worker session in every deployment, so it is held to the tightest shape of all.
+The runner's fleet-worker preamble (`src/blizzard/runner/harness/prompts/`) is bound the same way: it is frontloaded
+into every worker session in every deployment, so it is held to the tightest shape of all.

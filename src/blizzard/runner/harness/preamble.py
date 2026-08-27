@@ -36,9 +36,17 @@ DEFAULT_BLIZZARD_PREAMBLE = _PROMPTS.text("blizzard_preamble.md")
 #: table, which layer 1's own prose would otherwise be the only thing to introduce.
 RESUME_STANDING_UNCHANGED = _PROMPTS.text("resume_standing_unchanged.md")
 
-#: The pair-collapse when the resuming node differs from the previous turn's (blizzard#340) —
-#: a template over ``{prior_node}``/``{node}``, so "unchanged" cannot read as turn continuity.
-RESUME_STANDING_UNCHANGED_CROSS_NODE = _PROMPTS.text("resume_standing_unchanged.cross_node.md")
+#: The raw ``{node}``/``{prior_node}`` template behind :func:`resume_cross_node` — private,
+#: so nothing emit-ready ever carries unsubstituted braces (blizzard#340).
+_RESUME_CROSS_NODE = _PROMPTS.text("resume_cross_node.md")
+
+
+def resume_cross_node(*, node: str, prior_node: str) -> str:
+    """The role-change line composed into a resume render when the resuming node differs
+    from the previous turn's (blizzard#340) — without it, a layer notice alone would read
+    as turn-to-turn continuity. Substitution lives here, never at a call site."""
+    return _RESUME_CROSS_NODE.format(node=node, prior_node=prior_node)
+
 
 #: Layer 1 unchanged while layer 2 is sent in full — carrying the same facts-table
 #: pointer, since the collapse rule is per layer (issue #149).
@@ -87,8 +95,8 @@ class Preamble:
         """``prior`` is the fingerprint of the standing prose the resumed session was last sent,
         ``None`` for a spawn resuming nothing: it selects between the full three-layer render
         and one where an unchanged layer collapses and a changed one is announced. ``node`` /
-        ``prior_node`` name this and the previous turn's node-step (blizzard#340) — a mismatch
-        selects the cross-node notice, and ``None`` reads as same-node, which has nothing to name."""
+        ``prior_node`` name this and the previous turn's node-step (blizzard#340) — known and
+        differing, they compose the role-change line in; a ``None`` reads as same-node."""
         rows = [
             ("runner id", runner_id),
             ("chunk id", chunk_id),
@@ -129,19 +137,21 @@ class Preamble:
         if self.prior is None:
             return [self.blizzard, self.workspace] if self.workspace else [self.blizzard]
 
+        # The role-change line rides every resume render whose nodes are known to differ
+        # (blizzard#340), whatever became of the layers below it.
+        cross: list[str] = []
+        if self.node is not None and self.prior_node is not None and self.node != self.prior_node:
+            cross = [resume_cross_node(node=self.node, prior_node=self.prior_node)]
+
         blizzard_held = self.prior.blizzard == self.fingerprint.blizzard
         workspace_held = self.prior.workspace == self.fingerprint.workspace
 
         if blizzard_held and workspace_held:
             # One line for the pair when there is a pair; an absent layer 2 is not something
             # to call "unchanged", since the fresh render never emits it either.
-            if not self.workspace:
-                return [RESUME_BLIZZARD_UNCHANGED]
-            if self.node is not None and self.prior_node is not None and self.node != self.prior_node:
-                return [RESUME_STANDING_UNCHANGED_CROSS_NODE.format(node=self.node, prior_node=self.prior_node)]
-            return [RESUME_STANDING_UNCHANGED]
+            return [*cross, RESUME_STANDING_UNCHANGED if self.workspace else RESUME_BLIZZARD_UNCHANGED]
 
-        layers = [RESUME_UPDATED_NOTICE]
+        layers = [RESUME_UPDATED_NOTICE, *cross]
         layers.append(RESUME_BLIZZARD_UNCHANGED if blizzard_held else self.blizzard)
         if workspace_held:
             # Only collapses when there is prose to hold in mind; an empty layer 2 is silent.

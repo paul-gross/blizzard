@@ -92,10 +92,16 @@ class Spawner:
         if self.suppressed(via=via, chunk_id=chunk_id):
             return
         now = self.ctx.clock.now()
-        lease = self._mint(chunk_id, envelope, resume_from=resume_from, at=now)
+        prior_lease = self.ctx.sessions.resumed_lease(resume_from)
+        lease = self._mint(chunk_id, envelope, resume_from=resume_from, prior_lease=prior_lease, at=now)
         _CP_AFTER_MINT.reached()
         rendered = self._render(
-            chunk_id, lease.lease_id, environments, node_name=envelope.node.node_name, resume_from=resume_from
+            chunk_id,
+            lease.lease_id,
+            environments,
+            node_name=envelope.node.node_name,
+            prior_node=prior_lease.node_name if prior_lease else None,
+            resume_from=resume_from,
         )
         try:
             handle = self.ctx.harness.spawn(
@@ -170,7 +176,15 @@ class Spawner:
             lease_token=lease_token,
         )
 
-    def _mint(self, chunk_id: str, envelope: NodeEnvelope, *, resume_from: str | None, at: datetime) -> MintedLease:
+    def _mint(
+        self,
+        chunk_id: str,
+        envelope: NodeEnvelope,
+        *,
+        resume_from: str | None,
+        prior_lease: LeaseRecord | None,
+        at: datetime,
+    ) -> MintedLease:
         """Pin the mint's graph artifacts, record the lease, stash its capability-token
         hash, and buffer the hub's fact."""
         # Mint above the max of both floors (bzh:epoch-fencing, #112): the local fence alone is 0
@@ -179,7 +193,7 @@ class Spawner:
         lease_id = Id.mint(LEASE_PREFIX, self.ctx.clock).value
         node = envelope.node
         retries_max = node.retries_max if node.retries_max is not None else self.ctx.config.default_retries_max
-        model, effort, compaction_window = self.ctx.sessions.session_stamps(node, resume_from)
+        model, effort, compaction_window = self.ctx.sessions.session_stamps(node, resume_from, prior_lease)
         # Before `record_lease`: a crash here leaves only an orphan row a retry
         # writes again identically — never a lease whose mint's declarations are absent.
         self.ctx.store.record_graph_artifacts(
@@ -225,14 +239,12 @@ class Spawner:
         environments: list[AcquiredEnvironment],
         *,
         node_name: str,
+        prior_node: str | None,
         resume_from: str | None,
     ) -> Preamble:
         # The store's runtime override when set, else the static config prompt — read here so a
         # replace applies to the next spawn with no restart.
         override = self.ctx.store.workspace_prompt_override(self.ctx.config.workspace_id)
-        # The previous turn's node is read from recorded lease rows (blizzard#340): the minted
-        # lease has no session row yet, so the newest lease that ran `resume_from` is the prior turn's.
-        prior_lease = self.ctx.store.lease_for_session(resume_from) if resume_from else None
         # `prior` is read ONLY when this spawn resumes a session (issue #149), so a fresh one can
         # never elide prose it has never seen; nothing recorded reads `None` and renders in full.
         return Preamble.of(
@@ -244,7 +256,7 @@ class Spawner:
             chunk_id=chunk_id,
             prior=self.ctx.store.session_preamble_fingerprint(resume_from) if resume_from else None,
             node=node_name,
-            prior_node=prior_lease.node_name if prior_lease else None,
+            prior_node=prior_node,
         )
 
     def _worker_preamble(

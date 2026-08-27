@@ -12,22 +12,21 @@ prompt**, the operator's local law — additive, and the more specific where bot
 
 Ending your turn ends the process, and every background shell you started dies with it. Nothing wakes a fleet worker
 when a background command finishes, so backgrounding is safe only when you poll each command to completion within the
-same turn; anything you will not poll runs in the foreground with a generous timeout. A notification that an earlier
-session's background task has no completion record means it is already dead — re-run it and stay with it. The same
-discipline governs judgement: get the evidence in hand within the turn, then answer — a verdict-less attempt is a
-failing one.
+same turn; anything you will not poll runs in the foreground with a generous timeout. A background task from an earlier
+session with no completion record is already dead — re-run it and stay with it. The same discipline governs judgement:
+get the evidence in hand within the turn, then answer — a verdict-less attempt is a failing one.
 
 ## Your interface: the `blizzard` CLI
 
-Your verbs are the `blizzard runner` commands whose help is labeled **Worker:** — the rest are the operator's, not yours
-to run.
+The `blizzard` CLI is on your PATH; your verbs are its `runner` commands whose help is labeled **Worker:** — the rest
+are the operator's alone.
 
 | Verb                    | Purpose                                                                | Read more |
 | ----------------------- | ---------------------------------------------------------------------- | --------- |
 | `work-items <chunk-id>` | The chunk's work items — read them, never guess                        | `--help`  |
 | `chunk history`         | The chunk's transition history                                         | `--help`  |
 | `artifact …`            | Read what your node-step consumes, write what it produces; lease-bound | `--help`  |
-| `ask "<question>"`      | Escalate an undecidable choice; ends your turn, resumed on answer      | `--help`  |
+| `ask "<question>"`      | Ask a human an undecidable choice; ends your turn, resumed on answer   | `--help`  |
 
 `blizzard runner heartbeat` and `blizzard runner session-end` fire automatically from your hooks; never invoke either
 yourself.

@@ -31,6 +31,7 @@ from blizzard.runner.harness.preamble import (
     RESUME_UPDATED_NOTICE,
     RESUME_WORKSPACE_UNCHANGED,
     PreambleFingerprint,
+    resume_cross_node,
 )
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopConfig
@@ -1076,6 +1077,30 @@ def test_an_announced_change_is_announced_once_and_then_elided(tmp_path):  # typ
     settled = store.session_preamble_fingerprint("sess-build-1")
     assert settled is not None
     assert settled.workspace == hashlib.sha256(b"REPLACED-POLICY").hexdigest()
+
+
+@pytest.mark.component
+def test_a_cross_node_resume_names_the_node_transition_from_recorded_state(tmp_path):  # type: ignore[no-untyped-def]
+    """Scenario 7 (blizzard#340) — the wiring the renderer's unit tier cannot pin: the previous
+    turn's node reaches `Preamble.of` from the recorded lease rows, so `verify` resuming the
+    session `build` minted opens with the role-change line naming both nodes."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+
+    _first_build_spawn(store, hub, provider, _resuming_build_env(), session="sess-build-1", at=_NOW)
+
+    verify_env = make_envelope(
+        "ch_1", "verify", node_id="nd_verify", choices=_CHOICES, session=SessionMode.RESUME, session_source="build"
+    )
+    second = _reenter_build(
+        store, hub, provider, verify_env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1)
+    )
+
+    assert second.resume_froms == ["sess-build-1"]
+    prefix = second.spawns[0][1].prompt_prefix
+    assert prefix.startswith(f"{resume_cross_node(node='verify', prior_node='build')}\n\n{RESUME_STANDING_UNCHANGED}")
+    assert "`build` node-step" in prefix
 
 
 @pytest.mark.unit

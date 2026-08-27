@@ -10,21 +10,21 @@ this is. Read any earlier visit's asset — `blizzard runner artifact get retros
 (`--node` required: every node in this graph produces one) — then the chunk's asset trail: each node's `retrospective`,
 the `reviewed-plan`, the plan-review and review findings, the verification report, and the pre-push summary.
 
-## Verify the landing before writing anything
+## Verify the landing first
 
 Start from `blizzard runner artifact get delivery-findings --node deliver --content` when one exists. Fetch in each
-repo's worktree first, then check three things:
+repo's worktree first, then check:
 
-1. **The landed sha is reachable from base** — per repo, newest-`epoch` `git_commit` entry:
-   `git merge-base --is-ancestor <sha> origin/<base>` exits 0.
+1. **The landed sha is reachable from base** — per repo, newest-`epoch` `git_commit` entry, tested in that repo's
+   worktree: `git merge-base --is-ancestor <sha> origin/<base>` exits 0.
 2. **That repo's PR is merged** — read its merge state from inside that repo's worktree so the query targets the right
    forge (on GitHub, `gh pr view --json state,mergedAt`).
 3. **The chunk's originating work item is closed** — `blizzard runner work-items <chunk-id>` gives each ref's `web_url`;
    ask the forge. An open item is a finding — never on its own a reason to select `delivery-incomplete`; only legs 1 and
    2 are.
 
-Record the result in the asset's **Landing Verification** section either way. If leg 1 or 2 fails for any repo, submit
-the asset now naming the discrepancy; your judgement then takes `delivery-incomplete`.
+Record the result in **Landing Verification** either way. If leg 1 or 2 fails for any repo, submit the asset now naming
+the discrepancy; your judgement then takes `delivery-incomplete`.
 
 Separately, check whether the landing turned the base branch's own gate red — query by the PR's merge commit, per repo
 (on GitHub, `gh pr view --json mergeCommit`). Never a reason to route backward: raise a red run as a finding in this
@@ -62,5 +62,5 @@ findings, not vibes. Do not change the delivered code from this node.
 ## Post-delivery
 
 Only on the visit that writes the full closing reflection, after the asset is submitted: carry out whatever
-post-delivery work the workspace's own agent context asks of this node. Declaring none leaves this node at the
-reflection above.
+post-delivery work the workspace's agent context asks of this node. A workspace that declares none leaves this node at
+the reflection above.

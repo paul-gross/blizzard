@@ -12,16 +12,18 @@ Every finding recorded in a `plan-findings` or `review-findings` asset carries:
   file anchors as `<asset-name>::<section>`, e.g. `plan::Acceptance criteria`.
 - a **description** — one or two sentences, **at most 300 characters**: what is wrong and why it matters, specific and
   actionable. The derivation that established the finding — cross-references, confirming lookups, quotations — stays in
-  the responder's reasoning, never in the entry. A finding that genuinely needs more to be actionable puts the excess in
-  a `detail:` continuation *after* the description, so a reader can stop at the claim; the bound binds the description
-  alone.
+  the responder's reasoning; it never rides the entry, not even relabelled as detail. When *acting* on the finding needs
+  a fact the description cannot hold — a reproduction command, an exact expected/actual pair, a fix constraint — carry
+  that fact alone in a `detail:` continuation after the description, itself **at most two lines**, so a reader can stop
+  at the claim.
 
-Example, inside a `review-findings` asset:
+Example, inside a `review-findings` asset — the second line optional, and only ever the acting-on fact:
 
 ```text
 F1 — should-fix — payments-api/src/payments/worker.py:142
   Retry counter isn't reset after a successful heartbeat, so a flaky-then-recovered
   worker still escalates on its next transient failure.
+  detail: reproduce with `pytest -k recovered_worker` — expected 0 escalations, saw 1.
 ```
 
 The same finding over-long — its derivation transcribed into the entry instead of summarized by it:

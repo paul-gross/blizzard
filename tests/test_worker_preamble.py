@@ -16,12 +16,12 @@ from blizzard.runner.harness.preamble import (
     DEFAULT_BLIZZARD_PREAMBLE,
     RESUME_BLIZZARD_UNCHANGED,
     RESUME_STANDING_UNCHANGED,
-    RESUME_STANDING_UNCHANGED_CROSS_NODE,
     RESUME_UPDATED_NOTICE,
     RESUME_WORKSPACE_UNCHANGED,
     RESUME_WORKSPACE_WITHDRAWN,
     Preamble,
     PreambleFingerprint,
+    resume_cross_node,
 )
 
 
@@ -217,20 +217,32 @@ def test_same_node_resume_is_byte_identical_to_the_plain_collapse() -> None:
 @pytest.mark.unit
 def test_cross_node_resume_names_both_nodes_and_keeps_the_layers_collapsed() -> None:
     """blizzard#340: `build` resuming a session whose previous turn was `verify` — the
-    common shape when two nodes share a session pool. The notice names the transition;
-    the standing layers still collapse rather than re-send."""
+    common shape when two nodes share a session pool. The role-change line leads; the
+    standing layers still collapse rather than re-send."""
     prose = "Workspace-specific prose."
     prior = _fingerprint(prose, _ENVS, runner_prompt="Blizzard prose.")
 
     out = _render(prose, _ENVS, runner_prompt="Blizzard prose.", prior=prior, node="build", prior_node="verify")
 
-    assert out == f"{RESUME_STANDING_UNCHANGED_CROSS_NODE.format(node='build', prior_node='verify')}\n\n{_TABLE}"
+    cross = resume_cross_node(node="build", prior_node="verify")
+    assert out == f"{cross}\n\n{RESUME_STANDING_UNCHANGED}\n\n{_TABLE}"
     assert "`verify` node-step" in out
-    assert "this turn works `build`" in out
+    # Wrap-insensitive: the 120-column wrap may split the phrase across lines.
+    assert "this turn works `build`" in " ".join(out.split())
     assert "Blizzard prose." not in out
     assert prose not in out
-    # The variant still owes what the plain collapse line owes: the facts-table introduction.
-    assert "facts table below" in out
+
+
+@pytest.mark.unit
+def test_cross_node_resume_with_no_workspace_prompt_still_announces_the_role_change() -> None:
+    """blizzard#340: a deployment with no layer 2 collapses to the blizzard-only line —
+    which must not read as continuity either, so the role-change line rides it the same."""
+    prior = _fingerprint("", _ENVS, runner_prompt="Blizzard prose.")
+
+    out = _render("", _ENVS, runner_prompt="Blizzard prose.", prior=prior, node="build", prior_node="verify")
+
+    cross = resume_cross_node(node="build", prior_node="verify")
+    assert out == f"{cross}\n\n{RESUME_BLIZZARD_UNCHANGED}\n\n{_TABLE}"
 
 
 @pytest.mark.unit
@@ -246,14 +258,16 @@ def test_resume_with_an_unknown_prior_node_falls_back_to_the_plain_collapse() ->
 
 
 @pytest.mark.unit
-def test_a_changed_standing_layer_outranks_the_cross_node_collapse() -> None:
-    """blizzard#340 leaves the updated-notice path alone: when a layer moved, the update
-    announcement renders even across a node change — the full prose is already arriving."""
+def test_a_changed_standing_layer_carries_the_role_change_line_too() -> None:
+    """blizzard#340 in the updated-notice path: layer 1 is the one *not* re-arriving there,
+    so its collapse line would still read as continuity without the role-change line
+    between the announcement and the layers."""
     prior = _fingerprint("Old policy.", _ENVS, runner_prompt="Blizzard prose.")
 
     out = _render("New policy.", _ENVS, runner_prompt="Blizzard prose.", prior=prior, node="build", prior_node="verify")
 
-    assert out == f"{RESUME_UPDATED_NOTICE}\n\n{RESUME_BLIZZARD_UNCHANGED}\n\nNew policy.\n\n{_TABLE}"
+    cross = resume_cross_node(node="build", prior_node="verify")
+    assert out == f"{RESUME_UPDATED_NOTICE}\n\n{cross}\n\n{RESUME_BLIZZARD_UNCHANGED}\n\nNew policy.\n\n{_TABLE}"
 
 
 @pytest.mark.unit
