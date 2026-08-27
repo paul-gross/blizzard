@@ -17,7 +17,7 @@ Every finding recorded in a `plan-findings` or `review-findings` asset carries:
   that fact alone in a `detail:` continuation after the description, itself **at most two lines**, so a reader can stop
   at the claim.
 
-Example, inside a `review-findings` asset — the second line optional, and only ever the acting-on fact:
+Example, inside a `review-findings` asset — the `detail:` continuation optional, and only ever the acting-on fact:
 
 ```text
 F1 — should-fix — payments-api/src/payments/worker.py:142
@@ -37,8 +37,8 @@ F1 — should-fix — payments-api/src/payments/worker.py:142
   value, which means a worker that was flaky and then recovered still escalates...
 ```
 
-Everything after the claim is reasoning the reviewer already did — compressing it back to the two-sentence form above
-loses nothing a responder acts on.
+The derivation is reasoning the reviewer already did: keep the claim, drop the derivation wherever in the entry it sits
+— the two-sentence form above loses nothing a responder acts on.
 
 ## Refutation record
 

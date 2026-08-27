@@ -6,9 +6,9 @@ A worker's first spawn on a session carries three ordered layers ahead of the no
 blizzard preamble, the operator's `workspace_prompt` prose when set, and a machine-local facts table (runner, chunk, and
 lease identity, plus held environments).
 
-The baked preamble frames the worker as operating inside the fleet, names its worker-facing `blizzard runner` verbs
-(`ask`, `work-items`), and states the turn-ending discipline of a headless session — nothing survives the turn that
-started it. Read the shipped preamble text
+The baked preamble frames the worker as operating inside the fleet, tables its worker-facing `blizzard runner` verbs,
+and states the turn-ending discipline of a headless session — nothing survives the turn that started it. Read the
+shipped preamble text
 ([src/blizzard/runner/harness/prompts/blizzard_preamble.md](../../src/blizzard/runner/harness/prompts/blizzard_preamble.md))
 before authoring workspace prose, so it adds deployment-specific policy rather than re-establishing framing the worker
 already has.
@@ -22,11 +22,13 @@ a missing path raises a `ConfigError` at startup, the same fail-fast as the work
 Layer 3 is unconditional on every path, re-rendered per attempt around the freshly minted lease_id (a stale table would
 name a dead lease); a fresh spawn, or a node declared `session: fresh`, renders all three layers in full. Layers 1 and 2
 are standing prose, so a node-step resuming an existing session sends each only when it changed since that session last
-spawned; unchanged, the layer collapses to a single still-applies line — led by a role-change line naming both nodes
-when the resuming node differs from the one that produced the session's previous turn — the ordinary case on
+spawned; unchanged, the layer collapses to a single still-applies line — the ordinary case on
 advanced-development-workflow, whose worker nodes resume by default, only plan-review and review being declared fresh. A
 changed standing layer is re-sent in full, led by an explicit statement that the worker's standing instructions have
 been updated since its previous turn; a workspace prompt replaced with an empty one is announced as a withdrawal.
+Whatever became of the layers, any resume whose node differs from the one that produced the session's previous turn
+carries a role-change line naming both nodes — first in the render, except under the update announcement when one leads
+it.
 
 That announcement is why `PUT /api/workspace-prompt` is trustworthy mid-chunk: a replace applies at the chunk's next
 resumed node-step, and the worker is told it is reading something new. The workspace-prompt override is standing: it

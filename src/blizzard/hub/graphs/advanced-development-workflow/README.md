@@ -17,5 +17,6 @@ an explanatory document:
   its excess behind a link read only on the branch that needs it, rather than growing a per-turn tax. Check with
   `wc -c prompts/*.md`.
 
-The runner's fleet-worker preamble (`src/blizzard/runner/harness/prompts/`) is bound the same way: it is frontloaded
-into every worker session in every deployment, so it is held to the tightest shape of all.
+The runner's fleet-worker preamble tree (`src/blizzard/runner/harness/prompts/`) is bound the same way and inherits the
+4,000-byte bar; `blizzard_preamble.md` itself is frontloaded into every worker session in every deployment, so it is
+held within 2,252 bytes (`wc -c src/blizzard/runner/harness/prompts/*.md`).

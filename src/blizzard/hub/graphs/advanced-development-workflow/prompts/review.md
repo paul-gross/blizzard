@@ -51,7 +51,8 @@ adjudicated every refutation, and every finding with:
   that bar.
 - **anchor** — `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>`.
 - a **description** held to the docket's bound: one or two sentences, at most 300 characters — the defect and its
-  consequence, never the derivation that established it.
+  consequence, never the derivation that established it; a fact needed to act on it — a reproduction command, an
+  expected/actual pair — rides a `detail:` continuation, at most two lines.
 
 The fields are restated from the docket; read it in full with
 `blizzard runner artifact get docket --scope graph --content`. If that command fails, proceed on the restatement above

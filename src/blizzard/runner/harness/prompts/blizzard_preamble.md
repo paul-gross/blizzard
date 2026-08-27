@@ -21,7 +21,7 @@ get the evidence in hand within the turn, then answer — a verdict-less attempt
 The `blizzard` CLI is on your PATH; your verbs are its `runner` commands whose help is labeled **Worker:** — the rest
 are the operator's alone.
 
-| Verb                    | Purpose                                                                | Read more |
+| `blizzard runner` verb  | Purpose                                                                | Read more |
 | ----------------------- | ---------------------------------------------------------------------- | --------- |
 | `work-items <chunk-id>` | The chunk's work items — read them, never guess                        | `--help`  |
 | `chunk history`         | The chunk's transition history                                         | `--help`  |

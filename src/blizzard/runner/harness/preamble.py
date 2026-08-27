@@ -36,15 +36,13 @@ DEFAULT_BLIZZARD_PREAMBLE = _PROMPTS.text("blizzard_preamble.md")
 #: table, which layer 1's own prose would otherwise be the only thing to introduce.
 RESUME_STANDING_UNCHANGED = _PROMPTS.text("resume_standing_unchanged.md")
 
-#: The raw ``{node}``/``{prior_node}`` template behind :func:`resume_cross_node` — private,
-#: so nothing emit-ready ever carries unsubstituted braces (blizzard#340).
+#: The raw ``{node}``/``{prior_node}`` template behind :func:`resume_cross_node` (blizzard#340).
 _RESUME_CROSS_NODE = _PROMPTS.text("resume_cross_node.md")
 
 
 def resume_cross_node(*, node: str, prior_node: str) -> str:
-    """The role-change line composed into a resume render when the resuming node differs
-    from the previous turn's (blizzard#340) — without it, a layer notice alone would read
-    as turn-to-turn continuity. Substitution lives here, never at a call site."""
+    """The emit-ready role-change line for a resume whose node differs from the previous
+    turn's (blizzard#340)."""
     return _RESUME_CROSS_NODE.format(node=node, prior_node=prior_node)
 
 

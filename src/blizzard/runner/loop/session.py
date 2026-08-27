@@ -35,9 +35,8 @@ class SessionResolver:
         return self.store.latest_session_id(chunk_id, node.session_source)
 
     def resumed_lease(self, resume_from: str | None) -> LeaseRecord | None:
-        """The newest recorded lease of the session this spawn resumes, or ``None`` for a fresh
-        mint — the one read (blizzard#340) serving both the stamps and the resume notice's
-        prior node, so no caller re-derives it from the store or the transcript."""
+        """The newest recorded lease of the session this spawn resumes, or ``None`` for a
+        fresh mint (blizzard#340)."""
         return self.store.lease_for_session(resume_from) if resume_from is not None else None
 
     def session_stamps(
