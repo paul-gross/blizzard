@@ -38,14 +38,22 @@ module.exports = defineConfig([
         "error",
         { template: 0, styles: 0, animations: 0 },
       ],
+      // The ~400-line cap (blizzard-context bzh:frontend-container-presentational),
+      // formerly `web/scripts/structural-gate.js`'s own walk. Raw counting: neither
+      // blank lines nor comments are skipped, so it preserves the prior check's
+      // meaning exactly.
+      "max-lines": ["error", { max: 400, skipBlankLines: false, skipComments: false }],
     },
   },
   // Spec files declare inline @Component test-host fixtures — test scaffolding,
   // not application components — so they're exempt from the inline-declarations ban.
+  // Specs also run well past 400 lines by nature (one `it` per case); 800 is a
+  // runaway guard against a spec growing unbounded, not design pressure.
   {
     files: ["**/*.spec.ts"],
     rules: {
       "@angular-eslint/component-max-inline-declarations": "off",
+      "max-lines": ["error", { max: 800, skipBlankLines: false, skipComments: false }],
     },
   },
   {

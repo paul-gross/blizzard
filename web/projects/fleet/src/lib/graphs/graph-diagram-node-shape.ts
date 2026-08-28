@@ -9,7 +9,7 @@ const CORNER_RADIUS = 9;
 
 /**
  * One node's SVG shape — split out of `graph-diagram.ts` (issue #157's 400-line
- * `web:structural-gate` cap) once the selection feature (blizzard#159) pushed the
+ * `web:lint` cap) once the selection feature (blizzard#159) pushed the
  * parent over it. An attribute-selector component (`g[fleetGraphDiagramNode]`)
  * so it renders as a plain `<g>` inside the parent's `<svg>`, no wrapping element.
  * Purely presentational: `selected`/`incident` are booleans the parent derives from

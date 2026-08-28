@@ -56,7 +56,7 @@ import { ChunkTranscriptsContainer } from './chunk-transcripts-container';
  * queries stay off this container entirely — {@link ChunkNodeHistoryContainer} and
  * {@link ChunkTranscriptsContainer} each own theirs, mounted only inside their own
  * `@switch` branch below, which is what keeps them lazy (`review:F1`; split out
- * rather than folded in here to keep this file under `web:structural-gate`'s line cap).
+ * rather than folded in here to keep this file under `web:lint`'s line cap).
  *
  * Scope note, deliberate rather than an oversight: the dock's **destructive
  * and structural** operator actions — detach, pause/resume, close — are not

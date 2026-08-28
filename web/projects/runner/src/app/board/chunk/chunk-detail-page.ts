@@ -60,7 +60,7 @@ import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
  * {@link ChunkTranscriptsTab}) — the same split the hub's tabs make; Artifacts
  * stays inline since it is already one `fleet` component ({@link ChunkArtifactsPanel}),
  * nothing this container would gain from a further extraction. Together this
- * is what keeps this container under `web:structural-gate`'s line cap.
+ * is what keeps this container under `web:lint`'s line cap.
  *
  * The Node history tab stops at each row's own artifacts — it does not wire a
  * per-step transcript the way the hub's own tab does: the hub's transcript
