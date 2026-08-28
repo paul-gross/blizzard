@@ -396,8 +396,7 @@ class RotatePolicy:
         )
 
 
-# Every key this hub's session parser reads by name (issue #351) — a `sessions:` entry
-# carrying any other key would otherwise be silently dropped rather than stored.
+# Every key this hub's session parser reads by name (issue #351).
 SESSION_KNOWN_KEYS = frozenset({"model", "effort", "rotate", "compaction_window"})
 
 
@@ -420,9 +419,7 @@ class SessionDecl:
         name = str(key)
         unknown = sorted(set(body.body) - SESSION_KNOWN_KEYS)
         if unknown:
-            # A mint is a one-shot operator action whose whole purpose is to install a
-            # declaration (issue #351) — silently storing less than what was authored
-            # would convert that intent into a no-op, so this fails loudly instead.
+            # Pinned by tests/test_graph_sessions.py::test_an_unknown_session_key_is_rejected_naming_the_key
             raise GraphParseError(
                 f"session {name!r}: unknown key(s) {', '.join(unknown)} — this hub "
                 f"(blizzard {HUB_VERSION}) recognizes only {sorted(SESSION_KNOWN_KEYS)}"

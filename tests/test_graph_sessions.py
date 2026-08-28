@@ -126,8 +126,7 @@ def test_declaration_order_is_the_authored_order() -> None:
     assert list(doc.sessions) == ["planning", "code", "gate"]
 
 
-def test_every_known_session_key_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
-    # blizzard#351: a hub whose parser knows every authored key must mint unaffected.
+def test_every_known_session_key_is_accepted() -> None:
     doc = GraphDoc.of(
         _doc(
             sessions={
@@ -144,8 +143,6 @@ def test_every_known_session_key_is_accepted(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_an_unknown_session_key_is_rejected_naming_the_key() -> None:
-    # blizzard#351: an older hub's parser must fail loudly rather than silently drop a
-    # key it does not know, so a mint that succeeds is trustworthy.
     with pytest.raises(GraphParseError) as exc_info:
         GraphDoc.of(_doc(sessions={"code": {"compaction_window": "150000", "not_a_real_key": "x"}}))
     message = str(exc_info.value)

@@ -143,8 +143,6 @@ def test_graph_show_prints_the_reified_graph(monkeypatch: pytest.MonkeyPatch) ->
 
 @pytest.mark.unit
 def test_graph_show_renders_session_pools(monkeypatch: pytest.MonkeyPatch) -> None:
-    # blizzard#351: `graph show` must let an operator confirm what a mint actually stored
-    # without reaching for `--json`.
     body = {
         "graph_id": "gr_1",
         "name": "alpha",
