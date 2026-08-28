@@ -1,5 +1,6 @@
 import type { GraphNodeView, GraphView } from '../api/hub';
-import { META_LINE_HEIGHT, type TextMeasurer, layoutGraph } from './graph-layout';
+import { META_LINE_HEIGHT } from './graph-box-sizing';
+import { type TextMeasurer, layoutGraph } from './graph-layout';
 
 /** Deterministic stand-in for canvas `measureText` — a fixed per-character width so
  * layout math is reproducible without a DOM (the production measurer lives in

@@ -38,14 +38,27 @@ module.exports = defineConfig([
         "error",
         { template: 0, styles: 0, animations: 0 },
       ],
+      // The ~400-line cap, moved here from `web/scripts/structural-gate.js`'s own walk.
+      // No architecture doc declares the number itself — in practice the files it has
+      // caught were also blizzard-context bzh:frontend-container-presentational splits
+      // (an oversized component is often evidence of merged container/presentational
+      // concerns), but the cap now reaches every `.ts` file this config sees, not only
+      // components. Not a byte-for-byte port either: eslint's own `max-lines` counts
+      // real lines the way `wc -l` does, one lower than structural-gate's
+      // `source.split('\n').length` for any file ending in the usual trailing newline
+      // — a file at exactly 400 real lines that used to fail now passes.
+      "max-lines": ["error", { max: 400, skipBlankLines: false, skipComments: false }],
     },
   },
   // Spec files declare inline @Component test-host fixtures — test scaffolding,
   // not application components — so they're exempt from the inline-declarations ban.
+  // Specs also run well past 400 lines by nature (one `it` per case); 800 is a
+  // runaway guard against a spec growing unbounded, not design pressure.
   {
     files: ["**/*.spec.ts"],
     rules: {
       "@angular-eslint/component-max-inline-declarations": "off",
+      "max-lines": ["error", { max: 800, skipBlankLines: false, skipComments: false }],
     },
   },
   {

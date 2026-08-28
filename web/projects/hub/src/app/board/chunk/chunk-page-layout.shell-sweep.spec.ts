@@ -3,11 +3,10 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type hubApi } from 'fleet';
+import { ChunkGeneralTab, hubClient, type hubApi } from 'fleet';
 import { OPERATOR_ME_RESPONSE, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
-import { ChunkGeneralTab } from './chunk-general-tab';
 import { ChunkPage } from './chunk-page';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 

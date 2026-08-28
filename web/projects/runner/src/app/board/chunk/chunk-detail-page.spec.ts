@@ -140,6 +140,26 @@ describe('ChunkDetailPage', () => {
     expect(el.querySelector('fleet-chunk-artifacts-panel')).toBeNull();
   });
 
+  it('opts the issue pane into inline placement — the narrow-route fix issue #318 shipped', async () => {
+    // A page-level mount check for `issuePanePlacement="inline"` (`chunk-detail-page.html`):
+    // the `.inline` class only shows up on the pane's own status line, so a real error state
+    // is needed to observe it — success renders no status line at all.
+    stub.restore();
+    stub = stubRequestClient(
+      runnerClient,
+      (method, path) =>
+        method === 'GET' && path === `/api/chunks/${CHUNK_ID}/work-items`
+          ? stubError(503, { detail: 'no work source is configured' })
+          : routes()(method, path),
+    );
+
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    const status = el.querySelector('[data-testid="issue-error"]');
+    expect(status).not.toBeNull();
+    expect(status?.classList.contains('inline')).toBe(true);
+  });
+
   it('gains the identity header the hub’s own chunk page carries, naming the chunk by its full id', async () => {
     // This page never had one before this refactor — the shared
     // `fleet-chunk-page-header` (`ChunkPageShell`'s composition) — so this pins

@@ -39,7 +39,7 @@ export interface BoardCard {
 
 /**
  * One board card — split out of {@link BoardShell} (issue #137) so that file
- * stayed under the `web:structural-gate` line cap as the READY lane's
+ * stayed under the `web:lint` line cap as the READY lane's
  * drag-and-drop landed on it. Renders exactly what was inline in
  * `BoardShell`'s `@for` before, plus one addition — `[attr.data-chunk]`
  * carries the card's full chunk id, a unique locator the e2e suite needs

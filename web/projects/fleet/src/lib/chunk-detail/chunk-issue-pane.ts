@@ -15,11 +15,12 @@ import { type WorkItemsState } from './work-items-state';
  *
  * `placement` (issue #318) forwards to the inner `fleet-kit-async-state`,
  * defaulting to its own `'center'` — every existing mount (the desktop dock's
- * `chunk-detail-panel.ts`, the hub's `chunk-general-tab.ts`) keeps its prior
- * rendering unchanged. The runner's narrow single-column chunk detail route
- * is the one caller that opts into `'inline'`: its full-sentence error copy
- * overflowed `'center'`'s absolutely-positioned box at phone widths, an issue
- * a wide desktop layout never hits.
+ * `chunk-detail-panel.ts`, the shared `chunk-page/chunk-general-tab.ts` both
+ * apps compose) keeps its prior rendering unchanged. The runner's narrow
+ * single-column chunk detail route is the one caller that opts into
+ * `'inline'`: its full-sentence error copy overflowed `'center'`'s
+ * absolutely-positioned box at phone widths, an issue a wide desktop layout
+ * never hits.
  */
 @Component({
   selector: 'fleet-chunk-detail-issue-pane',

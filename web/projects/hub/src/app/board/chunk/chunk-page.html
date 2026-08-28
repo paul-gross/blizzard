@@ -27,12 +27,13 @@
   @if (detail(); as d) {
     @switch (tab()) {
       @case ('general') {
-        <app-chunk-general-tab
+        <fleet-chunk-general-tab
           [detail]="d"
           [workItems]="workItems()"
           [canControl]="canControl()"
           [canAnswer]="canAnswer()"
           [canResolve]="canResolve()"
+          [graphLinkBase]="['/graphs']"
           (answerQuestion)="onAnswer($event)"
           (resolveDecision)="onResolve($event)"
           (editGraph)="onEditGraph($event)"

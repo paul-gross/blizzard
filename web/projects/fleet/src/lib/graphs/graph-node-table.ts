@@ -6,7 +6,7 @@ import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-n
 /**
  * The graph detail's node table (executor, session, judged-by, retries, mode,
  * checks, produces) — split out of `graph-detail.ts` (issue #143) so the
- * container stays under the `web:structural-gate` line cap. Presentational
+ * container stays under the `web:lint` line cap. Presentational
  * only: `nodes`/`entryNodeId` are plain inputs, no query/mutation injection
  * (`bzh:frontend-container-presentational`).
  */

@@ -39,7 +39,7 @@ export interface BoardTopMove {
  * One board column — a lane's engraved head (label, occupancy beacon, count)
  * over its card list. Split out of {@link BoardShell} (issue #137) alongside
  * {@link BoardCardComponent} so that file stays under the
- * `web:structural-gate` line cap once the READY lane grew its queue-shaping
+ * `web:lint` line cap once the READY lane grew its queue-shaping
  * affordances.
  *
  * Two independent conditionals arm this component's affordances: {@link reorderControls}

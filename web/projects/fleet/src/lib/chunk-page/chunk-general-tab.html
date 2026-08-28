@@ -3,14 +3,14 @@
     <fleet-chunk-detail-facts
       [detail]="detail()"
       [canControl]="canControl()"
-      [graphLinkBase]="['/graphs']"
+      [graphLinkBase]="graphLinkBase()"
       (editGraph)="editGraph.emit($event)"
     >
       <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
     </fleet-chunk-detail-facts>
   </fleet-kit-panel>
   <fleet-kit-panel class="section" data-testid="section-issues" label="issues">
-    <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
+    <fleet-chunk-detail-issue-pane [workItems]="workItems()" [placement]="issuePanePlacement()" />
   </fleet-kit-panel>
   <fleet-kit-panel class="section" data-testid="section-node-history" label="node history">
     <!-- The panel above already engraves "node history"; the section's own
@@ -21,7 +21,7 @@
       [detail]="detail()"
       [heading]="false"
       [activatable]="true"
-      [graphLinkBase]="['/graphs']"
+      [graphLinkBase]="graphLinkBase()"
       (pickStep)="pickStep.emit($event)"
     />
   </fleet-kit-panel>

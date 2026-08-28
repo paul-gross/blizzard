@@ -16,7 +16,7 @@ import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
  * once opened) and maps their loading/error state, forwarding resolved data down to the
  * presentational {@link ChunkTranscriptsTab}, which carries the tab's markup and injects
  * nothing. Split out of {@link ChunkPage} rather than folded into it, so that container
- * stays under `web:structural-gate`'s line cap; {@link ChunkPage} mounts this only inside
+ * stays under `web:lint`'s line cap; {@link ChunkPage} mounts this only inside
  * its `@case ('transcripts')` branch, which is what keeps these two queries lazy — they
  * fire only once that tab is actually selected, the same as before this split.
  *

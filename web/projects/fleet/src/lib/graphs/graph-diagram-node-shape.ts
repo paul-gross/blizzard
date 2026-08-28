@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { META_FIRST_LINE_Y, META_LINE_HEIGHT, type LaidOutNode } from './graph-layout';
+import { META_FIRST_LINE_Y, META_LINE_HEIGHT } from './graph-box-sizing';
+import type { LaidOutNode } from './graph-layout';
 
 /** The node box's corner radius — square on the left (the color stripe's edge),
  * rounded on the right, so the selection/hover outline traced over the same path
@@ -9,7 +10,7 @@ const CORNER_RADIUS = 9;
 
 /**
  * One node's SVG shape — split out of `graph-diagram.ts` (issue #157's 400-line
- * `web:structural-gate` cap) once the selection feature (blizzard#159) pushed the
+ * `web:lint` cap) once the selection feature (blizzard#159) pushed the
  * parent over it. An attribute-selector component (`g[fleetGraphDiagramNode]`)
  * so it renders as a plain `<g>` inside the parent's `<svg>`, no wrapping element.
  * Purely presentational: `selected`/`incident` are booleans the parent derives from

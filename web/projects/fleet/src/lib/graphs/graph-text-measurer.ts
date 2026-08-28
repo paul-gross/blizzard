@@ -9,7 +9,7 @@ import type { TextMeasurer } from './graph-layout';
  * Its own module rather than part of the component: it is the one piece of the diagram
  * that is neither template nor layout, it is the only piece a browser is *required* to
  * exercise (jsdom has no canvas backend, so the component specs stub it), and keeping it
- * here holds `graph-diagram.ts` under the `web:structural-gate` line cap.
+ * here holds `graph-diagram.ts` under the `web:lint` line cap.
  *
  * **This file and `graph-diagram.ts`'s `styles` must change together.** Every font
  * string and tracking value below mirrors a `.node-name` / `.node-badge` / `.node-meta` /

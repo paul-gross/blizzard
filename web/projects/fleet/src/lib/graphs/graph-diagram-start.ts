@@ -4,7 +4,7 @@ import type { LaidOutStart } from './graph-layout';
 
 /**
  * The green START circle and its connector arrow into the entry node — split out of
- * `graph-diagram.ts` (issue #157's 400-line `web:structural-gate` cap) once the start
+ * `graph-diagram.ts` (issue #157's 400-line `web:lint` cap) once the start
  * indicator (blizzard#207, replacing the old per-node yellow entry-ring box) pushed
  * the parent over it. Mirrors `graph-diagram-node-shape.ts`: an attribute-selector
  * component (`g[fleetGraphDiagramStart]`) so it renders as a plain `<g>` inside the
