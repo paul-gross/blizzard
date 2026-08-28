@@ -3181,8 +3181,8 @@
   },
   "service/test_runner_service.py": {
    "comments": 59,
-   "docstrings": 53,
-   "total": 842
+   "docstrings": 56,
+   "total": 883
   },
   "service/test_transcript_segments_service.py": {
    "comments": 3,
