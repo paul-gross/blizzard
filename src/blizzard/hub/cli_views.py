@@ -132,6 +132,15 @@ class GraphSyncListing(Listing):
         return f"{row['name']}: {row['status']}{graph_id}{detail}"
 
 
+class ScopeListing(Listing):
+    empty = "no scopes yet"
+
+    def line(self, row: Any) -> str:
+        marker = "retired" if row["retired"] else "enabled"
+        description = f"  {row['description']}" if row.get("description") else ""
+        return f"{row['slug']}  {marker}{description}"
+
+
 class QueueListing(Listing):
     empty = "queue is empty"
 
@@ -223,6 +232,13 @@ class WorkItemListing(Listing):
         return f"{label}: {row.get('title') or '(no title)'}"
 
 
+class RoutineListing(Listing):
+    empty = "no routines yet"
+
+    def line(self, row: Any) -> str:
+        return f"{row['routine_id']}  name={row['name']}  graph={row['graph_name']}  scope={row['default_scope_slug']}"
+
+
 @dataclass(frozen=True)
 class ChunkDetail:
     body: dict[str, Any]
@@ -265,6 +281,18 @@ class MigrationIntent:
             yield f"{self.chunk_id} will migrate to {target} node {intent.get('node_name')} at its next transition"
         else:
             yield f"{self.chunk_id} will auto-migrate to {target} at its next transition (name-matched node)"
+
+
+@dataclass(frozen=True)
+class RoutineDetail:
+    body: dict[str, Any]
+
+    def lines(self) -> Iterator[str]:
+        body = self.body
+        yield f"{body['routine_id']}  name={body['name']}  graph={body['graph_name']}"
+        yield f"  default scope: {body['default_scope_slug']}"
+        models = ", ".join(body.get("default_model") or []) or "-"
+        yield f"  default model: {models}   default effort: {body.get('default_effort') or '-'}"
 
 
 @dataclass(frozen=True)

@@ -65,6 +65,8 @@ from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.restart import RestartService
+from blizzard.hub.domain.routines import IReadRoutineRepository, RoutineAuthoring
+from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptCaps, TranscriptIngestService
 from blizzard.hub.domain.work import IReadChunkRepository
@@ -77,7 +79,9 @@ from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEve
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -168,6 +172,18 @@ class HubServices:
     #: The operational-datasets query Protocol (blizzard#256 D1) — the durations/spend/
     #: outcomes routes' own read-only seam; no write repository backs it either.
     operational_analytics: IReadOperationalAnalytics
+    #: The scope read Protocol (blizzard#389) — the same store instance as the two
+    #: services below's writes.
+    scopes: IReadScopeRepository
+    #: Mint-on-name and edit-description over a scope (blizzard#389 D4).
+    scope_registry: ScopeRegistry
+    #: The scope retire/enable brake (blizzard#389 D3).
+    scope_lifecycle: ScopeLifecycle
+    #: The routine read Protocol (blizzard#389) — the same store instance as
+    #: ``routine_authoring``'s writes.
+    routines: IReadRoutineRepository
+    #: Create and edit a routine, minting its default scope on demand (blizzard#389 D4).
+    routine_authoring: RoutineAuthoring
 
 
 def build_services(
@@ -258,6 +274,9 @@ def build_services(
     auth_throttle = IpThrottle(clock=clock)
     materialization_edits = WorkItemEditService(items=work_item_store, chunks=chunk_store, clock=clock, delete=delete)
     graph_mint = GraphMintService(graphs=graph_store, clock=clock)
+    scope_store = ScopeStore(engine)
+    scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
+    routine_store = RoutineStore(engine)
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -319,4 +338,11 @@ def build_services(
         event_derivation_service=event_derivation_service,
         analytics_events=analytics_event_queries,
         operational_analytics=operational_analytics,
+        scopes=scope_store,
+        scope_registry=scope_registry,
+        scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
+        routines=routine_store,
+        routine_authoring=RoutineAuthoring(
+            routines=routine_store, graphs=graph_store, scope_registry=scope_registry, clock=clock
+        ),
     )

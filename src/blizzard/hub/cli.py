@@ -44,8 +44,11 @@ from blizzard.hub.cli_views import (
     OutcomesListing,
     QuestionListing,
     QueueListing,
+    RoutineDetail,
+    RoutineListing,
     RunnerDetail,
     RunnerListing,
+    ScopeListing,
     SpendListing,
     WorkItemListing,
 )
@@ -1012,6 +1015,182 @@ def _set_graph_lifecycle(cli: CliContext, graph_id: str, *, verb: str, by: str) 
     body = resp.json()
     state = "retired" if body.get("retired") else "enabled"
     cli.show_lines(body, f"graph {graph_id} is now {state}")
+
+
+# `blizzard hub scope` — issue #389
+
+
+@hub.group("scope")
+def scope_group() -> None:
+    """Operator verbs over scopes: create, list, edit, retire, re-enable."""
+
+
+@scope_group.command("create", cls=FleetCommand)
+@click.argument("slug")
+@click.option("--description", default="", help="The scope's description.")
+def scope_create(cli: CliContext, slug: str, description: str) -> None:
+    """Mint SLUG, or no-op onto the existing scope of the same slug.
+
+    A re-create never overwrites a stored description — ``scope edit`` is the verb that
+    changes it."""
+    resp = cli.post("/api/scopes", "POST /scopes", json_body={"slug": slug, "description": description})
+    body = resp.json()
+    cli.show_lines(body, f"scope {body['slug']} ready")
+
+
+@scope_group.command("list", cls=FleetCommand)
+def scope_list(cli: CliContext) -> None:
+    """List every scope, newest first — slug, retired, description."""
+    rows = cli.get("/api/scopes", "GET /scopes").json()
+    cli.show(rows, ScopeListing(rows))
+
+
+@scope_group.command("edit", cls=FleetCommand)
+@click.argument("slug")
+@click.option("--description", required=True, help="The scope's new description.")
+def scope_edit(cli: CliContext, slug: str, description: str) -> None:
+    """Change SLUG's stored description in place; never touches its slug."""
+    resp = cli.patch(
+        f"/api/scopes/{slug}",
+        "PATCH /scopes/{slug}",
+        json_body={"description": description},
+        on_status={404: f"unknown scope {slug}"},
+    )
+    body = resp.json()
+    cli.show_lines(body, f"scope {slug} updated")
+
+
+@scope_group.command("retire", cls=FleetCommand)
+@click.argument("slug")
+@click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
+def scope_retire(cli: CliContext, slug: str, by: str) -> None:
+    """Retire SLUG — a reversible brake; in-flight users of it are untouched."""
+    _set_scope_lifecycle(cli, slug, verb="retire", by=by)
+
+
+@scope_group.command("enable", cls=FleetCommand)
+@click.argument("slug")
+@click.option("--by", "by", default="operator", help="Who is re-enabling (recorded on the fact).")
+def scope_enable(cli: CliContext, slug: str, by: str) -> None:
+    """Re-enable a retired SLUG."""
+    _set_scope_lifecycle(cli, slug, verb="enable", by=by)
+
+
+def _set_scope_lifecycle(cli: CliContext, slug: str, *, verb: str, by: str) -> None:
+    resp = cli.post(
+        f"/api/scopes/{slug}/{verb}",
+        f"POST /scopes/{{slug}}/{verb}",
+        json_body={"by": by},
+        on_status={404: f"unknown scope {slug}"},
+    )
+    body = resp.json()
+    state = "retired" if body.get("retired") else "enabled"
+    cli.show_lines(body, f"scope {slug} is now {state}")
+
+
+# `blizzard hub routine` — issue #389
+
+_ROUTINE_MODEL_HELP = (
+    "The routine's default model preference. Repeatable and ORDERED — the first entry "
+    "that resolves at session mint wins."
+)
+
+
+@hub.group("routine")
+def routine_group() -> None:
+    """Operator verbs over routines: create, list, inspect, edit."""
+
+
+@routine_group.command("create", cls=FleetCommand)
+@click.argument("name")
+@click.argument("graph_name")
+@click.argument("default_scope_slug")
+@click.option("--model", "default_model", multiple=True, help=_ROUTINE_MODEL_HELP)
+@click.option("--effort", "default_effort", default=None, help="The routine's default effort.")
+def routine_create(
+    cli: CliContext,
+    name: str,
+    graph_name: str,
+    default_scope_slug: str,
+    default_model: tuple[str, ...],
+    default_effort: str | None,
+) -> None:
+    """Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.
+
+    DEFAULT_SCOPE_SLUG mints a fresh scope if unseen (D4). GRAPH_NAME must resolve to
+    an enabled graph."""
+    resp = cli.send(
+        "post",
+        "/api/routines",
+        json_body={
+            "name": name,
+            "graph_name": graph_name,
+            "default_scope_slug": default_scope_slug,
+            "default_model": list(default_model),
+            "default_effort": default_effort,
+        },
+    )
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        raise click.ClickException(f"routine rejected: {cli.detail(resp, 'validation failed')}")
+    cli.check(resp, "POST /routines")
+    body = resp.json()
+    cli.show_lines(body, f"minted routine {body['routine_id']}")
+
+
+@routine_group.command("list", cls=FleetCommand)
+def routine_list(cli: CliContext) -> None:
+    """List every routine, newest first — routine_id, name, graph, default scope."""
+    rows = cli.get("/api/routines", "GET /routines").json()
+    cli.show(rows, RoutineListing(rows))
+
+
+@routine_group.command("show", cls=FleetCommand)
+@click.argument("routine_id")
+def routine_show(cli: CliContext, routine_id: str) -> None:
+    """One routine's whole record — name, graph, default scope, model/effort defaults."""
+    resp = cli.get(
+        f"/api/routines/{routine_id}", "GET /routines/{id}", on_status={404: f"unknown routine {routine_id}"}
+    )
+    body = resp.json()
+    cli.show(body, RoutineDetail(body))
+
+
+@routine_group.command("edit", cls=FleetCommand)
+@click.argument("routine_id")
+@click.option("--graph", "graph_name", required=True, help="The routine's graph name.")
+@click.option("--scope", "default_scope_slug", required=True, help="The routine's default scope slug.")
+@click.option("--model", "default_model", multiple=True, help=_ROUTINE_MODEL_HELP)
+@click.option("--effort", "default_effort", default=None, help="The routine's default effort.")
+def routine_edit(
+    cli: CliContext,
+    routine_id: str,
+    graph_name: str,
+    default_scope_slug: str,
+    default_model: tuple[str, ...],
+    default_effort: str | None,
+) -> None:
+    """Change ROUTINE_ID's graph, default scope, and model/effort defaults; its name
+    never changes here."""
+    resp = cli.get(
+        f"/api/routines/{routine_id}", "GET /routines/{id}", on_status={404: f"unknown routine {routine_id}"}
+    )
+    name = resp.json()["name"]
+    resp = cli.send(
+        "patch",
+        f"/api/routines/{routine_id}",
+        json_body={
+            "name": name,
+            "graph_name": graph_name,
+            "default_scope_slug": default_scope_slug,
+            "default_model": list(default_model),
+            "default_effort": default_effort,
+        },
+    )
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        raise click.ClickException(f"routine edit rejected: {cli.detail(resp, 'validation failed')}")
+    cli.check(resp, "PATCH /routines/{id}", on_status={404: f"unknown routine {routine_id}"})
+    body = resp.json()
+    cli.show_lines(body, f"routine {routine_id} updated")
 
 
 # `blizzard hub queue` — issue #87, issue #104
