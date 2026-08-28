@@ -155,12 +155,49 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: build and push the hub image (linux/amd64, linux/arm64)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: packaging/docker/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.image_meta.outputs.tags }}
-          annotations: ${{ steps.image_meta.outputs.annotations }}
+      - name: build and push the hub image (linux/amd64, linux/arm64), retried on a transient GHCR error
+        env:
+          IMAGE_TAGS: ${{ steps.image_meta.outputs.tags }}
+          IMAGE_ANNOTATIONS: ${{ steps.image_meta.outputs.annotations }}
+        run: |
+          set -uo pipefail
+
+          tag_args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && tag_args+=(--tag "$tag")
+          done <<< "$IMAGE_TAGS"
+
+          annotation_args=()
+          while IFS= read -r annotation; do
+            [ -n "$annotation" ] && annotation_args+=(--annotation "$annotation")
+          done <<< "$IMAGE_ANNOTATIONS"
+
+          # A GHCR 403 secondary rate limit, 429, or 5xx is transient — the
+          # same push that fails now typically succeeds moments later, and
+          # the build's layers are already exported after the first attempt,
+          # so a retry only repeats the push. scripts/is-retryable-push-error.sh
+          # owns the classification; anything else (a genuine auth or manifest
+          # error) fails the job on the spot instead of burning the remaining
+          # attempts.
+          max_attempts=3
+          backoff_seconds=15
+          attempt=1
+          while :; do
+            log="$(mktemp)"
+            if docker buildx build \
+                --file packaging/docker/Dockerfile \
+                --platform linux/amd64,linux/arm64 \
+                --push \
+                "${tag_args[@]}" \
+                "${annotation_args[@]}" \
+                . 2>&1 | tee "$log"; then
+              exit 0
+            fi
+            if [ "$attempt" -ge "$max_attempts" ] || ! ./scripts/is-retryable-push-error.sh "$log"; then
+              exit 1
+            fi
+            echo "Transient GHCR error on attempt $attempt/$max_attempts — retrying in ${backoff_seconds}s"
+            sleep "$backoff_seconds"
+            attempt=$((attempt + 1))
+            backoff_seconds=$((backoff_seconds * 2))
+          done

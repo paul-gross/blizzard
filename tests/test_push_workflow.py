@@ -74,7 +74,7 @@ def test_dev_image_puts_a_wheel_in_dist_before_building() -> None:
     the build-push step."""
     steps = _dev_image_job()["steps"]
     fetch = _step_index(steps, lambda s: "download-artifact" in str(s.get("uses", "")))
-    build = _step_index(steps, lambda s: "build-push-action" in str(s.get("uses", "")))
+    build = _step_index(steps, lambda s: "docker buildx build" in str(s.get("run", "")))
     assert fetch < build, "the wheel must be staged before the image build consumes it"
     assert steps[fetch].get("with", {}).get("path") == "dist"
 
@@ -93,13 +93,33 @@ def test_derived_tags_include_edge_and_a_sha_tag_referencing_github_sha() -> Non
     assert "sha-${GITHUB_SHA}" in run or "sha-$GITHUB_SHA" in run
 
 
-def test_build_push_step_consumes_the_derived_tags_and_targets_both_platforms() -> None:
+def _build_push_step() -> dict:
     steps = _dev_image_job()["steps"]
-    build_push = steps[_step_index(steps, lambda s: "build-push-action" in str(s.get("uses", "")))]
-    with_ = build_push.get("with", {})
-    assert with_.get("push") is True
-    tags_input = str(with_.get("tags", ""))
-    assert "image_meta" in tags_input, "the build-push step must consume the derived tag list, not a literal"
-    platforms = str(with_.get("platforms", ""))
-    assert "linux/amd64" in platforms
-    assert "linux/arm64" in platforms
+    return steps[_step_index(steps, lambda s: "docker buildx build" in str(s.get("run", "")))]
+
+
+def test_build_push_step_consumes_the_derived_tags_and_targets_both_platforms() -> None:
+    build_push = _build_push_step()
+    env = build_push.get("env", {})
+    assert "image_meta" in str(env.get("IMAGE_TAGS", "")), (
+        "the build-push step must consume the derived tag list, not a literal"
+    )
+    assert "image_meta" in str(env.get("IMAGE_ANNOTATIONS", ""))
+    run = str(build_push.get("run", ""))
+    assert "--push" in run
+    assert "linux/amd64" in run
+    assert "linux/arm64" in run
+
+
+def test_build_push_step_retries_a_transient_ghcr_error_before_failing() -> None:
+    """A 403 secondary rate limit, 429, or 5xx must not fail the job on the first
+    attempt — the step retries with a backoff, classifying each failure with
+    scripts/is-retryable-push-error.sh so a non-retryable error (a genuine auth
+    or manifest error) still fails on the spot."""
+    run = str(_build_push_step().get("run", ""))
+    assert "is-retryable-push-error.sh" in run
+    assert "sleep" in run
+    max_attempts = next(
+        int(line.split("=", 1)[1]) for line in run.splitlines() if line.strip().startswith("max_attempts=")
+    )
+    assert max_attempts >= 3, "at least two retries (three total attempts) are required"
