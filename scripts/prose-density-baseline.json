@@ -517,13 +517,13 @@
   },
   "blizzard_mock/mock_hub/api/control.py": {
    "comments": 0,
-   "docstrings": 9,
-   "total": 94
+   "docstrings": 12,
+   "total": 106
   },
   "blizzard_mock/mock_hub/api/deps.py": {
    "comments": 3,
-   "docstrings": 27,
-   "total": 178
+   "docstrings": 30,
+   "total": 186
   },
   "blizzard_mock/mock_hub/api/middleware.py": {
    "comments": 6,
@@ -568,12 +568,12 @@
   "blizzard_mock/mock_hub/domain/models.py": {
    "comments": 25,
    "docstrings": 27,
-   "total": 214
+   "total": 215
   },
   "blizzard_mock/mock_hub/domain/service.py": {
    "comments": 41,
-   "docstrings": 80,
-   "total": 748
+   "docstrings": 85,
+   "total": 759
   },
   "blizzard_mock/mock_hub/domain/state.py": {
    "comments": 6,
@@ -1145,7 +1145,7 @@
   "blizzard/hub/cli_views.py": {
    "comments": 4,
    "docstrings": 8,
-   "total": 310
+   "total": 327
   },
   "blizzard/hub/composition.py": {
    "comments": 41,
@@ -1303,9 +1303,9 @@
    "total": 67
   },
   "blizzard/hub/domain/graph.py": {
-   "comments": 46,
+   "comments": 48,
    "docstrings": 109,
-   "total": 749
+   "total": 761
   },
   "blizzard/hub/domain/graph_authoring.py": {
    "comments": 4,
@@ -3111,8 +3111,8 @@
   },
   "service/support.py": {
    "comments": 8,
-   "docstrings": 41,
-   "total": 378
+   "docstrings": 42,
+   "total": 386
   },
   "service/test_analytics_events_service.py": {
    "comments": 3,
@@ -3181,8 +3181,8 @@
   },
   "service/test_runner_service.py": {
    "comments": 59,
-   "docstrings": 51,
-   "total": 774
+   "docstrings": 53,
+   "total": 842
   },
   "service/test_transcript_segments_service.py": {
    "comments": 3,
@@ -3782,7 +3782,7 @@
   "test_graph_sessions.py": {
    "comments": 23,
    "docstrings": 8,
-   "total": 316
+   "total": 352
   },
   "test_graph_store_produces.py": {
    "comments": 0,
@@ -3832,7 +3832,7 @@
   "test_hub_cli_graph.py": {
    "comments": 1,
    "docstrings": 17,
-   "total": 400
+   "total": 429
   },
   "test_hub_cli_item.py": {
    "comments": 7,
@@ -3953,6 +3953,11 @@
    "comments": 20,
    "docstrings": 79,
    "total": 873
+  },
+  "test_is_retryable_push_error.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "total": 46
   },
   "test_land_common.py": {
    "comments": 18,
@@ -4137,7 +4142,7 @@
   "test_push_workflow.py": {
    "comments": 0,
    "docstrings": 15,
-   "total": 105
+   "total": 121
   },
   "test_questions_api.py": {
    "comments": 5,

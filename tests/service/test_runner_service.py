@@ -48,6 +48,7 @@ from tests.service.support import (
     mint_fixture,
     mock_hub,
     mock_hub_chunk_spec,
+    mock_hub_escalating_chunk_spec,
     poll_until,
     require_mock_fleet,
     require_winter_source,
@@ -242,6 +243,73 @@ def test_stale_envelope_is_tolerated_and_the_chunk_still_lands(tmp_path: Path) -
         assert hub.post("/_levers/stale_envelope", json={"chunk_id": chunk_id, "remaining": 1}).status_code == 200
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land despite a stale envelope (status {_status(hub, chunk_id)!r})"
+
+
+def _active_lease_chunk_ids(config: RunnerConfig) -> list[str]:
+    engine = create_engine_from_url(config.db_url)
+    try:
+        return [lease.chunk_id for lease in SqlAlchemyRunnerStore(engine).list_active_leases()]
+    finally:
+        engine.dispose()
+
+
+def _open_escalation_chunk_ids(config: RunnerConfig) -> list[str]:
+    engine = create_engine_from_url(config.db_url)
+    try:
+        return [escalation.chunk_id for escalation in SqlAlchemyRunnerStore(engine).open_escalations()]
+    finally:
+        engine.dispose()
+
+
+def test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped(tmp_path: Path) -> None:
+    """Issue #118's backstop, driven over a real hub response rather than ``FakeHub``."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        chunk_id = _seed(hub)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+
+        _drive(config, fenced, ticks=1)
+        assert chunk_id in _active_lease_chunk_ids(config), "lease never went active"
+
+        assert hub.post("/_seed/stop", json={"chunk_id": chunk_id}).status_code == 200
+
+        abandoned = poll_until(
+            lambda: _tick_then(config, fenced, lambda: chunk_id not in _active_lease_chunk_ids(config)),
+            timeout=60.0,
+        )
+        assert abandoned, "lease still active after the hub reported the chunk stopped"
+
+
+def test_pull_closes_the_local_escalation_when_the_hub_reports_the_chunk_stopped(tmp_path: Path) -> None:
+    """Issues #292/#293's sweep, driven over a real hub response."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        resp = hub.post("/_seed/chunk", json=mock_hub_escalating_chunk_spec(_WORK_REF_URL))
+        assert resp.status_code == 201, resp.text
+        chunk_id = resp.json()["chunk_id"]
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+
+        escalated = poll_until(
+            lambda: _tick_then(config, fenced, lambda: chunk_id in _open_escalation_chunk_ids(config)),
+            timeout=60.0,
+        )
+        assert escalated, f"chunk never escalated (hub status {_status(hub, chunk_id)!r})"
+
+        assert hub.post("/_seed/stop", json={"chunk_id": chunk_id}).status_code == 200
+
+        closed = poll_until(
+            lambda: _tick_then(config, fenced, lambda: chunk_id not in _open_escalation_chunk_ids(config)),
+            timeout=60.0,
+        )
+        assert closed, "escalation still open after the hub reported the chunk stopped"
 
 
 # Transcript provenance — the panel's read proven at fleet tier (issue #29).
