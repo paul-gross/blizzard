@@ -24,6 +24,7 @@ import httpx
 import pytest
 import uvicorn
 from fastapi import FastAPI
+from sqlalchemy import select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
@@ -32,6 +33,7 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
+from blizzard.runner.store.schema import escalation_closures
 from tests.e2e.test_acceptance_loop import (
     REPO,
     REPO_NAME,
@@ -48,6 +50,7 @@ from tests.service.support import (
     mint_fixture,
     mock_hub,
     mock_hub_chunk_spec,
+    mock_hub_escalating_chunk_spec,
     poll_until,
     require_mock_fleet,
     require_winter_source,
@@ -242,6 +245,112 @@ def test_stale_envelope_is_tolerated_and_the_chunk_still_lands(tmp_path: Path) -
         assert hub.post("/_levers/stale_envelope", json={"chunk_id": chunk_id, "remaining": 1}).status_code == 200
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land despite a stale envelope (status {_status(hub, chunk_id)!r})"
+
+
+def _open_escalation_chunk_ids(config: RunnerConfig) -> list[str]:
+    engine = create_engine_from_url(config.db_url)
+    try:
+        return [escalation.chunk_id for escalation in SqlAlchemyRunnerStore(engine).open_escalations()]
+    finally:
+        engine.dispose()
+
+
+def _lease_id_for_chunk(config: RunnerConfig, chunk_id: str) -> str | None:
+    engine = create_engine_from_url(config.db_url)
+    try:
+        for lease in SqlAlchemyRunnerStore(engine).list_active_leases():
+            if lease.chunk_id == chunk_id:
+                return lease.lease_id
+        return None
+    finally:
+        engine.dispose()
+
+
+def _lease_closure_reason(config: RunnerConfig, lease_id: str) -> str | None:
+    """Discriminates PULL's abandon (``released``) from an ordinary completion racing it to
+    ``done`` (``transitioned``) — both empty the same active-leases row."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        for closed in SqlAlchemyRunnerStore(engine).list_closed_leases(50):
+            if closed.lease.lease_id == lease_id:
+                return closed.reason
+        return None
+    finally:
+        engine.dispose()
+
+
+def _escalation_closure_reason(config: RunnerConfig, chunk_id: str) -> str | None:
+    """Distinct from mere non-openness, which a re-adopted lease also causes with no row here."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                select(escalation_closures.c.reason)
+                .where(escalation_closures.c.chunk_id == chunk_id)
+                .order_by(escalation_closures.c.closed_at.desc())
+                .limit(1)
+            ).first()
+        return None if row is None else str(row[0])
+    finally:
+        engine.dispose()
+
+
+def test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped(tmp_path: Path) -> None:
+    """Issue #118's backstop, driven over a real hub response rather than ``FakeHub``."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        chunk_id = _seed(hub)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+
+        _drive(config, fenced, ticks=1)
+        lease_id = _lease_id_for_chunk(config, chunk_id)
+        assert lease_id is not None, "lease never went active"
+
+        assert hub.post("/_seed/stop", json={"chunk_id": chunk_id}).status_code == 200
+
+        closed = poll_until(
+            lambda: _tick_then(config, fenced, lambda: _lease_closure_reason(config, lease_id) is not None),
+            timeout=60.0,
+        )
+        assert closed, "lease never closed after the hub reported the chunk stopped"
+        assert _lease_closure_reason(config, lease_id) == "released", (
+            "lease closed by ordinary completion racing the stop, not PULL's own abandon"
+        )
+
+
+def test_pull_closes_the_local_escalation_when_the_hub_reports_the_chunk_stopped(tmp_path: Path) -> None:
+    """Issues #292/#293's sweep, driven over a real hub response."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        resp = hub.post("/_seed/chunk", json=mock_hub_escalating_chunk_spec(_WORK_REF_URL))
+        assert resp.status_code == 201, resp.text
+        chunk_id = resp.json()["chunk_id"]
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+
+        escalated = poll_until(
+            lambda: _tick_then(config, fenced, lambda: chunk_id in _open_escalation_chunk_ids(config)),
+            timeout=60.0,
+        )
+        assert escalated, f"chunk never escalated (hub status {_status(hub, chunk_id)!r})"
+
+        assert hub.post("/_seed/stop", json={"chunk_id": chunk_id}).status_code == 200
+
+        closed = poll_until(
+            lambda: _tick_then(config, fenced, lambda: _escalation_closure_reason(config, chunk_id) is not None),
+            timeout=60.0,
+        )
+        assert closed, "escalation closure never recorded after the hub reported the chunk stopped"
+        assert _escalation_closure_reason(config, chunk_id) == "stopped", (
+            "escalation cleared by something other than PULL's own stopped-chunk closure"
+        )
 
 
 # Transcript provenance — the panel's read proven at fleet tier (issue #29).

@@ -226,6 +226,14 @@ def mock_hub_chunk_spec(work_ref: str) -> dict:
     }
 
 
+def mock_hub_escalating_chunk_spec(work_ref: str) -> dict:
+    """A crashing, no-retry judgement — the runner escalates on the first attempt."""
+    spec = mock_hub_chunk_spec(work_ref)
+    spec["nodes"]["build"]["judgement_prompt"] = "crash()\n"
+    spec["nodes"]["build"]["retries_max"] = 0
+    return spec
+
+
 @contextlib.contextmanager
 def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterator[httpx.Client]:
     """Run ``blizzard-mock-hub`` as a real subprocess and yield a client to it."""
