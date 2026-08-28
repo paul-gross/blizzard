@@ -1,12 +1,9 @@
 """Routine domain model — an operator-authored pointer at a graph, a default scope, and
 run-defaults the hub hands back unresolved (issue #389).
 
-A routine's ``routine_id`` is a surrogate key its ``name`` — a lineage every run,
-finding, and proposal will carry — survives independently of (D1); the row is
-otherwise mutable and edited in place (D3). :class:`RoutineAuthoring` holds the scope
-registry so naming a default scope mints it through the same path an explicit
-``scope create`` uses (D4), and validates that a named graph resolves to an enabled
-mint (D2) before either create or edit lands."""
+``routine_id`` is a surrogate key: ``name``, the run/finding/proposal lineage, survives
+independently of it (D1). :class:`RoutineAuthoring` mints an unseen default scope (D4)
+and requires the named graph resolve to an enabled mint (D2)."""
 
 from __future__ import annotations
 

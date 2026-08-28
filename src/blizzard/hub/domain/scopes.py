@@ -1,10 +1,9 @@
 """Scope domain model — an operator-authored slug the hub stores and hands back, never
 resolves (issue #389).
 
-A scope is minted the moment its slug is first named — by an explicit ``scope create``
-or by a routine naming an unseen default scope — so :class:`ScopeRegistry.ensure` is the
-one mint path both namers share (D4). Retire/enable is a reversible brake, append-only
-and newest-fact-wins, exactly like a graph's (``bzh:facts-not-status``)."""
+Minted the moment its slug is first named, by ``scope create`` or a routine naming an
+unseen default (D4, :class:`ScopeRegistry.ensure`). Retire/enable is a reversible,
+append-only, newest-fact-wins brake, exactly like a graph's (``bzh:facts-not-status``)."""
 
 from __future__ import annotations
 

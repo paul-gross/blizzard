@@ -1,10 +1,9 @@
 """SQLAlchemy adapter for the routine repository seam (package-private, issue #389).
 
-All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Uniqueness of
-``name`` is enforced by :class:`~blizzard.hub.domain.routines.RoutineAuthoring` before
-:meth:`RoutineStore.create` is called; the ``uq_routines_name`` constraint is a backstop,
-not a caught-and-translated refusal (D9 — the one caught library exception across these
-stores is D5's idempotent CAS, which this is not)."""
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Name uniqueness
+is enforced by :class:`~blizzard.hub.domain.routines.RoutineAuthoring` before ``create``
+runs; ``uq_routines_name`` is a backstop only — D9's one caught library exception is D5's
+idempotent CAS, which this is not."""
 
 from __future__ import annotations
 
