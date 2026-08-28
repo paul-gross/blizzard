@@ -1,17 +1,9 @@
 import dagre from '@dagrejs/dagre';
 
 import type { GraphView } from '../api/hub';
-import {
-  LABEL_HEIGHT,
-  META_FIRST_LINE_Y,
-  META_LINE_HEIGHT,
-  type TextKind,
-  type TextMeasurer,
-  labelBoxWidth,
-  nodeBox,
-} from './graph-box-sizing';
+import { LABEL_HEIGHT, type TextMeasurer, labelBoxWidth, nodeBox } from './graph-box-sizing';
 
-export { META_FIRST_LINE_Y, META_LINE_HEIGHT, type TextKind, type TextMeasurer };
+export { type TextMeasurer };
 
 /**
  * The pure DAG-layout core for the graph diagram (`bzh:generated-client` — this

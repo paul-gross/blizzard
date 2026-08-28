@@ -56,7 +56,7 @@ describe('ChunkGeneralTab', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('fleet-chunk-detail-issue-pane')).not.toBeNull();
+    expect(el.querySelector('[data-testid="issue-loading"]')).not.toBeNull();
   });
 
   it('re-emits editGraph from the facts section when canControl opts in', async () => {
@@ -82,6 +82,21 @@ describe('ChunkGeneralTab', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
+  });
+
+  it('forwards graphLinkBase to the facts section, defaulting to no link', async () => {
+    const unlinked = TestBed.createComponent(ChunkGeneralTab);
+    unlinked.componentRef.setInput('detail', DETAIL);
+    await unlinked.whenStable();
+    const unlinkedValue = (unlinked.nativeElement as HTMLElement).querySelector('[data-testid="graph-value"]');
+    expect(unlinkedValue?.tagName).toBe('SPAN');
+
+    const linked = TestBed.createComponent(ChunkGeneralTab);
+    linked.componentRef.setInput('detail', DETAIL);
+    linked.componentRef.setInput('graphLinkBase', ['/graphs']);
+    await linked.whenStable();
+    const linkedValue = (linked.nativeElement as HTMLElement).querySelector('[data-testid="graph-value"]');
+    expect(linkedValue?.tagName).toBe('A');
   });
 
   it('re-emits answerQuestion from the asks section when canAnswer opts in', async () => {
@@ -115,6 +130,38 @@ describe('ChunkGeneralTab', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
 
     expect(emitted).toEqual({ questionId: 'qn_01', answer: 'rest', chunkId: DETAIL.chunk_id });
+  });
+
+  it('re-emits resolveDecision from the asks section when canResolve opts in', async () => {
+    const waiting: ChunkDetail = {
+      ...DETAIL,
+      status: 'waiting_on_human',
+      decision: {
+        decision_id: 'de_01',
+        chunk_id: DETAIL.chunk_id,
+        node_id: 'nd_gate',
+        node_name: 'approve-gate',
+        epoch: 1,
+        submitted_at: '2026-07-13T00:00:01Z',
+        choices: [
+          { name: 'approve', description: 'Ship it.' },
+          { name: 'reject', description: 'Send it back.' },
+        ],
+        transitioned: false,
+      },
+    };
+    const fixture = TestBed.createComponent(ChunkGeneralTab);
+    fixture.componentRef.setInput('detail', waiting);
+    fixture.componentRef.setInput('canResolve', true);
+    let emitted: { decisionId: string; choice: string; chunkId: string; struck: readonly string[] } | undefined;
+    fixture.componentInstance.resolveDecision.subscribe((event) => (emitted = event));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const buttons = el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]');
+    buttons[1].click(); // reject
+
+    expect(emitted).toEqual({ decisionId: 'de_01', choice: 'reject', chunkId: DETAIL.chunk_id, struck: [] });
   });
 
   it('emits pickStep when a row in the node-history summary is activated', async () => {

@@ -17,8 +17,8 @@ export {
   type LaidOutStart,
   type EdgeKind,
   type TextMeasurer,
-  type TextKind,
 } from './graph-layout';
+export { type TextKind } from './graph-box-sizing';
 export { injectHubGraphsQuery, injectHubGraphQuery } from './graphs.query';
 export { injectGraphLifecycleMutation, type GraphLifecycleVars } from './graph-lifecycle.mutations';
 export type { GraphSummaryView, GraphView, GraphNodeView, GraphEdgeView, GraphChoiceView } from '../api/hub';

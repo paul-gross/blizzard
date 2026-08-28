@@ -38,10 +38,15 @@ module.exports = defineConfig([
         "error",
         { template: 0, styles: 0, animations: 0 },
       ],
-      // The ~400-line cap (blizzard-context bzh:frontend-container-presentational),
-      // formerly `web/scripts/structural-gate.js`'s own walk. Raw counting: neither
-      // blank lines nor comments are skipped, so it preserves the prior check's
-      // meaning exactly.
+      // The ~400-line cap, moved here from `web/scripts/structural-gate.js`'s own walk.
+      // No architecture doc declares the number itself — in practice the files it has
+      // caught were also blizzard-context bzh:frontend-container-presentational splits
+      // (an oversized component is often evidence of merged container/presentational
+      // concerns), but the cap now reaches every `.ts` file this config sees, not only
+      // components. Not a byte-for-byte port either: eslint's own `max-lines` counts
+      // real lines the way `wc -l` does, one lower than structural-gate's
+      // `source.split('\n').length` for any file ending in the usual trailing newline
+      // — a file at exactly 400 real lines that used to fail now passes.
       "max-lines": ["error", { max: 400, skipBlankLines: false, skipComments: false }],
     },
   },

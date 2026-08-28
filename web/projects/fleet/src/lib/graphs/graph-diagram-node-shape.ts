@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { META_FIRST_LINE_Y, META_LINE_HEIGHT, type LaidOutNode } from './graph-layout';
+import { META_FIRST_LINE_Y, META_LINE_HEIGHT } from './graph-box-sizing';
+import type { LaidOutNode } from './graph-layout';
 
 /** The node box's corner radius — square on the left (the color stripe's edge),
  * rounded on the right, so the selection/hover outline traced over the same path
