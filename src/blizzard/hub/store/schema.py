@@ -157,6 +157,50 @@ graph_policy_facts = Table(
     Column("set_by", String, nullable=False),
 )
 
+# --- Scopes (an operator-authored slug the hub stores and hands back, issue #389) ---
+# The slug is the primary key (D1): mint-on-name means a different slug is a different
+# bucket by design, so it is already the stable, immutable, groupable key.
+
+scopes = Table(
+    "scopes",
+    metadata,
+    Column("slug", String, primary_key=True),
+    Column("description", Text, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+)
+
+# The reversible retire/enable brake over one scope slug (issue #389) — the
+# graph_lifecycle_facts shape: append-only, newest-fact-wins (D3).
+scope_lifecycle_facts = Table(
+    "scope_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
+# --- Routines (an operator-authored graph + default-scope + run-defaults pointer,
+# issue #389) — a mutable entity row: name/graph/default scope/model/effort edit in
+# place (D3), so `routine_id` is a surrogate key the name's own lineage survives under.
+
+routines = Table(
+    "routines",
+    metadata,
+    Column("routine_id", String, primary_key=True),  # rtn_<ulid>
+    Column("name", String, nullable=False),
+    Column("graph_name", String, nullable=False),  # a graph *name*, not a graph_id (D2)
+    Column("default_scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    # The routine's default model preference (JSON list[str]) and effort — the
+    # chunks.default_model/default_effort shape (issue #144). Both nullable and minted
+    # empty: an empty preference means express none.
+    Column("default_model", Text, nullable=True),
+    Column("default_effort", String, nullable=True),
+    Column("created_at", UtcDateTime, nullable=False),
+    UniqueConstraint("name", name="uq_routines_name"),
+)
+
 # --- Chunks and their work refs (chunk.minted) ------------------------------
 
 chunks = Table(

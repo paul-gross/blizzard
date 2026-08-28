@@ -31,12 +31,13 @@ under them both daemons survive a crash or reboot with nothing lost and nothing 
 
 ### Configuring what workers do
 
-| File                                                         | When to read                                                                                                                                         |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`deployment/work-sources.md`](./deployment/work-sources.md) | You are declaring the `[[work_source]]` bindings a chunk's work item is read through: credentials, label projection, delivery closure, ingest tokens |
-| [`deployment/worker-spawn.md`](./deployment/worker-spawn.md) | You are deciding what a worker process is handed: forwarded environment vars, model and effort tiers, session stickiness, and the spawn preamble     |
-| [`deployment/artifacts.md`](./deployment/artifacts.md)       | You are authoring a graph's `produces:` or `artifacts:` keys, or flipping `produces_mode` to `enforce`                                               |
-| [`deployment/transcripts.md`](./deployment/transcripts.md)   | You are turning on either transcript lane — the context warn lane, or shipping session content to the hub; both off by default                       |
+| File                                                                       | When to read                                                                                                                                           |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`deployment/work-sources.md`](./deployment/work-sources.md)               | You are declaring the `[[work_source]]` bindings a chunk's work item is read through: credentials, label projection, delivery closure, ingest tokens |
+| [`deployment/worker-spawn.md`](./deployment/worker-spawn.md)               | You are deciding what a worker process is handed: forwarded environment vars, model and effort tiers, session stickiness, and the spawn preamble     |
+| [`deployment/artifacts.md`](./deployment/artifacts.md)                     | You are authoring a graph's `produces:` or `artifacts:` keys, or flipping `produces_mode` to `enforce`                                               |
+| [`deployment/transcripts.md`](./deployment/transcripts.md)                 | You are turning on either transcript lane — the context warn lane, or shipping session content to the hub; both off by default                       |
+| [`deployment/routines-and-scopes.md`](./deployment/routines-and-scopes.md) | You are authoring a routine's graph and run defaults, or a scope's slug and description                                                              |
 
 ### Operating a running fleet
 

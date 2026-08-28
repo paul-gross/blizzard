@@ -39,7 +39,9 @@ GATE_RESOLVE = Permission("gate:resolve")
 QUEUE_REORDER = Permission("queue:reorder")
 #: Pause/resume/enroll a runner.
 RUNNER_PAUSE = Permission("runner:pause")
-#: Mint, edit (retire/enable), or otherwise author a workflow graph.
+#: Mint, edit (retire/enable), or otherwise author a workflow graph. Reused by scope and
+#: routine authoring (blizzard#389) — a routine is a pointer at a graph plus its run
+#: defaults, and a scope's retire/enable is the same brake on the same tier.
 GRAPH_EDIT = Permission("graph:edit")
 #: Administer users and their roles (#94). Held by ``admin``+ (pinned by
 #: tests/test_auth_core.py::test_user_manage_is_admin_and_above).

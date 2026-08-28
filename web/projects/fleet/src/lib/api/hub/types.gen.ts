@@ -2908,6 +2908,97 @@ export type RouteView = {
 };
 
 /**
+ * RoutineCreateRequest
+ */
+export type RoutineCreateRequest = {
+    /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
+    /**
+     * Default Scope Slug
+     */
+    default_scope_slug: string;
+    /**
+     * Graph Name
+     */
+    graph_name: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * RoutineEditRequest
+ *
+ * ``name`` is required and must equal the routine's current one (D7) — the request
+ * restates it so a caller cannot silently target the wrong routine's edit.
+ */
+export type RoutineEditRequest = {
+    /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
+    /**
+     * Default Scope Slug
+     */
+    default_scope_slug: string;
+    /**
+     * Graph Name
+     */
+    graph_name: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * RoutineView
+ *
+ * A routine as served by the create/list/read/edit routes.
+ */
+export type RoutineView = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
+    /**
+     * Default Scope Slug
+     */
+    default_scope_slug: string;
+    /**
+     * Graph Name
+     */
+    graph_name: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Routine Id
+     */
+    routine_id: string;
+};
+
+/**
  * RunnerEnrollmentResponse
  *
  * A freshly minted (or rotated) bearer token — issue #86a.
@@ -3119,6 +3210,70 @@ export type RunnerView = {
      * Workspace Id
      */
     workspace_id: string;
+};
+
+/**
+ * ScopeCreateRequest
+ *
+ * Mint a scope, or no-op onto the existing one of the same slug (D4).
+ */
+export type ScopeCreateRequest = {
+    /**
+     * Description
+     */
+    description?: string;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * ScopeEditRequest
+ *
+ * Change a scope's stored description in place.
+ */
+export type ScopeEditRequest = {
+    /**
+     * Description
+     */
+    description: string;
+};
+
+/**
+ * ScopeLifecycleRequest
+ *
+ * Retire or re-enable a scope — records who flipped it.
+ */
+export type ScopeLifecycleRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
+ * ScopeView
+ *
+ * A scope as served by the create/list/read/lifecycle routes.
+ */
+export type ScopeView = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Retired
+     */
+    retired?: boolean;
+    /**
+     * Slug
+     */
+    slug: string;
 };
 
 /**
@@ -6763,6 +6918,109 @@ export type ReadyApiReadyGetResponses = {
 
 export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiReadyGetResponses];
 
+export type ListRoutinesApiRoutinesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/routines';
+};
+
+export type ListRoutinesApiRoutinesGetResponses = {
+    /**
+     * Response List Routines Api Routines Get
+     *
+     * Successful Response
+     */
+    200: Array<RoutineView>;
+};
+
+export type ListRoutinesApiRoutinesGetResponse = ListRoutinesApiRoutinesGetResponses[keyof ListRoutinesApiRoutinesGetResponses];
+
+export type CreateRoutineApiRoutinesPostData = {
+    body: RoutineCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/routines';
+};
+
+export type CreateRoutineApiRoutinesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateRoutineApiRoutinesPostError = CreateRoutineApiRoutinesPostErrors[keyof CreateRoutineApiRoutinesPostErrors];
+
+export type CreateRoutineApiRoutinesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RoutineView;
+};
+
+export type CreateRoutineApiRoutinesPostResponse = CreateRoutineApiRoutinesPostResponses[keyof CreateRoutineApiRoutinesPostResponses];
+
+export type GetRoutineApiRoutinesRoutineIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+    };
+    query?: never;
+    url: '/api/routines/{routine_id}';
+};
+
+export type GetRoutineApiRoutinesRoutineIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRoutineApiRoutinesRoutineIdGetError = GetRoutineApiRoutinesRoutineIdGetErrors[keyof GetRoutineApiRoutinesRoutineIdGetErrors];
+
+export type GetRoutineApiRoutinesRoutineIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RoutineView;
+};
+
+export type GetRoutineApiRoutinesRoutineIdGetResponse = GetRoutineApiRoutinesRoutineIdGetResponses[keyof GetRoutineApiRoutinesRoutineIdGetResponses];
+
+export type EditRoutineApiRoutinesRoutineIdPatchData = {
+    body: RoutineEditRequest;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+    };
+    query?: never;
+    url: '/api/routines/{routine_id}';
+};
+
+export type EditRoutineApiRoutinesRoutineIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EditRoutineApiRoutinesRoutineIdPatchError = EditRoutineApiRoutinesRoutineIdPatchErrors[keyof EditRoutineApiRoutinesRoutineIdPatchErrors];
+
+export type EditRoutineApiRoutinesRoutineIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: RoutineView;
+};
+
+export type EditRoutineApiRoutinesRoutineIdPatchResponse = EditRoutineApiRoutinesRoutineIdPatchResponses[keyof EditRoutineApiRoutinesRoutineIdPatchResponses];
+
 export type ListRunnersApiRunnersGetData = {
     body?: never;
     path?: never;
@@ -6898,6 +7156,169 @@ export type ResumeRunnerApiRunnersRunnerIdResumePostResponses = {
 };
 
 export type ResumeRunnerApiRunnersRunnerIdResumePostResponse = ResumeRunnerApiRunnersRunnerIdResumePostResponses[keyof ResumeRunnerApiRunnersRunnerIdResumePostResponses];
+
+export type ListScopesApiScopesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/scopes';
+};
+
+export type ListScopesApiScopesGetResponses = {
+    /**
+     * Response List Scopes Api Scopes Get
+     *
+     * Successful Response
+     */
+    200: Array<ScopeView>;
+};
+
+export type ListScopesApiScopesGetResponse = ListScopesApiScopesGetResponses[keyof ListScopesApiScopesGetResponses];
+
+export type CreateScopeApiScopesPostData = {
+    body: ScopeCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/scopes';
+};
+
+export type CreateScopeApiScopesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateScopeApiScopesPostError = CreateScopeApiScopesPostErrors[keyof CreateScopeApiScopesPostErrors];
+
+export type CreateScopeApiScopesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: ScopeView;
+};
+
+export type CreateScopeApiScopesPostResponse = CreateScopeApiScopesPostResponses[keyof CreateScopeApiScopesPostResponses];
+
+export type GetScopeApiScopesSlugGetData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/scopes/{slug}';
+};
+
+export type GetScopeApiScopesSlugGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetScopeApiScopesSlugGetError = GetScopeApiScopesSlugGetErrors[keyof GetScopeApiScopesSlugGetErrors];
+
+export type GetScopeApiScopesSlugGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScopeView;
+};
+
+export type GetScopeApiScopesSlugGetResponse = GetScopeApiScopesSlugGetResponses[keyof GetScopeApiScopesSlugGetResponses];
+
+export type EditScopeApiScopesSlugPatchData = {
+    body: ScopeEditRequest;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/scopes/{slug}';
+};
+
+export type EditScopeApiScopesSlugPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EditScopeApiScopesSlugPatchError = EditScopeApiScopesSlugPatchErrors[keyof EditScopeApiScopesSlugPatchErrors];
+
+export type EditScopeApiScopesSlugPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScopeView;
+};
+
+export type EditScopeApiScopesSlugPatchResponse = EditScopeApiScopesSlugPatchResponses[keyof EditScopeApiScopesSlugPatchResponses];
+
+export type EnableScopeApiScopesSlugEnablePostData = {
+    body: ScopeLifecycleRequest;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/scopes/{slug}/enable';
+};
+
+export type EnableScopeApiScopesSlugEnablePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnableScopeApiScopesSlugEnablePostError = EnableScopeApiScopesSlugEnablePostErrors[keyof EnableScopeApiScopesSlugEnablePostErrors];
+
+export type EnableScopeApiScopesSlugEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ScopeView;
+};
+
+export type EnableScopeApiScopesSlugEnablePostResponse = EnableScopeApiScopesSlugEnablePostResponses[keyof EnableScopeApiScopesSlugEnablePostResponses];
+
+export type RetireScopeApiScopesSlugRetirePostData = {
+    body: ScopeLifecycleRequest;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/scopes/{slug}/retire';
+};
+
+export type RetireScopeApiScopesSlugRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireScopeApiScopesSlugRetirePostError = RetireScopeApiScopesSlugRetirePostErrors[keyof RetireScopeApiScopesSlugRetirePostErrors];
+
+export type RetireScopeApiScopesSlugRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ScopeView;
+};
+
+export type RetireScopeApiScopesSlugRetirePostResponse = RetireScopeApiScopesSlugRetirePostResponses[keyof RetireScopeApiScopesSlugRetirePostResponses];
 
 export type FleetSpendApiSpendGetData = {
     body?: never;

@@ -4437,6 +4437,144 @@
         "title": "RouteView",
         "type": "object"
       },
+      "RoutineCreateRequest": {
+        "properties": {
+          "default_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Effort"
+          },
+          "default_model": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Model",
+            "type": "array"
+          },
+          "default_scope_slug": {
+            "title": "Default Scope Slug",
+            "type": "string"
+          },
+          "graph_name": {
+            "title": "Graph Name",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "graph_name",
+          "default_scope_slug"
+        ],
+        "title": "RoutineCreateRequest",
+        "type": "object"
+      },
+      "RoutineEditRequest": {
+        "description": "``name`` is required and must equal the routine's current one (D7) \u2014 the request\nrestates it so a caller cannot silently target the wrong routine's edit.",
+        "properties": {
+          "default_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Effort"
+          },
+          "default_model": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Model",
+            "type": "array"
+          },
+          "default_scope_slug": {
+            "title": "Default Scope Slug",
+            "type": "string"
+          },
+          "graph_name": {
+            "title": "Graph Name",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "graph_name",
+          "default_scope_slug"
+        ],
+        "title": "RoutineEditRequest",
+        "type": "object"
+      },
+      "RoutineView": {
+        "description": "A routine as served by the create/list/read/edit routes.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "default_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Effort"
+          },
+          "default_model": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Model",
+            "type": "array"
+          },
+          "default_scope_slug": {
+            "title": "Default Scope Slug",
+            "type": "string"
+          },
+          "graph_name": {
+            "title": "Graph Name",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "routine_id": {
+            "title": "Routine Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "routine_id",
+          "name",
+          "graph_name",
+          "default_scope_slug",
+          "created_at"
+        ],
+        "title": "RoutineView",
+        "type": "object"
+      },
       "RunnerEnrollmentResponse": {
         "description": "A freshly minted (or rotated) bearer token \u2014 issue #86a.\n\n``token`` is the plaintext, visible only here \u2014 only its sha256 hash is kept. A\nre-enroll rotates: the old token stops resolving the moment this response lands.",
         "properties": {
@@ -4726,6 +4864,80 @@
           "hub_paused"
         ],
         "title": "RunnerView",
+        "type": "object"
+      },
+      "ScopeCreateRequest": {
+        "description": "Mint a scope, or no-op onto the existing one of the same slug (D4).",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "ScopeCreateRequest",
+        "type": "object"
+      },
+      "ScopeEditRequest": {
+        "description": "Change a scope's stored description in place.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ScopeEditRequest",
+        "type": "object"
+      },
+      "ScopeLifecycleRequest": {
+        "description": "Retire or re-enable a scope \u2014 records who flipped it.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "ScopeLifecycleRequest",
+        "type": "object"
+      },
+      "ScopeView": {
+        "description": "A scope as served by the create/list/read/lifecycle routes.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "description",
+          "created_at"
+        ],
+        "title": "ScopeView",
         "type": "object"
       },
       "SessionMode": {
@@ -11318,6 +11530,166 @@
         ]
       }
     },
+    "/api/routines": {
+      "get": {
+        "description": "Every routine, newest first.",
+        "operationId": "list_routines_api_routines_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoutineView"
+                  },
+                  "title": "Response List Routines Api Routines Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Routines",
+        "tags": [
+          "routines"
+        ]
+      },
+      "post": {
+        "description": "Mint a routine; 422 on a duplicate name, a malformed default scope slug, or a\ngraph name with no enabled mint.",
+        "operationId": "create_routine_api_routines_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutineCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/routines/{routine_id}": {
+      "get": {
+        "description": "One routine's whole record; 404 on an unknown id.",
+        "operationId": "get_routine_api_routines__routine_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Routine",
+        "tags": [
+          "routines"
+        ]
+      },
+      "patch": {
+        "description": "Change the graph, the default scope, and the model/effort defaults; 404 on an\nunknown id, 422 on a name change, a malformed default scope slug, or a graph name\nwith no enabled mint.",
+        "operationId": "edit_routine_api_routines__routine_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutineEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
     "/api/runners": {
       "get": {
         "description": "The fleet registry \u2014 every runner with derived liveness + paused state.",
@@ -11529,6 +11901,272 @@
         "summary": "Resume Runner",
         "tags": [
           "runners"
+        ]
+      }
+    },
+    "/api/scopes": {
+      "get": {
+        "description": "Every scope, newest first, each marked retired or not.",
+        "operationId": "list_scopes_api_scopes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScopeView"
+                  },
+                  "title": "Response List Scopes Api Scopes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Scopes",
+        "tags": [
+          "scopes"
+        ]
+      },
+      "post": {
+        "description": "Mint a scope, or no-op onto the existing one of the same slug (D4); 422 on a\nmalformed slug, naming the rejected value.",
+        "operationId": "create_scope_api_scopes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopeCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Scope",
+        "tags": [
+          "scopes"
+        ]
+      }
+    },
+    "/api/scopes/{slug}": {
+      "get": {
+        "description": "One scope; 404 on an unknown slug.",
+        "operationId": "get_scope_api_scopes__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Scope",
+        "tags": [
+          "scopes"
+        ]
+      },
+      "patch": {
+        "description": "Change a scope's description in place; 422 on a malformed slug naming the\nrejected value, 404 on a well-formed but unknown one.",
+        "operationId": "edit_scope_api_scopes__slug__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopeEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Scope",
+        "tags": [
+          "scopes"
+        ]
+      }
+    },
+    "/api/scopes/{slug}/enable": {
+      "post": {
+        "description": "Re-enable a retired scope (D3); idempotent, 404 on an unknown slug.",
+        "operationId": "enable_scope_api_scopes__slug__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopeLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Scope",
+        "tags": [
+          "scopes"
+        ]
+      }
+    },
+    "/api/scopes/{slug}/retire": {
+      "post": {
+        "description": "Retire a scope \u2014 a reversible brake (D3); 404 on an unknown slug.",
+        "operationId": "retire_scope_api_scopes__slug__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopeLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Scope",
+        "tags": [
+          "scopes"
         ]
       }
     },

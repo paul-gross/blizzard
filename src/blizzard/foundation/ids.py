@@ -38,6 +38,7 @@ USER_PREFIX = "usr"  # a hub-local user (issue #91)
 SEGMENT_PREFIX = "seg"  # a transcript segment, the hub's idempotence key (issue #246)
 WORK_ITEM_PREFIX = "wi"  # a hub-owned work item (issue #357)
 PROPOSAL_PREFIX = "wip"  # a proposed work item riding a node-step's completion
+ROUTINE_PREFIX = "rtn"  # a routine (issue #389) — a scope has no prefix; its slug is its id
 
 
 @dataclass(frozen=True)
