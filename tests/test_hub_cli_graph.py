@@ -142,6 +142,37 @@ def test_graph_show_prints_the_reified_graph(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.unit
+def test_graph_show_renders_session_pools(monkeypatch: pytest.MonkeyPatch) -> None:
+    # blizzard#351: `graph show` must let an operator confirm what a mint actually stored
+    # without reaching for `--json`.
+    body = {
+        "graph_id": "gr_1",
+        "name": "alpha",
+        "entry_node_id": "nd_1",
+        "retired": False,
+        "sessions": [
+            {
+                "name": "code",
+                "model": ["blizzard:basic"],
+                "effort": "medium",
+                "rotate": {"max_context_tokens": None, "max_transcript_bytes": None, "max_invocations": 30},
+                "compaction_window": "150000",
+            }
+        ],
+        "nodes": [{"node_id": "nd_1", "name": "build", "executor": "runner"}],
+        "edges": [],
+    }
+
+    monkeypatch.setattr(hub_cli.httpx, "get", lambda url, *, timeout: _FakeResponse(200, body))
+    result = CliRunner().invoke(hub_group, ["graph", "show", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+
+    assert result.exit_code == 0, result.output
+    assert "session code" in result.output
+    assert "compaction_window=150000" in result.output
+    assert "max_invocations=30" in result.output
+
+
+@pytest.mark.unit
 def test_graph_show_surfaces_the_baked_artifact_names_only_under_json(monkeypatch: pytest.MonkeyPatch) -> None:
     """The read-back for what a mint actually baked, and its one working form: the human
     rendering is nodes and edges, so a graph's `artifacts:` names — and the authored order

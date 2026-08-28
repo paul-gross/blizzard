@@ -915,7 +915,7 @@ def graph_list(cli: CliContext) -> None:
 @graph_group.command("show", cls=FleetCommand)
 @click.argument("graph_id")
 def graph_show(cli: CliContext, graph_id: str) -> None:
-    """One graph's full reified definition — nodes and edges."""
+    """One graph's full reified definition — session pools, nodes, and edges."""
     resp = cli.get(f"/api/graphs/{graph_id}", "GET /graphs/{id}", on_status={404: f"unknown graph {graph_id}"})
     body = resp.json()
     cli.show(body, GraphDetail(body))

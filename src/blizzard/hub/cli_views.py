@@ -284,10 +284,27 @@ class GraphDetail:
         body = self.body
         marker = "retired" if body.get("retired") else "enabled"
         yield f"{body['graph_id']}  name={body['name']}  {marker}  entry={body.get('entry_node_id')}"
+        for session in body.get("sessions", []):
+            yield f"  session {session['name']}  {self._session_summary(session)}"
         for node in body.get("nodes", []):
             yield f"  node {node['node_id']}  name={node['name']}  executor={node.get('executor')}"
         for edge in body.get("edges", []):
             yield f"  edge {edge['from_node_id']} --[{edge.get('choice_id')}]--> {edge.get('to_node_name')}"
+
+    @staticmethod
+    def _session_summary(session: dict[str, Any]) -> str:
+        parts = []
+        if session.get("model"):
+            parts.append(f"model={','.join(session['model'])}")
+        if session.get("effort"):
+            parts.append(f"effort={session['effort']}")
+        if session.get("compaction_window"):
+            parts.append(f"compaction_window={session['compaction_window']}")
+        rotate = session.get("rotate") or {}
+        bounds = ", ".join(f"{k}={v}" for k, v in rotate.items() if v is not None)
+        if bounds:
+            parts.append(f"rotate=({bounds})")
+        return "  ".join(parts) if parts else "(no pinning)"
 
 
 @dataclass(frozen=True)

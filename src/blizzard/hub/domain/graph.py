@@ -13,6 +13,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard import __version__ as HUB_VERSION
 from blizzard.hub.domain.artifacts import ArtifactKind
 
 
@@ -395,6 +396,11 @@ class RotatePolicy:
         )
 
 
+# Every key this hub's session parser reads by name (issue #351) — a `sessions:` entry
+# carrying any other key would otherwise be silently dropped rather than stored.
+SESSION_KNOWN_KEYS = frozenset({"model", "effort", "rotate", "compaction_window"})
+
+
 @dataclass(frozen=True)
 class SessionDecl:
     """One graph-level named session declaration (issue #144).
@@ -412,6 +418,15 @@ class SessionDecl:
     def of(cls, key: object, raw: object) -> SessionDecl:
         body = Parser.of(raw, f"session {key!r}")
         name = str(key)
+        unknown = sorted(set(body.body) - SESSION_KNOWN_KEYS)
+        if unknown:
+            # A mint is a one-shot operator action whose whole purpose is to install a
+            # declaration (issue #351) — silently storing less than what was authored
+            # would convert that intent into a no-op, so this fails loudly instead.
+            raise GraphParseError(
+                f"session {name!r}: unknown key(s) {', '.join(unknown)} — this hub "
+                f"(blizzard {HUB_VERSION}) recognizes only {sorted(SESSION_KNOWN_KEYS)}"
+            )
         raw_model = body.get("model")
         # A single string is the one-entry spelling, normalized to the same one-entry list
         # the sequence form parses to, so readers see exactly one shape.

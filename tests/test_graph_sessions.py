@@ -17,6 +17,7 @@ from sqlalchemy import create_engine
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.graph import (
     GraphDoc,
+    GraphParseError,
     RotatePolicy,
     SessionDecl,
     SessionMode,
@@ -123,6 +124,44 @@ def test_a_declaration_with_no_rotate_block_carries_no_policy_at_all() -> None:
 def test_declaration_order_is_the_authored_order() -> None:
     doc = GraphDoc.of(_doc(sessions={"planning": {}, "code": {}, "gate": {}}))
     assert list(doc.sessions) == ["planning", "code", "gate"]
+
+
+def test_every_known_session_key_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # blizzard#351: a hub whose parser knows every authored key must mint unaffected.
+    doc = GraphDoc.of(
+        _doc(
+            sessions={
+                "code": {
+                    "model": ["blizzard:basic"],
+                    "effort": "medium",
+                    "rotate": {"max_invocations": 30},
+                    "compaction_window": "150000",
+                }
+            }
+        )
+    )
+    assert doc.sessions["code"].compaction_window == "150000"
+
+
+def test_an_unknown_session_key_is_rejected_naming_the_key() -> None:
+    # blizzard#351: an older hub's parser must fail loudly rather than silently drop a
+    # key it does not know, so a mint that succeeds is trustworthy.
+    with pytest.raises(GraphParseError) as exc_info:
+        GraphDoc.of(_doc(sessions={"code": {"compaction_window": "150000", "not_a_real_key": "x"}}))
+    message = str(exc_info.value)
+    assert "not_a_real_key" in message
+    assert "compaction_window" not in message.split("recognizes only")[0]
+
+
+def test_an_unknown_session_key_error_names_the_session_and_the_hub_version() -> None:
+    from blizzard import __version__
+
+    with pytest.raises(GraphParseError) as exc_info:
+        GraphDoc.of(_doc(sessions={"code": {"typo_field": "x"}}))
+    message = str(exc_info.value)
+    assert "session 'code'" in message
+    assert "typo_field" in message
+    assert __version__ in message
 
 
 # GraphDoc equality — what `mint_if_changed` / `graph_sync` compare on.
