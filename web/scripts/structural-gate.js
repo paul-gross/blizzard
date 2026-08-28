@@ -4,15 +4,13 @@
  * `blizzard-context:/verification/blizzard.md`'s `web:structural-gate`
  * method.
  *
- * One check, live:
- *
- *   A real-timer sweep (issue #275) over the specs the `test` target runs:
- *   a `setTimeout`/`setInterval` whose delay is a non-zero integer literal
- *   is a real second spent inside the merge gate, and a window guessed
- *   rather than chosen. `setTimeout(…, 0)` is the macrotask-flush idiom and
- *   is not matched; `*.shell-sweep.spec.ts` is out of scope (a real frame
- *   wait is `web:shell-sweep`'s method); a genuinely time-driven spec is
- *   named in `REAL_TIMER_EXEMPT_FILES` with its reason.
+ * A real-timer sweep over the specs the `test` target runs: a
+ * `setTimeout`/`setInterval` whose delay is a non-zero integer literal is a
+ * real second spent inside the merge gate, and a window guessed rather than
+ * chosen. `setTimeout(…, 0)` is the macrotask-flush idiom and is not matched;
+ * `*.shell-sweep.spec.ts` is out of scope (a real frame wait is
+ * `web:shell-sweep`'s method); a genuinely time-driven spec is named in
+ * `REAL_TIMER_EXEMPT_FILES` with its reason.
  *
  * Run from `web/`: `npm run structural-gate` (`node scripts/structural-gate.js`).
  */
