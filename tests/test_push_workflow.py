@@ -112,10 +112,6 @@ def test_build_push_step_consumes_the_derived_tags_and_targets_both_platforms() 
 
 
 def test_build_push_step_retries_a_transient_ghcr_error_before_failing() -> None:
-    """A 403 secondary rate limit, 429, or 5xx must not fail the job on the first
-    attempt — the step retries with a backoff, classifying each failure with
-    scripts/is-retryable-push-error.sh so a non-retryable error (a genuine auth
-    or manifest error) still fails on the spot."""
     run = str(_build_push_step().get("run", ""))
     assert "is-retryable-push-error.sh" in run
     assert "sleep" in run

@@ -1,10 +1,3 @@
-"""``scripts/is-retryable-push-error.sh`` — the pure predicate deciding whether a
-GHCR push's captured output names a transient error worth retrying: a 403
-secondary rate limit, a 429, or a 5xx. Pulled out of the
-dev-image job's retry loop precisely so the classification is unit-testable
-here rather than buried in workflow YAML.
-"""
-
 from __future__ import annotations
 
 import subprocess
