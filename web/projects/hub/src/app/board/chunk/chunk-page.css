@@ -42,7 +42,7 @@
   color: var(--text);
   font-size: var(--fs-xs);
 }
-app-chunk-general-tab {
+fleet-chunk-general-tab {
   flex: 1;
   min-height: 0;
 }

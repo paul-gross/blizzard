@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   type AnswerQuestionEvent,
+  ChunkGeneralTab,
   ChunkPageHeader,
   ChunkPageShell,
   deriveWorkItemsState,
@@ -28,7 +29,6 @@ import {
 
 import { ChunkArtifactsTab } from './chunk-artifacts-tab';
 import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-selection';
-import { ChunkGeneralTab } from './chunk-general-tab';
 import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
 import { ChunkTranscriptsContainer } from './chunk-transcripts-container';
 

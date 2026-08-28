@@ -7,6 +7,7 @@ import {
   type ArtifactView,
   asyncState,
   ChunkArtifactsPanel,
+  ChunkGeneralTab,
   ChunkPageHeader,
   ChunkPageShell,
   deriveWorkItemsState,
@@ -26,7 +27,6 @@ import {
 import { injectChunkDetailQuery, injectChunkWorkItemsDetailQuery, injectRunnerLeasesQuery } from 'local-panel';
 
 import { type RunnerChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-selection';
-import { ChunkGeneralTab } from './chunk-general-tab';
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
