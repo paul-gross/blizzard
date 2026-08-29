@@ -26,6 +26,23 @@ and `artifact list` shows graph entries beside the node's own; `create`, `commit
 A name colliding with any node's `produces:` name is rejected: workers reach both scopes through one `artifact` CLI, so
 a shared name would be ambiguous rather than a legal shadow.
 
+## System-scope artifacts
+
+Blizzard itself publishes a small, global set of read-only documents — a slash-bearing namespace of its own, not a
+per-graph one — that every graph and every chunk reads the identical copy of; no graph declares it, and no worker ever
+produces it. `garden/finding-format` and `garden/proposal-format` are the shipped examples: the shapes a garden
+routine's own delivery script validates a submission against.
+
+A system-scope read is always a live call to the hub, on every invocation, unlike a graph-scope read: `artifact get
+<name> --scope system` and `artifact list --scope system` never answer from a runner-local pin or cache, so if the hub
+is unreachable when a worker makes the call, the read fails outright rather than answering from a stale or absent
+local copy.
+
+The read-only rule matches graph scope: `create`, `commit`, and `staged` all refuse `--scope system`. `artifact list`
+and `artifact get --scope system` otherwise serve system scope exactly the way they serve graph scope — `get` resolves
+one artifact by name (`--content` for raw text), and `list` includes it in the unfiltered read alongside node and
+graph scope.
+
 ## Declaring produced artifacts
 
 Each `produces:` entry carries a kind: a bare string is an asset, while a `{name, kind: git_commit}` entry is met by
