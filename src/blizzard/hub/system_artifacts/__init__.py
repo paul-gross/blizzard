@@ -14,12 +14,8 @@ from blizzard.hub.domain.artifacts import is_valid_system_artifact_name
 #: Every packaged document's own extension — stripped to form the artifact's name.
 _SUFFIX = ".md"
 
-#: Filenames that never publish even though they carry `_SUFFIX` — directory documentation,
-#: not a document blizzard means to serve. Unlike `PackagedGraphs`, which tests membership by
-#: a single reserved filename (`graph.yaml`), a system artifact's whole point is an arbitrary,
-#: nested name, so there is no positive filename test to require instead — this is the narrow
-#: negative one for the one realistic accident (someone adding a `README.md` to explain a
-#: directory here the way every packaged-graph directory already has one).
+#: Filenames that never publish despite carrying `_SUFFIX` — directory documentation, not a
+#: document blizzard means to serve (the one realistic accident: a `README.md` here).
 _NEVER_PUBLISHED = frozenset({"README.md"})
 
 

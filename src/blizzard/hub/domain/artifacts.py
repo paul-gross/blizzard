@@ -30,9 +30,7 @@ class ArtifactScope(StrEnum):
 
 
 # One conservative URL path segment — no `/`, since the consuming route percent-encodes a
-# bare name into it, so a `/` would reach it as a real separator. Shared by both name
-# grammars below: a graph-artifact name is exactly one segment, a system-artifact name a
-# `/`-separated path of them, but neither owns the segment shape independently of the other.
+# bare name into it. Shared by both name grammars below (`canon:one-owner`).
 _ARTIFACT_NAME_SEGMENT = r"[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*"
 
 _GRAPH_ARTIFACT_NAME = re.compile(rf"^{_ARTIFACT_NAME_SEGMENT}$")

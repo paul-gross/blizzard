@@ -1173,9 +1173,9 @@
    "total": 397
   },
   "blizzard/hub/composition.py": {
-   "comments": 56,
+   "comments": 54,
    "docstrings": 12,
-   "total": 376
+   "total": 374
   },
   "blizzard/hub/config.py": {
    "comments": 45,
@@ -1268,9 +1268,9 @@
    "total": 686
   },
   "blizzard/hub/domain/artifacts.py": {
-   "comments": 6,
+   "comments": 4,
    "docstrings": 27,
-   "total": 163
+   "total": 161
   },
   "blizzard/hub/domain/claim.py": {
    "comments": 19,
@@ -1958,9 +1958,9 @@
    "total": 1184
   },
   "blizzard/hub/system_artifacts/__init__.py": {
-   "comments": 7,
+   "comments": 3,
    "docstrings": 13,
-   "total": 76
+   "total": 72
   },
   "blizzard/hub/work_sources/__init__.py": {
    "comments": 0,

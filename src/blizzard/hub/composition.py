@@ -137,10 +137,8 @@ class HubServices:
     clock: IClock
     default_graph_doc: GraphDoc
     default_graph_yaml: str
-    #: The published ``ArtifactScope.SYSTEM`` set (blizzard#391) — the loader itself, not a
-    #: snapshot of its contents, so a route reading through it still resolves fresh on
-    #: every call (``bzh:system-scope-reads-live``); injected so a test can substitute a
-    #: throwaway root instead of monkeypatching the packaged module singleton.
+    #: The published ``ArtifactScope.SYSTEM`` set — the loader itself, so a read through it
+    #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
     system_artifacts: PackagedSystemArtifacts
     work_sources: IWorkSourceRegistry
     #: The close-intent drain sweep (blizzard#383) — built here because it needs the
