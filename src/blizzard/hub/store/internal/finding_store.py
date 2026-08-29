@@ -1,8 +1,7 @@
 """SQLAlchemy adapter for the finding repository seam (package-private, blizzard#390).
 
-All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Liveness,
-last-seen, and the observed count are derived over ``finding_facts`` at read time
-(D2-D4), never cached on ``findings``."""
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the
+no-stored-column contract this reads over is `schema.py`'s own (D2-D4)."""
 
 from __future__ import annotations
 
@@ -12,11 +11,13 @@ from datetime import datetime
 from sqlalchemy import Engine, func, insert, select
 
 from blizzard.hub.domain.findings import (
+    FACT_KINDS,
     Finding,
     FindingFact,
     FindingSet,
     IWriteFindingRepository,
     IWriteFindingSetRepository,
+    UnknownFactKindError,
     derive_liveness,
 )
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
@@ -67,6 +68,8 @@ class FindingStore:
         )
 
     def record_fact(self, finding_id: str, *, kind: str, at: datetime, note: str | None = None) -> None:
+        if kind not in FACT_KINDS:
+            raise UnknownFactKindError(kind)
         with self._engine.begin() as conn:
             conn.execute(insert(finding_facts).values(finding_id=finding_id, kind=kind, recorded_at=at, note=note))
 
@@ -79,12 +82,16 @@ class FindingStore:
         return self._of(row, facts)
 
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
-        """The pass's own bucket read (D3) — filtered on `ix_findings_routine_scope`."""
+        """The pass's own bucket read (D3) — filtered on `ix_findings_routine_scope`,
+        ordered by `finding_id` so every backend returns the same rows."""
         with self._engine.connect() as conn:
             rows = conn.execute(
-                select(findings).where(findings.c.routine_name == routine_name, findings.c.scope_slug == scope_slug)
+                select(findings)
+                .where(findings.c.routine_name == routine_name, findings.c.scope_slug == scope_slug)
+                .order_by(findings.c.finding_id)
             ).all()
-            result = [self._of(row, self._facts(conn, row.finding_id)) for row in rows]
+            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
+            result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
@@ -102,6 +109,22 @@ class FindingStore:
             select(finding_facts).where(finding_facts.c.finding_id == finding_id).order_by(finding_facts.c.id.asc())
         ).all()
         return [FindingFact(kind=r.kind, recorded_at=r.recorded_at, note=r.note) for r in rows]
+
+    def _facts_for_many(self, conn, finding_ids: list[str]) -> dict[str, list[FindingFact]]:  # type: ignore[no-untyped-def]
+        """One query for every id in `finding_ids` (index-backed on
+        `ix_finding_facts_finding_id_id`), so a bucket read never issues one fact query
+        per row."""
+        grouped: dict[str, list[FindingFact]] = {finding_id: [] for finding_id in finding_ids}
+        if not finding_ids:
+            return grouped
+        rows = conn.execute(
+            select(finding_facts)
+            .where(finding_facts.c.finding_id.in_(finding_ids))
+            .order_by(finding_facts.c.finding_id, finding_facts.c.id.asc())
+        ).all()
+        for r in rows:
+            grouped[r.finding_id].append(FindingFact(kind=r.kind, recorded_at=r.recorded_at, note=r.note))
+        return grouped
 
     @staticmethod
     def _of(row, facts: list[FindingFact]) -> Finding:  # type: ignore[no-untyped-def]

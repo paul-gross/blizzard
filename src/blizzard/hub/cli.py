@@ -38,14 +38,14 @@ from blizzard.hub.cli_views import (
     FindingDetail,
     FindingListing,
     FleetStatus,
+    GardenProposalDetail,
+    GardenProposalListing,
     GraphDetail,
     GraphListing,
     GraphSyncListing,
     Listing,
     MigrationIntent,
     OutcomesListing,
-    ProposalDetail,
-    ProposalListing,
     QuestionListing,
     QueueListing,
     RoutineDetail,
@@ -1213,7 +1213,7 @@ def finding_list(cli: CliContext, routine: str, scope: str, include_gone: bool) 
     """List ROUTINE's findings under SCOPE — live only, unless --include-gone.
 
     This is the read a running pass calls to cross-reference its own bucket
-    (machinery.md §Managing findings and proposals)."""
+    (blizzard-context:/domain/findings-and-proposals.md)."""
     rows = cli.get(
         "/api/findings",
         "GET /findings",
@@ -1233,30 +1233,32 @@ def finding_show(cli: CliContext, finding_id: str) -> None:
     cli.show(body, FindingDetail(body))
 
 
-# `blizzard hub proposal` — blizzard#390
+# `blizzard hub garden-proposal` — blizzard#390 (D1: never the bare `proposal` name)
 
 
-@hub.group("proposal")
-def proposal_group() -> None:
+@hub.group("garden-proposal")
+def garden_proposal_group() -> None:
     """Read verbs over garden proposals: list every one, or inspect one by id."""
 
 
-@proposal_group.command("list", cls=FleetCommand)
-def proposal_list(cli: CliContext) -> None:
+@garden_proposal_group.command("list", cls=FleetCommand)
+def garden_proposal_list(cli: CliContext) -> None:
     """List every garden proposal, newest first."""
-    rows = cli.get("/api/proposals", "GET /proposals").json()
-    cli.show(rows, ProposalListing(rows))
+    rows = cli.get("/api/garden-proposals", "GET /garden-proposals").json()
+    cli.show(rows, GardenProposalListing(rows))
 
 
-@proposal_group.command("show", cls=FleetCommand)
+@garden_proposal_group.command("show", cls=FleetCommand)
 @click.argument("proposal_id")
-def proposal_show(cli: CliContext, proposal_id: str) -> None:
+def garden_proposal_show(cli: CliContext, proposal_id: str) -> None:
     """One garden proposal's whole record."""
     resp = cli.get(
-        f"/api/proposals/{proposal_id}", "GET /proposals/{id}", on_status={404: f"unknown proposal {proposal_id}"}
+        f"/api/garden-proposals/{proposal_id}",
+        "GET /garden-proposals/{id}",
+        on_status={404: f"unknown garden proposal {proposal_id}"},
     )
     body = resp.json()
-    cli.show(body, ProposalDetail(body))
+    cli.show(body, GardenProposalDetail(body))
 
 
 # `blizzard hub queue` — issue #87, issue #104

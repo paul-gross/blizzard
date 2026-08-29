@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     Float,
     ForeignKey,
@@ -299,8 +300,10 @@ artifacts = Table(
 
 # --- Findings and finding sets (blizzard#390) -----------------------------------
 # A finding is a durable observation a routine's run recorded — first class the way an
-# artifact is (machinery.md §Findings are artifacts). Liveness is derived, never a column
-# (D2): finding_facts is append-only, newest-fact-wins, the scope_lifecycle_facts shape.
+# artifact is (blizzard-product:/plans/garden/machinery.md §Findings are artifacts). This
+# table carries no live/last_seen_at/observed_count column (D2, D4): finding_facts is
+# append-only, and every reader derives them fresh, newest-fact-wins, the
+# scope_lifecycle_facts shape.
 
 findings = Table(
     "findings",
@@ -326,9 +329,10 @@ finding_facts = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("finding_id", String, ForeignKey("findings.finding_id"), nullable=False),
-    Column("kind", String, nullable=False),  # add | observed | gone
+    Column("kind", String, nullable=False),  # add | observed | gone (FACT_KINDS, domain/findings.py)
     Column("recorded_at", UtcDateTime, nullable=False),
     Column("note", Text, nullable=True),  # gone's note; null for add/observed
+    CheckConstraint("kind IN ('add', 'observed', 'gone')", name="ck_finding_facts_kind"),
 )
 
 Index("ix_finding_facts_finding_id_id", finding_facts.c.finding_id, finding_facts.c.id)
@@ -356,7 +360,7 @@ Index("ix_finding_sets_chunk_id", finding_sets.c.chunk_id)
 garden_proposals = Table(
     "garden_proposals",
     metadata,
-    Column("proposal_id", String, primary_key=True),  # prop_<ulid>
+    Column("proposal_id", String, primary_key=True),  # gprop_<ulid>
     Column("routine_name", String, nullable=False),  # D5-shaped — named by the routine's own name
     Column("class", String, key="class_", nullable=False),  # the deployment's own taxonomy; opaque to the hub
     Column("title", String, nullable=False),

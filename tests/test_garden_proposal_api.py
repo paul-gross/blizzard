@@ -40,9 +40,11 @@ def test_list_renders_every_proposal_newest_first(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed(hub)
     proposals = GardenProposalStore(hub.engine)
-    proposals.create("prop_old", routine_name="nightly", class_="c", title="old", body="b", findings=["fin_1"], at=_NOW)
     proposals.create(
-        "prop_new",
+        "gprop_old", routine_name="nightly", class_="c", title="old", body="b", findings=["fin_1"], at=_NOW
+    )
+    proposals.create(
+        "gprop_new",
         routine_name="nightly",
         class_="c",
         title="new",
@@ -51,17 +53,17 @@ def test_list_renders_every_proposal_newest_first(tmp_path: Path) -> None:
         at=_NOW.replace(hour=13),
     )
 
-    resp = hub.client.get("/api/proposals")
+    resp = hub.client.get("/api/garden-proposals")
 
     assert resp.status_code == 200, resp.text
-    assert [row["proposal_id"] for row in resp.json()] == ["prop_new", "prop_old"]
+    assert [row["proposal_id"] for row in resp.json()] == ["gprop_new", "gprop_old"]
 
 
 def test_get_renders_one_proposal(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed(hub)
     GardenProposalStore(hub.engine).create(
-        "prop_1",
+        "gprop_1",
         routine_name="nightly",
         class_="fix-the-source",
         title="Author a docstring standard",
@@ -70,7 +72,7 @@ def test_get_renders_one_proposal(tmp_path: Path) -> None:
         at=_NOW,
     )
 
-    resp = hub.client.get("/api/proposals/prop_1")
+    resp = hub.client.get("/api/garden-proposals/gprop_1")
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -81,6 +83,6 @@ def test_get_renders_one_proposal(tmp_path: Path) -> None:
 def test_get_unknown_id_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 
-    resp = hub.client.get("/api/proposals/prop_ghost")
+    resp = hub.client.get("/api/garden-proposals/gprop_ghost")
 
     assert resp.status_code == 404, resp.text

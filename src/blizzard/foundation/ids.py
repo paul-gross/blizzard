@@ -41,7 +41,7 @@ WORK_ITEM_PROPOSAL_PREFIX = "wip"  # a proposed work item riding a node-step's c
 ROUTINE_PREFIX = "rtn"  # a routine (issue #389) — a scope has no prefix; its slug is its id
 FINDING_PREFIX = "fin"  # a finding (blizzard#390) — one instance a routine's run observed
 FINDING_SET_PREFIX = "fins"  # the set a delivered finding list mints, one per artifact (blizzard#390)
-GARDEN_PROPOSAL_PREFIX = "prop"  # a garden proposal (blizzard#390) — never confused with a work-item proposal
+GARDEN_PROPOSAL_PREFIX = "gprop"  # a garden proposal (blizzard#390) — never confused with a work-item proposal
 
 
 @dataclass(frozen=True)

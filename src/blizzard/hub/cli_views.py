@@ -247,8 +247,8 @@ class FindingListing(Listing):
         return f"{row['finding_id']}  {marker}  class={row['class']}  {row['locus']}"
 
 
-class ProposalListing(Listing):
-    empty = "no proposals"
+class GardenProposalListing(Listing):
+    empty = "no garden proposals"
 
     def line(self, row: Any) -> str:
         return f"{row['proposal_id']}  class={row['class']}  {row['title']}"
@@ -326,7 +326,7 @@ class FindingDetail:
 
 
 @dataclass(frozen=True)
-class ProposalDetail:
+class GardenProposalDetail:
     body: dict[str, Any]
 
     def lines(self) -> Iterator[str]:

@@ -16,6 +16,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.findings import Finding
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
 
@@ -41,7 +42,7 @@ def _store(tmp_path: Path) -> FindingStore:
     return store
 
 
-def _add(store: FindingStore, finding_id: str = "fin_1", **overrides: object) -> object:
+def _add(store: FindingStore, finding_id: str = "fin_1", **overrides: object) -> Finding:
     fields: dict[str, object] = {
         "routine_name": "nightly",
         "scope_slug": "blizzard",
@@ -72,8 +73,8 @@ def test_get_unknown_id_is_none(tmp_path: Path) -> None:
 
 
 def test_a_finding_is_named_by_id_across_two_runs(tmp_path: Path) -> None:
-    """The second run's `observed` op names the finding fin_1 recorded first — matching
-    is a reference, never a recomputed fingerprint (machinery.md §Identity)."""
+    """The second run's `observed` op names the finding fin_1 recorded first (D2) —
+    matching is a reference, never a recomputed fingerprint."""
     store = _store(tmp_path)
     _add(store)
 

@@ -1,5 +1,5 @@
-"""``blizzard hub proposal list|show`` (unit tier) — pure clients of the garden-proposal
-routes, driven here with ``httpx`` stubbed (blizzard#390), the
+"""``blizzard hub garden-proposal list|show`` (unit tier) — pure clients of the
+garden-proposal routes, driven here with ``httpx`` stubbed (blizzard#390), the
 ``tests/test_hub_cli_scope.py`` shape."""
 
 from __future__ import annotations
@@ -28,13 +28,13 @@ class _FakeResponse:
 
 
 @pytest.mark.unit
-def test_proposal_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_garden_proposal_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
             [
                 {
-                    "proposal_id": "prop_1",
+                    "proposal_id": "gprop_1",
                     "routine_name": "nightly",
                     "class": "fix-the-source",
                     "title": "Author a docstring standard",
@@ -46,20 +46,20 @@ def test_proposal_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["proposal", "list"])
+    result = CliRunner().invoke(hub_group, ["garden-proposal", "list"])
 
     assert result.exit_code == 0, result.output
-    assert "prop_1" in result.output
+    assert "gprop_1" in result.output
     assert "fix-the-source" in result.output
 
 
 @pytest.mark.unit
-def test_proposal_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_garden_proposal_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
             {
-                "proposal_id": "prop_1",
+                "proposal_id": "gprop_1",
                 "routine_name": "nightly",
                 "class": "fix-the-source",
                 "title": "Author a docstring standard",
@@ -70,20 +70,20 @@ def test_proposal_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch) -> No
         )
 
     monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["proposal", "show", "prop_1"])
+    result = CliRunner().invoke(hub_group, ["garden-proposal", "show", "gprop_1"])
 
     assert result.exit_code == 0, result.output
-    assert "prop_1" in result.output
+    assert "gprop_1" in result.output
     assert "fin_1, fin_2" in result.output
 
 
 @pytest.mark.unit
-def test_proposal_show_unknown_id_reports_404(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_garden_proposal_show_unknown_id_reports_404(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404, {"detail": "unknown proposal prop_ghost"})
+        return _FakeResponse(404, {"detail": "unknown garden proposal gprop_ghost"})
 
     monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["proposal", "show", "prop_ghost"])
+    result = CliRunner().invoke(hub_group, ["garden-proposal", "show", "gprop_ghost"])
 
     assert result.exit_code != 0
-    assert "unknown proposal prop_ghost" in result.output
+    assert "unknown garden proposal gprop_ghost" in result.output

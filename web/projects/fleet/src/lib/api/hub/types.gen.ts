@@ -6698,6 +6698,54 @@ export type IngestTranscriptSegmentsApiFleetTranscriptsPostResponses = {
 
 export type IngestTranscriptSegmentsApiFleetTranscriptsPostResponse = IngestTranscriptSegmentsApiFleetTranscriptsPostResponses[keyof IngestTranscriptSegmentsApiFleetTranscriptsPostResponses];
 
+export type ListGardenProposalsApiGardenProposalsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/garden-proposals';
+};
+
+export type ListGardenProposalsApiGardenProposalsGetResponses = {
+    /**
+     * Response List Garden Proposals Api Garden Proposals Get
+     *
+     * Successful Response
+     */
+    200: Array<GardenProposalView>;
+};
+
+export type ListGardenProposalsApiGardenProposalsGetResponse = ListGardenProposalsApiGardenProposalsGetResponses[keyof ListGardenProposalsApiGardenProposalsGetResponses];
+
+export type GetGardenProposalApiGardenProposalsProposalIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Proposal Id
+         */
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/garden-proposals/{proposal_id}';
+};
+
+export type GetGardenProposalApiGardenProposalsProposalIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetGardenProposalApiGardenProposalsProposalIdGetError = GetGardenProposalApiGardenProposalsProposalIdGetErrors[keyof GetGardenProposalApiGardenProposalsProposalIdGetErrors];
+
+export type GetGardenProposalApiGardenProposalsProposalIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalView;
+};
+
+export type GetGardenProposalApiGardenProposalsProposalIdGetResponse = GetGardenProposalApiGardenProposalsProposalIdGetResponses[keyof GetGardenProposalApiGardenProposalsProposalIdGetResponses];
+
 export type ListGraphsApiGraphsGetData = {
     body?: never;
     path?: never;
@@ -6912,54 +6960,6 @@ export type MeApiMeGetResponses = {
 };
 
 export type MeApiMeGetResponse = MeApiMeGetResponses[keyof MeApiMeGetResponses];
-
-export type ListProposalsApiProposalsGetData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/proposals';
-};
-
-export type ListProposalsApiProposalsGetResponses = {
-    /**
-     * Response List Proposals Api Proposals Get
-     *
-     * Successful Response
-     */
-    200: Array<GardenProposalView>;
-};
-
-export type ListProposalsApiProposalsGetResponse = ListProposalsApiProposalsGetResponses[keyof ListProposalsApiProposalsGetResponses];
-
-export type GetProposalApiProposalsProposalIdGetData = {
-    body?: never;
-    path: {
-        /**
-         * Proposal Id
-         */
-        proposal_id: string;
-    };
-    query?: never;
-    url: '/api/proposals/{proposal_id}';
-};
-
-export type GetProposalApiProposalsProposalIdGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetProposalApiProposalsProposalIdGetError = GetProposalApiProposalsProposalIdGetErrors[keyof GetProposalApiProposalsProposalIdGetErrors];
-
-export type GetProposalApiProposalsProposalIdGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: GardenProposalView;
-};
-
-export type GetProposalApiProposalsProposalIdGetResponse = GetProposalApiProposalsProposalIdGetResponses[keyof GetProposalApiProposalsProposalIdGetResponses];
 
 export type ListOpenQuestionsApiQuestionsGetData = {
     body?: never;

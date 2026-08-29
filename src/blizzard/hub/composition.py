@@ -188,13 +188,11 @@ class HubServices:
     routines: IReadRoutineRepository
     #: Create and edit a routine, minting its default scope on demand (blizzard#389 D4).
     routine_authoring: RoutineAuthoring
-    #: The finding read Protocol (blizzard#390) — the same store instance the (currently
-    #: test-only) write half writes through; no route mutates it yet.
+    #: The finding read Protocol (blizzard#390).
     findings: IReadFindingRepository
     #: The finding-set read Protocol (blizzard#390) — one set per delivered artifact list.
     finding_sets: IReadFindingSetRepository
-    #: The garden-proposal read Protocol (blizzard#390) — the same store instance
-    #: ``garden_proposal_authoring``'s writes.
+    #: The garden-proposal read Protocol (blizzard#390).
     garden_proposals: IReadGardenProposalRepository
     #: Create a garden proposal, rejecting an empty `findings` list (blizzard#390 D7).
     garden_proposal_authoring: GardenProposalAuthoring

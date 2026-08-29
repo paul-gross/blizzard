@@ -1,9 +1,9 @@
 """Finding wire shapes (blizzard#390) — the candidate, the delta ops, and the read view.
 
 Both this and ``blizzard.wire.garden_proposal`` are the platform's own shapes
-(machinery.md §Where the formats live): a garden graph never carries its own copy, and
-the hub validates a submission against exactly this. Nothing in production writes these
-yet — delivery is a sibling issue; this is the format it will validate against."""
+(blizzard-product:/plans/garden/machinery.md §Where the formats live): a garden graph
+never carries its own copy. Nothing in production writes these yet — delivery is a
+sibling issue; this is the format it will validate against."""
 
 from __future__ import annotations
 
@@ -13,9 +13,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class FindingCandidate(BaseModel):
-    """A run's survey artifact entry — no id, since identity is minted at delivery
-    (machinery.md §Identity is the hub's to assign). `ref` is stable only within its own
-    submission, so a later node in the same run can name it."""
+    """A run's survey artifact entry — no id, since identity is minted at delivery (see
+    [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md)).
+    `ref` is stable only within its own submission, so a later node in the same run can
+    name it."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -27,8 +28,9 @@ class FindingCandidate(BaseModel):
 
 
 class AddFindingOp(BaseModel):
-    """The candidate minus its `ref` (machinery.md §A run emits a delta, not a state) —
-    the hub mints an id for each."""
+    """The candidate minus its `ref` — a delta, not a state (see
+    [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md))
+    — the hub mints an id for each."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -60,10 +62,9 @@ FindingOp = Annotated[AddFindingOp | ObservedFindingOp | GoneFindingOp, Field(di
 
 
 class FindingDelta(BaseModel):
-    """A delivered finding list — the scope it was swept under, the revision the run
-    read per repository, and the routine's own measurement, all properties of the
-    artifact rather than of any single finding, recorded whether or not `findings` holds
-    a single entry (machinery.md §A run emits a delta)."""
+    """A delivered finding list — the scope, the revision read per repository, and the
+    routine's measurement, properties of the artifact rather than of any one finding (see
+    [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md))."""
 
     scope: str
     revisions: dict[str, str] = {}

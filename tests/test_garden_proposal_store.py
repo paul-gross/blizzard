@@ -63,7 +63,7 @@ def test_create_then_get_round_trips(tmp_path: Path) -> None:
     store = _store(tmp_path)
 
     created = store.create(
-        "prop_1",
+        "gprop_1",
         routine_name="nightly",
         class_="fix-the-source",
         title="Author a docstring standard",
@@ -72,21 +72,21 @@ def test_create_then_get_round_trips(tmp_path: Path) -> None:
         at=_NOW,
     )
 
-    fetched = store.get("prop_1")
+    fetched = store.get("gprop_1")
     assert fetched == created
     assert set(fetched.findings) == {"fin_1", "fin_2"}  # type: ignore[union-attr]
 
 
 def test_get_unknown_id_is_none(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    assert store.get("prop_ghost") is None
+    assert store.get("gprop_ghost") is None
 
 
 def test_list_all_orders_newest_first(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    store.create("prop_old", routine_name="nightly", class_="c", title="old", body="b", findings=["fin_1"], at=_NOW)
+    store.create("gprop_old", routine_name="nightly", class_="c", title="old", body="b", findings=["fin_1"], at=_NOW)
     store.create(
-        "prop_new",
+        "gprop_new",
         routine_name="nightly",
         class_="c",
         title="new",
@@ -97,18 +97,18 @@ def test_list_all_orders_newest_first(tmp_path: Path) -> None:
 
     ids = [p.proposal_id for p in store.list_all()]
 
-    assert ids == ["prop_new", "prop_old"]
+    assert ids == ["gprop_new", "gprop_old"]
 
 
 def test_count_by_class_counts_across_the_named_routine(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.create(
-        "prop_1", routine_name="nightly", class_="fix-the-source", title="t1", body="b", findings=["fin_1"], at=_NOW
+        "gprop_1", routine_name="nightly", class_="fix-the-source", title="t1", body="b", findings=["fin_1"], at=_NOW
     )
     store.create(
-        "prop_2", routine_name="nightly", class_="fix-the-source", title="t2", body="b", findings=["fin_2"], at=_NOW
+        "gprop_2", routine_name="nightly", class_="fix-the-source", title="t2", body="b", findings=["fin_2"], at=_NOW
     )
-    store.create("prop_3", routine_name="nightly", class_="wontfix", title="t3", body="b", findings=["fin_1"], at=_NOW)
+    store.create("gprop_3", routine_name="nightly", class_="wontfix", title="t3", body="b", findings=["fin_1"], at=_NOW)
 
     assert store.count_by_class("nightly", "fix-the-source") == 2
     assert store.count_by_class("nightly", "wontfix") == 1
@@ -120,9 +120,9 @@ def test_two_proposals_with_overlapping_findings_stay_distinguished(tmp_path: Pa
     never collapse into one row set (D7)."""
     store = _store(tmp_path)
     store.create(
-        "prop_1", routine_name="nightly", class_="c", title="t1", body="b", findings=["fin_1", "fin_2"], at=_NOW
+        "gprop_1", routine_name="nightly", class_="c", title="t1", body="b", findings=["fin_1", "fin_2"], at=_NOW
     )
-    store.create("prop_2", routine_name="nightly", class_="c", title="t2", body="b", findings=["fin_1"], at=_NOW)
+    store.create("gprop_2", routine_name="nightly", class_="c", title="t2", body="b", findings=["fin_1"], at=_NOW)
 
-    assert set(store.get("prop_1").findings) == {"fin_1", "fin_2"}  # type: ignore[union-attr]
-    assert set(store.get("prop_2").findings) == {"fin_1"}  # type: ignore[union-attr]
+    assert set(store.get("gprop_1").findings) == {"fin_1", "fin_2"}  # type: ignore[union-attr]
+    assert set(store.get("gprop_2").findings) == {"fin_1"}  # type: ignore[union-attr]

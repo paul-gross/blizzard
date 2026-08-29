@@ -17,7 +17,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.garden_proposals import GardenProposal
 from blizzard.wire.garden_proposal import GardenProposalView
 
-router = APIRouter(prefix="/api", tags=["proposals"], dependencies=[Depends(reject_runner_principal)])
+router = APIRouter(prefix="/api", tags=["garden-proposals"], dependencies=[Depends(reject_runner_principal)])
 
 
 def _proposal_view(proposal: GardenProposal) -> GardenProposalView:
@@ -36,16 +36,22 @@ def _proposal_view(proposal: GardenProposal) -> GardenProposalView:
     )
 
 
-@router.get("/proposals", response_model=list[GardenProposalView], dependencies=[Depends(require(FLEET_VIEW))])
-def list_proposals(services: Annotated[HubServices, Depends(get_services)]) -> list[GardenProposalView]:
+@router.get("/garden-proposals", response_model=list[GardenProposalView], dependencies=[Depends(require(FLEET_VIEW))])
+def list_garden_proposals(services: Annotated[HubServices, Depends(get_services)]) -> list[GardenProposalView]:
     """Every garden proposal, newest first."""
     return [_proposal_view(p) for p in services.garden_proposals.list_all()]
 
 
-@router.get("/proposals/{proposal_id}", response_model=GardenProposalView, dependencies=[Depends(require(FLEET_VIEW))])
-def get_proposal(proposal_id: str, services: Annotated[HubServices, Depends(get_services)]) -> GardenProposalView:
+@router.get(
+    "/garden-proposals/{proposal_id}",
+    response_model=GardenProposalView,
+    dependencies=[Depends(require(FLEET_VIEW))],
+)
+def get_garden_proposal(
+    proposal_id: str, services: Annotated[HubServices, Depends(get_services)]
+) -> GardenProposalView:
     """One garden proposal's whole record; 404 on an unknown id."""
     proposal = services.garden_proposals.get(proposal_id)
     if proposal is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown proposal {proposal_id}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown garden proposal {proposal_id}")
     return _proposal_view(proposal)

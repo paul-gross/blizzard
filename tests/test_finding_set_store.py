@@ -81,8 +81,8 @@ def test_three_sets_from_one_run_are_distinguished_by_their_artifacts(tmp_path: 
 
     sets = store.list_for_chunk("ch_1")
 
-    assert {s.finding_set_id for s in sets} == {"fins_1", "fins_2", "fins_3"}
-    assert {s.artifact_id for s in sets} == {"art_1", "art_2", "art_3"}
+    assert {fs.finding_set_id for fs in sets} == {"fins_1", "fins_2", "fins_3"}
+    assert {fs.artifact_id for fs in sets} == {"art_1", "art_2", "art_3"}
 
 
 def test_a_second_set_on_the_same_artifact_is_refused(tmp_path: Path) -> None:

@@ -4,12 +4,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import GARDEN_PROPOSAL_PREFIX, Id
+from blizzard.hub.domain.findings import Finding
 
 
 class EmptyProposalFindingsError(ValueError):
@@ -17,6 +19,13 @@ class EmptyProposalFindingsError(ValueError):
 
     def __init__(self) -> None:
         super().__init__("a garden proposal must name at least one finding")
+
+
+class DuplicateProposalFindingError(ValueError):
+    """The same finding named more than once in one proposal's `findings`."""
+
+    def __init__(self, finding_id: str) -> None:
+        super().__init__(f"finding {finding_id!r} named more than once")
 
 
 @dataclass(frozen=True)
@@ -41,8 +50,9 @@ class IReadGardenProposalRepository(Protocol):
     def list_all(self) -> list[GardenProposal]: ...
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
-        """How often `class_` recurs among `routine_name`'s proposals (machinery.md
-        §Proposals) — a count, never the rows themselves."""
+        """How often `class_` recurs among `routine_name`'s proposals
+        (blizzard-context:/domain/findings-and-proposals.md §`class` and `locus` are
+        opaque) — a count, never the rows themselves."""
         ...
 
 
@@ -67,21 +77,30 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
 
 
 class GardenProposalAuthoring:
-    """Create a garden proposal, rejecting an empty `findings` list (D7, blizzard#390)."""
+    """Create a garden proposal from loaded findings (`bzh:domain-takes-objects`),
+    rejecting an empty or duplicate-naming `findings` list (D7, blizzard#390)."""
 
     def __init__(self, *, proposals: IWriteGardenProposalRepository, clock: IClock) -> None:
         self._proposals = proposals
         self._clock = clock
 
-    def create(self, *, routine_name: str, class_: str, title: str, body: str, findings: list[str]) -> GardenProposal:
+    def create(
+        self, *, routine_name: str, class_: str, title: str, body: str, findings: Sequence[Finding]
+    ) -> GardenProposal:
         if not findings:
             raise EmptyProposalFindingsError()
+        finding_ids = [f.finding_id for f in findings]
+        seen: set[str] = set()
+        for finding_id in finding_ids:
+            if finding_id in seen:
+                raise DuplicateProposalFindingError(finding_id)
+            seen.add(finding_id)
         return self._proposals.create(
             Id.mint(GARDEN_PROPOSAL_PREFIX, self._clock).value,
             routine_name=routine_name,
             class_=class_,
             title=title,
             body=body,
-            findings=list(findings),
+            findings=finding_ids,
             at=self._clock.now(),
         )

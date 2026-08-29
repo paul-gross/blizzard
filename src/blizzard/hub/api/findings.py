@@ -1,8 +1,9 @@
 """Finding routes — the read half over findings (blizzard#390).
 
-``GET /api/findings`` is the pass's own bucket read (machinery.md §Managing findings
-and proposals): a routine's live findings under one scope. Nothing writes here yet —
-delivery is a sibling issue (D8)."""
+``GET /api/findings`` is the pass's own bucket read
+(blizzard-product:/plans/garden/machinery.md §Managing findings and proposals): a
+routine's live findings under one scope. Nothing writes here yet — delivery is a sibling
+issue (D8)."""
 
 from __future__ import annotations
 
@@ -23,8 +24,8 @@ router = APIRouter(prefix="/api", tags=["findings"], dependencies=[Depends(rejec
 
 
 def _finding_view(finding: Finding) -> FindingView:
-    # `class_`'s alias is the Python keyword `class` (bzh:dependency-inversion pattern
-    # for a reserved-word wire field) — constructed by alias via `model_validate`.
+    # `class_`'s alias is the Python keyword `class` — constructed by alias via
+    # `model_validate`, the `_proposal_view` shape.
     return FindingView.model_validate(
         {
             "finding_id": finding.finding_id,

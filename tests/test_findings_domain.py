@@ -58,7 +58,9 @@ def test_a_gone_fact_takes_it_out_of_the_live_bucket() -> None:
 
 
 def test_a_later_fact_after_gone_restores_liveness() -> None:
-    """`gone` does not close the finding (machinery.md) — a later `observed` restores it."""
+    """`gone` does not close the finding
+    (blizzard-context:/domain/findings-and-proposals.md §Liveness is derived, and
+    reversible) — a later `observed` restores it."""
     facts = [
         FindingFact(kind="add", recorded_at=_T0),
         FindingFact(kind="gone", recorded_at=_T1, note="not found this run"),

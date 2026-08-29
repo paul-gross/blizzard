@@ -65,8 +65,14 @@ class GardenProposalStore:
             return self._of(row, self._findings(conn, proposal_id))
 
     def list_all(self) -> list[GardenProposal]:
+        """Newest first — `proposal_id` (a chronologically sortable ULID) breaks the tie a
+        one-instant batch delivery leaves in `created_at` alone."""
         with self._engine.connect() as conn:
-            rows = conn.execute(select(garden_proposals).order_by(garden_proposals.c.created_at.desc())).all()
+            rows = conn.execute(
+                select(garden_proposals).order_by(
+                    garden_proposals.c.created_at.desc(), garden_proposals.c.proposal_id.desc()
+                )
+            ).all()
             return [self._of(row, self._findings(conn, row.proposal_id)) for row in rows]
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
@@ -79,7 +85,9 @@ class GardenProposalStore:
 
     def _findings(self, conn, proposal_id: str) -> list[str]:  # type: ignore[no-untyped-def]
         rows = conn.execute(
-            select(garden_proposal_findings.c.finding_id).where(garden_proposal_findings.c.proposal_id == proposal_id)
+            select(garden_proposal_findings.c.finding_id)
+            .where(garden_proposal_findings.c.proposal_id == proposal_id)
+            .order_by(garden_proposal_findings.c.finding_id)
         ).all()
         return [r.finding_id for r in rows]
 

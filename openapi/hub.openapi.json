@@ -11173,6 +11173,75 @@
         ]
       }
     },
+    "/api/garden-proposals": {
+      "get": {
+        "description": "Every garden proposal, newest first.",
+        "operationId": "list_garden_proposals_api_garden_proposals_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GardenProposalView"
+                  },
+                  "title": "Response List Garden Proposals Api Garden Proposals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Garden Proposals",
+        "tags": [
+          "garden-proposals"
+        ]
+      }
+    },
+    "/api/garden-proposals/{proposal_id}": {
+      "get": {
+        "description": "One garden proposal's whole record; 404 on an unknown id.",
+        "operationId": "get_garden_proposal_api_garden_proposals__proposal_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Garden Proposal",
+        "tags": [
+          "garden-proposals"
+        ]
+      }
+    },
     "/api/graphs": {
       "get": {
         "description": "Every minted graph, newest first, newest non-retired per name marked ``effective``.",
@@ -11507,75 +11576,6 @@
         "summary": "Me",
         "tags": [
           "auth"
-        ]
-      }
-    },
-    "/api/proposals": {
-      "get": {
-        "description": "Every garden proposal, newest first.",
-        "operationId": "list_proposals_api_proposals_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/GardenProposalView"
-                  },
-                  "title": "Response List Proposals Api Proposals Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "List Proposals",
-        "tags": [
-          "proposals"
-        ]
-      }
-    },
-    "/api/proposals/{proposal_id}": {
-      "get": {
-        "description": "One garden proposal's whole record; 404 on an unknown id.",
-        "operationId": "get_proposal_api_proposals__proposal_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "proposal_id",
-            "required": true,
-            "schema": {
-              "title": "Proposal Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GardenProposalView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Proposal",
-        "tags": [
-          "proposals"
         ]
       }
     },
