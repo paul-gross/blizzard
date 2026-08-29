@@ -17,9 +17,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.foundation.store.invariants import Invariants
 from blizzard.hub.config import HubConfig, WorkSourceConfig
 from blizzard.runner.config import RunnerConfig
+from blizzard.tools.invariants import Invariants
 from tests.crash.support import (
     OWNER,
     WORK_SOURCE_TOKEN_ENV,

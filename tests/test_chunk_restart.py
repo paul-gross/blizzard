@@ -14,10 +14,10 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.invariants import HubInvariants
 from blizzard.hub.domain.graph import Executor, SessionMode
 from blizzard.hub.domain.restart import SUPERSEDED_ANSWER
 from blizzard.hub.domain.work import IWriteChunkRepository, Movement, MovementKind
+from blizzard.tools.invariants import HubInvariants
 from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, ingest, report_lease
 
 pytestmark = pytest.mark.component

@@ -11,9 +11,9 @@ from pathlib import Path
 
 import click
 
-from blizzard.foundation.store.invariants import Invariants
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.runner.config import RunnerConfig
+from blizzard.tools.invariants import Invariants
 
 
 @click.group(hidden=True)

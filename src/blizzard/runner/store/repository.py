@@ -881,7 +881,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Ack a buffered transcript row — the drain's own ack (D3). A ``delta`` row is
         pruned outright (up to the per-record cap each, nothing reads one acked); a ``final`` row
         stays, marked acked — its own tiny row is the exactly-once receipt
-        :class:`~blizzard.foundation.store.invariants.TranscriptSegmentFinalizedExactlyOnce`
+        :class:`~blizzard.tools.invariants.TranscriptSegmentFinalizedExactlyOnce`
         checks for."""
         ...
 

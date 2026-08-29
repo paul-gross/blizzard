@@ -14,7 +14,6 @@ from sqlalchemy import MetaData
 
 from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.invariants import RunnerInvariants, Violation
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.environments.provider import (
@@ -43,6 +42,7 @@ from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_segments
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
+from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission

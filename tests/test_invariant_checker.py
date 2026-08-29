@@ -17,11 +17,11 @@ from alembic.operations import Operations
 from sqlalchemy import insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.invariants import HubInvariants, RunnerInvariants
 from blizzard.hub.runtime import init_environment as init_hub
 from blizzard.hub.store import schema as hub
 from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
+from blizzard.tools.invariants import HubInvariants, RunnerInvariants
 
 pytestmark = pytest.mark.component
 
