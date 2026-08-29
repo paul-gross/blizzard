@@ -15,8 +15,8 @@ from blizzard.foundation.ids import (
     ARTIFACT_PREFIX,
     DECISION_PREFIX,
     MIGRATION_PREFIX,
-    WORK_ITEM_PROPOSAL_PREFIX,
     TRANSITION_PREFIX,
+    WORK_ITEM_PROPOSAL_PREFIX,
     Id,
 )
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN

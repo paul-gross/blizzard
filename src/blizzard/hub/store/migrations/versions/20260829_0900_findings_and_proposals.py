@@ -1,6 +1,5 @@
-"""findings, finding_facts, finding_sets, garden_proposals, garden_proposal_findings —
-the finding-and-proposal hub entities (blizzard#390). One hand-written revision mints
-all five.
+"""findings, finding_facts, finding_sets, garden_proposals, garden_proposal_findings
+(blizzard#390). One hand-written revision mints all five.
 
 Revision ID: 20260829_0900_findings_and_proposals
 Revises: 20260828_1000_scopes_and_routines
