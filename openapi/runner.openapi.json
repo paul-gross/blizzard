@@ -4263,7 +4263,7 @@
     },
     "/api/leases/{lease_id}/artifacts/{name}": {
       "get": {
-        "description": "One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;\n``404`` when nothing under the searched scope(s) matches. A supplied ``node`` narrows to node\nscope on its own, since neither a graph declaration nor a system artifact has a producing\nnode, so pairing it with ``scope=graph``/``scope=system`` is ``400``. More than one\ncandidate \u2014 several upstream nodes emitting the same name (issue #169), or a name present\nin more than one scope (a graph or `produces:` name colliding with a system artifact's,\nresolved here rather than prevented at mint) \u2014 is ``409`` naming them, never an arbitrary\npick.",
+        "description": "One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;\n``404`` when nothing matches. A supplied ``node`` settles scope to node on its own \u2014 neither\na graph declaration nor a system artifact has a producing node \u2014 so pairing it with\n``scope=graph``/``scope=system`` is ``400``. More than one candidate \u2014 several upstream\nnodes (issue #169), or a name colliding across scopes \u2014 is ``409`` naming them.",
         "operationId": "get_artifact_api_leases__lease_id__artifacts__name__get",
         "parameters": [
           {

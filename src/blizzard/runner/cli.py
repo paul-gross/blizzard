@@ -633,10 +633,9 @@ def ask(prompt: str, options: str | None) -> None:
 def artifact_group() -> None:
     """Worker: read node-step, graph, and system artifacts; write this node-step's own (issue
     #127). The lease binding is ambient: every verb acts on the worker's own lease, resolved
-    from the spawn environment, so none takes a flag by which a worker could name another
-    chunk. ``--scope`` picks between node scope, the graph mint's baked-in declarations, and
-    blizzard's own published system-artifact set. ``create`` *stages* a submission, published
-    on completion (#169)."""
+    from the spawn environment — none takes a flag naming another chunk. ``--scope`` picks node
+    scope, the graph mint's baked-in declarations, or blizzard's published system-artifact set.
+    ``create`` *stages* a submission, published on completion (#169)."""
 
 
 @dataclass(frozen=True)
@@ -696,10 +695,8 @@ _SCOPE_CHOICE = click.Choice([s.value for s in ArtifactScope])
 def artifact_list(content: bool, scope: str | None) -> None:
     """Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,
     plus the graph mint's own baked-in declarations and blizzard's published system-artifact
-    set — ``--scope`` narrows to one.
-
-    Content is elided by default (issue #169), since inlining every upstream asset's full text
-    has overflowed tool output; ``--content`` restores it."""
+    set — ``--scope`` narrows to one. Content is elided by default (issue #169), since inlining
+    every upstream asset's full text has overflowed tool output; ``--content`` restores it."""
     worker = WorkerCall.of("artifact list")
     resp = worker.get(
         worker.leased("artifacts"),
@@ -742,8 +739,7 @@ def artifact_list(content: bool, scope: str | None) -> None:
 def artifact_get(name: str, node: str | None, scope: str | None, content: bool) -> None:
     """Worker: read one artifact by NAME — a ``produces:`` name (node scope), a baked-in graph
     declaration (graph scope), or one of blizzard's own published documents (system scope);
-    unknown is a ``404``, and more than one candidate — several upstream nodes (issue #169),
-    or a name present in more than one scope — exits non-zero naming them. ``--content`` prints
+    unknown is a ``404``, more than one candidate a ``409`` naming them. ``--content`` prints
     raw asset text, and errors on the ``git_commit`` kind, which carries none. NAME is
     percent-encoded (issue #233)."""
     worker = WorkerCall.of("artifact get")

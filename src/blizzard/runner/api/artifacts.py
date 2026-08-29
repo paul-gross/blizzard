@@ -1,11 +1,9 @@
 """A worker's read of its own node-step artifacts (issue #127), its graph mint's own
 baked-in declarations, and blizzard's own published system-artifact set — resolved
 latest-by-epoch for node scope, or one by name, whose ``:path`` converter captures a slash
-verbatim. Node and system scope are hub-proxied forwards, since the worker holds no hub
-credential of its own; graph scope never reaches the hub, answered entirely off the
-runner's own mirror of the pinned mint, read by the lease's ``graph_id``
-(``bzh:system-scope-reads-live``, ``bzh:graph-scope-reads-local``). Authorization resolves
-before any source is consulted."""
+verbatim. Graph scope answers from the runner's own pinned-mint mirror; node and system
+scope proxy through the hub on every call (``bzh:graph-scope-reads-local``,
+``bzh:system-scope-reads-live``). Authorization resolves before any source is consulted."""
 
 from __future__ import annotations
 
@@ -143,13 +141,10 @@ def get_artifact(
     lease_id: str, name: str, request: Request, node: str | None = None, scope: ArtifactScope | None = None
 ) -> WorkerArtifact:
     """One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;
-    ``404`` when nothing under the searched scope(s) matches. A supplied ``node`` narrows to node
-    scope on its own, since neither a graph declaration nor a system artifact has a producing
-    node, so pairing it with ``scope=graph``/``scope=system`` is ``400``. More than one
-    candidate — several upstream nodes emitting the same name (issue #169), or a name present
-    in more than one scope (a graph or `produces:` name colliding with a system artifact's,
-    resolved here rather than prevented at mint) — is ``409`` naming them, never an arbitrary
-    pick."""
+    ``404`` when nothing matches. A supplied ``node`` settles scope to node on its own — neither
+    a graph declaration nor a system artifact has a producing node — so pairing it with
+    ``scope=graph``/``scope=system`` is ``400``. More than one candidate — several upstream
+    nodes (issue #169), or a name colliding across scopes — is ``409`` naming them."""
     lease = authorized_lease(lease_id, request)
     if node is not None and scope is not None and scope in _NODELESS_SCOPES:
         raise HTTPException(

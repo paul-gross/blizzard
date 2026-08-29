@@ -1,14 +1,9 @@
 """System-scope artifact reads — service tier (blizzard#391).
 
-A real runner-local API (in-thread uvicorn, per ``tests.e2e.test_acceptance_loop._runner_api``)
-against a real ``blizzard-mock-hub`` subprocess, driven the way a worker actually would: the
-``blizzard runner artifact`` CLI, never the route directly. Proves the end-to-end read (list +
-get + ``--content``), the counterpart to ``bzh:graph-scope-reads-local`` for
-``bzh:graph-scope-reads-live`` — a system-scope read never resolves from runner-local state, so
-an unreachable hub fails it rather than silently answering from nothing — and this chunk's own
-acceptance criterion: both packaged names are readable by a worker on a graph that declares no
-``artifacts:`` block at all.
-"""
+A real runner-local API against a real ``blizzard-mock-hub`` subprocess, driven through the
+``blizzard runner artifact`` CLI. Proves the end-to-end read, ``bzh:system-scope-reads-live``'s
+unreachable-hub failure, and that both packaged names are readable by a worker whose graph
+declares no ``artifacts:`` block."""
 
 from __future__ import annotations
 
@@ -153,9 +148,8 @@ def test_a_worker_on_a_graph_with_no_artifacts_block_reads_a_packaged_name_verba
         base_config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(base_config, host="127.0.0.1", port=_free_port())
         lease_id, token = "lease_sys_no_artifacts_block", "tok_sys_no_artifacts_block"
-        # A graph id nothing ever declares graph-scoped artifacts for — the runner-local
-        # mirror `_graph_rows` reads from is empty for it, exactly as a graph with no
-        # `artifacts:` block leaves it.
+        # A graph id nothing declares graph-scoped artifacts for — `_graph_rows` reads it
+        # empty, exactly as a graph with no `artifacts:` block leaves it.
         _seed_lease(config, lease_id=lease_id, token=token, graph_id="gr_no_artifacts_block")
 
         with _runner_api(config):

@@ -1,10 +1,8 @@
 """Docs-as-contract guard (D5, blizzard#391 Phase 2) — every published garden system
 artifact carries a machine-checkable pin to the wire models it documents: a `### ModelName`
-heading immediately followed by a fenced ```json block whose keys are exactly that
-model's field aliases, and which parses into the model without error. Renaming, adding, or
-removing a field on any of the pinned finding/proposal models breaks this test until the
-document is updated to match — see ``blizzard.hub.system_artifacts`` for the packaged
-documents themselves."""
+heading immediately followed by a fenced ```json block whose keys are exactly that model's
+field aliases, and which parses into the model without error. Renaming, adding, or removing a
+field on any pinned model breaks this test until the document is updated to match."""
 
 from __future__ import annotations
 
@@ -20,12 +18,8 @@ from blizzard.wire import finding, garden_proposal
 
 pytestmark = pytest.mark.unit
 
-# The documented models, by the exact heading name each document uses. `finding.FindingOp`
-# (`Annotated[AddFindingOp | ObservedFindingOp | GoneFindingOp, Field(discriminator="op")]`)
-# is a union alias, not a model, and is deliberately absent here — a document documents its
-# three member types individually instead of one heading with three shapes behind it. A
-# future reader wiring `FindingOp` in would need `typing.get_args` on its `Annotated` first
-# argument to get at the three real models rather than calling `model_fields` on the alias.
+# The documented models, by heading name. `finding.FindingOp` is a union alias, not a model,
+# so it's absent here — a document pins its three member types individually instead.
 _MODELS: dict[str, type[BaseModel]] = {
     "FindingCandidate": finding.FindingCandidate,
     "FindingDelta": finding.FindingDelta,
@@ -35,9 +29,8 @@ _MODELS: dict[str, type[BaseModel]] = {
     "GardenProposalCandidate": garden_proposal.GardenProposalCandidate,
 }
 
-# `### ModelName`, then a fenced ```json block — one or more blank lines allowed between
-# the heading and the fence, none required. Non-greedy body so consecutive pairs in one
-# document are extracted independently rather than one match swallowing the rest.
+# `### ModelName`, then a fenced ```json block. Non-greedy body so consecutive pairs in
+# one document are extracted independently rather than one match swallowing the rest.
 _HEADING_AND_BLOCK = re.compile(r"^### (?P<name>\w+)\n+```json\n(?P<body>.*?)\n```", re.MULTILINE | re.DOTALL)
 
 

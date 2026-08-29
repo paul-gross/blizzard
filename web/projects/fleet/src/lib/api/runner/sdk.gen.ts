@@ -209,13 +209,10 @@ export const listArtifactsApiLeasesLeaseIdArtifactsGet = <ThrowOnError extends b
  * Get Artifact
  *
  * One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;
- * ``404`` when nothing under the searched scope(s) matches. A supplied ``node`` narrows to node
- * scope on its own, since neither a graph declaration nor a system artifact has a producing
- * node, so pairing it with ``scope=graph``/``scope=system`` is ``400``. More than one
- * candidate — several upstream nodes emitting the same name (issue #169), or a name present
- * in more than one scope (a graph or `produces:` name colliding with a system artifact's,
- * resolved here rather than prevented at mint) — is ``409`` naming them, never an arbitrary
- * pick.
+ * ``404`` when nothing matches. A supplied ``node`` settles scope to node on its own — neither
+ * a graph declaration nor a system artifact has a producing node — so pairing it with
+ * ``scope=graph``/``scope=system`` is ``400``. More than one candidate — several upstream
+ * nodes (issue #169), or a name colliding across scopes — is ``409`` naming them.
  */
 export const getArtifactApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends boolean = false>(options: Options<GetArtifactApiLeasesLeaseIdArtifactsNameGetData, ThrowOnError>): RequestResult<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError> => (options.client ?? client).get<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/artifacts/{name}', ...options });
 
