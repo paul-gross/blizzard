@@ -309,12 +309,15 @@ class ChunkStore:
                     select(s.route_token_minted).where(s.route_token_minted.c.chunk_id == chunk_id)
                 ).all()
             ]
+            # Scoped to this chunk's own questions (blizzard#421) — load_all_facts's fleet-wide
+            # counterpart is deliberately unfiltered, since it is building the answered set for
+            # every chunk at once.
             answered = {
                 a.question_id
                 for a in conn.execute(
-                    select(s.question_answers.c.question_id).join(
-                        s.questions, s.questions.c.question_id == s.question_answers.c.question_id
-                    )
+                    select(s.question_answers.c.question_id)
+                    .join(s.questions, s.questions.c.question_id == s.question_answers.c.question_id)
+                    .where(s.questions.c.chunk_id == chunk_id)
                 ).all()
             }
             questions = [
