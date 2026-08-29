@@ -4316,7 +4316,7 @@ export type WorkSourcesListView = {
  * RotatePolicyView
  *
  * The declared session's rotation bounds (issue #144), carried on ``NodeConfig``.
- * ``max_invocations`` counts **harness invocations** — spawn, resume, judge, nudge — not node-steps,
+ * ``max_invocations`` counts **harness invocations** — spawn, resume, judge — not node-steps,
  * of which one burns two or three.
  */
 export type BlizzardWireEnvelopeRotatePolicyView = {
