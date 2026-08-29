@@ -249,6 +249,7 @@ transitions = Table(
     Column("runner_id", String, nullable=False),  # reporting author, or the hub coordinator
     Column("recorded_at", UtcDateTime, nullable=False),
 )
+Index("ix_transitions_chunk_id", transitions.c.chunk_id)
 
 # The activity feed's bounded read (issue #213) — indexed because ``transitions`` is the
 # one high-volume source among the feed's.
@@ -279,6 +280,7 @@ chunk_migrations = Table(
     # Nullable — a row predating the discriminator stays honestly unattributed.
     Column("source", String, nullable=True),
 )
+Index("ix_chunk_migrations_chunk_id", chunk_migrations.c.chunk_id)
 
 # --- Artifacts (the chunk artifact store) --------------------------------------
 
@@ -447,6 +449,7 @@ lease_facts = Table(
     Column("runner_id", String, nullable=False),
     Column("minted_at", UtcDateTime, nullable=False),
 )
+Index("ix_lease_facts_chunk_id", lease_facts.c.chunk_id)
 
 # --- Routes (route.created / route.released) ----------------------------------
 
@@ -462,6 +465,7 @@ route_created = Table(
     # per-chunk counter shared with route_released.seq, assigned in real write order.
     Column("seq", Integer, nullable=False),
 )
+Index("ix_route_created_chunk_id", route_created.c.chunk_id)
 
 route_environments = Table(
     "route_environments",
@@ -481,6 +485,7 @@ route_released = Table(
     # tied on timestamp is still totally ordered by real write order.
     Column("seq", Integer, nullable=False),
 )
+Index("ix_route_released_chunk_id", route_released.c.chunk_id)
 
 # --- Route capability tokens (route_token_minted — issue #84a) ----------------
 # Only the sha256 digest is persisted; ``seq`` shares the per-chunk route counter.
@@ -493,6 +498,7 @@ route_token_minted = Table(
     Column("seq", Integer, nullable=False),
     Column("minted_at", UtcDateTime, nullable=False),
 )
+Index("ix_route_token_minted_chunk_id", route_token_minted.c.chunk_id)
 
 # --- Delivery landing facts (per-repo, then whole-chunk) ----------------------
 
@@ -505,6 +511,7 @@ delivery_repo_landed = Table(
     Column("commit_hash", String, nullable=False),
     Column("landed_at", UtcDateTime, nullable=False),
 )
+Index("ix_delivery_repo_landed_chunk_id", delivery_repo_landed.c.chunk_id)
 
 delivery_landed = Table(
     "delivery_landed",
@@ -513,6 +520,7 @@ delivery_landed = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("landed_at", UtcDateTime, nullable=False),  # terminal: all repos landed
 )
+Index("ix_delivery_landed_chunk_id", delivery_landed.c.chunk_id)
 
 # --- Delivery closure facts (work_item_closures — issue #216) -----------------
 # One row per close-attempt outcome; `closed`/`gone` are terminal, `failed` is retried.
@@ -558,6 +566,7 @@ chunk_bounces = Table(
     Column("envelope", Text, nullable=False),  # JSON kick-back payload
     Column("recorded_at", UtcDateTime, nullable=False),
 )
+Index("ix_chunk_bounces_chunk_id", chunk_bounces.c.chunk_id)
 
 # --- Open-PR delivery facts (pr.opened / pr.closed) ---------------------------
 # Read-only history (#67): no engine path writes either table any more.
@@ -588,6 +597,7 @@ delivery_pr_closed = Table(
     Column("landed_commit", String, nullable=True),  # the merge commit where one exists
     Column("closed_at", UtcDateTime, nullable=False),
 )
+Index("ix_delivery_pr_closed_chunk_id", delivery_pr_closed.c.chunk_id)
 
 # --- The fleet-wide hub-execution serialization slot (#65) -------------------
 # A live slot has ``released_at IS NULL``; one at a time, reclaimable past its TTL.
@@ -614,6 +624,7 @@ hub_node_poll = Table(
     Column("epoch", Integer, nullable=False),
     Column("polled_at", UtcDateTime, nullable=False),
 )
+Index("ix_hub_node_poll_chunk_id", hub_node_poll.c.chunk_id)
 
 # --- Readiness: the not-ready resting state and its promotion --------
 # A chunk with no ``chunk_promoted`` row derives ``not_ready`` and is never claimed.
@@ -625,6 +636,7 @@ chunk_promoted = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("promoted_at", UtcDateTime, nullable=False),  # not_ready -> ready
 )
+Index("ix_chunk_promoted_chunk_id", chunk_promoted.c.chunk_id)
 
 # --- Facts that make the derivation precedence correct (shaped) -------------
 
@@ -637,6 +649,7 @@ chunk_stopped = Table(
     # Who stopped it (issue #118) — nullable: a row predating the column reads back `None`.
     Column("stopped_by", String, nullable=True),
 )
+Index("ix_chunk_stopped_chunk_id", chunk_stopped.c.chunk_id)
 
 # An operator's manual completion (issue #294) — outranks a ``chunk_stopped`` row recorded
 # at or before it (``ChunkFacts._operator_completion_outranks_stop``), the motivating case.
@@ -648,6 +661,7 @@ chunk_completed = Table(
     Column("completed_at", UtcDateTime, nullable=False),
     Column("completed_by", String, nullable=False),
 )
+Index("ix_chunk_completed_chunk_id", chunk_completed.c.chunk_id)
 
 # The fact that makes an unacquired chunk ephemeral by deletion (issue #364) — a
 # ``chunk_grouped``-shaped sibling; ``deleted_by`` is non-null, with no legacy row predating it.
@@ -675,6 +689,7 @@ escalations = Table(
     Column("decision_id", String, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
+Index("ix_escalations_chunk_id", escalations.c.chunk_id)
 
 # --- Usage facts (usage.recorded — issue #59) --------------------------------
 # One row per harness invocation. **Not** epoch-fenced: a zombie's spend is real spend.
@@ -696,6 +711,7 @@ usage_facts = Table(
     Column("cost_usd", Float, nullable=True),  # None = no envelope for this invocation — never fabricated
     Column("recorded_at", UtcDateTime, nullable=False),
 )
+Index("ix_usage_facts_chunk_id", usage_facts.c.chunk_id)
 
 # --- Questions and answers (the ask/answer rendezvous) ----------------------
 # Open exactly while no answer row exists; the answer is first-write-wins CAS on the PK.
@@ -713,6 +729,7 @@ questions = Table(
     Column("options", Text, nullable=False),  # JSON list[str] of offered choices (may be empty)
     Column("asked_at", UtcDateTime, nullable=False),  # reap clock stops for the chunk from here
 )
+Index("ix_questions_chunk_id", questions.c.chunk_id)
 
 question_answers = Table(
     "question_answers",
@@ -750,6 +767,7 @@ decisions = Table(
     Column("choices", Text, nullable=False),  # JSON list of {name, description} — the buttons
     Column("submitted_at", UtcDateTime, nullable=False),
 )
+Index("ix_decisions_chunk_id", decisions.c.chunk_id)
 
 decision_resolutions = Table(
     "decision_resolutions",
@@ -772,6 +790,7 @@ requeues = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
 )
+Index("ix_requeues_chunk_id", requeues.c.chunk_id)
 
 # An operator's forced move of a chunk onto a node, now (issue #370) — a movement fact of
 # its own, never a transition: nothing judged it and no edge was taken.
@@ -794,6 +813,7 @@ chunk_restarts = Table(
     Column("restarted_by", String, nullable=False),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
+Index("ix_chunk_restarts_chunk_id", chunk_restarts.c.chunk_id)
 
 # --- Chunk pause facts (chunk.paused / chunk.resumed — issue #46) -----------
 # An operator-level brake over one chunk: append-only, newest-fact-wins.
@@ -807,6 +827,7 @@ chunk_pause_facts = Table(
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
 )
+Index("ix_chunk_pause_facts_chunk_id", chunk_pause_facts.c.chunk_id)
 
 # --- Store-and-forward high-water mark (per-runner idempotency) ---------------
 # The greatest per-runner seq already applied; a fact at or below it is re-acked, not applied.
