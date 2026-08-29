@@ -41,6 +41,7 @@ from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.restart import ChunkNotRestartable, RestartCurrentNodeUnknown, RestartNodeUnknown
 from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
+    ChunkFacts,
     FleetSummary,
     WorkItemPriority,
     WorkRef,
@@ -132,9 +133,20 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
 
 @router.get("/chunks", response_model=list[ChunkSummary], dependencies=[Depends(require(FLEET_VIEW))])
 def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list[ChunkSummary]:
-    """The fleet chunk list — derived status per chunk."""
+    """The fleet chunk list — derived status per chunk.
+
+    Reads the fleet's facts and routes with one bulk query each rather than fanning
+    `load_facts`/`route_of` out per chunk (issue #421) — the `FleetPulse.view()` shape
+    (issue #374), extended to routes and to the rendered row."""
     names = GraphNames(services.graphs.get)
-    return [ChunkView.of(services, chunk, names).summary() for chunk in services.chunks.list_all()]
+    facts = services.chunks.load_all_facts()
+    routes = services.chunks.load_all_routes()
+    return [
+        ChunkView.injected(
+            services, chunk, facts.get(chunk.chunk_id) or ChunkFacts(minted=True), routes.get(chunk.chunk_id), names
+        ).summary()
+        for chunk in services.chunks.list_all()
+    ]
 
 
 @dataclass(frozen=True)

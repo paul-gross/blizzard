@@ -9028,7 +9028,7 @@
     },
     "/api/chunks": {
       "get": {
-        "description": "The fleet chunk list \u2014 derived status per chunk.",
+        "description": "The fleet chunk list \u2014 derived status per chunk.\n\nReads the fleet's facts and routes with one bulk query each rather than fanning\n`load_facts`/`route_of` out per chunk (issue #421) \u2014 the `FleetPulse.view()` shape\n(issue #374), extended to routes and to the rendered row.",
         "operationId": "list_chunks_api_chunks_get",
         "responses": {
           "200": {

@@ -1274,6 +1274,12 @@ class IReadChunkRepository(Protocol):
         """The chunk's live route (runner/workspace/envs), or None if unclaimed/released."""
         ...
 
+    def load_all_routes(self) -> dict[str, Route]:
+        """Every chunk's live route, keyed by chunk id — the bulk counterpart to
+        :meth:`route_of` (issue #421), bounded the way :meth:`load_all_facts` is. A chunk
+        with no live route is absent from the dict, as :meth:`route_of` returns ``None``."""
+        ...
+
     def list_ready(self) -> list[Chunk]: ...
     def list_not_ready(self) -> list[Chunk]:
         """The backlog's own candidate set (``bzh:ranking-is-per-list``)."""
