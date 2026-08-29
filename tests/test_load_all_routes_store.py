@@ -1,11 +1,7 @@
-"""``IReadChunkRepository.load_all_routes`` — the list-read bulk route read (component
-tier, blizzard#421).
+"""``IReadChunkRepository.load_all_routes`` (component tier, blizzard#421).
 
-Proves the bulk read derives the exact same route per chunk as ``route_of`` called one
-chunk at a time, across ``test_load_all_facts_store``'s own fixture — which already spans a
-live route (``ch_running``), a route with no live claim at all (chunks minted with no
-``record_route`` call), and a created-then-released route (``ch_kitchen_sink``) — and that
-it does so in a bounded number of queries, regardless of fleet size."""
+Proves the bulk read derives the same route per chunk as ``route_of`` called one at a
+time, across ``test_load_all_facts_store``'s fixture, in a bounded query count."""
 
 from __future__ import annotations
 

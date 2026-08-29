@@ -1,10 +1,7 @@
 """``GET /api/chunks`` — the bulk-read list path (component tier, blizzard#421).
 
-`list_chunks` used to fan `ChunkView.of`'s `load_facts` and `route_of` out once per chunk
-(~29 queries per chunk at fleet scale). Proves the route now reads the fleet's facts and
-routes with one bulk query each, so the query count is unchanged as fleet size grows, and
-never reaches `load_facts`/`route_of` at all — the `FleetPulse.view()` shape (issue #374),
-extended to the rendered list row."""
+Proves the route reads the fleet's facts and routes with one bulk query each, so the query
+count is unchanged as fleet size grows and never reaches `load_facts`/`route_of` at all."""
 
 from __future__ import annotations
 

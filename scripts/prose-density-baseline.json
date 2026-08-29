@@ -873,14 +873,14 @@
    "total": 87
   },
   "blizzard/hub/api/chunk_views.py": {
-   "comments": 1,
-   "docstrings": 42,
-   "total": 349
+   "comments": 3,
+   "docstrings": 49,
+   "total": 386
   },
   "blizzard/hub/api/chunks.py": {
    "comments": 15,
-   "docstrings": 64,
-   "total": 558
+   "docstrings": 68,
+   "total": 570
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -1434,8 +1434,8 @@
   },
   "blizzard/hub/domain/work.py": {
    "comments": 54,
-   "docstrings": 561,
-   "total": 1922
+   "docstrings": 564,
+   "total": 1928
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 5,
@@ -1528,9 +1528,9 @@
    "total": 397
   },
   "blizzard/hub/store/internal/chunk_store.py": {
-   "comments": 72,
-   "docstrings": 167,
-   "total": 2752
+   "comments": 74,
+   "docstrings": 175,
+   "total": 2831
   },
   "blizzard/hub/store/internal/finding_store.py": {
    "comments": 4,
@@ -1947,6 +1947,11 @@
    "docstrings": 6,
    "total": 39
   },
+  "blizzard/hub/store/migrations/versions/20260829_1930_fact_tables_chunk_id_index.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "total": 66
+  },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
    "docstrings": 0,
@@ -1955,7 +1960,7 @@
   "blizzard/hub/store/schema.py": {
    "comments": 380,
    "docstrings": 6,
-   "total": 1184
+   "total": 1205
   },
   "blizzard/hub/system_artifacts/__init__.py": {
    "comments": 3,
@@ -3514,6 +3519,11 @@
    "docstrings": 27,
    "total": 485
   },
+  "test_chunk_fact_table_indexes.py": {
+   "comments": 2,
+   "docstrings": 11,
+   "total": 96
+  },
   "test_chunk_pause.py": {
    "comments": 103,
    "docstrings": 51,
@@ -4159,10 +4169,20 @@
    "docstrings": 6,
    "total": 40
   },
+  "test_list_chunks_bulk_reads.py": {
+   "comments": 5,
+   "docstrings": 7,
+   "total": 109
+  },
   "test_load_all_facts_store.py": {
    "comments": 24,
    "docstrings": 12,
    "total": 405
+  },
+  "test_load_all_routes_store.py": {
+   "comments": 4,
+   "docstrings": 4,
+   "total": 75
   },
   "test_logging.py": {
    "comments": 1,

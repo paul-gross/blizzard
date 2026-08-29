@@ -309,9 +309,8 @@ class ChunkStore:
                     select(s.route_token_minted).where(s.route_token_minted.c.chunk_id == chunk_id)
                 ).all()
             ]
-            # Scoped to this chunk's own questions (blizzard#421) — load_all_facts's fleet-wide
-            # counterpart is deliberately unfiltered, since it is building the answered set for
-            # every chunk at once.
+            # Scoped to this chunk's own questions (blizzard#421); load_all_facts's fleet-wide
+            # counterpart is deliberately unfiltered — it builds the set for every chunk at once.
             answered = {
                 a.question_id
                 for a in conn.execute(
@@ -755,11 +754,9 @@ class ChunkStore:
 
     def load_all_routes(self) -> dict[str, Route]:
         """See :meth:`IReadChunkRepository.load_all_routes` (issue #421) — one bounded query
-        per route table across the whole store, the bulk counterpart to :meth:`route_of`.
-        Derives the newest ``route_created``/``route_released`` pair per chunk id in Python
-        the way :meth:`load_all_facts` groups its own per-table reads, then defers the
-        liveness call to the same :class:`~blizzard.hub.domain.work.RouteHistory.newest`
-        tie-break :meth:`_route_of_conn` uses, so the two never drift."""
+        per route table, grouped by chunk id in Python the way :meth:`load_all_facts` is,
+        deferring liveness to the same :class:`~blizzard.hub.domain.work.RouteHistory.newest`
+        tie-break :meth:`_route_of_conn` uses."""
         with self._engine.connect() as conn:
             newest_created: dict[str, RouteCreatedFact] = {}
             route_id_of: dict[str, str] = {}

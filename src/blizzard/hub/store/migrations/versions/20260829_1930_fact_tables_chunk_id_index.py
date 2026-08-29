@@ -1,10 +1,5 @@
-"""chunk_id indexes on the per-chunk fact tables (blizzard#421).
-
-``ChunkStore.load_facts`` and ``_route_of_conn`` filter twenty-one fact tables by
-``chunk_id``, none of which carried an index or a unique constraint leading with it — every
-one of those filters was a sequential scan. ``delivery_pr_opened`` is excluded: its
-``uq_delivery_pr_opened_chunk_repo`` unique constraint already leads with ``chunk_id``, so an
-index here would be redundant write cost for no read.
+"""chunk_id indexes on the per-chunk fact tables (blizzard#421); ``delivery_pr_opened`` is
+excluded, already covered by its own unique constraint.
 
 Revision ID: 20260829_1930_fact_tables_chunk_id_index
 Revises: 20260829_0900_findings_and_proposals

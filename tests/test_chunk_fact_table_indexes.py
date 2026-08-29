@@ -24,9 +24,8 @@ pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 8, 29, 12, 0, 0, tzinfo=UTC)
 
-# Mirrors the `20260829_1930_fact_tables_chunk_id_index` revision's own table list —
-# every fact table `load_facts`/`_route_of_conn` filter by `chunk_id`, minus
-# `delivery_pr_opened` (already covered by a unique constraint leading with `chunk_id`).
+# Mirrors the revision's own table list, minus `delivery_pr_opened` (covered by its
+# own unique constraint).
 _INDEXED_TABLES = (
     "transitions",
     "chunk_migrations",
@@ -83,10 +82,8 @@ def test_delivery_pr_opened_read_plans_as_an_index_search_on_its_own_unique_cons
 
 
 def test_load_facts_answered_question_read_plans_as_an_index_search(tmp_path: Path) -> None:
-    """`load_facts`'s `answered` read (blizzard#421) is scoped to the chunk's own questions
-    via a join filtered on `questions.chunk_id`, so it plans against `ix_questions_chunk_id`
-    rather than an unfiltered join across the whole store — mirrors the exact query shape in
-    `ChunkStore.load_facts`."""
+    """`load_facts`'s `answered` read (blizzard#421) joins on `questions.chunk_id`, so it
+    plans against `ix_questions_chunk_id` rather than an unfiltered join."""
     engine = _engine(tmp_path)
     with engine.connect() as conn:
         plan = conn.execute(

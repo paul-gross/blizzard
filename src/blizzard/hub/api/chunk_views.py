@@ -45,9 +45,7 @@ class _RouteNotInjected(Enum):
     TOKEN = 0
 
 
-#: :meth:`ChunkView.of`'s default — "fetch the route lazily via `route_of`" — distinct from
-#: an *injected* ``None``, which :meth:`ChunkView.injected` uses to mean "no live route"
-#: (``bzh:facts-not-status``'s injection-carries-absence rule, issue #421).
+#: :meth:`ChunkView.of`'s default, distinct from an *injected* ``None`` (issue #421).
 _ROUTE_NOT_INJECTED: Final = _RouteNotInjected.TOKEN
 
 
@@ -78,13 +76,9 @@ class ChunkView:
     def injected(
         cls, services: HubServices, chunk: Chunk, facts: ChunkFacts, route: Route | None, names: GraphNames
     ) -> ChunkView:
-        """Construct from an already-fetched :class:`ChunkFacts` and route — the bulk-read
-        counterpart to :meth:`of` (issue #421), so a fan-out list read injects
-        ``load_all_facts``/``load_all_routes`` results instead of calling
-        ``load_facts``/``route_of`` once per chunk. Rendering (:meth:`summary`,
-        :meth:`detail`) is unchanged either way — only where the facts and route come from
-        moves (``canon:one-owner``). ``route=None`` here means "no live route", not "not
-        fetched"; :meth:`of` leaves :attr:`route` at :data:`_ROUTE_NOT_INJECTED` instead."""
+        """The bulk-read counterpart to :meth:`of` (issue #421): a fan-out list read injects
+        already-fetched facts and route instead of calling ``load_facts``/``route_of`` per
+        chunk. ``route=None`` means "no live route"; :meth:`of` leaves it uninjected."""
         return cls(services=services, chunk=chunk, facts=facts, names=names, route=route)
 
     def _resolved_route(self) -> Route | None:
@@ -99,9 +93,8 @@ class ChunkView:
         every transition verb, from the same facts (``canon:one-owner``)."""
         node_id, node_name = self.current_node()
         status = self.facts.status()
-        # Gated on the claim either way: a terminal chunk reads unrouted even while its route
-        # facts still show a live route (issue #140), injected or not — and on the lazy path
-        # the guard also spares the terminal chunk its `route_of` query.
+        # A terminal chunk reads unrouted regardless of injection (issue #140); on the
+        # lazy path the guard also spares it the `route_of` query.
         if not status.holds_claim:
             route = None
         elif self.route is not _ROUTE_NOT_INJECTED:
