@@ -753,12 +753,91 @@ class ChunkStore:
             route_id=created.route_id,
         )
 
+    def load_all_routes(self) -> dict[str, Route]:
+        """See :meth:`IReadChunkRepository.load_all_routes` (issue #421) — one bounded query
+        per route table across the whole store, the bulk counterpart to :meth:`route_of`.
+        Derives the newest ``route_created``/``route_released`` pair per chunk id in Python
+        the way :meth:`load_all_facts` groups its own per-table reads, then defers the
+        liveness call to the same :class:`~blizzard.hub.domain.work.RouteHistory.newest`
+        tie-break :meth:`_route_of_conn` uses, so the two never drift."""
+        with self._engine.connect() as conn:
+            newest_created: dict[str, RouteCreatedFact] = {}
+            route_id_of: dict[str, str] = {}
+            runner_of: dict[str, str] = {}
+            workspace_of: dict[str, str] = {}
+            for r in conn.execute(select(s.route_created)).all():
+                existing = newest_created.get(r.chunk_id)
+                if existing is None or (r.created_at, r.seq) > (existing.created_at, existing.seq):
+                    newest_created[r.chunk_id] = RouteCreatedFact(created_at=r.created_at, seq=r.seq)
+                    route_id_of[r.chunk_id] = r.route_id
+                    runner_of[r.chunk_id] = r.runner_id
+                    workspace_of[r.chunk_id] = r.workspace_id
+
+            newest_released: dict[str, RouteReleasedFact] = {}
+            for r in conn.execute(
+                select(s.route_released.c.chunk_id, s.route_released.c.released_at, s.route_released.c.seq)
+            ).all():
+                existing = newest_released.get(r.chunk_id)
+                if existing is None or (r.released_at, r.seq) > (existing.released_at, existing.seq):
+                    newest_released[r.chunk_id] = RouteReleasedFact(released_at=r.released_at, seq=r.seq)
+
+            live_chunk_ids = {
+                chunk_id
+                for chunk_id, created in newest_created.items()
+                if RouteHistory([created], [newest_released[chunk_id]] if chunk_id in newest_released else []).newest
+                is not None
+            }
+            if not live_chunk_ids:
+                return {}
+
+            route_ids = {route_id_of[chunk_id] for chunk_id in live_chunk_ids}
+            env_ids: dict[str, list[str]] = defaultdict(list)
+            for e in conn.execute(
+                select(s.route_environments.c.route_id, s.route_environments.c.environment_id).where(
+                    s.route_environments.c.route_id.in_(route_ids)
+                )
+            ).all():
+                env_ids[e.route_id].append(e.environment_id)
+
+            return {
+                chunk_id: Route(
+                    chunk_id=chunk_id,
+                    runner_id=runner_of[chunk_id],
+                    workspace_id=workspace_of[chunk_id],
+                    environment_ids=env_ids[route_id_of[chunk_id]],
+                    created_at=newest_created[chunk_id].created_at,
+                    route_id=route_id_of[chunk_id],
+                )
+                for chunk_id in live_chunk_ids
+            }
+
     def list_all(self) -> list[Chunk]:
+        """Every non-ephemeral chunk, newest-minted first. Reads ``chunk_work_refs`` with
+        one bulk query grouped by chunk id in Python (issue #421) rather than :meth:`_chunk`'s
+        per-chunk query, the same shape :meth:`load_all_facts` reads its own tables in — so
+        the list route's own chunk read is bounded regardless of fleet size too."""
         with self._engine.connect() as conn:
             ephemeral = self._ephemeral_ids(conn)
-            rows = conn.execute(select(s.chunks).order_by(s.chunks.c.minted_at.desc())).all()
-            # A grouped-away or deleted chunk is ephemeral: removed from every listing.
-            return [self._chunk(conn, row) for row in rows if row.chunk_id not in ephemeral]
+            rows = [
+                r
+                for r in conn.execute(select(s.chunks).order_by(s.chunks.c.minted_at.desc())).all()
+                if r.chunk_id not in ephemeral  # a grouped-away or deleted chunk is removed from every listing
+            ]
+            pointers: dict[str, list[WorkRef]] = defaultdict(list)
+            for p in conn.execute(select(s.chunk_work_refs)).all():
+                pointers[p.chunk_id].append(WorkRef(source=p.source, ref=p.ref))
+            return [
+                Chunk(
+                    chunk_id=r.chunk_id,
+                    graph_id=r.graph_id,
+                    work_refs=pointers[r.chunk_id],
+                    minted_at=r.minted_at,
+                    default_model=DEFAULT_MODEL.decode(r.default_model),
+                    default_effort=r.default_effort,
+                    intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
+                )
+                for r in rows
+            ]
 
     def list_ready(self) -> list[Chunk]:
         return [c for c in self.list_all() if self._status(c.chunk_id) is ChunkStatus.READY]

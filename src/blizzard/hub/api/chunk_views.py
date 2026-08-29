@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+from typing import Final
 
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
@@ -12,6 +14,7 @@ from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact
+from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import Chunk, ChunkFacts
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
@@ -35,6 +38,19 @@ from blizzard.wire.chunk import (
 from blizzard.wire.decision import DecisionView
 
 
+class _RouteNotInjected(Enum):
+    """The type of :data:`_ROUTE_NOT_INJECTED` — a single-member enum, not a plain class, so
+    ``is``/``is not`` narrows the ``Route | None | _RouteNotInjected`` union for pyright."""
+
+    TOKEN = 0
+
+
+#: :meth:`ChunkView.of`'s default — "fetch the route lazily via `route_of`" — distinct from
+#: an *injected* ``None``, which :meth:`ChunkView.injected` uses to mean "no live route"
+#: (``bzh:facts-not-status``'s injection-carries-absence rule, issue #421).
+_ROUTE_NOT_INJECTED: Final = _RouteNotInjected.TOKEN
+
+
 @dataclass(frozen=True)
 class ChunkView:
     """One chunk read — the row, the facts every derived value comes from
@@ -47,6 +63,7 @@ class ChunkView:
     chunk: Chunk
     facts: ChunkFacts
     names: GraphNames
+    route: Route | None | _RouteNotInjected = _ROUTE_NOT_INJECTED
 
     @classmethod
     def of(cls, services: HubServices, chunk: Chunk, names: GraphNames | None = None) -> ChunkView:
@@ -57,13 +74,40 @@ class ChunkView:
             names=names or GraphNames(services.graphs.get),
         )
 
+    @classmethod
+    def injected(
+        cls, services: HubServices, chunk: Chunk, facts: ChunkFacts, route: Route | None, names: GraphNames
+    ) -> ChunkView:
+        """Construct from an already-fetched :class:`ChunkFacts` and route — the bulk-read
+        counterpart to :meth:`of` (issue #421), so a fan-out list read injects
+        ``load_all_facts``/``load_all_routes`` results instead of calling
+        ``load_facts``/``route_of`` once per chunk. Rendering (:meth:`summary`,
+        :meth:`detail`) is unchanged either way — only where the facts and route come from
+        moves (``canon:one-owner``). ``route=None`` here means "no live route", not "not
+        fetched"; :meth:`of` leaves :attr:`route` at :data:`_ROUTE_NOT_INJECTED` instead."""
+        return cls(services=services, chunk=chunk, facts=facts, names=names, route=route)
+
+    def _resolved_route(self) -> Route | None:
+        """The chunk's route: the injected value if one was given, otherwise fetched lazily
+        via :meth:`~blizzard.hub.domain.work.IReadChunkRepository.route_of`."""
+        if self.route is not _ROUTE_NOT_INJECTED:
+            return self.route
+        return self.services.chunks.route_of(self.chunk.chunk_id)
+
     def summary(self) -> ChunkSummary:
         """The derived fleet-list row (issue #104) — rendered both by the list read and by
         every transition verb, from the same facts (``canon:one-owner``)."""
         node_id, node_name = self.current_node()
         status = self.facts.status()
-        # Asked before the read so a terminal chunk costs no `route_of` query at all (issue #140).
-        route = self.services.chunks.route_of(self.chunk.chunk_id) if status.holds_claim else None
+        # Gated on the claim either way: a terminal chunk reads unrouted even while its route
+        # facts still show a live route (issue #140), injected or not — and on the lazy path
+        # the guard also spares the terminal chunk its `route_of` query.
+        if not status.holds_claim:
+            route = None
+        elif self.route is not _ROUTE_NOT_INJECTED:
+            route = self.route
+        else:
+            route = self.services.chunks.route_of(self.chunk.chunk_id)
         completed_at = self.facts.completed_at()
         return ChunkSummary(
             chunk_id=self.chunk.chunk_id,
@@ -155,7 +199,7 @@ class ChunkView:
         )
 
     def _route(self) -> RouteView | None:
-        route = self.services.chunks.route_of(self.chunk.chunk_id)
+        route = self._resolved_route()
         if route is None:
             return None
         return RouteView(
