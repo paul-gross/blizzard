@@ -3465,6 +3465,22 @@ export type SubmittedArtifact = {
 };
 
 /**
+ * SystemArtifactView
+ *
+ * One system artifact as the fleet route serves it — its global name and raw text.
+ */
+export type SystemArtifactView = {
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
  * ToolCallSegmentView
  *
  * A tool invocation, structured: what was called, with what input, and what came back.
@@ -6672,6 +6688,54 @@ export type FleetSummaryApiFleetSummaryGetResponses = {
 };
 
 export type FleetSummaryApiFleetSummaryGetResponse = FleetSummaryApiFleetSummaryGetResponses[keyof FleetSummaryApiFleetSummaryGetResponses];
+
+export type ListSystemArtifactsRouteApiFleetSystemArtifactsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/system-artifacts';
+};
+
+export type ListSystemArtifactsRouteApiFleetSystemArtifactsGetResponses = {
+    /**
+     * Response List System Artifacts Route Api Fleet System Artifacts Get
+     *
+     * Successful Response
+     */
+    200: Array<SystemArtifactView>;
+};
+
+export type ListSystemArtifactsRouteApiFleetSystemArtifactsGetResponse = ListSystemArtifactsRouteApiFleetSystemArtifactsGetResponses[keyof ListSystemArtifactsRouteApiFleetSystemArtifactsGetResponses];
+
+export type GetSystemArtifactRouteApiFleetSystemArtifactsNameGetData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/fleet/system-artifacts/{name}';
+};
+
+export type GetSystemArtifactRouteApiFleetSystemArtifactsNameGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSystemArtifactRouteApiFleetSystemArtifactsNameGetError = GetSystemArtifactRouteApiFleetSystemArtifactsNameGetErrors[keyof GetSystemArtifactRouteApiFleetSystemArtifactsNameGetErrors];
+
+export type GetSystemArtifactRouteApiFleetSystemArtifactsNameGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SystemArtifactView;
+};
+
+export type GetSystemArtifactRouteApiFleetSystemArtifactsNameGetResponse = GetSystemArtifactRouteApiFleetSystemArtifactsNameGetResponses[keyof GetSystemArtifactRouteApiFleetSystemArtifactsNameGetResponses];
 
 export type IngestTranscriptSegmentsApiFleetTranscriptsPostData = {
     body: TranscriptSegmentBatch;

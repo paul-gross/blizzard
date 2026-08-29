@@ -631,18 +631,19 @@ def ask(prompt: str, options: str | None) -> None:
 
 @runner.group("artifact")
 def artifact_group() -> None:
-    """Worker: read node-step and graph artifacts; write this node-step's own (issue #127). The
-    lease binding is ambient: every verb acts on the worker's own lease, resolved from the spawn
-    environment, so none takes a flag by which a worker could name another chunk. ``--scope``
-    picks between node scope and the graph mint's baked-in declarations. ``create`` *stages* a
-    submission, published on completion (#169)."""
+    """Worker: read node-step, graph, and system artifacts; write this node-step's own (issue
+    #127). The lease binding is ambient: every verb acts on the worker's own lease, resolved
+    from the spawn environment, so none takes a flag by which a worker could name another
+    chunk. ``--scope`` picks between node scope, the graph mint's baked-in declarations, and
+    blizzard's own published system-artifact set. ``create`` *stages* a submission, published
+    on completion (#169)."""
 
 
 @dataclass(frozen=True)
 class ArtifactEntry:
     """One ``list``-view entry (issue #169) — every field but ``content``, which collapses to
     its ``bytes`` length (``None`` when the artifact carries none, i.e. ``git_commit``).
-    Carries ``scope`` (node/graph) like every other field."""
+    Carries ``scope`` (node/graph/system) like every other field."""
 
     artifact: dict
 
@@ -654,14 +655,22 @@ class ArtifactEntry:
         return summary
 
 
-def _refuse_graph_scope(verb: str, scope: str | None) -> None:
+#: Why each read-only scope refuses a write — named so the refusal states the domain fact,
+#: not just the word "read-only".
+_READ_ONLY_SCOPE_REASON = {
+    ArtifactScope.GRAPH.value: "a graph's declarations are baked at mint",
+    ArtifactScope.SYSTEM.value: "a system artifact is published by blizzard itself",
+}
+
+
+def _refuse_read_only_scope(verb: str, scope: str | None) -> None:
     """``create``/``commit``/``staged`` are node-scope only: a graph's declarations are baked at
-    mint and read-only. Refusing here states that domain fact to a worker parsing stderr mid-turn
-    (which scopes each verb serves: ``blizzard-context:/standards/worker-nodes/declarations.md``)."""
-    if scope == ArtifactScope.GRAPH.value:
-        raise click.ClickException(
-            f"artifact {verb}: graph scope is read-only — a graph's declarations are baked at mint"
-        )
+    mint and a system artifact is blizzard's own published document — both read-only. Refusing
+    here states that domain fact to a worker parsing stderr mid-turn (which scopes each verb
+    serves: ``blizzard-context:/standards/worker-nodes/declarations.md``)."""
+    reason = _READ_ONLY_SCOPE_REASON.get(scope or "")
+    if reason is not None:
+        raise click.ClickException(f"artifact {verb}: {scope} scope is read-only — {reason}")
 
 
 _SCOPE_CHOICE = click.Choice([s.value for s in ArtifactScope])
@@ -680,12 +689,14 @@ _SCOPE_CHOICE = click.Choice([s.value for s in ArtifactScope])
     "scope",
     type=_SCOPE_CHOICE,
     default=None,
-    help="Filter to one scope — `node` (this node-step's own artifacts) or `graph` (the graph "
-    "mint's baked-in declarations). Omitted reads both.",
+    help="Filter to one scope — `node` (this node-step's own artifacts), `graph` (the graph "
+    "mint's baked-in declarations), or `system` (blizzard's own published documents). Omitted "
+    "reads all three.",
 )
 def artifact_list(content: bool, scope: str | None) -> None:
     """Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,
-    plus the graph mint's own baked-in declarations — ``--scope`` narrows to one.
+    plus the graph mint's own baked-in declarations and blizzard's published system-artifact
+    set — ``--scope`` narrows to one.
 
     Content is elided by default (issue #169), since inlining every upstream asset's full text
     has overflowed tool output; ``--content`` restores it."""
@@ -707,18 +718,19 @@ def artifact_list(content: bool, scope: str | None) -> None:
     "--node",
     "node",
     default=None,
-    help="The producing node's name, to disambiguate a NAME more than one node emits. A "
-    "graph declaration has no producing node, so this narrows to node scope on its own — "
-    "pairing it with `--scope graph` is a contradiction and is refused.",
+    help="The producing node's name, to disambiguate a NAME more than one node emits. Neither "
+    "a graph declaration nor a system artifact has a producing node, so this narrows to node "
+    "scope on its own — pairing it with `--scope graph`/`--scope system` is a contradiction "
+    "and is refused.",
 )
 @click.option(
     "--scope",
     "scope",
     type=_SCOPE_CHOICE,
     default=None,
-    help="Resolve NAME from one scope only — `node` or `graph`. Omitted searches both, and a "
-    "NAME present in both is ambiguous the same as several producing nodes — unless `--node` "
-    "settles it.",
+    help="Resolve NAME from one scope only — `node`, `graph`, or `system`. Omitted searches "
+    "all three, and a NAME present in more than one is ambiguous the same as several "
+    "producing nodes — unless `--node` settles it.",
 )
 @click.option(
     "--content",
@@ -728,11 +740,12 @@ def artifact_list(content: bool, scope: str | None) -> None:
     help="Print the raw asset text to stdout instead of JSON (errors on a git-commit artifact).",
 )
 def artifact_get(name: str, node: str | None, scope: str | None, content: bool) -> None:
-    """Worker: read one artifact by NAME — a ``produces:`` name (node scope) or a baked-in graph
-    declaration (graph scope); unknown is a ``404``, and more than one candidate — several
-    upstream nodes (issue #169), or both scopes at once — exits non-zero naming them.
-    ``--content`` prints raw asset text, and errors on the ``git_commit`` kind, which carries
-    none. NAME is percent-encoded (issue #233)."""
+    """Worker: read one artifact by NAME — a ``produces:`` name (node scope), a baked-in graph
+    declaration (graph scope), or one of blizzard's own published documents (system scope);
+    unknown is a ``404``, and more than one candidate — several upstream nodes (issue #169),
+    or a name present in more than one scope — exits non-zero naming them. ``--content`` prints
+    raw asset text, and errors on the ``git_commit`` kind, which carries none. NAME is
+    percent-encoded (issue #233)."""
     worker = WorkerCall.of("artifact get")
     params: dict[str, str] = {}
     if node:
@@ -763,15 +776,16 @@ def artifact_get(name: str, node: str | None, scope: str | None, content: bool) 
     "scope",
     type=_SCOPE_CHOICE,
     default=None,
-    help="Always `node` — `graph` is refused, since a graph-mint declaration is baked in at mint and read-only.",
+    help="Always `node` — `graph` and `system` are refused, since a graph-mint declaration and "
+    "a system artifact are both read-only.",
 )
 def artifact_create(name: str, scope: str | None) -> None:
     """Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node
-    scope only — ``--scope graph`` is refused, since a graph-mint declaration is read-only.
+    scope only — ``--scope graph``/``--scope system`` are refused, both being read-only.
     A submission *stages* the content, published into the envelope only on completion (issue #169)
     — read it back with ``artifact staged``. Empty stdin and any rejection exit non-zero rather
     than silently losing the submission."""
-    _refuse_graph_scope("create", scope)
+    _refuse_read_only_scope("create", scope)
     worker = WorkerCall.of("artifact create")
     content = click.get_text_stream("stdin").read()
     if not content:
@@ -801,14 +815,14 @@ def artifact_create(name: str, scope: str | None) -> None:
     "scope",
     type=_SCOPE_CHOICE,
     default=None,
-    help="Always `node` — `graph` is refused, since graph scope has no staged submissions by construction.",
+    help="Always `node` — `graph` and `system` are refused, neither ever having a staged submission.",
 )
 def artifact_staged(content: bool, scope: str | None) -> None:
     """Worker: list this node-step's own staged (not-yet-published) submissions, node scope only
-    — ``--scope graph`` is refused, a graph declaration never being staged. Read straight
+    — ``--scope graph``/``--scope system`` are refused, neither ever being staged. Read straight
     off the runner's own ``attachments`` record rather than the hub envelope (issue #169), so a
     fresh ``artifact create`` shows up here immediately; ``--content`` gives the full text."""
-    _refuse_graph_scope("staged", scope)
+    _refuse_read_only_scope("staged", scope)
     worker = WorkerCall.of("artifact staged")
     resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
     if content:
@@ -868,14 +882,16 @@ class SessionLabel:
     "scope",
     type=_SCOPE_CHOICE,
     default=None,
-    help="Always `node` — `graph` is refused, since a graph-mint declaration is baked in at mint and read-only.",
+    help="Always `node` — `graph` and `system` are refused, since a graph-mint declaration and "
+    "a system artifact are both read-only.",
 )
 def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_sha: str, scope: str | None) -> None:
     """Worker: durably declare a git-commit artifact for REPO (issue #143). Carries the ``git_commit``
-    kind only — an asset is declared through ``artifact create``. Node scope only — ``--scope graph``
-    is refused. Deliberately no ``--forge``: the origin comes from the environment's repo
-    manifest (pinned by tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag)."""
-    _refuse_graph_scope("commit", scope)
+    kind only — an asset is declared through ``artifact create``. Node scope only —
+    ``--scope graph``/``--scope system`` are refused. Deliberately no ``--forge``: the origin
+    comes from the environment's repo manifest (pinned by
+    tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag)."""
+    _refuse_read_only_scope("commit", scope)
     worker = WorkerCall.of("artifact commit")
     body: dict[str, str] = {"repo": repo, "branch": branch, "commit": commit_sha}
     if environment_id is not None:

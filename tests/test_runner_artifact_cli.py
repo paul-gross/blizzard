@@ -134,6 +134,21 @@ def test_list_scope_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
+def test_list_scope_system_is_accepted_and_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict | None] = []
+
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(payload=[])
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "list", "--scope", "system"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"scope": "system"}]
+
+
+@pytest.mark.unit
 def test_list_omits_the_scope_param_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     """A bare ``list`` sends no ``scope`` at all — never an empty string a route would have
     to special-case — so the hub-proxied node half and the store-read graph half both run."""
@@ -243,6 +258,25 @@ def test_get_scope_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPat
 
     assert result.exit_code == 0, result.output
     assert calls == [{"scope": "graph"}]
+
+
+@pytest.mark.unit
+def test_get_scope_system_is_accepted_and_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict | None] = []
+
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(
+            text='{"scope": "system", "name": "garden/finding-format", "kind": "asset", "content": "hi"}'
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(
+        runner_group, ["artifact", "get", "garden/finding-format", "--scope", "system"], env=_ENV
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"scope": "system"}]
 
 
 @pytest.mark.unit
@@ -411,6 +445,27 @@ def test_create_refuses_graph_scope_without_posting(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
+def test_create_refuses_system_scope_without_posting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A system artifact is blizzard's own published document — ``create --scope system``
+    refuses the same way ``--scope graph`` does, naming the scope."""
+    posted = False
+
+    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
+        nonlocal posted
+        posted = True
+        return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        runner_group, ["artifact", "create", "--name", "n", "--scope", "system"], env=_ENV, input="content"
+    )
+
+    assert result.exit_code != 0
+    assert "read-only" in result.output and "system" in result.output
+    assert posted is False
+
+
+@pytest.mark.unit
 def test_create_accepts_explicit_node_scope(monkeypatch: pytest.MonkeyPatch) -> None:
     """The flag exists for the refusal above — an explicit ``node`` value is a no-op, not a
     second refusal path."""
@@ -480,6 +535,25 @@ def test_staged_refuses_graph_scope_without_fetching(monkeypatch: pytest.MonkeyP
 
     assert result.exit_code != 0
     assert "read-only" in result.output
+    assert fetched is False
+
+
+@pytest.mark.unit
+def test_staged_refuses_system_scope_without_fetching(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A system artifact is never staged by construction — refused the same way graph
+    scope is, naming the scope."""
+    fetched = False
+
+    def fake_get(*args: object, **kwargs: object) -> _FakeResponse:
+        nonlocal fetched
+        fetched = True
+        return _FakeResponse(payload=[])
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "staged", "--scope", "system"], env=_ENV)
+
+    assert result.exit_code != 0
+    assert "read-only" in result.output and "system" in result.output
     assert fetched is False
 
 
