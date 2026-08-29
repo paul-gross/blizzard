@@ -5260,6 +5260,25 @@
         "title": "SubmittedArtifact",
         "type": "object"
       },
+      "SystemArtifactView": {
+        "description": "One system artifact as the fleet route serves it \u2014 its global name and raw text.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "content"
+        ],
+        "title": "SystemArtifactView",
+        "type": "object"
+      },
       "ToolCallSegmentView": {
         "description": "A tool invocation, structured: what was called, with what input, and what came back.",
         "properties": {
@@ -11126,6 +11145,75 @@
           }
         },
         "summary": "Fleet Summary",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/system-artifacts": {
+      "get": {
+        "description": "The full ``system``-scoped artifact set \u2014 resolved at call time off the packaged\nset, pinned to no chunk or lease.",
+        "operationId": "list_system_artifacts_route_api_fleet_system_artifacts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SystemArtifactView"
+                  },
+                  "title": "Response List System Artifacts Route Api Fleet System Artifacts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List System Artifacts Route",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/system-artifacts/{name}": {
+      "get": {
+        "description": "One published system artifact by its slash-bearing name; ``404`` unknown.",
+        "operationId": "get_system_artifact_route_api_fleet_system_artifacts__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemArtifactView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get System Artifact Route",
         "tags": [
           "fleet"
         ]

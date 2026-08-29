@@ -20,22 +20,37 @@ class ArtifactKind(StrEnum):
 
 
 class ArtifactScope(StrEnum):
-    """Where an artifact is pinned — a chunk's node-step, or the graph mint that baked it
-    into the graph itself (``artifacts:``)."""
+    """Where an artifact is pinned — a chunk's node-step, the graph mint that baked it
+    into the graph itself (``artifacts:``), or blizzard's own published, global-namespace
+    documents, resolved at call time (``system``)."""
 
     NODE = "node"
     GRAPH = "graph"
+    SYSTEM = "system"
 
 
-# One conservative URL path segment — no `/`, since the consuming route
-# percent-encodes a bare name into it, so a `/` would reach it as a real separator.
-_GRAPH_ARTIFACT_NAME = re.compile(r"^[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*$")
+# One conservative URL path segment — no `/`, since the consuming route percent-encodes a
+# bare name into it. Shared by both name grammars below (`canon:one-owner`).
+_ARTIFACT_NAME_SEGMENT = r"[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*"
+
+_GRAPH_ARTIFACT_NAME = re.compile(rf"^{_ARTIFACT_NAME_SEGMENT}$")
+
+# A `/`-separated path of that same segment shape — blizzard's own global namespace, so a
+# published document can be grouped (`garden/finding-format`) unlike a graph-authored name.
+_SYSTEM_ARTIFACT_NAME = re.compile(rf"^{_ARTIFACT_NAME_SEGMENT}(?:/{_ARTIFACT_NAME_SEGMENT})*$")
 
 
 def is_valid_graph_artifact_name(name: str) -> bool:
     """The single owner of graph-artifact name validity (``canon:one-owner``) — a
     `produces:` name is a different, unvalidated namespace."""
     return bool(_GRAPH_ARTIFACT_NAME.fullmatch(name))
+
+
+def is_valid_system_artifact_name(name: str) -> bool:
+    """The single owner of system-artifact name validity (``canon:one-owner``) — a sibling
+    to :func:`is_valid_graph_artifact_name` in blizzard's own global namespace, where a `/`
+    groups a name rather than being forbidden."""
+    return bool(_SYSTEM_ARTIFACT_NAME.fullmatch(name))
 
 
 @dataclass(frozen=True)

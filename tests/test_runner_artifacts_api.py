@@ -68,7 +68,7 @@ _ENVELOPE: dict[str, object] = {
 class _FakeHubResponse:
     """A stand-in for the hub's ``httpx.Response`` on the proxy's outbound edge."""
 
-    def __init__(self, status_code: int, payload: dict[str, object] | None = None, text: str = "") -> None:
+    def __init__(self, status_code: int, payload: object | None = None, text: str = "") -> None:
         self.status_code = status_code
         self._payload = payload
         self.text = text
@@ -102,10 +102,28 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
     store.record_lease_token(str(fields["lease_id"]), TokenHash(_TOKEN).hex, _NOW)
 
 
-def _stub_hub(monkeypatch: pytest.MonkeyPatch, response: _FakeHubResponse, seen: list[str] | None = None) -> None:
+_SYSTEM_ARTIFACTS_PATH = f"{_HUB_URL}/api/fleet/system-artifacts"
+
+
+def _stub_hub(
+    monkeypatch: pytest.MonkeyPatch,
+    response: _FakeHubResponse,
+    seen: list[str] | None = None,
+    *,
+    system_list: _FakeHubResponse | None = None,
+    system_get: _FakeHubResponse | None = None,
+) -> None:
+    """Every hub call returns ``response``, except one under ``/system-artifacts``, which
+    defaults to "nothing published" (an empty list / a 404) — so a test not exercising
+    system scope needs no shape for it; ``system_list``/``system_get`` override either."""
+
     def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         if seen is not None:
             seen.append(url)
+        if url == _SYSTEM_ARTIFACTS_PATH:
+            return system_list if system_list is not None else _FakeHubResponse(200, [])
+        if url.startswith(f"{_SYSTEM_ARTIFACTS_PATH}/"):
+            return system_get if system_get is not None else _FakeHubResponse(404, {"detail": "no system artifact"})
         return response
 
     monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
@@ -213,8 +231,9 @@ def test_list_forwards_to_the_hub_envelope_and_returns_both_kinds(
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
-    # It forwarded to the hub's runner-authenticated envelope route for the resolved chunk.
-    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/envelope"]
+    # It forwarded to the hub's runner-authenticated envelope route for the resolved chunk,
+    # then to the system-artifact set (empty here, since none is stubbed).
+    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/envelope", _SYSTEM_ARTIFACTS_PATH]
     body = resp.json()
     assert [a["name"] for a in body] == ["plan", "build-branch"]
     asset = next(a for a in body if a["kind"] == "asset")
@@ -238,13 +257,16 @@ def test_list_forwards_the_runner_bearer_when_a_token_is_configured(
 
     def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         seen_headers.append(dict(headers))
+        if url == _SYSTEM_ARTIFACTS_PATH:
+            return _FakeHubResponse(200, [])
         return _FakeHubResponse(200, _ENVELOPE)
 
     monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     with TestClient(create_app(config, runner_store=store)) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
-    assert seen_headers == [{"Authorization": "Bearer hub-tok"}]
+    # Two forwards — envelope, then the system-artifact set — both riding the same bearer.
+    assert seen_headers == [{"Authorization": "Bearer hub-tok"}, {"Authorization": "Bearer hub-tok"}]
 
 
 @pytest.mark.component
@@ -574,6 +596,28 @@ def test_get_node_alone_settles_a_cross_scope_collision(tmp_path: Path, monkeypa
 
 
 @pytest.mark.component
+def test_get_409_across_graph_and_system_never_advises_node(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A graph declaration and a system artifact can collide with no node candidate in the
+    mix at all — neither scope has a producing node, so advising ``--node`` would send the
+    caller toward an unrelated 404 rather than a resolution; only ``--scope`` remains."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    _stub_hub(
+        monkeypatch,
+        _FakeHubResponse(200, _ENVELOPE),
+        system_get=_FakeHubResponse(200, {"name": "docket", "content": "blizzard's own docket"}),
+    )
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/artifacts/docket", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert "graph" in detail and "system" in detail
+    assert "--scope" in detail
+    assert "--node" not in detail
+
+
+@pytest.mark.component
 def test_get_409_names_only_the_levers_the_caller_has_left(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A caller who already passed ``scope=node`` and still hit several producing nodes has
     only ``--node`` left; naming ``--scope`` again is advice they cannot act on."""
@@ -611,3 +655,151 @@ def test_get_404_after_searching_both_scopes_says_so(tmp_path: Path, monkeypatch
     assert "gr_1" in bare.json()["detail"]
     # The narrowed miss never looked at graph scope, so it claims no graph-scoped search.
     assert "gr_1" not in narrowed.json()["detail"]
+
+
+# System scope — a published document, always a hub-proxied forward, never runner-local
+
+
+_SYSTEM_ARTIFACT = {"name": "garden/finding-format", "content": "the format text"}
+
+
+@pytest.mark.component
+def test_list_scope_system_forwards_to_the_hub_and_returns_the_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    _stub_hub(
+        monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen, system_list=_FakeHubResponse(200, [_SYSTEM_ARTIFACT])
+    )
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts", params={"scope": "system"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
+        )
+    assert resp.status_code == 200, resp.text
+    assert seen == [_SYSTEM_ARTIFACTS_PATH]
+    body = resp.json()
+    assert body == [
+        {
+            "scope": "system",
+            "name": "garden/finding-format",
+            "kind": "asset",
+            "node_name": None,
+            "epoch": None,
+            "repo": None,
+            "branch_name": None,
+            "commit_hash": None,
+            "content": "the format text",
+        }
+    ]
+
+
+@pytest.mark.component
+def test_get_scope_system_returns_the_named_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    _stub_hub(
+        monkeypatch,
+        _FakeHubResponse(200, _ENVELOPE),
+        seen,
+        system_get=_FakeHubResponse(200, _SYSTEM_ARTIFACT),
+    )
+    with TestClient(app) as client:
+        resp = client.get(
+            f"/api/leases/lease_1/artifacts/{quote('garden/finding-format', safe='/')}",
+            params={"scope": "system"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 200, resp.text
+    assert seen == [f"{_SYSTEM_ARTIFACTS_PATH}/garden/finding-format"]
+    assert resp.json()["scope"] == "system"
+    assert resp.json()["content"] == "the format text"
+
+
+@pytest.mark.component
+def test_get_scope_system_404_for_an_unpublished_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE))
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts/ghost",
+            params={"scope": "system"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 404
+    assert "ghost" in resp.json()["detail"]
+
+
+@pytest.mark.component
+def test_get_node_under_scope_system_is_refused_not_silently_dropped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen)
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts/docket",
+            params={"node": "plan", "scope": "system"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 400, resp.text
+    detail = resp.json()["detail"]
+    assert "--node" in detail and "--scope system" in detail
+    assert seen == []
+
+
+_ENVELOPE_WITH_A_SYSTEM_COLLIDING_NAME: dict[str, object] = {
+    **_ENVELOPE,
+    "artifacts": [
+        {"name": "docket", "kind": "asset", "node_name": "plan", "epoch": 1, "content": "a node's own docket"},
+    ],
+}
+
+
+@pytest.mark.component
+def test_get_bare_name_ambiguous_across_node_and_system_names_both(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same read-time collision D3 resolves for a graph declaration applies to a
+    system artifact's global name — a node's own ``produces:`` output can collide with it,
+    and the route owns the 409 rather than assuming it away."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _stub_hub(
+        monkeypatch,
+        _FakeHubResponse(200, _ENVELOPE_WITH_A_SYSTEM_COLLIDING_NAME),
+        system_get=_FakeHubResponse(200, {"name": "docket", "content": "blizzard's own docket"}),
+    )
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/artifacts/docket", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert "system" in detail and "plan" in detail
+    assert "--scope" in detail and "--node" in detail
+
+
+@pytest.mark.component
+def test_get_node_alone_settles_a_system_collision(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``node`` names a *producing* node, and a system artifact has none — so supplying it
+    is already a narrowing to node scope, resolving the collision above on its own."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _stub_hub(
+        monkeypatch,
+        _FakeHubResponse(200, _ENVELOPE_WITH_A_SYSTEM_COLLIDING_NAME),
+        system_get=_FakeHubResponse(200, {"name": "docket", "content": "blizzard's own docket"}),
+    )
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts/docket",
+            params={"node": "plan"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["scope"] == "node"
+    assert resp.json()["content"] == "a node's own docket"

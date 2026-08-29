@@ -20,6 +20,7 @@ from blizzard.hub.api import chunks as chunks_api
 from blizzard.hub.api import questions as questions_api
 from blizzard.hub.api import queue as queue_api
 from blizzard.hub.api import runners as runners_api
+from blizzard.hub.api import system_artifacts as system_artifacts_api
 from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.api.auth import AuthMode, RunnerPrincipal, require_runner_principal
 from blizzard.hub.api.deps import get_services
@@ -56,6 +57,7 @@ from blizzard.wire.route import (
     RouteTokenRekeyResponse,
 )
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerRegistrationResponse, RunnerView
+from blizzard.wire.system_artifact import SystemArtifactView
 from blizzard.wire.transcript_segment import LeaseTranscriptView, TranscriptSegmentAck, TranscriptSegmentBatch
 
 _log = get_logger("blizzard.hub.fleet")
@@ -186,6 +188,19 @@ class MigrationTargets:
 def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
     """The runner's FILL read — the same ready queue as ``GET /api/queue``."""
     return queue_api.get_queue(services)
+
+
+@router.get("/system-artifacts", response_model=list[SystemArtifactView])
+def list_system_artifacts_route(services: Annotated[HubServices, Depends(get_services)]) -> list[SystemArtifactView]:
+    """The full ``system``-scoped artifact set — resolved at call time off the packaged
+    set, pinned to no chunk or lease."""
+    return system_artifacts_api.list_system_artifacts(services.system_artifacts)
+
+
+@router.get("/system-artifacts/{name:path}", response_model=SystemArtifactView)
+def get_system_artifact_route(name: str, services: Annotated[HubServices, Depends(get_services)]) -> SystemArtifactView:
+    """One published system artifact by its slash-bearing name; ``404`` unknown."""
+    return system_artifacts_api.get_system_artifact(name, services.system_artifacts)
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail)

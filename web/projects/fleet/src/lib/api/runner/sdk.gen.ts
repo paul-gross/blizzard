@@ -198,9 +198,10 @@ export const listLeasesApiLeasesGet = <ThrowOnError extends boolean = false>(opt
 /**
  * List Artifacts
  *
- * The worker's own artifacts — every node-step input resolved latest-by-epoch, plus the
- * graph mint's own baked-in declarations, both kind-discriminated. ``scope`` narrows to one;
- * omitted, both are read. ``scope=graph`` never reaches the hub.
+ * The worker's own artifacts — every node-step input resolved latest-by-epoch, the graph
+ * mint's own baked-in declarations, and blizzard's published system-artifact set, all
+ * kind-discriminated. ``scope`` narrows to one; omitted, all three are read. ``scope=graph``
+ * never reaches the hub; ``scope=system`` always does.
  */
 export const listArtifactsApiLeasesLeaseIdArtifactsGet = <ThrowOnError extends boolean = false>(options: Options<ListArtifactsApiLeasesLeaseIdArtifactsGetData, ThrowOnError>): RequestResult<ListArtifactsApiLeasesLeaseIdArtifactsGetResponses, ListArtifactsApiLeasesLeaseIdArtifactsGetErrors, ThrowOnError> => (options.client ?? client).get<ListArtifactsApiLeasesLeaseIdArtifactsGetResponses, ListArtifactsApiLeasesLeaseIdArtifactsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/artifacts', ...options });
 
@@ -208,10 +209,10 @@ export const listArtifactsApiLeasesLeaseIdArtifactsGet = <ThrowOnError extends b
  * Get Artifact
  *
  * One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;
- * ``404`` when nothing under the searched scope(s) matches. A supplied ``node`` narrows to node
- * scope on its own, a graph declaration having no producing node, so pairing it with
- * ``scope=graph`` is ``400``. More than one candidate — several upstream nodes emitting the same
- * name (issue #169), or a name in both scopes — is ``409`` naming them, never an arbitrary pick.
+ * ``404`` when nothing matches. A supplied ``node`` settles scope to node on its own — neither
+ * a graph declaration nor a system artifact has a producing node — so pairing it with
+ * ``scope=graph``/``scope=system`` is ``400``. More than one candidate — several upstream
+ * nodes (issue #169), or a name colliding across scopes — is ``409`` naming them.
  */
 export const getArtifactApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends boolean = false>(options: Options<GetArtifactApiLeasesLeaseIdArtifactsNameGetData, ThrowOnError>): RequestResult<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError> => (options.client ?? client).get<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/artifacts/{name}', ...options });
 

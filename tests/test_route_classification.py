@@ -186,6 +186,10 @@ _FLEET: set[tuple[str, str]] = {
     # A lease's own read-back of its shipped segments, confined by its own always-raising
     # ownership check rather than `assert_owns` (blizzard#249, D3).
     ("GET", "/api/fleet/chunks/{chunk_id}/transcript-segments"),
+    # blizzard's own published `ArtifactScope.SYSTEM` set (blizzard#391) — read-only,
+    # resolved live off the packaged set rather than any lease or chunk.
+    ("GET", "/api/fleet/system-artifacts"),
+    ("GET", "/api/fleet/system-artifacts/{name:path}"),
 }
 
 

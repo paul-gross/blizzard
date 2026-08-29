@@ -89,6 +89,8 @@ from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
+from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 
@@ -135,6 +137,9 @@ class HubServices:
     clock: IClock
     default_graph_doc: GraphDoc
     default_graph_yaml: str
+    #: The published ``ArtifactScope.SYSTEM`` set — the loader itself, so a read through it
+    #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
+    system_artifacts: PackagedSystemArtifacts
     work_sources: IWorkSourceRegistry
     #: The close-intent drain sweep (blizzard#383) — built here because it needs the
     #: write-capable chunk repository, which only the composition root holds.
@@ -222,6 +227,7 @@ def build_services(
     signing_keys_dir: Path | None = None,
     trusted_proxies: TrustedProxies | None = None,
     transcript_caps: TranscriptCaps | None = None,
+    system_artifacts: PackagedSystemArtifacts | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over a migrated store engine.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
@@ -327,6 +333,7 @@ def build_services(
         clock=clock,
         default_graph_doc=PACKAGED.default.doc,
         default_graph_yaml=PACKAGED.default.text,
+        system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
         work_sources=work_sources,
         close_drain=CloseIntentDrainer(chunks=chunk_store, work_sources=work_sources, clock=clock),
         work_item_materialization=WorkItemMaterializationReconciler(

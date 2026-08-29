@@ -26,6 +26,28 @@ and `artifact list` shows graph entries beside the node's own; `create`, `commit
 A name colliding with any node's `produces:` name is rejected: workers reach both scopes through one `artifact` CLI, so
 a shared name would be ambiguous rather than a legal shadow.
 
+## System-scope artifacts
+
+Blizzard itself publishes a small, global set of read-only documents — a slash-bearing namespace of its own, not a
+per-graph one — that every graph and every chunk reads the identical copy of; no graph declares it, and no worker ever
+produces it. `garden/finding-format` and `garden/proposal-format` are the shipped examples: the shapes a garden
+routine's finding and proposal artifacts are meant to conform to, held in lockstep with the `blizzard.wire.finding`
+and `blizzard.wire.garden_proposal` models by a dedicated test rather than generated from them.
+
+A system-scope read is always a live call to the hub, on every invocation, unlike a graph-scope read: `artifact get
+<name> --scope system` and `artifact list --scope system` never answer from a runner-local pin or cache, so if the hub
+is unreachable when a worker makes the call, the read fails outright rather than answering from a stale or absent
+local copy.
+
+The read-only rule matches graph scope: `create`, `commit`, and `staged` all refuse `--scope system`. `artifact list`
+and `artifact get --scope system` otherwise serve system scope much the way they serve graph scope — `get` resolves
+one artifact by name (`--content` for raw text), and `list` includes it in the unfiltered read alongside node and
+graph scope — with one difference: a system name colliding with a node's `produces:` name is not rejected at mint the
+way a graph-scope collision is, since blizzard's own global namespace and a deployment's per-graph declarations are
+authored by different parties with no shared mint to reject at. The collision surfaces instead at read: a bare
+`artifact get <name>` matching both a node output and a system artifact is a `409` naming both, resolved by adding
+`--node` (which only a node-scoped candidate has) or `--scope`.
+
 ## Declaring produced artifacts
 
 Each `produces:` entry carries a kind: a bare string is an asset, while a `{name, kind: git_commit}` entry is met by

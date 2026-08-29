@@ -209,3 +209,26 @@ def test_commit_verb_refuses_graph_scope_without_posting(monkeypatch: pytest.Mon
     assert result.exit_code != 0
     assert "read-only" in result.output
     assert posted is False
+
+
+@pytest.mark.unit
+def test_commit_verb_refuses_system_scope_without_posting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A system artifact is blizzard's own published document — ``--scope system`` refuses
+    the same way ``--scope graph`` does, naming the scope."""
+    posted = False
+
+    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
+        nonlocal posted
+        posted = True
+        return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        runner_group,
+        ["artifact", "commit", "--repo", "blizzard", "--branch", "feat/x", "--commit", "abc123", "--scope", "system"],
+        env=_ENV,
+    )
+
+    assert result.exit_code != 0
+    assert "read-only" in result.output and "system" in result.output
+    assert posted is False
