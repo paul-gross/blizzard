@@ -68,7 +68,7 @@ _ENVELOPE: dict[str, object] = {
 class _FakeHubResponse:
     """A stand-in for the hub's ``httpx.Response`` on the proxy's outbound edge."""
 
-    def __init__(self, status_code: int, payload: dict[str, object] | None = None, text: str = "") -> None:
+    def __init__(self, status_code: int, payload: object | None = None, text: str = "") -> None:
         self.status_code = status_code
         self._payload = payload
         self.text = text
