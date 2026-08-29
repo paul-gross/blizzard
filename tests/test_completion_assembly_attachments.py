@@ -96,6 +96,9 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
         worktree_git=FakeWorktreeGit(),
     )
 
+    # `review-diary` stays unattached, so the first exit resumes rather than judges (issue
+    # #422); the second, past the one-resume cap, falls through to judgement.
+    Advance(ctx).run()
     Advance(ctx).run()
     Pull(ctx).run()
 

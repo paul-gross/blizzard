@@ -42,6 +42,22 @@ class DormantSession:
     ctx: LoopContext
     lease: LeaseRecord
 
+    def resume_on_unmet_produces(self, message: str, bindings: list[EnvBindingRecord]) -> None:
+        """Resume a session that exited with required ``produces:`` unattached, instead of
+        judging it (issue #422) — no retry consumed, no epoch bumped, the same guarantee every
+        dormant-session wake carries. The exited generation's spend is recorded first, the same
+        ordering :meth:`park_on_ask` already uses for its own resume-instead-of-judge path."""
+        lease = self.lease
+        self.ctx.usage.record_worker(lease, bindings)
+        pid, _ = self._wake(message, bindings)
+        _log.info(
+            "resumed premature exit for unmet produces",
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+            epoch=lease.epoch,
+            pid=pid,
+        )
+
     def park_on_ask(self, ask: AskRecord) -> None:
         """Park the chunk on a question: forward it to the hub and stop the reap clock.
 

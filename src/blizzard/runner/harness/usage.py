@@ -12,7 +12,7 @@ from typing import Literal
 
 #: The point in a node's lifecycle an invocation is attributed to. Supplied by the
 #: caller, which knows the operation it just ran, never inferred by the adapter.
-UsageKind = Literal["spawn", "resume", "judge", "nudge"]
+UsageKind = Literal["spawn", "resume", "judge"]
 
 __all__ = ["UsageKind", "UsageSample"]
 

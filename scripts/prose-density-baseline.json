@@ -2388,9 +2388,9 @@
    "total": 33
   },
   "blizzard/runner/harness/worker_settings.py": {
-   "comments": 2,
+   "comments": 4,
    "docstrings": 7,
-   "total": 46
+   "total": 59
   },
   "blizzard/runner/harness/workspace_prompts.py": {
    "comments": 0,
@@ -2434,8 +2434,8 @@
   },
   "blizzard/runner/loop/dormant.py": {
    "comments": 32,
-   "docstrings": 34,
-   "total": 240
+   "docstrings": 38,
+   "total": 256
   },
   "blizzard/runner/loop/drain.py": {
    "comments": 19,
@@ -2449,8 +2449,8 @@
   },
   "blizzard/runner/loop/git_commits.py": {
    "comments": 2,
-   "docstrings": 14,
-   "total": 110
+   "docstrings": 12,
+   "total": 103
   },
   "blizzard/runner/loop/held_chunk.py": {
    "comments": 13,
@@ -2483,9 +2483,9 @@
    "total": 60
   },
   "blizzard/runner/loop/judgement.py": {
-   "comments": 35,
-   "docstrings": 25,
-   "total": 279
+   "comments": 31,
+   "docstrings": 23,
+   "total": 261
   },
   "blizzard/runner/loop/judgement_prompt.py": {
    "comments": 0,
@@ -3640,9 +3640,9 @@
    "total": 278
   },
   "test_completion_assembly_attachments.py": {
-   "comments": 3,
+   "comments": 5,
    "docstrings": 7,
-   "total": 115
+   "total": 118
   },
   "test_compose_deployment.py": {
    "comments": 0,
@@ -4282,7 +4282,7 @@
   "test_pin_runner_loop.py": {
    "comments": 26,
    "docstrings": 21,
-   "total": 296
+   "total": 305
   },
   "test_pin_runner_misc.py": {
    "comments": 10,
@@ -4625,9 +4625,9 @@
    "total": 107
   },
   "test_runner_loop.py": {
-   "comments": 268,
+   "comments": 271,
    "docstrings": 133,
-   "total": 2385
+   "total": 2391
   },
   "test_runner_loop_build.py": {
    "comments": 0,
@@ -4635,9 +4635,9 @@
    "total": 211
   },
   "test_runner_nudge.py": {
-   "comments": 13,
+   "comments": 14,
    "docstrings": 30,
-   "total": 452
+   "total": 502
   },
   "test_runner_paused.py": {
    "comments": 200,
@@ -5043,6 +5043,11 @@
    "comments": 29,
    "docstrings": 46,
    "total": 460
+  },
+  "test_worker_settings.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "total": 28
   },
   "test_workspace_prompt_api.py": {
    "comments": 3,

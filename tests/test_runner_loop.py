@@ -1143,7 +1143,10 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
         worktree_git=FakeWorktreeGit(),
     )
 
-    Advance(ctx).run()  # buffers the completion (with the harvested findings asset)
+    # `review-findings` is never attached, so the first exit resumes rather than judges
+    # (issue #422); the second, past the one-resume cap, falls through to judgement.
+    Advance(ctx).run()
+    Advance(ctx).run()
     Pull(ctx).run()  # the flusher delivers it to the hub (store-and-forward)
 
     _, submission = hub.completions[0]
@@ -1188,6 +1191,9 @@ def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path): 
         store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe(), worktree_git=wt
     )
 
+    # `review-findings` is never attached, so the first exit is resumed rather than
+    # judged (issue #422); the second, past the one-resume cap, falls through to judgement.
+    Advance(ctx).run()
     Advance(ctx).run()
     Pull(ctx).run()
 

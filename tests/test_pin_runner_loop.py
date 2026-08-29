@@ -162,41 +162,50 @@ def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_p
     assert [(r.command, r.passed) for r in results] == [("mise run lint", True)]
 
 
-# The nudge-fired guard fact lands BEFORE the nudge resume runs (issue #113).
+# The nudge-fired guard fact lands BEFORE the resume it guards runs (issues #113, #422).
 # --------------------------------------------------------------------------- #
 
 
-class _RecordingNudgeHarness(FakeHarness):
-    """Captures whether the nudge-fired fact was already durable at each ``judge`` call."""
+class _RecordingResumeHarness(FakeHarness):
+    """Captures whether the resume-fired fact was already durable at the resume call."""
 
     def __init__(self, *, store, lease_id: str, epoch: int, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
         self._store = store
         self._lease_id = lease_id
         self._epoch = epoch
-        self.fired_at_judge: list[bool] = []
+        self.fired_at_resume: list[bool] = []
 
-    def judge(
+    def resume_with_message(
         self,
         workdir: str,
         session_id: str,
-        judgement_prompt: str,
+        message: str,
+        stdout_path: str = "",
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
-        model: str | None = None,
         compaction_window: str | None = None,
-    ) -> str:
-        self.fired_at_judge.append(self._store.nudge_fired(self._lease_id, self._epoch))
-        return super().judge(workdir, session_id, judgement_prompt, preamble=preamble, chunk_id=chunk_id)
+    ) -> int:
+        self.fired_at_resume.append(self._store.nudge_fired(self._lease_id, self._epoch))
+        return super().resume_with_message(
+            workdir,
+            session_id,
+            message,
+            stdout_path,
+            preamble=preamble,
+            chunk_id=chunk_id,
+            effort=effort,
+            compaction_window=compaction_window,
+        )
 
 
 @pytest.mark.component
-def test_the_nudge_guard_fact_is_durable_before_the_nudge_resume_runs(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """ "At most one nudge per (lease, epoch)" is structural only if the guard fact is
+def test_the_resume_guard_fact_is_durable_before_the_resume_runs(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """ "At most one resume per (lease, epoch)" is structural only if the guard fact is
     written first: recorded after the resume, a crash in between leaves recovery unable to
-    tell "nudged, worker ignored it" from "never nudged"."""
+    tell "resumed, worker ignored it" from "never resumed"."""
     store = _store(tmp_path)
     _seed_running_lease(store, lease="lease_r", node_id="nd_review")
     hub = FakeHub()
@@ -204,7 +213,7 @@ def test_the_nudge_guard_fact_is_durable_before_the_nudge_resume_runs(tmp_path) 
         "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
     )
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
-    harness = _RecordingNudgeHarness(
+    harness = _RecordingResumeHarness(
         store=store,
         lease_id="lease_r",
         epoch=1,
@@ -224,8 +233,8 @@ def test_the_nudge_guard_fact_is_durable_before_the_nudge_resume_runs(tmp_path) 
 
     Advance(ctx).run()
 
-    assert len(harness.fired_at_judge) == 2, "expected the verdict elicitation plus exactly one nudge"
-    assert harness.fired_at_judge[1] is True, "the nudge resume ran before its guard fact was durable"
+    assert harness.judged == [], "no verdict should be elicited on a resumed premature exit"
+    assert harness.fired_at_resume == [True], "the resume ran before its guard fact was durable"
 
 
 # The prompts are resolved by the caller and injected, never re-derived here.

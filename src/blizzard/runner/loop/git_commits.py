@@ -41,13 +41,6 @@ class DeclaredCommits:
                 artifacts.append(artifact)
         return artifacts
 
-    def amend(self, artifacts: list[SubmittedArtifact]) -> list[SubmittedArtifact]:
-        """Re-verify and overlay onto ``artifacts`` by repo name rather than appending, so a
-        hiccup cannot regress one this attempt already has while an amendment still wins."""
-        by_name = {a.name: a for a in artifacts}
-        by_name.update({a.name: a for a in self.verify()})
-        return list(by_name.values())
-
     def _confirm(
         self, key: Key, declared: GitCommitDeclarationRecord, origins: dict[Key, str]
     ) -> SubmittedArtifact | None:

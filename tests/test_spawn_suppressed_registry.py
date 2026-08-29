@@ -21,7 +21,7 @@ _SCANNED = (_LOOP / "steps.py", _LOOP / "spawn.py", _LOOP / "judgement.py", _LOO
 #: Helpers exempt from calling the gate themselves, because every call site is inside a
 #: function that does — re-derived by `test_exempt_helpers_are_reached_only_from_gated_scopes`
 #: rather than taken on trust.
-_ALLOWED_UNGATED = frozenset({"_elicit", "_wake"})
+_ALLOWED_UNGATED = frozenset({"_elicit", "_wake", "resume_on_unmet_produces"})
 
 _GATE_NAME = "suppressed"
 _GATED_METHODS = frozenset({"spawn", "resume_with_message", "judge"})

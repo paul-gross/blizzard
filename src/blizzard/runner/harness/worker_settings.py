@@ -15,6 +15,18 @@ HEARTBEAT_HOOK_COMMAND = "blizzard runner heartbeat"
 #: The command a worker's SessionEnd hook runs — the "declared done" signal.
 SESSION_END_HOOK_COMMAND = "blizzard runner session-end"
 
+#: Tools that defer work to a future turn a headless worker never gets (issue #422);
+#: ``TaskOutput``/``TaskStop``/backgrounded ``Bash`` stay reachable on purpose.
+DENIED_TOOLS = (
+    "ScheduleWakeup",
+    "Monitor",
+    "CronCreate",
+    "CronDelete",
+    "CronList",
+    "RemoteTrigger",
+    "EndConversation",
+)
+
 
 @dataclass(frozen=True)
 class WorkerSettings:
@@ -38,6 +50,7 @@ class WorkerSettings:
                     {"hooks": [{"type": "command", "command": self.session_end}]},
                 ],
             },
+            "permissions": {"deny": list(DENIED_TOOLS)},
         }
 
     @property

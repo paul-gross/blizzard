@@ -6627,7 +6627,7 @@
         "type": "object"
       },
       "blizzard__wire__envelope__RotatePolicyView": {
-        "description": "The declared session's rotation bounds (issue #144), carried on ``NodeConfig``.\n``max_invocations`` counts **harness invocations** \u2014 spawn, resume, judge, nudge \u2014 not node-steps,\nof which one burns two or three.",
+        "description": "The declared session's rotation bounds (issue #144), carried on ``NodeConfig``.\n``max_invocations`` counts **harness invocations** \u2014 spawn, resume, judge \u2014 not node-steps,\nof which one burns two or three.",
         "properties": {
           "max_context_tokens": {
             "anyOf": [

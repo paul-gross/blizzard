@@ -71,7 +71,7 @@ sessions:
     # every figure below observed rather than assumed.
     rotate:
       # Harness INVOCATIONS, not node-steps: one node-step burns two or three (a spawn
-      # plus a judge, plus any nudge), so this is roughly five node-steps, not twelve.
+      # plus a judge, plus an occasional resume), so this is roughly five node-steps, not twelve.
       # Observed p99 is 10 and the most any session ever reached is 21, so this bounds the
       # tail without touching the body — but it IS the bound that rotates a real lineage
       # first, since `code` spans build -> pre-push -> resolve and accumulates across
