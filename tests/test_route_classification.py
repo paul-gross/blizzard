@@ -77,6 +77,11 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/routines"): FLEET_VIEW,
     ("GET", "/api/routines/{routine_id}"): FLEET_VIEW,
     ("PATCH", "/api/routines/{routine_id}"): GRAPH_EDIT,
+    # Findings and garden proposals (blizzard#390) — read-only routes, both FLEET_VIEW (D8).
+    ("GET", "/api/findings"): FLEET_VIEW,
+    ("GET", "/api/findings/{finding_id}"): FLEET_VIEW,
+    ("GET", "/api/proposals"): FLEET_VIEW,
+    ("GET", "/api/proposals/{proposal_id}"): FLEET_VIEW,
     ("POST", "/api/chunks"): CHUNK_INGEST,
     ("GET", "/api/chunks"): FLEET_VIEW,
     ("GET", "/api/chunks/{chunk_id}"): FLEET_VIEW,

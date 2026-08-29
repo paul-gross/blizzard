@@ -1583,6 +1583,54 @@ export type ExternalSubscriptionUsageWindowView = {
 };
 
 /**
+ * FindingView
+ *
+ * A finding as served by the read routes and CLI verbs.
+ */
+export type FindingView = {
+    /**
+     * Class
+     */
+    class: string;
+    /**
+     * Finding Id
+     */
+    finding_id: string;
+    /**
+     * Introduced
+     */
+    introduced?: string | null;
+    /**
+     * Last Seen At
+     */
+    last_seen_at: string | null;
+    /**
+     * Live
+     */
+    live: boolean;
+    /**
+     * Locus
+     */
+    locus: string;
+    /**
+     * Observed Count
+     */
+    observed_count: number;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+    /**
+     * Scope Slug
+     */
+    scope_slug: string;
+    /**
+     * Summary
+     */
+    summary: string;
+};
+
+/**
  * FleetSpendView
  *
  * The fleet's usage/cost total since ``since`` and, when the caller bounded the
@@ -1648,6 +1696,42 @@ export type FleetSummaryView = {
      * Waiting
      */
     waiting: number;
+};
+
+/**
+ * GardenProposalView
+ *
+ * A garden proposal as served by the read routes and CLI verbs.
+ */
+export type GardenProposalView = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Class
+     */
+    class: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Findings
+     */
+    findings: Array<string>;
+    /**
+     * Proposal Id
+     */
+    proposal_id: string;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+    /**
+     * Title
+     */
+    title: string;
 };
 
 /**
@@ -5915,6 +5999,76 @@ export type ListEventsApiEventsGetResponses = {
 
 export type ListEventsApiEventsGetResponse = ListEventsApiEventsGetResponses[keyof ListEventsApiEventsGetResponses];
 
+export type ListFindingsApiFindingsGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Routine
+         */
+        routine: string;
+        /**
+         * Scope
+         */
+        scope: string;
+        /**
+         * Include Gone
+         */
+        include_gone?: boolean;
+    };
+    url: '/api/findings';
+};
+
+export type ListFindingsApiFindingsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListFindingsApiFindingsGetError = ListFindingsApiFindingsGetErrors[keyof ListFindingsApiFindingsGetErrors];
+
+export type ListFindingsApiFindingsGetResponses = {
+    /**
+     * Response List Findings Api Findings Get
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type ListFindingsApiFindingsGetResponse = ListFindingsApiFindingsGetResponses[keyof ListFindingsApiFindingsGetResponses];
+
+export type GetFindingApiFindingsFindingIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Finding Id
+         */
+        finding_id: string;
+    };
+    query?: never;
+    url: '/api/findings/{finding_id}';
+};
+
+export type GetFindingApiFindingsFindingIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetFindingApiFindingsFindingIdGetError = GetFindingApiFindingsFindingIdGetErrors[keyof GetFindingApiFindingsFindingIdGetErrors];
+
+export type GetFindingApiFindingsFindingIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FindingView;
+};
+
+export type GetFindingApiFindingsFindingIdGetResponse = GetFindingApiFindingsFindingIdGetResponses[keyof GetFindingApiFindingsFindingIdGetResponses];
+
 export type GetChunkApiFleetChunksChunkIdGetData = {
     body?: never;
     path: {
@@ -6758,6 +6912,54 @@ export type MeApiMeGetResponses = {
 };
 
 export type MeApiMeGetResponse = MeApiMeGetResponses[keyof MeApiMeGetResponses];
+
+export type ListProposalsApiProposalsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/proposals';
+};
+
+export type ListProposalsApiProposalsGetResponses = {
+    /**
+     * Response List Proposals Api Proposals Get
+     *
+     * Successful Response
+     */
+    200: Array<GardenProposalView>;
+};
+
+export type ListProposalsApiProposalsGetResponse = ListProposalsApiProposalsGetResponses[keyof ListProposalsApiProposalsGetResponses];
+
+export type GetProposalApiProposalsProposalIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Proposal Id
+         */
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/proposals/{proposal_id}';
+};
+
+export type GetProposalApiProposalsProposalIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetProposalApiProposalsProposalIdGetError = GetProposalApiProposalsProposalIdGetErrors[keyof GetProposalApiProposalsProposalIdGetErrors];
+
+export type GetProposalApiProposalsProposalIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalView;
+};
+
+export type GetProposalApiProposalsProposalIdGetResponse = GetProposalApiProposalsProposalIdGetResponses[keyof GetProposalApiProposalsProposalIdGetResponses];
 
 export type ListOpenQuestionsApiQuestionsGetData = {
     body?: never;

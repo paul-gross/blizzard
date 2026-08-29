@@ -35,6 +35,8 @@ from blizzard.hub.cli_views import (
     DecisionListing,
     DurationsListing,
     EventListing,
+    FindingDetail,
+    FindingListing,
     FleetStatus,
     GraphDetail,
     GraphListing,
@@ -42,6 +44,8 @@ from blizzard.hub.cli_views import (
     Listing,
     MigrationIntent,
     OutcomesListing,
+    ProposalDetail,
+    ProposalListing,
     QuestionListing,
     QueueListing,
     RoutineDetail,
@@ -1191,6 +1195,68 @@ def routine_edit(
     cli.check(resp, "PATCH /routines/{id}", on_status={404: f"unknown routine {routine_id}"})
     body = resp.json()
     cli.show_lines(body, f"routine {routine_id} updated")
+
+
+# `blizzard hub finding` — blizzard#390
+
+
+@hub.group("finding")
+def finding_group() -> None:
+    """Read verbs over findings: a routine's bucket under one scope, or one by id."""
+
+
+@finding_group.command("list", cls=FleetCommand)
+@click.option("--routine", "routine", required=True, help="The routine whose findings to list.")
+@click.option("--scope", "scope", required=True, help="The scope to filter to.")
+@click.option("--include-gone", is_flag=True, default=False, help="Also show findings whose newest fact is gone (D3).")
+def finding_list(cli: CliContext, routine: str, scope: str, include_gone: bool) -> None:
+    """List ROUTINE's findings under SCOPE — live only, unless --include-gone.
+
+    This is the read a running pass calls to cross-reference its own bucket
+    (machinery.md §Managing findings and proposals)."""
+    rows = cli.get(
+        "/api/findings",
+        "GET /findings",
+        params={"routine": routine, "scope": scope, "include_gone": str(include_gone).lower()},
+    ).json()
+    cli.show(rows, FindingListing(rows))
+
+
+@finding_group.command("show", cls=FleetCommand)
+@click.argument("finding_id")
+def finding_show(cli: CliContext, finding_id: str) -> None:
+    """One finding's whole record."""
+    resp = cli.get(
+        f"/api/findings/{finding_id}", "GET /findings/{id}", on_status={404: f"unknown finding {finding_id}"}
+    )
+    body = resp.json()
+    cli.show(body, FindingDetail(body))
+
+
+# `blizzard hub proposal` — blizzard#390
+
+
+@hub.group("proposal")
+def proposal_group() -> None:
+    """Read verbs over garden proposals: list every one, or inspect one by id."""
+
+
+@proposal_group.command("list", cls=FleetCommand)
+def proposal_list(cli: CliContext) -> None:
+    """List every garden proposal, newest first."""
+    rows = cli.get("/api/proposals", "GET /proposals").json()
+    cli.show(rows, ProposalListing(rows))
+
+
+@proposal_group.command("show", cls=FleetCommand)
+@click.argument("proposal_id")
+def proposal_show(cli: CliContext, proposal_id: str) -> None:
+    """One garden proposal's whole record."""
+    resp = cli.get(
+        f"/api/proposals/{proposal_id}", "GET /proposals/{id}", on_status={404: f"unknown proposal {proposal_id}"}
+    )
+    body = resp.json()
+    cli.show(body, ProposalDetail(body))
 
 
 # `blizzard hub queue` — issue #87, issue #104

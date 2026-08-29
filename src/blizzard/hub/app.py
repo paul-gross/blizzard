@@ -30,7 +30,9 @@ from blizzard.hub.api.auth_login import router as auth_login_router
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.decisions import router as decisions_router
 from blizzard.hub.api.events import router as events_router
+from blizzard.hub.api.findings import router as findings_router
 from blizzard.hub.api.fleet import router as fleet_router
+from blizzard.hub.api.garden_proposals import router as garden_proposals_router
 from blizzard.hub.api.graphs import router as graphs_router
 from blizzard.hub.api.health import router as health_router
 from blizzard.hub.api.idp import router as idp_router
@@ -184,6 +186,8 @@ def create_app(
     app.include_router(graphs_router)
     app.include_router(scopes_router)
     app.include_router(routines_router)
+    app.include_router(findings_router)
+    app.include_router(garden_proposals_router)
     app.include_router(chunks_router)
     app.include_router(decisions_router)
     app.include_router(queue_router)

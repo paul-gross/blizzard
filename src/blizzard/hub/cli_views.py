@@ -239,6 +239,21 @@ class RoutineListing(Listing):
         return f"{row['routine_id']}  name={row['name']}  graph={row['graph_name']}  scope={row['default_scope_slug']}"
 
 
+class FindingListing(Listing):
+    empty = "no findings"
+
+    def line(self, row: Any) -> str:
+        marker = "live" if row["live"] else "gone"
+        return f"{row['finding_id']}  {marker}  class={row['class']}  {row['locus']}"
+
+
+class ProposalListing(Listing):
+    empty = "no proposals"
+
+    def line(self, row: Any) -> str:
+        return f"{row['proposal_id']}  class={row['class']}  {row['title']}"
+
+
 @dataclass(frozen=True)
 class ChunkDetail:
     body: dict[str, Any]
@@ -293,6 +308,33 @@ class RoutineDetail:
         yield f"  default scope: {body['default_scope_slug']}"
         models = ", ".join(body.get("default_model") or []) or "-"
         yield f"  default model: {models}   default effort: {body.get('default_effort') or '-'}"
+
+
+@dataclass(frozen=True)
+class FindingDetail:
+    body: dict[str, Any]
+
+    def lines(self) -> Iterator[str]:
+        body = self.body
+        marker = "live" if body["live"] else "gone"
+        yield f"{body['finding_id']}  {marker}  routine={body['routine_name']}  scope={body['scope_slug']}"
+        yield f"  class={body['class']}  locus={body['locus']}"
+        yield f"  {body['summary']}"
+        if body.get("introduced"):
+            yield f"  introduced: {body['introduced']}"
+        yield f"  last_seen_at={body.get('last_seen_at') or '-'}  observed_count={body['observed_count']}"
+
+
+@dataclass(frozen=True)
+class ProposalDetail:
+    body: dict[str, Any]
+
+    def lines(self) -> Iterator[str]:
+        body = self.body
+        yield f"{body['proposal_id']}  routine={body['routine_name']}  class={body['class']}"
+        yield f"  {body['title']}"
+        yield f"  {body['body']}"
+        yield f"  findings: {', '.join(body['findings'])}"
 
 
 @dataclass(frozen=True)

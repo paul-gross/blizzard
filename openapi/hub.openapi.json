@@ -2423,6 +2423,78 @@
         "title": "ExternalSubscriptionUsageWindowView",
         "type": "object"
       },
+      "FindingView": {
+        "description": "A finding as served by the read routes and CLI verbs.",
+        "properties": {
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "introduced": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Introduced"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "live": {
+            "title": "Live",
+            "type": "boolean"
+          },
+          "locus": {
+            "title": "Locus",
+            "type": "string"
+          },
+          "observed_count": {
+            "title": "Observed Count",
+            "type": "integer"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "scope_slug": {
+            "title": "Scope Slug",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "routine_name",
+          "scope_slug",
+          "class",
+          "locus",
+          "summary",
+          "live",
+          "last_seen_at",
+          "observed_count"
+        ],
+        "title": "FindingView",
+        "type": "object"
+      },
       "FleetSpendView": {
         "description": "The fleet's usage/cost total since ``since`` and, when the caller bounded the\nwindow, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``\nmarks ``cost_usd`` as a lower bound.",
         "properties": {
@@ -2505,6 +2577,53 @@
           "needs"
         ],
         "title": "FleetSummaryView",
+        "type": "object"
+      },
+      "GardenProposalView": {
+        "description": "A garden proposal as served by the read routes and CLI verbs.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "proposal_id": {
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "routine_name",
+          "class",
+          "title",
+          "body",
+          "findings",
+          "created_at"
+        ],
+        "title": "GardenProposalView",
         "type": "object"
       },
       "GraphArtifact": {
@@ -9985,6 +10104,115 @@
         ]
       }
     },
+    "/api/findings": {
+      "get": {
+        "description": "A routine's findings under one scope \u2014 live only, unless `include_gone` (D3);\nthe read a running pass calls to cross-reference its own bucket.",
+        "operationId": "list_findings_api_findings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "routine",
+            "required": true,
+            "schema": {
+              "title": "Routine",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": true,
+            "schema": {
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_gone",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Gone",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingView"
+                  },
+                  "title": "Response List Findings Api Findings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Findings",
+        "tags": [
+          "findings"
+        ]
+      }
+    },
+    "/api/findings/{finding_id}": {
+      "get": {
+        "description": "One finding's whole record; 404 on an unknown id.",
+        "operationId": "get_finding_api_findings__finding_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "title": "Finding Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Finding",
+        "tags": [
+          "findings"
+        ]
+      }
+    },
     "/api/fleet/chunks/{chunk_id}": {
       "get": {
         "description": "The runner's chunk-status poll \u2014 the same aggregate as ``GET /api/chunks/{chunk_id}``.",
@@ -11279,6 +11507,75 @@
         "summary": "Me",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/proposals": {
+      "get": {
+        "description": "Every garden proposal, newest first.",
+        "operationId": "list_proposals_api_proposals_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GardenProposalView"
+                  },
+                  "title": "Response List Proposals Api Proposals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Proposals",
+        "tags": [
+          "proposals"
+        ]
+      }
+    },
+    "/api/proposals/{proposal_id}": {
+      "get": {
+        "description": "One garden proposal's whole record; 404 on an unknown id.",
+        "operationId": "get_proposal_api_proposals__proposal_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Proposal",
+        "tags": [
+          "proposals"
         ]
       }
     },
