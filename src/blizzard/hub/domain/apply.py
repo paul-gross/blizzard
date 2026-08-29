@@ -15,8 +15,8 @@ from blizzard.foundation.ids import (
     ARTIFACT_PREFIX,
     DECISION_PREFIX,
     MIGRATION_PREFIX,
-    PROPOSAL_PREFIX,
     TRANSITION_PREFIX,
+    WORK_ITEM_PROPOSAL_PREFIX,
     Id,
 )
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
@@ -674,7 +674,7 @@ class ApplyService:
         return [
             WorkItemProposalRow.of(
                 p,
-                proposal_id=Id.mint(PROPOSAL_PREFIX, self._clock).value,
+                proposal_id=Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value,
                 chunk_id=chunk.chunk_id,
                 node_id=from_node.node_id,
                 node_name=from_node.name,

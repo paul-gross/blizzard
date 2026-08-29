@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     Float,
     ForeignKey,
@@ -296,6 +297,91 @@ artifacts = Table(
     Column("forge", String, nullable=True),  # git_commit only (issue #143, Phase 4); null = legacy row
     Column("produced_at", UtcDateTime, nullable=False),
 )
+
+# --- Findings and finding sets (blizzard#390) -----------------------------------
+# A finding is a durable observation a routine's run recorded — first class the way an
+# artifact is (blizzard-product:/plans/garden/machinery.md §Findings are artifacts). This
+# table carries no live/last_seen_at/observed_count column (D2, D4): finding_facts is
+# append-only, and every reader derives them fresh, newest-fact-wins, the
+# scope_lifecycle_facts shape.
+
+findings = Table(
+    "findings",
+    metadata,
+    Column("finding_id", String, primary_key=True),  # fin_<ulid>
+    Column("routine_name", String, nullable=False),  # D5 — a routine's own name, not its surrogate id
+    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),  # D5
+    Column("class", String, key="class_", nullable=False),  # the deployment's own vocabulary; opaque to the hub
+    Column("locus", String, nullable=False),  # a repo-relative path, optionally :line/::symbol; opaque to the hub
+    Column("summary", Text, nullable=False),
+    Column("introduced", String, nullable=True),  # best-effort blame commit; null when not resolvable
+)
+
+Index("ix_findings_routine_scope", findings.c.routine_name, findings.c.scope_slug)
+Index("ix_findings_routine_class", findings.c.routine_name, findings.c.class_)
+
+# One row per `add`/`observed`/`gone` transformation a delivered list applied to a
+# finding (D2, D4) — first-recorded, last-seen, and the observed count are reads over
+# this table, never a cached summary on `findings` itself.
+
+finding_facts = Table(
+    "finding_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("finding_id", String, ForeignKey("findings.finding_id"), nullable=False),
+    Column("kind", String, nullable=False),  # add | observed | gone (FACT_KINDS, domain/findings.py)
+    Column("recorded_at", UtcDateTime, nullable=False),
+    Column("note", Text, nullable=True),  # gone's note; null for add/observed
+    CheckConstraint("kind IN ('add', 'observed', 'gone')", name="ck_finding_facts_kind"),
+)
+
+Index("ix_finding_facts_finding_id_id", finding_facts.c.finding_id, finding_facts.c.id)
+
+# The set a delivered finding list mints, one per artifact (D6) — scope, the
+# per-repository revisions, and the routine's measurement live here, never per finding.
+
+finding_sets = Table(
+    "finding_sets",
+    metadata,
+    Column("finding_set_id", String, primary_key=True),  # fins_<ulid>
+    Column("artifact_id", String, ForeignKey("artifacts.artifact_id"), nullable=False, unique=True),  # D6
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # D6 — the run that delivered it
+    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("revisions", Text, nullable=False),  # JSON {repo: revision} (`bzh:sql-portable`)
+    Column("measurement", Text, nullable=True),  # opaque, routine-strategy-defined; null when none was recorded
+)
+
+Index("ix_finding_sets_chunk_id", finding_sets.c.chunk_id)
+
+# --- Garden proposals (blizzard#390) ---------------------------------------------
+# A proposed response to one or more findings — never `proposals`, so neither this nor
+# `work_item_proposals` inherits an unqualified name a call site could confuse (D1).
+
+garden_proposals = Table(
+    "garden_proposals",
+    metadata,
+    Column("proposal_id", String, primary_key=True),  # gprop_<ulid>
+    Column("routine_name", String, nullable=False),  # D5-shaped — named by the routine's own name
+    Column("class", String, key="class_", nullable=False),  # the deployment's own taxonomy; opaque to the hub
+    Column("title", String, nullable=False),
+    Column("body", Text, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+)
+
+Index("ix_garden_proposals_routine_class", garden_proposals.c.routine_name, garden_proposals.c.class_)
+
+# The findings a proposal answers (D7) — a join, not a JSON list, so which-work-resolved-
+# which-findings is a query rather than a scan (`bzh:sql-portable`). Required and
+# non-empty is enforced in the domain service.
+
+garden_proposal_findings = Table(
+    "garden_proposal_findings",
+    metadata,
+    Column("proposal_id", String, ForeignKey("garden_proposals.proposal_id"), primary_key=True),
+    Column("finding_id", String, ForeignKey("findings.finding_id"), primary_key=True),
+)
+
+Index("ix_garden_proposal_findings_finding_id", garden_proposal_findings.c.finding_id)
 
 # --- Proposed work items (ride a node-step's completion, materialized at delivery) ----
 

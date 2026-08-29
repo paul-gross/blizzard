@@ -55,6 +55,8 @@ from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
+from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSetRepository
+from blizzard.hub.domain.garden_proposals import GardenProposalAuthoring, IReadGardenProposalRepository
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
 from blizzard.hub.domain.graph_lifecycle import GraphLifecycleService
@@ -78,6 +80,8 @@ from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
+from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -184,6 +188,14 @@ class HubServices:
     routines: IReadRoutineRepository
     #: Create and edit a routine, minting its default scope on demand (blizzard#389 D4).
     routine_authoring: RoutineAuthoring
+    #: The finding read Protocol (blizzard#390).
+    findings: IReadFindingRepository
+    #: The finding-set read Protocol (blizzard#390) — one set per delivered artifact list.
+    finding_sets: IReadFindingSetRepository
+    #: The garden-proposal read Protocol (blizzard#390).
+    garden_proposals: IReadGardenProposalRepository
+    #: Create a garden proposal, rejecting an empty `findings` list (blizzard#390 D7).
+    garden_proposal_authoring: GardenProposalAuthoring
 
 
 def build_services(
@@ -277,6 +289,9 @@ def build_services(
     scope_store = ScopeStore(engine)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = RoutineStore(engine)
+    finding_store = FindingStore(engine)
+    finding_set_store = FindingSetStore(engine)
+    garden_proposal_store = GardenProposalStore(engine)
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -345,4 +360,8 @@ def build_services(
         routine_authoring=RoutineAuthoring(
             routines=routine_store, graphs=graph_store, scope_registry=scope_registry, clock=clock
         ),
+        findings=finding_store,
+        finding_sets=finding_set_store,
+        garden_proposals=garden_proposal_store,
+        garden_proposal_authoring=GardenProposalAuthoring(proposals=garden_proposal_store, clock=clock),
     )
