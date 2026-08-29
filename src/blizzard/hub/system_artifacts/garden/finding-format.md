@@ -88,9 +88,6 @@ delta holds a single finding.
 }
 ```
 
-A candidate carried through unchanged, minus its `ref` — the hub mints an id for each
-addition.
-
 ### AddFindingOp
 
 ```json
@@ -103,9 +100,7 @@ addition.
 }
 ```
 
-The finding named by `id` still reproduces. No payload beyond the id: the finding was true
-when it was recorded and it is true now, so there is nothing to revise — this op only
-restamps when the finding was last seen and against which revision.
+A candidate carried through unchanged, minus its `ref` — the hub mints an id for each addition.
 
 ### ObservedFindingOp
 
@@ -113,9 +108,9 @@ restamps when the finding was last seen and against which revision.
 { "op": "observed", "id": "fin_01JKQ8Z3M4N5P6R7S8T9V0W1X2" }
 ```
 
-The run looked and could not find the finding named by `id`. This does not close the
-finding — it flags it for a person, because a finding leaves the live set on human
-judgment and never on a pass's word alone. `note` says why the run believes it is gone.
+The finding named by `id` still reproduces. No payload beyond the id: the finding was true
+when it was recorded and it is true now, so there is nothing to revise — this op only
+restamps when the finding was last seen and against which revision.
 
 ### GoneFindingOp
 
@@ -126,3 +121,7 @@ judgment and never on a pass's word alone. `note` says why the run believes it i
   "note": "No longer reproduces at the recorded locus."
 }
 ```
+
+The run looked and could not find the finding named by `id`. This does not close the
+finding — it flags it for a person, because a finding leaves the live set on human
+judgment and never on a pass's word alone. `note` says why the run believes it is gone.

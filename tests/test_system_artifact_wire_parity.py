@@ -9,12 +9,24 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from pydantic import BaseModel
 
 from blizzard.hub.system_artifacts import PACKAGED
 from blizzard.wire import finding, garden_proposal
+
+
+def _finding_op_members() -> dict[str, type[BaseModel]]:
+    """``finding.FindingOp``'s three current member types, introspected off the union alias
+    itself (``Annotated[AddFindingOp | ObservedFindingOp | GoneFindingOp,
+    Field(discriminator="op")]``) rather than named by hand — so a member added to the union
+    later is pinned here automatically, and ``test_every_pinned_model_is_covered_by_some_document``
+    catches it going undocumented rather than silently passing."""
+    (union,) = get_args(finding.FindingOp)[:1]
+    return {member.__name__: member for member in get_args(union)}
+
 
 pytestmark = pytest.mark.unit
 
@@ -23,9 +35,7 @@ pytestmark = pytest.mark.unit
 _MODELS: dict[str, type[BaseModel]] = {
     "FindingCandidate": finding.FindingCandidate,
     "FindingDelta": finding.FindingDelta,
-    "AddFindingOp": finding.AddFindingOp,
-    "ObservedFindingOp": finding.ObservedFindingOp,
-    "GoneFindingOp": finding.GoneFindingOp,
+    **_finding_op_members(),
     "GardenProposalCandidate": garden_proposal.GardenProposalCandidate,
 }
 
@@ -75,3 +85,14 @@ def test_every_pinned_model_is_covered_by_some_document() -> None:
     nobody re-headed) fails here rather than passing by simple omission."""
     covered = {name for doc in _all_documents() for name, _ in _guard_pairs(doc)}
     assert covered == set(_MODELS), f"documented models {covered} != the pinned set {set(_MODELS)}"
+
+
+def test_finding_op_members_are_introspected_off_the_union_not_named_by_hand() -> None:
+    """Pins the introspection mechanism itself: a member added to, removed from, or renamed
+    in the ``FindingOp`` union changes what this derives with no edit to this test file —
+    the opposite of a hardcoded name list, which a new member could silently bypass."""
+    assert _finding_op_members() == {
+        "AddFindingOp": finding.AddFindingOp,
+        "ObservedFindingOp": finding.ObservedFindingOp,
+        "GoneFindingOp": finding.GoneFindingOp,
+    }

@@ -596,6 +596,28 @@ def test_get_node_alone_settles_a_cross_scope_collision(tmp_path: Path, monkeypa
 
 
 @pytest.mark.component
+def test_get_409_across_graph_and_system_never_advises_node(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A graph declaration and a system artifact can collide with no node candidate in the
+    mix at all — neither scope has a producing node, so advising ``--node`` would send the
+    caller toward an unrelated 404 rather than a resolution; only ``--scope`` remains."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    _stub_hub(
+        monkeypatch,
+        _FakeHubResponse(200, _ENVELOPE),
+        system_get=_FakeHubResponse(200, {"name": "docket", "content": "blizzard's own docket"}),
+    )
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/artifacts/docket", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert "graph" in detail and "system" in detail
+    assert "--scope" in detail
+    assert "--node" not in detail
+
+
+@pytest.mark.component
 def test_get_409_names_only_the_levers_the_caller_has_left(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A caller who already passed ``scope=node`` and still hit several producing nodes has
     only ``--node`` left; naming ``--scope`` again is advice they cannot act on."""

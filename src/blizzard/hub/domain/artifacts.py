@@ -29,14 +29,17 @@ class ArtifactScope(StrEnum):
     SYSTEM = "system"
 
 
-# One conservative URL path segment — no `/`, since the consuming route
-# percent-encodes a bare name into it, so a `/` would reach it as a real separator.
-_GRAPH_ARTIFACT_NAME = re.compile(r"^[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*$")
+# One conservative URL path segment — no `/`, since the consuming route percent-encodes a
+# bare name into it, so a `/` would reach it as a real separator. Shared by both name
+# grammars below: a graph-artifact name is exactly one segment, a system-artifact name a
+# `/`-separated path of them, but neither owns the segment shape independently of the other.
+_ARTIFACT_NAME_SEGMENT = r"[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*"
+
+_GRAPH_ARTIFACT_NAME = re.compile(rf"^{_ARTIFACT_NAME_SEGMENT}$")
 
 # A `/`-separated path of that same segment shape — blizzard's own global namespace, so a
 # published document can be grouped (`garden/finding-format`) unlike a graph-authored name.
-_SYSTEM_ARTIFACT_SEGMENT = r"[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*"
-_SYSTEM_ARTIFACT_NAME = re.compile(rf"^{_SYSTEM_ARTIFACT_SEGMENT}(?:/{_SYSTEM_ARTIFACT_SEGMENT})*$")
+_SYSTEM_ARTIFACT_NAME = re.compile(rf"^{_ARTIFACT_NAME_SEGMENT}(?:/{_ARTIFACT_NAME_SEGMENT})*$")
 
 
 def is_valid_graph_artifact_name(name: str) -> bool:

@@ -14,6 +14,14 @@ from blizzard.hub.domain.artifacts import is_valid_system_artifact_name
 #: Every packaged document's own extension — stripped to form the artifact's name.
 _SUFFIX = ".md"
 
+#: Filenames that never publish even though they carry `_SUFFIX` — directory documentation,
+#: not a document blizzard means to serve. Unlike `PackagedGraphs`, which tests membership by
+#: a single reserved filename (`graph.yaml`), a system artifact's whole point is an arbitrary,
+#: nested name, so there is no positive filename test to require instead — this is the narrow
+#: negative one for the one realistic accident (someone adding a `README.md` to explain a
+#: directory here the way every packaged-graph directory already has one).
+_NEVER_PUBLISHED = frozenset({"README.md"})
+
 
 class SystemArtifactNameInvalid(ValueError):
     """A packaged file's derived name fails :func:`is_valid_system_artifact_name` — a
@@ -48,8 +56,8 @@ class PackagedSystemArtifacts:
     @property
     def paths(self) -> list[Path]:
         """Every packaged document's path, sorted so a report over them reads the same way
-        twice (mirrors ``PackagedGraphs.paths``)."""
-        return sorted(self.root.rglob(f"*{_SUFFIX}"))
+        twice (mirrors ``PackagedGraphs.paths``) — excluding ``_NEVER_PUBLISHED`` names."""
+        return sorted(p for p in self.root.rglob(f"*{_SUFFIX}") if p.name not in _NEVER_PUBLISHED)
 
     @property
     def files(self) -> list[SystemArtifactFile]:

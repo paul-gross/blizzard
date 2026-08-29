@@ -40,9 +40,13 @@ is unreachable when a worker makes the call, the read fails outright rather than
 local copy.
 
 The read-only rule matches graph scope: `create`, `commit`, and `staged` all refuse `--scope system`. `artifact list`
-and `artifact get --scope system` otherwise serve system scope exactly the way they serve graph scope — `get` resolves
+and `artifact get --scope system` otherwise serve system scope much the way they serve graph scope — `get` resolves
 one artifact by name (`--content` for raw text), and `list` includes it in the unfiltered read alongside node and
-graph scope.
+graph scope — with one difference: a system name colliding with a node's `produces:` name is not rejected at mint the
+way a graph-scope collision is, since blizzard's own global namespace and a deployment's per-graph declarations are
+authored by different parties with no shared mint to reject at. The collision surfaces instead at read: a bare
+`artifact get <name>` matching both a node output and a system artifact is a `409` naming both, resolved by adding
+`--node` (which only a node-scoped candidate has) or `--scope`.
 
 ## Declaring produced artifacts
 

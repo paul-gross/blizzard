@@ -984,8 +984,8 @@
   },
   "blizzard/hub/api/system_artifacts.py": {
    "comments": 0,
-   "docstrings": 5,
-   "total": 23
+   "docstrings": 7,
+   "total": 25
   },
   "blizzard/hub/api/transcripts.py": {
    "comments": 4,
@@ -1173,9 +1173,9 @@
    "total": 397
   },
   "blizzard/hub/composition.py": {
-   "comments": 52,
+   "comments": 56,
    "docstrings": 12,
-   "total": 367
+   "total": 376
   },
   "blizzard/hub/config.py": {
    "comments": 45,
@@ -1268,9 +1268,9 @@
    "total": 686
   },
   "blizzard/hub/domain/artifacts.py": {
-   "comments": 4,
+   "comments": 6,
    "docstrings": 27,
-   "total": 160
+   "total": 163
   },
   "blizzard/hub/domain/claim.py": {
    "comments": 19,
@@ -1958,9 +1958,9 @@
    "total": 1184
   },
   "blizzard/hub/system_artifacts/__init__.py": {
-   "comments": 1,
+   "comments": 7,
    "docstrings": 13,
-   "total": 68
+   "total": 76
   },
   "blizzard/hub/work_sources/__init__.py": {
    "comments": 0,
@@ -2023,9 +2023,9 @@
    "total": 7
   },
   "blizzard/runner/api/artifacts.py": {
-   "comments": 5,
-   "docstrings": 24,
-   "total": 196
+   "comments": 6,
+   "docstrings": 26,
+   "total": 207
   },
   "blizzard/runner/api/asks.py": {
    "comments": 0,
@@ -3317,7 +3317,7 @@
   "support.py": {
    "comments": 39,
    "docstrings": 121,
-   "total": 882
+   "total": 885
   },
   "test_activity_api.py": {
    "comments": 2,
@@ -4076,8 +4076,8 @@
   },
   "test_hub_system_artifacts_route.py": {
    "comments": 0,
-   "docstrings": 5,
-   "total": 62
+   "docstrings": 6,
+   "total": 58
   },
   "test_hub_work_source.py": {
    "comments": 10,
@@ -4451,8 +4451,8 @@
   },
   "test_runner_artifacts_api.py": {
    "comments": 16,
-   "docstrings": 42,
-   "total": 783
+   "docstrings": 45,
+   "total": 805
   },
   "test_runner_asks_api.py": {
    "comments": 3,
@@ -4846,13 +4846,13 @@
   },
   "test_system_artifact_wire_parity.py": {
    "comments": 5,
-   "docstrings": 9,
-   "total": 77
+   "docstrings": 17,
+   "total": 98
   },
   "test_system_artifacts_loader.py": {
    "comments": 0,
    "docstrings": 4,
-   "total": 69
+   "total": 80
   },
   "test_systemd_units.py": {
    "comments": 6,

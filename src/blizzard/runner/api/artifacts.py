@@ -55,7 +55,7 @@ def _graph_hit(graph_id: str, name: str, request: Request) -> WorkerArtifact | N
 def _system_rows(request: Request) -> list[WorkerArtifact]:
     """The published system-artifact set (``ArtifactScope.SYSTEM``) — a hub-proxied forward
     on every call, never a runner-local answer (``bzh:system-scope-reads-live``)."""
-    upstream = HubProxy.of(request, "system-artifacts").get("/api/fleet/system-artifacts")
+    upstream = HubProxy.of(request, "artifacts").get("/api/fleet/system-artifacts")
     return [
         WorkerArtifact(scope=ArtifactScope.SYSTEM, name=item["name"], kind=ArtifactKind.ASSET, content=item["content"])
         for item in upstream.json()
@@ -65,7 +65,7 @@ def _system_rows(request: Request) -> list[WorkerArtifact]:
 def _system_hit(name: str, request: Request) -> WorkerArtifact | None:
     """One system artifact by name, or ``None`` on a genuine miss — any other upstream
     failure (unreachable, non-404 status) propagates rather than reading as "not found"."""
-    proxy = HubProxy.of(request, "system-artifacts")
+    proxy = HubProxy.of(request, "artifacts")
     try:
         upstream = proxy.get(f"/api/fleet/system-artifacts/{quote(name, safe='/')}")
     except HTTPException as exc:
@@ -78,20 +78,31 @@ def _system_hit(name: str, request: Request) -> WorkerArtifact | None:
     )
 
 
-def _remaining_levers(*, node: str | None, scope: ArtifactScope | None) -> tuple[str, ...]:
-    """The narrowing flags the caller has not already spent. ``node`` names a *producing*
-    node, and neither a graph declaration nor a system artifact has one, so supplying it
-    settles the scope too — leaving nothing further to narrow with."""
+def _remaining_levers(
+    candidates: list[WorkerArtifact], *, node: str | None, scope: ArtifactScope | None
+) -> tuple[str, ...]:
+    """The narrowing flags that could actually change this result. ``--node`` names a
+    *producing* node, which only a node-scoped candidate has, so it is offered only when the
+    ambiguous set actually holds one — a graph/system-only collision has no producing node
+    for ``--node`` to narrow, and advising it would send the caller toward an unrelated
+    ``404`` instead of a resolution."""
     if node is not None:
         return ()
-    return ("--scope", "--node") if scope is None else ("--node",)
+    node_scoped = any(c.scope is ArtifactScope.NODE for c in candidates)
+    if scope is None:
+        return ("--scope", "--node") if node_scoped else ("--scope",)
+    return ("--node",) if node_scoped else ()
 
 
 def _ambiguous(name: str, candidates: list[WorkerArtifact], *, levers: tuple[str, ...]) -> HTTPException:
     def _label(c: WorkerArtifact) -> str:
         if c.scope is ArtifactScope.NODE:
             return f"node {c.node_name}"
-        return "system" if c.scope is ArtifactScope.SYSTEM else "graph"
+        if c.scope is ArtifactScope.SYSTEM:
+            return "system"
+        if c.scope is ArtifactScope.GRAPH:
+            return "graph"
+        raise AssertionError(f"unhandled artifact scope {c.scope!r}")  # pragma: no cover
 
     labels = sorted({_label(c) for c in candidates})
     # Only levers still open to the caller: telling them to pass a flag they already
@@ -192,5 +203,5 @@ def get_artifact(
             detail=f"no artifact {name!r}{qualifier} for this node-step{where}",
         )
     if len(candidates) > 1:
-        raise _ambiguous(name, candidates, levers=_remaining_levers(node=node, scope=scope))
+        raise _ambiguous(name, candidates, levers=_remaining_levers(candidates, node=node, scope=scope))
     return candidates[0]

@@ -63,6 +63,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -507,6 +508,7 @@ def build_hub(
     oauth_providers: dict[str, IOAuthProvider] | None = None,
     trusted_proxies: Sequence[str] = (),
     transcript_caps: TranscriptCaps | None = None,
+    system_artifacts: PackagedSystemArtifacts | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -576,6 +578,7 @@ def build_hub(
         signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=transcript_caps,
+        system_artifacts=system_artifacts,
     )
     app = create_app(config, services=services)
     client = TestClient(app)

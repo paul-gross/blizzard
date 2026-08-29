@@ -58,6 +58,17 @@ def test_a_non_markdown_file_is_never_published(tmp_path: Path) -> None:
     assert packaged.files == []
 
 
+def test_a_readme_is_never_published_even_though_it_carries_the_suffix(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("directory documentation, not a document")
+    garden = tmp_path / "garden"
+    garden.mkdir()
+    (garden / "README.md").write_text("same, nested")
+    (garden / "finding-format.md").write_text("f")
+    packaged = PackagedSystemArtifacts(tmp_path)
+
+    assert [f.name for f in packaged.files] == ["garden/finding-format"]
+
+
 def test_a_malformed_derived_name_raises_naming_it_and_its_path(tmp_path: Path) -> None:
     garden = tmp_path / "garden "
     garden.mkdir()
