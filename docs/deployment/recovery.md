@@ -38,14 +38,15 @@ only at the hub is discovered by RESUME's own re-attach read, which re-parks the
 way the pause fact, not the restart, decides.
 
 The crash path drops three more cases the shutdown path would have observed directly, and none lands in the same place:
-a spawn that recorded a session-end goes exit-is-done, ADVANCE judging the completed work with no re-attach; a process
-still alive goes to REAP, which decides on the heartbeat — still beating, it is re-adopted untouched and never
-re-spawned, past the one-hour liveness window (which any outage over an hour guarantees, since heartbeats reach the
-downed runner's own API) it is reaped and retried like any stalled worker; a heartbeat already stale at the crash means
-the process is gone by construction, so REAP passes it and ADVANCE claims it — the verdict elicited from the dead
-session, a retry consumed only when none can be, a failed attempt recorded via ADVANCE rather than a reap. The
-session-end and stale-heartbeat cases converge on ADVANCE by different routes; ADVANCE consults no session-end fact —
-the exit, not the declaration, routes a lease to it.
+a spawn that recorded a session-end goes exit-is-done, ADVANCE judging the completed work — with no re-attach, unless a
+required `produces:` is still unattached, which re-attaches the session in place instead, capped at one such resume per
+`(lease, epoch)` before ADVANCE falls through to judging it anyway; a process still alive goes to REAP, which decides on
+the heartbeat — still beating, it is re-adopted untouched and never re-spawned, past the one-hour liveness window (which
+any outage over an hour guarantees, since heartbeats reach the downed runner's own API) it is reaped and retried like
+any stalled worker; a heartbeat already stale at the crash means the process is gone by construction, so REAP passes it
+and ADVANCE claims it — the verdict elicited from the dead session, a retry consumed only when none can be, a failed
+attempt recorded via ADVANCE rather than a reap. The session-end and stale-heartbeat cases converge on ADVANCE by
+different routes; ADVANCE consults no session-end fact — the exit, not the declaration, routes a lease to it.
 
 REAP expires narrowly: a lease minted but never spawned, and a worker still alive but stalled past the liveness window;
 a session-bearing lease whose process is simply gone is not reaped — that one belongs to ADVANCE (the worker declared

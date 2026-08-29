@@ -324,7 +324,7 @@ usage_facts = Table(
     Column("node_id", String, nullable=False),
     Column("epoch", Integer, nullable=False),
     Column("generation", Integer, nullable=False),  # this lease's spawn ordinal (1 = the initial spawn)
-    Column("kind", String, nullable=False),  # spawn | resume | judge | nudge
+    Column("kind", String, nullable=False),  # spawn | resume | judge
     Column("model", String, nullable=False),
     Column("input_tokens", Integer, nullable=False),
     Column("output_tokens", Integer, nullable=False),

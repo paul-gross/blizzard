@@ -42,15 +42,11 @@ _CP_CHECKS_AFTER_MARKER = crashpoint(
 _CP_AFTER_JUDGE = crashpoint("advance.after-judgement.before-buffer", "verdict parsed; completion not buffered")
 _CP_AFTER_USAGE = crashpoint("advance.after-usage.before-buffer", "usage facts recorded; completion not buffered")
 
-# Nudge-once (issue #113): the durable `(lease, epoch)` fact is recorded BEFORE the resume it
-# guards, so "at most one nudge" holds across a crash at either point.
+# Resume-once (issues #113, #422): the durable `(lease, epoch)` fact is recorded BEFORE the
+# resume it guards, so "at most one resume" holds across a crash at either point.
 _CP_NUDGE_AFTER_FIRED_FACT = crashpoint(
     "nudge.after-fired-fact.before-resume",
-    "nudge-fired fact durable; the resume that delivers the nudge has not run yet",
-)
-_CP_NUDGE_AFTER_RESUME = crashpoint(
-    "nudge.after-resume.before-reassemble",
-    "nudge resume returned; attachments not yet re-read and the completion not yet reassembled",
+    "resume-fired fact durable; the resume that wakes the session has not run yet",
 )
 
 _CP_AFTER_BUFFER = crashpoint("advance.after-buffer.before-flush", "completion buffered; not yet flushed")
@@ -81,10 +77,10 @@ class Judgement:
         return cls(ctx, lease, envelope, bindings)
 
     def run(self) -> None:
-        """Confirm the commits, then either buffer a human's decision or elicit the verdict.
-
-        The elicitation is itself a spawn, so the local brake gates it (issue #45) — placed
-        below the confirm, since nothing above it starts a process."""
+        """Confirm the commits, then buffer a human's decision, resume a premature exit, or
+        elicit the verdict — the produces reconcile sits below the human gate and the local
+        spawn brake alike, since `DormantSession.resume_on_unmet_produces` is itself a spawn
+        (issue #422)."""
         lease = self.lease
         commits = DeclaredCommits(self.ctx, lease, self.bindings)
         artifacts = commits.verify()
@@ -94,6 +90,24 @@ class Judgement:
             self._buffer_decision(artifacts)
             return
         if Spawner(self.ctx).suppressed(via="advance", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
+            return
+
+        produces = ProducesReconciler(self.envelope)
+        attachments = self.ctx.store.attachments_for_lease(lease.lease_id)
+        missing = produces.missing(artifacts, attachments)
+        if missing and not self.ctx.store.nudge_fired(lease.lease_id, lease.epoch):
+            # Resume-once (issues #113, #422): an exit with `produces:` unmet is resumed, not
+            # judged — no verdict elicited, no attempt failed, and no `checks:` run.
+            _log.warning(
+                "resuming premature exit for unattached produces names",
+                node=self.envelope.node.node_name,
+                missing=[spec.name for spec in missing],
+                lease_id=lease.lease_id,
+                epoch=lease.epoch,
+            )
+            self.ctx.store.record_nudge_fired(lease_id=lease.lease_id, epoch=lease.epoch, at=self.ctx.clock.now())
+            _CP_NUDGE_AFTER_FIRED_FACT.reached()
+            DormantSession(self.ctx, lease).resume_on_unmet_produces(produces.nudge_message(missing), self.bindings)
             return
 
         # Checks run before the judgement (issue #114), against the tree the worker just left
@@ -123,34 +137,10 @@ class Judgement:
             Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
             return
 
-        assessment = self.ctx.harness.parse_assessment(output)
-        attachments = self.ctx.store.attachments_for_lease(lease.lease_id)
-        produces = ProducesReconciler(self.envelope)
-        missing = produces.missing(artifacts, attachments)
-        if missing and not self.ctx.store.nudge_fired(lease.lease_id, lease.epoch):
-            # Nudge-once (issue #113): the guard fact is recorded BEFORE the resume, which is
-            # what makes "at most one nudge per (lease, epoch)" hold across a kill -9 at either.
-            _log.warning(
-                "nudging worker for unattached produces names",
-                node=self.envelope.node.node_name,
-                missing=[spec.name for spec in missing],
-                lease_id=lease.lease_id,
-                epoch=lease.epoch,
-            )
-            self.ctx.store.record_nudge_fired(lease_id=lease.lease_id, epoch=lease.epoch, at=self.ctx.clock.now())
-            _CP_NUDGE_AFTER_FIRED_FACT.reached()
-            # `judge`, not `resume_with_message`: the reply is discarded, but the resume must be
-            # *synchronous* or the attachments re-read below races the worker still attaching.
-            nudge_output = self._elicit(produces.nudge_message(missing))
-            _CP_NUDGE_AFTER_RESUME.reached()
-            self._record_nudge_usage(nudge_output)
-            # Re-read: a worker that attached during the nudge must have its content picked up
-            # before assembly below, not the assessment fallback it just corrected.
-            attachments = self.ctx.store.attachments_for_lease(lease.lease_id)
-            artifacts = commits.amend(artifacts)
-
         # Harvest asset artifacts for any `produces` name no git commit covers, read from the
         # durable store so a restart between attach and completion still sees it.
+        assessment = self.ctx.harness.parse_assessment(output)
+        attachments = self.ctx.store.attachments_for_lease(lease.lease_id)
         artifacts += produces.collect_assets(artifacts, assessment, attachments)
         self._buffer_completion(choice, checks, artifacts)
 
@@ -233,14 +223,6 @@ class Judgement:
             choice=choice,
         )
         return True
-
-    def _record_nudge_usage(self, output: str) -> None:
-        """A distinct ``nudge`` kind (issue #58) so it cannot collide with the primary
-        judgement's own fact at this same generation."""
-        generation = self.ctx.store.lease_generation(self.lease.lease_id)
-        sample = self.ctx.harness.parse_usage(output, "nudge", model=self.lease.resolved_model)
-        if sample is not None:
-            self.ctx.usage.record_sample(self.lease, generation=generation, sample=sample)
 
     def _buffer_decision(self, artifacts: list[SubmittedArtifact]) -> None:
         """Buffer a runner-config gate decision — the gated node-step's outcome.

@@ -154,8 +154,8 @@ _ATTACH_CI_SUBSET = ("attach.after-record.before-response",)
 # The declare-commit CI subset (#143): the family's lone member is its own CI representative.
 _DECLARE_COMMIT_CI_SUBSET = ("declare-commit.after-record.before-response",)
 
-# The nudge CI subset (#113): the family's first-declared member — the fired-fact-before-resume
-# window the "at most one nudge" guarantee rests on — is its own CI representative.
+# The nudge CI subset (#113, #422): the family's lone member — the fired-fact-before-resume
+# window the "at most one resume" guarantee rests on — is its own CI representative.
 _NUDGE_CI_SUBSET = ("nudge.after-fired-fact.before-resume",)
 
 # The checks CI subset (#114): the family's recovery-critical member — the results-before-marker
