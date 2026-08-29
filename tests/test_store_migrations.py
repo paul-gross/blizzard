@@ -196,6 +196,31 @@ def test_scopes_and_routines_tables_survive_migration_roundtrip(tmp_path: Path) 
     assert set(tables) <= _table_names()
 
 
+def test_findings_and_proposals_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
+    """``findings``, ``finding_sets``, ``finding_facts``, ``garden_proposals``,
+    ``garden_proposal_findings`` (blizzard#390) — one hand-written revision mints all
+    five; downgrades to its own parent by id, so the drop half is asserted rather than
+    inferred from a revision marker."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+    tables = ("findings", "finding_sets", "finding_facts", "garden_proposals", "garden_proposal_findings")
+
+    def _table_names() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return set(sa.inspect(engine).get_table_names())
+        finally:
+            engine.dispose()
+
+    assert set(tables) <= _table_names()
+
+    runner.downgrade("20260828_1000_scopes_and_routines")
+    assert not set(tables) & _table_names()
+
+    runner.upgrade("head")
+    assert set(tables) <= _table_names()
+
+
 def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """The runner's own graph-artifact mirror table — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from a

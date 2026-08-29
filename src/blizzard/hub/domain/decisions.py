@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, PROPOSAL_PREFIX, Id
+from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_PROPOSAL_PREFIX, Id
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import Graph, Node
@@ -153,7 +153,7 @@ class DecisionService:
         return [
             WorkItemProposalRow.of(
                 p,
-                proposal_id=Id.mint(PROPOSAL_PREFIX, self._clock).value,
+                proposal_id=Id.mint(WORK_ITEM_PROPOSAL_PREFIX, self._clock).value,
                 chunk_id=chunk.chunk_id,
                 node_id=node.node_id,
                 node_name=node.name,
