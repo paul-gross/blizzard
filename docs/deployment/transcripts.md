@@ -20,8 +20,12 @@ final-marker flush fails every tick, buffering forever with a transport error lo
 expect it.
 
 The hub stores accepted content compressed at rest behind an operator-only read API — a durable record, not a discard
-sink. Transcript reads are operator-only, requiring `transcript:read` (contributor and above); a runner's fleet token
-can push to ingest but never read back.
+sink. Reads through the hub's API are operator-only, requiring `transcript:read` (contributor and above); a runner's
+fleet token can push to ingest but never read back through it. A runner's own local panel is a separate case: it reads
+its own chunk-scoped segments straight from that runner's local store, through the runner daemon's own
+`GET /api/chunks/{chunk_id}/transcripts[/{segment_id}]` pair (`src/blizzard/runner/api/transcript_segments.py`) — a
+runner-local read never routed through the hub or gated by `transcript:read`, since it never crosses the fleet token
+boundary the hub's API guards.
 
 Tool results and subagent conversations routinely arrive in later records than the call that produced them (the runner
 reads a session in windows), shipping with that call's `tool_use_id`; the board folds them back on render, direct API

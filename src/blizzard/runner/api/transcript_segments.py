@@ -1,14 +1,9 @@
-"""The runner-plane, chunk-scoped transcript segment routes (runner-node-grouped-
-transcripts, D1/D3) — a chunk's segment index and one segment's content by id, mirroring
-the hub's own ``/api/chunks/{chunk_id}/transcripts[/{segment_id}]`` path shape so the
-generated runner SDK exposes the same operation names (D3, D5).
-
-Runner-local only: both routes resolve through :class:`TranscriptService`
-(D4), which never calls the hub for these two reads. Ownership needs no explicit guard —
-this runner's store only ever holds its own leases' segments, so a chunk it never held
-returns an empty index, and a segment id from a different runner resolves as not-found
-(D3). Distinct from ``transcripts.py``'s lease-keyed ``/api/leases/{lease_id}/transcript``,
-which stays exactly as it is."""
+"""The runner-plane, chunk-scoped transcript segment routes (runner-node-grouped-transcripts,
+D1/D3) — a chunk's segment index and one segment's content by id, mirroring the hub's own
+``/api/chunks/{chunk_id}/transcripts[/{segment_id}]`` path shape (D3, D5). Runner-local only:
+both resolve through :class:`TranscriptService` (D4), never calling the hub; ownership is
+structural — this runner's store only ever holds its own leases' segments. Distinct from
+``transcripts.py``'s lease-keyed ``/api/leases/{lease_id}/transcript``, unchanged by this."""
 
 from __future__ import annotations
 
@@ -49,9 +44,8 @@ def _index_entry(row: TranscriptSegmentLedgerRow) -> TranscriptSegmentIndexEntry
 
 
 def _content_view(segment_id: str, content: ResolvedSegmentContent) -> TranscriptSegmentContentView:
-    # `TranscriptSegmentContentView` carries no dedicated unavailability field (D2) — an
-    # unavailable session file renders as `truncated=True` over an empty `turns`, never a
-    # silent empty transcript and never a 404 (D1).
+    # `TranscriptSegmentContentView` has no unavailability field (D2) — unavailable renders as
+    # `truncated=True` over empty `turns`, never a silent empty transcript and never a 404 (D1).
     if not content.available:
         return TranscriptSegmentContentView(segment_id=segment_id, final=content.final, truncated=True, turns=[])
     return TranscriptSegmentContentView(

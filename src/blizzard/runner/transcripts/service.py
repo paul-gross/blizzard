@@ -1,13 +1,9 @@
 """The transcript route's domain read model (issue #29) — resolves a lease's transcript to
 a home per Decision 1 (blizzard#249). Holds only read-only seams (``bzh:repository-split``),
 so a controller may hold it directly (``bzh:controller-read-only``). ``leases.lease(lease_id)``
-spans closure — unlike ``active_lease`` — because a transcript outlives its lease.
-Local until acked, hub after (issue #249 AC1): see :meth:`TranscriptService.for_lease`.
-
-Also resolves the runner-plane, chunk-scoped segment reads (blizzard#... runner-node-grouped-
-transcripts, D1/D4): a chunk's segment index straight off the local ledger, and one segment's
-content through the same local session-file read ``_read_local`` already uses — local-only,
-no archived fallback, since the hub's lease-keyed read cannot answer for one segment (D1)."""
+spans closure — unlike ``active_lease`` — because a transcript outlives its lease. Local until
+acked, hub after (issue #249 AC1, :meth:`TranscriptService.for_lease`); the runner-plane's
+chunk-scoped segment reads (D1/D4) resolve locally too, through that same session-file read."""
 
 from __future__ import annotations
 
@@ -37,8 +33,7 @@ class ResolvedSegmentContent:
     """One segment's resolved content, read straight from its session file (D1) — never
     from the ledger's own shipped-turn accounting, which only bounds the index read (D6).
     ``turns`` is ``[]`` with ``available=False`` when the session file is gone; a caller
-    renders that onto ``TranscriptSegmentContentView`` as ``truncated=True, turns=[]`` (D2's
-    wire model carries no dedicated unavailability field to fill instead)."""
+    renders that as ``truncated=True, turns=[]`` (D2's wire model has no unavailability field)."""
 
     final: bool
     available: bool

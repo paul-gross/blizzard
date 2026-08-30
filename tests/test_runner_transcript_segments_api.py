@@ -1,10 +1,9 @@
-"""The runner-plane, chunk-scoped transcript segment routes — ``GET
-/api/chunks/{chunk_id}/transcripts`` and ``GET /api/chunks/{chunk_id}/transcripts/{segment_id}``
-(runner-node-grouped-transcripts, D1/D3/D4). Exercised over a real store via ``TestClient``,
-with a fake ``IReadTranscriptRepository`` standing in for the filesystem and an
-``IReadArchivedTranscriptRepository`` that raises on any call — a route reaching the hub
-at all fails the test outright, proving D1's local-only claim rather than merely asserting
-an empty call log afterward."""
+"""The runner-plane, chunk-scoped transcript segment routes — ``GET /api/chunks/{chunk_id}/transcripts``
+and ``GET .../transcripts/{segment_id}`` (runner-node-grouped-transcripts, D1/D3/D4). Exercised over a
+real store via ``TestClient``, with a fake ``IReadTranscriptRepository`` standing in for the filesystem
+and an ``IReadArchivedTranscriptRepository`` that raises on any call — a route reaching the hub at all
+fails the test outright, proving D1's local-only claim rather than merely asserting an empty call log
+afterward."""
 
 from __future__ import annotations
 
@@ -107,11 +106,9 @@ def test_index_is_empty_for_a_chunk_this_runner_never_held(tmp_path: Path) -> No
 def test_index_includes_every_segment_under_the_chunk_regardless_of_which_runner_id_its_lease_names(
     tmp_path: Path,
 ) -> None:
-    """Ownership-exclusion (D3): a chunk whose leases were minted under two DIFFERENT
-    ``runner_id``s — unreachable in real fleet data, since one runner's local store cannot
-    physically hold another's rows, constructed here only to prove the point — still reads
-    back every segment this store itself holds. The read is confined by the physical store,
-    never by filtering on the lease's own ``runner_id`` field."""
+    """Ownership-exclusion (D3): a chunk whose leases carry two DIFFERENT ``runner_id``s —
+    unreachable in real fleet data, constructed only to prove the point — still reads back
+    every segment this store holds; confinement is the physical store, never a filter on ``runner_id``."""
     app, store = _app_with_segments(tmp_path)
     _mint(store, lease="lease_1", node="nd_build", epoch=1, runner_id="r1")
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
