@@ -4,9 +4,11 @@ import type { GraphEdgeView, GraphNodeView, GraphSessionView } from '../api/hub'
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { errorMessage } from '../error-message';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitPanel, KitPanelHeader } from '../kit/kit-panel';
 import { asyncState } from '../query-state';
 import { GraphDetailEdges } from './graph-detail-edges';
 import { GraphDetailHeader } from './graph-detail-header';
+import { GraphDetailLifecycle } from './graph-detail-lifecycle';
 import { GraphDiagramView } from './graph-diagram-view';
 import { injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
 import { GraphNodeTable } from './graph-node-table';
@@ -30,9 +32,10 @@ import { injectHubGraphQuery } from './graphs.query';
  * (issue #208).
  *
  * Container only: keeps the injections (`injectHubGraphQuery`,
- * `injectGraphLifecycleMutation`, `injectMeQuery`), the derived state, the mutation
- * calls, and the `.gd-panel`/`.body` layout wrapper hosting five presentational
- * children — {@link GraphDetailHeader}, `fleet-graph-diagram-view`,
+ * `injectGraphLifecycleMutation`, `injectMeQuery`) and the derived state, and
+ * composes `KitPanel` (`bzh:frontend-kit-floor`) around six presentational
+ * children — {@link GraphDetailHeader} (the panel's own header supplement),
+ * {@link GraphDetailLifecycle}, `fleet-graph-diagram-view`,
  * `fleet-graph-node-table`, `fleet-graph-session-table`, and
  * {@link GraphDetailEdges} — each of which forwards data down and re-emits outputs up
  * (`bzh:frontend-container-presentational`).
@@ -40,7 +43,17 @@ import { injectHubGraphQuery } from './graphs.query';
 @Component({
   selector: 'fleet-graph-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GraphDetailEdges, GraphDetailHeader, GraphDiagramView, GraphNodeTable, GraphSessionTable, KitAsyncState],
+  imports: [
+    GraphDetailEdges,
+    GraphDetailHeader,
+    GraphDetailLifecycle,
+    GraphDiagramView,
+    GraphNodeTable,
+    GraphSessionTable,
+    KitAsyncState,
+    KitPanel,
+    KitPanelHeader,
+  ],
   templateUrl: './graph-detail.html',
   styleUrl: './graph-detail.css',
 })
@@ -60,7 +73,7 @@ export class GraphDetail {
   protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.graphQuery, false));
 
   /** Whether the current identity may author graphs (`graph:edit`, admin-tier — issue
-   * #93) — gates the retire/re-enable controls, forwarded to {@link GraphDetailHeader};
+   * #93) — gates the retire/re-enable controls, forwarded to {@link GraphDetailLifecycle};
    * `null`/pending resolves to `false`. */
   protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
 
@@ -82,7 +95,7 @@ export class GraphDetail {
     return this.nodes().find((n) => n.node_id === g.entry_node_id)?.name ?? g.entry_node_id;
   });
 
-  /** Fires the retire mutation once {@link GraphDetailHeader} has already confirmed. */
+  /** Fires the retire mutation once {@link GraphDetailLifecycle} has already confirmed. */
   protected onRetire(graphId: string): void {
     this.actionError.set(null);
     this.lifecycleMutation.mutate(
@@ -91,7 +104,7 @@ export class GraphDetail {
     );
   }
 
-  /** Fires the enable mutation once {@link GraphDetailHeader} has already confirmed. */
+  /** Fires the enable mutation once {@link GraphDetailLifecycle} has already confirmed. */
   protected onEnable(graphId: string): void {
     this.actionError.set(null);
     this.lifecycleMutation.mutate(

@@ -13,7 +13,7 @@
   height: 100%;
   position: relative;
 }
-.lbl {
+.resume-tag {
   font-size: var(--fs-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -71,7 +71,7 @@
   border: 1px solid var(--red-dim);
   background: color-mix(in srgb, var(--red-dim) 12%, transparent);
 }
-.resume-box .lbl {
+.resume-box .resume-tag {
   color: var(--red);
   display: block;
   margin-bottom: 4px;

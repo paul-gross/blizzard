@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: 6px;
 }
-.gd-lbl {
+.section-lbl {
   font-size: var(--fs-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;

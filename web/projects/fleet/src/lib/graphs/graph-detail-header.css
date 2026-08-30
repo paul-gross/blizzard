@@ -1,26 +1,11 @@
-/* Reproduces `.body`'s own `flex-direction: column; gap: 10px;` (`graph-detail.css`)
-   internally: these four blocks were its direct flex children before the split, and
-   the container now hands this component only one flex slot to render all of them
-   in — without this, they'd stack with no gap at all. */
+/* Paints no chrome of its own — projected into KitPanel's own fleetKitPanelHeader
+   slot in supplement mode (kit-panel.ts's own declared contract), which already
+   supplies the bar's background, border, and label span; `display: contents`
+   (the same convention `machine-detail-header.css` uses for owns-the-bar mode)
+   puts this component's two spans directly alongside that label as `.p-hdr`'s
+   own flex items rather than wrapping them in a second box. */
 :host {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.gd-lbl {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
-.gd-hdr {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--line);
-  background: var(--overlay-25);
+  display: contents;
 }
 .gid {
   color: var(--label-dim);
@@ -39,22 +24,4 @@
 .lifecycle-badge.retired {
   color: var(--red);
   border: 1px solid var(--red);
-}
-.lifecycle-actions {
-  display: flex;
-  padding: 4px 8px 0;
-}
-.lifecycle-error {
-  margin: 0;
-  padding: 0 8px;
-  color: var(--red);
-  font-size: var(--fs-xs);
-}
-.entry {
-  margin: 0;
-  font-size: var(--fs-sm);
-  color: var(--label-dim);
-}
-.entry strong {
-  color: var(--cyan);
 }

@@ -1,5 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { ageMs, compactRef, formatAge, KitAsyncState, KitPanel, KitPanelHeader, type runnerApi } from 'fleet';
+import {
+  ageMs,
+  compactRef,
+  formatAge,
+  injectNowSignal,
+  KitAsyncState,
+  KitPanel,
+  KitPanelHeader,
+  type runnerApi,
+} from 'fleet';
 
 import { injectChunkDetailQuery } from './chunk-detail.query';
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
@@ -114,6 +123,10 @@ export class MachineDetail {
     return l ? compactRef(l.lease_id) : '';
   });
 
+  /** Ticks once a second so {@link heartbeatLabel} advances between polls, the
+   * same cadence {@link HeartbeatFreshness}'s own bar reads (`bzh:frontend-formatters`). */
+  private readonly now = injectNowSignal(1000);
+
   /**
    * `-34s` shorthand, or `—` before the first beat / past the skew bound —
    * decoration only; the server-derived state carries liveness (`bzh:utc-instants`).
@@ -121,7 +134,7 @@ export class MachineDetail {
   protected readonly heartbeatLabel = computed<string>(() => {
     const l = this.newestLease();
     if (!l || l.state === 'closed') return '—';
-    const age = ageMs(l.last_heartbeat_at, Date.now());
+    const age = ageMs(l.last_heartbeat_at, this.now());
     return age === null ? '—' : formatAge(age);
   });
 }

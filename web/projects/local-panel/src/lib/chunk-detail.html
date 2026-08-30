@@ -34,7 +34,7 @@
           <dt>heartbeat</dt>
           <dd>
             <span class="hb-line">
-              <span>{{ heartbeatLabel() }}</span>
+              <span data-testid="heartbeat-label">{{ heartbeatLabel() }}</span>
               <local-heartbeat-freshness
                 class="hb-bar"
                 [lastHeartbeatAt]="l.last_heartbeat_at"
@@ -45,7 +45,7 @@
         </dl>
         @if (escalation(); as esc) {
           <div class="resume-box" data-testid="detail-resume">
-            <span class="lbl">escalated — resume session</span>
+            <span class="resume-tag">escalated — resume session</span>
             <code>{{ esc.resume_command || '(no session to resume)' }}</code>
           </div>
         }

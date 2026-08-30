@@ -1,5 +1,5 @@
 <div class="section" data-testid="graph-detail-edges">
-  <span class="gd-lbl">Edges &amp; choices</span>
+  <span class="section-lbl">Edges &amp; choices</span>
   @for (node of nodes(); track node.node_id) {
     @if (resolvedEdges(node).length > 0) {
       <div class="node-edges" data-testid="graph-detail-node-edges" [attr.data-node-id]="node.node_id">

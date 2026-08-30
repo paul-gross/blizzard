@@ -1,28 +1,8 @@
-<div class="gd-hdr">
-  <span class="gd-lbl">{{ name() }}</span>
-  <span
-    class="lifecycle-badge"
-    data-testid="graph-detail-lifecycle-badge"
-    [class.retired]="retired()"
-    [class.enabled]="!retired()"
-    >{{ retired() ? 'retired' : 'enabled' }}</span
-  >
-  <span class="gid" data-testid="graph-detail-graph-id">{{ graphId() }}</span>
-</div>
-<!-- Retire/re-enable are graph authoring — gated on graph:edit (admin-tier,
-     issue #93): a contributor reads the structure + badge but not the controls. -->
-@if (canEdit()) {
-  <div class="lifecycle-actions">
-    @if (retired()) {
-      <fleet-kit-button testid="graph-detail-enable" (click)="onEnable()">Re-enable</fleet-kit-button>
-    } @else {
-      <fleet-kit-button testid="graph-detail-retire" variant="danger" (click)="onRetire()">Retire</fleet-kit-button>
-    }
-  </div>
-}
-@if (actionError(); as err) {
-  <p class="lifecycle-error" data-testid="graph-detail-lifecycle-error">{{ err }}</p>
-}
-<p class="entry" data-testid="graph-detail-entry">
-  Entry node: <strong>{{ entryNodeName() }}</strong>
-</p>
+<span
+  class="lifecycle-badge"
+  data-testid="graph-detail-lifecycle-badge"
+  [class.retired]="retired()"
+  [class.enabled]="!retired()"
+  >{{ retired() ? 'retired' : 'enabled' }}</span
+>
+<span class="gid" data-testid="graph-detail-graph-id">{{ graphId() }}</span>

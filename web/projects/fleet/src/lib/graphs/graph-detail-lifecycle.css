@@ -1,0 +1,26 @@
+/* Reproduces `.body`'s own `flex-direction: column; gap: 10px;` (`graph-detail.css`)
+   internally: this component is one flex child of `.body`, holding three blocks
+   of its own — without this, they'd stack with no gap at all. */
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.lifecycle-actions {
+  display: flex;
+  padding: 4px 8px 0;
+}
+.lifecycle-error {
+  margin: 0;
+  padding: 0 8px;
+  color: var(--red);
+  font-size: var(--fs-xs);
+}
+.entry {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--label-dim);
+}
+.entry strong {
+  color: var(--cyan);
+}

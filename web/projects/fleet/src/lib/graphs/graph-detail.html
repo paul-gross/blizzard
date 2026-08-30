@@ -1,4 +1,13 @@
-<section class="gd-panel graph-detail" aria-label="Graph detail" data-testid="graph-detail">
+<fleet-kit-panel
+  class="graph-detail"
+  aria-label="Graph detail"
+  data-testid="graph-detail"
+  [label]="graph()?.name ?? null"
+  [bodyScroll]="false"
+>
+  @if (graph(); as g) {
+    <fleet-graph-detail-header fleetKitPanelHeader [graphId]="g.graph_id" [retired]="!!g.retired" />
+  }
   <fleet-kit-async-state
     [state]="state()"
     loadingText="Loading graph…"
@@ -8,9 +17,8 @@
   >
   @if (graph(); as g) {
     <div class="body" data-testid="graph-detail-body">
-      <fleet-graph-detail-header
+      <fleet-graph-detail-lifecycle
         [graphId]="g.graph_id"
-        [name]="g.name"
         [retired]="!!g.retired"
         [canEdit]="canEdit()"
         [actionError]="actionError()"
@@ -29,4 +37,4 @@
     </div>
   }
   </fleet-kit-async-state>
-</section>
+</fleet-kit-panel>

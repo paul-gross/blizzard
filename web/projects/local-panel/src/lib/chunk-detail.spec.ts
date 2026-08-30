@@ -292,3 +292,43 @@ describe('MachineDetail panel chrome', () => {
     expect(selected.el.querySelector('.p-hdr [data-testid="detail-chunk-ref"]')).not.toBeNull();
   });
 });
+
+/**
+ * The heartbeat label reads off {@link injectNowSignal}, not a bare `Date.now()`
+ * inside a `computed()` (`bzh:frontend-formatters`) — so it advances on the tick
+ * alone, the same contract `HeartbeatFreshness`'s own bar honors beside it.
+ */
+describe('MachineDetail heartbeat label ticking', () => {
+  it('advances the heartbeat label on the tick alone, with the leases input unchanged', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse(NEWEST().last_heartbeat_at!));
+    let stub: RequestClientStub | undefined;
+    try {
+      stub = stubRequestClient(runnerClient, routes());
+      await TestBed.configureTestingModule({
+        imports: [MachineDetail],
+        providers: [
+          provideZonelessChangeDetection(),
+          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+          provideRouter([]),
+        ],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(MachineDetail);
+      fixture.componentRef.setInput('leases', [NEWEST()]);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="heartbeat-label"]')?.textContent).toContain('-0s');
+
+      // The tick alone — the leases input never changes — advances the label.
+      await vi.advanceTimersByTimeAsync(5_000);
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="heartbeat-label"]')?.textContent).toContain('-5s');
+    } finally {
+      stub?.restore();
+      vi.useRealTimers();
+    }
+  });
+});

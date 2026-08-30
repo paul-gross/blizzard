@@ -1,3 +1,7 @@
+/* `overflow-y: auto` scrolls the whole panel — chrome, header, and body alike —
+   rather than `fleet-kit-panel`'s own `.p-body`, which the panel's `bodyScroll`
+   input (`graph-detail.html`) is set `false` to disable, so there is only ever
+   one scroll container. */
 :host {
   display: block;
   height: 100%;
@@ -5,11 +9,6 @@
   font-family: var(--mono);
   font-size: var(--fs-base);
   color: var(--text);
-}
-.gd-panel {
-  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
-  border: 1px solid var(--bezel);
-  min-height: 0;
 }
 .body {
   display: flex;
