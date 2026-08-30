@@ -110,11 +110,9 @@ class TranscriptService:
 
     def segment_content(self, chunk_id: str, segment_id: str) -> ResolvedSegmentContent | None:
         """One segment's content, resolved through its session file (D1) — ``None`` iff no such
-        segment exists under this chunk on this store (404, mirroring :meth:`for_lease`).
-        Windowed to this segment's own turns: a same-session resume shares one file across
-        segments, so the read starts where the preceding sibling left off and ends at this
-        segment's own frozen cursor once finalized — never a sibling's, which keeps advancing
-        until that sibling is itself finalized."""
+        segment exists under this chunk on this store (404, mirroring :meth:`for_lease`). Windowed
+        to this segment's own turns: starts where the preceding sibling left off, ends at this
+        segment's own frozen cursor once finalized — never a sibling's still-advancing one."""
         segment = self._transcript_ledger.transcript_segment(segment_id)
         if segment is None or segment.chunk_id != chunk_id:
             return None
