@@ -89,6 +89,12 @@ class IReadTranscriptLedgerRepository(Protocol):
         """Segments with no final marker yet — the pump's per-tick work list (issue #246)."""
         ...
 
+    def transcript_segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentLedgerRow]:
+        """The chunk's segment ledger rows, oldest first, open or finalized alike — the
+        runner-plane's chunk-scoped segment index read (D6, runner-node-grouped-transcripts).
+        A chunk this store holds no lease for returns ``[]``."""
+        ...
+
     def chunk_transcript_shipped_bytes(self, chunk_id: str) -> int:
         """Sum of ``shipped_bytes`` across every one of this chunk's segments, open or
         finalized — the running total the 64 MB per-chunk budget (D4) is measured against."""

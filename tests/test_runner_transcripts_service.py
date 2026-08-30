@@ -370,3 +370,87 @@ def test_a_closed_lease_the_hub_is_unreachable_and_local_cannot_answer_either_fl
     assert resolved.transcript.available is False
     assert resolved.transcript.reason == "not_found"
     assert resolved.hub_unreachable is True
+
+
+# --- runner-plane chunk-scoped segment reads (D1, D4, D6) -----------------------
+
+
+@pytest.mark.unit
+def test_segments_for_chunk_returns_the_chunks_own_ledger_rows(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+
+    segments = _service(store).segments_for_chunk("ch_1")
+
+    assert [s.chunk_id for s in segments] == ["ch_1"]
+    assert segments[0].session_id == "sess-a"
+
+
+@pytest.mark.unit
+def test_segments_for_chunk_is_empty_for_a_chunk_this_store_never_held(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+
+    assert _service(store).segments_for_chunk("ch_other") == []
+
+
+@pytest.mark.unit
+def test_segment_content_is_none_for_an_unknown_segment_id(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    assert _service(store).segment_content("ch_1", "seg_nope") is None
+
+
+@pytest.mark.unit
+def test_segment_content_is_none_when_the_segment_belongs_to_a_different_chunk(tmp_path: Path) -> None:
+    """The route's ownership check — a segment fetched under the wrong ``chunk_id`` in the
+    URL resolves as though it never existed, same as an unknown id."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    [segment] = store.transcript_segments_for_chunk("ch_1")
+
+    assert _service(store).segment_content("ch_other", segment.segment_id) is None
+
+
+@pytest.mark.unit
+def test_segment_content_reads_the_session_file_local_only_never_the_hub(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    [segment] = store.transcript_segments_for_chunk("ch_1")
+    local = FakeTranscriptRepository(
+        {
+            "sess-a": Transcript(
+                session_id="sess-a", available=True, reason=None, turns=[_local_turn("hi")], truncated=False
+            )
+        }
+    )
+    archived = FakeArchivedTranscriptRepository(
+        {_KEY: ArchivedTranscript(status="found", turns=[_hub_turn("should never be seen")], truncated=False)}
+    )
+
+    content = _service(store, local=local, archived=archived).segment_content("ch_1", segment.segment_id)
+
+    assert content is not None
+    assert content.available is True
+    assert content.final is False
+    assert content.truncated is False
+    assert [t.text for t in content.turns] == ["hi"]
+    assert archived.calls == []
+
+
+@pytest.mark.unit
+def test_segment_content_reports_unavailability_rather_than_raising_when_the_file_is_gone(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    [segment] = store.transcript_segments_for_chunk("ch_1")
+
+    content = _service(store).segment_content("ch_1", segment.segment_id)  # no fake entry -> not_found
+
+    assert content is not None
+    assert content.available is False
+    assert content.truncated is True
+    assert content.turns == []
