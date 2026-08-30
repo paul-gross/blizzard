@@ -13,13 +13,14 @@ from typing import Any, cast
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
+from blizzard.foundation.node_steps import Executor
+from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.stop import ChunkNotStoppable, StopService
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
-    ChunkStatus,
     EscalationFact,
     IWriteChunkRepository,
     QuestionFact,

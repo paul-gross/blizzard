@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import ProducesSpec
 from blizzard.hub.store.internal.graph_store import PRODUCES
 

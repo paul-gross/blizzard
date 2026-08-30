@@ -14,9 +14,10 @@ import pytest
 from sqlalchemy import insert
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.node_steps import Executor
 from blizzard.hub.api.chunk_views import ChunkHistoryView
 from blizzard.hub.api.graph_names import GraphNames
-from blizzard.hub.domain.graph import Executor, Graph, GraphDoc
+from blizzard.hub.domain.graph import Graph, GraphDoc
 from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.domain.work import ChunkFacts, TransitionFact
 from blizzard.hub.store import schema as s

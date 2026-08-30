@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from blizzard.hub.domain.work import ChunkStatus, MigrationMode, WorkItemPriority
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.hub.domain.work import MigrationMode, WorkItemPriority
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.work_source import WorkItemAuthorView

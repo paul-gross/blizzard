@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageSample
 

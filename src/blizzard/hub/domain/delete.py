@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import threading
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.queue import GROUPABLE_STATUSES, ChunkNotFound
-from blizzard.hub.domain.work import Chunk, ChunkStatus, IReadChunkRepository, IWriteWorkItemRepository
+from blizzard.hub.domain.work import Chunk, IReadChunkRepository, IWriteWorkItemRepository
 
 
 class ChunkNotDeletable(ValueError):

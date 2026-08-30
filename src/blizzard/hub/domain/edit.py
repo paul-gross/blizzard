@@ -12,15 +12,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Final
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
-from blizzard.hub.domain.work import (
-    Chunk,
-    ChunkFacts,
-    ChunkStatus,
-    IntendedMigration,
-    IWriteChunkRepository,
-    MigrationMode,
-)
+from blizzard.hub.domain.work import Chunk, ChunkFacts, IntendedMigration, IWriteChunkRepository, MigrationMode
 
 
 class UnsetType(Enum):

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.graph import Executor, SessionMode
+from blizzard.foundation.node_steps import Executor, SessionMode
 from blizzard.hub.domain.graph_validation import Validator
 from blizzard.hub.graphs import PACKAGED
 

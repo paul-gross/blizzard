@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.graph import SessionMode
+from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.store.repository import IReadRunnerStore, LeaseRecord, PoolHead

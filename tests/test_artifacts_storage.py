@@ -8,13 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.artifacts import (
-    ArtifactKind,
-    ArtifactRow,
-    AssetArtifact,
-    GitCommitArtifact,
-    Provenance,
-)
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.hub.domain.artifacts import ArtifactRow, AssetArtifact, GitCommitArtifact, Provenance
 
 pytestmark = pytest.mark.unit
 

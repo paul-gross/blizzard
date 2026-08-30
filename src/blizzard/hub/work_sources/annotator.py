@@ -10,7 +10,8 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Protocol
 
-from blizzard.hub.domain.work import ChunkStatus, WorkRef
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.hub.domain.work import WorkRef
 
 
 class WorkStatusMarker(StrEnum):

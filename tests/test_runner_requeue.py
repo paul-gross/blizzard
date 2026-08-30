@@ -11,8 +11,8 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.requeue import ChunkNotRequeueable, RequeueBlockedByOpenTakeover, RequeueService
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Fill

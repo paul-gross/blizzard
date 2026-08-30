@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.loop.outbound import OutboundFacts

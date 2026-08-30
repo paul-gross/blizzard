@@ -8,11 +8,10 @@ immediately; there is no separate revoke — rotating *is* revoking.
 from __future__ import annotations
 
 import secrets
-from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.hashing import Sha256Hex
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.registry import IWriteRunnerRegistry, RunnerRegistration
 
 _log = get_logger("blizzard.hub.enrollment")
@@ -20,18 +19,6 @@ _log = get_logger("blizzard.hub.enrollment")
 #: `secrets.token_urlsafe` byte count — 32 bytes -> a 43-character URL-safe token,
 #: comfortably beyond brute-force range for a bearer credential.
 _TOKEN_BYTES = 32
-
-
-@dataclass(frozen=True)
-class TokenHash:
-    """A fleet bearer token in plaintext — enrollment, route, or lease — and the digest
-    it is stored and compared as (:class:`~blizzard.foundation.hashing.Sha256Hex`)."""
-
-    plaintext: str
-
-    @property
-    def hex(self) -> str:
-        return Sha256Hex(self.plaintext).hex
 
 
 class RunnerEnrollmentService:

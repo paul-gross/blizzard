@@ -16,7 +16,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.enrollment import TokenHash
+from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.system_artifacts import PACKAGED
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig

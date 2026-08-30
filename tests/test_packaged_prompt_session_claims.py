@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.graph import Executor, GraphDoc, NodeDoc, SessionMode
+from blizzard.foundation.node_steps import Executor, SessionMode
+from blizzard.hub.domain.graph import GraphDoc, NodeDoc
 from blizzard.hub.graphs import PACKAGED
 
 pytestmark = pytest.mark.unit

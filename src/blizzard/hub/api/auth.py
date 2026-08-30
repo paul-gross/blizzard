@@ -12,11 +12,11 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.enrollment import TokenHash
 
 _log = get_logger("blizzard.hub.auth")
 

@@ -11,8 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.forge_status import AnnotationReconciler
-from blizzard.hub.domain.work import ChunkStatus, WorkRef
+from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from tests.support import FakeAnnotator, FakeWorkSource, build_hub, ingest

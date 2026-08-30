@@ -11,9 +11,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.artifacts import ArtifactKind
-from blizzard.hub.domain.enrollment import TokenHash
+from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService

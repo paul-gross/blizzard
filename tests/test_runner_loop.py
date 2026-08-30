@@ -15,12 +15,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import Engine
 
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.artifacts import ArtifactKind
-from blizzard.hub.domain.enrollment import TokenHash
-from blizzard.hub.domain.graph import SessionMode
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -1106,7 +1106,7 @@ def test_a_cross_node_resume_names_the_node_transition_from_recorded_state(tmp_p
 @pytest.mark.unit
 def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # type: ignore[no-untyped-def]
     """A node that `produces` a name no git commit covers emits the assessment as an asset."""
-    from blizzard.hub.domain.artifacts import ArtifactKind
+    from blizzard.foundation.artifacts import ArtifactKind
     from tests.runner_fakes import make_envelope
 
     store = _store(tmp_path)

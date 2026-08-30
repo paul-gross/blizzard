@@ -15,10 +15,10 @@ from typing import Any
 from sqlalchemy import Connection, Engine, and_, case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
-from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.repository import (

@@ -11,8 +11,8 @@ import hmac
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.config import ROUTE_TOKEN_ENFORCE
-from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.hub.domain.work import ChunkFacts, RouteHistory
 
 _log = get_logger("blizzard.hub.route_auth")

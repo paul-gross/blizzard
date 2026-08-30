@@ -11,9 +11,9 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.enrollment import TokenHash
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.domain.takeover import (
     ChunkNotTakeable,

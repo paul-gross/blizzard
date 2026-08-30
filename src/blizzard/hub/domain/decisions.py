@@ -10,20 +10,17 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_PROPOSAL_PREFIX, Id
 from blizzard.hub.config import ROUTE_TOKEN_WARN
-from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
+from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.proposal_auth import ProposalPolicy
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.route_auth import RouteToken
-from blizzard.hub.domain.work import (
-    TERMINAL_STATUSES,
-    Chunk,
-    DecisionChoice,
-    IWriteChunkRepository,
-)
+from blizzard.hub.domain.work import Chunk, DecisionChoice, IWriteChunkRepository
 from blizzard.wire.completion import SubmittedArtifact, WorkItemProposal
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse

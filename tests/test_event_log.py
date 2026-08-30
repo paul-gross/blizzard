@@ -13,9 +13,10 @@ from pathlib import Path
 import pytest
 from sqlalchemy import insert, select
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import ChunkStatus, EscalationOpen, EventFeed, EventRow
+from blizzard.hub.domain.work import EscalationOpen, EventFeed, EventRow
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from tests.support import migrate_to, seed_chunk, seed_graph

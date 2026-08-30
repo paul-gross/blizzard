@@ -10,7 +10,7 @@ import hmac
 import secrets
 from dataclasses import dataclass
 
-from blizzard.hub.domain.enrollment import TokenHash
+from blizzard.foundation.tokens import TokenHash
 
 __all__ = ["LeaseToken"]
 

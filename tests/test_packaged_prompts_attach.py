@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.artifacts import ArtifactKind
-from blizzard.hub.domain.graph import Executor, GraphDoc, NodeDoc
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.node_steps import Executor
+from blizzard.hub.domain.graph import GraphDoc, NodeDoc
 from blizzard.hub.graphs import PACKAGED
 
 pytestmark = pytest.mark.unit

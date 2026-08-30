@@ -12,8 +12,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.graph import SessionMode
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.outbound import COMPLETION_KIND
 from blizzard.runner.loop.steps import Pull

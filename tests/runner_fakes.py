@@ -12,10 +12,10 @@ from datetime import UTC, datetime
 
 from sqlalchemy import MetaData
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock
+from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.graph import SessionMode
-from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -772,7 +772,7 @@ def make_envelope(
     ``epoch`` defaults to 0 (fresh, never-leased); pass the carried-forward floor to
     model a reclaim. ``session`` defaults ``FRESH``; ``produces`` is a bare name
     (``kind=asset``) or an explicit :class:`~blizzard.wire.graph.ProducesEntry`; ``graph_artifacts`` defaults empty."""
-    from blizzard.hub.domain.graph import Executor, JudgedBy
+    from blizzard.foundation.node_steps import Executor, JudgedBy
     from blizzard.wire.envelope import EnvelopeChoice
 
     gated = requires_checks or set()

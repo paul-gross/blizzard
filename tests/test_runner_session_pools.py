@@ -13,7 +13,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.graph import SessionMode
+from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory

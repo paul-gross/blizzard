@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.steps import Advance, Pull

@@ -14,8 +14,9 @@ from datetime import datetime
 from sqlalchemy import Connection, Engine, func, select
 
 from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
+from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import ChunkFacts, MigrationSource, RouteHistory
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.internal.chunk_store import DEFAULT_MODEL, ChunkStore

@@ -20,8 +20,8 @@ from sqlalchemy import Engine, select
 
 from blizzard.foundation.crash import discover_crash_points
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli

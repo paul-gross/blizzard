@@ -14,7 +14,8 @@ from enum import StrEnum
 from typing import Protocol
 
 from blizzard import __version__ as HUB_VERSION
-from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 
 
 class GraphParseError(ValueError):
@@ -51,27 +52,6 @@ class ChoiceTarget:
     @property
     def malformed(self) -> bool:
         return self.node is None and self.graph is None
-
-
-class Executor(StrEnum):
-    """Where a node's step runs."""
-
-    RUNNER = "runner"
-    HUB = "hub"
-
-
-class JudgedBy(StrEnum):
-    """Who issues a node's exit judgement — the structural gate marker."""
-
-    WORKER = "worker"
-    HUMAN = "human"
-
-
-class SessionMode(StrEnum):
-    """Per-node session freshness."""
-
-    RESUME = "resume"
-    FRESH = "fresh"
 
 
 # ``session: resume:<name>`` (issues #115, #144) — resume ``<name>``'s most-recent
