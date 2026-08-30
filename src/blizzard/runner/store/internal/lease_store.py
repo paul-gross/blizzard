@@ -21,6 +21,8 @@ from blizzard.runner.store.internal.base import (
     RunnerStoreConnections,
     Unclosed,
     enqueue_transcript_final,
+    lease_select,
+    row_to_lease,
 )
 from blizzard.runner.store.schema import (
     heartbeats,
@@ -58,31 +60,31 @@ class LeaseStore:
     # --- reads --------------------------------------------------------------
 
     def list_active_leases(self) -> list[LeaseRecord]:
-        stmt = self._lease_select().where(OPEN_LEASE.clause)
-        return [self._row_to_lease(r) for r in self._store.all(stmt)]
+        stmt = lease_select().where(OPEN_LEASE.clause)
+        return [row_to_lease(r) for r in self._store.all(stmt)]
 
     def active_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
         stmt = (
-            self._lease_select()
+            lease_select()
             .where(leases.c.chunk_id == chunk_id)
             .where(OPEN_LEASE.clause)
             .order_by(leases.c.created_at.desc())
         )
         rows = self._store.all(stmt)
-        return self._row_to_lease(rows[0]) if rows else None
+        return row_to_lease(rows[0]) if rows else None
 
     def active_lease(self, lease_id: str) -> LeaseRecord | None:
-        stmt = self._lease_select().where(leases.c.lease_id == lease_id).where(OPEN_LEASE.clause)
+        stmt = lease_select().where(leases.c.lease_id == lease_id).where(OPEN_LEASE.clause)
         rows = self._store.all(stmt)
-        return self._row_to_lease(rows[0]) if rows else None
+        return row_to_lease(rows[0]) if rows else None
 
     def latest_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
-        stmt = self._lease_select().where(leases.c.chunk_id == chunk_id).order_by(leases.c.created_at.desc())
+        stmt = lease_select().where(leases.c.chunk_id == chunk_id).order_by(leases.c.created_at.desc())
         rows = self._store.all(stmt)
-        return self._row_to_lease(rows[0]) if rows else None
+        return row_to_lease(rows[0]) if rows else None
 
     def latest_session_id(self, chunk_id: str, node_name: str | None) -> str | None:
-        stmt = self._lease_select().where(leases.c.chunk_id == chunk_id).where(leases.c.session_id.is_not(None))
+        stmt = lease_select().where(leases.c.chunk_id == chunk_id).where(leases.c.session_id.is_not(None))
         if node_name is not None:
             stmt = stmt.where(lease_context.c.node_name == node_name)
         stmt = stmt.order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
@@ -95,7 +97,7 @@ class LeaseStore:
         Same ordering and same session-bearing filter as :meth:`latest_session_id`,
         keyed on the stamped pool name rather than the node name."""
         stmt = (
-            self._lease_select()
+            lease_select()
             .where(leases.c.chunk_id == chunk_id)
             .where(leases.c.session_id.is_not(None))
             .where(lease_context.c.session_name == session_name)
@@ -125,28 +127,28 @@ class LeaseStore:
     def lease_for_session(self, session_id: str) -> LeaseRecord | None:
         """The newest lease that ran ``session_id`` — same ordering as `pool_head`."""
         stmt = (
-            self._lease_select()
+            lease_select()
             .where(leases.c.session_id == session_id)
             .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
         )
         rows = self._store.all(stmt)
-        return self._row_to_lease(rows[0]) if rows else None
+        return row_to_lease(rows[0]) if rows else None
 
     def lease(self, lease_id: str) -> LeaseRecord | None:
-        stmt = self._lease_select().where(leases.c.lease_id == lease_id)
+        stmt = lease_select().where(leases.c.lease_id == lease_id)
         rows = self._store.all(stmt)
-        return self._row_to_lease(rows[0]) if rows else None
+        return row_to_lease(rows[0]) if rows else None
 
     def list_closed_leases(self, limit: int) -> list[ClosedLeaseRecord]:
         stmt = (
-            self._lease_select()
+            lease_select()
             .add_columns(lease_closures.c.reason, lease_closures.c.closed_at)
             .join(lease_closures, lease_closures.c.lease_id == leases.c.lease_id)
             .order_by(lease_closures.c.closed_at.desc())
             .limit(limit)
         )
         return [
-            ClosedLeaseRecord(lease=self._row_to_lease(r), reason=str(r.reason), closed_at=r.closed_at)
+            ClosedLeaseRecord(lease=row_to_lease(r), reason=str(r.reason), closed_at=r.closed_at)
             for r in self._store.all(stmt)
         ]
 
@@ -415,51 +417,8 @@ class LeaseStore:
             )
         _log.info("session preamble recorded", session_id=session_id)
 
-    # --- shared helpers -------------------------------------------------------
-
-    @staticmethod
-    def _lease_select():  # type: ignore[no-untyped-def]
-        return select(
-            leases.c.lease_id,
-            leases.c.chunk_id,
-            leases.c.epoch,
-            leases.c.runner_id,
-            leases.c.pid,
-            leases.c.process_start_time,
-            leases.c.session_id,
-            leases.c.created_at,
-            lease_context.c.graph_id,
-            lease_context.c.node_id,
-            lease_context.c.node_name,
-            lease_context.c.retries_max,
-            # The session stamps (issue #144) — selected on the shared join rather than a
-            # second query, so every lease read carries them.
-            lease_context.c.session_name,
-            lease_context.c.resolved_model,
-            lease_context.c.resolved_effort,
-            lease_context.c.resolved_compaction_window,
-        ).join(lease_context, lease_context.c.lease_id == leases.c.lease_id)
-
-    @staticmethod
-    def _row_to_lease(r) -> LeaseRecord:  # type: ignore[no-untyped-def]
-        return LeaseRecord(
-            lease_id=str(r.lease_id),
-            chunk_id=str(r.chunk_id),
-            graph_id=str(r.graph_id),
-            node_id=str(r.node_id),
-            node_name=str(r.node_name),
-            epoch=int(r.epoch),
-            runner_id=str(r.runner_id),
-            retries_max=int(r.retries_max),
-            created_at=r.created_at,
-            session_name=r.session_name,
-            resolved_model=r.resolved_model,
-            resolved_effort=r.resolved_effort,
-            resolved_compaction_window=r.resolved_compaction_window,
-            pid=int(r.pid) if r.pid is not None else None,
-            process_start_time=str(r.process_start_time) if r.process_start_time is not None else None,
-            session_id=str(r.session_id) if r.session_id is not None else None,
-        )
+    # ``lease_select``/``row_to_lease`` moved to ``store/internal/base.py`` (blizzard#410):
+    # the transcripts ledger's backfill read also joins a lease.
 
 
 def _conforms_lease_store(x: LeaseStore) -> IWriteLeaseRepository:

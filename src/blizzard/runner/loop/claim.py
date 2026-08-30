@@ -12,11 +12,11 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     WorkspaceAcquisitionError,
 )
+from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.spawn import Environments, Spawner
-from blizzard.runner.store.repository import EnvBindingRecord
 from blizzard.wire.envelope import NodeEnvelope
 from blizzard.wire.queue import QueuePeekEntry
 from blizzard.wire.route import RouteClaim

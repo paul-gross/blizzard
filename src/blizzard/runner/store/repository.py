@@ -7,23 +7,23 @@ passed in from the injected clock — the store never reads a wall clock.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.runner.auth.tokens import IReadTokenRepository, IWriteTokenRepository
 from blizzard.runner.domain.leases import IReadLeaseRepository, IWriteLeaseRepository, LeaseRecord
+from blizzard.runner.environments.repository import (
+    IReadEnvironmentRepository,
+    IWriteEnvironmentRepository,
+)
 from blizzard.runner.harness.usage import UsageSample
-
-
-@dataclass(frozen=True)
-class EnvBindingRecord:
-    """A chunk→env binding fact."""
-
-    chunk_id: str
-    environment_id: str
-    workdir: str
-    bound_at: datetime
+from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
+from blizzard.runner.transcripts.ledger import (
+    IReadTranscriptLedgerRepository,
+    IWriteTranscriptLedgerRepository,
+)
 
 
 @dataclass(frozen=True)
@@ -49,65 +49,6 @@ class OutboundFactRecord:
     lease_id: str | None
     created_at: datetime
     acked_at: datetime | None
-
-
-@dataclass(frozen=True)
-class TranscriptSegmentLedgerRow:
-    """One row of the transcript segment ledger (issue #246, D2) — local state, never shipped
-    as-is, and so named apart from the wire's own ``TranscriptSegmentRecord`` (blizzard#247).
-    ``normalizer_version`` is never ``None``, starting at the source seam's "never ran"
-    sentinel. ``truncated_reason``/``shipping_stopped_reason`` are independent: the former never latches."""
-
-    segment_id: str
-    chunk_id: str
-    node_id: str
-    epoch: int
-    generation: int
-    lease_id: str
-    session_id: str
-    cursor: str | None
-    shipped_bytes: int
-    shipped_turns: int
-    normalizer_version: str
-    harness_version: str | None
-    truncated_reason: str | None
-    shipping_stopped_reason: str | None
-    #: Set only on a re-ship (blizzard#250): the segment this one replaces on the hub.
-    supersedes: str | None
-    finalized_at: datetime | None
-    stamped_at: datetime
-    #: agent_id -> spawning `tool_use_id` (blizzard#338), accumulated across every window
-    #: this segment has read; empty until one names a pair.
-    agent_tool_use_ids: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class BufferedTranscriptDelta:
-    """One pending record in the transcript lane's own buffer (D3) — :class:`BufferedFact`'s
-    counterpart. Non-final ``payload`` is a ``TranscriptSegmentRecord``'s fields (minus
-    ``seq``/``runner_id``) as JSON; a final one is just ``{"segment_id": ...}``. ``final``
-    mirrors the payload's own flag, driving ack-time keep-vs-delete."""
-
-    seq: int
-    segment_id: str
-    chunk_id: str
-    final: bool
-    payload: str
-    created_at: datetime
-
-
-@dataclass(frozen=True)
-class TranscriptBackfillLease:
-    """One session-bearing lease the backfill may import (blizzard#250), with whether that
-    session already holds a segment. The dedupe key is the *session*: a pre-epic session
-    resumed across leases left one merged file, which imports once."""
-
-    lease_id: str
-    chunk_id: str
-    node_id: str
-    epoch: int
-    session_id: str
-    has_segment: bool
 
 
 @dataclass(frozen=True)
@@ -230,7 +171,14 @@ class TakeoverRecord:
     opened_at: datetime
 
 
-class IReadRunnerStore(IReadLeaseRepository, Protocol):
+class IReadRunnerStore(
+    IReadLeaseRepository,
+    IReadEnvironmentRepository,
+    IReadTranscriptLedgerRepository,
+    IReadTokenRepository,
+    IReadWorkspacePromptRepository,
+    Protocol,
+):
     """Read-only runner-store queries (held by read-path edges)."""
 
     def pending_submission_lease_ids(self) -> set[str]:
@@ -241,67 +189,12 @@ class IReadRunnerStore(IReadLeaseRepository, Protocol):
         flush is pending."""
         ...
 
-    def held_environment_ids(self) -> list[str]:
-        """Every env id whose binding has no release fact (the provider's ``held_ids``)."""
-        ...
-
-    def bindings_for_chunk(self, chunk_id: str) -> list[EnvBindingRecord]:
-        """The chunk's unreleased env bindings (its held environments)."""
-        ...
-
-    def live_tenure_chunk_ids(self) -> list[str]:
-        """Chunks still held by this runner — those with an unreleased binding."""
-        ...
-
     def pending_outbound(self) -> list[BufferedFact]:
         """The unacked outbound buffer, FIFO by seq."""
         ...
 
     def recent_outbound(self, limit: int) -> list[OutboundFactRecord]:
         """The newest ``limit`` outbound facts, acked or not, newest first — the local fact log."""
-        ...
-
-    def transcript_segment(self, segment_id: str) -> TranscriptSegmentLedgerRow | None:
-        """The segment by id, or ``None`` — the pump and drain's per-segment read (issue #246)."""
-        ...
-
-    def open_transcript_segments(self) -> list[TranscriptSegmentLedgerRow]:
-        """Segments with no final marker yet — the pump's per-tick work list (issue #246)."""
-        ...
-
-    def chunk_transcript_shipped_bytes(self, chunk_id: str) -> int:
-        """Sum of ``shipped_bytes`` across every one of this chunk's segments, open or
-        finalized — the running total the 64 MB per-chunk budget (D4) is measured against."""
-        ...
-
-    def outstanding_transcript_buffer_bytes(self) -> int:
-        """Sum of ``payload`` bytes across every UNACKED row of the transcript outbound
-        buffer, across every segment (F8, review round 7) — the pump's own backpressure
-        gate against a prolonged hub outage leaving unbounded content resident in SQLite.
-        Distinct from :meth:`chunk_transcript_shipped_bytes`, which bounds one chunk's
-        SHIPPED total, not the buffer's own resident total."""
-        ...
-
-    def has_unshipped_transcript_content(self, chunk_id: str) -> bool:
-        """Whether this chunk holds an UNACKED **content** row in the transcript outbound
-        buffer (issue #249) — the "not yet acked by the hub" half of the panel's home
-        selection. Final markers are excluded deliberately: a pending one carries no turns,
-        so the hub's copy is already complete. An existence check, not
-        :meth:`pending_transcript_outbound`'s payload-materializing list read."""
-        ...
-
-    def pending_transcript_outbound(self, *, limit: int | None = None) -> list[BufferedTranscriptDelta]:
-        """The unacked transcript buffer, FIFO by seq — the drain's own lane (D3).
-
-        ``limit`` bounds the query itself, not just what the caller iterates — a large
-        backlog's full payload set (up to the per-record cap each) is otherwise materialized
-        before any per-run bound the caller applies is ever consulted."""
-        ...
-
-    def transcript_backfill_leases(self) -> list[TranscriptBackfillLease]:
-        """Every lease that ever recorded a session id, oldest first — the backfill's work
-        list (blizzard#250). This store is the only source: the harness directory holds the
-        operator's own sessions too, and a sweep of it could never tell them apart."""
         ...
 
     def unforwarded_ask(self, lease_id: str) -> AskRecord | None:
@@ -344,13 +237,6 @@ class IReadRunnerStore(IReadLeaseRepository, Protocol):
         whether or not it has been forwarded up yet."""
         ...
 
-    def held_bindings(self) -> list[EnvBindingRecord]:
-        """Every currently-held env binding, across every chunk (issue #51).
-
-        :meth:`bindings_for_chunk` widened from one chunk to the whole fleet this runner
-        holds, on the same ``held`` predicate."""
-        ...
-
     def open_escalations(self) -> list[EscalationRecord]:
         """Every escalated chunk still unsuperseded (issue #51).
 
@@ -391,26 +277,6 @@ class IReadRunnerStore(IReadLeaseRepository, Protocol):
 
         The crash-time reference startup recovery classifies staleness against, stamped
         each tick, so the newest value is when the daemon died to within one tick."""
-        ...
-
-    def workspace_prompt_override(self, workspace_id: str) -> str | None:
-        """The runtime workspace-prompt override for this workspace, or ``None`` (issue #17).
-
-        ``None`` means never overridden — the caller falls back to the static config
-        prompt. A present row (even an empty string) is a deliberate override that wins
-        over config."""
-        ...
-
-    def route_token(self, chunk_id: str) -> str | None:
-        """The chunk's stashed route capability token, or ``None`` if never claimed here
-        (issue #84a). Stamped onto every chunk-scoped outbound payload at enqueue.
-        ``None`` is presented as an absent field, never fabricated."""
-        ...
-
-    def lease_token_hash(self, lease_id: str) -> str | None:
-        """The lease's minted capability token hash, or ``None`` if never minted
-        here (issue #113, Phase 1) — what an attach authorization check compares a
-        presented plaintext's hash against."""
         ...
 
     def lease_for_open_takeover(self, lease_id: str) -> LeaseRecord | None:
@@ -514,7 +380,15 @@ class IReadRunnerStore(IReadLeaseRepository, Protocol):
         ...
 
 
-class IWriteRunnerStore(IWriteLeaseRepository, IReadRunnerStore, Protocol):
+class IWriteRunnerStore(
+    IWriteLeaseRepository,
+    IWriteEnvironmentRepository,
+    IWriteTranscriptLedgerRepository,
+    IWriteTokenRepository,
+    IWriteWorkspacePromptRepository,
+    IReadRunnerStore,
+    Protocol,
+):
     """Read-write runner store — held only by the domain (the loop steps)."""
 
     def record_graph_artifacts(
@@ -533,14 +407,6 @@ class IWriteRunnerStore(IWriteLeaseRepository, IReadRunnerStore, Protocol):
         reference startup recovery reads back via :meth:`last_daemon_liveness`."""
         ...
 
-    def record_binding(self, *, chunk_id: str, environment_id: str, workdir: str, bound_at: datetime) -> None:
-        """Persist a chunk→env binding fact (written with the route claim)."""
-        ...
-
-    def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
-        """Release a chunk's env binding at tenure end."""
-        ...
-
     def enqueue_outbound(
         self, *, kind: str, chunk_id: str | None, lease_id: str | None, payload: str, created_at: datetime
     ) -> int:
@@ -549,94 +415,6 @@ class IWriteRunnerStore(IWriteLeaseRepository, IReadRunnerStore, Protocol):
 
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
         """Mark a buffered fact delivered — a semantic rejection acks too."""
-        ...
-
-    def mark_transcript_record_truncated(self, segment_id: str, *, reason: str, severity: int) -> bool:
-        """Note that one shipped record was shrunk in place (D4's per-record cap) —
-        informational only. Latches per ``(segment_id, reason)`` (F2): the SAME reason
-        recurring never re-warns; a DIFFERENT one always does, regardless of what currently
-        displays. ``severity`` ranks ``reason`` against this method's other callers — the
-        store keeps whichever arrived with the highest severity as the displayed one."""
-        ...
-
-    def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:
-        """Permanently stop shipping this segment's content — the per-chunk 64 MB budget
-        breached (D4). The only field :class:`TranscriptPump`'s guard reads; idempotent,
-        keeps its first reason. Returns whether this call actually set the field."""
-        ...
-
-    def mark_sidechain_dropped_warned(self, segment_id: str, *, agent_id: str | None) -> bool:
-        """Latch the dropped-sidechain fact-lane warning per (segment, agent_id): a subagent
-        conversation can outlive one pump window, so this must not re-warn every tick it
-        stays unlinked. Returns whether this is the first warning for this agent."""
-        ...
-
-    def record_transcript_deltas(
-        self,
-        *,
-        segment_id: str,
-        chunk_id: str,
-        cursor: str | None,
-        shipped_bytes: int,
-        shipped_turns: int,
-        normalizer_version: str,
-        harness_version: str | None,
-        payloads: list[str],
-        created_at: datetime,
-        agent_tool_use_ids: dict[str, str] | None = None,
-    ) -> list[int]:
-        """Advance a segment's cursor/shipped counts/version stamp and atomically enqueue
-        ``len(payloads)`` buffer rows (issue #246; F1) — ONE transaction, so a batch split
-        into several records still advances the cursor exactly once, and a crash loses
-        neither the cursor advance nor any record. Returns their seqs, in payload order."""
-        ...
-
-    def open_transcript_segment(
-        self,
-        *,
-        chunk_id: str,
-        node_id: str,
-        epoch: int,
-        generation: int,
-        lease_id: str,
-        session_id: str,
-        stamped_at: datetime,
-        supersedes: str | None = None,
-    ) -> str:
-        """Stamp a segment boundary outside a spawn and return its id (blizzard#250), cursor
-        unset so the pump reads the session from the start. Every boundary the *live* lane
-        stamps stays :meth:`record_spawn`'s; this one is the backfill's alone. ``supersedes``
-        is the re-ship's own pointer at the segment this one replaces on the hub."""
-        ...
-
-    def finalize_transcript_segment(self, segment_id: str, *, finalized_at: datetime) -> bool:
-        """Close one segment out on its own, enqueuing its single final marker in the same
-        transaction — :meth:`record_closure`'s per-segment half, for a segment whose lease
-        closed long before it existed. ``False`` when it was already finalized."""
-        ...
-
-    def advance_transcript_cursor(
-        self,
-        segment_id: str,
-        *,
-        cursor: str,
-        normalizer_version: str,
-        harness_version: str | None,
-        agent_tool_use_ids: dict[str, str] | None = None,
-    ) -> None:
-        """Advance a segment's read cursor (and version stamp) with nothing to enqueue — a
-        window that moved the source's read position but produced no turn (e.g. a run of
-        control records), which still must not be re-read next tick. Unlike
-        :meth:`record_transcript_deltas`, no outbound row: there is no record to ship, only
-        progress to remember."""
-        ...
-
-    def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
-        """Ack a buffered transcript row — the drain's own ack (D3). A ``delta`` row is
-        pruned outright (up to the per-record cap each, nothing reads one acked); a ``final`` row
-        stays, marked acked — its own tiny row is the exactly-once receipt
-        :class:`~blizzard.tools.invariants.TranscriptSegmentFinalizedExactlyOnce`
-        checks for."""
         ...
 
     def record_ask(
@@ -680,31 +458,6 @@ class IWriteRunnerStore(IWriteLeaseRepository, IReadRunnerStore, Protocol):
         (issue #43), and return the buffered report's seq. Appends rather than upserts:
         a locally-minted fact, not a mirror; taking the buffer entry here makes the
         brake and its report crash-atomic (``tests/test_ingest_and_pause_verbs.py``)."""
-        ...
-
-    def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
-        """Set the runtime workspace-prompt override (upsert) — read at spawn (issue #17)."""
-        ...
-
-    def clear_workspace_prompt(self, workspace_id: str) -> bool:
-        """Drop the runtime workspace-prompt override, returning whether one was there (#344).
-
-        Removing the row is what distinguishes clearing from overriding with empty text: the
-        absent row is the only state that resolves back to the configured prompt."""
-        ...
-
-    def set_route_token(self, chunk_id: str, *, token: str, at: datetime) -> None:
-        """Stash a won claim's plaintext route token (upsert) — issue #84a.
-
-        Called on a won claim with the token the claim response returned once. A fresh
-        claim overwrites a prior row for the same chunk."""
-        ...
-
-    def record_lease_token(self, lease_id: str, token_hash: str, at: datetime) -> None:
-        """Persist a lease's capability-token hash (issue #113, Phase 1).
-
-        Overwrite-safe: the implementation replaces any prior row, invalidating the
-        previous token. The plaintext is never persisted, only this sha256 hash."""
         ...
 
     def record_takeover(

@@ -15,16 +15,14 @@ from blizzard.runner.domain.leases import (
     NewLease,
 )
 from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.session import ResumedSession
-from blizzard.runner.store.repository import (
-    EnvBindingRecord,
-    GraphArtifactRecord,
-)
+from blizzard.runner.store.repository import GraphArtifactRecord
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")

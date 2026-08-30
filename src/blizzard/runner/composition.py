@@ -11,11 +11,21 @@ from sqlalchemy import Engine
 
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.base import RunnerStoreConnections
+from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.lease_store import LeaseStore
+from blizzard.runner.store.internal.token_store import TokenStore
+from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
+from blizzard.runner.store.internal.workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.stores import RunnerStores
 
 
 def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerStores:
     """Construct and wire every extracted concept-store adapter over a migrated engine."""
     connections = RunnerStoreConnections(engine, errors)
-    return RunnerStores(leases=LeaseStore(connections))
+    return RunnerStores(
+        leases=LeaseStore(connections),
+        environments=EnvironmentStore(connections),
+        transcript_ledger=TranscriptLedgerStore(connections),
+        tokens=TokenStore(connections),
+        workspace_prompt=WorkspacePromptStore(connections),
+    )

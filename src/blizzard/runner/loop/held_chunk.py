@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.spawn import Environments, Spawner
-from blizzard.runner.store.repository import EnvBindingRecord
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.envelope import ApplyOutcome, NodeEnvelope

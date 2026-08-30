@@ -15,7 +15,10 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.transcript_pump import TRUNCATION_REASON_SEVERITY, TranscriptPump
-from blizzard.runner.store.repository import BufferedTranscriptDelta, TranscriptSegmentLedgerRow
+from blizzard.runner.transcripts.ledger import (
+    BufferedTranscriptDelta,
+    TranscriptSegmentLedgerRow,
+)
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
 _log = get_logger("blizzard.runner.loop")

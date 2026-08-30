@@ -14,7 +14,10 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.transcript_drain import HUB_CAPPED, TranscriptDrain
 from blizzard.runner.loop.transcript_pump import BACKFILL_INCOMPLETE, MAX_BUFFERED_BYTES, TranscriptPump
-from blizzard.runner.store.repository import TranscriptBackfillLease, TranscriptSegmentLedgerRow
+from blizzard.runner.transcripts.ledger import (
+    TranscriptBackfillLease,
+    TranscriptSegmentLedgerRow,
+)
 
 _log = get_logger("blizzard.runner.loop")
 

@@ -38,7 +38,7 @@ from blizzard.runner.loop.transcript_pump import (
     _record_overhead,
     _turn_wire,
 )
-from blizzard.runner.store.repository import (
+from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
     TranscriptSegmentLedgerRow,
 )

@@ -13,12 +13,14 @@ from typing import Any
 from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import SQLAlchemyError
 
+from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import (
     binding_releases,
     env_bindings,
     escalation_closures,
     lease_closures,
+    lease_context,
     leases,
     pause_park_resumes,
     pause_parks,
@@ -134,6 +136,52 @@ UNRESOLVED_ESCALATION = Unsuperseded(
         escalation_closures.c.closed_at > lease_closures.c.closed_at,
     ),
 )
+
+
+def lease_select():  # type: ignore[no-untyped-def]
+    """The lease+context join every lease read selects from — shared with the transcripts
+    ledger's backfill read, which also joins a lease (blizzard#410)."""
+    return select(
+        leases.c.lease_id,
+        leases.c.chunk_id,
+        leases.c.epoch,
+        leases.c.runner_id,
+        leases.c.pid,
+        leases.c.process_start_time,
+        leases.c.session_id,
+        leases.c.created_at,
+        lease_context.c.graph_id,
+        lease_context.c.node_id,
+        lease_context.c.node_name,
+        lease_context.c.retries_max,
+        # The session stamps (issue #144) — selected on the shared join rather than a
+        # second query, so every lease read carries them.
+        lease_context.c.session_name,
+        lease_context.c.resolved_model,
+        lease_context.c.resolved_effort,
+        lease_context.c.resolved_compaction_window,
+    ).join(lease_context, lease_context.c.lease_id == leases.c.lease_id)
+
+
+def row_to_lease(r) -> LeaseRecord:  # type: ignore[no-untyped-def]
+    return LeaseRecord(
+        lease_id=str(r.lease_id),
+        chunk_id=str(r.chunk_id),
+        graph_id=str(r.graph_id),
+        node_id=str(r.node_id),
+        node_name=str(r.node_name),
+        epoch=int(r.epoch),
+        runner_id=str(r.runner_id),
+        retries_max=int(r.retries_max),
+        created_at=r.created_at,
+        session_name=r.session_name,
+        resolved_model=r.resolved_model,
+        resolved_effort=r.resolved_effort,
+        resolved_compaction_window=r.resolved_compaction_window,
+        pid=int(r.pid) if r.pid is not None else None,
+        process_start_time=str(r.process_start_time) if r.process_start_time is not None else None,
+        session_id=str(r.session_id) if r.session_id is not None else None,
+    )
 
 
 def enqueue_transcript_final(conn: Connection, segment: Any, *, at: datetime) -> None:

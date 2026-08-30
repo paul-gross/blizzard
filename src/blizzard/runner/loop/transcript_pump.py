@@ -27,8 +27,8 @@ from blizzard.runner.harness.transcript import (
 )
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.store.repository import TranscriptSegmentLedgerRow
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
+from blizzard.runner.transcripts.ledger import TranscriptSegmentLedgerRow
 
 _log = get_logger("blizzard.runner.loop")
 

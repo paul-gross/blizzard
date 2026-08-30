@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.runner.auth.tokens import IWriteTokenRepository
 from blizzard.runner.domain.leases import IWriteLeaseRepository
+from blizzard.runner.environments.repository import IWriteEnvironmentRepository
+from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepository
+from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository
 
 
 @dataclass(frozen=True)
@@ -18,3 +22,7 @@ class RunnerStores:
     :func:`~blizzard.runner.composition.build_stores`."""
 
     leases: IWriteLeaseRepository
+    environments: IWriteEnvironmentRepository
+    transcript_ledger: IWriteTranscriptLedgerRepository
+    tokens: IWriteTokenRepository
+    workspace_prompt: IWriteWorkspacePromptRepository
