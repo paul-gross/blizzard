@@ -16,8 +16,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 import blizzard.runner.api.hub_proxy as hub_proxy
-from blizzard.hub.domain.artifacts import ArtifactKind
-from blizzard.hub.domain.enrollment import TokenHash
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.store.repository import GraphArtifactRecord, NewLease

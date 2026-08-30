@@ -12,7 +12,7 @@ import uuid
 from dataclasses import dataclass, replace
 from typing import Protocol
 
-from blizzard.hub.domain.graph import Executor, JudgedBy, SessionMode
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
 from blizzard.runner.selftest.model import (

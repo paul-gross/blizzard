@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.spawn import Environments, Spawner

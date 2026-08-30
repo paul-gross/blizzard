@@ -13,38 +13,13 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
+from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor, Graph
+from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph
 from blizzard.hub.domain.proposals import WorkItemProposalRow
-
-
-class ChunkStatus(StrEnum):
-    """The derived chunk statuses. Never stored — always a query result."""
-
-    NOT_READY = "not_ready"
-    READY = "ready"
-    RUNNING = "running"
-    DELIVERING = "delivering"
-    WAITING_ON_HUMAN = "waiting_on_human"
-    NEEDS_HUMAN = "needs_human"
-    PAUSED = "paused"
-    STOPPED = "stopped"
-    DONE = "done"
-
-    @property
-    def holds_claim(self) -> bool:
-        """Whether a chunk at this status still holds the route it may be carrying (issue #140).
-        Terminal outranks route liveness: a terminal transition from a runner node stamps no
-        ``route.released``, so the raw route fact outlives it."""
-        return self not in TERMINAL_STATUSES
-
-
-# The two statuses a chunk never leaves — the one owner of "this chunk is finished",
-# defined beside the enum it folds rather than re-spelled per call site.
-TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
-
 
 # --- Domain objects ---------------------------------------------------------
 
@@ -659,6 +634,13 @@ class DecisionRow:
     @property
     def resolved(self) -> bool:
         return self.resolved_choice is not None
+
+
+def holds_claim(status: ChunkStatus) -> bool:
+    """Whether a chunk at this status still holds the route it may be carrying (issue #140).
+    Terminal outranks route liveness: a terminal transition from a runner node stamps no
+    ``route.released``, so the raw route fact outlives it."""
+    return status not in TERMINAL_STATUSES
 
 
 @dataclass(frozen=True)

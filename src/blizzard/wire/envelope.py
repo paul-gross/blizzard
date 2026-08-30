@@ -11,8 +11,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 
-from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactScope
-from blizzard.hub.domain.graph import Executor, JudgedBy, SessionMode
+from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.wire.graph import ProducesEntry
 
 

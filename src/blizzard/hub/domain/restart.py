@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import threading
 
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.edit import MigrationTargetIsCurrentPin, TargetGraphRetired
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository, Node
-from blizzard.hub.domain.work import TERMINAL_STATUSES, Chunk, ChunkFacts, ChunkStatus, IWriteChunkRepository
+from blizzard.hub.domain.work import Chunk, ChunkFacts, IWriteChunkRepository
 
 #: The answer an open ask is consumed with. Fixed and toneless: the person who moved the
 #: chunk did not answer the question, they made it moot.

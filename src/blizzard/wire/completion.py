@@ -13,7 +13,7 @@ from typing import Annotated, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.domain.work import WorkItemPriority
 
 

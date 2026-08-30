@@ -11,10 +11,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.graph import Executor
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.work import (
     ChunkFacts,
-    ChunkStatus,
     DecisionFact,
     EscalationFact,
     LeaseFact,

@@ -15,7 +15,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import Chunk, ChunkFacts
+from blizzard.hub.domain.work import Chunk, ChunkFacts, holds_claim
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
     ArtifactView,
@@ -95,7 +95,7 @@ class ChunkView:
         status = self.facts.status()
         # A terminal chunk reads unrouted regardless of injection (issue #140); on the
         # lazy path the guard also spares it the `route_of` query.
-        if not status.holds_claim:
+        if not holds_claim(status):
             route = None
         elif self.route is not _ROUTE_NOT_INJECTED:
             route = self.route

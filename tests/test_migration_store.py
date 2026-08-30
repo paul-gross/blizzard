@@ -14,13 +14,15 @@ from typing import cast
 import pytest
 from sqlalchemy import select
 
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
-from blizzard.hub.domain.graph import Executor, GraphDoc
+from blizzard.foundation.node_steps import Executor
+from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.graph import GraphDoc
 from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.domain.work import (
     ChunkFacts,
-    ChunkStatus,
     IntendedMigration,
     IWriteChunkRepository,
     MigrationFact,

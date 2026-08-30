@@ -13,7 +13,8 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.enrollment import RunnerEnrollmentService, TokenHash
+from blizzard.foundation.tokens import TokenHash
+from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.registry import IWriteRunnerRegistry, RunnerRegistration
 
 pytestmark = pytest.mark.unit

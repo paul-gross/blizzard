@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import CompoundSelect, Engine, Select, case, func, select, tuple_, union
 
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
+from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.analytics import MalformedCursor
 from blizzard.hub.domain.analytics.operational import (
     ChunkSpendPage,
@@ -32,7 +33,6 @@ from blizzard.hub.domain.analytics.operational import (
     summarize_durations,
     summarize_outcomes,
 )
-from blizzard.hub.domain.graph import Executor
 from blizzard.hub.domain.work import UsageTotal
 from blizzard.hub.store import schema as s
 

@@ -7,8 +7,9 @@ no second fact and is never refused."""
 
 from __future__ import annotations
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.work import Chunk, ChunkFacts, ChunkStatus, IWriteChunkRepository
+from blizzard.hub.domain.work import Chunk, ChunkFacts, IWriteChunkRepository
 
 
 class CompleteService:

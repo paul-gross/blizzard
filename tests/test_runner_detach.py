@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap
 from blizzard.runner.loop.tick import tick

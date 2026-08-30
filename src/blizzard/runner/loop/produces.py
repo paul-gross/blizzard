@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.wire.completion import Coverage, SubmittedArtifact
 from blizzard.wire.envelope import NodeEnvelope
 from blizzard.wire.graph import ProducesEntry

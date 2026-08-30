@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.graph import SessionMode, SessionRef
+from blizzard.foundation.node_steps import SessionMode
+from blizzard.hub.domain.graph import SessionRef
 from blizzard.hub.domain.graph_validation import Validator
 from blizzard.hub.graphs import GraphFile
 

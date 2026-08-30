@@ -14,8 +14,9 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.complete import CompleteService
-from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
+from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import Chunk, ChunkFacts, IWriteChunkRepository, RouteCreatedFact, TransitionFact
 
 pytestmark = pytest.mark.unit

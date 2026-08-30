@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.store.repository import GraphArtifactRecord

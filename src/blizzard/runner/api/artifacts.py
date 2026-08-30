@@ -13,7 +13,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
-from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactScope
+from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.runner.api.hub_proxy import HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring

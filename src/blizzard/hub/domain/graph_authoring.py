@@ -12,6 +12,7 @@ from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import CHOICE_PREFIX, GRAPH_PREFIX, NODE_PREFIX, Id
+from blizzard.foundation.node_steps import JudgedBy
 from blizzard.hub.domain.graph import (
     RESERVED_TERMINAL,
     Choice,
@@ -21,7 +22,6 @@ from blizzard.hub.domain.graph import (
     GraphArtifact,
     GraphDoc,
     IWriteGraphRepository,
-    JudgedBy,
     Node,
     NodeDoc,
     RunStep,

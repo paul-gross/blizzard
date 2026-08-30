@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
-from blizzard.hub.domain.graph import Edge, Graph, Node, SessionMode
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.node_steps import SessionMode
+from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.work import Chunk, TransitionFact
 from blizzard.wire.envelope import (
     EnvelopeArtifact,

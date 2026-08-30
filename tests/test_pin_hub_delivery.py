@@ -13,10 +13,11 @@ from typing import Any, cast
 
 import pytest
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.delivery.hub_node import UnconvergedDeliveryError
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
-from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
+from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.work import IWriteChunkRepository
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_common, land_pr_ci

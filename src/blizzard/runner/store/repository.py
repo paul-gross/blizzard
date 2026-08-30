@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageSample
 
@@ -881,7 +881,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Ack a buffered transcript row — the drain's own ack (D3). A ``delta`` row is
         pruned outright (up to the per-record cap each, nothing reads one acked); a ``final`` row
         stays, marked acked — its own tiny row is the exactly-once receipt
-        :class:`~blizzard.foundation.store.invariants.TranscriptSegmentFinalizedExactlyOnce`
+        :class:`~blizzard.tools.invariants.TranscriptSegmentFinalizedExactlyOnce`
         checks for."""
         ...
 

@@ -13,14 +13,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.work import (
-    Chunk,
-    ChunkFacts,
-    ChunkStatus,
-    IWriteChunkRepository,
-)
+from blizzard.hub.domain.work import Chunk, ChunkFacts, IWriteChunkRepository
 
 _log = get_logger("blizzard.hub.queue")
 

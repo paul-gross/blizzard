@@ -20,15 +20,15 @@ from sqlalchemy import Engine, select
 
 from blizzard.foundation.crash import discover_crash_points
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.invariants import Invariants
+from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.store import schema as runner_schema
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import NewLease
+from blizzard.tools.invariants import Invariants
 from tests.crash.support import (
     LAND_STEP,
     OWNER,

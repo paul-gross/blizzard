@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass
 from datetime import timedelta
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, Id
@@ -19,7 +20,7 @@ from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.delivery.repo_ref import RepoRef
 from blizzard.hub.delivery.workdir import IHubWorkdir
-from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
+from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.graph import (
     DEFAULT_BOUNCE_CAP,
     HUB_DEFAULT_FAILURE_CHOICE,

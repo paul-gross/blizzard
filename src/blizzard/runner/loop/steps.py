@@ -12,10 +12,10 @@ from collections.abc import Container, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.domain.work import TERMINAL_STATUSES, ChunkStatus
 from blizzard.runner.domain.leases import Liveness, as_utc
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.spawn_cwd import SpawnCwd

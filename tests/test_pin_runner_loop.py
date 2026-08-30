@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.loop.build import LoopWiring

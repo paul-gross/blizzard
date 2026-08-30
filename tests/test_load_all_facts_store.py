@@ -17,11 +17,12 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine, event, insert
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.api.chunks import FleetPulse
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import Chunk, ChunkFacts, ChunkStatus, DecisionChoice, FleetSummary, MigrationSource
+from blizzard.hub.domain.work import Chunk, ChunkFacts, DecisionChoice, FleetSummary, MigrationSource
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore, record_deleted_row
 from tests.support import build_hub, ingest, migrate_to, seed_graph
@@ -314,7 +315,7 @@ def test_bulk_read_resolves_a_migrated_landing_node_against_its_own_graph(tmp_pa
     assert bulk["ch_multigraph"].status() is ChunkStatus.DELIVERING
     migration = bulk["ch_multigraph"].newest_migration()
     assert migration is not None
-    from blizzard.hub.domain.graph import Executor
+    from blizzard.foundation.node_steps import Executor
 
     assert migration.landed_node_executor is Executor.HUB
 

@@ -10,7 +10,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.graph import Mint, Mints, SessionMode, SessionRef
+from blizzard.foundation.node_steps import SessionMode
+from blizzard.hub.domain.graph import Mint, Mints, SessionRef
 from tests.support import make_graph
 
 pytestmark = pytest.mark.unit

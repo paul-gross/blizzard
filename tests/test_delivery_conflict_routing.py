@@ -12,9 +12,10 @@ from typing import cast
 
 import pytest
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.delivery.command_runner import CommandResult
-from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
+from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.graph import DEFAULT_BOUNCE_CAP
 from blizzard.hub.domain.work import IWriteChunkRepository
 from blizzard.hub.graphs import PACKAGED
