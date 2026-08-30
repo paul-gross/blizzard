@@ -24,22 +24,22 @@ import { ChunkDetailPage } from './chunk-detail-page';
  * key, an unbroken work item token) never pushes the page wider than the
  * viewport.
  *
- * The "stacks its own sections" proof only applies to General and
- * Transcripts, whose own sections carry a `section-`-prefixed testid
- * (`fleet-kit-panel`'s own convention); Artifacts and Node history are each
- * one nav-plus-viewer pane rather than a stack of independent panels
- * (`fleet-chunk-artifacts-panel`, `app-chunk-node-history-tab`) — for those
- * two, the horizontal-overflow check above already stands in for it: the
- * Artifacts tab defaults its viewer to the fixture's single (deliberately
- * long-keyed) artifact with no click needed, so the overflow check already
- * covers this file's own defect class for that tab.
+ * The "stacks its own sections" proof only applies to General, whose own sections carry
+ * a `section-`-prefixed testid (`fleet-kit-panel`'s own convention); Artifacts, Node
+ * history, and Transcripts (runner-node-grouped-transcripts Phase 4 — now the shared
+ * `fleet-chunk-transcripts-container` nav-plus-viewer pane, not the prior lease-chip
+ * `section-transcript` panel) are each one nav-plus-viewer pane rather than a stack of
+ * independent panels (`fleet-chunk-artifacts-panel`, `app-chunk-node-history-tab`,
+ * `fleet-chunk-transcripts-container`) — for these three, the horizontal-overflow check
+ * above already stands in for it: the Artifacts tab defaults its viewer to the fixture's
+ * single (deliberately long-keyed) artifact with no click needed, so the overflow check
+ * already covers this file's own defect class for that tab.
  *
  * Excluded from the default `ng test runner` run (`angular.json`'s
  * `test.exclude`) because it needs `--browsers=ChromiumHeadless`, not jsdom —
  * run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
-const LEASE_ID = 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR';
 
 const DETAIL = {
   chunk_id: CHUNK_ID,
@@ -76,32 +76,11 @@ const DETAIL = {
   ],
 };
 
-const LEASE = {
-  lease_id: LEASE_ID,
-  chunk_id: CHUNK_ID,
-  graph_id: 'gr_1',
-  node_id: 'nd_review',
-  node_name: 'review',
-  epoch: 1,
-  session_id: 'sess-77',
-  pid: 4821,
-  environment_id: 'beta',
-  workdir: '/ws/beta',
-  created_at: '2026-07-16T11:00:00.000Z',
-  last_heartbeat_at: '2026-07-16T11:59:26.000Z',
-  state: 'running',
-  closed_at: null,
-  closure_reason: null,
-};
-
 function routes(method: string, path: string): unknown {
   if (method !== 'GET') return {};
   if (path === `/api/chunks/${CHUNK_ID}`) return DETAIL;
   if (path === `/api/chunks/${CHUNK_ID}/work-items`) return { items: [] };
-  if (path === '/api/leases') return { items: [LEASE] };
-  if (path === `/api/leases/${LEASE_ID}/transcript`) {
-    return { lease_id: LEASE_ID, session_id: 'sess', available: true, reason: null, truncated: false, turns: [] };
-  }
+  if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
   return {};
 }
 
@@ -111,7 +90,7 @@ const TABS = [
   { testid: 'tab-general', label: 'General', expectSections: true },
   { testid: 'tab-node-history', label: 'Node history', expectSections: false },
   { testid: 'tab-artifacts', label: 'Artifacts', expectSections: false },
-  { testid: 'tab-transcripts', label: 'Transcripts', expectSections: true },
+  { testid: 'tab-transcripts', label: 'Transcripts', expectSections: false },
 ] as const;
 
 describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', () => {
@@ -245,10 +224,6 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
       if (method !== 'GET') return {};
       if (path === `/api/chunks/${CHUNK_ID}`) return DETAIL;
       if (path === `/api/chunks/${CHUNK_ID}/work-items`) return stubError(503, { detail: 'no work source is configured' });
-      if (path === '/api/leases') return { items: [LEASE] };
-      if (path === `/api/leases/${LEASE_ID}/transcript`) {
-        return { lease_id: LEASE_ID, session_id: 'sess', available: true, reason: null, truncated: false, turns: [] };
-      }
       return {};
     });
     await TestBed.configureTestingModule({
@@ -272,7 +247,7 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
         const label = `width=${width}`;
         const status = root.querySelector<HTMLElement>('[data-testid="issue-error"]');
         expect(status, `${label}: issue-error status not in the DOM`).not.toBeNull();
-        expect(status!.textContent?.trim()).toBe('Could not reach the forge — issue content is unavailable.');
+        expect(status!.textContent?.trim()).toBe('Could not read the work items — content is unavailable.');
         const section = status!.closest<HTMLElement>('[data-testid^="section-"]')!;
         const statusRect = status!.getBoundingClientRect();
         const sectionRect = section.getBoundingClientRect();

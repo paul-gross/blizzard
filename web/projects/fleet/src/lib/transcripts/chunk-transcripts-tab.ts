@@ -1,31 +1,24 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import {
-  deriveTranscriptSteps,
-  encodeSidechainPath,
-  KitAsyncState,
-  type KitAsyncStateValue,
-  parseSidechainPath,
-  mergeLateLinks,
-  resolveSegmentSeams,
-  resolveSidechainByPath,
-  type SidechainOpenEvent,
-  type TranscriptSegmentContentView,
-  type TranscriptSegmentIndexEntry,
-  type TranscriptStep,
-  TranscriptSegmentView,
-  TranscriptViewer,
-  type TransitionView,
-} from 'fleet';
+
+import type { TransitionView } from '../api/hub';
+import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { encodeSidechainPath, parseSidechainPath, resolveSidechainByPath } from './transcript-sidechain-path';
+import { deriveTranscriptSteps, resolveSegmentSeams, type TranscriptStep } from './transcript-steps';
+import type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry } from '../api/hub';
+import { mergeLateLinks } from './merge-late-links';
+import { TranscriptSegmentView } from './transcript-segment-view';
+import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
 
 /**
- * The chunk detail page's Transcripts tab (blizzard#248 Phase 2) — a nav of node-history
- * steps, each holding its segments, beside a lazily-fetched segment viewer. Mirrors
- * {@link ChunkArtifactsTab}'s nav-beside-viewer shape and, like it, is presentational
- * (`bzh:frontend-container-presentational`, `review:F1`): the two queries behind this tab
- * (D8: the index on open, one segment's turns only once opened) live on
- * `ChunkTranscriptsContainer`, which passes their resolved state down as inputs — nothing
- * about a chunk's transcripts is in `detail()`'s own payload (D8, pinned at
- * `test_chunk_detail_carries_no_transcript_field`).
+ * The chunk detail page's Transcripts tab (blizzard#248 Phase 2, moved into `fleet` by
+ * runner-node-grouped-transcripts Phase 4 so both the hub and runner apps mount the same
+ * component) — a nav of node-history steps, each holding its segments, beside a
+ * lazily-fetched segment viewer. Mirrors `ChunkArtifactsTab`'s nav-beside-viewer shape
+ * and, like it, is presentational (`bzh:frontend-container-presentational`, `review:F1`):
+ * the two queries behind this tab (D8: the index on open, one segment's turns only once
+ * opened) live on {@link ChunkTranscriptsContainer}, which passes their resolved state
+ * down as inputs — nothing about a chunk's transcripts is in `detail()`'s own payload
+ * (D8, pinned at `test_chunk_detail_carries_no_transcript_field`).
  *
  * {@link indexState}/{@link segmentState} are that container's own `asyncState()` folds over
  * its two queries (`bzh:frontend-empty-state-gated`); {@link isForbidden} is carried
@@ -36,7 +29,7 @@ import {
  * per-step detail pane mounts, so neither carries its own copy of that markup.
  */
 @Component({
-  selector: 'app-chunk-transcripts-tab',
+  selector: 'fleet-chunk-transcripts-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState, TranscriptSegmentView, TranscriptViewer],
   templateUrl: './chunk-transcripts-tab.html',
@@ -51,7 +44,7 @@ export class ChunkTranscriptsTab {
   readonly currentNodeName = input<string | null>(null);
   readonly latestEpoch = input<number | null>(null);
 
-  /** The `injectHubChunkTranscriptsQuery` read, resolved: the segment index once {@link indexState} is `'ready'`, `[]` otherwise. */
+  /** The `injectChunkTranscriptsQuery` read, resolved: the segment index once {@link indexState} is `'ready'`, `[]` otherwise. */
   readonly segments = input<readonly TranscriptSegmentIndexEntry[]>([]);
 
   /** `asyncState()` over the index query — never `'empty'`; "no segments yet" is this component's own {@link steps}-derived state. */
@@ -66,7 +59,7 @@ export class ChunkTranscriptsTab {
   /** The `?sidechain` URL param, raw (`review:F3`) — a dot-joined `SidechainPath` (`fleet`'s `transcript-sidechain-path.ts`), or `null`. */
   readonly sidechainPath = input<string | null>(null);
 
-  /** The `injectHubChunkTranscriptSegmentQuery` read: `'empty'` while {@link segmentId} names nothing, else loading/error/ready. */
+  /** The `injectChunkTranscriptSegmentQuery` read: `'empty'` while {@link segmentId} names nothing, else loading/error/ready. */
   readonly segmentState = input.required<KitAsyncStateValue>();
 
   /** The open segment's turns and completion state, once {@link segmentState} is `'ready'`. */

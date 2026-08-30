@@ -34,6 +34,15 @@ export interface ChunkDetailSelection {
    * tab, or `null`. Unvalidated, the same stance as {@link artifactKey}. */
   readonly stepKey: Signal<string | null>;
 
+  /** The raw `segment` param — the transcript segment id opened in the
+   * Transcripts tab, or `null`. Unvalidated, the same stance as {@link artifactKey}. */
+  readonly transcriptSegment: Signal<string | null>;
+
+  /** The raw `sidechain` param — an encoded `SidechainPath` (`fleet`'s
+   * `transcript-sidechain-path.ts`) naming the sidechain, nested under a tool
+   * call or unlinked, opened standalone within the open segment, or `null`. */
+  readonly transcriptSidechain: Signal<string | null>;
+
   /** Merge a tab into the URL — a client-side navigation (no reload) that
    * pushes a history entry, leaving every other query param (`?attempt=`,
    * `?artifact=`, `?step=`) untouched. */
@@ -46,6 +55,15 @@ export interface ChunkDetailSelection {
   /** Select a node-step (or close one with `null`) in the Node history tab —
    * switches to that tab and writes the step's join key back to the URL. */
   selectStep(stepKey: string | null): void;
+
+  /** Open a transcript segment (or close one with `null`) — clears any
+   * standalone-opened sidechain, since it belongs to the previously open
+   * segment. Mirrors the hub's own `chunk-detail-selection.ts`. */
+  selectTranscriptSegment(segmentId: string | null): void;
+
+  /** Open (or close, with `null`) a sidechain standalone within the
+   * currently open segment, addressed by its encoded `SidechainPath`. */
+  selectTranscriptSidechain(path: string | null): void;
 }
 
 const TABS: readonly RunnerChunkDetailTab[] = ['general', 'node-history', 'artifacts', 'transcripts'];
@@ -66,6 +84,8 @@ export function injectChunkDetailSelection(): ChunkDetailSelection {
     }),
     artifactKey: computed(() => params().get('artifact')),
     stepKey: computed(() => params().get('step')),
+    transcriptSegment: computed(() => params().get('segment')),
+    transcriptSidechain: computed(() => params().get('sidechain')),
     select(tab: RunnerChunkDetailTab): void {
       void router.navigate([], {
         relativeTo: route,
@@ -84,6 +104,20 @@ export function injectChunkDetailSelection(): ChunkDetailSelection {
       void router.navigate([], {
         relativeTo: route,
         queryParams: { tab: 'node-history', step: stepKey },
+        queryParamsHandling: 'merge',
+      });
+    },
+    selectTranscriptSegment(segmentId: string | null): void {
+      void router.navigate([], {
+        relativeTo: route,
+        queryParams: { tab: 'transcripts', segment: segmentId, sidechain: null },
+        queryParamsHandling: 'merge',
+      });
+    },
+    selectTranscriptSidechain(path: string | null): void {
+      void router.navigate([], {
+        relativeTo: route,
+        queryParams: { sidechain: path },
         queryParamsHandling: 'merge',
       });
     },

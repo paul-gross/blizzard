@@ -42,16 +42,27 @@ export function shouldRetryTranscriptFetch(failureCount: number, error: Error): 
  * 403 renders as the container's own honest state (D9) instead of the tab silently never
  * appearing (which it also doesn't, since the chunk page hides the tab option itself for
  * that identity).
+ *
+ * `client`/`plane` are accessors, not plain values, the same as `chunkId` — not because
+ * either is expected to change, but because a caller threading a signal `input.required()`
+ * straight through (`ChunkTranscriptsContainer`) cannot read it eagerly at field-init time
+ * (Angular's own `NG8118`: a required input has no value yet at that point in a real
+ * template-bound mount); wrapped in a closure, it resolves lazily instead, once
+ * `injectQuery`'s own reactive computation actually runs.
  */
-export function injectChunkTranscriptsQuery(client: Client, plane: TranscriptPlane, chunkId: () => string | null) {
+export function injectChunkTranscriptsQuery(
+  client: () => Client,
+  plane: () => TranscriptPlane,
+  chunkId: () => string | null,
+) {
   return injectQuery(() => {
     const id = chunkId();
     return {
-      queryKey: chunkTranscriptsKey(plane, id),
+      queryKey: chunkTranscriptsKey(plane(), id),
       enabled: id !== null,
       queryFn: async (): Promise<TranscriptSegmentIndexView> => {
         const { data, error, response } = await listTranscriptSegmentsApiChunksChunkIdTranscriptsGet({
-          client,
+          client: client(),
           path: { chunk_id: id! },
           throwOnError: false,
         });
@@ -68,7 +79,11 @@ export function injectChunkTranscriptsQuery(client: Client, plane: TranscriptPla
  * {@link injectChunkTranscriptsQuery} for callers (e.g. the Node History tab) that only
  * ever read the hub's own transcripts and have no reason to thread a client through. */
 export function injectHubChunkTranscriptsQuery(chunkId: () => string | null) {
-  return injectChunkTranscriptsQuery(hubClient, 'hub', chunkId);
+  return injectChunkTranscriptsQuery(
+    () => hubClient,
+    () => 'hub',
+    chunkId,
+  );
 }
 
 /**
@@ -90,8 +105,8 @@ export function injectHubChunkTranscriptsQuery(chunkId: () => string | null) {
  * segment is read exactly once.
  */
 export function injectChunkTranscriptSegmentQuery(
-  client: Client,
-  plane: TranscriptPlane,
+  client: () => Client,
+  plane: () => TranscriptPlane,
   chunkId: () => string | null,
   segmentId: () => string | null,
   final: () => boolean | null,
@@ -101,11 +116,11 @@ export function injectChunkTranscriptSegmentQuery(
     const sid = segmentId();
     const isFinal = final();
     return {
-      queryKey: chunkTranscriptSegmentKey(plane, cid, sid, isFinal ?? false),
+      queryKey: chunkTranscriptSegmentKey(plane(), cid, sid, isFinal ?? false),
       enabled: cid !== null && sid !== null && isFinal !== null,
       queryFn: async (): Promise<TranscriptSegmentContentView> => {
         const { data, error, response } = await getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet({
-          client,
+          client: client(),
           path: { chunk_id: cid!, segment_id: sid! },
           throwOnError: false,
         });
@@ -126,5 +141,11 @@ export function injectHubChunkTranscriptSegmentQuery(
   segmentId: () => string | null,
   final: () => boolean | null,
 ) {
-  return injectChunkTranscriptSegmentQuery(hubClient, 'hub', chunkId, segmentId, final);
+  return injectChunkTranscriptSegmentQuery(
+    () => hubClient,
+    () => 'hub',
+    chunkId,
+    segmentId,
+    final,
+  );
 }

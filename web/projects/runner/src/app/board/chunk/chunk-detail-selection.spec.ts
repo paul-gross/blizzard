@@ -99,4 +99,43 @@ describe('injectChunkDetailSelection', () => {
     expect(TestBed.inject(Router).url).toBe('/board/chunk/ch_1?tab=node-history');
     expect(host.selection.stepKey()).toBeNull();
   });
+
+  it('resolves absent ?segment/?sidechain params to null', async () => {
+    const host = await open('/board/chunk/ch_1');
+    expect(host.selection.transcriptSegment()).toBeNull();
+    expect(host.selection.transcriptSidechain()).toBeNull();
+  });
+
+  it('selectTranscriptSegment() switches to the transcripts tab, writes ?segment=, and clears ?sidechain=', async () => {
+    const harness = await RouterTestingHarness.create();
+    const host = (await harness.navigateByUrl(
+      '/board/chunk/ch_1?tab=general&sidechain=0',
+      SelectionHost,
+    )) as SelectionHost;
+
+    host.selection.selectTranscriptSegment('seg-1');
+    await harness.fixture.whenStable();
+
+    expect(TestBed.inject(Router).url).toBe('/board/chunk/ch_1?tab=transcripts&segment=seg-1');
+    expect(host.selection.transcriptSegment()).toBe('seg-1');
+    expect(host.selection.transcriptSidechain()).toBeNull();
+  });
+
+  it('selectTranscriptSidechain() writes ?sidechain= without touching ?tab= or ?segment=, clearable with null', async () => {
+    const harness = await RouterTestingHarness.create();
+    const host = (await harness.navigateByUrl(
+      '/board/chunk/ch_1?tab=transcripts&segment=seg-1',
+      SelectionHost,
+    )) as SelectionHost;
+
+    host.selection.selectTranscriptSidechain('2.0');
+    await harness.fixture.whenStable();
+    expect(TestBed.inject(Router).url).toBe('/board/chunk/ch_1?tab=transcripts&segment=seg-1&sidechain=2.0');
+    expect(host.selection.transcriptSidechain()).toBe('2.0');
+
+    host.selection.selectTranscriptSidechain(null);
+    await harness.fixture.whenStable();
+    expect(TestBed.inject(Router).url).toBe('/board/chunk/ch_1?tab=transcripts&segment=seg-1');
+    expect(host.selection.transcriptSidechain()).toBeNull();
+  });
 });

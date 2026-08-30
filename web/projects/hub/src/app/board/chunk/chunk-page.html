@@ -56,7 +56,9 @@
         />
       }
       @case ('transcripts') {
-        <app-chunk-transcripts-container
+        <fleet-chunk-transcripts-container
+          [client]="hubClient"
+          plane="hub"
           [chunkId]="chunkId()"
           [history]="d.history ?? []"
           [currentNodeId]="d.current_node_id"

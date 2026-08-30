@@ -137,7 +137,11 @@ function definePlaneTranscriptsQueryHost(client: Client, plane: TranscriptPlane)
   })
   class TestPlaneTranscriptsQueryHost {
     readonly chunkId = signal<string | null>('ch_1');
-    readonly query = injectChunkTranscriptsQuery(client, plane, () => this.chunkId());
+    readonly query = injectChunkTranscriptsQuery(
+      () => client,
+      () => plane,
+      () => this.chunkId(),
+    );
   }
   return TestPlaneTranscriptsQueryHost;
 }
@@ -181,8 +185,8 @@ describe('injectChunkTranscriptSegmentQuery — plane-generic (D5)', () => {
     })
     class TestPlaneTranscriptSegmentQueryHost {
       readonly query = injectChunkTranscriptSegmentQuery(
-        client,
-        plane,
+        () => client,
+        () => plane,
         () => 'ch_1',
         () => 'seg-1',
         () => true,
