@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import Engine, func, insert, select
+from sqlalchemy import func, insert, select
 
 from blizzard.hub.domain.findings import (
     FACT_KINDS,
@@ -20,14 +20,15 @@ from blizzard.hub.domain.findings import (
     UnknownFactKindError,
     derive_liveness,
 )
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 
 
 class FindingStore:
     """Read-write finding adapter over the hub store engine."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     def add(
         self,
@@ -41,7 +42,7 @@ class FindingStore:
         introduced: str | None,
         at: datetime,
     ) -> Finding:
-        with self._engine.begin() as conn:
+        with self._store.write("add") as conn:
             conn.execute(
                 insert(findings).values(
                     finding_id=finding_id,
@@ -70,11 +71,11 @@ class FindingStore:
     def record_fact(self, finding_id: str, *, kind: str, at: datetime, note: str | None = None) -> None:
         if kind not in FACT_KINDS:
             raise UnknownFactKindError(kind)
-        with self._engine.begin() as conn:
+        with self._store.write("record_fact") as conn:
             conn.execute(insert(finding_facts).values(finding_id=finding_id, kind=kind, recorded_at=at, note=note))
 
     def get(self, finding_id: str) -> Finding | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get") as conn:
             row = conn.execute(select(findings).where(findings.c.finding_id == finding_id)).one_or_none()
             if row is None:
                 return None
@@ -84,7 +85,7 @@ class FindingStore:
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """The pass's own bucket read (D3) — filtered on `ix_findings_routine_scope`,
         ordered by `finding_id` so every backend returns the same rows."""
-        with self._engine.connect() as conn:
+        with self._store.read("list_for") as conn:
             rows = conn.execute(
                 select(findings)
                 .where(findings.c.routine_name == routine_name, findings.c.scope_slug == scope_slug)
@@ -97,7 +98,7 @@ class FindingStore:
     def count_by_class(self, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name` — filtered on
         `ix_findings_routine_class`."""
-        with self._engine.connect() as conn:
+        with self._store.read("count_by_class") as conn:
             return conn.execute(
                 select(func.count())
                 .select_from(findings)
@@ -150,8 +151,8 @@ def _conforms_finding_store(x: FindingStore) -> IWriteFindingRepository:
 class FindingSetStore:
     """Read-write finding-set adapter over the hub store engine."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     def create(
         self,
@@ -163,7 +164,7 @@ class FindingSetStore:
         revisions: dict[str, str],
         measurement: str | None,
     ) -> FindingSet:
-        with self._engine.begin() as conn:
+        with self._store.write("create") as conn:
             conn.execute(
                 insert(finding_sets).values(
                     finding_set_id=finding_set_id,
@@ -184,7 +185,7 @@ class FindingSetStore:
         )
 
     def get(self, finding_set_id: str) -> FindingSet | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get") as conn:
             row = conn.execute(
                 select(finding_sets).where(finding_sets.c.finding_set_id == finding_set_id)
             ).one_or_none()
@@ -192,7 +193,7 @@ class FindingSetStore:
 
     def list_for_chunk(self, chunk_id: str) -> list[FindingSet]:
         """A run's own delivered sets — filtered on `ix_finding_sets_chunk_id`."""
-        with self._engine.connect() as conn:
+        with self._store.read("list_for_chunk") as conn:
             rows = conn.execute(select(finding_sets).where(finding_sets.c.chunk_id == chunk_id)).all()
         return [self._of(row) for row in rows]
 

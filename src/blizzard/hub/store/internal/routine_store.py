@@ -10,9 +10,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from sqlalchemy import Engine, insert, select, update
+from sqlalchemy import insert, select, update
 
 from blizzard.hub.domain.routines import IWriteRoutineRepository, Routine
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import routines
 
 
@@ -36,11 +37,11 @@ MODEL = ModelColumn()
 class RoutineStore:
     """Read-write routine adapter over the hub store engine."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     def create(self, routine: Routine) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("create") as conn:
             conn.execute(
                 insert(routines).values(
                     routine_id=routine.routine_id,
@@ -62,7 +63,7 @@ class RoutineStore:
         default_model: list[str],
         default_effort: str | None,
     ) -> Routine:
-        with self._engine.begin() as conn:
+        with self._store.write("edit") as conn:
             conn.execute(
                 update(routines)
                 .where(routines.c.routine_id == routine_id)
@@ -77,17 +78,17 @@ class RoutineStore:
         return self._of(row)
 
     def get(self, routine_id: str) -> Routine | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get") as conn:
             row = conn.execute(select(routines).where(routines.c.routine_id == routine_id)).one_or_none()
         return self._of(row) if row is not None else None
 
     def get_by_name(self, name: str) -> Routine | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get_by_name") as conn:
             row = conn.execute(select(routines).where(routines.c.name == name)).one_or_none()
         return self._of(row) if row is not None else None
 
     def list_all(self) -> list[Routine]:
-        with self._engine.connect() as conn:
+        with self._store.read("list_all") as conn:
             rows = conn.execute(select(routines).order_by(routines.c.created_at.desc())).all()
         return [self._of(row) for row in rows]
 

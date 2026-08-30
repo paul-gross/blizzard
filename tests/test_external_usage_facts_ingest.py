@@ -20,7 +20,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.wire.facts import EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED, RunnerFact, RunnerFactBatch
-from tests.support import build_hub, emitted_events, migrate_to
+from tests.support import build_hub, emitted_events, hub_store_connections, migrate_to
 
 pytestmark = pytest.mark.component
 
@@ -42,8 +42,9 @@ def _payload(*, sampled_at: datetime, utilization_pct: float) -> dict:
 
 
 def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
-    chunks = ChunkStore(engine, clock)
-    fleet = FleetService(registry=RunnerRegistryStore(engine), clock=clock)
+    store = hub_store_connections(engine)
+    chunks = ChunkStore(store, clock)
+    fleet = FleetService(registry=RunnerRegistryStore(store), clock=clock)
     return FactIngestService(chunks=chunks, fleet=fleet, clock=clock)
 
 

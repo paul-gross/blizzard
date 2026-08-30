@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import CompoundSelect, Engine, Select, case, func, select, tuple_, union
+from sqlalchemy import CompoundSelect, Select, case, func, select, tuple_, union
 
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.foundation.node_steps import Executor
@@ -35,6 +35,7 @@ from blizzard.hub.domain.analytics.operational import (
 )
 from blizzard.hub.domain.work import UsageTotal
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreConnections
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
@@ -310,8 +311,8 @@ def _graph_entry_nodes_stmt(criteria: OperationalCriteria) -> Select[Any]:
 class AnalyticsOperationalStore:
     """Read-only operational-analytics query adapter over the hub store engine."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     def durations_by_node(self, criteria: OperationalCriteria) -> list[DurationStats]:
         rows = self._step_durations(criteria)
@@ -325,7 +326,7 @@ class AnalyticsOperationalStore:
         """F6 (review round 4): no separate group-existence probe — an empty admitted-
         group set makes both statements below's correlated subquery empty too, so
         ``fold_step_durations`` already returns ``[]`` without a dedicated early-out."""
-        with self._engine.connect() as conn:
+        with self._store.read("step_durations") as conn:
             transition_rows = conn.execute(_duration_rows_stmt(criteria)).all()
             lease_rows = conn.execute(_duration_lease_min_stmt(criteria)).all()
         transitions = [_to_transition_movement(r) for r in transition_rows]
@@ -334,26 +335,26 @@ class AnalyticsOperationalStore:
         return steps_in_window(all_rows, since=criteria.since, until=criteria.until, graph_id=criteria.graph_id)
 
     def spend_by_node(self, criteria: OperationalCriteria) -> list[SpendStats]:
-        with self._engine.connect() as conn:
+        with self._store.read("spend_by_node") as conn:
             rows = conn.execute(_spend_by_node_stmt(criteria)).all()
         return [_to_spend_stats(row) for row in rows]
 
     def spend_by_graph(self, criteria: OperationalCriteria) -> list[SpendStats]:
-        with self._engine.connect() as conn:
+        with self._store.read("spend_by_graph") as conn:
             rows = conn.execute(_spend_by_graph_stmt(criteria)).all()
         return [_to_spend_stats(row) for row in rows]
 
     def spend_by_chunk(self, criteria: OperationalCriteria, *, cursor: str | None = None, limit: int) -> ChunkSpendPage:
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
-        with self._engine.connect() as conn:
+        with self._store.read("spend_by_chunk") as conn:
             rows = conn.execute(_spend_by_chunk_stmt(criteria, cursor=cursor, limit=limit)).all()
         page_rows = rows[:limit]
         next_cursor = page_rows[-1].key if len(rows) > limit else None
         return ChunkSpendPage(records=[_to_spend_stats(row) for row in page_rows], next_cursor=next_cursor)
 
     def outcomes_by_node(self, criteria: OperationalCriteria) -> list[OutcomeStats]:
-        with self._engine.connect() as conn:
+        with self._store.read("outcomes_by_node") as conn:
             judged_rows = conn.execute(_judged_distribution_stmt(criteria)).all()
             lease_rows = conn.execute(_candidate_lease_epochs_stmt(criteria)).all()
             max_epoch_rows = conn.execute(_chunk_max_lease_epoch_stmt(criteria)).all()

@@ -13,6 +13,7 @@ _TESTS_DIR = _REPO_ROOT / "tests"
 _FOUNDATION_DIR = _SRC_DIR / "foundation"
 _HUB_DIR = _SRC_DIR / "hub"
 _RUNNER_DIR = _SRC_DIR / "runner"
+_HUB_STORE_INTERNAL_DIR = _HUB_DIR / "store" / "internal"
 
 _MOVED_HOMES = {
     "ChunkStatus": "blizzard.foundation.chunk_status",
@@ -82,3 +83,25 @@ def test_runner_does_not_import_hub() -> None:
 def test_moved_vocabulary_has_exactly_one_importable_home() -> None:
     violations = _misrouted_moved_names(_SRC_DIR) + _misrouted_moved_names(_TESTS_DIR)
     assert not violations, f"D — imported from somewhere other than its declared foundation home: {violations}"
+
+
+def _bare_engine_accesses(root: Path) -> list[str]:
+    violations: list[str] = []
+    for path in sorted(root.glob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Attribute):
+                continue
+            if node.attr == "_engine" and isinstance(node.value, ast.Name) and node.value.id == "self":
+                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} acquires self._engine")
+    return violations
+
+
+def test_hub_store_internal_acquires_no_connection_outside_the_seam() -> None:
+    """D5 (blizzard#413): every ``hub/store/internal/`` adapter takes the injected
+    ``HubStoreConnections`` collaborator in place of ``Engine`` — no adapter method may
+    reach past it to acquire a connection directly."""
+    violations = _bare_engine_accesses(_HUB_STORE_INTERNAL_DIR)
+    assert not violations, (
+        f"E — hub/store/internal/ must route every connection through HubStoreConnections: {violations}"
+    )

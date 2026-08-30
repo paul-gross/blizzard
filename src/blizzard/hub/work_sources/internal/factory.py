@@ -13,13 +13,13 @@ from dataclasses import dataclass
 from typing import cast
 
 import httpx
-from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import ConfigError, WorkSourceConfig
 from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.work import IWriteWorkItemRepository
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -47,7 +47,7 @@ class WorkSourceEntry:
     def registry(
         cls,
         sources: Sequence[WorkSourceConfig],
-        engine: Engine,
+        store: HubStoreConnections,
         clock: IClock,
         *,
         users: IReadUserRepository,
@@ -72,7 +72,7 @@ class WorkSourceEntry:
             if close_forge_writes_enabled:
                 closers[config.name] = cast(IWorkCloser, adapter)
         seat_hub_work_source(
-            built, editors, closers, engine=engine, clock=clock, users=users, items=work_item_store, delete=delete
+            built, editors, closers, store=store, clock=clock, users=users, items=work_item_store, delete=delete
         )
         return WorkSourceRegistry(built, annotators, closers, editors)
 

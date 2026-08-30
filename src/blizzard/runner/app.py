@@ -79,7 +79,7 @@ from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.store.repository import IWriteRunnerStore, RunnerStoreErrorFactory
 from blizzard.runner.transcripts.internal.http_archived_transcript_repository import (
     HttpArchivedTranscriptRepository,
 )
@@ -260,7 +260,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
-    runner_store = SqlAlchemyRunnerStore(engine)
+    runner_store = SqlAlchemyRunnerStore(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
     workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(
         workspace_root=config.workspace_root or str(config.root),
         env_pool=config.workspace_envs,

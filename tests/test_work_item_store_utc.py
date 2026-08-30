@@ -17,7 +17,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.work import WorkItemAuthor, WorkItemClosure
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import seed_graph, seed_work_item
+from tests.support import hub_store_connections, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.unit
 
@@ -30,7 +30,7 @@ def _store(tmp_path: Path) -> WorkItemStore:
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
-    return WorkItemStore(engine)
+    return WorkItemStore(hub_store_connections(engine))
 
 
 def test_create_round_trips_its_own_written_instant(tmp_path: Path) -> None:

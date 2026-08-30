@@ -77,6 +77,7 @@ from blizzard.hub.domain.work_item_materialization import WorkItemMaterializatio
 from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import PACKAGED
+from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store import ChunkStore
@@ -235,15 +236,18 @@ def build_services(
     ``oauth_providers``. ``claim_lock``/``work_item_store``/``delete`` are required, not
     built here, so the built-in hub binding shares the same three (issue #364)."""
     clock = clock or SystemClock()
-    chunk_store = ChunkStore(engine, clock)
-    graph_store = GraphStore(engine)
-    registry_store = RunnerRegistryStore(engine)
-    transcript_store = TranscriptSegmentStore(engine)
-    event_store = TranscriptEventStore(engine)
+    # The hub-store seam (issue #413) — one collaborator shared by every
+    # ``hub/store/internal/`` adapter, replacing the bare engine (D2).
+    store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
+    chunk_store = ChunkStore(store_connections, clock)
+    graph_store = GraphStore(store_connections)
+    registry_store = RunnerRegistryStore(store_connections)
+    transcript_store = TranscriptSegmentStore(store_connections)
+    event_store = TranscriptEventStore(store_connections)
     event_derivation_service = EventDerivationService(events=event_store, chunks=chunk_store, clock=clock)
     event_derivation = EventDerivationReconciler(service=event_derivation_service, events=event_store)
-    analytics_event_queries = AnalyticsEventQueryStore(engine)
-    operational_analytics = AnalyticsOperationalStore(engine)
+    analytics_event_queries = AnalyticsEventQueryStore(store_connections)
+    operational_analytics = AnalyticsOperationalStore(store_connections)
     marker_authority = MarkerAuthority()
     hub_node = HubNodeExecutor(
         chunks=chunk_store,
@@ -292,12 +296,12 @@ def build_services(
     auth_throttle = IpThrottle(clock=clock)
     materialization_edits = WorkItemEditService(items=work_item_store, chunks=chunk_store, clock=clock, delete=delete)
     graph_mint = GraphMintService(graphs=graph_store, clock=clock)
-    scope_store = ScopeStore(engine)
+    scope_store = ScopeStore(store_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
-    routine_store = RoutineStore(engine)
-    finding_store = FindingStore(engine)
-    finding_set_store = FindingSetStore(engine)
-    garden_proposal_store = GardenProposalStore(engine)
+    routine_store = RoutineStore(store_connections)
+    finding_store = FindingStore(store_connections)
+    finding_set_store = FindingSetStore(store_connections)
+    garden_proposal_store = GardenProposalStore(store_connections)
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,

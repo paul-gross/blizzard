@@ -19,6 +19,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.findings import Finding
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -34,7 +35,7 @@ def _store_and_engine(tmp_path: Path) -> tuple[FindingStore, Engine]:
         conn.execute(
             sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('blizzard', '', :now)"), {"now": _NOW}
         )
-    return FindingStore(engine), engine
+    return FindingStore(hub_store_connections(engine)), engine
 
 
 def _store(tmp_path: Path) -> FindingStore:

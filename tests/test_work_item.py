@@ -10,7 +10,7 @@ from blizzard.hub.domain.work import WorkItemAuthor, WorkRef
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.source import WorkItem
-from tests.support import FakeWorkSource, build_hub, pointer_token, seed_work_item
+from tests.support import FakeWorkSource, build_hub, hub_store_connections, pointer_token, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -111,8 +111,9 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     graph = hub.services.graph_mint.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
-    items = WorkItemStore(hub.engine)
-    chunks = ChunkStore(hub.engine, hub.clock)
+    hub_store = hub_store_connections(hub.engine)
+    items = WorkItemStore(hub_store)
+    chunks = ChunkStore(hub_store, hub.clock)
     author = WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_proposer", node_name="triage")
     hub_item = seed_work_item(
         items,
@@ -179,7 +180,7 @@ def test_work_items_an_unresolvable_hub_pointer_still_carries_an_in_app_web_url(
     other pointer (blizzard#362)."""
     hub = build_hub(tmp_path, work_sources={"widget": FakeWorkSource(name="widget")})
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
-    chunks = ChunkStore(hub.engine, hub.clock)
+    chunks = ChunkStore(hub_store_connections(hub.engine), hub.clock)
     chunks.add_work_refs(chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now())
 
     entries = {e["source"]: e for e in hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]}

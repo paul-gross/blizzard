@@ -21,7 +21,7 @@ from blizzard.hub.domain.work import ActivityRow, DecisionChoice, IReadChunkRepo
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.chunk_store import ChunkStore, record_deleted_row
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import migrate_to, seed_chunk, seed_graph
+from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -38,7 +38,7 @@ def _store(tmp_path: Path) -> tuple[ChunkStore, sa.Engine]:
         seed_graph(conn, "gr_1", at=_T0)
         seed_graph(conn, "gr_2", at=_T0)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_T0)
-    return ChunkStore(engine, FixedClock(_T0)), engine
+    return ChunkStore(hub_store_connections(engine), FixedClock(_T0)), engine
 
 
 def _seed_second_chunk(engine: sa.Engine, chunk_id: str) -> None:
@@ -390,7 +390,7 @@ def test_no_single_source_read_exceeds_the_limit(tmp_path: Path) -> None:
 def _registry_store(tmp_path: Path) -> RunnerRegistryStore:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
-    return RunnerRegistryStore(create_engine_from_url(db_url))
+    return RunnerRegistryStore(hub_store_connections(create_engine_from_url(db_url)))
 
 
 def test_runner_pause_resolves_through_the_runner_registry(tmp_path: Path) -> None:

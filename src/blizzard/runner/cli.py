@@ -27,6 +27,7 @@ from blizzard.cli.host_directory import HostDirectory
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.events.server import EarlyShutdownServer
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.foundation.store.utc import iso_utc
@@ -51,6 +52,7 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.transcript_backfill import TranscriptReshipError
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
+from blizzard.runner.store.repository import RunnerStoreErrorFactory
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0
@@ -221,7 +223,8 @@ def _resume_marked(config: RunnerConfig, mark: Callable[[ResumeMarking], int]) -
     ``ResumeMarking`` itself used to own, relocated here now that its store is injected."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return mark(ResumeMarking(SqlAlchemyRunnerStore(engine), SystemClock(), LinuxProcessProbe()))
+        store = SqlAlchemyRunnerStore(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+        return mark(ResumeMarking(store, SystemClock(), LinuxProcessProbe()))
     finally:
         engine.dispose()
 
@@ -488,7 +491,9 @@ def _configured_source(config: RunnerConfig) -> str:
 def _stored_override(config: RunnerConfig) -> str | None:
     """The store's runtime override, or ``None``. A read-only query, so a live daemon is no bar."""
     try:
-        store = SqlAlchemyRunnerStore(create_engine_from_url(config.db_url))
+        store = SqlAlchemyRunnerStore(
+            create_engine_from_url(config.db_url), RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+        )
         return store.workspace_prompt_override(config.workspace_id)
     except SQLAlchemyError as exc:
         raise click.ClickException(f"could not read the runner store at {config.db_url}: {exc}") from exc

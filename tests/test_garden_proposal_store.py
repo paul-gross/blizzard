@@ -15,6 +15,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -30,7 +31,8 @@ def _store_and_engine(tmp_path: Path) -> tuple[GardenProposalStore, Engine]:
             sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('blizzard', '', :now)"),
             {"now": _NOW},
         )
-    findings = FindingStore(engine)
+    store_connections = hub_store_connections(engine)
+    findings = FindingStore(store_connections)
     findings.add(
         "fin_1",
         routine_name="nightly",
@@ -51,7 +53,7 @@ def _store_and_engine(tmp_path: Path) -> tuple[GardenProposalStore, Engine]:
         introduced=None,
         at=_NOW,
     )
-    return GardenProposalStore(engine), engine
+    return GardenProposalStore(store_connections), engine
 
 
 def _store(tmp_path: Path) -> GardenProposalStore:

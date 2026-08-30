@@ -44,6 +44,7 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _terminate,
 )
+from tests.runner_fakes import runner_store_errors
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
     SseTap,
@@ -94,7 +95,7 @@ def _pending_outbound(config: RunnerConfig) -> int:
     """The depth of the runner's store-and-forward buffer."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return len(SqlAlchemyRunnerStore(engine).pending_outbound())
+        return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound())
     finally:
         engine.dispose()
 
@@ -162,7 +163,7 @@ def _pending_transcript_outbound(config: RunnerConfig) -> int:
     """The depth of the runner's transcript-lane buffer — D3's own, never the fact lane's."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return len(SqlAlchemyRunnerStore(engine).pending_transcript_outbound())
+        return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_transcript_outbound())
     finally:
         engine.dispose()
 
@@ -250,7 +251,10 @@ def test_stale_envelope_is_tolerated_and_the_chunk_still_lands(tmp_path: Path) -
 def _open_escalation_chunk_ids(config: RunnerConfig) -> list[str]:
     engine = create_engine_from_url(config.db_url)
     try:
-        return [escalation.chunk_id for escalation in SqlAlchemyRunnerStore(engine).open_escalations()]
+        return [
+            escalation.chunk_id
+            for escalation in SqlAlchemyRunnerStore(engine, runner_store_errors()).open_escalations()
+        ]
     finally:
         engine.dispose()
 
@@ -258,7 +262,7 @@ def _open_escalation_chunk_ids(config: RunnerConfig) -> list[str]:
 def _lease_id_for_chunk(config: RunnerConfig, chunk_id: str) -> str | None:
     engine = create_engine_from_url(config.db_url)
     try:
-        for lease in SqlAlchemyRunnerStore(engine).list_active_leases():
+        for lease in SqlAlchemyRunnerStore(engine, runner_store_errors()).list_active_leases():
             if lease.chunk_id == chunk_id:
                 return lease.lease_id
         return None
@@ -271,7 +275,7 @@ def _lease_closure_reason(config: RunnerConfig, lease_id: str) -> str | None:
     ``done`` (``transitioned``) — both empty the same active-leases row."""
     engine = create_engine_from_url(config.db_url)
     try:
-        for closed in SqlAlchemyRunnerStore(engine).list_closed_leases(50):
+        for closed in SqlAlchemyRunnerStore(engine, runner_store_errors()).list_closed_leases(50):
             if closed.lease.lease_id == lease_id:
                 return closed.reason
         return None
@@ -509,7 +513,7 @@ def _worker_credential(config: RunnerConfig, lease_id: str) -> dict[str, str]:
     token, token_hash = LeaseToken.mint()
     engine = create_engine_from_url(config.db_url)
     try:
-        SqlAlchemyRunnerStore(engine).record_lease_token(lease_id, token_hash, datetime.now(UTC))
+        SqlAlchemyRunnerStore(engine, runner_store_errors()).record_lease_token(lease_id, token_hash, datetime.now(UTC))
     finally:
         engine.dispose()
     return {"X-Blizzard-Lease-Token": token}

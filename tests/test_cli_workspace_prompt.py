@@ -18,6 +18,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.workspace_prompts import WORKSPACE_PROMPT_FILENAME
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
+from tests.runner_fakes import runner_store_errors
 
 pytestmark = pytest.mark.unit
 
@@ -143,7 +144,7 @@ def test_a_standing_override_is_what_diff_and_status_report(tmp_path: Path) -> N
     root = _runtime(tmp_path)
     assert _run("install", "winter", "--dir", str(root)).exit_code == 0
     config = RunnerConfig.load(root)
-    store = SqlAlchemyRunnerStore(create_engine_from_url(config.db_url))
+    store = SqlAlchemyRunnerStore(create_engine_from_url(config.db_url), runner_store_errors())
     store.set_workspace_prompt(config.workspace_id, prompt="AN OVERRIDE", at=datetime(2026, 1, 1, tzinfo=UTC))
 
     status = _run("status", "--dir", str(root))

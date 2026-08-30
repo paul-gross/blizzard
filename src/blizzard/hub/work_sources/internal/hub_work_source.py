@@ -6,8 +6,6 @@ here is fetched from a forge.
 
 from __future__ import annotations
 
-from sqlalchemy import Engine
-
 from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
@@ -24,6 +22,7 @@ from blizzard.hub.domain.work import (
     WorkRef,
 )
 from blizzard.hub.domain.work_items import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit, WorkItemEditService
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
@@ -138,7 +137,7 @@ def seat_hub_work_source(
     editors: dict[str, IWorkEditor],
     closers: dict[str, IWorkCloser],
     *,
-    engine: Engine,
+    store: HubStoreConnections,
     clock: IClock,
     users: IReadUserRepository,
     items: IWriteWorkItemRepository,
@@ -149,7 +148,7 @@ def seat_hub_work_source(
     ``tests/support.py::build_hub``: never absent, never configured. ``users``/``items``/
     ``delete`` are the composition root's own instances (#362, #364), so the same
     claim-locked ``DeleteService`` backs every write path regardless of the door reaching it."""
-    chunks = ChunkStore(engine, clock)
+    chunks = ChunkStore(store, clock)
     edits = WorkItemEditService(items=items, chunks=chunks, clock=clock, delete=delete)
     hub_source = HubWorkSource(items, chunks, edits, users)
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source

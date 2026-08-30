@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from sqlalchemy import Engine, Select, func, select
+from sqlalchemy import Select, func, select
 
 from blizzard.hub.domain.analytics import MalformedCursor
 from blizzard.hub.domain.analytics.events import KIND_FILE_READ, KIND_SKILL_INVOCATION
@@ -22,6 +22,7 @@ from blizzard.hub.domain.analytics.queries import (
     IReadAnalyticsEventQueries,
 )
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreConnections
 
 #: The whole cursor format this adapter mints: a row id, plain and unsigned.
 _CURSOR = re.compile(r"[0-9]+")
@@ -103,13 +104,13 @@ def _to_record(row: Any) -> EventRecord:
 class AnalyticsEventQueryStore:
     """Read-only analytics-event query adapter over the hub store engine."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     def events(self, criteria: EventQueryCriteria, *, cursor: str | None = None, limit: int) -> EventPage:
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
-        with self._engine.connect() as conn:
+        with self._store.read("events") as conn:
             rows = conn.execute(_events_stmt(criteria, cursor=cursor, limit=limit)).all()
         page_rows = rows[:limit]
         next_cursor = str(page_rows[-1].id) if len(rows) > limit else None
@@ -128,7 +129,7 @@ class AnalyticsEventQueryStore:
         return self._counts(criteria, group_col=s.transcript_events.c.node_id, kind=None)
 
     def _counts(self, criteria: EventQueryCriteria, *, group_col: Any, kind: str | None) -> list[CountRow]:
-        with self._engine.connect() as conn:
+        with self._store.read("counts") as conn:
             rows = conn.execute(_counts_stmt(criteria, group_col=group_col, kind=kind)).all()
         return [CountRow(key=row.key, count=row.occurrences) for row in rows]
 

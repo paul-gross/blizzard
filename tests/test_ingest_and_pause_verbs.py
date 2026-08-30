@@ -28,6 +28,7 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
+from tests.runner_fakes import runner_store_errors
 
 
 class _FakeResponse:
@@ -572,7 +573,7 @@ def test_chunk_delete_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> 
 
 def _store(root: Path) -> SqlAlchemyRunnerStore:
     """Read the runner's own store back to assert the fact the verb landed."""
-    return SqlAlchemyRunnerStore(create_engine_from_url(RunnerConfig.load(root).db_url))
+    return SqlAlchemyRunnerStore(create_engine_from_url(RunnerConfig.load(root).db_url), runner_store_errors())
 
 
 def _init_runner(tmp_path: Path) -> Path:

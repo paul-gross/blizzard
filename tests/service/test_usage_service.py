@@ -20,6 +20,7 @@ from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.wire.facts import USAGE_RECORDED
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub, _runner_config
+from tests.runner_fakes import runner_store_errors
 from tests.service.support import (
     mint_fixture,
     mock_hub,
@@ -62,7 +63,13 @@ def _pending_usage(config: RunnerConfig) -> int:
     """The count of buffered, not-yet-flushed ``usage.recorded`` outbound facts."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return len([b for b in SqlAlchemyRunnerStore(engine).pending_outbound() if b.kind == USAGE_RECORDED])
+        return len(
+            [
+                b
+                for b in SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound()
+                if b.kind == USAGE_RECORDED
+            ]
+        )
     finally:
         engine.dispose()
 
@@ -70,7 +77,7 @@ def _pending_usage(config: RunnerConfig) -> int:
 def _pending_total(config: RunnerConfig) -> int:
     engine = create_engine_from_url(config.db_url)
     try:
-        return len(SqlAlchemyRunnerStore(engine).pending_outbound())
+        return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound())
     finally:
         engine.dispose()
 

@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Delete, Engine, Insert, Select, insert, select
+from sqlalchemy import Delete, Insert, Select, insert, select
 
 from blizzard.hub.domain.analytics.events import (
     DerivationMarker,
@@ -23,6 +23,7 @@ from blizzard.hub.domain.analytics.events import (
     TranscriptEvent,
 )
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.wire.transcript_segment import TurnSegmentView
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
@@ -161,23 +162,23 @@ def _decode_turns(records: Sequence[Any]) -> list[TurnSegmentView]:
 class TranscriptEventStore:
     """Read-write transcript-event adapter over the hub store engine."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     # --- reads ----------------------------------------------------------------
 
     def visible_segment_ids(self, *, chunk_id: str | None = None) -> frozenset[str]:
-        with self._engine.connect() as conn:
+        with self._store.read("visible_segment_ids") as conn:
             rows = conn.execute(_visible_segment_ids_stmt(chunk_id)).all()
         return frozenset(row.segment_id for row in rows)
 
     def derived_segment_ids(self) -> frozenset[str]:
-        with self._engine.connect() as conn:
+        with self._store.read("derived_segment_ids") as conn:
             rows = conn.execute(_derived_segment_ids_stmt()).all()
         return frozenset(row.segment_id for row in rows)
 
     def segment_derivation_input(self, segment_id: str) -> SegmentDerivationInput | None:
-        with self._engine.connect() as conn:
+        with self._store.read("segment_derivation_input") as conn:
             rows = conn.execute(_segment_records_stmt(segment_id)).all()
         if not rows:
             return None
@@ -195,7 +196,7 @@ class TranscriptEventStore:
         )
 
     def derivation_marker(self, segment_id: str, extractor_version: str) -> DerivationMarker | None:
-        with self._engine.connect() as conn:
+        with self._store.read("derivation_marker") as conn:
             row = conn.execute(_marker_stmt(segment_id, extractor_version)).one_or_none()
         if row is None:
             return None
@@ -220,7 +221,7 @@ class TranscriptEventStore:
         content_fingerprint: str,
         at: datetime,
     ) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("replace_segment_events") as conn:
             conn.execute(_delete_events_stmt(segment_id, extractor_version))
             conn.execute(_delete_marker_stmt(segment_id, extractor_version))
             if events:
@@ -237,7 +238,7 @@ class TranscriptEventStore:
             )
 
     def drop_segment(self, segment_id: str) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("drop_segment") as conn:
             conn.execute(_delete_all_events_for_segment_stmt(segment_id))
             conn.execute(_delete_all_markers_for_segment_stmt(segment_id))
 

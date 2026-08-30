@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
+import structlog
+
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageSample
@@ -20,6 +22,22 @@ class RunnerStoreError(RuntimeError):
     """A runner-store operation failed — the domain-facing error the loop sees.
 
     Wraps the driver exception at the adapter boundary, so callers never depend on it."""
+
+
+class RunnerStoreErrorFactory:
+    """The injected error-wrapping seam :class:`SqlAlchemyRunnerStore` takes in place of
+    a module-level logger — the substitutability the hub-store seam's
+    ``HubStoreErrorFactory`` also gives its own adapters (blizzard#413)."""
+
+    def __init__(self, log: structlog.stdlib.BoundLogger) -> None:
+        self._log = log
+
+    def from_driver(self, exc: Exception, *, operation: str) -> RunnerStoreError:
+        """Wrap `exc` into a :class:`RunnerStoreError`, logged once at ERROR. Callers
+        must not log it again."""
+        detail = str(exc).strip()
+        self._log.error("runner store operation failed", operation=operation, detail=detail)
+        return RunnerStoreError(f"runner store {operation} failed: {detail}")
 
 
 @dataclass(frozen=True)

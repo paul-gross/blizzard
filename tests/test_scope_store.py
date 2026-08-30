@@ -12,11 +12,14 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import Engine
+from structlog.testing import capture_logs
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.scope_store import ScopeStore
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -27,7 +30,7 @@ def _store_and_engine(tmp_path: Path) -> tuple[ScopeStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
-    return ScopeStore(engine), engine
+    return ScopeStore(hub_store_connections(engine)), engine
 
 
 def _store(tmp_path: Path) -> ScopeStore:
@@ -108,3 +111,21 @@ def test_a_second_retire_is_a_harmless_no_op(tmp_path: Path) -> None:
     store.record_lifecycle("blizzard", retired=True, at=_NOW, by="paul")
 
     assert store.is_retired("blizzard") is True
+
+
+def test_a_driver_fault_mid_read_raises_the_wrapped_error_and_logs_once(tmp_path: Path) -> None:
+    """The schema goes missing out from under an otherwise-healthy engine — a fault
+    raised inside the caller's ``with`` block, past connection acquisition, proving the
+    seam's wrap site encloses the whole unit of work (D1) and not just acquisition."""
+    store, engine = _store_and_engine(tmp_path)
+    engine.dispose()
+    (tmp_path / "hub.db").unlink()
+
+    with capture_logs() as logs, pytest.raises(HubStoreError) as exc_info:
+        store.get("blizzard")
+
+    assert exc_info.value.operation == "get"
+    assert exc_info.value.detail
+    error_logs = [entry for entry in logs if entry["log_level"] == "error"]
+    assert len(error_logs) == 1
+    assert error_logs[0]["operation"] == "get"

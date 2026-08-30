@@ -13,15 +13,15 @@ from typing import cast
 
 import pytest
 from sqlalchemy import Engine, select
-from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.work import Chunk, IReadWorkItemRepository, WorkItemAuthor, WorkItemClosure, WorkRef
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import seed_graph, seed_work_item
+from tests.support import hub_store_connections, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -34,7 +34,7 @@ def _store_and_engine(tmp_path: Path) -> tuple[WorkItemStore, Engine]:
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
-    return WorkItemStore(engine), engine
+    return WorkItemStore(hub_store_connections(engine)), engine
 
 
 def _store(tmp_path: Path) -> WorkItemStore:
@@ -220,7 +220,7 @@ def test_create_with_chunk_rolls_back_the_item_and_the_chunk_rows_on_a_failing_c
     bad = WorkRef(source="hub", ref=cast(str, None))
     chunk = Chunk(chunk_id="ch_1", graph_id="gr_1", work_refs=[pointer, bad], minted_at=_NOW)
 
-    with pytest.raises(IntegrityError):
+    with pytest.raises(HubStoreError):
         store.create_with_chunk(
             pointer=pointer,
             title="t",

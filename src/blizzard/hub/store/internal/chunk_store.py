@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import Connection, Engine, func, insert, select, update
+from sqlalchemy import Connection, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.artifacts import ArtifactKind
@@ -64,6 +64,7 @@ from blizzard.hub.domain.work import (
     WorkRef,
 )
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreConnections
 
 _ROUTE_PREFIX = "route"
 
@@ -231,21 +232,21 @@ def insert_materialization_row(
 class ChunkStore:
     """Read-write chunk-facts adapter over the hub store engine."""
 
-    def __init__(self, engine: Engine, clock: IClock) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+        self._store = store
         self._clock = clock
 
     # --- reads --------------------------------------------------------------
 
     def get(self, chunk_id: str) -> Chunk | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get") as conn:
             row = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
             if row is None or chunk_id in self._ephemeral_ids(conn):
                 return None  # a grouped-away or deleted chunk is ephemeral — gone from every read
             return self._chunk(conn, row)
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
-        with self._engine.connect() as conn:
+        with self._store.read("load_facts") as conn:
             chunk = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
             if chunk is None or chunk_id in self._ephemeral_ids(conn):
                 return None
@@ -459,7 +460,7 @@ class ChunkStore:
         this shape's precedent. Every family reproduces :meth:`load_facts`'s row
         construction verbatim; only ``chunk_pause_facts`` is read in an explicit order,
         since :meth:`ChunkFacts.open_pause` indexes its list's tail."""
-        with self._engine.connect() as conn:
+        with self._store.read("load_all_facts") as conn:
             ephemeral = self._ephemeral_ids(conn)
             graph_id_of = {
                 r.chunk_id: r.graph_id
@@ -691,7 +692,7 @@ class ChunkStore:
             }
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
-        with self._engine.connect() as conn:
+        with self._store.read("load_artifacts") as conn:
             return [
                 ArtifactRow(
                     kind=ArtifactKind(a.kind),
@@ -710,7 +711,7 @@ class ChunkStore:
 
     def route_of(self, chunk_id: str) -> Route | None:
         """The chunk's live route, or ``None`` if its newest release has caught up to it."""
-        with self._engine.connect() as conn:
+        with self._store.read("route_of") as conn:
             return self._route_of_conn(conn, chunk_id)
 
     @staticmethod
@@ -758,7 +759,7 @@ class ChunkStore:
         per route table, grouped by chunk id in Python the way :meth:`load_all_facts` is,
         deferring liveness to the same :class:`~blizzard.hub.domain.work.RouteHistory.newest`
         tie-break :meth:`_route_of_conn` uses."""
-        with self._engine.connect() as conn:
+        with self._store.read("load_all_routes") as conn:
             newest_created: dict[str, RouteCreatedFact] = {}
             route_id_of: dict[str, str] = {}
             runner_of: dict[str, str] = {}
@@ -814,7 +815,7 @@ class ChunkStore:
         one bulk query grouped by chunk id in Python (issue #421) rather than :meth:`_chunk`'s
         per-chunk query, the same shape :meth:`load_all_facts` reads its own tables in — so
         the list route's own chunk read is bounded regardless of fleet size too."""
-        with self._engine.connect() as conn:
+        with self._store.read("list_all") as conn:
             ephemeral = self._ephemeral_ids(conn)
             rows = [
                 r
@@ -845,7 +846,7 @@ class ChunkStore:
 
     def queue_positions(self) -> dict[str, float]:
         """The newest explicit queue position per chunk — the ordering the peek honours."""
-        with self._engine.connect() as conn:
+        with self._store.read("queue_positions") as conn:
             rows = conn.execute(
                 select(s.queue_positions.c.chunk_id, s.queue_positions.c.position, s.queue_positions.c.id).order_by(
                     s.queue_positions.c.id
@@ -856,12 +857,12 @@ class ChunkStore:
 
     def promoted_ats(self) -> dict[str, datetime]:
         """Each promoted chunk's ``chunk_promoted.promoted_at`` (issue #137)."""
-        with self._engine.connect() as conn:
+        with self._store.read("promoted_ats") as conn:
             rows = conn.execute(select(s.chunk_promoted.c.chunk_id, s.chunk_promoted.c.promoted_at)).all()
         return {r.chunk_id: r.promoted_at for r in rows}
 
     def find_live_holder(self, pointer: WorkRef) -> str | None:
-        with self._engine.connect() as conn:
+        with self._store.read("find_live_holder") as conn:
             ephemeral = self._ephemeral_ids(conn)
             chunk_ids = [
                 p.chunk_id
@@ -879,7 +880,7 @@ class ChunkStore:
         return None
 
     def live_work_refs(self) -> dict[WorkRef, ChunkStatus]:
-        with self._engine.connect() as conn:
+        with self._store.read("live_work_refs") as conn:
             ephemeral = self._ephemeral_ids(conn)
             rows = conn.execute(
                 select(s.chunk_work_refs.c.chunk_id, s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref)
@@ -895,7 +896,7 @@ class ChunkStore:
         return result
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
-        with self._engine.connect() as conn:
+        with self._store.read("pending_close_intents") as conn:
             ephemeral = self._ephemeral_ids(conn)
             rows = conn.execute(
                 select(s.close_intents.c.chunk_id, s.close_intents.c.source, s.close_intents.c.ref)
@@ -909,7 +910,7 @@ class ChunkStore:
         ]
 
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
-        with self._engine.begin() as conn:
+        with self._store.write("unmaterialized_proposals") as conn:
             ephemeral = self._ephemeral_ids(conn)
             delivered = {
                 r.chunk_id
@@ -971,7 +972,7 @@ class ChunkStore:
         )
 
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
-        with self._engine.connect() as conn:
+        with self._store.read("accepted_transition_target") as conn:
             row = conn.execute(
                 select(s.transitions.c.to_node_id).where(
                     (s.transitions.c.chunk_id == chunk_id)
@@ -982,7 +983,7 @@ class ChunkStore:
             return row.to_node_id if row is not None else None
 
     def landed_repos(self, chunk_id: str) -> set[str]:
-        with self._engine.connect() as conn:
+        with self._store.read("landed_repos") as conn:
             return {
                 r.repo
                 for r in conn.execute(
@@ -991,19 +992,19 @@ class ChunkStore:
             }
 
     def runner_high_water(self, runner_id: str) -> int:
-        with self._engine.connect() as conn:
+        with self._store.read("runner_high_water") as conn:
             row = conn.execute(
                 select(s.runner_high_water.c.seq).where(s.runner_high_water.c.runner_id == runner_id)
             ).one_or_none()
             return int(row.seq) if row is not None else 0
 
     def get_question(self, question_id: str) -> QuestionRow | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get_question") as conn:
             row = conn.execute(QUESTIONS.select.where(s.questions.c.question_id == question_id)).one_or_none()
             return QUESTIONS.of(row) if row is not None else None
 
     def list_open_questions(self) -> list[QuestionRow]:
-        with self._engine.connect() as conn:
+        with self._store.read("list_open_questions") as conn:
             rows = conn.execute(
                 QUESTIONS.select.where(
                     s.questions.c.question_id.not_in(select(s.question_answers.c.question_id))
@@ -1012,19 +1013,19 @@ class ChunkStore:
             return [QUESTIONS.of(row) for row in rows]
 
     def load_questions(self, chunk_id: str) -> list[QuestionRow]:
-        with self._engine.connect() as conn:
+        with self._store.read("load_questions") as conn:
             rows = conn.execute(
                 QUESTIONS.select.where(s.questions.c.chunk_id == chunk_id).order_by(s.questions.c.asked_at)
             ).all()
             return [QUESTIONS.of(row) for row in rows]
 
     def get_decision(self, decision_id: str) -> DecisionRow | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get_decision") as conn:
             row = conn.execute(select(s.decisions).where(s.decisions.c.decision_id == decision_id)).one_or_none()
             return self._decision_row(conn, row) if row is not None else None
 
     def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> DecisionRow | None:
-        with self._engine.connect() as conn:
+        with self._store.read("find_decision") as conn:
             row = conn.execute(
                 select(s.decisions).where(
                     (s.decisions.c.chunk_id == chunk_id)
@@ -1035,7 +1036,7 @@ class ChunkStore:
             return self._decision_row(conn, row) if row is not None else None
 
     def decision_for_chunk(self, chunk_id: str) -> DecisionRow | None:
-        with self._engine.connect() as conn:
+        with self._store.read("decision_for_chunk") as conn:
             rows = conn.execute(
                 select(s.decisions)
                 .where(s.decisions.c.chunk_id == chunk_id)
@@ -1048,13 +1049,13 @@ class ChunkStore:
             return None
 
     def list_open_decisions(self) -> list[DecisionRow]:
-        with self._engine.connect() as conn:
+        with self._store.read("list_open_decisions") as conn:
             rows = conn.execute(select(s.decisions).order_by(s.decisions.c.submitted_at)).all()
             decisions = [self._decision_row(conn, row) for row in rows]
             return [d for d in decisions if not d.resolved]
 
     def usage_since(self, since: datetime, *, until: datetime | None = None) -> list[UsageFact]:
-        with self._engine.connect() as conn:
+        with self._store.read("usage_since") as conn:
             query = select(s.usage_facts).where(s.usage_facts.c.recorded_at >= since)
             if until is not None:
                 query = query.where(s.usage_facts.c.recorded_at < until)
@@ -1083,7 +1084,7 @@ class ChunkStore:
         since: datetime | None = None,
         limit: int = DEFAULT_EVENT_LIST_LIMIT,
     ) -> list[EventRow]:
-        with self._engine.connect() as conn:
+        with self._store.read("list_events") as conn:
             stmt = select(s.event_log)
             if severity is not None:
                 stmt = stmt.where(s.event_log.c.severity == severity)
@@ -1122,7 +1123,7 @@ class ChunkStore:
 
     def _newest_escalation_per_chunk(self):  # type: ignore[no-untyped-def]
         """The newest ``escalations`` row per chunk. Low-volume, so a full scan is fine."""
-        with self._engine.connect() as conn:
+        with self._store.read("_newest_escalation_per_chunk") as conn:
             newest_by_chunk = {}
             for e in conn.execute(select(s.escalations)).all():
                 current = newest_by_chunk.get(e.chunk_id)
@@ -1139,7 +1140,7 @@ class ChunkStore:
         if not newest_by_chunk:
             return []
         chunk_ids = list(newest_by_chunk)
-        with self._engine.connect() as conn:
+        with self._store.read("_escalation_candidates") as conn:
             lease_rows = conn.execute(select(s.lease_facts).where(s.lease_facts.c.chunk_id.in_(chunk_ids))).all()
             requeue_rows = conn.execute(select(s.requeues).where(s.requeues.c.chunk_id.in_(chunk_ids))).all()
         superseding: dict[str, list[datetime]] = {}
@@ -1158,7 +1159,7 @@ class ChunkStore:
         mapped ``ChunkChangeCause`` fact table, concatenated, unsorted across sources.
         Every per-chunk source joins ``chunks`` for its current ``graph_id``, except
         ``transitions``/``chunk_migrations``, which carry their own column."""
-        with self._engine.connect() as conn:
+        with self._store.read("activity_facts_since") as conn:
             rows: list[ActivityRow] = []
             # Resolved once (issue #364): every fact-source block below excludes a
             # deleted chunk by referencing this same subquery, rather than repeating it.
@@ -1576,13 +1577,13 @@ class ChunkStore:
     # --- writes -------------------------------------------------------------
 
     def mint(self, chunk: Chunk) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("mint") as conn:
             insert_chunk_rows(conn, chunk)
 
     def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
         # Idempotent by chunk_id: a chunk already promoted keeps its first row, so a
         # double promote (board click, CLI retry) is a harmless no-op.
-        with self._engine.begin() as conn:
+        with self._store.write("record_promote") as conn:
             if self._exists(conn, s.chunk_promoted, chunk_id):
                 return None
             result = conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
@@ -1592,7 +1593,7 @@ class ChunkStore:
     def record_promote_with_tail_position(self, chunk_id: str, *, position: float, at: datetime) -> int | None:
         # One transaction: a crash between the two writes would otherwise let a stale
         # backlog position outrank the tail stamp on restart.
-        with self._engine.begin() as conn:
+        with self._store.write("record_promote_with_tail_position") as conn:
             if self._exists(conn, s.chunk_promoted, chunk_id):
                 return None
             result = conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
@@ -1601,13 +1602,13 @@ class ChunkStore:
             return int(key[0]) if key is not None else None
 
     def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("record_lease") as conn:
             conn.execute(
                 insert(s.lease_facts).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
             )
 
     def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("set_runner_high_water") as conn:
             existing = conn.execute(
                 select(s.runner_high_water.c.runner_id).where(s.runner_high_water.c.runner_id == runner_id)
             ).one_or_none()
@@ -1627,7 +1628,7 @@ class ChunkStore:
         (:meth:`_next_route_seq`), allocated by its own call to the allocator, never a
         fixed +1. Returns the freshly-minted ``route_created.route_id`` (issue #213)."""
         route_id = Id.mint(_ROUTE_PREFIX, self._clock).value
-        with self._engine.begin() as conn:
+        with self._store.write("record_route") as conn:
             conn.execute(
                 insert(s.route_created).values(
                     route_id=route_id,
@@ -1651,7 +1652,7 @@ class ChunkStore:
             return route_id
 
     def record_route_released(self, chunk_id: str, *, at: datetime) -> int:
-        with self._engine.begin() as conn:
+        with self._store.write("record_route_released") as conn:
             result = conn.execute(
                 insert(s.route_released).values(
                     chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
@@ -1665,7 +1666,7 @@ class ChunkStore:
         Same allocator as :meth:`record_route`'s own token fact, its own call rather
         than a fixed +1, so it stays correctly ordered against a concurrent
         create/release/re-key on this chunk."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_route_token") as conn:
             conn.execute(
                 insert(s.route_token_minted).values(
                     chunk_id=chunk_id,
@@ -1690,7 +1691,7 @@ class ChunkStore:
         proposals: list[WorkItemProposalRow],
         decision_id: str | None = None,
     ) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("record_transition") as conn:
             conn.execute(
                 insert(s.transitions).values(
                     transition_id=transition_id,
@@ -1784,7 +1785,7 @@ class ChunkStore:
             )
 
     def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("record_delivery_repo_landed") as conn:
             conn.execute(
                 insert(s.delivery_repo_landed).values(
                     chunk_id=chunk_id, repo=repo, commit_hash=commit_hash, landed_at=at
@@ -1793,7 +1794,7 @@ class ChunkStore:
             self._enqueue_close_intents(conn, chunk_id, at=at)
 
     def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("record_delivery_landed") as conn:
             conn.execute(insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
             self._enqueue_close_intents(conn, chunk_id, at=at)
 
@@ -1805,7 +1806,7 @@ class ChunkStore:
         outcome also retires the matching pending ``close_intents`` row, same transaction,
         whether or not this call wrote a fresh outcome row — a replay finishes an
         interrupted retirement. See ``blizzard-context/architecture/crash-correctness/hub.md``."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_work_item_closure") as conn:
             already = conn.execute(
                 select(s.work_item_closures.c.id).where(
                     (s.work_item_closures.c.chunk_id == chunk_id)
@@ -1848,7 +1849,7 @@ class ChunkStore:
         reason: str | None,
         at: datetime,
     ) -> bool:
-        with self._engine.begin() as conn:
+        with self._store.write("record_work_item_materialization") as conn:
             return insert_materialization_row(
                 conn, proposal_id=proposal_id, outcome=outcome, pointer=pointer, reason=reason, at=at
             )
@@ -1869,7 +1870,7 @@ class ChunkStore:
 
         The hub lease, ``delivery.landed``, the terminal transition and the route release
         are one transaction; guarded by ``delivery.landed``, True only when it wrote."""
-        with self._engine.begin() as conn:
+        with self._store.write("finalize_delivery") as conn:
             already = conn.execute(
                 select(s.delivery_landed.c.id).where(s.delivery_landed.c.chunk_id == chunk_id)
             ).first()
@@ -1907,7 +1908,7 @@ class ChunkStore:
         A pre-check within the same transaction (mirroring :meth:`record_hub_step_transition`)
         rather than a DB constraint: a redelivery replay at the coordinator's same
         ``hub_epoch`` re-enters harmlessly. Returns True iff it wrote."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_bounce") as conn:
             already = conn.execute(
                 select(s.chunk_bounces.c.id).where(
                     (s.chunk_bounces.c.chunk_id == chunk_id) & (s.chunk_bounces.c.epoch == epoch)
@@ -1930,7 +1931,7 @@ class ChunkStore:
         The hub lease and the escalation fact land in one transaction, guarded by the
         escalation's existence at this epoch. No transition: the chunk's held route and
         stuck node are untouched. Returns True iff it wrote."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_bounce_escalation") as conn:
             already = conn.execute(
                 select(s.escalations.c.id).where(
                     (s.escalations.c.chunk_id == chunk_id) & (s.escalations.c.epoch == epoch)
@@ -1958,7 +1959,7 @@ class ChunkStore:
         decision_id: str | None = None,
         wrapped_takeover_command: str = "",
     ) -> int:
-        with self._engine.begin() as conn:
+        with self._store.write("record_escalation") as conn:
             result = conn.execute(
                 insert(s.escalations).values(
                     chunk_id=chunk_id,
@@ -1990,7 +1991,7 @@ class ChunkStore:
     ) -> None:
         # Append-only, no epoch fence, no second dedup key — the caller's per-runner seq
         # high-water mark already guarantees at most one call per landed fact.
-        with self._engine.begin() as conn:
+        with self._store.write("record_usage") as conn:
             conn.execute(
                 insert(s.usage_facts).values(
                     chunk_id=chunk_id,
@@ -2023,7 +2024,7 @@ class ChunkStore:
     ) -> int:
         # Append-only operational fact (issue #125), no epoch fence. `detail` serializes
         # to JSON text here; `chunk_id` is None for a runner-scoped event.
-        with self._engine.begin() as conn:
+        with self._store.write("record_event") as conn:
             result = conn.execute(
                 insert(s.event_log).values(
                     severity=severity,
@@ -2054,7 +2055,7 @@ class ChunkStore:
         asked_at: datetime,
     ) -> None:
         # Idempotent by question_id: a store-and-forward replay re-lands the same row.
-        with self._engine.begin() as conn:
+        with self._store.write("record_question") as conn:
             exists = conn.execute(
                 select(s.questions.c.question_id).where(s.questions.c.question_id == question_id)
             ).first()
@@ -2078,7 +2079,7 @@ class ChunkStore:
         # First-write-wins CAS: the answer row's PK is the question id, so a racing
         # second insert raises IntegrityError and the loser reads back the winner.
         try:
-            with self._engine.begin() as conn:
+            with self._store.write("answer_question", expect=(IntegrityError,)) as conn:
                 conn.execute(
                     insert(s.question_answers).values(
                         question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at
@@ -2088,7 +2089,7 @@ class ChunkStore:
                 won=True, question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at
             )
         except IntegrityError:
-            with self._engine.connect() as conn:
+            with self._store.read("answer_question_conflict_lookup") as conn:
                 winner = conn.execute(
                     select(s.question_answers).where(s.question_answers.c.question_id == question_id)
                 ).one()
@@ -2101,7 +2102,7 @@ class ChunkStore:
             )
 
     def record_answer_delivered(self, *, question_id: str, chunk_id: str, at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("record_answer_delivered") as conn:
             conn.execute(
                 insert(s.answer_deliveries).values(question_id=question_id, chunk_id=chunk_id, delivered_at=at)
             )
@@ -2120,7 +2121,7 @@ class ChunkStore:
         proposals: list[WorkItemProposalRow],
     ) -> None:
         payload = json.dumps([{"name": c.name, "description": c.description} for c in choices])
-        with self._engine.begin() as conn:
+        with self._store.write("record_decision") as conn:
             conn.execute(
                 insert(s.decisions).values(
                     decision_id=decision_id,
@@ -2155,7 +2156,7 @@ class ChunkStore:
     def record_decision_resolution(
         self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, struck: Sequence[str] = ()
     ) -> bool:
-        with self._engine.begin() as conn:
+        with self._store.write("record_decision_resolution") as conn:
             existing = conn.execute(
                 select(s.decision_resolutions.c.decision_id).where(s.decision_resolutions.c.decision_id == decision_id)
             ).one_or_none()
@@ -2184,7 +2185,7 @@ class ChunkStore:
             return True
 
     def record_requeue(self, chunk_id: str, *, at: datetime) -> int:
-        with self._engine.begin() as conn:
+        with self._store.write("record_requeue") as conn:
             result = conn.execute(insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
@@ -2207,7 +2208,7 @@ class ChunkStore:
         longer runs still pins it; each answer keeps first-write-wins. The fence epoch is derived
         HERE rather than handed down — one above every prior attempt is a read-then-write only this
         transaction holds together (``bzh:epoch-fencing``)."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_restart") as conn:
             epoch = self._latest_epoch(conn, chunk_id) + 1
             for question_id in answered_question_ids:
                 already = conn.execute(
@@ -2292,7 +2293,7 @@ class ChunkStore:
 
         A migration writes no ``transitions`` row, so the transition-replay probe cannot
         see it; this is its counterpart, on :meth:`record_migration`'s natural key."""
-        with self._engine.connect() as conn:
+        with self._store.read("accepted_migration") as conn:
             return self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch)
 
     def record_migration(
@@ -2320,7 +2321,7 @@ class ChunkStore:
         One transaction: the fact, the ``chunks.graph_id`` re-pin, the route release
         (unless ``release_route``, #111), this step's artifacts and proposals, and the
         intent clear (``clear_intent``, #124). Keyed ``(chunk_id, from_node_id, epoch)``."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_migration") as conn:
             if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
                 return None
             resolved_migration_id = (
@@ -2392,18 +2393,18 @@ class ChunkStore:
 
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
         """Append the moved chunk's new ready-queue position; order derives."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_queue_position") as conn:
             conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
 
     def record_backlog_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("record_backlog_position") as conn:
             if self._exists(conn, s.chunk_promoted, chunk_id):
                 return  # promoted since the caller resolved backlog candidates — not this write's chunk anymore
             conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
 
     def add_work_refs(self, chunk_id: str, pointers: list[WorkRef], *, at: datetime) -> None:
         """Fold pointers into the survivor of a group, de-duped by (source, ref)."""
-        with self._engine.begin() as conn:
+        with self._store.write("add_work_refs") as conn:
             existing = {
                 (p.source, p.ref)
                 for p in conn.execute(
@@ -2422,7 +2423,7 @@ class ChunkStore:
 
     def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> int:
         """Record ``chunk.grouped`` — the merged-away chunk is ephemeral now."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_grouped") as conn:
             result = conn.execute(
                 insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at)
             )
@@ -2431,7 +2432,7 @@ class ChunkStore:
 
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_pause") as conn:
             result = conn.execute(
                 insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by)
             )
@@ -2444,7 +2445,7 @@ class ChunkStore:
         ``kill -9`` cannot leave the chunk durably ``stopped`` with its route still live.
         The route check runs against this same connection (:meth:`_route_of_conn`), so
         there is no read-then-write race. The slot release is unconditional."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_stop") as conn:
             result = conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by))
             if self._route_of_conn(conn, chunk_id) is not None:
                 conn.execute(
@@ -2466,7 +2467,7 @@ class ChunkStore:
         :meth:`record_stop`, so a ``kill -9`` cannot leave the chunk durably ``done`` with
         its route still live. The caller has already checked the chunk is not already
         ``done`` — this always writes a fresh row."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_completion") as conn:
             result = conn.execute(insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=at, completed_by=by))
             if self._route_of_conn(conn, chunk_id) is not None:
                 conn.execute(
@@ -2485,13 +2486,13 @@ class ChunkStore:
 
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
         """Repin a not-ready or ready-unclaimed chunk to a different workflow graph (issue #27, #120)."""
-        with self._engine.begin() as conn:
+        with self._store.write("set_graph") as conn:
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
 
     def set_defaults(self, chunk_id: str, *, default_model: list[str], default_effort: str | None) -> None:
         """Repin a not-ready or ready-unclaimed chunk's default model/effort (issues #27,
         #120, #144) — both in one write; see :meth:`IWriteChunkRepository.set_defaults`."""
-        with self._engine.begin() as conn:
+        with self._store.write("set_defaults") as conn:
             conn.execute(
                 update(s.chunks)
                 .where(s.chunks.c.chunk_id == chunk_id)
@@ -2506,7 +2507,7 @@ class ChunkStore:
 
         A plain column overwrite, editable at any non-terminal status. The column
         carries no timestamp, so this write takes no ``at``."""
-        with self._engine.begin() as conn:
+        with self._store.write("set_intended_migration") as conn:
             conn.execute(
                 update(s.chunks)
                 .where(s.chunks.c.chunk_id == chunk_id)
@@ -2520,7 +2521,7 @@ class ChunkStore:
         fact, ``bzh:facts-not-status`` — never an in-process lock, so the invariant
         checker can assert at most one live slot and a ``kill -9`` mid-run leaves a
         stale, reclaimable row rather than a wedged fleet)."""
-        with self._engine.begin() as conn:
+        with self._store.write("acquire_hub_exec_slot") as conn:
             # Force sqlite's whole-database write lock BEFORE the read-then-insert below,
             # closing the race a bare SELECT leaves open (see ``_next_route_seq``).
             conn.execute(update(s.hub_exec_slot).values(node_id=s.hub_exec_slot.c.node_id))
@@ -2543,7 +2544,7 @@ class ChunkStore:
             return slot_id
 
     def release_hub_exec_slot(self, chunk_id: str, *, at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("release_hub_exec_slot") as conn:
             conn.execute(
                 update(s.hub_exec_slot)
                 .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
@@ -2551,7 +2552,7 @@ class ChunkStore:
             )
 
     def count_live_hub_exec_slots(self) -> int:
-        with self._engine.connect() as conn:
+        with self._store.read("count_live_hub_exec_slots") as conn:
             return int(
                 conn.execute(
                     select(func.count()).select_from(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))
@@ -2560,7 +2561,7 @@ class ChunkStore:
             )
 
     def has_hub_artifact(self, chunk_id: str, *, node_id: str, epoch: int, name: str) -> bool:
-        with self._engine.connect() as conn:
+        with self._store.read("has_hub_artifact") as conn:
             return (
                 conn.execute(
                     select(s.artifacts.c.artifact_id).where(
@@ -2579,7 +2580,7 @@ class ChunkStore:
         """Append one hub-node progress artifact **outside** a transition (#65),
         idempotent per ``(chunk, node, name, epoch)`` — the ``produces:`` re-run skip's
         durable side, and the mid-run marker callback's write."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_hub_artifact") as conn:
             already = conn.execute(
                 select(s.artifacts.c.artifact_id).where(
                     (s.artifacts.c.chunk_id == chunk_id)
@@ -2628,7 +2629,7 @@ class ChunkStore:
         Two guards, both returning False: the transition's existence at ``(chunk_id,
         from_node_id, epoch)`` absorbs a redelivery replay, and the chunk's CURRENT epoch
         absorbs a restart that re-aimed it while the ``run:`` list ran (``bzh:epoch-fencing``)."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_hub_step_transition") as conn:
             already = conn.execute(
                 select(s.transitions.c.transition_id).where(
                     (s.transitions.c.chunk_id == chunk_id)
@@ -2686,7 +2687,7 @@ class ChunkStore:
     def record_hub_node_poll(self, chunk_id: str, *, node_id: str, epoch: int, at: datetime) -> None:
         """Append one pending-poll-attempt fact (#66) — never a transition, no
         idempotency guard (an at-least-once poll attempt is harmless recorded twice)."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_hub_node_poll") as conn:
             conn.execute(insert(s.hub_node_poll).values(chunk_id=chunk_id, node_id=node_id, epoch=epoch, polled_at=at))
 
     # --- helpers ------------------------------------------------------------

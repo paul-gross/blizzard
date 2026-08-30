@@ -19,7 +19,7 @@ from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import EscalationOpen, EventFeed, EventRow
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore
-from tests.support import migrate_to, seed_chunk, seed_graph
+from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
 
@@ -37,7 +37,7 @@ def _store(tmp_path: Path) -> ChunkStore:
         seed_graph(conn, "gr_1", at=_T0)
         seed_chunk(conn, "ch_a", graph_id="gr_1", at=_T0)
         seed_chunk(conn, "ch_b", graph_id="gr_1", at=_T0)
-    return ChunkStore(engine, FixedClock(_T0))
+    return ChunkStore(hub_store_connections(engine), FixedClock(_T0))
 
 
 def test_record_event_roundtrips_columns_and_json_detail(tmp_path: Path) -> None:
@@ -134,7 +134,7 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
 
 def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    with store._engine.begin() as conn:  # seed the requeue and stop cases' chunks
+    with store._store.write("test_seed_chunks") as conn:  # seed the requeue and stop cases' chunks
         seed_chunk(conn, "ch_c", graph_id="gr_1", at=_T0)
         seed_chunk(conn, "ch_d", graph_id="gr_1", at=_T0)
         seed_chunk(conn, "ch_e", graph_id="gr_1", at=_T0)

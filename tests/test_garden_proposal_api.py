@@ -14,7 +14,7 @@ from sqlalchemy import insert
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import build_hub
+from tests.support import build_hub, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -24,7 +24,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 def _seed(hub) -> None:  # type: ignore[no-untyped-def]
     with hub.engine.begin() as conn:
         conn.execute(insert(s.scopes).values(slug="blizzard", description="", created_at=_NOW))
-    FindingStore(hub.engine).add(
+    FindingStore(hub_store_connections(hub.engine)).add(
         "fin_1",
         routine_name="nightly",
         scope_slug="blizzard",
@@ -39,7 +39,7 @@ def _seed(hub) -> None:  # type: ignore[no-untyped-def]
 def test_list_renders_every_proposal_newest_first(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed(hub)
-    proposals = GardenProposalStore(hub.engine)
+    proposals = GardenProposalStore(hub_store_connections(hub.engine))
     proposals.create(
         "gprop_old", routine_name="nightly", class_="c", title="old", body="b", findings=["fin_1"], at=_NOW
     )
@@ -62,7 +62,7 @@ def test_list_renders_every_proposal_newest_first(tmp_path: Path) -> None:
 def test_get_renders_one_proposal(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed(hub)
-    GardenProposalStore(hub.engine).create(
+    GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
         routine_name="nightly",
         class_="fix-the-source",

@@ -23,7 +23,7 @@ from blizzard.hub.domain.transcripts import (
     TranscriptIngestService,
 )
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
-from tests.support import build_hub, seed_chunk, seed_graph
+from tests.support import build_hub, hub_store_connections, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -64,7 +64,7 @@ def _record(
 def test_replayed_batch_applies_nothing_new_and_returns_the_same_high_water(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    service = TranscriptIngestService(store=TranscriptSegmentStore(hub.engine), clock=hub.clock)
+    service = TranscriptIngestService(store=TranscriptSegmentStore(hub_store_connections(hub.engine)), clock=hub.clock)
     batch = [_record(1, turn_range_start=0, turn_range_end=0), _record(2, turn_range_start=1, turn_range_end=1)]
 
     first = service.ingest("r1", batch)
@@ -80,7 +80,7 @@ def test_replayed_batch_applies_nothing_new_and_returns_the_same_high_water(tmp_
 def test_a_batch_straddling_the_mark_applies_only_whats_past_it(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    service = TranscriptIngestService(store=TranscriptSegmentStore(hub.engine), clock=hub.clock)
+    service = TranscriptIngestService(store=TranscriptSegmentStore(hub_store_connections(hub.engine)), clock=hub.clock)
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
 
     result = service.ingest(
@@ -101,7 +101,7 @@ def test_a_re_offer_under_a_fresh_seq_dedupes_against_the_natural_key(tmp_path: 
     — the natural key must, and without raising on the schema's unique constraint."""
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    store = TranscriptSegmentStore(hub.engine)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(store=store, clock=hub.clock)
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
 
@@ -119,7 +119,7 @@ def test_a_below_mark_record_the_hub_no_longer_holds_is_stored_not_reported_idem
     for a natural key the hub does not hold destroys the only copy of that content."""
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    store = TranscriptSegmentStore(hub.engine)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(store=store, clock=hub.clock)
     service.ingest(
         "r1", [_record(1, turn_range_start=0, turn_range_end=0), _record(2, turn_range_start=1, turn_range_end=1)]
@@ -138,7 +138,7 @@ def test_a_below_mark_record_the_hub_no_longer_holds_is_stored_not_reported_idem
 def test_a_re_offer_of_a_previously_rejected_record_is_re_adjudicated_not_falsely_applied(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    store = TranscriptSegmentStore(hub.engine)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(store=store, clock=hub.clock)
     big = "x" * (RECORD_MAX_BYTES + 1)
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
@@ -162,7 +162,7 @@ def test_a_re_offer_that_accepts_refreshes_the_first_offers_identity_fields(tmp_
     stored row and the derived index row, not just the content."""
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    store = TranscriptSegmentStore(hub.engine)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(store=store, clock=hub.clock)
     big = "x" * (RECORD_MAX_BYTES + 1)
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, final=False, turns_json=big)])
@@ -181,7 +181,7 @@ def test_a_re_offer_that_accepts_refreshes_the_first_offers_identity_fields(tmp_
 def test_a_re_offer_of_a_still_over_cap_record_stays_capped_not_applied(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    store = TranscriptSegmentStore(hub.engine)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(store=store, clock=hub.clock)
     big = "x" * (RECORD_MAX_BYTES + 1)
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
@@ -198,7 +198,7 @@ def test_a_re_offer_of_a_still_over_cap_record_stays_capped_not_applied(tmp_path
 def test_a_tail_record_ingested_after_completion_reads_back_in_turn_range_order(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    store = TranscriptSegmentStore(hub.engine)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(store=store, clock=hub.clock)
 
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
@@ -212,7 +212,7 @@ def test_a_tail_record_ingested_after_completion_reads_back_in_turn_range_order(
 def test_a_segment_is_complete_only_on_its_final_marker(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    store = TranscriptSegmentStore(hub.engine)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(store=store, clock=hub.clock)
 
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, final=False)])
@@ -230,7 +230,7 @@ def test_a_segment_is_complete_only_on_its_final_marker(tmp_path: Path) -> None:
 def test_an_oversized_record_is_rejected_acked_and_advances_the_high_water(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    store = TranscriptSegmentStore(hub.engine)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(store=store, clock=hub.clock)
     big = "x" * (RECORD_MAX_BYTES + 1)
 
@@ -267,7 +267,7 @@ def test_the_three_caps_are_the_magnitudes_that_govern_today() -> None:
 def test_the_chunk_budget_cap_rejects_independently_of_the_other_two(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    store = TranscriptSegmentStore(hub.engine)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(store=store, clock=hub.clock, caps=TranscriptCaps(chunk_budget_max_bytes=50))
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json="a" * 40)])
 
@@ -281,7 +281,7 @@ def test_the_chunk_budget_cap_rejects_independently_of_the_other_two(tmp_path: P
 def test_the_runner_daily_rate_cap_rejects_independently_of_the_other_two(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    store = TranscriptSegmentStore(hub.engine)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(store=store, clock=hub.clock, caps=TranscriptCaps(runner_daily_rate_max_bytes=50))
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json="a" * 40)])
 
@@ -297,7 +297,7 @@ def test_a_cap_rejection_leaves_a_readable_truncation_mark_even_as_the_segments_
 ) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    store = TranscriptSegmentStore(hub.engine)
+    store = TranscriptSegmentStore(hub_store_connections(hub.engine))
     service = TranscriptIngestService(store=store, clock=hub.clock)
     big = "x" * (RECORD_MAX_BYTES + 1)
 

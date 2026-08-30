@@ -35,7 +35,7 @@ from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
-from tests.support import migrate_to, seed_chunk, seed_graph, seed_work_item
+from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -44,9 +44,10 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStore, UserRepository, Engine, FixedClock]:
     _, engine = migrate_to(tmp_path, "head")
-    items = WorkItemStore(engine)
+    store = hub_store_connections(engine)
+    items = WorkItemStore(store)
     clock = FixedClock(_T0)
-    chunks = ChunkStore(engine, clock)
+    chunks = ChunkStore(store, clock)
     delete = DeleteService(chunks=chunks, items=items, clock=clock, claim_lock=threading.Lock())
     edits = WorkItemEditService(items=items, chunks=chunks, clock=clock, delete=delete)
     users = UserRepository(engine, RepoErrorFactory(get_logger("tests.test_hub_work_source")))
