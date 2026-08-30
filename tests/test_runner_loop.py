@@ -41,7 +41,7 @@ from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, Resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import NewLease
+from blizzard.runner.store.repository import NewLease, RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.wire.chunk import ChunkDetail, ChunkUsageTotalView, RouteView
 from blizzard.wire.completion import SubmittedArtifact
@@ -59,6 +59,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    runner_store_errors,
 )
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -2235,8 +2236,8 @@ class _CountingPreambleStore(SqlAlchemyRunnerStore):
     """The real store with one read counted (issue #149) — a subclass, not a hand-written
     double, so every other method the loop touches keeps its genuine behaviour."""
 
-    def __init__(self, engine: Engine) -> None:
-        super().__init__(engine)
+    def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
+        super().__init__(engine, errors)
         self.fingerprint_reads: list[str] = []
 
     def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
@@ -2249,7 +2250,7 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
     """The lookup is resume-**gated**, not merely resume-shaped (issue #149): hoisting
     the read above the `resume_from` check passes every other test here (a fresh session
     has no prior row *yet*) but silently elides prose once a session id is reused."""
-    store = _CountingPreambleStore(_engine_for(tmp_path))
+    store = _CountingPreambleStore(_engine_for(tmp_path), runner_store_errors())
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
     build_env = make_envelope(
@@ -2294,7 +2295,7 @@ def test_an_empty_resume_from_is_not_treated_as_a_resume(tmp_path):  # type: ign
     """The core's "is this a resume?" predicate matches the ADAPTER's (issue #149): the
     adapter treats an empty `resume_from` as a brand-new session, while a core keyed on
     `is not None` would look up a fingerprint for `""` and could wrongly elide."""
-    store = _CountingPreambleStore(_engine_for(tmp_path))
+    store = _CountingPreambleStore(_engine_for(tmp_path), runner_store_errors())
     hub = FakeHub()
     envelope = _build_envelope()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")

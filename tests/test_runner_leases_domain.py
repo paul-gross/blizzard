@@ -21,9 +21,9 @@ from blizzard.runner.domain.leases import (
     LocalLeaseService,
 )
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import LeaseRecord, NewLease
+from blizzard.runner.store.repository import LeaseRecord, NewLease, RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
-from tests.runner_fakes import FakeProbe, make_store
+from tests.runner_fakes import FakeProbe, make_store, runner_store_errors
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -248,8 +248,8 @@ def test_a_lease_with_neither_a_beat_nor_a_spawn_falls_back_to_its_mint(tmp_path
 class _CountingParkedIdsStore(SqlAlchemyRunnerStore):
     """The real store, instrumented to count ``parked_lease_ids`` calls (N+1 guard)."""
 
-    def __init__(self, engine: Engine) -> None:
-        super().__init__(engine)
+    def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
+        super().__init__(engine, errors)
         self.parked_lease_ids_calls = 0
 
     def parked_lease_ids(self) -> set[str]:
@@ -260,7 +260,7 @@ class _CountingParkedIdsStore(SqlAlchemyRunnerStore):
 def _counting_store(tmp_path) -> _CountingParkedIdsStore:  # type: ignore[no-untyped-def]
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     runner_metadata.create_all(engine)
-    return _CountingParkedIdsStore(engine)
+    return _CountingParkedIdsStore(engine, runner_store_errors())
 
 
 @pytest.mark.component

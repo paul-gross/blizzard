@@ -13,15 +13,42 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import NewLease
+from blizzard.runner.store.repository import NewLease, RunnerStoreError, RunnerStoreErrorFactory
 from blizzard.runner.store.schema import park_facts, pause_parks
-from tests.runner_fakes import make_store
+from tests.runner_fakes import make_store, runner_store_errors
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+
+
+class _FakeRunnerStoreErrors(RunnerStoreErrorFactory):
+    """A fake collaborator that records every wrap without ever touching the real
+    logger its base class carries (issue #413) — proves the store's driver-error wrap
+    is substitutable by injection."""
+
+    def __init__(self) -> None:
+        self.wrapped: list[str] = []
+
+    def from_driver(self, exc: Exception, *, operation: str) -> RunnerStoreError:
+        self.wrapped.append(operation)
+        return RunnerStoreError(f"fake wrap: {operation}")
+
+
+@pytest.mark.unit
+def test_the_driver_error_wrap_is_substitutable_by_injection(tmp_path: Path) -> None:
+    """``_wrap`` is an injected ``RunnerStoreErrorFactory``, not a module-level logger
+    (issue #413) — a fake factory observes the wrap without reaching into the module."""
+    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")  # unmigrated: every query is a driver fault
+    errors = _FakeRunnerStoreErrors()
+    store = SqlAlchemyRunnerStore(engine, errors)
+
+    with pytest.raises(RunnerStoreError):
+        store.pending_outbound()
+
+    assert errors.wrapped == ["query"]
 
 
 @pytest.mark.unit
@@ -153,7 +180,7 @@ def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_
     config = runner_runtime.init_environment(tmp_path)
     engine = create_engine_from_url(config.db_url)
     try:
-        store = SqlAlchemyRunnerStore(engine)
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
         store.record_lease(
             NewLease(
                 lease_id="lease_1",

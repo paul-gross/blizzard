@@ -23,6 +23,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import NewLease
 from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
+from tests.runner_fakes import runner_store_errors
 from tests.service.support import mint_fixture, mock_hub, require_mock_fleet, require_winter_source, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -37,7 +38,7 @@ def _seed_lease(config: RunnerConfig, *, lease_id: str, token: str, graph_id: st
     construction, a graph declaring no ``artifacts:`` block."""
     engine = create_engine_from_url(config.db_url)
     try:
-        store = SqlAlchemyRunnerStore(engine)
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
         store.record_lease(
             NewLease(
                 lease_id=lease_id,

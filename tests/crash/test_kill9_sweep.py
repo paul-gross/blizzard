@@ -56,6 +56,7 @@ from tests.crash.support import (
     wait_status,
     write_runner_config,
 )
+from tests.runner_fakes import runner_store_errors
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -573,7 +574,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     # Seed a lease + its capability token, then park it, through a store the daemon does not
     # yet hold; dispose so the hosted daemon opens the sqlite file with no concurrent writer.
     engine = create_engine_from_url(db_url)
-    store = SqlAlchemyRunnerStore(engine)
+    store = SqlAlchemyRunnerStore(engine, runner_store_errors())
     store.record_lease(
         NewLease(
             lease_id="lease_attach",
@@ -620,7 +621,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         # worker submitted, though the 200 never returned.
         engine2 = create_engine_from_url(db_url)
         try:
-            assert SqlAlchemyRunnerStore(engine2).attachments_for_lease("lease_attach") == {
+            assert SqlAlchemyRunnerStore(engine2, runner_store_errors()).attachments_for_lease("lease_attach") == {
                 _ATTACH_NAME: _ATTACH_CONTENT
             }
             with engine2.connect() as conn:
@@ -647,7 +648,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         await_http(runner, "/api/health", proc=runner_proc)
         engine3 = create_engine_from_url(db_url)
         try:
-            assert SqlAlchemyRunnerStore(engine3).attachments_for_lease("lease_attach") == {
+            assert SqlAlchemyRunnerStore(engine3, runner_store_errors()).attachments_for_lease("lease_attach") == {
                 _ATTACH_NAME: _ATTACH_CONTENT
             }
         finally:
@@ -689,7 +690,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     # Seed a lease + its capability token, then park it, through a store the daemon does not
     # yet hold; dispose so the hosted daemon opens the sqlite file with no concurrent writer.
     engine = create_engine_from_url(db_url)
-    store = SqlAlchemyRunnerStore(engine)
+    store = SqlAlchemyRunnerStore(engine, runner_store_errors())
     store.record_lease(
         NewLease(
             lease_id="lease_declare_commit",
@@ -753,7 +754,9 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         # the worker submitted, though the 200 never returned.
         engine2 = create_engine_from_url(db_url)
         try:
-            declarations = SqlAlchemyRunnerStore(engine2).git_commit_declarations_for_lease("lease_declare_commit")
+            declarations = SqlAlchemyRunnerStore(engine2, runner_store_errors()).git_commit_declarations_for_lease(
+                "lease_declare_commit"
+            )
             assert set(declarations) == {(_DECLARE_COMMIT_ENV, _DECLARE_COMMIT_REPO)}
             declared = declarations[(_DECLARE_COMMIT_ENV, _DECLARE_COMMIT_REPO)]
             assert (declared.environment_id, declared.repo, declared.branch, declared.commit) == (
@@ -787,7 +790,9 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         await_http(runner, "/api/health", proc=runner_proc)
         engine3 = create_engine_from_url(db_url)
         try:
-            declarations = SqlAlchemyRunnerStore(engine3).git_commit_declarations_for_lease("lease_declare_commit")
+            declarations = SqlAlchemyRunnerStore(engine3, runner_store_errors()).git_commit_declarations_for_lease(
+                "lease_declare_commit"
+            )
             assert set(declarations) == {(_DECLARE_COMMIT_ENV, _DECLARE_COMMIT_REPO)}
         finally:
             engine3.dispose()
@@ -1157,7 +1162,7 @@ def _ingest_hanging_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: s
 def _runner_store(runner_dir: Path) -> tuple[SqlAlchemyRunnerStore, Engine]:
     """A read store over the runner's sqlite plus its engine (dispose after use)."""
     engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
-    return SqlAlchemyRunnerStore(engine), engine
+    return SqlAlchemyRunnerStore(engine, runner_store_errors()), engine
 
 
 def _leases_for_chunk(runner_dir: Path, chunk_id: str) -> list[tuple[str, int, str | None, int | None]]:

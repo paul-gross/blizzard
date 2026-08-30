@@ -39,7 +39,7 @@ from blizzard.runner.loop.transcript_backfill import (
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.store.repository import IWriteRunnerStore, RunnerStoreErrorFactory
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -69,7 +69,7 @@ class LoopWiring:
         """Wire a :class:`LoopContext`; the caller owns the ``httpx.Client`` behind ``hub``."""
         config = self.config
         engine = create_engine_from_url(config.db_url)
-        store = SqlAlchemyRunnerStore(engine)
+        store = SqlAlchemyRunnerStore(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
         provider = WinterWorkspaceProvider(
             config.workspace_root, env_pool=config.workspace_envs, base_branch=config.base_branch
         )

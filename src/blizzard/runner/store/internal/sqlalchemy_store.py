@@ -38,7 +38,7 @@ from blizzard.runner.store.repository import (
     OutboundFactRecord,
     ParkRecord,
     PoolHead,
-    RunnerStoreError,
+    RunnerStoreErrorFactory,
     TakeoverRecord,
     TranscriptBackfillLease,
     TranscriptSegmentLedgerRow,
@@ -209,8 +209,9 @@ def _enqueue_transcript_final(conn, segment, *, at: datetime) -> None:  # type: 
 class SqlAlchemyRunnerStore:
     """Read-write runner store over a SQLAlchemy engine."""
 
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
         self._engine = engine
+        self._errors = errors
 
     # --- reads --------------------------------------------------------------
 
@@ -1834,25 +1835,20 @@ class SqlAlchemyRunnerStore:
         try:
             return self._engine.connect()
         except SQLAlchemyError as exc:
-            raise self._wrap(exc, "connect") from exc
+            raise self._errors.from_driver(exc, operation="connect") from exc
 
     def _begin(self):  # type: ignore[no-untyped-def]
         try:
             return self._engine.begin()
         except SQLAlchemyError as exc:
-            raise self._wrap(exc, "begin") from exc
+            raise self._errors.from_driver(exc, operation="begin") from exc
 
     def _all(self, stmt):  # type: ignore[no-untyped-def]
         try:
             with self._engine.connect() as conn:
                 return list(conn.execute(stmt))
         except SQLAlchemyError as exc:
-            raise self._wrap(exc, "query") from exc
-
-    @staticmethod
-    def _wrap(exc: SQLAlchemyError, operation: str) -> RunnerStoreError:
-        _log.error("runner store operation failed", operation=operation, detail=str(exc))
-        return RunnerStoreError(f"runner store {operation} failed: {exc}")
+            raise self._errors.from_driver(exc, operation="query") from exc
 
 
 def _conforms_runner_store(x: SqlAlchemyRunnerStore) -> IWriteRunnerStore:

@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 
+import structlog
 from sqlalchemy import MetaData
 
 from blizzard.foundation.chunk_status import ChunkStatus
@@ -38,7 +39,7 @@ from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore
+from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore, RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_segments
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
@@ -62,11 +63,17 @@ from blizzard.wire.route import RouteClaim, RouteClaimResponse, RouteTokenRekeyR
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
+def runner_store_errors() -> RunnerStoreErrorFactory:
+    """The runner-store seam (issue #413) every test's ``SqlAlchemyRunnerStore``
+    construction supplies — one helper so its call sites construct it identically."""
+    return RunnerStoreErrorFactory(structlog.get_logger("test"))
+
+
 def make_store(tmp_path_url: str) -> SqlAlchemyRunnerStore:
     """A migrated (schema-created) runner store over a fresh sqlite file."""
     engine = create_engine_from_url(tmp_path_url)
     _create_all(runner_metadata, engine)
-    return SqlAlchemyRunnerStore(engine)
+    return SqlAlchemyRunnerStore(engine, runner_store_errors())
 
 
 def _create_all(md: MetaData, engine: object) -> None:

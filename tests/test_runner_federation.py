@@ -25,6 +25,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.schema import metadata
+from tests.runner_fakes import runner_store_errors
 
 pytestmark = pytest.mark.component
 
@@ -85,7 +86,7 @@ def _build_app(
         public_urls=("https://runner-a.example", *extra_public_urls),
         trusted_proxies=trusted_proxies,
     )
-    store = SqlAlchemyRunnerStore(engine)
+    store = SqlAlchemyRunnerStore(engine, runner_store_errors())
     runner_status = RunnerStatusService(
         store=store,
         clock=SystemClock(),

@@ -26,12 +26,13 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import NewLease
+from tests.runner_fakes import runner_store_errors
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
 def _store(root: Path) -> SqlAlchemyRunnerStore:
-    return SqlAlchemyRunnerStore(create_engine_from_url(RunnerConfig.load(root).db_url))
+    return SqlAlchemyRunnerStore(create_engine_from_url(RunnerConfig.load(root).db_url), runner_store_errors())
 
 
 def _init_runner(tmp_path: Path) -> Path:
