@@ -156,9 +156,6 @@ _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": None,
     # A read-only driver-exception catch, not schema/query access.
     _RUNNER_DIR / "cli" / "prompt.py": ("SQLAlchemyError",),
-    # D7/Phase 5 closes this: the last remaining driver-exception leak, moving into
-    # foundation/store/migrations.py so both daemons share the fix.
-    _RUNNER_DIR / "runtime.py": ("OperationalError",),
 }
 
 
