@@ -871,3 +871,48 @@ def test_a_grouped_chunks_missing_intent_is_not_a_violation(tmp_path: Path) -> N
         conn.execute(insert(hub.chunk_grouped).values(chunk_id="ch_1", grouped_into="ch_2", grouped_at=_NOW))
     slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" not in slugs
+
+
+def _segment_values(**overrides: object) -> dict[str, object]:
+    values: dict[str, object] = {
+        "segment_id": "sg_1",
+        "chunk_id": "ch_1",
+        "node_id": "nd_build",
+        "epoch": 1,
+        "spawn_generation": 1,
+        "runner_id": "r1",
+        "turn_range_start": 0,
+        "turn_range_end": 0,
+        "final": True,
+        "rejected": False,
+        "byte_count": 10,
+        "codec": "zlib",
+        "content": b"",
+        "normalizer_version": "claude-code-jsonl/2",
+        "received_at": _NOW,
+    }
+    values.update(overrides)
+    return values
+
+
+def test_a_segment_naming_no_chunk_is_a_violation(tmp_path: Path) -> None:
+    """The production shape this check exists to name: sqlite enforces none of the schema's
+    foreign keys, so a segment can outlive — or never have had — the chunk row it declares."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.transcript_segments).values(**_segment_values(chunk_id="ch_never_minted")))
+
+    violations = [v for v in HubInvariants(engine).run() if v.invariant == "hub:segment-chunk-resolves"]
+
+    assert [v.detail for v in violations] == ["segment sg_1 names unknown chunk ch_never_minted"]
+
+
+def test_a_segment_naming_a_minted_chunk_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
+        conn.execute(insert(hub.transcript_segments).values(**_segment_values()))
+
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+
+    assert "hub:segment-chunk-resolves" not in slugs

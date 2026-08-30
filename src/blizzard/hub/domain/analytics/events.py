@@ -78,10 +78,10 @@ class IReadTranscriptEvents(Protocol):
 
     def visible_segment_ids(self, *, chunk_id: str | None = None) -> frozenset[str]:
         """Every segment id the hub's own read path would show today (D1) — final, not
-        superseded — narrowed to ``chunk_id`` when given (the re-derive route's
-        chunk-scoped call, D7). The derivation service's candidate set is this, filtered
-        against :meth:`derivation_marker`; the reconciler diffs the unscoped set against
-        :meth:`derived_segment_ids` to find a segment to drop."""
+        superseded, and pointing at a chunk that exists — narrowed to ``chunk_id`` when given
+        (the re-derive route's chunk-scoped call, D7). The candidate set is this, filtered
+        against :meth:`derivation_marker`; the reconciler drops whatever
+        :meth:`derived_segment_ids` holds beyond it."""
         ...
 
     def derived_segment_ids(self) -> frozenset[str]:

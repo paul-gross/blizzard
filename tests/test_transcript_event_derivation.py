@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -117,6 +117,12 @@ class _Fixture:
             artifacts=[],
             proposals=[],
         )
+
+    def drop_chunk_row(self, chunk_id: str) -> None:
+        """The breach ``hub:segment-chunk-resolves`` names, injected directly: sqlite
+        enforces no foreign key, so a segment can outlive the chunk row it declares."""
+        with self.engine.begin() as conn:
+            conn.execute(delete(s.chunks).where(s.chunks.c.chunk_id == chunk_id))
 
     def stored_events(self) -> list[Any]:
         with self.engine.connect() as conn:
@@ -246,3 +252,73 @@ def test_a_content_hole_segment_derives_incomplete_then_re_derives_once_accepted
     assert marker_after is not None
     assert marker_after.complete is True
     assert marker_after.event_count == 1
+
+
+# --- a segment whose chunk no chunk read shows leaves the derivation set entirely ---
+
+
+def test_a_segment_whose_chunk_was_never_minted_is_not_a_candidate(fixture: _Fixture) -> None:
+    """A segment can outlive — or never have had — its chunk row, and the sweep must
+    converge over it rather than re-reaching an underivable segment every tick."""
+    fixture.segments.insert_accepted(
+        _segment_record(segment_id="sg_orphan", chunk_id="ch_never_minted"), byte_count=10, codec="zlib", at=_NOW
+    )
+
+    fixture.reconciler.sweep()
+
+    assert fixture.events.visible_segment_ids() == frozenset()
+    assert fixture.service.candidate_segment_ids() == []
+    assert fixture.stored_events() == []
+
+
+def test_a_segment_that_outlives_its_chunk_row_has_its_derived_rows_dropped(fixture: _Fixture) -> None:
+    """Rows derived before the breach do not survive it: the sweep's own drop path
+    reclaims a segment the visible set no longer holds."""
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.reconciler.sweep()
+    assert len(fixture.stored_events()) == 1
+
+    fixture.drop_chunk_row("ch_1")
+    fixture.reconciler.sweep()
+
+    assert fixture.events.visible_segment_ids() == frozenset()
+    assert fixture.stored_events() == []
+    assert fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION) is None
+
+
+def test_forcing_a_segment_whose_chunk_does_not_resolve_is_a_no_op_rather_than_a_crash(fixture: _Fixture) -> None:
+    """The segment-scoped re-derive route forces a segment regardless of candidacy, so it
+    reaches one the visible set excludes and must decline it rather than raise."""
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.drop_chunk_row("ch_1")
+
+    assert fixture.service.derive_segment("sg_1") is False
+    assert fixture.stored_events() == []
+
+
+class _PoisonedService(EventDerivationService):
+    """Raises on one segment id, standing in for any segment the sweep cannot derive."""
+
+    def __init__(self, *, poison: str, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._poison = poison
+
+    def derive_segment(self, segment_id: str) -> bool:
+        if segment_id == self._poison:
+            raise RuntimeError("underivable")
+        return super().derive_segment(segment_id)
+
+
+def test_one_underivable_segment_does_not_cost_the_rest_of_the_tick(fixture: _Fixture) -> None:
+    """A segment that raises is stepped over, not fatal — every later candidate still
+    derives."""
+    fixture.mint_chunk("ch_2")
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.segments.insert_accepted(
+        _segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW
+    )
+    poisoned = _PoisonedService(poison="sg_1", events=fixture.events, chunks=fixture.chunks, clock=fixture.clock)
+
+    EventDerivationReconciler(service=poisoned, events=fixture.events).sweep()
+
+    assert [row.segment_id for row in fixture.stored_events()] == ["sg_2"]

@@ -30,12 +30,20 @@ from blizzard.wire.transcript_segment import TurnSegmentView
 # compiles the real ones under both dialects (`bzh:sql-portable`).
 
 
+def _minted_chunk_ids_subselect() -> Select[Any]:
+    """Every chunk id the ``chunks`` table holds — the parent ``transcript_segments.chunk_id``
+    declares a foreign key to. A subquery, not a ``_stmt`` builder: composed into one, never
+    executed itself."""
+    return select(s.chunks.c.chunk_id)
+
+
 def _visible_segment_ids_stmt(chunk_id: str | None = None) -> Select[Any]:
     superseded = select(s.transcript_segments.c.supersedes).where(s.transcript_segments.c.supersedes.is_not(None))
     stmt = (
         select(s.transcript_segments.c.segment_id)
         .where(s.transcript_segments.c.final.is_(True))
         .where(s.transcript_segments.c.segment_id.not_in(superseded))
+        .where(s.transcript_segments.c.chunk_id.in_(_minted_chunk_ids_subselect()))
         .distinct()
     )
     if chunk_id is not None:

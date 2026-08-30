@@ -65,14 +65,15 @@ class EventDerivationService:
     def derive_segment(self, segment_id: str) -> bool:
         """One transaction: recognize every event this segment's turns hold today,
         stamp the node-step context, and replace this ``(segment_id, extractor_version)``
-        pair's rows and marker (D6). A no-longer-existing segment is a no-op — the
-        reconciler's own drop path (D1) is what removes a superseded segment's rows.
-        Returns whether the segment actually had derivation input, so callers can
-        distinguish that no-op from an ordinary derive."""
+        pair's rows and marker (D6). Returns whether it derived: a segment that no longer
+        exists, or whose ``chunk_id`` resolves to no chunk, is the no-op a caller must not
+        count — the reconciler's drop path (D1) is what reclaims such a segment's rows."""
         current = self._events.segment_derivation_input(segment_id)
         if current is None:
             return False
         graph_id = self._resolve_graph_id(current.chunk_id, current.node_id, current.epoch)
+        if graph_id is None:
+            return False
         extracted = extract_events(
             current.turns, normalizer_version=current.normalizer_version, extractors=self._extractors
         )
@@ -105,7 +106,10 @@ class EventDerivationService:
         )
         return True
 
-    def _resolve_graph_id(self, chunk_id: str, node_id: str, epoch: int) -> str:
+    def _resolve_graph_id(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
+        """The node-step's graph (D4), or ``None`` when no chunk resolves — a segment
+        whose ``chunk_id`` names none breaches the foreign key its table declares, so
+        derivation declines it and ``hub:segment-chunk-resolves`` is what reports it."""
         facts = self._chunks.load_facts(chunk_id)
         matches = [
             t
@@ -117,8 +121,7 @@ class EventDerivationService:
             assert newest.graph_id is not None  # narrowed by the filter above
             return newest.graph_id
         chunk = self._chunks.get(chunk_id)
-        assert chunk is not None, f"transcript segment references unknown chunk {chunk_id!r}"
-        return chunk.graph_id
+        return chunk.graph_id if chunk is not None else None
 
 
 class EventDerivationReconciler:
@@ -131,10 +134,20 @@ class EventDerivationReconciler:
         self._events = events
 
     def sweep(self) -> None:
+        """One convergence pass. A segment that raises is stepped over rather than ending
+        the tick, which would cost every later candidate its derivation and the drop pass
+        behind them, on every tick. The record names the segment and the fault but carries
+        no traceback: a store fault already logged one at its wrap site, and any other is
+        reproducible on demand through the segment-scoped re-derive route."""
         derived = 0
+        failed = 0
         for segment_id in self._service.candidate_segment_ids():
-            self._service.derive_segment(segment_id)
-            derived += 1
+            try:
+                if self._service.derive_segment(segment_id):
+                    derived += 1
+            except Exception as exc:
+                failed += 1
+                _log.warning("segment derivation skipped", segment_id=segment_id, fault=repr(exc))
 
         visible = self._events.visible_segment_ids()
         dropped = 0
@@ -142,4 +155,4 @@ class EventDerivationReconciler:
             self._events.drop_segment(segment_id)
             dropped += 1
 
-        _log.info("transcript event derivation sweep completed", derived=derived, dropped=dropped)
+        _log.info("transcript event derivation sweep completed", derived=derived, dropped=dropped, failed=failed)

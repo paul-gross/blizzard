@@ -25,7 +25,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import transcript_event_store as store_module
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
-from tests.support import hub_store_connections
+from tests.support import hub_store_connections, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
 
@@ -95,10 +95,16 @@ def _event(**overrides: object) -> TranscriptEvent:
     return TranscriptEvent(**values)  # type: ignore[arg-type]
 
 
-def _migrated_engine(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _migrated_engine(tmp_path: Path, *, chunk_ids: tuple[str, ...] = ("ch_1", "ch_2")):  # type: ignore[no-untyped-def]
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
-    return create_engine_from_url(db_url)
+    engine = create_engine_from_url(db_url)
+    # A segment is visible only while its chunk is, so the visible-set cases need one.
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=_NOW)
+        for chunk_id in chunk_ids:
+            seed_chunk(conn, chunk_id, graph_id="gr_1", at=_NOW)
+    return engine
 
 
 # --- dialect-portable DDL and the statements the store itself executes -------
@@ -214,6 +220,21 @@ def test_visible_segment_ids_narrows_to_the_given_chunk(tmp_path: Path) -> None:
     assert store.visible_segment_ids(chunk_id="ch_1") == frozenset({"sg_1"})
     assert store.visible_segment_ids(chunk_id="ch_2") == frozenset({"sg_2"})
     assert store.visible_segment_ids() == frozenset({"sg_1", "sg_2"})
+
+
+def test_visible_segment_ids_excludes_a_segment_naming_no_chunk(tmp_path: Path) -> None:
+    """Sqlite enforces no foreign key, so a segment can name a chunk the table never held;
+    ``hub:segment-chunk-resolves`` reports it, and the visible set leaves it out."""
+    engine = _migrated_engine(tmp_path)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(
+        _segment_record(segment_id="sg_orphan", chunk_id="ch_never_minted"), byte_count=10, codec="zlib", at=_NOW
+    )
+
+    store = TranscriptEventStore(hub_store_connections(engine))
+
+    assert store.visible_segment_ids() == frozenset()
+    assert store.visible_segment_ids(chunk_id="ch_never_minted") == frozenset()
 
 
 # --- decode ----------------------------------------------------------------

@@ -710,6 +710,28 @@ class RunnerInvariants:
 
 
 @dataclass(frozen=True)
+class SegmentChunkResolves(QueryCheck):
+    """Every ``transcript_segments.chunk_id`` resolves to a ``chunks`` row — the foreign key
+    the table declares, which sqlite does not enforce. A breach hides a chunk's transcripts
+    from every read that joins through the chunk, so transcript-event derivation declines the
+    segment rather than deriving a node-step it cannot place."""
+
+    def run(self) -> list[Violation]:
+        minted = {row[0] for row in self.conn.execute(select(hub.chunks.c.chunk_id))}
+        orphans = {
+            (row.segment_id, row.chunk_id)
+            for row in self.conn.execute(
+                select(hub.transcript_segments.c.segment_id, hub.transcript_segments.c.chunk_id).distinct()
+            )
+            if row.chunk_id not in minted
+        }
+        return [
+            Violation("hub:segment-chunk-resolves", f"segment {segment_id} names unknown chunk {chunk_id}")
+            for segment_id, chunk_id in sorted(orphans)
+        ]
+
+
+@dataclass(frozen=True)
 class HubInvariants:
     """The hub store's durable invariants (transitions, epochs, delivery)."""
 
@@ -731,6 +753,7 @@ class HubInvariants:
                 NoDoubleTerminalClosure(conn),
                 NoPendingIntentAgainstATerminalRef(conn),
                 NoUnenqueuedClosableRef(conn),
+                SegmentChunkResolves(conn),
             )
             for check in checks:
                 violations.extend(check.run())
