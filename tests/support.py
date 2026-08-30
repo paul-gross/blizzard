@@ -19,7 +19,7 @@ from typing import IO
 import sqlalchemy as sa
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 from sqlalchemy import insert as sa_insert
 
 from blizzard.auth_core import Role
@@ -892,3 +892,20 @@ def seed_work_item(
     return store.create_with_chunk(
         pointer=pointer, title=title, body=body, author=author, stated_priority=stated_priority, at=at, chunk=chunk
     )
+
+
+def count_queries(engine: Engine, fn: Callable[[], object]) -> int:
+    """How many statements ``fn`` issues on ``engine`` — what a bulk-read test asserts is
+    flat as the fleet grows, rather than growing per chunk."""
+    count = 0
+
+    def before_cursor_execute(*_: object) -> None:
+        nonlocal count
+        count += 1
+
+    event.listen(engine, "before_cursor_execute", before_cursor_execute)
+    try:
+        fn()
+    finally:
+        event.remove(engine, "before_cursor_execute", before_cursor_execute)
+    return count

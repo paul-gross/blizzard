@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy import Engine, event, insert
+from sqlalchemy import Engine, insert
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -25,7 +25,7 @@ from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import Chunk, ChunkFacts, DecisionChoice, FleetSummary, MigrationSource
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore, record_deleted_row
-from tests.support import build_hub, hub_store_connections, ingest, migrate_to, seed_graph
+from tests.support import build_hub, count_queries, hub_store_connections, ingest, migrate_to, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -350,25 +350,11 @@ def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> N
         large.mint(Chunk(chunk_id=f"ch_{i}", graph_id="gr_1", work_refs=[], minted_at=_T0))
         large.record_promote(f"ch_{i}", at=_T0)
 
-    small_count = _count_queries(small_engine, small.load_all_facts)
-    large_count = _count_queries(large_engine, large.load_all_facts)
+    small_count = count_queries(small_engine, small.load_all_facts)
+    large_count = count_queries(large_engine, large.load_all_facts)
 
     assert small_count == large_count
     assert large_count < 40  # bounded by table count, not chunk count
-
-
-def _count_queries(engine: Engine, fn) -> int:  # type: ignore[no-untyped-def]
-    count = {"n": 0}
-
-    def before_cursor_execute(conn, cursor, statement, parameters, context, executemany) -> None:  # type: ignore[no-untyped-def]
-        count["n"] += 1
-
-    event.listen(engine, "before_cursor_execute", before_cursor_execute)
-    try:
-        fn()
-    finally:
-        event.remove(engine, "before_cursor_execute", before_cursor_execute)
-    return count["n"]
 
 
 def test_fleet_pulse_view_calls_load_all_facts_and_never_load_facts_or_list_all(tmp_path: Path) -> None:

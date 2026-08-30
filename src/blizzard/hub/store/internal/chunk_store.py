@@ -839,10 +839,20 @@ class ChunkStore:
             ]
 
     def list_ready(self) -> list[Chunk]:
-        return [c for c in self.list_all() if self._status(c.chunk_id) is ChunkStatus.READY]
+        return self._listed_with_status(ChunkStatus.READY)
 
     def list_not_ready(self) -> list[Chunk]:
-        return [c for c in self.list_all() if self._status(c.chunk_id) is ChunkStatus.NOT_READY]
+        return self._listed_with_status(ChunkStatus.NOT_READY)
+
+    def _listed_with_status(self, status: ChunkStatus) -> list[Chunk]:
+        """:meth:`list_all` narrowed by derived status, over :meth:`load_all_facts`'s bulk
+        read rather than :meth:`_status`'s per-chunk fan-out — the queue and backlog peeks
+        read the whole fleet, so their cost must not scale with it (issue #421's shape).
+        Reading the listing first means a chunk deleted between the two reads is excluded,
+        never mistaken for one whose facts are simply unwritten."""
+        chunks = self.list_all()
+        statuses = {chunk_id: facts.status() for chunk_id, facts in self.load_all_facts().items()}
+        return [c for c in chunks if statuses.get(c.chunk_id) is status]
 
     def queue_positions(self) -> dict[str, float]:
         """The newest explicit queue position per chunk — the ordering the peek honours."""

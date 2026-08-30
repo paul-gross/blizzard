@@ -769,8 +769,8 @@
   },
   "blizzard/foundation/logging.py": {
    "comments": 2,
-   "docstrings": 7,
-   "total": 71
+   "docstrings": 16,
+   "total": 90
   },
   "blizzard/foundation/node_steps.py": {
    "comments": 0,
@@ -1344,8 +1344,8 @@
   },
   "blizzard/hub/domain/analytics/derivation.py": {
    "comments": 1,
-   "docstrings": 24,
-   "total": 145
+   "docstrings": 31,
+   "total": 158
   },
   "blizzard/hub/domain/analytics/events.py": {
    "comments": 5,
@@ -1639,8 +1639,8 @@
   },
   "blizzard/hub/store/internal/chunk_store.py": {
    "comments": 74,
-   "docstrings": 175,
-   "total": 2833
+   "docstrings": 180,
+   "total": 2843
   },
   "blizzard/hub/store/internal/finding_store.py": {
    "comments": 4,
@@ -1674,8 +1674,8 @@
   },
   "blizzard/hub/store/internal/transcript_event_store.py": {
    "comments": 5,
-   "docstrings": 14,
-   "total": 247
+   "docstrings": 17,
+   "total": 255
   },
   "blizzard/hub/store/internal/transcript_segment_store.py": {
    "comments": 15,
@@ -3019,8 +3019,8 @@
   },
   "blizzard/tools/invariants.py": {
    "comments": 23,
-   "docstrings": 65,
-   "total": 760
+   "docstrings": 69,
+   "total": 783
   },
   "blizzard/tools/openapi.py": {
    "comments": 0,
@@ -3481,8 +3481,8 @@
   },
   "support.py": {
    "comments": 39,
-   "docstrings": 124,
-   "total": 894
+   "docstrings": 126,
+   "total": 911
   },
   "test_activity_api.py": {
    "comments": 2,
@@ -4311,8 +4311,8 @@
   },
   "test_invariant_checker.py": {
    "comments": 20,
-   "docstrings": 79,
-   "total": 873
+   "docstrings": 81,
+   "total": 918
   },
   "test_is_retryable_push_error.py": {
    "comments": 0,
@@ -4345,24 +4345,24 @@
    "total": 40
   },
   "test_list_chunks_bulk_reads.py": {
-   "comments": 5,
+   "comments": 3,
    "docstrings": 7,
-   "total": 110
+   "total": 95
   },
   "test_load_all_facts_store.py": {
-   "comments": 24,
+   "comments": 22,
    "docstrings": 12,
-   "total": 406
+   "total": 392
   },
   "test_load_all_routes_store.py": {
    "comments": 4,
    "docstrings": 4,
-   "total": 75
+   "total": 76
   },
   "test_logging.py": {
    "comments": 1,
-   "docstrings": 5,
-   "total": 37
+   "docstrings": 12,
+   "total": 90
   },
   "test_marker_auth.py": {
    "comments": 3,
@@ -4528,6 +4528,11 @@
    "comments": 29,
    "docstrings": 6,
    "total": 371
+  },
+  "test_queue_bulk_reads.py": {
+   "comments": 4,
+   "docstrings": 7,
+   "total": 90
   },
   "test_queue_service.py": {
    "comments": 23,
@@ -5065,9 +5070,9 @@
    "total": 573
   },
   "test_transcript_event_derivation.py": {
-   "comments": 3,
-   "docstrings": 10,
-   "total": 248
+   "comments": 4,
+   "docstrings": 21,
+   "total": 324
   },
   "test_transcript_event_extraction.py": {
    "comments": 3,
@@ -5075,9 +5080,9 @@
    "total": 235
   },
   "test_transcript_event_store.py": {
-   "comments": 8,
-   "docstrings": 9,
-   "total": 386
+   "comments": 9,
+   "docstrings": 11,
+   "total": 407
   },
   "test_transcript_ingest_service.py": {
    "comments": 12,

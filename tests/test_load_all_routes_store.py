@@ -12,7 +12,8 @@ import pytest
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import Chunk
 from blizzard.hub.store.internal.chunk_store import ChunkStore
-from tests.test_load_all_facts_store import _LIVE_CHUNK_IDS, _T0, _count_queries, _seed_fixture, _store
+from tests.support import count_queries
+from tests.test_load_all_facts_store import _LIVE_CHUNK_IDS, _T0, _seed_fixture, _store
 
 pytestmark = pytest.mark.component
 
@@ -58,8 +59,8 @@ def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> N
     for i in range(40):
         _seed_route(large, f"ch_{i}")
 
-    small_count = _count_queries(small_engine, small.load_all_routes)
-    large_count = _count_queries(large_engine, large.load_all_routes)
+    small_count = count_queries(small_engine, small.load_all_routes)
+    large_count = count_queries(large_engine, large.load_all_routes)
 
     assert small_count == large_count
     assert large_count < 40  # bounded by table count, not chunk count
