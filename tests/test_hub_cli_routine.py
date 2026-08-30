@@ -8,7 +8,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 
@@ -45,7 +44,7 @@ def test_routine_create_posts_name_graph_and_scope(monkeypatch: pytest.MonkeyPat
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group,
         ["routine", "create", "nightly", "alpha", "blizzard"],
@@ -76,7 +75,7 @@ def test_routine_create_collects_repeated_model_options(monkeypatch: pytest.Monk
         calls.append((url, json))
         return _FakeResponse(201, {"routine_id": "rtn_1", "name": "nightly"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     CliRunner().invoke(
         hub_group,
         ["routine", "create", "nightly", "alpha", "blizzard", "--model", "a", "--model", "b", "--effort", "high"],
@@ -91,7 +90,7 @@ def test_routine_create_maps_a_422_to_a_click_exception(monkeypatch: pytest.Monk
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "no enabled graph named 'ghost' exists"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["routine", "create", "nightly", "ghost", "blizzard"])
 
     assert result.exit_code != 0
@@ -106,7 +105,7 @@ def test_routine_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
             [{"routine_id": "rtn_1", "name": "nightly", "graph_name": "alpha", "default_scope_slug": "blizzard"}],
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["routine", "list"])
 
     assert result.exit_code == 0, result.output
@@ -119,7 +118,7 @@ def test_routine_list_on_no_routines_prints_a_friendly_message(monkeypatch: pyte
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [])
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["routine", "list"])
 
     assert result.exit_code == 0, result.output
@@ -141,7 +140,7 @@ def test_routine_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["routine", "show", "rtn_1"])
 
     assert result.exit_code == 0, result.output
@@ -155,7 +154,7 @@ def test_routine_show_maps_an_unknown_routine(monkeypatch: pytest.MonkeyPatch) -
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["routine", "show", "rtn_ghost"])
 
     assert result.exit_code != 0
@@ -175,8 +174,8 @@ def test_routine_edit_reads_the_current_name_then_patches(monkeypatch: pytest.Mo
         patch_calls.append((url, json))
         return _FakeResponse(200, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "beta"})
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(
         hub_group,
         ["routine", "edit", "rtn_1", "--graph", "beta", "--scope", "blizzard"],

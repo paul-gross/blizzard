@@ -15,9 +15,8 @@ import httpx
 import pytest
 from click.testing import CliRunner, Result
 
-import blizzard.hub.cli as hub_cli
-from blizzard.hub.cli import _DATASETS
 from blizzard.hub.cli import hub as hub_group
+from blizzard.hub.cli.analytics import _DATASETS
 from tests.support import HubHarness
 from tests.test_analytics_events_api import _cookie, _seeded_hub
 from tests.test_analytics_spend_api import _mint_chunk, _push_usage
@@ -49,8 +48,8 @@ def _relay(hub: HubHarness, token: str, monkeypatch: pytest.MonkeyPatch) -> None
         with hub.client.stream(method, url, params=params, headers=headers) as resp:
             yield resp
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
-    monkeypatch.setattr(hub_cli.httpx, "stream", fake_stream)
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "stream", fake_stream)
 
 
 def _invoke(*args: str) -> Result:

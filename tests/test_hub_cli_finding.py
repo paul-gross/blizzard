@@ -8,7 +8,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 
@@ -35,7 +34,7 @@ def test_finding_list_passes_routine_scope_and_include_gone(monkeypatch: pytest.
         calls.append((url, params))
         return _FakeResponse(200, [])
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(
         hub_group,
         ["finding", "list", "--routine", "nightly", "--scope", "blizzard", "--include-gone"],
@@ -69,7 +68,7 @@ def test_finding_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
             ],
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["finding", "list", "--routine", "nightly", "--scope", "blizzard"])
 
     assert result.exit_code == 0, result.output
@@ -96,7 +95,7 @@ def test_finding_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch) -> Non
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["finding", "show", "fin_1"])
 
     assert result.exit_code == 0, result.output
@@ -109,7 +108,7 @@ def test_finding_show_unknown_id_reports_404(monkeypatch: pytest.MonkeyPatch) ->
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown finding fin_ghost"})
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["finding", "show", "fin_ghost"])
 
     assert result.exit_code != 0

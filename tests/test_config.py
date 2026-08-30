@@ -563,7 +563,7 @@ def test_work_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_work_source_name_with_a_colon_raises(tmp_path: Path) -> None:
-    # see hub/cli.py's ingest token parsing.
+    # see hub/cli/chunk.py's ingest token parsing.
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(

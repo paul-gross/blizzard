@@ -13,7 +13,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 
@@ -46,7 +45,7 @@ def test_graph_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
             ],
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["graph", "list"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
@@ -62,7 +61,7 @@ def test_graph_list_on_no_graphs_prints_a_friendly_message(monkeypatch: pytest.M
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [])
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["graph", "list"])
 
     assert result.exit_code == 0, result.output
@@ -77,7 +76,7 @@ def test_graph_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyPat
         calls.append((url, json))
         return _FakeResponse(202, {"graph_id": "gr_1", "retired": True})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group, ["graph", "retire", "gr_1", "--by", "paul"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
@@ -95,7 +94,7 @@ def test_graph_enable_posts_to_the_enable_endpoint(monkeypatch: pytest.MonkeyPat
         calls.append((url, json))
         return _FakeResponse(202, {"graph_id": "gr_1", "retired": False})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["graph", "enable", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
@@ -108,7 +107,7 @@ def test_graph_retire_maps_an_unknown_graph(monkeypatch: pytest.MonkeyPatch) -> 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["graph", "retire", "gr_ghost"])
 
     assert result.exit_code != 0
@@ -132,7 +131,7 @@ def test_graph_show_prints_the_reified_graph(monkeypatch: pytest.MonkeyPatch) ->
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["graph", "show", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
@@ -161,7 +160,7 @@ def test_graph_show_renders_session_pools(monkeypatch: pytest.MonkeyPatch) -> No
         "edges": [],
     }
 
-    monkeypatch.setattr(hub_cli.httpx, "get", lambda url, *, timeout: _FakeResponse(200, body))
+    monkeypatch.setattr(httpx, "get", lambda url, *, timeout: _FakeResponse(200, body))
     result = CliRunner().invoke(hub_group, ["graph", "show", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
@@ -185,7 +184,7 @@ def test_graph_show_surfaces_the_baked_artifact_names_only_under_json(monkeypatc
         "artifacts": ["zebra", "apple"],
     }
 
-    monkeypatch.setattr(hub_cli.httpx, "get", lambda url, *, timeout: _FakeResponse(200, body))
+    monkeypatch.setattr(httpx, "get", lambda url, *, timeout: _FakeResponse(200, body))
     env = {"BZ_HUB_URL": "http://hub.local:8421"}
     plain = CliRunner().invoke(hub_group, ["graph", "show", "gr_1"], env=env)
     as_json = CliRunner().invoke(hub_group, ["graph", "show", "gr_1", "--json"], env=env)
@@ -201,7 +200,7 @@ def test_graph_show_maps_an_unknown_graph(monkeypatch: pytest.MonkeyPatch) -> No
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["graph", "show", "gr_ghost"])
 
     assert result.exit_code != 0
@@ -250,7 +249,7 @@ def test_graph_mint_posts_the_prompt_inlined(monkeypatch: pytest.MonkeyPatch, tm
         calls.append((url, json))
         return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group, ["graph", "mint", str(graph_path)], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
@@ -272,7 +271,7 @@ def test_graph_mint_prints_the_minted_graph_id(monkeypatch: pytest.MonkeyPatch, 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["graph", "mint", str(graph_path)])
 
     assert result.exit_code == 0, result.output
@@ -286,7 +285,7 @@ def test_graph_mint_surfaces_mint_warnings(monkeypatch: pytest.MonkeyPatch, tmp_
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(201, {"graph_id": "gr_new", "warnings": ["node build has no incoming edges"]})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["graph", "mint", str(graph_path)])
 
     assert result.exit_code == 0, result.output
@@ -300,7 +299,7 @@ def test_graph_mint_maps_a_validation_failure(monkeypatch: pytest.MonkeyPatch, t
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(422, {"ok": False, "errors": ["entry node 'build' not found"], "warnings": []})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["graph", "mint", str(graph_path)])
 
     assert result.exit_code != 0
@@ -322,7 +321,7 @@ def test_graph_mint_validation_failure_also_renders_warnings(monkeypatch: pytest
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["graph", "mint", str(graph_path)])
 
     assert result.exit_code != 0
@@ -359,7 +358,7 @@ def test_graph_mint_reads_the_definition_from_stdin(monkeypatch: pytest.MonkeyPa
         calls.append((url, json))
         return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group,
         ["graph", "mint", "-"],
@@ -394,7 +393,7 @@ def test_graph_sync_prints_every_outcome_and_exits_zero(monkeypatch: pytest.Monk
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["graph", "sync"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
@@ -420,7 +419,7 @@ def test_graph_sync_exits_non_zero_when_a_packaged_graph_failed(monkeypatch: pyt
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["graph", "sync"])
 
     assert result.exit_code != 0

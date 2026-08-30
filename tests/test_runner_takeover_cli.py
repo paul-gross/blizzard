@@ -8,6 +8,7 @@ never shells out — the point is the CLI's own protocol (open, exec, mark ended
 from __future__ import annotations
 
 import shlex
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -16,7 +17,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.runner.cli as runner_cli
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
@@ -99,7 +99,7 @@ def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runne
             )
         return 0
 
-    monkeypatch.setattr(runner_cli.subprocess, "call", fake_call)
+    monkeypatch.setattr(subprocess, "call", fake_call)
 
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
@@ -128,7 +128,7 @@ def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypat
         child_envs.append(env)
         return 0
 
-    monkeypatch.setattr(runner_cli.subprocess, "call", fake_call)
+    monkeypatch.setattr(subprocess, "call", fake_call)
     # A sentinel terminal var: the identity env must layer OVER the operator's env
     # (issue #258), not replace it, so the exec'd child still sees this.
     monkeypatch.setenv("OPERATOR_TERMINAL_SENTINEL", "still-here")
@@ -164,7 +164,7 @@ def test_takeover_propagates_a_nonzero_exit_code(tmp_path: Path, monkeypatch: py
     store = _store(root)
     _seed_parked_lease(store)
 
-    monkeypatch.setattr(runner_cli.subprocess, "call", lambda command, shell=False, cwd=None, env=None: 7)
+    monkeypatch.setattr(subprocess, "call", lambda command, shell=False, cwd=None, env=None: 7)
 
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
@@ -187,7 +187,7 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
     def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(runner_cli.subprocess, "call", fake_call)
+    monkeypatch.setattr(subprocess, "call", fake_call)
 
     with _serve_local_api(root):
         # click's own `main()` converts an uncaught KeyboardInterrupt into `Abort` —
@@ -219,9 +219,7 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatc
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
     calls: list[str] = []
-    monkeypatch.setattr(
-        runner_cli.subprocess, "call", lambda command, shell=False, cwd=None: calls.append(command) or 0
-    )
+    monkeypatch.setattr(subprocess, "call", lambda command, shell=False, cwd=None: calls.append(command) or 0)
 
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])

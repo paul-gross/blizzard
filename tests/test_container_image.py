@@ -98,7 +98,7 @@ def test_daemon_startup_path_carries_no_migrate_call() -> None:
     """``hub host``'s CLI command must never call migrate itself — the systemd unit's
     ``ExecStartPre`` owns that step; folding it in would let a concurrent instance race
     a migration against a daemon that just started serving."""
-    cli_text = (_REPO_ROOT / "src" / "blizzard" / "hub" / "cli.py").read_text()
+    cli_text = (_REPO_ROOT / "src" / "blizzard" / "hub" / "cli" / "runtime.py").read_text()
     match = re.search(r"\ndef host\(.*?(?=\n@|\Z|\ndef )", cli_text, re.DOTALL)
     assert match, "could not locate hub cli's host() command body"
     assert "migrate" not in match.group(0), "hub host's CLI command must not call migrate itself"

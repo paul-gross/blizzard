@@ -18,11 +18,11 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import FLEET_VIEW
+from blizzard.cli.runtime import _EarlyShutdownServer
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.cli import _EarlyShutdownServer
 from blizzard.hub.config import HubConfig
 from blizzard.hub.store import MIGRATIONS_DIR
 

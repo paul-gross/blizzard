@@ -15,7 +15,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 pytestmark = pytest.mark.unit
@@ -91,9 +90,7 @@ def _local_timezone(tz: str) -> Iterator[None]:
 
 
 def test_default_output_is_a_human_table(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        hub_cli.httpx, "get", lambda *a, **k: _FakeResponse(200, {"events": [_EVENT], "next_cursor": None})
-    )
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse(200, {"events": [_EVENT], "next_cursor": None}))
 
     result = CliRunner().invoke(hub_group, ["analytics", "events"])
 
@@ -105,7 +102,7 @@ def test_default_output_is_a_human_table(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_json_prints_the_raw_envelope_including_next_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
     body = {"events": [_EVENT], "next_cursor": "cur_2"}
-    monkeypatch.setattr(hub_cli.httpx, "get", lambda *a, **k: _FakeResponse(200, body))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse(200, body))
 
     result = CliRunner().invoke(hub_group, ["analytics", "events", "--json"])
 
@@ -115,8 +112,8 @@ def test_json_prints_the_raw_envelope_including_next_cursor(monkeypatch: pytest.
 
 def test_ndjson_streams_every_line_to_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
     resp = _FakeStreamResponse(200, lines=['{"id": 1}', '{"id": 2}'])
-    monkeypatch.setattr(hub_cli.httpx, "stream", _stream_returning(resp))
-    monkeypatch.setattr(hub_cli.httpx, "get", lambda *a, **k: pytest.fail("--ndjson must not hit the paged route"))
+    monkeypatch.setattr(httpx, "stream", _stream_returning(resp))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("--ndjson must not hit the paged route"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "events", "--ndjson"])
 
@@ -128,7 +125,7 @@ def test_ndjson_streams_every_line_to_stdout(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_ndjson_rejects_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "events", "--ndjson", "--json"])
 
@@ -137,7 +134,7 @@ def test_ndjson_rejects_json(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_ndjson_rejects_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "events", "--ndjson", "--cursor", "cur_1"])
 
@@ -146,7 +143,7 @@ def test_ndjson_rejects_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_ndjson_rejects_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "events", "--ndjson", "--limit", "10"])
 
@@ -164,7 +161,7 @@ def test_every_filter_flag_becomes_a_query_param(monkeypatch: pytest.MonkeyPatch
         calls.append(params or {})
         return _FakeResponse(200, {"events": [], "next_cursor": None})
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     result = CliRunner().invoke(
         hub_group,
@@ -213,7 +210,7 @@ def test_the_default_limit_is_200_when_not_given(monkeypatch: pytest.MonkeyPatch
         calls.append(params or {})
         return _FakeResponse(200, {"events": [], "next_cursor": None})
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     result = CliRunner().invoke(hub_group, ["analytics", "events"])
 
@@ -231,7 +228,7 @@ def test_since_and_until_convert_the_operators_local_time_to_utc(monkeypatch: py
         calls.append(params or {})
         return _FakeResponse(200, {"events": [], "next_cursor": None})
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     with _local_timezone("America/New_York"):  # UTC-5 in January, no DST
         result = CliRunner().invoke(
@@ -248,7 +245,7 @@ def test_since_and_until_convert_the_operators_local_time_to_utc(monkeypatch: py
 
 
 def test_a_bare_401_gets_the_login_hint(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "get", lambda *a, **k: _FakeResponse(401))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse(401))
 
     result = CliRunner().invoke(hub_group, ["analytics", "events"])
 
@@ -258,7 +255,7 @@ def test_a_bare_401_gets_the_login_hint(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_a_bare_403_surfaces_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        hub_cli.httpx, "get", lambda *a, **k: _FakeResponse(403, {"detail": "missing permission 'transcript:read'"})
+        httpx, "get", lambda *a, **k: _FakeResponse(403, {"detail": "missing permission 'transcript:read'"})
     )
 
     result = CliRunner().invoke(hub_group, ["analytics", "events"])

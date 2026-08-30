@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from blizzard.hub import cli_login
+from blizzard.hub.cli import login as cli_login
 
 pytestmark = pytest.mark.unit
 

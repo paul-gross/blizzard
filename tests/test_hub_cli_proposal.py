@@ -8,7 +8,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 
@@ -45,7 +44,7 @@ def test_garden_proposal_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -
             ],
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["garden-proposal", "list"])
 
     assert result.exit_code == 0, result.output
@@ -69,7 +68,7 @@ def test_garden_proposal_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["garden-proposal", "show", "gprop_1"])
 
     assert result.exit_code == 0, result.output
@@ -82,7 +81,7 @@ def test_garden_proposal_show_unknown_id_reports_404(monkeypatch: pytest.MonkeyP
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown garden proposal gprop_ghost"})
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["garden-proposal", "show", "gprop_ghost"])
 
     assert result.exit_code != 0

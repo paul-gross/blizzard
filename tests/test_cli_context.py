@@ -10,8 +10,8 @@ import click
 import httpx
 import pytest
 
-from blizzard.hub import cli_context
-from blizzard.hub.cli_context import CliContext
+from blizzard.hub.cli import context as cli_context
+from blizzard.hub.cli.context import CliContext
 
 pytestmark = pytest.mark.unit
 

@@ -10,7 +10,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 
@@ -62,7 +61,7 @@ def test_create_posts_title_body_and_priority_and_reports_the_label_and_chunk(
         calls.append((url, json))
         return _FakeResponse(201, {**_item_view(), "chunk_id": "ch_new"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group,
         ["item", "create", "--title", "a title", "--body-file", "-", "--priority", "high"],
@@ -88,7 +87,7 @@ def test_create_defaults_source_to_hub_and_reads_a_body_file(tmp_path: Path, mon
         calls.append((url, json))
         return _FakeResponse(201, {**_item_view(), "chunk_id": "ch_new"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["item", "create", "--title", "t", "--body-file", str(body_path)])
 
     assert result.exit_code == 0, result.output
@@ -102,7 +101,7 @@ def test_create_maps_a_pointer_conflict(monkeypatch: pytest.MonkeyPatch) -> None
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"existing_chunk_id": "ch_old", "source": "hub", "ref": "42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["item", "create", "--title", "t", "--body-file", "-"], input="b")
 
     assert result.exit_code != 0
@@ -116,7 +115,7 @@ def test_create_surfaces_the_hubs_capability_refusal_verbatim(monkeypatch: pytes
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "work source 'blizzard' has no editor"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group, ["item", "create", "--title", "t", "--body-file", "-", "--source", "blizzard"], input="b"
     )
@@ -130,7 +129,7 @@ def test_create_maps_an_unknown_source(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown work source 'nope'"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group, ["item", "create", "--title", "t", "--body-file", "-", "--source", "nope"], input="b"
     )
@@ -151,7 +150,7 @@ def test_edit_patches_only_the_given_fields(monkeypatch: pytest.MonkeyPatch) -> 
         calls.append((url, json))
         return _FakeResponse(200, _item_view(title="new title"))
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(
         hub_group,
         ["item", "edit", "hub:42", "--title", "new title"],
@@ -173,7 +172,7 @@ def test_edit_accepts_a_hash_ref_token_and_a_stdin_body(monkeypatch: pytest.Monk
         calls.append(json)
         return _FakeResponse(200, _item_view())
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(
         hub_group, ["item", "edit", "hub#42", "--body-file", "-", "--priority", "low"], input="new body"
     )
@@ -187,7 +186,7 @@ def test_edit_rejects_a_token_with_no_source_before_any_http_call(monkeypatch: p
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         raise AssertionError("must not call the API for an unresolvable token")
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["item", "edit", "42", "--title", "t"])
 
     assert result.exit_code != 0
@@ -199,7 +198,7 @@ def test_edit_surfaces_the_hubs_capability_refusal_verbatim(monkeypatch: pytest.
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "work source 'blizzard' has no editor"})
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["item", "edit", "blizzard#123", "--title", "t"])
 
     assert result.exit_code != 0
@@ -218,7 +217,7 @@ def test_delete_confirms_and_sends_the_delete(monkeypatch: pytest.MonkeyPatch) -
         calls.append(url)
         return _FakeResponse(200, _item_view())
 
-    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    monkeypatch.setattr(httpx, "delete", fake_delete)
     result = CliRunner().invoke(
         hub_group, ["item", "delete", "hub:42"], input="y\n", env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
@@ -233,7 +232,7 @@ def test_delete_aborts_when_confirmation_is_declined(monkeypatch: pytest.MonkeyP
     def fake_delete(url: str, *, timeout: float) -> _FakeResponse:
         raise AssertionError("must not call the API when the user declines")
 
-    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    monkeypatch.setattr(httpx, "delete", fake_delete)
     result = CliRunner().invoke(hub_group, ["item", "delete", "hub:42"], input="n\n")
 
     assert result.exit_code != 0
@@ -247,7 +246,7 @@ def test_delete_yes_skips_the_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
         calls.append(url)
         return _FakeResponse(200, _item_view())
 
-    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    monkeypatch.setattr(httpx, "delete", fake_delete)
     result = CliRunner().invoke(hub_group, ["item", "delete", "hub:42", "--yes"])
 
     assert result.exit_code == 0, result.output
@@ -259,7 +258,7 @@ def test_delete_surfaces_the_hubs_capability_refusal_verbatim(monkeypatch: pytes
     def fake_delete(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "work source 'blizzard' has no editor"})
 
-    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    monkeypatch.setattr(httpx, "delete", fake_delete)
     result = CliRunner().invoke(hub_group, ["item", "delete", "blizzard#123", "--yes"])
 
     assert result.exit_code != 0
@@ -277,7 +276,7 @@ def test_delete_of_a_live_held_item_surfaces_the_held_chunk_detail_not_the_canne
     def fake_delete(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "hub:42 is held by live chunk ch_1"})
 
-    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    monkeypatch.setattr(httpx, "delete", fake_delete)
     result = CliRunner().invoke(hub_group, ["item", "delete", "hub:42", "--yes"])
 
     assert result.exit_code != 0

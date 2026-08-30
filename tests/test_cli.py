@@ -17,8 +17,8 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.cli.main import blizzard
-from blizzard.runner.cli import _daemon_holding
-from blizzard.runner.cli_daemon import LOCAL_CLIENT_TIMEOUT
+from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT
+from blizzard.runner.cli.transcript import _daemon_holding
 from blizzard.runner.config import RunnerConfig
 
 pytestmark = pytest.mark.unit

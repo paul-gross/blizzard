@@ -10,10 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.auth_core import Role
 from blizzard.hub.api.marker_auth import _MARKER_TOKEN_HEADER
 from blizzard.hub.cli import hub as hub_group
@@ -51,7 +51,7 @@ def test_record_marker_sends_the_token_header(monkeypatch: pytest.MonkeyPatch) -
         calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
         return _FakeResponse()
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
 
     result = CliRunner().invoke(hub_group, ["record-marker", "merged/acme/widget", "sha1"])
 
@@ -65,7 +65,7 @@ def test_record_marker_sends_the_token_header(monkeypatch: pytest.MonkeyPatch) -
 @pytest.mark.unit
 def test_record_marker_refuses_without_a_callback_url(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_env(monkeypatch, callback_url=None, token=_MARKER_TOKEN)
-    monkeypatch.setattr(hub_cli.httpx, "post", lambda *a, **k: pytest.fail("must not post without a callback URL"))
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: pytest.fail("must not post without a callback URL"))
 
     result = CliRunner().invoke(hub_group, ["record-marker", "merged/acme/widget", "sha1"])
 
@@ -76,7 +76,7 @@ def test_record_marker_refuses_without_a_callback_url(monkeypatch: pytest.Monkey
 @pytest.mark.unit
 def test_record_marker_refuses_without_a_token(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_env(monkeypatch, callback_url=_CALLBACK_URL, token=None)
-    monkeypatch.setattr(hub_cli.httpx, "post", lambda *a, **k: pytest.fail("must not post without a token"))
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: pytest.fail("must not post without a token"))
 
     result = CliRunner().invoke(hub_group, ["record-marker", "merged/acme/widget", "sha1"])
 
@@ -107,7 +107,7 @@ def test_record_marker_is_accepted_by_a_real_oauth_hub(tmp_path: Path, monkeypat
     def relay_to_the_real_hub(url: str, *, json: dict[str, Any], headers: dict[str, str], timeout: float):
         return hub.client.post(url, json=json, headers=headers)
 
-    monkeypatch.setattr(hub_cli.httpx, "post", relay_to_the_real_hub)
+    monkeypatch.setattr(httpx, "post", relay_to_the_real_hub)
 
     result = CliRunner().invoke(hub_group, ["record-marker", "merged/acme-widget", "sha:abc123"])
 
