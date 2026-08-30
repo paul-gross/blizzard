@@ -7,7 +7,8 @@ afterward."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -26,15 +27,19 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
 class FakeTranscriptRepository:
-    """An in-process ``IReadTranscriptRepository`` — one canned ``Transcript`` per session id."""
+    """An in-process ``IReadTranscriptRepository`` — one canned ``Transcript`` per session id,
+    the whole file. ``since`` is a stringified turn-count offset — a slice from there onward,
+    the same forward-cursor shape the real one gives."""
 
     def __init__(self, by_session_id: dict[str, Transcript] | None = None) -> None:
         self._by_session_id = by_session_id or {}
 
-    def read_turns(self, session_id: str, *, spawn_cwd: str | None) -> Transcript:
-        if session_id in self._by_session_id:
-            return self._by_session_id[session_id]
-        return Transcript(session_id=session_id, available=False, reason="not_found", turns=[], truncated=False)
+    def read_turns(self, session_id: str, *, spawn_cwd: str | None, since: str | None = None) -> Transcript:
+        if session_id not in self._by_session_id:
+            return Transcript(session_id=session_id, available=False, reason="not_found", turns=[], truncated=False)
+        full = self._by_session_id[session_id]
+        offset = int(since) if since is not None else 0
+        return replace(full, turns=full.turns[offset:])
 
 
 class RaisingArchivedTranscriptRepository:
@@ -150,6 +155,56 @@ def test_content_returns_turns_for_a_known_segment(tmp_path: Path) -> None:
     assert body["truncated"] is False
     [turn_body] = body["turns"]
     assert turn_body["text"] == "hello"
+
+
+@pytest.mark.component
+def test_content_windows_a_same_session_resume_to_each_segments_own_turns(tmp_path: Path) -> None:
+    """A resume reuses one session_id across two segments (``record_spawn``'s own cursor
+    carry-forward) — each ``GET .../transcripts/{segment_id}`` must return its own slice of
+    the shared file, never both coming back byte-identical."""
+
+    def _turn(text: str) -> Turn:
+        return Turn(
+            index=0,
+            kind="env",
+            timestamp=_NOW,
+            text=text,
+            tool=None,
+            thinking_redacted=False,
+            sidechain=None,
+            truncated=False,
+        )
+
+    whole_file = [_turn(f"turn{i}") for i in range(4)]
+    repo = FakeTranscriptRepository(
+        {"sess-a": Transcript(session_id="sess-a", available=True, reason=None, turns=whole_file, truncated=False)}
+    )
+    app, store = _app_with_segments(tmp_path, repo=repo)
+    _mint(store)
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    [gen1] = store.transcript_segments_for_chunk("ch_1")
+    store.record_transcript_deltas(
+        segment_id=gen1.segment_id,
+        chunk_id="ch_1",
+        cursor="2",
+        shipped_bytes=10,
+        shipped_turns=2,
+        normalizer_version="v1",
+        harness_version=None,
+        payloads=["{}"],
+        created_at=_NOW,
+    )
+    store.record_spawn(
+        "lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+    )
+    [gen2] = store.open_transcript_segments()
+
+    client = TestClient(app)
+    gen1_body = client.get(f"/api/chunks/ch_1/transcripts/{gen1.segment_id}").json()
+    gen2_body = client.get(f"/api/chunks/ch_1/transcripts/{gen2.segment_id}").json()
+
+    assert [t["text"] for t in gen1_body["turns"]] == ["turn0", "turn1"]
+    assert [t["text"] for t in gen2_body["turns"]] == ["turn2", "turn3"]
 
 
 @pytest.mark.component

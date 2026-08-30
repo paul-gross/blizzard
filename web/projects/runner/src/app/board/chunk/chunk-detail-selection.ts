@@ -15,10 +15,9 @@ export type RunnerChunkDetailTab = 'general' | 'node-history' | 'artifacts' | 't
  * the single source of truth, so a link is copyable, a reload keeps its
  * place, and back/forward walk the selection.
  *
- * This page already owns `?attempt=` (`chunk-detail-page.ts`'s own docstring,
- * D4) before this tab strip existed — every navigation here merges into the
- * URL rather than replacing it, so `?attempt=` and every other selection
- * survive a tab switch and a deep link can carry all of them at once.
+ * Every navigation here merges into the URL rather than replacing it, so one
+ * selection survives a tab switch alongside every other, and a deep link can
+ * carry all of them at once.
  */
 export interface ChunkDetailSelection {
   /** The active tab. An absent or unrecognized `tab` param resolves to
@@ -44,8 +43,8 @@ export interface ChunkDetailSelection {
   readonly transcriptSidechain: Signal<string | null>;
 
   /** Merge a tab into the URL — a client-side navigation (no reload) that
-   * pushes a history entry, leaving every other query param (`?attempt=`,
-   * `?artifact=`, `?step=`) untouched. */
+   * pushes a history entry, leaving every other query param (`?artifact=`,
+   * `?step=`, `?segment=`, `?sidechain=`) untouched. */
   select(tab: RunnerChunkDetailTab): void;
 
   /** Pick an artifact in the Artifacts tab — switches to that tab and writes

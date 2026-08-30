@@ -2,13 +2,16 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
+import * as hubApi from '../api/hub';
 import type { Client } from '../api/hub/client';
 import { client as hubClient } from '../api/hub/client.gen';
+import * as runnerApi from '../api/runner';
 import { client as runnerClient } from '../api/runner/client.gen';
 import type { TranscriptPlane } from '../query-keys';
 import { settle } from '../testing/settle';
 import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import {
+  TRANSCRIPT_SEGMENTS_API,
   TranscriptFetchError,
   injectChunkTranscriptSegmentQuery,
   injectChunkTranscriptsQuery,
@@ -201,5 +204,43 @@ describe('injectChunkTranscriptSegmentQuery — plane-generic (D5)', () => {
 
     expect(fixture.componentInstance.query.data()?.segment_id).toBe('s1');
     expect(stub.forRoute('/api/chunks/ch_1/transcripts/seg-1', 'GET')).toHaveLength(1);
+  });
+});
+
+/**
+ * `bzh:generated-client`, over the dispatch table both plane-generic queries share
+ * ({@link TRANSCRIPT_SEGMENTS_API}) — a reference-identity check, not a spy: this
+ * workspace's own Angular test harness refuses `vi.mock` for relative imports outright
+ * ("Please use Angular TestBed for mocking dependencies"), and a frozen ESM namespace
+ * export cannot be `vi.spyOn`'d in place either. Reference identity is also the only
+ * property that genuinely distinguishes the two calls at all: given the same explicit
+ * `client`, the hub's and runner's generated wrappers are byte-identical at runtime
+ * (same hardcoded URL, same `options.client ?? client` shape) — a black-box behavioral
+ * test cannot tell "the right module" from "the wrong module with the client swapped
+ * in" apart, which is exactly the silent-drift risk the rule exists to close off.
+ */
+describe('TRANSCRIPT_SEGMENTS_API — plane dispatch (bzh:generated-client)', () => {
+  it('maps the hub plane to the hub’s own generated operations, never the runner’s', () => {
+    expect(TRANSCRIPT_SEGMENTS_API.hub.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet).toBe(
+      hubApi.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet,
+    );
+    expect(TRANSCRIPT_SEGMENTS_API.hub.getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet).toBe(
+      hubApi.getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet,
+    );
+    expect(TRANSCRIPT_SEGMENTS_API.hub.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet).not.toBe(
+      runnerApi.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet,
+    );
+  });
+
+  it('maps the runner plane to the runner’s own generated operations, never the hub’s', () => {
+    expect(TRANSCRIPT_SEGMENTS_API.runner.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet).toBe(
+      runnerApi.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet,
+    );
+    expect(TRANSCRIPT_SEGMENTS_API.runner.getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet).toBe(
+      runnerApi.getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet,
+    );
+    expect(TRANSCRIPT_SEGMENTS_API.runner.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet).not.toBe(
+      hubApi.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet,
+    );
   });
 });

@@ -52,15 +52,20 @@ export function hubGraphKey(graphId: string | null): readonly unknown[] {
 }
 
 /** Which daemon a transcript-segment query reads from (runner-node-grouped-transcripts,
- * D5) — the hub's `chunk-changed` SSE stream and the runner's own both exist, so each
- * plane's cache entries stay under their own key prefix even though they answer the
- * identical wire shape (D2). */
+ * D5) — namespaced so a plane's own live-invalidation event, where one exists, only ever
+ * refetches that plane's own cache entries, even though both planes answer the identical
+ * wire shape (D2). Only the hub plane has such an event today; see
+ * {@link chunkTranscriptsKey} for the runner plane's own gap. */
 export type TranscriptPlane = 'hub' | 'runner';
 
 /** One chunk's transcript-segment index (blizzard#248), keyed by plane and id —
- * deliberately under the plane's own chunk-key prefix (`[plane, 'chunk', chunkId]`), so a
- * `chunk-changed` SSE event refetches it: new segments genuinely appear here as the
- * chunk's steps progress. */
+ * deliberately under the plane's own chunk-key prefix (`[plane, 'chunk', chunkId]`), so
+ * the hub's `chunk-changed` SSE event refetches it: new segments genuinely appear here as
+ * the chunk's steps progress. The runner plane carries no equivalent event yet — no
+ * `RunnerEventType` names a transcript change (`local-panel/runner-live-updates.ts`'s own
+ * registry is exhaustive over the six it does have) — so a runner operator watching a
+ * live chunk needs a manual reload to see new segments; this key's placement positions
+ * it to pick up a future runner event, it does not itself close today's gap. */
 export function chunkTranscriptsKey(plane: TranscriptPlane, chunkId: string | null): readonly unknown[] {
   return [plane, 'chunk', chunkId, 'transcripts'];
 }

@@ -4064,7 +4064,7 @@
     },
     "/api/chunks/{chunk_id}/transcripts": {
       "get": {
-        "description": "The chunk's segment index, straight off the local ledger \u2014 metadata and byte counts\nonly, never turns (D12). A chunk this runner never held a lease for returns ``[]``.",
+        "description": "The chunk's segment index, straight off the local ledger \u2014 metadata and byte counts\nonly, never turns (D6). A chunk this runner never held a lease for returns ``[]``.",
         "operationId": "list_transcript_segments_api_chunks__chunk_id__transcripts_get",
         "parameters": [
           {

@@ -130,7 +130,7 @@ export const endTakeoverApiChunksChunkIdTakeoversTakeoverIdPatch = <ThrowOnError
  * List Transcript Segments
  *
  * The chunk's segment index, straight off the local ledger — metadata and byte counts
- * only, never turns (D12). A chunk this runner never held a lease for returns ``[]``.
+ * only, never turns (D6). A chunk this runner never held a lease for returns ``[]``.
  */
 export const listTranscriptSegmentsApiChunksChunkIdTranscriptsGet = <ThrowOnError extends boolean = false>(options: Options<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetData, ThrowOnError>): RequestResult<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses, ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors, ThrowOnError> => (options.client ?? client).get<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses, ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/transcripts', ...options });
 

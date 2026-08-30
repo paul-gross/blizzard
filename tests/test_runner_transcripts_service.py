@@ -7,7 +7,8 @@ the normalization, both pinned elsewhere."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -23,17 +24,21 @@ _KEY = ("ch_1", "nd_build", 1)
 
 
 class FakeTranscriptRepository:
-    """An in-process ``IReadTranscriptRepository`` — one canned ``Transcript`` per session id."""
+    """An in-process ``IReadTranscriptRepository`` — one canned ``Transcript`` per session id,
+    the whole file. ``since`` is a stringified turn-count offset into that session's own
+    list — a slice from there onward, the same forward-cursor shape the real one gives."""
 
     def __init__(self, by_session_id: dict[str, Transcript] | None = None) -> None:
         self._by_session_id = by_session_id or {}
-        self.calls: list[str] = []
+        self.calls: list[tuple[str, str | None]] = []
 
-    def read_turns(self, session_id: str, *, spawn_cwd: str | None) -> Transcript:
-        self.calls.append(session_id)
-        if session_id in self._by_session_id:
-            return self._by_session_id[session_id]
-        return Transcript(session_id=session_id, available=False, reason="not_found", turns=[], truncated=False)
+    def read_turns(self, session_id: str, *, spawn_cwd: str | None, since: str | None = None) -> Transcript:
+        self.calls.append((session_id, since))
+        if session_id not in self._by_session_id:
+            return Transcript(session_id=session_id, available=False, reason="not_found", turns=[], truncated=False)
+        full = self._by_session_id[session_id]
+        offset = int(since) if since is not None else 0
+        return replace(full, turns=full.turns[offset:])
 
 
 def _service(
@@ -439,6 +444,47 @@ def test_segment_content_reads_the_session_file_local_only_never_the_hub(tmp_pat
     assert content.truncated is False
     assert [t.text for t in content.turns] == ["hi"]
     assert archived.calls == []
+
+
+@pytest.mark.unit
+def test_segment_content_windows_a_same_session_resume_to_each_segments_own_turns(tmp_path: Path) -> None:
+    """A resume reuses one session_id across two segments (``record_spawn``'s own cursor
+    carry-forward) — each segment's own content must be its own slice of the shared file,
+    never the whole file both would otherwise return byte-identical."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    [gen1] = store.transcript_segments_for_chunk("ch_1")
+    store.record_transcript_deltas(
+        segment_id=gen1.segment_id,
+        chunk_id="ch_1",
+        cursor="2",
+        shipped_bytes=10,
+        shipped_turns=2,
+        normalizer_version="v1",
+        harness_version=None,
+        payloads=["{}"],
+        created_at=_NOW,
+    )
+    store.record_spawn(
+        "lease_1", pid=101, process_start_time="start-101", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+    )
+    [gen2] = store.open_transcript_segments()
+    assert gen2.cursor == "2"  # carried forward from gen1's own cursor
+
+    whole_file = [_local_turn(f"turn{i}") for i in range(4)]
+    local = FakeTranscriptRepository(
+        {"sess-a": Transcript(session_id="sess-a", available=True, reason=None, turns=whole_file, truncated=False)}
+    )
+    service = _service(store, local=local)
+
+    gen1_content = service.segment_content("ch_1", gen1.segment_id)
+    gen2_content = service.segment_content("ch_1", gen2.segment_id)
+
+    assert gen1_content is not None
+    assert [t.text for t in gen1_content.turns] == ["turn0", "turn1"]
+    assert gen2_content is not None
+    assert [t.text for t in gen2_content.turns] == ["turn2", "turn3"]
 
 
 @pytest.mark.unit

@@ -1,14 +1,22 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet,
-  listTranscriptSegmentsApiChunksChunkIdTranscriptsGet,
-  type TranscriptSegmentContentView,
-  type TranscriptSegmentIndexView,
-} from '../api/hub';
+import * as hubApi from '../api/hub';
+import type { TranscriptSegmentContentView, TranscriptSegmentIndexView } from '../api/hub';
 import type { Client } from '../api/hub/client';
 import { client as hubClient } from '../api/hub/client.gen';
+import * as runnerApi from '../api/runner';
 import { chunkTranscriptSegmentKey, chunkTranscriptsKey, type TranscriptPlane } from '../query-keys';
+
+/** Each plane's own generated module, keyed by {@link TranscriptPlane} (`bzh:generated-
+ * client`) — the two specs mirror each other's path shape (D3), but calling through the
+ * wrong plane's generated function would make any future divergence between them silent
+ * instead of a compile error, so the plane picks which generated module answers, never
+ * just which transport `client` the call runs against. Exported (not part of `fleet`'s
+ * public API — absent from `public-api.ts`) purely so this file's own spec can assert the
+ * mapping by reference identity, since a frozen ESM namespace export cannot be spied on in
+ * place, and this workspace's own Angular test harness refuses `vi.mock` for relative
+ * imports outright. */
+export const TRANSCRIPT_SEGMENTS_API = { hub: hubApi, runner: runnerApi } as const;
 
 /** An error a transcript queryFn throws, carrying the HTTP status the fetch actually
  * returned — the generated `error` value doesn't — so a container can render an
@@ -57,11 +65,14 @@ export function injectChunkTranscriptsQuery(
 ) {
   return injectQuery(() => {
     const id = chunkId();
+    const activePlane = plane();
     return {
-      queryKey: chunkTranscriptsKey(plane(), id),
+      queryKey: chunkTranscriptsKey(activePlane, id),
       enabled: id !== null,
       queryFn: async (): Promise<TranscriptSegmentIndexView> => {
-        const { data, error, response } = await listTranscriptSegmentsApiChunksChunkIdTranscriptsGet({
+        const { data, error, response } = await TRANSCRIPT_SEGMENTS_API[
+          activePlane
+        ].listTranscriptSegmentsApiChunksChunkIdTranscriptsGet({
           client: client(),
           path: { chunk_id: id! },
           throwOnError: false,
@@ -115,11 +126,14 @@ export function injectChunkTranscriptSegmentQuery(
     const cid = chunkId();
     const sid = segmentId();
     const isFinal = final();
+    const activePlane = plane();
     return {
-      queryKey: chunkTranscriptSegmentKey(plane(), cid, sid, isFinal ?? false),
+      queryKey: chunkTranscriptSegmentKey(activePlane, cid, sid, isFinal ?? false),
       enabled: cid !== null && sid !== null && isFinal !== null,
       queryFn: async (): Promise<TranscriptSegmentContentView> => {
-        const { data, error, response } = await getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet({
+        const { data, error, response } = await TRANSCRIPT_SEGMENTS_API[
+          activePlane
+        ].getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet({
           client: client(),
           path: { chunk_id: cid!, segment_id: sid! },
           throwOnError: false,

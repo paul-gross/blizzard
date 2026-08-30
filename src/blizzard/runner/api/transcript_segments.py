@@ -44,10 +44,8 @@ def _index_entry(row: TranscriptSegmentLedgerRow) -> TranscriptSegmentIndexEntry
 
 
 def _content_view(segment_id: str, content: ResolvedSegmentContent) -> TranscriptSegmentContentView:
-    # `TranscriptSegmentContentView` has no unavailability field (D2) — unavailable renders as
-    # `truncated=True` over empty `turns`, never a silent empty transcript and never a 404 (D1).
-    if not content.available:
-        return TranscriptSegmentContentView(segment_id=segment_id, final=content.final, truncated=True, turns=[])
+    # No unavailability field on the wire view (D2) — `content.truncated`/`.turns` already
+    # carry that mapping, minted once by `TranscriptService.segment_content`, never here too.
     return TranscriptSegmentContentView(
         segment_id=segment_id,
         final=content.final,
@@ -59,7 +57,7 @@ def _content_view(segment_id: str, content: ResolvedSegmentContent) -> Transcrip
 @router.get("/chunks/{chunk_id}/transcripts", response_model=TranscriptSegmentIndexView)
 def list_transcript_segments(chunk_id: str, request: Request) -> TranscriptSegmentIndexView:
     """The chunk's segment index, straight off the local ledger — metadata and byte counts
-    only, never turns (D12). A chunk this runner never held a lease for returns ``[]``."""
+    only, never turns (D6). A chunk this runner never held a lease for returns ``[]``."""
     service = RunnerWiring.of(request).transcripts()
     segments = service.segments_for_chunk(chunk_id)
     return TranscriptSegmentIndexView(chunk_id=chunk_id, segments=[_index_entry(row) for row in segments])

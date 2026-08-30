@@ -92,10 +92,12 @@ class IReadTranscriptRepository(Protocol):
     One operation. Raw-lines and size-on-disk reads are a separate concern, reached off
     the harness transcript source directly rather than through this seam."""
 
-    def read_turns(self, session_id: str, *, spawn_cwd: str | None) -> Transcript:
+    def read_turns(self, session_id: str, *, spawn_cwd: str | None, since: str | None = None) -> Transcript:
         """The session's parsed transcript, located by ``session_id`` alone.
 
         ``spawn_cwd`` is an optional **disambiguation hint**, not the lookup key — used
         only when more than one project directory holds a file with this session id, and
-        legitimately ``None``."""
+        legitimately ``None``. ``since`` is a forward-read cursor token (a
+        ``TranscriptSegmentLedgerRow.cursor``) bounding the read to what was written after
+        it; ``None`` reads from the start."""
         ...
