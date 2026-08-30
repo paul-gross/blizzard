@@ -7,16 +7,13 @@ place the write happens (``bzh:controller-read-only``)."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
+from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import LeaseRecord
-
-if TYPE_CHECKING:
-    # Deferred: ``runner/stores.py`` composes this module's own Protocol (blizzard#410).
-    from blizzard.runner.stores import IWriteRunnerStore
 
 __all__ = ["AttachmentRejected", "AttachmentService", "IReadAttachmentRepository", "IWriteAttachmentRepository"]
 
@@ -66,18 +63,20 @@ class AttachmentRejected(Exception):
 
 
 class AttachmentService:
-    """Composition-root-wired: the write store and clock (issue #113, Phase 2)."""
+    """Composition-root-wired: the attachment store, the token store (for authorization),
+    and the clock (issue #113, Phase 2)."""
 
-    def __init__(self, store: IWriteRunnerStore, clock: IClock) -> None:
+    def __init__(self, store: IWriteAttachmentRepository, clock: IClock, *, tokens: IReadTokenRepository) -> None:
         self._store = store
         self._clock = clock
+        self._tokens = tokens
 
     def attach(self, lease: LeaseRecord, *, presented_token: str | None, name: str, content: str) -> None:
         """Record ``content`` under ``name`` for ``lease``, or raise
         :class:`AttachmentRejected` if ``presented_token`` does not authorize it. ``lease``
         is already resolved by the caller (``bzh:domain-takes-objects``). Append-and-read-
         newest: a repeat call for the same ``(lease, name)`` is a correction, not an error."""
-        stored_hash = self._store.lease_token_hash(lease.lease_id)
+        stored_hash = self._tokens.lease_token_hash(lease.lease_id)
         if not LeaseToken(presented_token, stored_hash).valid:
             raise AttachmentRejected(f"presented token does not authorize lease {lease.lease_id}")
         self._store.record_attachment(

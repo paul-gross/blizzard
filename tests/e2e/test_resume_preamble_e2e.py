@@ -25,7 +25,6 @@ from blizzard.runner.harness.preamble import (
     RESUME_UPDATED_NOTICE,
 )
 from blizzard.runner.loop.build import LoopWiring
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO,
@@ -39,7 +38,7 @@ from tests.e2e.test_acceptance_loop import (
     _winter_source,
 )
 from tests.e2e.test_session_modes_e2e import _graph_yaml
-from tests.runner_fakes import runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 
 pytestmark = [
     pytest.mark.e2e,

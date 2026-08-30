@@ -82,7 +82,7 @@ class ReadyQueue:
         _CP_AFTER_CLAIM.reached()
         # Stash the won claim's plaintext route token (issue #84a) before spawning: every later
         # reader takes it out of the store, never off `outcome.claimed` directly.
-        self.ctx.store.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
+        self.ctx.stores.tokens.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
         Spawner(self.ctx).enter_node(chunk_id, outcome.claimed.envelope, acquired, via="fill")
         return True
 
@@ -94,7 +94,7 @@ class ReadyQueue:
         return peek.entries[0] if peek.entries else None
 
     def _acquire(self, entry: QueuePeekEntry) -> list[AcquiredEnvironment] | None:
-        held = self.ctx.store.held_environment_ids()
+        held = self.ctx.stores.environments.held_environment_ids()
         _CP_BEFORE_ACQUIRE.reached()
         try:
             return self.ctx.provider.acquire(entry.chunk_id, self._environments_wanted(entry), held)
@@ -128,7 +128,7 @@ class ReadyQueue:
         _CP_AFTER_ACQUIRE.reached()
         now = self.ctx.clock.now()
         for env in acquired:
-            self.ctx.store.record_binding(
+            self.ctx.stores.environments.record_binding(
                 chunk_id=chunk_id, environment_id=env.environment_id, workdir=env.workdir, bound_at=now
             )
             if self.ctx.events is not None:
@@ -163,9 +163,9 @@ class InterruptedClaims:
     ctx: LoopContext
 
     def reconcile(self) -> None:
-        requeue_pending = self.ctx.store.pending_requeue_chunk_ids()  # one read per FILL, not per chunk
-        for chunk_id in self.ctx.store.live_tenure_chunk_ids():
-            if self.ctx.store.active_lease_for_chunk(chunk_id) is None:
+        requeue_pending = self.ctx.stores.requeue.pending_requeue_chunk_ids()  # one read per FILL, not per chunk
+        for chunk_id in self.ctx.stores.environments.live_tenure_chunk_ids():
+            if self.ctx.stores.leases.active_lease_for_chunk(chunk_id) is None:
                 self._reconcile_one(chunk_id, requeued=chunk_id in requeue_pending)
             # else a live worker holds it — REAP/ADVANCE own it
 
@@ -191,7 +191,7 @@ class InterruptedClaims:
             # A resolved gate keeps its route live, so it looks exactly like an interrupted
             # claim; without this guard the adopt branch would bump the epoch under the human.
             return
-        bindings = self.ctx.store.bindings_for_chunk(chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)
         if not bindings:
             return
         if detail.status == ChunkStatus.RUNNING and ours:
@@ -215,11 +215,11 @@ class InterruptedClaims:
         The route is confirmed and the binding held, but no lease was ever minted, so recovery is
         a spawn of the current node from its idempotent envelope. Also the route-token recovery
         path: the adopted window spans the claim response, so a missing token re-keys here (#84b)."""
-        bindings = self.ctx.store.bindings_for_chunk(chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)
         if not bindings:
             _log.warning("adopt with no bound env — cannot spawn", chunk_id=chunk_id)
             return
-        if self.ctx.store.route_token(chunk_id) is None:
+        if self.ctx.stores.tokens.route_token(chunk_id) is None:
             try:
                 rekeyed = self.ctx.hub.rekey_route_token(chunk_id)
             except ChunkNotFoundError:
@@ -227,7 +227,7 @@ class InterruptedClaims:
                 return
             except HubClientError:
                 return  # hub unreachable — the binding is durable; retry next tick
-            self.ctx.store.set_route_token(chunk_id, token=rekeyed.route_token, at=self.ctx.clock.now())
+            self.ctx.stores.tokens.set_route_token(chunk_id, token=rekeyed.route_token, at=self.ctx.clock.now())
         envelope = self._envelope(chunk_id, "adopted")
         if envelope is None:
             return
@@ -240,7 +240,7 @@ class InterruptedClaims:
         The hold-clearing fact is already durable when this runs (``bzh:crash-correctness``). The
         retry budget is **carried, not reset** — an ordinary mint against the node's existing
         ``retries_max``, so a requeue buys exactly one more try."""
-        bindings = self.ctx.store.bindings_for_chunk(chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)
         if not bindings:
             _log.warning("requeue-resume with no bound env — cannot spawn", chunk_id=chunk_id)
             return
@@ -278,7 +278,7 @@ class InterruptedClaims:
         _log.info("re-claimed interrupted chunk — spawning current node", chunk_id=chunk_id)
         # A reclaim is a fresh claim, so its token overwrites whatever this chunk's row held
         # before — a fresh claim always wins (issue #84a).
-        self.ctx.store.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
+        self.ctx.stores.tokens.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
         Spawner(self.ctx).spawn(chunk_id, outcome.claimed.envelope, envs, via="reclaim")
 
     def _envelope(self, chunk_id: str, what: str) -> NodeEnvelope | None:

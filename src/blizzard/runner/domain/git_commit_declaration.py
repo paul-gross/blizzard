@@ -7,17 +7,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
+from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.environments.provider import IWorkspaceProvider
-
-if TYPE_CHECKING:
-    # Deferred: ``runner/stores.py`` composes this module's own Protocol (blizzard#410).
-    from blizzard.runner.stores import IWriteRunnerStore
+from blizzard.runner.environments.repository import IReadEnvironmentRepository
 
 __all__ = [
     "GitCommitDeclarationRecord",
@@ -96,14 +94,25 @@ class GitCommitDeclarationUnknownRepo(Exception):
 
 
 class GitCommitDeclarationService:
-    """Composition-root-wired: the write store, the workspace provider, and the clock. The provider is
-    here because the environment's repo manifest says which repos the lease authorizes, and is the one
-    source of the origin each is later verified against."""
+    """Composition-root-wired: the write store, the token store (for authorization), the
+    environment store (for bound-environment resolution), the workspace provider, and the
+    clock. The provider is here because the environment's repo manifest says which repos
+    the lease authorizes, and is the one source of the origin each is later verified against."""
 
-    def __init__(self, store: IWriteRunnerStore, clock: IClock, provider: IWorkspaceProvider) -> None:
+    def __init__(
+        self,
+        store: IWriteGitCommitDeclarationRepository,
+        clock: IClock,
+        provider: IWorkspaceProvider,
+        *,
+        tokens: IReadTokenRepository,
+        environments: IReadEnvironmentRepository,
+    ) -> None:
         self._store = store
         self._clock = clock
         self._provider = provider
+        self._tokens = tokens
+        self._environments = environments
 
     def declare(
         self,
@@ -120,7 +129,7 @@ class GitCommitDeclarationService:
         :class:`GitCommitDeclarationUnknownRepo` when the env is unresolvable or does not list ``repo``.
         Append-and-read-newest (``bzh:facts-not-status``): a repeat call for the same ``(lease, env,
         repo)`` is a correction. The env is part of that key, so one env cannot overwrite another."""
-        stored_hash = self._store.lease_token_hash(lease.lease_id)
+        stored_hash = self._tokens.lease_token_hash(lease.lease_id)
         if not LeaseToken(presented_token, stored_hash).valid:
             raise GitCommitDeclarationRejected(f"presented token does not authorize lease {lease.lease_id}")
         resolved_env = self._resolve_environment(lease, environment_id)
@@ -149,7 +158,7 @@ class GitCommitDeclarationService:
 
         Inference stops where it stops being unambiguous: with several bound envs, guessing
         would silently attribute a branch to the wrong environment, so it is refused."""
-        bound = [binding.environment_id for binding in self._store.bindings_for_chunk(lease.chunk_id)]
+        bound = [binding.environment_id for binding in self._environments.bindings_for_chunk(lease.chunk_id)]
         if environment_id is not None:
             if environment_id not in bound:
                 raise GitCommitDeclarationUnknownRepo(

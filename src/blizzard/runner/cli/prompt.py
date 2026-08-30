@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
+from blizzard.runner.composition import build_stores
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness.workspace_prompts import (
     PACKAGED,
@@ -17,7 +18,6 @@ from blizzard.runner.harness.workspace_prompts import (
     UnknownWorkspacePromptSample,
 )
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 
 
 @click.group("prompt")
@@ -165,10 +165,10 @@ def _configured_source(config: RunnerConfig) -> str:
 def _stored_override(config: RunnerConfig) -> str | None:
     """The store's runtime override, or ``None``. A read-only query, so a live daemon is no bar."""
     try:
-        store = SqlAlchemyRunnerStore(
-            create_engine_from_url(config.db_url), RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+        stores = build_stores(
+            create_engine_from_url(config.db_url), errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
         )
-        return store.workspace_prompt_override(config.workspace_id)
+        return stores.workspace_prompt.workspace_prompt_override(config.workspace_id)
     except SQLAlchemyError as exc:
         raise click.ClickException(f"could not read the runner store at {config.db_url}: {exc}") from exc
 

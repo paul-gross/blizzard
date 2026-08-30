@@ -34,7 +34,9 @@ class DeclaredCommits:
         order. Spans **every** bound environment, since the key carries the env."""
         origins = self._origins()
         artifacts: list[SubmittedArtifact] = []
-        for key, declared in self.ctx.store.git_commit_declarations_for_lease(self.lease.lease_id).items():
+        for key, declared in self.ctx.stores.git_commit_declarations.git_commit_declarations_for_lease(
+            self.lease.lease_id
+        ).items():
             if self._resolved.get(key) == declared:
                 continue
             self._resolved[key] = declared

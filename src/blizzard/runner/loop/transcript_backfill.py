@@ -93,7 +93,7 @@ class TranscriptBackfill:
                 deferred += 1
 
         backpressured = False
-        for lease in self.ctx.store.transcript_backfill_leases():
+        for lease in self.ctx.stores.transcript_ledger.transcript_backfill_leases():
             if lease.session_id in seen:
                 continue
             seen.add(lease.session_id)
@@ -105,7 +105,10 @@ class TranscriptBackfill:
                 gone += 1
             elif limit is not None and imported >= limit:
                 deferred += 1
-            elif backpressured or self.ctx.store.outstanding_transcript_buffer_bytes() >= MAX_BUFFERED_BYTES:
+            elif (
+                backpressured
+                or self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes() >= MAX_BUFFERED_BYTES
+            ):
                 # Latched once tripped: nothing here shrinks the buffer again, since the
                 # flush below is exactly what failed to.
                 backpressured = True
@@ -138,13 +141,13 @@ class TranscriptBackfill:
         turn_range_start)`` and returns early on an accepted record, so a segment that
         shipped short is never corrected in place — only superseded. The original is left
         as it shipped, so what the hub was once told stays on the record."""
-        source = self.ctx.store.transcript_segment(source_segment_id)
+        source = self.ctx.stores.transcript_ledger.transcript_segment(source_segment_id)
         if source is None:
             raise TranscriptReshipError(f"no such transcript segment: {source_segment_id}")
         if self.ctx.transcripts is None or not self.ctx.config.transcripts_ship:
             # The same gate `run` holds — the CLI's refusal is the message, not the enforcement.
             raise TranscriptReshipError("[transcripts] ship is false — the lane is off")
-        if self.ctx.store.active_lease(source.lease_id) is not None:
+        if self.ctx.stores.leases.active_lease(source.lease_id) is not None:
             # `run`'s own rule, for the same reason: a live lease's segment belongs to the
             # tick's pump. Re-shipping one races it, leaving two segments over one session.
             raise TranscriptReshipError(
@@ -164,7 +167,7 @@ class TranscriptBackfill:
         segment_id = resumed.segment_id if resumed is not None else self._open_beside(source)
         complete = self._finish(segment_id)
         # Read back: the pump owns every counter, and may have marked a truncation of its own.
-        landed = self.ctx.store.transcript_segment(segment_id)
+        landed = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
         _log.info(
             "transcript segment reshipped",
             source_segment_id=source_segment_id,
@@ -196,7 +199,7 @@ class TranscriptBackfill:
         """A fresh segment over ``source``'s own lease coordinates, pointed at what it
         replaces. Without that pointer the hub's lease read — keyed on the lease, not the
         segment — concatenates both and renders the conversation twice."""
-        return self.ctx.store.open_transcript_segment(
+        return self.ctx.stores.transcript_ledger.open_transcript_segment(
             chunk_id=source.chunk_id,
             node_id=source.node_id,
             epoch=source.epoch,
@@ -208,7 +211,7 @@ class TranscriptBackfill:
         )
 
     def _open(self, lease: TranscriptBackfillLease) -> str:
-        return self.ctx.store.open_transcript_segment(
+        return self.ctx.stores.transcript_ledger.open_transcript_segment(
             chunk_id=lease.chunk_id,
             node_id=lease.node_id,
             epoch=lease.epoch,
@@ -228,7 +231,7 @@ class TranscriptBackfill:
             segment_id, deadline=None, incomplete_reason=BACKFILL_INCOMPLETE
         )
         if caught_up:
-            self.ctx.store.finalize_transcript_segment(segment_id, finalized_at=self.ctx.clock.now())
+            self.ctx.stores.transcript_ledger.finalize_transcript_segment(segment_id, finalized_at=self.ctx.clock.now())
         drain = TranscriptDrain(self.ctx)
         while drain.flush(limit=_FLUSH_BATCH, deadline=None) > 0:
             pass
@@ -237,7 +240,7 @@ class TranscriptBackfill:
     def _was_capped(self, segment_id: str) -> int:
         """1 when the hub refused this segment's content or the runner stopped shipping it —
         an import the local counts alone would report as whole."""
-        segment = self.ctx.store.transcript_segment(segment_id)
+        segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
         if segment is None:
             return 0
         return int(segment.truncated_reason == HUB_CAPPED or segment.shipping_stopped_reason is not None)
@@ -247,10 +250,10 @@ class TranscriptBackfill:
         own. A live lease's segment belongs to the tick's pump, never here."""
         return [
             segment
-            for segment in self.ctx.store.open_transcript_segments()
-            if self.ctx.store.active_lease(segment.lease_id) is None
+            for segment in self.ctx.stores.transcript_ledger.open_transcript_segments()
+            if self.ctx.stores.leases.active_lease(segment.lease_id) is None
         ]
 
     def _spawn_cwd(self, chunk_id: str) -> str | None:
-        bindings = self.ctx.store.bindings_for_chunk(chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)
         return SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path

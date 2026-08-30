@@ -32,7 +32,6 @@ from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.schema import escalation_closures
 from tests.e2e.test_acceptance_loop import (
     REPO,
@@ -44,7 +43,7 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _terminate,
 )
-from tests.runner_fakes import runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
     SseTap,

@@ -25,6 +25,6 @@ class SessionEndResponse(BaseModel):
 def session_end(lease_id: str, request: Request) -> SessionEndResponse:
     """Record a lease's session-end, stamped with the injected clock."""
     wiring = RunnerWiring.of(request)
-    store, clock = wiring.store(), wiring.clock()
-    store.record_session_end(lease_id=lease_id, ended_at=clock.now())
+    leases, clock = wiring.stores().leases, wiring.clock()
+    leases.record_session_end(lease_id=lease_id, ended_at=clock.now())
     return SessionEndResponse(recorded=True, lease_id=lease_id)

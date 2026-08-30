@@ -17,8 +17,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from tests.runner_fakes import runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.test_runner_status_cli import _init_runner, _serve_local_api
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)

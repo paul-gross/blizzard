@@ -13,7 +13,6 @@ from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.domain.attachments import AttachmentRejected
-from blizzard.runner.stores import IReadRunnerStore
 from blizzard.wire.attachments import AttachmentRequest, AttachmentResponse, StagedAttachment
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -46,6 +45,6 @@ def list_staged_attachments(lease_id: str, request: Request) -> list[StagedAttac
     """The lease's currently staged submissions — newest content per ``name``, not yet
     published into any envelope (issue #169)."""
     lease = authorized_lease(lease_id, request)
-    store: IReadRunnerStore = request.app.state.runner_store
-    staged = store.attachments_for_lease(lease.lease_id)
+    attachments = RunnerWiring.of(request).stores().attachments
+    staged = attachments.attachments_for_lease(lease.lease_id)
     return [StagedAttachment(name=name, content=content) for name, content in sorted(staged.items())]

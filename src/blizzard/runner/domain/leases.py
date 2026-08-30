@@ -18,7 +18,7 @@ from blizzard.runner.harness.fingerprint import PreambleFingerprint
 
 if TYPE_CHECKING:
     # Deferred: ``runner/stores.py`` composes this module's own Protocol (blizzard#410).
-    from blizzard.runner.stores import IReadRunnerStore
+    from blizzard.runner.stores import RunnerStores
 
 __all__ = [
     "HEARTBEAT_STALENESS_THRESHOLD",
@@ -341,7 +341,7 @@ class Liveness:
 
     @classmethod
     def of(
-        cls, store: IReadRunnerStore, lease: LeaseRecord, *, heartbeat: datetime | None | _Unread = _UNREAD
+        cls, store: IReadLeaseRepository, lease: LeaseRecord, *, heartbeat: datetime | None | _Unread = _UNREAD
     ) -> Liveness:
         """Read the lease's activity facts, taking an already-read ``heartbeat`` if offered."""
         beat = store.latest_heartbeat(lease.lease_id) if isinstance(heartbeat, _Unread) else heartbeat
@@ -409,18 +409,18 @@ class IProcessProbe(Protocol):
 class LocalLeaseService:
     """Derive every active lease's state at read time — the panel's list (issue #28).
 
-    A status the store never stores. Holds only :class:`IReadRunnerStore`
-    (``bzh:repository-split``), so a controller may hold this service directly."""
+    A status the store never stores. Spans leases, asks (parked) and environments
+    (bindings), so it holds the :class:`~blizzard.runner.stores.RunnerStores` bundle (D4)."""
 
     def __init__(
         self,
-        store: IReadRunnerStore,
+        stores: RunnerStores,
         clock: IClock,
         process: IProcessProbe,
         stale_after: timedelta = HEARTBEAT_STALENESS_THRESHOLD,
         recent_limit: int = RECENT_LEASE_LIMIT,
     ) -> None:
-        self._store = store
+        self._stores = stores
         self._clock = clock
         self._process = process
         self._stale_after = stale_after
@@ -432,11 +432,11 @@ class LocalLeaseService:
         The reported heartbeat and the staleness baseline are different questions, but
         share one heartbeat read. The remaining per-lease N+1 is accepted."""
         now = self._clock.now()
-        parked = self._store.parked_lease_ids()
+        parked = self._stores.asks.parked_lease_ids()
         activities: list[LeaseActivity] = []
-        for lease in self._store.list_active_leases():
-            last_heartbeat = self._store.latest_heartbeat(lease.lease_id)
-            liveness = Liveness.of(self._store, lease, heartbeat=last_heartbeat)
+        for lease in self._stores.leases.list_active_leases():
+            last_heartbeat = self._stores.leases.latest_heartbeat(lease.lease_id)
+            liveness = Liveness.of(self._stores.leases, lease, heartbeat=last_heartbeat)
             alive = self._is_alive(lease)
             binding = self._first_binding(lease.chunk_id)
             activities.append(
@@ -475,7 +475,7 @@ class LocalLeaseService:
                 closed_at=record.closed_at,
                 closure_reason=record.reason,
             )
-            for record in self._store.list_closed_leases(self._recent_limit)
+            for record in self._stores.leases.list_closed_leases(self._recent_limit)
         ]
 
     def _is_alive(self, lease: LeaseRecord) -> bool:
@@ -484,5 +484,5 @@ class LocalLeaseService:
         return self._process.is_alive(lease.pid, lease.process_start_time or "")
 
     def _first_binding(self, chunk_id: str) -> EnvBindingRecord | None:
-        bindings = self._store.bindings_for_chunk(chunk_id)
+        bindings = self._stores.environments.bindings_for_chunk(chunk_id)
         return bindings[0] if bindings else None

@@ -68,7 +68,7 @@ class Judgement:
     def of(cls, ctx: LoopContext, lease: LeaseRecord) -> Judgement | None:
         """This exit's judgement, or ``None`` when there is nothing to judge this tick — no
         bound environment, or a hub that could not hand over the envelope to judge against."""
-        bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
+        bindings = ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings:
             _log.warning("exited worker with no bound env — skipping", chunk_id=lease.chunk_id)
             return None
@@ -95,9 +95,9 @@ class Judgement:
             return
 
         produces = ProducesReconciler(self.envelope)
-        attachments = self.ctx.store.attachments_for_lease(lease.lease_id)
+        attachments = self.ctx.stores.attachments.attachments_for_lease(lease.lease_id)
         missing = produces.missing(artifacts, attachments)
-        if missing and not self.ctx.store.nudge_fired(lease.lease_id, lease.epoch):
+        if missing and not self.ctx.stores.checks.nudge_fired(lease.lease_id, lease.epoch):
             # Resume-once (issues #113, #422): an exit with `produces:` unmet is resumed, not
             # judged — no verdict elicited, no attempt failed, and no `checks:` run.
             _log.warning(
@@ -107,7 +107,9 @@ class Judgement:
                 lease_id=lease.lease_id,
                 epoch=lease.epoch,
             )
-            self.ctx.store.record_nudge_fired(lease_id=lease.lease_id, epoch=lease.epoch, at=self.ctx.clock.now())
+            self.ctx.stores.checks.record_nudge_fired(
+                lease_id=lease.lease_id, epoch=lease.epoch, at=self.ctx.clock.now()
+            )
             _CP_NUDGE_AFTER_FIRED_FACT.reached()
             DormantSession(self.ctx, lease).resume_on_unmet_produces(produces.nudge_message(missing), self.bindings)
             return
@@ -126,7 +128,7 @@ class Judgement:
             # pre-elicitation check in `_advance_exited_worker` cannot see this one — it was
             # recorded during the elicitation just above — so park on it here instead of
             # burning a retry on a verdict that was never coming.
-            ask = self.ctx.store.unforwarded_ask(lease.lease_id)
+            ask = self.ctx.stores.asks.unforwarded_ask(lease.lease_id)
             if ask is not None:
                 DormantSession(self.ctx, lease).park_on_ask(ask)
                 return
@@ -142,7 +144,7 @@ class Judgement:
         # Harvest asset artifacts for any `produces` name no git commit covers, read from the
         # durable store so a restart between attach and completion still sees it.
         assessment = self.ctx.harness.parse_assessment(output)
-        attachments = self.ctx.store.attachments_for_lease(lease.lease_id)
+        attachments = self.ctx.stores.attachments.attachments_for_lease(lease.lease_id)
         artifacts += produces.collect_assets(artifacts, assessment, attachments)
         self._buffer_completion(choice, checks, artifacts)
 
@@ -155,8 +157,8 @@ class Judgement:
         lease = self.lease
         if not node.checks:
             return []
-        if self.ctx.store.checks_ran(lease.lease_id, lease.epoch):
-            return self.ctx.store.check_results_for_lease(lease.lease_id, lease.epoch)
+        if self.ctx.stores.checks.checks_ran(lease.lease_id, lease.epoch):
+            return self.ctx.stores.checks.check_results_for_lease(lease.lease_id, lease.epoch)
         if self.ctx.check_runner is None:
             # The seam is unwired but the node declares checks — a wiring bug, never a
             # production path. Surface it loudly and skip rather than wedge the tick.
@@ -174,7 +176,7 @@ class Judgement:
             outcome = self.ctx.check_runner.run(command, cwd, timeout)
             results.append(CheckResultRecord(command=command, passed=outcome.passed, output_tail=outcome.output_tail))
         # Rows first, then the marker — what `runner:checks-recorded-when-marked` rests on.
-        self.ctx.store.record_check_results(
+        self.ctx.stores.checks.record_check_results(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,
             node_id=lease.node_id,
@@ -183,7 +185,7 @@ class Judgement:
             at=self.ctx.clock.now(),
         )
         _CP_CHECKS_AFTER_RESULTS.reached()
-        self.ctx.store.record_checks_ran(lease_id=lease.lease_id, epoch=lease.epoch, at=self.ctx.clock.now())
+        self.ctx.stores.checks.record_checks_ran(lease_id=lease.lease_id, epoch=lease.epoch, at=self.ctx.clock.now())
         _CP_CHECKS_AFTER_MARKER.reached()
         _log.info(
             "checks executed",
@@ -237,7 +239,7 @@ class Judgement:
             epoch=lease.epoch,
             runner_id=self.ctx.config.runner_id,
             artifacts=artifacts,
-            route_token=self.ctx.store.route_token(lease.chunk_id),
+            route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
         )
         OutboundFacts(self.ctx).decision(lease, submission, at=self.ctx.clock.now())
         _log.info("runner-config gate: decision buffered", chunk_id=lease.chunk_id, node=lease.node_name)
@@ -256,7 +258,7 @@ class Judgement:
             # `(command, passed)` only — `output_tail` stays runner-local, off the wire.
             check_results=[CheckResult(command=r.command, passed=r.passed) for r in checks],
             artifacts=artifacts,
-            route_token=self.ctx.store.route_token(lease.chunk_id),
+            route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
         )
         OutboundFacts(self.ctx).completion(lease, submission, at=self.ctx.clock.now())
         _CP_AFTER_BUFFER.reached()

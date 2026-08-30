@@ -6,8 +6,7 @@ import contextlib
 import os
 from dataclasses import dataclass
 
-from blizzard.runner.domain.leases import LeaseRecord
-from blizzard.runner.stores import IReadRunnerStore
+from blizzard.runner.domain.leases import IReadLeaseRepository, LeaseRecord
 
 
 @dataclass(frozen=True)
@@ -15,7 +14,7 @@ class WorkerStdoutFiles:
     """One runner's worker-output file layout, rooted at ``root`` (``""`` disables it)."""
 
     root: str
-    store: IReadRunnerStore
+    leases: IReadLeaseRepository
 
     def stdout_path(self, lease_id: str, generation: int) -> str:
         """This lease's per-generation stdout redirect target, or ``""`` for no redirect.
@@ -40,7 +39,7 @@ class WorkerStdoutFiles:
         Best-effort and never raises (a hung-but-live worker that never crashed to stderr, or
         an unconfigured ``root``, is the ordinary empty case) — folded into a failed attempt's
         event detail so a dead worker's last words reach the operator."""
-        generation = self.store.lease_generation(lease.lease_id)
+        generation = self.leases.lease_generation(lease.lease_id)
         if generation <= 0:
             return ""
         text = self._read(self.stderr_path(lease.lease_id, generation))
@@ -54,7 +53,7 @@ class WorkerStdoutFiles:
         file at any of those generations is a no-op."""
         if not self.root:
             return
-        for generation in range(1, self.store.lease_generation(lease_id) + 2):
+        for generation in range(1, self.leases.lease_generation(lease_id) + 2):
             with contextlib.suppress(OSError):
                 os.remove(self.stdout_path(lease_id, generation))
 

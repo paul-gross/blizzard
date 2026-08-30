@@ -44,6 +44,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    make_stores,
 )
 
 pytestmark = pytest.mark.component
@@ -313,7 +314,7 @@ def _answered_question(question_id="qn_1") -> QuestionView:  # type: ignore[no-u
 def test_restart_resume_suppressed_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()
@@ -349,7 +350,7 @@ def test_restart_resume_suppressed_then_advance_does_not_judge_or_spawn(tmp_path
     which would otherwise spawn a harness process and judge a killed worker as done."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()
@@ -501,7 +502,7 @@ def test_hub_paused_only_restart_resume_still_spawns(tmp_path):  # type: ignore[
     """The mirror image: hub brake on, local brake off — restart-resume is unaffected."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
     hub.paused = True
@@ -550,7 +551,7 @@ def test_suppression_logged_once_per_lease_per_tick_per_site(tmp_path):  # type:
     store = _store(tmp_path)
     _seed_running_lease(store, chunk="ch_1", lease="lease_1")
     _seed_running_lease(store, chunk="ch_2", lease="lease_2", pid=101, start="start-101", session="sess-b")
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk("ch_1")
@@ -736,7 +737,7 @@ def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):
     steps. Hub brake off: the local brake alone must stop all four spawn primitives."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
     hub.paused = False  # the hub's brake is off — the local brake is the only one on
@@ -802,7 +803,7 @@ def test_advance_does_not_judge_a_lease_resume_left_open_after_a_hub_blip(tmp_pa
     dead-pid lease that only the resume-intent skip stops from being judged."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = _BlipOnceHub()
     hub.chunks["ch_1"] = _running_chunk()

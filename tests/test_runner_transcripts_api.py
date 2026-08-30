@@ -19,7 +19,7 @@ from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
-from tests.runner_fakes import FakeArchivedTranscriptRepository, make_store
+from tests.runner_fakes import FakeArchivedTranscriptRepository, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -53,8 +53,15 @@ def _app_with_transcripts(
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     repo = repo or FakeTranscriptRepository()
     archived = archived or FakeArchivedTranscriptRepository()
-    service = TranscriptService(store=store, transcripts=repo, archived=archived, workspace_root=workspace_root)
-    return create_app(config, runner_store=store, transcripts=service), store, repo
+    service = TranscriptService(
+        leases=store,
+        transcript_ledger=store,
+        environments=store,
+        transcripts=repo,
+        archived=archived,
+        workspace_root=workspace_root,
+    )
+    return create_app(config, runner_stores=make_stores(store), transcripts=service), store, repo
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]

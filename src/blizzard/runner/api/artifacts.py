@@ -41,10 +41,10 @@ def _node_row(artifact: EnvelopeArtifact) -> WorkerArtifact:
 
 def _graph_rows(graph_id: str, request: Request) -> list[WorkerArtifact]:
     """This lease's pinned mint's graph-scoped declarations, store-read only — never the hub."""
-    reads = RunnerWiring.of(request).reads()
+    graph_artifacts = RunnerWiring.of(request).stores().graph_artifacts
     return [
         WorkerArtifact(scope=ArtifactScope.GRAPH, name=r.name, kind=r.kind, content=r.content)
-        for r in reads.graph_artifacts_for_graph(graph_id)
+        for r in graph_artifacts.graph_artifacts_for_graph(graph_id)
     ]
 
 

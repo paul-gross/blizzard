@@ -19,7 +19,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.domain.leases import NewLease
-from tests.runner_fakes import make_store
+from tests.runner_fakes import make_store, make_stores
 
 _NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -28,8 +28,8 @@ _TOKEN = "the-lease-token"
 def _app_with_attachments(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = AttachmentService(store, FixedClock(_NOW))
-    return create_app(config, runner_store=store, attachments=service), store
+    service = AttachmentService(store, FixedClock(_NOW), tokens=store)
+    return create_app(config, runner_stores=make_stores(store), attachments=service), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -61,8 +61,8 @@ def test_503_when_attachment_service_unwired(tmp_path: Path) -> None:
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = AttachmentService(store, FixedClock(_NOW))
-    # The service is wired, but ``runner_store`` — the controller's own read-only
+    service = AttachmentService(store, FixedClock(_NOW), tokens=store)
+    # The service is wired, but ``runner_stores`` — the controller's own read-only
     # resolution seam — is not: the edge must still answer 503, not raise.
     app = create_app(config, attachments=service)
     with TestClient(app) as client:

@@ -135,3 +135,97 @@ def test_no_runner_domain_module_imports_from_runner_store() -> None:
     into ``runner/store/`` for one, which would invert the dependency arrow."""
     violations = _violations(_RUNNER_DOMAIN_DIR, ("blizzard.runner.store",))
     assert not violations, f"G — runner/domain/ must not import from runner/store/: {violations}"
+
+
+_RUNNER_STORE_INTERNAL_DIR = _RUNNER_STORE_DIR / "internal"
+_RUNNER_STORE_SCHEMA_FILE = _RUNNER_STORE_DIR / "schema.py"
+_RUNNER_STORE_ERRORS_FILE = _RUNNER_STORE_DIR / "errors.py"
+_RUNNER_STORE_MIGRATIONS_DIR = _RUNNER_STORE_DIR / "migrations"
+_RUNNER_COMPOSITION_FILE = _RUNNER_DIR / "composition.py"
+
+# AC3 (blizzard#410, Phases 4-5): every file outside the store's own package that still
+# names ``sqlalchemy`` — each an accepted, individually-justified exception, not the
+# store surface this criterion polices. ``None`` allows every name from that import;
+# a tuple narrows to only those names.
+_SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
+    # Engine only, for DI typing — shared with hub/composition.py, permanently out of
+    # scope (plan's "Out of scope": "Engine in a composition root").
+    _RUNNER_COMPOSITION_FILE: ("Engine",),
+    # A wholly separate, unrelated store (the JWT jti-seen cache) under its own
+    # package-private internal/ — never part of RunnerStore.
+    _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": None,
+    # A read-only driver-exception catch, not schema/query access.
+    _RUNNER_DIR / "cli" / "prompt.py": ("SQLAlchemyError",),
+    # D7/Phase 5 closes this: the last remaining driver-exception leak, moving into
+    # foundation/store/migrations.py so both daemons share the fix.
+    _RUNNER_DIR / "runtime.py": ("OperationalError",),
+}
+
+
+def _sqlalchemy_import_names(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(), filename=str(path))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "sqlalchemy" or alias.name.startswith("sqlalchemy."):
+                    names.add("*")
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and node.module is not None
+            and (node.module == "sqlalchemy" or node.module.startswith("sqlalchemy."))
+        ):
+            names.update(alias.name for alias in node.names)
+    return names
+
+
+def test_sqlalchemy_is_imported_only_from_the_store_seam() -> None:
+    """AC3 (blizzard#410, Phases 4-5): ``sqlalchemy`` is a name the store's own adapters,
+    schema, errors and migrations may hold — every other module takes the Protocol seam,
+    never the driver underneath it, bar the individually-justified exceptions above."""
+    violations: list[str] = []
+    for path in sorted(_RUNNER_DIR.rglob("*.py")):
+        if (
+            path.is_relative_to(_RUNNER_STORE_INTERNAL_DIR)
+            or path in (_RUNNER_STORE_SCHEMA_FILE, _RUNNER_STORE_ERRORS_FILE)
+            or path.is_relative_to(_RUNNER_STORE_MIGRATIONS_DIR)
+        ):
+            continue
+        names = _sqlalchemy_import_names(path)
+        if not names:
+            continue
+        allowed = _SQLALCHEMY_EXCEPTIONS.get(path, ())
+        if allowed is None:
+            continue
+        extra = names if allowed == () else names - set(allowed)
+        if extra:
+            violations.append(f"{path.relative_to(_REPO_ROOT)} imports sqlalchemy name(s) {sorted(extra)}")
+    assert not violations, f"H — sqlalchemy must stay inside the store seam: {violations}"
+
+
+def _runner_store_adapter_names() -> set[str]:
+    names: set[str] = set()
+    for path in sorted(_RUNNER_STORE_INTERNAL_DIR.glob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name.endswith("Store"):
+                names.add(node.name)
+    return names
+
+
+def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter() -> None:
+    """AC4 (blizzard#410, D4): every concrete ``store/internal/`` adapter is named by
+    ``runner/composition.py`` and nowhere else under ``src/`` — every other collaborator
+    takes a Protocol seam or the ``RunnerStores`` bundle it builds."""
+    adapters = _runner_store_adapter_names()
+    violations: list[str] = []
+    for path in sorted(_RUNNER_DIR.rglob("*.py")):
+        if path.is_relative_to(_RUNNER_STORE_INTERNAL_DIR) or path == _RUNNER_COMPOSITION_FILE:
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                hit = adapters & {alias.name for alias in node.names}
+                if hit:
+                    violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
+    assert not violations, f"I — only runner/composition.py may name a concrete runner-store adapter: {violations}"

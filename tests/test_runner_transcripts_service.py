@@ -40,7 +40,9 @@ def _service(
     store, *, local: FakeTranscriptRepository | None = None, archived: FakeArchivedTranscriptRepository | None = None
 ):  # type: ignore[no-untyped-def]
     return TranscriptService(
-        store=store,
+        leases=store,
+        transcript_ledger=store,
+        environments=store,
         transcripts=local or FakeTranscriptRepository(),
         archived=archived or FakeArchivedTranscriptRepository(),
         workspace_root="",

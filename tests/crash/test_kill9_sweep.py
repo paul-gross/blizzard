@@ -27,7 +27,6 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.store import schema as runner_schema
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.tools.invariants import Invariants
 from tests.crash.support import (
     LAND_STEP,
@@ -56,7 +55,7 @@ from tests.crash.support import (
     wait_status,
     write_runner_config,
 )
-from tests.runner_fakes import runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 
 pytestmark = pytest.mark.crash_sweep
 

@@ -26,8 +26,7 @@ from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.listeners import Listeners, Uds
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from tests.runner_fakes import runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 
 
 class _FakeResponse:

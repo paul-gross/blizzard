@@ -24,7 +24,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.adapter import WorkerHandle
-from tests.runner_fakes import FakeHarness, make_store
+from tests.runner_fakes import FakeHarness, make_store, make_stores
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _HUB_URL = "http://hub.local:8421"
@@ -48,7 +48,7 @@ def _app_with_status(tmp_path: Path, *, hub_url: str | None = _HUB_URL) -> tuple
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url or "")
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1"), verdict=None)
     service = RunnerStatusService(
-        store,
+        make_stores(store),
         FixedClock(_NOW),
         harness,
         runner_id=config.runner_id,
@@ -57,7 +57,7 @@ def _app_with_status(tmp_path: Path, *, hub_url: str | None = _HUB_URL) -> tuple
         hub_url=config.hub_url,
         env_pool=("e1",),
     )
-    app = create_app(config, runner_store=store, runner_status=service)
+    app = create_app(config, runner_stores=make_stores(store), runner_status=service)
     return TestClient(app), store
 
 

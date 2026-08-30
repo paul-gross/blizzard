@@ -41,7 +41,7 @@ def get_dashboard(request: Request) -> DashboardView:
     return DashboardView(
         runner=_runner_status_view(service),
         environments=_environment_list(service),
-        asks=_ask_list(wiring.reads()),
+        asks=_ask_list(wiring.stores().asks),
         escalations=_escalation_list(service),
         takeovers=_open_takeover_list(service),
         facts=_fact_list(service, DEFAULT_FACT_LIMIT),

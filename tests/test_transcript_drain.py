@@ -64,8 +64,8 @@ def _ctx(hub: FakeHub, *, clock: FixedClock | None = None):  # type: ignore[no-u
 
 
 def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
-    ctx.store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    ctx.store.record_lease(
+    ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    ctx.stores.leases.record_lease(
         NewLease(
             lease_id="lease_1",
             chunk_id="ch_1",
@@ -78,8 +78,8 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    ctx.store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
-    return ctx.store.open_transcript_segments()[0].segment_id
+    ctx.stores.leases.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
 
 def _enqueue_delta(ctx, segment_id: str, *, cursor: str) -> int:  # type: ignore[no-untyped-def]
@@ -98,7 +98,7 @@ def _enqueue_delta(ctx, segment_id: str, *, cursor: str) -> int:  # type: ignore
             "turns": [],
         }
     )
-    (seq,) = ctx.store.record_transcript_deltas(
+    (seq,) = ctx.stores.transcript_ledger.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor=cursor,
@@ -166,8 +166,8 @@ def test_drain_run_pumps_then_flushes_a_real_pump_output_to_the_hub_with_shippin
     pushed = hub.transcripts_pushed[0]
     assert pushed.final is False
     assert [t.text for t in pushed.turns] == ["hello from the real pump"]
-    assert ctx.store.pending_transcript_outbound() == []
-    segment = ctx.store.transcript_segment(segment_id)
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.cursor == "pos-1"  # the pump's own cursor advance landed too
 
@@ -194,7 +194,7 @@ def test_drain_renders_a_final_marker_from_the_ledger_row_not_a_hand_built_paylo
             "turns": [],
         }
     )
-    ctx.store.record_transcript_deltas(
+    ctx.stores.transcript_ledger.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor="tok-1",
@@ -205,7 +205,7 @@ def test_drain_renders_a_final_marker_from_the_ledger_row_not_a_hand_built_paylo
         payloads=[content_payload],
         created_at=_NOW,
     )
-    ctx.store.record_closure(
+    ctx.stores.leases.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
 
@@ -231,8 +231,8 @@ def test_drain_renders_a_final_marker_as_truncated_when_the_segment_carries_a_re
     hub = FakeHub()
     ctx = _ctx(hub)
     segment_id = _spawn_one_segment(ctx)
-    ctx.store.stop_transcript_segment_shipping(segment_id, reason="chunk_budget_exceeded")
-    ctx.store.record_closure(
+    ctx.stores.transcript_ledger.stop_transcript_segment_shipping(segment_id, reason="chunk_budget_exceeded")
+    ctx.stores.leases.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
 
@@ -250,14 +250,14 @@ def test_drain_renders_a_final_marker_as_truncated_from_a_record_truncation_alon
     hub = FakeHub()
     ctx = _ctx(hub)
     segment_id = _spawn_one_segment(ctx)
-    ctx.store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded", severity=1)
-    ctx.store.record_closure(
+    ctx.stores.transcript_ledger.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded", severity=1)
+    ctx.stores.leases.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
 
     TranscriptDrain(ctx).run()
 
-    segment = ctx.store.transcript_segment(segment_id)
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.shipping_stopped_reason is None  # only the record-truncation half is set
     final_pushes = [r for r in hub.transcripts_pushed if r.final]
@@ -272,7 +272,7 @@ def test_drain_renders_a_final_marker_on_the_sentinel_version_when_no_pump_ever_
     hub = FakeHub()
     ctx = _ctx(hub)
     _spawn_one_segment(ctx)
-    ctx.store.record_closure(
+    ctx.stores.leases.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
 
@@ -294,7 +294,7 @@ def test_drain_delivers_pending_records_in_fifo_order_and_acks_them() -> None:
     TranscriptDrain(ctx).run()
 
     assert [r.segment_id for r in hub.transcripts_pushed] == [segment_id, segment_id]
-    assert ctx.store.pending_transcript_outbound() == []
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
 
 
 def test_drain_stops_on_a_transport_failure_and_retries_the_backlog_next_tick() -> None:
@@ -308,12 +308,12 @@ def test_drain_stops_on_a_transport_failure_and_retries_the_backlog_next_tick() 
     TranscriptDrain(ctx).run()
 
     assert hub.transcripts_pushed == []  # never even reached the hub
-    assert len(ctx.store.pending_transcript_outbound()) == 2  # nothing acked — stays buffered
+    assert len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 2  # nothing acked — stays buffered
 
     hub.down = False
     TranscriptDrain(ctx).run()
     assert len(hub.transcripts_pushed) == 2
-    assert ctx.store.pending_transcript_outbound() == []
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
 
 
 def test_drain_acks_a_hub_capped_record_rather_than_wedging_the_fifo() -> None:
@@ -328,7 +328,7 @@ def test_drain_acks_a_hub_capped_record_rather_than_wedging_the_fifo() -> None:
 
     TranscriptDrain(ctx).run()
 
-    assert ctx.store.pending_transcript_outbound() == []  # both acked — rejection is not a wedge
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []  # both acked — rejection is not a wedge
     assert [f.seq for f in hub.transcripts_pushed] == [ok_seq]  # the rejected one never applied
 
 
@@ -343,10 +343,10 @@ def test_drain_surfaces_a_hub_cap_rejection_never_silently() -> None:
 
     TranscriptDrain(ctx).run()
 
-    segment = ctx.store.transcript_segment(segment_id)
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "hub_capped"
-    fact_events = ctx.store.pending_outbound()
+    fact_events = ctx.stores.outbound.pending_outbound()
     assert len(fact_events) == 1
     payload = json.loads(fact_events[0].payload)
     assert payload["kind"] == "transcript-truncated"
@@ -364,21 +364,21 @@ def test_drain_marks_a_hub_cap_rejection_on_replay_after_a_lost_ack() -> None:
     hub.reject_transcript_seqs = {seq}
     # The hub side of a first delivery attempt completing durably, with no local
     # post-ack work ever running — the exact window `_CP_AFTER_SUBMIT` names.
-    delta = ctx.store.pending_transcript_outbound()[0]
+    delta = ctx.stores.transcript_ledger.pending_transcript_outbound()[0]
     record = TranscriptSegmentRecord.model_validate({"seq": delta.seq, **json.loads(delta.payload)})
     hub.push_transcripts(TranscriptSegmentBatch(runner_id="r1", records=[record]))
-    assert ctx.store.pending_transcript_outbound() == [delta]  # still buffered — no local ack ran
-    segment = ctx.store.transcript_segment(segment_id)
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == [delta]  # still buffered — no local ack ran
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason is None  # not marked yet — the crash pre-empted it
 
     TranscriptDrain(ctx).run()  # the retry
 
-    assert ctx.store.pending_transcript_outbound() == []  # finally cleared locally
-    segment = ctx.store.transcript_segment(segment_id)
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []  # finally cleared locally
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "hub_capped"
-    fact_events = ctx.store.pending_outbound()
+    fact_events = ctx.stores.outbound.pending_outbound()
     assert len(fact_events) == 1
     assert json.loads(fact_events[0].payload)["kind"] == "transcript-truncated"
 
@@ -394,7 +394,7 @@ def test_drain_acks_an_already_applied_record_without_redelivering() -> None:
 
     TranscriptDrain(ctx).run()
 
-    assert ctx.store.pending_transcript_outbound() == []
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
     assert hub.transcripts_pushed == []  # never re-applied
 
 
@@ -411,7 +411,7 @@ def test_drain_bounds_its_own_per_run_record_count() -> None:
     TranscriptDrain(ctx).run()
 
     assert len(hub.transcripts_pushed) == transcript_drain_module._MAX_RECORDS_PER_RUN
-    assert len(ctx.store.pending_transcript_outbound()) == 5  # the rest waits for the next tick
+    assert len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 5  # the rest waits for the next tick
 
 
 def test_drain_bounds_its_own_per_run_wall_clock() -> None:
@@ -428,7 +428,7 @@ def test_drain_bounds_its_own_per_run_wall_clock() -> None:
     TranscriptDrain(ctx).run()
 
     assert hub.transcripts_pushed == []  # the wall-clock bound was already past on the first check
-    assert len(ctx.store.pending_transcript_outbound()) == 2
+    assert len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 2
 
 
 def test_drain_never_queries_pending_once_the_pump_alone_exhausts_the_deadline() -> None:
@@ -442,14 +442,14 @@ def test_drain_never_queries_pending_once_the_pump_alone_exhausts_the_deadline()
     _enqueue_delta(ctx, segment_id, cursor="pos-1")
 
     calls = 0
-    real_pending = ctx.store.pending_transcript_outbound
+    real_pending = ctx.stores.transcript_ledger.pending_transcript_outbound
 
     def _counting_pending(*args, **kwargs):  # type: ignore[no-untyped-def]
         nonlocal calls
         calls += 1
         return real_pending(*args, **kwargs)
 
-    ctx.store.pending_transcript_outbound = _counting_pending  # type: ignore[method-assign]
+    ctx.stores.transcript_ledger.pending_transcript_outbound = _counting_pending  # type: ignore[method-assign]
 
     TranscriptDrain(ctx).run()
 
@@ -531,7 +531,7 @@ def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
     drain_failures = [e for e in logs if "transcript drain failed" in e["event"]]
     assert drain_failures == []  # never reaches the outer, whole-tick catch
     assert hub.transcripts_pushed != []  # the pre-existing buffered delta still flushed, same run
-    assert ctx.store.pending_transcript_outbound() == []
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
 
     # The condition ending (a healthy tick) recovers on the very next run — nothing wedged.
     healthy_ctx = replace(ctx, transcripts=FakeTranscriptSource())
@@ -561,7 +561,9 @@ def test_drain_run_survives_the_pump_itself_raising_outside_the_segment_loop() -
     ctx = replace(ctx, config=replace(ctx.config, transcripts_ship=True))
     segment_id = _spawn_one_segment(ctx)
     _enqueue_delta(ctx, segment_id, cursor="pos-1")
-    ctx = replace(ctx, store=_RaisingOpenSegmentsStore(ctx.store))
+    ctx = replace(
+        ctx, stores=replace(ctx.stores, transcript_ledger=_RaisingOpenSegmentsStore(ctx.stores.transcript_ledger))
+    )
 
     with capture_logs() as logs:
         TranscriptDrain(ctx).run()  # must not raise

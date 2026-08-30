@@ -22,7 +22,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.artifacts import GraphArtifactRecord
 from blizzard.runner.domain.leases import NewLease
-from tests.runner_fakes import make_store
+from tests.runner_fakes import make_store, make_stores
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -83,7 +83,7 @@ class _FakeHubResponse:
 def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url)
-    return create_app(config, runner_store=store), store
+    return create_app(config, runner_stores=make_stores(store)), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -263,7 +263,7 @@ def test_list_forwards_the_runner_bearer_when_a_token_is_configured(
         return _FakeHubResponse(200, _ENVELOPE)
 
     monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    with TestClient(create_app(config, runner_store=store)) as client:
+    with TestClient(create_app(config, runner_stores=make_stores(store))) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     # Two forwards — envelope, then the system-artifact set — both riding the same bearer.

@@ -42,7 +42,7 @@ class OutboundDrain:
     ctx: LoopContext
 
     def run(self) -> None:
-        for fact in self.ctx.store.pending_outbound():
+        for fact in self.ctx.stores.outbound.pending_outbound():
             if not self._deliver(fact):
                 break  # transport failure — stop; retry the backlog next tick
 
@@ -85,7 +85,7 @@ class OutboundDrain:
         _CP_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay
         self._ack(fact)
         _CP_AFTER_ACK.reached()
-        lease = self.ctx.store.active_lease(fact.lease_id or "")
+        lease = self.ctx.stores.leases.active_lease(fact.lease_id or "")
         if lease is None:
             return True  # already advanced on an earlier flush whose ack was lost
         self._consume(lease, response)
@@ -103,7 +103,7 @@ class OutboundDrain:
         except HubClientError:
             return False  # decision stays durable in the buffer; retried next tick
         self._ack(fact)
-        lease = self.ctx.store.active_lease(fact.lease_id or "")
+        lease = self.ctx.stores.leases.active_lease(fact.lease_id or "")
         if lease is None:
             return True  # already parked on an earlier flush whose ack was lost
         if response.outcome == ApplyOutcome.FAILURE:
@@ -130,7 +130,7 @@ class OutboundDrain:
         if response.outcome == ApplyOutcome.NEXT and self._capped(lease):
             return  # capped — needs_human; the next attempt is not spawned
         HeldChunk(self.ctx, lease.chunk_id).apply(
-            response.outcome, response.next_envelope, self.ctx.store.bindings_for_chunk(lease.chunk_id)
+            response.outcome, response.next_envelope, self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         )
 
     def _capped(self, lease: LeaseRecord) -> bool:
@@ -162,7 +162,7 @@ class OutboundDrain:
         return True
 
     def _ack(self, fact: BufferedFact) -> None:
-        self.ctx.store.ack_outbound(fact.seq, acked_at=self.ctx.clock.now())
+        self.ctx.stores.outbound.ack_outbound(fact.seq, acked_at=self.ctx.clock.now())
         if self.ctx.events is not None:
             # Re-announces the enqueue's own seq — the fact log's `acked_at` marker
             # otherwise stays stale until the next backstop poll (D6 carries no acked state).

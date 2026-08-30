@@ -18,7 +18,7 @@ def authorized_lease(lease_id: str, request: Request) -> LeaseRecord:
     caller never learns the fleet's hub-wiring state."""
     wiring = RunnerWiring.of(request)
     lease = wiring.worker_lease(lease_id)
-    if not LeaseToken(presented_lease_token(request), wiring.reads().lease_token_hash(lease_id)).valid:
+    if not LeaseToken(presented_lease_token(request), wiring.stores().tokens.lease_token_hash(lease_id)).valid:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=f"presented token does not authorize lease {lease_id}"
         )

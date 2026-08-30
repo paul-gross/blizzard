@@ -5,10 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
+from blizzard.runner.domain.leases import IReadLeaseRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment, IWorkspaceProvider
+from blizzard.runner.environments.repository import IWriteEnvironmentRepository
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
-from blizzard.runner.stores import IWriteRunnerStore
 
 
 @dataclass(frozen=True)
@@ -16,7 +17,8 @@ class EnvironmentRelease:
     """The two ways a runner gives an environment back — at the chunk's tenure end, and
     when a just-recorded binding's claim never landed."""
 
-    store: IWriteRunnerStore
+    environments: IWriteEnvironmentRepository
+    leases: IReadLeaseRepository
     clock: IClock
     provider: IWorkspaceProvider
     worker_files: WorkerStdoutFiles
@@ -29,11 +31,11 @@ class EnvironmentRelease:
         per-generation stdout files of every lease it ever minted (issue #58) — bounded, and
         no longer needed once their usage facts are durable."""
         now = self.clock.now()
-        for binding in self.store.bindings_for_chunk(chunk_id):
+        for binding in self.environments.bindings_for_chunk(chunk_id):
             self.provider.release(binding.environment_id)
-            self.store.record_release(chunk_id=chunk_id, environment_id=binding.environment_id, released_at=now)
+            self.environments.record_release(chunk_id=chunk_id, environment_id=binding.environment_id, released_at=now)
             self._publish_released(chunk_id, binding.environment_id)
-        for lease_id in self.store.lease_ids_for_chunk(chunk_id):
+        for lease_id in self.leases.lease_ids_for_chunk(chunk_id):
             self.worker_files.cleanup(lease_id)
 
     def release_binding(self, chunk_id: str, acquired: list[AcquiredEnvironment]) -> None:
@@ -44,7 +46,7 @@ class EnvironmentRelease:
         chunk exactly as if it had never been touched (it stays ``ready``)."""
         now = self.clock.now()
         for a in acquired:
-            self.store.record_release(chunk_id=chunk_id, environment_id=a.environment_id, released_at=now)
+            self.environments.record_release(chunk_id=chunk_id, environment_id=a.environment_id, released_at=now)
             self._publish_released(chunk_id, a.environment_id)
             self.provider.release(a.environment_id)
 

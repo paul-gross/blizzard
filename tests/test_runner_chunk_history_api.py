@@ -20,7 +20,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
 from blizzard.wire.history import ChunkHistoryView
-from tests.runner_fakes import make_store
+from tests.runner_fakes import make_store, make_stores
 from tests.support import build_hub, pointer_token, report_lease
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
@@ -198,7 +198,7 @@ class _FakeHubResponse:
 def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url)
-    return create_app(config, runner_store=store), store
+    return create_app(config, runner_stores=make_stores(store)), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -342,7 +342,7 @@ def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path, m
         return _FakeHubResponse(200, _DETAIL)
 
     monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    with TestClient(create_app(config, runner_store=store)) as client:
+    with TestClient(create_app(config, runner_stores=make_stores(store))) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     assert seen_headers == [{"Authorization": "Bearer hub-tok"}]
@@ -483,7 +483,7 @@ def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(
     )
     runner_store.record_lease_token("lease_1", TokenHash(_TOKEN).hex, _NOW)
     runner_config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL)
-    with TestClient(create_app(runner_config, runner_store=runner_store)) as client:
+    with TestClient(create_app(runner_config, runner_stores=make_stores(runner_store))) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     worker_rows = resp.json()

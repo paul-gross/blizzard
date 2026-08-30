@@ -26,7 +26,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Advance, Reap
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.facts import LEASE_MINTED
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
+from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store, make_stores
 
 pytestmark = pytest.mark.component
 
@@ -40,7 +40,7 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
 
 def _service(store, *, clock=None, harness=None, probe=None):  # type: ignore[no-untyped-def]
     return TakeoverService(
-        store,
+        make_stores(store),
         clock or FixedClock(_NOW),
         harness or FakeHarness(handle=_HANDLE, verdict=None),
         probe or FakeProbe(),

@@ -17,7 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import LocalLeaseService, NewLease
-from tests.runner_fakes import FakeProbe, make_store
+from tests.runner_fakes import FakeProbe, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -26,8 +26,8 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 def _app_with_leases(tmp_path: Path, *, clock: FixedClock | None = None, probe: FakeProbe | None = None):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = LocalLeaseService(store, clock or FixedClock(_NOW), probe or FakeProbe())
-    return create_app(config, runner_store=store, leases=service), store
+    service = LocalLeaseService(make_stores(store), clock or FixedClock(_NOW), probe or FakeProbe())
+    return create_app(config, runner_stores=make_stores(store), leases=service), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]

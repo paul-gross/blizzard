@@ -84,7 +84,7 @@ class TranscriptDrain:
         empty buffer or a hub that refused the head — which is all a caller needs to stop."""
         # `limit` bounds the query itself, and is this call's ONLY count bound — a second,
         # loop-level guard would be dead code below this line's cap.
-        pending = self.ctx.store.pending_transcript_outbound(limit=limit)
+        pending = self.ctx.stores.transcript_ledger.pending_transcript_outbound(limit=limit)
         delivered = 0
         for delta in pending:
             if deadline is not None and self.ctx.clock.now() >= deadline:
@@ -108,14 +108,14 @@ class TranscriptDrain:
             # drain on a record the hub will never store in full: ack and move on (D6, D4).
             _log.error("hub capped buffered transcript record", seq=delta.seq, segment_id=delta.segment_id)
             # Never silent — the same segment-field/fact-lane pair the pump's own paths use.
-            changed = self.ctx.store.mark_transcript_record_truncated(
+            changed = self.ctx.stores.transcript_ledger.mark_transcript_record_truncated(
                 delta.segment_id, reason=HUB_CAPPED, severity=HUB_CAPPED_SEVERITY
             )
             if changed:
                 OutboundFacts(self.ctx).transcript_truncated(
                     chunk_id=delta.chunk_id, segment_id=delta.segment_id, reason=HUB_CAPPED, at=self.ctx.clock.now()
                 )
-        self.ctx.store.ack_transcript_outbound(delta.seq, acked_at=self.ctx.clock.now())
+        self.ctx.stores.transcript_ledger.ack_transcript_outbound(delta.seq, acked_at=self.ctx.clock.now())
         return True
 
     def _render(self, delta: BufferedTranscriptDelta) -> TranscriptSegmentRecord:
@@ -124,7 +124,7 @@ class TranscriptDrain:
         needs is already frozen on the ledger row, read straight from there."""
         if not delta.final:
             return TranscriptSegmentRecord.model_validate({"seq": delta.seq, **json.loads(delta.payload)})
-        segment = self.ctx.store.transcript_segment(delta.segment_id)
+        segment = self.ctx.stores.transcript_ledger.transcript_segment(delta.segment_id)
         if segment is None:
             # A final marker's own segment row always exists (D1); a conditional rather than
             # an `assert`, which `python -O` strips into an opaque `AttributeError` below.

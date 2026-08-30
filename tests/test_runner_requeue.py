@@ -33,7 +33,7 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
 
 
 def _service(store, *, clock=None):  # type: ignore[no-untyped-def]
-    return RequeueService(store, clock or FixedClock(_LATER))
+    return RequeueService(store, clock or FixedClock(_LATER), takeover=store, escalations=store)
 
 
 def _seed_escalated_chunk(store, *, chunk="ch_1", lease="lease_1", node_id="nd_build", node_name="build", epoch=1):  # type: ignore[no-untyped-def]

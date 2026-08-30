@@ -60,6 +60,7 @@ from blizzard.runner.auth.federation import router as auth_router
 from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepository
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
+from blizzard.runner.composition import build_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
@@ -79,8 +80,7 @@ from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.stores import IWriteRunnerStore
+from blizzard.runner.stores import RunnerStores
 from blizzard.runner.transcripts.internal.http_archived_transcript_repository import (
     HttpArchivedTranscriptRepository,
 )
@@ -158,7 +158,7 @@ def create_app(
     readiness: ReadinessService | None = None,
     workspace_provider: IWorkspaceProvider | None = None,
     harness: IHarnessAdapter | None = None,
-    runner_store: IWriteRunnerStore | None = None,
+    runner_stores: RunnerStores | None = None,
     leases: LocalLeaseService | None = None,
     transcripts: TranscriptService | None = None,
     runner_status: RunnerStatusService | None = None,
@@ -184,7 +184,7 @@ def create_app(
     # The seams below are None on the store-free app.
     app.state.workspace_provider = workspace_provider
     app.state.harness = harness
-    app.state.runner_store = runner_store
+    app.state.runner_stores = runner_stores
     # The SSE broker (D2) — `None` on every composer with no stream to feed, where
     # :class:`~blizzard.foundation.events.stream.Stream` degrades cleanly.
     app.state.events = events
@@ -261,7 +261,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
-    runner_store = SqlAlchemyRunnerStore(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+    runner_stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
     workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(
         workspace_root=config.workspace_root or str(config.root),
         env_pool=config.workspace_envs,
@@ -281,7 +281,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         transcript_source=harness_transcript_source,
     )
     # ``stale_after`` is left at its default so the two readers never desync (#28).
-    leases = LocalLeaseService(store=runner_store, clock=SystemClock(), process=LinuxProcessProbe())
+    leases = LocalLeaseService(stores=runner_stores, clock=SystemClock(), process=LinuxProcessProbe())
     # Projected off the harness's own source, via the accessor — never built twice.
     transcript_repository = ProjectedTranscriptRepository(harness.transcript_source())
     # The archived-transcript seam (blizzard#249, D4) needs its own authenticated client:
@@ -289,7 +289,9 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     archived_transcript_client = httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
     archived_transcripts = HttpArchivedTranscriptRepository(archived_transcript_client)
     transcripts = TranscriptService(
-        store=runner_store,
+        leases=runner_stores.leases,
+        transcript_ledger=runner_stores.transcript_ledger,
+        environments=runner_stores.environments,
         transcripts=transcript_repository,
         archived=archived_transcripts,
         workspace_root=config.workspace_root,
@@ -297,7 +299,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     # The clock/probe instances below are per-service: both are stateless, so a second
     # instance is equivalent to sharing one.
     runner_status = RunnerStatusService(
-        store=runner_store,
+        stores=runner_stores,
         clock=SystemClock(),
         harness=harness,
         runner_id=config.runner_id,
@@ -307,7 +309,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         env_pool=config.workspace_envs,
     )
     takeover = TakeoverService(
-        runner_store,
+        runner_stores,
         SystemClock(),
         harness,
         LinuxProcessProbe(),
@@ -315,11 +317,19 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         local_api_url=config.local_api_url,
         events=events,
     )
-    requeue = RequeueService(runner_store, SystemClock())
-    attachments = AttachmentService(runner_store, SystemClock())
+    requeue = RequeueService(
+        runner_stores.requeue, SystemClock(), takeover=runner_stores.takeover, escalations=runner_stores.escalations
+    )
+    attachments = AttachmentService(runner_stores.attachments, SystemClock(), tokens=runner_stores.tokens)
     # Takes the workspace provider too: a declaration is checked against the
     # environment's repo manifest, which is the provider's to declare (issue #143).
-    git_commit_declarations = GitCommitDeclarationService(runner_store, SystemClock(), workspace_provider)
+    git_commit_declarations = GitCommitDeclarationService(
+        runner_stores.git_commit_declarations,
+        SystemClock(),
+        workspace_provider,
+        tokens=runner_stores.tokens,
+        environments=runner_stores.environments,
+    )
     jti_cache = JtiCacheRepository(engine, SystemClock())
     # The real, network-reaching hub client — only `host` wires one (issue #95).
     hub_http_client = httpx.Client(base_url=config.hub_url, timeout=5.0)
@@ -328,7 +338,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         readiness=readiness,
         workspace_provider=workspace_provider,
         harness=harness,
-        runner_store=runner_store,
+        runner_stores=runner_stores,
         leases=leases,
         transcripts=transcripts,
         runner_status=runner_status,

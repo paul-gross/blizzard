@@ -15,6 +15,7 @@ import httpx
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.runner.composition import build_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
@@ -39,8 +40,7 @@ from blizzard.runner.loop.transcript_backfill import (
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.stores import IWriteRunnerStore
+from blizzard.runner.stores import RunnerStores
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -70,7 +70,7 @@ class LoopWiring:
         """Wire a :class:`LoopContext`; the caller owns the ``httpx.Client`` behind ``hub``."""
         config = self.config
         engine = create_engine_from_url(config.db_url)
-        store = SqlAlchemyRunnerStore(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+        stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
         provider = WinterWorkspaceProvider(
             config.workspace_root, env_pool=config.workspace_envs, base_branch=config.base_branch
         )
@@ -121,10 +121,10 @@ class LoopWiring:
             transcript_record_max_bytes=config.transcript_record_max_bytes,
             transcript_chunk_max_bytes=config.transcript_chunk_max_bytes,
         )
-        _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), store)
+        _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), stores.leases)
         _clock = SystemClock()
         return LoopContext(
-            store=store,
+            stores=stores,
             clock=_clock,
             hub=hub,
             provider=provider,
@@ -136,7 +136,8 @@ class LoopWiring:
             config=loop_config,
             worker_files=_worker_files,
             usage=UsageRecorder(
-                store=store,
+                leases=stores.leases,
+                usage=stores.usage,
                 clock=_clock,
                 harness=harness,
                 worker_files=_worker_files,
@@ -144,9 +145,14 @@ class LoopWiring:
                 transcripts=harness_transcript_source,
                 events=self.events,
             ),
-            sessions=SessionResolver(store=store, harness=harness, transcripts=harness_transcript_source),
+            sessions=SessionResolver(leases=stores.leases, harness=harness, transcripts=harness_transcript_source),
             env_release=EnvironmentRelease(
-                store=store, clock=_clock, provider=provider, worker_files=_worker_files, events=self.events
+                environments=stores.environments,
+                leases=stores.leases,
+                clock=_clock,
+                provider=provider,
+                worker_files=_worker_files,
+                events=self.events,
             ),
             # The same source injected into `harness` above, declared here too so the loop's
             # direct readers don't reach through `ctx.harness` for it.
@@ -181,19 +187,19 @@ class ResumeMarking:
 
     Store-only — no hub, no workspace provider."""
 
-    store: IWriteRunnerStore
+    stores: RunnerStores
     clock: IClock
     process: IProcessProbe
 
     def on_shutdown(self) -> int:
         """Mark in-flight leases as the daemon exits gracefully; an ungraceful ``kill -9``
         never reaches this path, which is the intended scope boundary."""
-        return ResumeIntents(self.store).mark_graceful(now=self.clock.now())
+        return ResumeIntents(self.stores).mark_graceful(now=self.clock.now())
 
     def on_startup(self) -> int:
         """Mark the sessions a crash orphaned, before the loop starts — the ungraceful
         counterpart, needing a process probe as well as the store."""
-        return ResumeIntents(self.store).mark_crashed(process=self.process, now=self.clock.now())
+        return ResumeIntents(self.stores).mark_crashed(process=self.process, now=self.clock.now())
 
 
 class PeriodicDriver:

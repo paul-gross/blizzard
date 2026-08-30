@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from tests.runner_fakes import make_store
+from tests.runner_fakes import make_store, make_stores
 
 
 def _app_with_store(tmp_path: Path, *, workspace_prompt: str = ""):  # type: ignore[no-untyped-def]
@@ -22,7 +22,7 @@ def _app_with_store(tmp_path: Path, *, workspace_prompt: str = ""):  # type: ign
     config = RunnerConfig(
         root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", workspace_prompt=workspace_prompt
     )
-    return create_app(config, runner_store=store), store, config
+    return create_app(config, runner_stores=make_stores(store)), store, config
 
 
 @pytest.mark.component
