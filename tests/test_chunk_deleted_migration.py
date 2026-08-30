@@ -20,6 +20,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -45,7 +46,7 @@ def test_upgrade_creates_chunk_deleted_and_leaves_preexisting_chunks_claimable(t
     # chunk carries no row in it, so it is unaffected.
     runner.upgrade("head")
 
-    store = ChunkStore(engine, FixedClock(_T0))
+    store = ChunkStore(hub_store_connections(engine), FixedClock(_T0))
     assert store.get("ch_legacy") is not None
     facts = store.load_facts("ch_legacy")
     assert facts is not None and facts.status() is ChunkStatus.READY  # unaffected — still claimable

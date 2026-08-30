@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.store.internal.chunk_store import ChunkStore
-from tests.support import build_hub, seed_chunk, seed_graph
+from tests.support import build_hub, hub_store_connections, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -27,7 +27,7 @@ def _events(hub, **params) -> list[dict]:  # type: ignore[no-untyped-def]
 
 def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    store = ChunkStore(hub.engine, hub.clock)
+    store = ChunkStore(hub_store_connections(hub.engine), hub.clock)
     t0 = hub.clock.now()
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=t0)
@@ -117,7 +117,7 @@ def test_naive_since_with_open_escalation_does_not_500(tmp_path: Path) -> None:
     # A well-formed but tz-NAIVE `since` (an ordinary date-picker input) must not 500
     # when the feed projects an open escalation, whose `recorded_at` is tz-aware.
     hub = build_hub(tmp_path)
-    store = ChunkStore(hub.engine, hub.clock)
+    store = ChunkStore(hub_store_connections(hub.engine), hub.clock)
     t0 = hub.clock.now()
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=t0)

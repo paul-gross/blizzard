@@ -23,7 +23,7 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.domain.work_closure import CloseIntentDrainer
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
-from tests.support import FakeCloser, HubHarness, build_hub, ingest
+from tests.support import FakeCloser, HubHarness, build_hub, hub_store_connections, ingest
 
 pytestmark = pytest.mark.unit
 
@@ -354,7 +354,7 @@ def test_sweep_closes_a_landed_hub_born_chunks_item(tmp_path: Path) -> None:
 
     hub.services.close_drain.sweep()
 
-    row = WorkItemStore(hub.engine).get("hub", created["ref"])
+    row = WorkItemStore(hub_store_connections(hub.engine)).get("hub", created["ref"])
     assert row is not None
     assert row.closure is WorkItemClosure.DELIVERED
     assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.pending_close_intents()

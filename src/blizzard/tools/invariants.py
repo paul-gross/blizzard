@@ -14,11 +14,13 @@ from datetime import datetime
 from sqlalchemy import Connection, Engine, func, select
 
 from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import ChunkFacts, MigrationSource, RouteHistory
 from blizzard.hub.store import schema as hub
+from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store import DEFAULT_MODEL, ChunkStore
 from blizzard.runner.store import schema as runner
 
@@ -734,7 +736,8 @@ class HubInvariants:
                 violations.extend(check.run())
         with self.engine.connect() as conn:
             violations.extend(MigrationsAtomic(conn).run())
-        store = ChunkStore(self.engine, self.clock)
+        store_connections = HubStoreConnections(self.engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
+        store = ChunkStore(store_connections, self.clock)
         for facts_check in (DerivationAndDelivery(store), LiveRouteHasToken(store)):
             violations.extend(facts_check.run())
         return violations

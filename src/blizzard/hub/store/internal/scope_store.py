@@ -9,50 +9,51 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Engine, insert, select, update
+from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.domain.scopes import IWriteScopeRepository, Scope
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import scope_lifecycle_facts, scopes
 
 
 class ScopeStore:
-    """Read-write scope adapter over the hub store engine."""
+    """Read-write scope adapter over the hub store."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     def ensure(self, slug: str, *, description: str, at: datetime) -> Scope:
         """Insert ``slug`` in its own transaction; a racing second mint gets
         ``IntegrityError`` on the shared primary key and reads back the winner instead —
         never overwriting the description the winner minted (D4, D5)."""
         try:
-            with self._engine.begin() as conn:
+            with self._store.write("ensure", expect=(IntegrityError,)) as conn:
                 conn.execute(insert(scopes).values(slug=slug, description=description, created_at=at))
             return Scope(slug=slug, description=description, created_at=at)
         except IntegrityError:
-            with self._engine.connect() as conn:
+            with self._store.read("ensure_conflict_lookup") as conn:
                 row = conn.execute(select(scopes).where(scopes.c.slug == slug)).one()
             return self._of(row)
 
     def edit_description(self, slug: str, *, description: str) -> Scope:
-        with self._engine.begin() as conn:
+        with self._store.write("edit_description") as conn:
             conn.execute(update(scopes).where(scopes.c.slug == slug).values(description=description))
             row = conn.execute(select(scopes).where(scopes.c.slug == slug)).one()
         return self._of(row)
 
     def get(self, slug: str) -> Scope | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get") as conn:
             row = conn.execute(select(scopes).where(scopes.c.slug == slug)).one_or_none()
         return self._of(row) if row is not None else None
 
     def list_all(self) -> list[Scope]:
-        with self._engine.connect() as conn:
+        with self._store.read("list_all") as conn:
             rows = conn.execute(select(scopes).order_by(scopes.c.created_at.desc())).all()
         return [self._of(row) for row in rows]
 
     def is_retired(self, slug: str) -> bool:
-        with self._engine.connect() as conn:
+        with self._store.read("is_retired") as conn:
             return self._is_retired(conn, slug)
 
     def _is_retired(self, conn, slug: str) -> bool:  # type: ignore[no-untyped-def]
@@ -68,7 +69,7 @@ class ScopeStore:
 
     def record_lifecycle(self, slug: str, *, retired: bool, at: datetime, by: str) -> None:
         """Append a ``scope.retired``/``scope.enabled`` fact — newest-fact-wins (D3)."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_lifecycle") as conn:
             conn.execute(insert(scope_lifecycle_facts).values(slug=slug, retired=retired, set_at=at, set_by=by))
 
     @staticmethod

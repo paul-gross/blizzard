@@ -61,6 +61,7 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
+from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
@@ -72,6 +73,13 @@ from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def hub_store_connections(engine: Engine) -> HubStoreConnections:
+    """The ``hub/store/internal/`` seam (issue #413) every adapter test wires over its
+    own migrated engine — one helper so the 13 adapters' test files construct it
+    identically."""
+    return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
 
 
 def make_graph(
@@ -541,15 +549,16 @@ def build_hub(
     # Constructed once here, ahead of both the work-source registry and `build_services`
     # below — mirrors `build_hosted_app`'s own wiring (issue #364).
     claim_lock = threading.Lock()
-    work_item_store = WorkItemStore(engine)
+    store_connections = hub_store_connections(engine)
+    work_item_store = WorkItemStore(store_connections)
     delete_service = DeleteService(
-        chunks=ChunkStore(engine, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
+        chunks=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
     )
     seat_hub_work_source(
         built_sources,
         editors,
         closers,
-        engine=engine,
+        store=store_connections,
         clock=clock,
         users=user_store,
         items=work_item_store,

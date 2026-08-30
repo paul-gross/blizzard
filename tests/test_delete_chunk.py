@@ -27,7 +27,7 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import build_hub, migrate_to, pointer_token, seed_graph, seed_work_item
+from tests.support import build_hub, hub_store_connections, migrate_to, pointer_token, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -43,8 +43,9 @@ def _stores(tmp_path: Path) -> tuple[ChunkStore, WorkItemStore, DeleteService, E
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
     clock = FixedClock(_T0)
-    chunks = ChunkStore(engine, clock)
-    items = WorkItemStore(engine)
+    store = hub_store_connections(engine)
+    chunks = ChunkStore(store, clock)
+    items = WorkItemStore(store)
     delete = DeleteService(chunks=chunks, items=items, clock=clock, claim_lock=threading.Lock())
     return chunks, items, delete, engine
 
@@ -238,8 +239,9 @@ def test_reingest_after_delete_a_forge_pointer_mints_a_fresh_chunk_reading_norma
     hub = build_hub(tmp_path)
     pointer = {"source": "default", "ref": "1"}
     first = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()
-    chunks = ChunkStore(hub.engine, hub.clock)
-    items = WorkItemStore(hub.engine)
+    hub_store = hub_store_connections(hub.engine)
+    chunks = ChunkStore(hub_store, hub.clock)
+    items = WorkItemStore(hub_store)
     delete = DeleteService(chunks=chunks, items=items, clock=hub.clock, claim_lock=threading.Lock())
     chunk = chunks.get(first["chunk_id"])
     assert chunk is not None

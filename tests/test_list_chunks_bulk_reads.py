@@ -14,8 +14,9 @@ from sqlalchemy import Engine, event
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import ChunkFacts
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_store import ChunkStore
-from tests.support import build_hub, ingest
+from tests.support import build_hub, hub_store_connections, ingest
 
 pytestmark = pytest.mark.component
 
@@ -66,8 +67,8 @@ class _CountingChunkStore(ChunkStore):
     `list_chunks` actually reaches — mirrors `test_load_all_facts_store`'s own
     `_CountingChunkStore`, extended to routes."""
 
-    def __init__(self, engine: Engine, clock: IClock) -> None:
-        super().__init__(engine, clock)
+    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+        super().__init__(store, clock)
         self.load_all_facts_calls = 0
         self.load_all_routes_calls = 0
         self.load_facts_calls = 0
@@ -95,7 +96,7 @@ def test_list_chunks_calls_bulk_reads_and_never_load_facts_or_route_of(tmp_path:
     ingest(hub, [{"source": "default", "ref": "1"}])
     ingest(hub, [{"source": "default", "ref": "2"}])
 
-    counting = _CountingChunkStore(hub.engine, hub.clock)
+    counting = _CountingChunkStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
     hub.app.state.services = replace(hub.services, chunks=counting)
 

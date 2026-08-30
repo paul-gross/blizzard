@@ -11,7 +11,7 @@ import zlib
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Engine, Insert, Select, Update, func, insert, select
+from sqlalchemy import Insert, Select, Update, func, insert, select
 
 from blizzard.hub.domain.transcripts import (
     IWriteTranscriptSegments,
@@ -21,6 +21,7 @@ from blizzard.hub.domain.transcripts import (
     SegmentRecordContent,
 )
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreConnections
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
@@ -219,13 +220,13 @@ def _update_still_rejected_stmt(record: SegmentRecord, *, byte_count: int, reaso
 class TranscriptSegmentStore:
     """Read-write transcript-segment adapter over the hub store engine."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     # --- reads ----------------------------------------------------------------
 
     def segments_for_chunk(self, chunk_id: str) -> list[SegmentIndexRow]:
-        with self._engine.connect() as conn:
+        with self._store.read("segments_for_chunk") as conn:
             rows = conn.execute(_segments_for_chunk_stmt(chunk_id)).all()
         return [
             self._index_row(segment_id, list(group))
@@ -233,7 +234,7 @@ class TranscriptSegmentStore:
         ]
 
     def records_for_segment(self, chunk_id: str, segment_id: str) -> list[SegmentRecordContent]:
-        with self._engine.connect() as conn:
+        with self._store.read("records_for_segment") as conn:
             rows = conn.execute(_records_for_segment_stmt(chunk_id, segment_id)).all()
         return [
             SegmentRecordContent(
@@ -252,7 +253,7 @@ class TranscriptSegmentStore:
         assumed: a ``LIMIT 1`` with no ``ORDER BY`` would silently 403 the legitimate
         owner should two runners' rows ever share one key, so a violation raises here
         instead of picking an arbitrary row."""
-        with self._engine.connect() as conn:
+        with self._store.read("runner_id_for_lease") as conn:
             rows = conn.execute(_lease_runner_ids_stmt(chunk_id, node_id, epoch)).all()
         if not rows:
             return None
@@ -266,7 +267,7 @@ class TranscriptSegmentStore:
         return runner_ids[0]
 
     def records_for_lease(self, chunk_id: str, node_id: str, epoch: int, runner_id: str) -> list[SegmentRecordContent]:
-        with self._engine.connect() as conn:
+        with self._store.read("records_for_lease") as conn:
             rows = conn.execute(_records_for_lease_stmt(chunk_id, node_id, epoch, runner_id)).all()
         return [
             SegmentRecordContent(
@@ -281,31 +282,31 @@ class TranscriptSegmentStore:
         ]
 
     def high_water(self, runner_id: str) -> int:
-        with self._engine.connect() as conn:
+        with self._store.read("high_water") as conn:
             row = conn.execute(_high_water_stmt(runner_id)).one_or_none()
             return row.seq if row is not None else 0
 
     def natural_key_state(self, segment_id: str, turn_range_start: int) -> NaturalKeyState:
-        with self._engine.connect() as conn:
+        with self._store.read("natural_key_state") as conn:
             row = conn.execute(_natural_key_state_stmt(segment_id, turn_range_start)).one_or_none()
         if row is None:
             return "absent"
         return "rejected" if row.rejected else "accepted"
 
     def chunk_stored_bytes(self, chunk_id: str) -> int:
-        with self._engine.connect() as conn:
+        with self._store.read("chunk_stored_bytes") as conn:
             total = conn.execute(_chunk_stored_bytes_stmt(chunk_id)).scalar_one()
             return int(total)
 
     def runner_window_bytes(self, runner_id: str, *, since: datetime) -> int:
-        with self._engine.connect() as conn:
+        with self._store.read("runner_window_bytes") as conn:
             total = conn.execute(_runner_window_bytes_stmt(runner_id, since)).scalar_one()
             return int(total)
 
     # --- writes -----------------------------------------------------------------
 
     def set_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("set_high_water") as conn:
             existing = conn.execute(_high_water_owner_stmt(runner_id)).one_or_none()
             if existing is None:
                 conn.execute(_insert_high_water_stmt(runner_id, seq=seq, at=at))
@@ -314,20 +315,20 @@ class TranscriptSegmentStore:
 
     def insert_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None:
         content = self._compress(record.turns_json, codec)
-        with self._engine.begin() as conn:
+        with self._store.write("insert_accepted") as conn:
             conn.execute(_insert_accepted_stmt(record, byte_count=byte_count, codec=codec, content=content, at=at))
 
     def insert_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("insert_rejected") as conn:
             conn.execute(_insert_rejected_stmt(record, byte_count=byte_count, reason=reason, at=at))
 
     def update_to_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None:
         content = self._compress(record.turns_json, codec)
-        with self._engine.begin() as conn:
+        with self._store.write("update_to_accepted") as conn:
             conn.execute(_update_to_accepted_stmt(record, byte_count=byte_count, codec=codec, content=content, at=at))
 
     def update_still_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("update_still_rejected") as conn:
             conn.execute(_update_still_rejected_stmt(record, byte_count=byte_count, reason=reason, at=at))
 
     # --- helpers ------------------------------------------------------------

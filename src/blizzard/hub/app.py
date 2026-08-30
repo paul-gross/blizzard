@@ -57,6 +57,7 @@ from blizzard.hub.domain.forge_status import AnnotationReconciler
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
@@ -233,16 +234,19 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     # one instance each, shared by every write path (blizzard#358) and auth path (blizzard#362).
     clock = SystemClock()
     user_store = UserRepository(engine, RepoErrorFactory(get_logger("blizzard.hub.auth")))
+    # The hub-store seam (issue #413) — one collaborator shared by every
+    # ``hub/store/internal/`` adapter constructed ahead of `build_services` below.
+    store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
     # Constructed once here too, so the built-in hub binding and `build_services` below
     # share one `WorkItemStore`/`DeleteService`/lock rather than each building its own.
     claim_lock = threading.Lock()
-    work_item_store = WorkItemStore(engine)
+    work_item_store = WorkItemStore(store_connections)
     delete_service = DeleteService(
-        chunks=ChunkStore(engine, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
+        chunks=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
     )
     work_source_registry = WorkSourceEntry.registry(
         config.work_sources,
-        engine,
+        store_connections,
         clock,
         users=user_store,
         work_item_store=work_item_store,

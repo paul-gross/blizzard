@@ -16,6 +16,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.unit
 
@@ -25,7 +26,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 def _store(tmp_path: Path) -> RunnerRegistryStore:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
-    return RunnerRegistryStore(create_engine_from_url(db_url))
+    return RunnerRegistryStore(hub_store_connections(create_engine_from_url(db_url)))
 
 
 def test_registration_round_trips_its_own_written_instant(tmp_path: Path) -> None:

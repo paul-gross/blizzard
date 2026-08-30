@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import insert, select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
@@ -29,6 +29,7 @@ from blizzard.hub.domain.graph import (
     RunStep,
     SessionDecl,
 )
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import (
     graph_artifacts,
     graph_choices,
@@ -256,11 +257,11 @@ NODES = NodeRow()
 class GraphStore:
     """Read-write graph adapter over the hub store engine."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     def mint(self, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("mint") as conn:
             conn.execute(
                 insert(graphs).values(
                     graph_id=graph.graph_id,
@@ -283,14 +284,14 @@ class GraphStore:
                 conn.execute(insert(graph_edges).values(EDGES.values(edge)))
 
     def get(self, graph_id: str) -> Graph | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get") as conn:
             row = conn.execute(select(graphs).where(graphs.c.graph_id == graph_id)).one_or_none()
             if row is None:
                 return None
             return self._reify(conn, row)
 
     def get_enabled_by_name(self, name: str) -> Graph | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get_enabled_by_name") as conn:
             # Tie-break on graph_id descending — ULIDs sort lexically by creation —
             # then walked newest-first, skipping every retired graph_id (issue #101).
             rows = conn.execute(
@@ -306,7 +307,7 @@ class GraphStore:
     def newest_definition_yaml(self, name: str) -> str | None:
         # Same ordering as get_enabled_by_name, minus the retired filter — see the
         # protocol docstring for why reconciliation compares against the newest *minted*.
-        with self._engine.connect() as conn:
+        with self._store.read("newest_definition_yaml") as conn:
             row = conn.execute(
                 select(graphs.c.definition_yaml)
                 .where(graphs.c.name == name)
@@ -316,12 +317,12 @@ class GraphStore:
         return str(row.definition_yaml) if row is not None else None
 
     def list_all(self) -> list[Graph]:
-        with self._engine.connect() as conn:
+        with self._store.read("list_all") as conn:
             rows = conn.execute(select(graphs).order_by(graphs.c.created_at.desc())).all()
             return [self._reify(conn, row) for row in rows]
 
     def is_retired(self, graph_id: str) -> bool:
-        with self._engine.connect() as conn:
+        with self._store.read("is_retired") as conn:
             return self._is_retired(conn, graph_id)
 
     def _is_retired(self, conn, graph_id: str) -> bool:  # type: ignore[no-untyped-def]
@@ -337,7 +338,7 @@ class GraphStore:
 
     def retired_graph_ids(self) -> set[str]:
         """Every ``graph_id`` whose newest lifecycle fact reads retired (issue #101)."""
-        with self._engine.connect() as conn:
+        with self._store.read("retired_graph_ids") as conn:
             rows = conn.execute(
                 select(graph_lifecycle_facts.c.graph_id, graph_lifecycle_facts.c.retired).order_by(
                     graph_lifecycle_facts.c.id
@@ -350,7 +351,7 @@ class GraphStore:
 
     def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:
         """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins (issue #101)."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_lifecycle") as conn:
             conn.execute(insert(graph_lifecycle_facts).values(graph_id=graph_id, retired=retired, set_at=at, set_by=by))
 
     def follow_latest(self, graph_id: str) -> bool | None:
@@ -359,7 +360,7 @@ class GraphStore:
 
         Ordered by ``id``, not ``set_at``: two facts inside one clock tick must still
         resolve newest-write-wins. A present ``None`` is a deliberate revert-to-inherit."""
-        with self._engine.connect() as conn:
+        with self._store.read("follow_latest") as conn:
             row = conn.execute(
                 select(graph_policy_facts.c.follow_latest)
                 .where(graph_policy_facts.c.graph_id == graph_id)
@@ -372,7 +373,7 @@ class GraphStore:
 
     def record_policy(self, graph_id: str, *, follow_latest: bool | None, at: datetime, by: str) -> None:
         """Append a follow-latest policy fact — newest-fact-wins (issue #164)."""
-        with self._engine.begin() as conn:
+        with self._store.write("record_policy") as conn:
             conn.execute(
                 insert(graph_policy_facts).values(graph_id=graph_id, follow_latest=follow_latest, set_at=at, set_by=by)
             )

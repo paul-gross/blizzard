@@ -26,6 +26,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -82,9 +83,9 @@ class _Fixture:
         db_url = f"sqlite:///{tmp_path / 'hub.db'}"
         migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
         self.engine = create_engine_from_url(db_url)
-        self.chunks = ChunkStore(self.engine, FixedClock(_NOW))
-        self.segments = TranscriptSegmentStore(self.engine)
-        self.events = TranscriptEventStore(self.engine)
+        self.chunks = ChunkStore(hub_store_connections(self.engine), FixedClock(_NOW))
+        self.segments = TranscriptSegmentStore(hub_store_connections(self.engine))
+        self.events = TranscriptEventStore(hub_store_connections(self.engine))
         self.clock = FixedClock(_NOW)
         self.chunks.mint(Chunk(chunk_id="ch_1", graph_id="gr_mint", work_refs=[], minted_at=_NOW))
         self.chunks.record_transition(

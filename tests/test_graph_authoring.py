@@ -16,6 +16,7 @@ from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_pr_ci
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.schema import metadata
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.unit
 
@@ -314,7 +315,7 @@ def test_proposes_work_items_round_trips_through_the_store() -> None:
     graph = Reification.of(GraphDoc.of(_proposes_doc(True)), _clock()).graph
     engine = create_engine("sqlite://")
     metadata.create_all(engine)
-    store = GraphStore(engine)
+    store = GraphStore(hub_store_connections(engine))
     store.mint(graph, definition_yaml="t", at=_clock().now())
 
     loaded = store.get(graph.graph_id)

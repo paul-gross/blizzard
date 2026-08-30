@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import insert, select
 
 from blizzard.hub.domain.registry import (
     ExternalSubscriptionUsageWindow,
@@ -19,18 +19,19 @@ from blizzard.hub.domain.registry import (
 )
 from blizzard.hub.domain.work import ActivityRow
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreConnections
 
 
 class RunnerRegistryStore:
     """Read-write fleet-registry adapter over the hub store engine."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     # --- reads --------------------------------------------------------------
 
     def get_runner(self, runner_id: str) -> RunnerRegistration | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get_runner") as conn:
             row = conn.execute(
                 select(s.runner_registrations).where(s.runner_registrations.c.runner_id == runner_id)
             ).one_or_none()
@@ -44,7 +45,7 @@ class RunnerRegistryStore:
             )
 
     def list_runners(self) -> list[RunnerRegistration]:
-        with self._engine.connect() as conn:
+        with self._store.read("list_runners") as conn:
             rows = conn.execute(select(s.runner_registrations).order_by(s.runner_registrations.c.registered_at)).all()
             return [
                 self._registration(
@@ -57,7 +58,7 @@ class RunnerRegistryStore:
             ]
 
     def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
-        with self._engine.connect() as conn:
+        with self._store.read("registration_for_token_hash") as conn:
             row = conn.execute(
                 select(s.runner_registrations).where(s.runner_registrations.c.token_hash == token_hash)
             ).one_or_none()
@@ -71,7 +72,7 @@ class RunnerRegistryStore:
             )
 
     def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
-        with self._engine.connect() as conn:
+        with self._store.read("list_pause_facts_since") as conn:
             fleet_rows = conn.execute(
                 select(s.runner_pause_facts)
                 .where(s.runner_pause_facts.c.set_at >= since)
@@ -126,7 +127,7 @@ class RunnerRegistryStore:
         # Written unconditionally on both branches, `None`/empty verbatim included: the
         # overwrite on refresh is what converges a changed value on re-registration.
         redirect_uris_json = json.dumps(list(redirect_uris)) if redirect_uris else None
-        with self._engine.begin() as conn:
+        with self._store.write("upsert_registration") as conn:
             existing = conn.execute(
                 select(s.runner_registrations.c.runner_id).where(s.runner_registrations.c.runner_id == runner_id)
             ).one_or_none()
@@ -157,7 +158,7 @@ class RunnerRegistryStore:
             return False
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
-        with self._engine.begin() as conn:
+        with self._store.write("touch_last_seen") as conn:
             result = conn.execute(
                 s.runner_registrations.update()
                 .where(s.runner_registrations.c.runner_id == runner_id)
@@ -166,7 +167,7 @@ class RunnerRegistryStore:
             return bool(result.rowcount)
 
     def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> int:
-        with self._engine.begin() as conn:
+        with self._store.write("record_pause") as conn:
             result = conn.execute(
                 insert(s.runner_pause_facts).values(runner_id=runner_id, paused=paused, set_at=at, set_by=by)
             )
@@ -176,7 +177,7 @@ class RunnerRegistryStore:
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
     ) -> int:
-        with self._engine.begin() as conn:
+        with self._store.write("record_local_pause") as conn:
             result = conn.execute(
                 insert(s.runner_local_pause_facts).values(
                     runner_id=runner_id, paused=paused, set_at=at, set_by=by, reason=reason
@@ -188,7 +189,7 @@ class RunnerRegistryStore:
     def record_external_usage(self, runner_id: str, *, sampled_at: datetime, windows_json: str, at: datetime) -> None:
         # No FK, no known-runner requirement: the fact can legitimately arrive ahead of
         # the registration, and must not stall this runner's high-water mark waiting.
-        with self._engine.begin() as conn:
+        with self._store.write("record_external_usage") as conn:
             existing = conn.execute(
                 select(s.runner_external_usage.c.runner_id).where(s.runner_external_usage.c.runner_id == runner_id)
             ).one_or_none()
@@ -209,7 +210,7 @@ class RunnerRegistryStore:
         # `at` is not persisted: no rotation-audit column exists yet — accepted only for
         # signature symmetry with this seam's other writes.
         del at
-        with self._engine.begin() as conn:
+        with self._store.write("set_token_hash") as conn:
             conn.execute(
                 s.runner_registrations.update()
                 .where(s.runner_registrations.c.runner_id == runner_id)

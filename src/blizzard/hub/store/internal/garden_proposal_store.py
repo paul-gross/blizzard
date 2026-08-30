@@ -7,17 +7,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Engine, func, insert, select
+from sqlalchemy import func, insert, select
 
 from blizzard.hub.domain.garden_proposals import GardenProposal, IWriteGardenProposalRepository
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import garden_proposal_findings, garden_proposals
 
 
 class GardenProposalStore:
     """Read-write garden-proposal adapter over the hub store engine."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     def create(
         self,
@@ -30,7 +31,7 @@ class GardenProposalStore:
         findings: list[str],
         at: datetime,
     ) -> GardenProposal:
-        with self._engine.begin() as conn:
+        with self._store.write("create") as conn:
             conn.execute(
                 insert(garden_proposals).values(
                     proposal_id=proposal_id,
@@ -56,7 +57,7 @@ class GardenProposalStore:
         )
 
     def get(self, proposal_id: str) -> GardenProposal | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get") as conn:
             row = conn.execute(
                 select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
             ).one_or_none()
@@ -67,7 +68,7 @@ class GardenProposalStore:
     def list_all(self) -> list[GardenProposal]:
         """Newest first — `proposal_id` (a chronologically sortable ULID) breaks the tie a
         one-instant batch delivery leaves in `created_at` alone."""
-        with self._engine.connect() as conn:
+        with self._store.read("list_all") as conn:
             rows = conn.execute(
                 select(garden_proposals).order_by(
                     garden_proposals.c.created_at.desc(), garden_proposals.c.proposal_id.desc()
@@ -76,7 +77,7 @@ class GardenProposalStore:
             return [self._of(row, self._findings(conn, row.proposal_id)) for row in rows]
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
-        with self._engine.connect() as conn:
+        with self._store.read("count_by_class") as conn:
             return conn.execute(
                 select(func.count())
                 .select_from(garden_proposals)

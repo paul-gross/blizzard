@@ -11,11 +11,11 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine, insert
-from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support import migrate_to, seed_chunk, seed_graph
+from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -47,7 +47,7 @@ def _store(tmp_path: Path) -> tuple[FindingSetStore, Engine]:
         _seed_artifact(conn, "art_1", chunk_id="ch_1", name="findings-billing")
         _seed_artifact(conn, "art_2", chunk_id="ch_1", name="findings-auth")
         _seed_artifact(conn, "art_3", chunk_id="ch_1", name="findings-web")
-    return FindingSetStore(engine), engine
+    return FindingSetStore(hub_store_connections(engine)), engine
 
 
 def test_create_then_get_round_trips(tmp_path: Path) -> None:
@@ -90,7 +90,7 @@ def test_a_second_set_on_the_same_artifact_is_refused(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     store.create("fins_1", artifact_id="art_1", chunk_id="ch_1", scope_slug="blizzard", revisions={}, measurement=None)
 
-    with pytest.raises(IntegrityError):
+    with pytest.raises(HubStoreError):
         store.create(
             "fins_2", artifact_id="art_1", chunk_id="ch_1", scope_slug="blizzard", revisions={}, measurement=None
         )

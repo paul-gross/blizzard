@@ -15,7 +15,7 @@ import pytest
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.store.internal.chunk_store import ChunkStore
-from tests.support import build_hub, seed_chunk, seed_graph
+from tests.support import build_hub, hub_store_connections, seed_chunk, seed_graph
 from tests.test_fleet_auth import _bearer, _seed_enrolled
 
 pytestmark = pytest.mark.component
@@ -53,7 +53,7 @@ def test_default_limit_is_200(tmp_path: Path) -> None:
 
 def test_explicit_since_narrows(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    store = ChunkStore(hub.engine, hub.clock)
+    store = ChunkStore(hub_store_connections(hub.engine), hub.clock)
     t0 = hub.clock.now()
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=t0)
@@ -80,7 +80,7 @@ def test_naive_since_is_coerced_not_raised(tmp_path: Path) -> None:
 
 def test_rows_come_back_newest_first(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    store = ChunkStore(hub.engine, hub.clock)
+    store = ChunkStore(hub_store_connections(hub.engine), hub.clock)
     t0 = hub.clock.now()
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=t0)

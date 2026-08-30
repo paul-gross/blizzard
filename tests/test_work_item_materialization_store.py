@@ -29,7 +29,15 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, migrate_to, seed_chunk, seed_graph, seed_work_item
+from tests.support import (
+    HubHarness,
+    build_hub,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk,
+    seed_graph,
+    seed_work_item,
+)
 
 pytestmark = pytest.mark.component
 
@@ -215,7 +223,7 @@ def test_upgrade_adds_runner_id_and_materializations_leaving_existing_rows_reada
                 proposed_at=_T0,
             )
         )
-    work_item_store = WorkItemStore(engine)
+    work_item_store = WorkItemStore(hub_store_connections(engine))
     author = WorkItemAuthor.user("u1")
     legacy_item = seed_work_item(work_item_store, graph_id="gr_1", author=author, at=_T0)
 
@@ -438,7 +446,8 @@ def test_materialize_create_mints_the_item_chunk_and_outcome_atomically_and_is_i
     hub = build_hub(tmp_path)
     engine = hub.engine
     graph_id = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML}).json()["graph_id"]
-    items = cast(IWriteWorkItemRepository, WorkItemStore(engine))
+    store = hub_store_connections(engine)
+    items = cast(IWriteWorkItemRepository, WorkItemStore(store))
     author = WorkItemAuthor.fleet(runner_id="r1", chunk_id="ch_source", node_name="build")
 
     graph = hub.services.graphs.get(graph_id)
@@ -458,7 +467,7 @@ def test_materialize_create_mints_the_item_chunk_and_outcome_atomically_and_is_i
     )
     assert first is True
     assert items.get("hub", pointer.ref) is not None
-    assert ChunkStore(engine, FixedClock(_T0)).get(chunk.chunk_id) is not None
+    assert ChunkStore(store, FixedClock(_T0)).get(chunk.chunk_id) is not None
 
     second = items.materialize_create(
         proposal_id="wip_create_1",
@@ -483,7 +492,7 @@ def test_materialize_create_mints_the_item_chunk_and_outcome_atomically_and_is_i
 def test_materialize_update_appends_evidence_stamps_edited_at_and_is_idempotent(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     engine = hub.engine
-    items = cast(IWriteWorkItemRepository, WorkItemStore(engine))
+    items = cast(IWriteWorkItemRepository, WorkItemStore(hub_store_connections(engine)))
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "original"})
     assert created.status_code == 201, created.text
     ref = created.json()["ref"]
@@ -506,7 +515,7 @@ def test_materialize_update_appends_evidence_stamps_edited_at_and_is_idempotent(
 def test_materialize_update_writes_nothing_when_the_item_is_no_longer_open(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     engine = hub.engine
-    items = cast(IWriteWorkItemRepository, WorkItemStore(engine))
+    items = cast(IWriteWorkItemRepository, WorkItemStore(hub_store_connections(engine)))
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"})
     ref = created.json()["ref"]
     items.close("hub", ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)

@@ -25,7 +25,7 @@ from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import Chunk, ChunkFacts, DecisionChoice, FleetSummary, MigrationSource
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore, record_deleted_row
-from tests.support import build_hub, ingest, migrate_to, seed_graph
+from tests.support import build_hub, hub_store_connections, ingest, migrate_to, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -53,7 +53,7 @@ def _store(tmp_path: Path) -> tuple[ChunkStore, Engine]:
         _seed_node(conn, "gr_1", "nd_g1_hub", executor="hub")
         _seed_node(conn, "gr_2", "nd_g2_runner", executor="runner")
         _seed_node(conn, "gr_2", "nd_g2_hub", executor="hub")
-    return ChunkStore(engine, FixedClock(_T0)), engine
+    return ChunkStore(hub_store_connections(engine), FixedClock(_T0)), engine
 
 
 def _mint(store: ChunkStore, chunk_id: str, *, graph_id: str = "gr_1") -> None:
@@ -377,8 +377,8 @@ def test_fleet_pulse_view_calls_load_all_facts_and_never_load_facts_or_list_all(
     ingest(hub, [{"source": "default", "ref": "2"}])
 
     class _CountingChunkStore(ChunkStore):
-        def __init__(self, engine, clock) -> None:  # type: ignore[no-untyped-def]
-            super().__init__(engine, clock)
+        def __init__(self, store, clock) -> None:  # type: ignore[no-untyped-def]
+            super().__init__(store, clock)
             self.load_all_facts_calls = 0
             self.load_facts_calls = 0
             self.list_all_calls = 0
@@ -395,7 +395,7 @@ def test_fleet_pulse_view_calls_load_all_facts_and_never_load_facts_or_list_all(
             self.list_all_calls += 1
             return super().list_all()
 
-    counting = _CountingChunkStore(hub.engine, hub.clock)
+    counting = _CountingChunkStore(hub_store_connections(hub.engine), hub.clock)
     services = replace(hub.services, chunks=counting)
 
     view = FleetPulse(services).view()

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import Connection, Engine, desc, insert, select, update
+from sqlalchemy import Connection, desc, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
@@ -24,6 +24,7 @@ from blizzard.hub.domain.work import (
     WorkRef,
 )
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_store import insert_chunk_rows, insert_materialization_row, record_deleted_row
 
 
@@ -32,18 +33,18 @@ class WorkItemStore:
     / :class:`~blizzard.hub.domain.work.IWriteWorkItemRepository`, confined to
     ``store/internal/`` (``bzh:repository-split``)."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     def get(self, source: str, ref: str) -> WorkItemRecord | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get") as conn:
             row = conn.execute(
                 select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
             ).one_or_none()
         return self._record(row) if row is not None else None
 
     def list(self, source: str, *, limit: int = 200) -> list[WorkItemRecord]:
-        with self._engine.connect() as conn:
+        with self._store.read("list") as conn:
             rows = conn.execute(
                 select(s.work_items)
                 .where(s.work_items.c.source == source)
@@ -69,7 +70,7 @@ class WorkItemStore:
         connection — the mechanism behind
         :meth:`~blizzard.hub.domain.work.IWriteWorkItemRepository.create_with_chunk`'s
         atomicity contract."""
-        with self._engine.begin() as conn:
+        with self._store.write("create_with_chunk") as conn:
             work_item_id = self._insert_item(
                 conn,
                 source=pointer.source,
@@ -133,7 +134,7 @@ class WorkItemStore:
     def edit(
         self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
     ) -> WorkItemRecord | None:
-        with self._engine.begin() as conn:
+        with self._store.write("edit") as conn:
             result = conn.execute(
                 update(s.work_items)
                 .where(s.work_items.c.source == source, s.work_items.c.ref == ref, s.work_items.c.closed_at.is_(None))
@@ -147,7 +148,7 @@ class WorkItemStore:
         return self._record(row)
 
     def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> WorkItemRecord:
-        with self._engine.begin() as conn:
+        with self._store.write("close") as conn:
             self._close_conn(conn, source, ref, closure=closure, at=at)
             row = conn.execute(
                 select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
@@ -160,7 +161,7 @@ class WorkItemStore:
         — mirrors :meth:`create_with_chunk`'s own atomicity shape. A ``forge:``-sourced
         pointer on the same chunk is left untouched. Returns the freshly-written
         ``chunk_deleted.id``."""
-        with self._engine.begin() as conn:
+        with self._store.write("delete_chunk_and_withdraw_hub_items") as conn:
             deleted_id = record_deleted_row(conn, chunk.chunk_id, by=by, at=at)
             for pointer in chunk.work_refs:
                 if pointer.source == RESERVED_HUB_SOURCE_NAME:
@@ -182,7 +183,7 @@ class WorkItemStore:
         """Mint the item, ``chunk``'s own rows, and ``proposal_id``'s ``created`` outcome
         fact on one ``engine.begin()`` connection (D8) — :meth:`create_with_chunk` plus
         the outcome row, checked first so an already-judged proposal mints nothing."""
-        with self._engine.begin() as conn:
+        with self._store.write("materialize_create") as conn:
             if not insert_materialization_row(
                 conn,
                 proposal_id=proposal_id,
@@ -211,7 +212,7 @@ class WorkItemStore:
         (D8). Returns ``False`` and writes nothing when already judged, or when the item
         is no longer open — the append is one SQL-level concatenation so no read-then-write
         gap can lose a concurrent edit."""
-        with self._engine.begin() as conn:
+        with self._store.write("materialize_update") as conn:
             already = conn.execute(
                 select(s.work_item_materializations.c.id).where(
                     s.work_item_materializations.c.proposal_id == proposal_id
@@ -259,12 +260,12 @@ class WorkItemStore:
         new value via ``RETURNING`` — a single portable statement (``bzh:sql-portable``)
         that lets postgres's row lock serialize concurrent winners on an existing row."""
         try:
-            with self._engine.begin() as conn:
+            with self._store.write("allocate_ref", expect=(IntegrityError,)) as conn:
                 conn.execute(insert(s.work_item_sequence).values(source=source, next_ref=2))
             return "1"
         except IntegrityError:
             pass
-        with self._engine.begin() as conn:
+        with self._store.write("allocate_ref") as conn:
             row = conn.execute(
                 update(s.work_item_sequence)
                 .where(s.work_item_sequence.c.source == source)

@@ -13,7 +13,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.store.internal.chunk_store import ChunkStore
-from tests.support import migrate_to, seed_chunk, seed_graph
+from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
 
@@ -29,7 +29,7 @@ def _store(tmp_path: Path) -> ChunkStore:
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
         seed_chunk(conn, "ch_a", graph_id="gr_1", at=_T0)
-    store = ChunkStore(engine, FixedClock(_T0))
+    store = ChunkStore(hub_store_connections(engine), FixedClock(_T0))
     for seconds, tokens in ((0, 1), (5, 2), (10, 4)):
         store.record_usage(
             "ch_a",

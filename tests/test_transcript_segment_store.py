@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql, sqlite
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import ClauseElement, visitors
 from sqlalchemy.sql.elements import TextClause
 
@@ -21,8 +20,10 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.transcripts import SegmentRecord
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal import transcript_segment_store as store_module
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.unit
 
@@ -139,7 +140,7 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
 
 def test_turn_content_round_trips_through_the_codec(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     record = _record()
 
     store.insert_accepted(record, byte_count=len(record.turns_json.encode("utf-8")), codec="zlib", at=_NOW)
@@ -155,7 +156,7 @@ def test_turn_content_is_compressed_at_rest_not_stored_as_plaintext(tmp_path: Pa
     """AC1/D10: the round-trip above cannot tell zlib from a no-op codec, so this reads
     the raw column — highly compressible turns must land far under their plaintext."""
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     turns = [{"index": i, "kind": "asst", "text": "the same sentence, over and over. " * 40} for i in range(64)]
     plaintext = json.dumps(turns).encode("utf-8")
     record = _record(turns_json=plaintext.decode("utf-8"))
@@ -171,7 +172,7 @@ def test_turn_content_is_compressed_at_rest_not_stored_as_plaintext(tmp_path: Pa
 
 def test_a_rejected_record_stores_no_content_or_codec(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     record = _record()
 
     store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
@@ -192,17 +193,17 @@ def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
     """D8: ``(segment_id, turn_range_start)`` is a schema-level unique constraint —
     a second insert at the same key must fail even if a caller forgot to check first."""
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     record = _record()
     store.insert_accepted(record, byte_count=10, codec="zlib", at=_NOW)
 
-    with pytest.raises(IntegrityError):
+    with pytest.raises(HubStoreError):
         store.insert_accepted(record, byte_count=10, codec="zlib", at=_NOW)
 
 
 def test_natural_key_state_is_absent_then_accepted_for_a_stored_pair(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     assert store.natural_key_state("sg_1", 0) == "absent"
 
     store.insert_accepted(_record(), byte_count=10, codec="zlib", at=_NOW)
@@ -213,7 +214,7 @@ def test_natural_key_state_is_absent_then_accepted_for_a_stored_pair(tmp_path: P
 
 def test_natural_key_state_is_rejected_for_a_cap_rejected_pair(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     store.insert_rejected(_record(), byte_count=999, reason="record_too_large", at=_NOW)
 
     assert store.natural_key_state("sg_1", 0) == "rejected"
@@ -221,7 +222,7 @@ def test_natural_key_state_is_rejected_for_a_cap_rejected_pair(tmp_path: Path) -
 
 def test_update_to_accepted_transitions_a_rejected_row_in_place(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     record = _record()
     store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
 
@@ -240,7 +241,7 @@ def test_update_to_accepted_carries_the_re_offers_own_truncated_flag(tmp_path: P
     """review F10: a natural-key re-offer must not keep the FIRST offer's flag — the worse,
     later offer's own truth wins, not a stale one."""
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     first = _record(record_truncated=True)
     store.insert_rejected(first, byte_count=999, reason="record_too_large", at=_NOW)
 
@@ -255,14 +256,14 @@ def test_update_to_accepted_carries_the_re_offers_own_truncated_flag(tmp_path: P
 
 def test_runner_id_for_lease_is_none_when_the_lease_holds_no_segments(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
 
     assert store.runner_id_for_lease("ch_1", "nd_build", 1) is None
 
 
 def test_runner_id_for_lease_resolves_to_the_shipping_runner(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     store.insert_accepted(_record(), byte_count=10, codec="zlib", at=_NOW)
 
     assert store.runner_id_for_lease("ch_1", "nd_build", 1) == "r1"
@@ -273,7 +274,7 @@ def test_runner_id_for_lease_raises_when_two_runners_hold_the_same_lease_key(tmp
     epoch) it neither states nor enforces — a violation must surface as an error, never
     as an arbitrary pick between the two runners' rows."""
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     store.insert_accepted(_record(segment_id="sg_1", runner_id="r1"), byte_count=10, codec="zlib", at=_NOW)
     store.insert_accepted(_record(segment_id="sg_2", runner_id="r2"), byte_count=10, codec="zlib", at=_NOW)
 
@@ -283,7 +284,7 @@ def test_runner_id_for_lease_raises_when_two_runners_hold_the_same_lease_key(tmp
 
 def test_records_for_lease_spans_every_spawn_generation_but_not_other_leases(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     first_spawn = _record(segment_id="sg_1", spawn_generation=1, turn_range_start=0, turn_range_end=0)
     second_spawn = _record(segment_id="sg_2", spawn_generation=2, turn_range_start=1, turn_range_end=1)
     other_epoch = _record(segment_id="sg_3", epoch=2, turn_range_start=0, turn_range_end=0)
@@ -301,7 +302,7 @@ def test_records_for_lease_drops_a_segment_another_one_supersedes(tmp_path: Path
     """A re-ship reuses its source's whole lease key, and this read is keyed on the lease —
     so without the pointer it concatenates both copies and renders the conversation twice."""
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     original = _record(segment_id="sg_old", turn_range_start=0, turn_range_end=0, record_truncated=True)
     reship = _record(segment_id="sg_new", turn_range_start=0, turn_range_end=0, supersedes="sg_old")
     for record in (original, reship):
@@ -317,7 +318,7 @@ def test_records_for_lease_keeps_a_segment_superseded_only_on_a_different_lease(
     """The pointer is scoped to its own lease: a same-named segment under another node or
     epoch must not vanish because an unrelated lease named that id."""
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     store.insert_accepted(_record(segment_id="sg_old"), byte_count=10, codec="zlib", at=_NOW)
     elsewhere = _record(segment_id="sg_new", node_id="nd_other", supersedes="sg_old")
     store.insert_accepted(elsewhere, byte_count=10, codec="zlib", at=_NOW)
@@ -327,7 +328,7 @@ def test_records_for_lease_keeps_a_segment_superseded_only_on_a_different_lease(
 
 def test_records_for_lease_confines_to_the_declared_runner(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     store.insert_accepted(_record(), byte_count=10, codec="zlib", at=_NOW)
 
     assert store.records_for_lease("ch_1", "nd_build", 1, "r2") == []
@@ -335,7 +336,7 @@ def test_records_for_lease_confines_to_the_declared_runner(tmp_path: Path) -> No
 
 def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     record = _record()
     store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
     later = _NOW.replace(hour=12)
@@ -356,7 +357,7 @@ def test_two_successive_still_rejected_offers_leave_only_the_latest_bytes_in_the
     against `_chunk_stored_bytes_stmt` once a rejected row flips to accepted, so a second
     still-rejected offer must not leave the first's bytes in the runner's daily-rate window."""
     engine = _migrated_engine(tmp_path)
-    store = TranscriptSegmentStore(engine)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
     record = _record()
     store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
     assert store.runner_window_bytes("r1", since=_NOW) == 999

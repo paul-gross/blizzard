@@ -25,6 +25,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import transcript_event_store as store_module
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.unit
 
@@ -173,42 +174,42 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
 
 def test_visible_segment_ids_excludes_a_non_final_segment(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(engine)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
     segments.insert_accepted(_segment_record(final=False), byte_count=10, codec="zlib", at=_NOW)
 
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
     assert store.visible_segment_ids() == frozenset()
 
 
 def test_visible_segment_ids_excludes_a_superseded_segment(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(engine)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
     segments.insert_accepted(_segment_record(segment_id="sg_old"), byte_count=10, codec="zlib", at=_NOW)
     segments.insert_accepted(
         _segment_record(segment_id="sg_new", supersedes="sg_old"), byte_count=10, codec="zlib", at=_NOW
     )
 
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
     assert store.visible_segment_ids() == frozenset({"sg_new"})
 
 
 def test_visible_segment_ids_includes_a_final_unsuperseded_segment(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(engine)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
     segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
 
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
     assert store.visible_segment_ids() == frozenset({"sg_1"})
 
 
 def test_visible_segment_ids_narrows_to_the_given_chunk(tmp_path: Path) -> None:
     """The re-derive route's chunk-scoped call (blizzard#254 D7)."""
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(engine)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
     segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_NOW)
     segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW)
 
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
 
     assert store.visible_segment_ids(chunk_id="ch_1") == frozenset({"sg_1"})
     assert store.visible_segment_ids(chunk_id="ch_2") == frozenset({"sg_2"})
@@ -220,11 +221,11 @@ def test_visible_segment_ids_narrows_to_the_given_chunk(tmp_path: Path) -> None:
 
 def test_segment_derivation_input_decodes_turns_from_stored_content(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(engine)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
     record = _segment_record()
     segments.insert_accepted(record, byte_count=10, codec="zlib", at=_NOW)
 
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
     result = store.segment_derivation_input("sg_1")
 
     assert result is not None
@@ -242,16 +243,16 @@ def test_segment_derivation_input_decodes_turns_from_stored_content(tmp_path: Pa
 
 def test_segment_derivation_input_is_none_for_an_unknown_segment(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
     assert store.segment_derivation_input("sg_missing") is None
 
 
 def test_segment_derivation_input_is_incomplete_when_a_record_is_rejected(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(engine)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
     segments.insert_rejected(_segment_record(), byte_count=999, reason="record_too_large", at=_NOW)
 
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
     result = store.segment_derivation_input("sg_1")
 
     assert result is not None
@@ -261,10 +262,10 @@ def test_segment_derivation_input_is_incomplete_when_a_record_is_rejected(tmp_pa
 
 def test_content_fingerprint_changes_when_a_rejected_record_is_later_accepted(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    segments = TranscriptSegmentStore(engine)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
     record = _segment_record()
     segments.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
     before = store.segment_derivation_input("sg_1")
     assert before is not None
 
@@ -280,7 +281,7 @@ def test_content_fingerprint_changes_when_a_rejected_record_is_later_accepted(tm
 
 def test_replace_segment_events_writes_events_and_marker(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
 
     store.replace_segment_events(
         "sg_1", _EXTRACTOR_VERSION, [_event()], complete=True, content_fingerprint="fp1", at=_NOW
@@ -303,7 +304,7 @@ def test_replace_segment_events_converges_under_a_repeated_call(tmp_path: Path) 
     makes even a partially-applied re-run converge: a second identical replace leaves
     exactly one row, not two, and never raises."""
     engine = _migrated_engine(tmp_path)
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
 
     for _ in range(2):
         store.replace_segment_events(
@@ -317,7 +318,7 @@ def test_replace_segment_events_converges_under_a_repeated_call(tmp_path: Path) 
 
 def test_replace_segment_events_leaves_other_extractor_versions_untouched(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
         "sg_1", "blizzard-analytics/1", [_event()], complete=True, content_fingerprint="fp1", at=_NOW
     )
@@ -336,7 +337,7 @@ def test_replace_segment_events_with_no_events_still_writes_a_marker(tmp_path: P
     """An unknown-dialect or empty-content segment derives zero events, honestly recorded
     rather than left looking like it was never attempted."""
     engine = _migrated_engine(tmp_path)
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
 
     store.replace_segment_events("sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp1", at=_NOW)
 
@@ -358,7 +359,7 @@ def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
 
 def test_drop_segment_removes_events_and_markers_at_every_extractor_version(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
         "sg_1", "blizzard-analytics/1", [_event()], complete=True, content_fingerprint="fp1", at=_NOW
     )
@@ -376,7 +377,7 @@ def test_drop_segment_removes_events_and_markers_at_every_extractor_version(tmp_
 
 def test_derived_segment_ids_reflects_every_segment_with_a_marker(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    store = TranscriptEventStore(engine)
+    store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
         "sg_1", _EXTRACTOR_VERSION, [_event()], complete=True, content_fingerprint="fp1", at=_NOW
     )

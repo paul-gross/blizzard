@@ -16,6 +16,7 @@ from blizzard.hub.domain.routines import Routine
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.routine_store import RoutineStore
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -28,7 +29,7 @@ def _store_and_engine(tmp_path: Path) -> tuple[RoutineStore, Engine]:
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
-    return RoutineStore(engine), engine
+    return RoutineStore(hub_store_connections(engine)), engine
 
 
 def _store(tmp_path: Path) -> RoutineStore:

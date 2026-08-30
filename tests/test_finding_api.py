@@ -14,7 +14,7 @@ from sqlalchemy import insert
 
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.support import build_hub
+from tests.support import build_hub, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -30,7 +30,7 @@ def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(
     hub = build_hub(tmp_path)
     _seed_scope(hub, "blizzard")
     _seed_scope(hub, "other-scope")
-    findings = FindingStore(hub.engine)
+    findings = FindingStore(hub_store_connections(hub.engine))
     findings.add(
         "fin_1",
         routine_name="nightly",
@@ -88,7 +88,7 @@ def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(
 def test_get_renders_one_finding(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub, "blizzard")
-    FindingStore(hub.engine).add(
+    FindingStore(hub_store_connections(hub.engine)).add(
         "fin_1",
         routine_name="nightly",
         scope_slug="blizzard",
