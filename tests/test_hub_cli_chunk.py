@@ -11,7 +11,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 
@@ -51,7 +50,7 @@ def test_migrate_forced_sends_to_graph_and_node(monkeypatch: pytest.MonkeyPatch)
         calls.append((url, json))
         return _patch_response("ch_1", {"mode": "forced", "graph_id": "gr_2", "graph_name": "beta", "node_name": "n2"})
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(
         hub_group,
         ["chunk", "migrate", "ch_1", "--to-graph", "beta", "--node", "n2"],
@@ -74,7 +73,7 @@ def test_migrate_auto_omits_node(monkeypatch: pytest.MonkeyPatch) -> None:
         calls.append((url, json))
         return _patch_response("ch_1", {"mode": "auto", "graph_id": "gr_2", "graph_name": "beta", "node_name": None})
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta"])
 
     assert result.exit_code == 0, result.output
@@ -91,7 +90,7 @@ def test_migrate_cancel_sends_null_intent(monkeypatch: pytest.MonkeyPatch) -> No
         calls.append((url, json))
         return _patch_response("ch_1", None)
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--cancel"])
 
     assert result.exit_code == 0, result.output
@@ -104,7 +103,7 @@ def test_migrate_cancel_conflicts_with_to_graph(monkeypatch: pytest.MonkeyPatch)
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         raise AssertionError("must not call the API when the flags conflict")
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--cancel", "--to-graph", "beta"])
 
     assert result.exit_code != 0
@@ -116,7 +115,7 @@ def test_migrate_cancel_conflicts_with_node(monkeypatch: pytest.MonkeyPatch) -> 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         raise AssertionError("must not call the API when the flags conflict")
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--cancel", "--node", "n2"])
 
     assert result.exit_code != 0
@@ -128,7 +127,7 @@ def test_migrate_without_to_graph_or_cancel_is_refused(monkeypatch: pytest.Monke
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         raise AssertionError("must not call the API without --to-graph or --cancel")
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1"])
 
     assert result.exit_code != 0
@@ -140,7 +139,7 @@ def test_migrate_maps_409_to_the_server_detail(monkeypatch: pytest.MonkeyPatch) 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk is already pinned to graph gr_2"})
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta"])
 
     assert result.exit_code != 0
@@ -152,7 +151,7 @@ def test_migrate_maps_422_to_the_server_detail(monkeypatch: pytest.MonkeyPatch) 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "node must not be blank"})
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta", "--node", " "])
 
     assert result.exit_code != 0
@@ -164,7 +163,7 @@ def test_migrate_maps_404_to_the_server_detail(monkeypatch: pytest.MonkeyPatch) 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown chunk ch_ghost"})
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_ghost", "--to-graph", "beta"])
 
     assert result.exit_code != 0
@@ -184,7 +183,7 @@ def test_migrate_json_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPat
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(202, payload)
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta", "--json"])
 
     assert result.exit_code == 0, result.output
@@ -208,7 +207,7 @@ def test_restart_without_a_node_posts_a_null_target(monkeypatch: pytest.MonkeyPa
         calls.append((url, json))
         return _summary("ch_1", "build")
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
@@ -225,7 +224,7 @@ def test_restart_sends_the_named_node_and_actor(monkeypatch: pytest.MonkeyPatch)
         calls.append((url, json))
         return _summary("ch_1", "plan")
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1", "--node", "plan", "--by", "ada"])
 
     assert result.exit_code == 0, result.output
@@ -241,7 +240,7 @@ def test_restart_sends_the_cross_graph_target_and_names_it_back(monkeypatch: pyt
         calls.append((url, json))
         return _summary("ch_1", "build")
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1", "--to-graph", "beta"])
 
     assert result.exit_code == 0, result.output
@@ -254,7 +253,7 @@ def test_restart_maps_409_to_the_server_detail(monkeypatch: pytest.MonkeyPatch) 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "node 'deploy' does not exist on graph gr_1"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1", "--node", "deploy"])
 
     assert result.exit_code != 0
@@ -284,7 +283,7 @@ def test_set_sends_repeated_default_model_flags_as_an_ordered_list(monkeypatch: 
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(
         hub_group,
         [
@@ -330,7 +329,7 @@ def test_set_omits_a_field_the_operator_did_not_name(monkeypatch: pytest.MonkeyP
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "patch", fake_patch)
+    monkeypatch.setattr(httpx, "patch", fake_patch)
     result = CliRunner().invoke(hub_group, ["chunk", "set", "ch_1", "--default-effort", "high"])
 
     assert result.exit_code == 0, result.output
@@ -364,7 +363,7 @@ def test_show_reads_both_defaults_back_in_text_mode(monkeypatch: pytest.MonkeyPa
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
@@ -391,7 +390,7 @@ def test_show_dashes_a_chunk_expressing_no_preference(monkeypatch: pytest.Monkey
             },
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output

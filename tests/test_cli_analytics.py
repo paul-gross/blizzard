@@ -7,7 +7,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 
@@ -36,7 +35,7 @@ def test_re_derive_with_no_scope_posts_only_the_limit(monkeypatch: pytest.Monkey
         calls.append((url, json))
         return _FakeResponse(200, {"derived": 3, "remaining": 0})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["analytics", "re-derive"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
@@ -53,7 +52,7 @@ def test_re_derive_with_a_segment_scope_posts_it(monkeypatch: pytest.MonkeyPatch
         calls.append((url, json))
         return _FakeResponse(200, {"derived": 1, "remaining": 0})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["analytics", "re-derive", "--segment", "sg_1"])
 
     assert result.exit_code == 0, result.output
@@ -68,7 +67,7 @@ def test_re_derive_with_a_chunk_scope_and_limit_posts_both(monkeypatch: pytest.M
         calls.append((url, json))
         return _FakeResponse(200, {"derived": 10, "remaining": 5})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["analytics", "re-derive", "--chunk", "ch_1", "--limit", "10"])
 
     assert result.exit_code == 0, result.output
@@ -81,7 +80,7 @@ def test_re_derive_rejects_both_a_segment_and_a_chunk(monkeypatch: pytest.Monkey
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         raise AssertionError("must not reach the hub — rejected client-side")
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["analytics", "re-derive", "--segment", "sg_1", "--chunk", "ch_1"])
 
     assert result.exit_code != 0

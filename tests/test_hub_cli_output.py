@@ -11,7 +11,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 
@@ -47,7 +46,7 @@ def test_json_on_a_read_verb_prints_the_raw_response_body(monkeypatch: pytest.Mo
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(200, payload)
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["chunk", "list", "--json"])
 
     assert result.exit_code == 0, result.output
@@ -60,7 +59,7 @@ def test_json_on_a_write_verb_prints_the_raw_response_body(monkeypatch: pytest.M
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(202, payload)
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "promote", "ch_42", "--json"])
 
     assert result.exit_code == 0, result.output

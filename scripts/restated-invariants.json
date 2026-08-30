@@ -1,326 +1,326 @@
 {
- "version": 1,
- "facts": [
-  {
-   "id": "escalation-wrapped-implies-raw",
-   "statement": "A present wrapped takeover verb implies a present raw one; the reverse never holds, and either may be absent.",
-   "owner": "blizzard-context:/domain/humans/escalation.md#the-commands-an-escalation-carries",
-   "owner_kind": "domain",
-   "owner_assert": {
-    "quote": "guarantees the raw resume command is present as well"
-   },
-   "markers": [
-    "wrapped implies raw",
-    "implies the raw one"
-   ],
-   "marker_acknowledgments": {
-    "wrapped implies raw": "R2: 3 words, kept after a first check --owners run showed the sibling marker 'never the reverse' false-positiving on unrelated one-way-sync idioms and was dropped; this one alone (plus 'implies the raw one') still catches every genuine site with no observed false positive."
-   },
-   "sites": []
-  },
-  {
-   "id": "escalation-view-wrapped-field-optional",
-   "statement": "ChunkEscalationView.wrapped_takeover_command is optional on the wire and defaults to empty; empty means no wrapped verb was composed.",
-   "owner": "src/blizzard/wire/chunk.py#ChunkEscalationView",
-   "owner_kind": "wire",
-   "owner_assert": {
-    "quote": "empty when none was composed"
-   },
-   "markers": [
-    "empty when none was composed"
-   ],
-   "sites": [
+  "version": 1,
+  "facts": [
     {
-     "file": "src/blizzard/wire/chunk.py",
-     "symbol": "ChunkEscalationView",
-     "role": "owner"
-    }
-   ]
-  },
-  {
-   "id": "board-wrapped-primary-raw-fallback",
-   "statement": "The board renders the wrapped verb as the primary copyable command with the raw string demoted to a collapsed fallback, and renders raw as primary when wrapped is empty.",
-   "owner": "web/projects/fleet/src/lib/chunk-detail/chunk-escalation.ts#ChunkEscalation",
-   "owner_kind": "module",
-   "owner_assert": {
-    "quote": "primary whenever present"
-   },
-   "markers": [
-    "demoted to a collapsed",
-    "primary copyable command"
-   ],
-   "marker_acknowledgments": {
-    "primary copyable command": "R2: 3 words, kept because it is a distinctive phrase pairing (not a generic idiom like 'primary' or 'command' alone) verified via a check --owners run to catch every genuine restating site with no false positive observed in-tree."
-   },
-   "sites": [
-    {
-     "file": "docs/deployment/chunk-operations/takeover.md",
-     "symbol": "the-verb-versus-the-raw-resume-string",
-     "role": "allowed",
-     "reason": "Operator-facing surface description. The component is the owner; this doc's reader is outside the workspace and cannot resolve a source path, so an operator doc states what the operator will see."
+      "id": "escalation-wrapped-implies-raw",
+      "statement": "A present wrapped takeover verb implies a present raw one; the reverse never holds, and either may be absent.",
+      "owner": "blizzard-context:/domain/humans/escalation.md#the-commands-an-escalation-carries",
+      "owner_kind": "domain",
+      "owner_assert": {
+        "quote": "guarantees the raw resume command is present as well"
+      },
+      "markers": [
+        "wrapped implies raw",
+        "implies the raw one"
+      ],
+      "marker_acknowledgments": {
+        "wrapped implies raw": "R2: 3 words, kept after a first check --owners run showed the sibling marker 'never the reverse' false-positiving on unrelated one-way-sync idioms and was dropped; this one alone (plus 'implies the raw one') still catches every genuine site with no observed false positive."
+      },
+      "sites": []
     },
     {
-     "file": "web/projects/fleet/src/lib/chunk-detail/chunk-escalation.ts",
-     "symbol": "ChunkEscalation",
-     "role": "owner"
-    }
-   ]
-  },
-  {
-   "id": "chunk-ingest-token-shape",
-   "statement": "A chunk-ingest token is a source-native pointer, one of `{source}:{ref}`, `{source}#{ref}`, or a pasted work item URL.",
-   "owner": "src/blizzard/wire/chunk.py#ChunkIngestRequest",
-   "owner_kind": "wire",
-   "owner_assert": {
-    "quote": "resolved against the configured work sources' own grammar"
-   },
-   "markers": [
-    "a pasted work item url"
-   ],
-   "sites": [
-    {
-     "file": "src/blizzard/wire/chunk.py",
-     "symbol": "ChunkIngestRequest",
-     "role": "owner"
+      "id": "escalation-view-wrapped-field-optional",
+      "statement": "ChunkEscalationView.wrapped_takeover_command is optional on the wire and defaults to empty; empty means no wrapped verb was composed.",
+      "owner": "src/blizzard/wire/chunk.py#ChunkEscalationView",
+      "owner_kind": "wire",
+      "owner_assert": {
+        "quote": "empty when none was composed"
+      },
+      "markers": [
+        "empty when none was composed"
+      ],
+      "sites": [
+        {
+          "file": "src/blizzard/wire/chunk.py",
+          "symbol": "ChunkEscalationView",
+          "role": "owner"
+        }
+      ]
     },
     {
-     "file": "tests/test_ingest_and_pause_verbs.py",
-     "symbol": "test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve",
-     "role": "allowed",
-     "reason": "Pinning-test docstring stating what its own assertion verifies (pass-through with no local resolution or repo-tail guess); documentation of the test's own check, not a second narrative copy of the wire fact."
+      "id": "board-wrapped-primary-raw-fallback",
+      "statement": "The board renders the wrapped verb as the primary copyable command with the raw string demoted to a collapsed fallback, and renders raw as primary when wrapped is empty.",
+      "owner": "web/projects/fleet/src/lib/chunk-detail/chunk-escalation.ts#ChunkEscalation",
+      "owner_kind": "module",
+      "owner_assert": {
+        "quote": "primary whenever present"
+      },
+      "markers": [
+        "demoted to a collapsed",
+        "primary copyable command"
+      ],
+      "marker_acknowledgments": {
+        "primary copyable command": "R2: 3 words, kept because it is a distinctive phrase pairing (not a generic idiom like 'primary' or 'command' alone) verified via a check --owners run to catch every genuine restating site with no false positive observed in-tree."
+      },
+      "sites": [
+        {
+          "file": "docs/deployment/chunk-operations/takeover.md",
+          "symbol": "the-verb-versus-the-raw-resume-string",
+          "role": "allowed",
+          "reason": "Operator-facing surface description. The component is the owner; this doc's reader is outside the workspace and cannot resolve a source path, so an operator doc states what the operator will see."
+        },
+        {
+          "file": "web/projects/fleet/src/lib/chunk-detail/chunk-escalation.ts",
+          "symbol": "ChunkEscalation",
+          "role": "owner"
+        }
+      ]
     },
     {
-     "file": "src/blizzard/hub/cli.py",
-     "symbol": "chunk_ingest",
-     "role": "allowed",
-     "reason": "This docstring IS the `blizzard hub chunk ingest --help` text — an operator-facing published surface with no source tree to point at, the same structural cause as this fact's docs/deployment/ survivor below."
+      "id": "chunk-ingest-token-shape",
+      "statement": "A chunk-ingest token is a source-native pointer, one of `{source}:{ref}`, `{source}#{ref}`, or a pasted work item URL.",
+      "owner": "src/blizzard/wire/chunk.py#ChunkIngestRequest",
+      "owner_kind": "wire",
+      "owner_assert": {
+        "quote": "resolved against the configured work sources' own grammar"
+      },
+      "markers": [
+        "a pasted work item url"
+      ],
+      "sites": [
+        {
+          "file": "src/blizzard/wire/chunk.py",
+          "symbol": "ChunkIngestRequest",
+          "role": "owner"
+        },
+        {
+          "file": "tests/test_ingest_and_pause_verbs.py",
+          "symbol": "test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve",
+          "role": "allowed",
+          "reason": "Pinning-test docstring stating what its own assertion verifies (pass-through with no local resolution or repo-tail guess); documentation of the test's own check, not a second narrative copy of the wire fact."
+        },
+        {
+          "file": "docs/deployment/work-sources.md",
+          "symbol": "ingesting-work-items",
+          "role": "allowed",
+          "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivor: an operator ingesting work reads this section from outside the workspace and cannot resolve a source path, and the section's next paragraph reasons about `<source>:<ref>` refs it must first introduce. Reducing it is also a public-doc registry copy, which blizzard#274 owns."
+        },
+        {
+          "file": "src/blizzard/hub/cli/chunk.py",
+          "symbol": "chunk_ingest",
+          "role": "allowed",
+          "reason": "This docstring IS the `blizzard hub chunk ingest --help` text — an operator-facing published surface with no source tree to point at, the same structural cause as this fact's docs/deployment/ survivor below."
+        }
+      ]
     },
     {
-     "file": "docs/deployment/work-sources.md",
-     "symbol": "ingesting-work-items",
-     "role": "allowed",
-     "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivor: an operator ingesting work reads this section from outside the workspace and cannot resolve a source path, and the section's next paragraph reasons about `<source>:<ref>` refs it must first introduce. Reducing it is also a public-doc registry copy, which blizzard#274 owns."
-    }
-   ]
-  },
-  {
-   "id": "hub-entity-id-prefixed-ulid-format",
-   "statement": "A hub-entity id is a prefixed ULID: a type tag, an underscore, then a Crockford-base32 ULID whose leading 48 bits are the mint timestamp.",
-   "owner": "src/blizzard/foundation/ids.py#<module>",
-   "owner_kind": "module",
-   "owner_assert": {
-    "quote": "A type tag, an underscore, then a Crockford-base32 ULID"
-   },
-   "markers": [
-    "type tag underscore crockford base32 ulid"
-   ],
-   "sites": [
-    {
-     "file": "src/blizzard/foundation/ids.py",
-     "symbol": "<module>",
-     "role": "owner"
-    }
-   ]
-  },
-  {
-   "id": "route-token-rekey-lost-plaintext-recovery",
-   "statement": "Rekeying a chunk's live route capability token exists as the lost-plaintext recovery: a claim whose route-token response was never read back has no other way to learn it.",
-   "owner": "src/blizzard/hub/domain/claim.py#rekey",
-   "owner_kind": "module",
-   "owner_assert": {
-    "quote": "a claim whose route-token response was never read back has no other way to learn it"
-   },
-   "markers": [
-    "the lost plaintext recovery"
-   ],
-   "sites": [
-    {
-     "file": "src/blizzard/hub/domain/claim.py",
-     "symbol": "rekey",
-     "role": "owner"
+      "id": "hub-entity-id-prefixed-ulid-format",
+      "statement": "A hub-entity id is a prefixed ULID: a type tag, an underscore, then a Crockford-base32 ULID whose leading 48 bits are the mint timestamp.",
+      "owner": "src/blizzard/foundation/ids.py#<module>",
+      "owner_kind": "module",
+      "owner_assert": {
+        "quote": "A type tag, an underscore, then a Crockford-base32 ULID"
+      },
+      "markers": [
+        "type tag underscore crockford base32 ulid"
+      ],
+      "sites": [
+        {
+          "file": "src/blizzard/foundation/ids.py",
+          "symbol": "<module>",
+          "role": "owner"
+        }
+      ]
     },
     {
-     "file": "src/blizzard/hub/api/fleet.py",
-     "symbol": "rekey_route_token",
-     "role": "allowed",
-     "reason": "This docstring generates into openapi/ and thence the generated client — a published surface with no source tree to point at; restated inline per one-prose-home.md's published-surface clause, the same structural cause as the chunk_ingest survivor."
-    }
-   ]
-  },
-  {
-   "id": "federation-origin-declared-not-derived",
-   "statement": "A runner's federation redirect_uri is selected from the origins it declared in public_url and registered with the hub, never derived from the request; the browser follows it, so a loopback-only declaration is reachable from the runner's own host alone.",
-   "owner": "docs/deployment/human-auth.md#federating-a-runners-web-surface",
-   "owner_kind": "doc-section",
-   "owner_assert": {
-    "quote": "the browser not the runner posts the federation token"
-   },
-   "markers": [
-    "the browser not the runner posts the federation token"
-   ],
-   "sites": [
-    {
-     "file": "docs/deployment/human-auth.md",
-     "symbol": "federating-a-runners-web-surface",
-     "role": "owner"
-    }
-   ],
-   "marker_acknowledgments": {
-    "the browser not the runner posts the federation token": "R1: 9 words, chosen because the fact's other phrasings all carry an apostrophe and so cannot normalize to themselves as a marker. The runner's generated blizzard-runner.toml scaffold comment (src/blizzard/runner/config.py's to_toml) is a fourth, sanctioned restatement under bzh:one-prose-home's published-surface clause, but it is not carried as a site: it lives inside string literals, which prose_spans.py does not extract, so a site entry for it is unobservable and reads as stale. Named here instead of dropped."
-   }
-  },
-  {
-   "id": "transcript-record-cap-runner-under-hub",
-   "statement": "The runner's per-record transcript cap is held below the hub's: over the runner's, content is shrunk and every turn survives; over the hub's, the record is rejected and its turns stored as [].",
-   "owner": "src/blizzard/hub/domain/transcripts.py#<module>",
-   "owner_kind": "module",
-   "owner_assert": {
-    "quote": "the rogue-runner backstop, not the working"
-   },
-   "markers": [
-    "rogue runner backstop not the working limit",
-    "rejects what this one merely shrinks",
-    "loses its turns whole"
-   ],
-   "marker_acknowledgments": {
-    "rejects what this one merely shrinks": "R1: 6 words, the runner-side constant's own phrasing of the ordering; distinct enough that no unrelated cap prose in-tree matches it.",
-    "loses its turns whole": "R2: 4 words, the phrasing both scaffolded config templates use for the hub-side consequence. blizzard#338 made both caps operator-settable, so the ordering now has to travel with the keys an operator is invited to edit: HubConfig._transcript_cap_lines and RunnerConfig.to_toml each restate it in the file they scaffold. Both are sanctioned under bzh:one-prose-home's published-surface clause — an operator reads blizzard-hub.toml / blizzard-runner.toml with no source tree to point at — and both are unobservable for the same structural reason named on federation-origin-declared-not-derived: the text lives inside string literals, which prose_spans.py does not extract, so a site entry reads as stale. Named here rather than dropped."
-   },
-   "sites": [
-    {
-     "file": "src/blizzard/hub/domain/transcripts.py",
-     "symbol": "<module>",
-     "role": "owner"
+      "id": "route-token-rekey-lost-plaintext-recovery",
+      "statement": "Rekeying a chunk's live route capability token exists as the lost-plaintext recovery: a claim whose route-token response was never read back has no other way to learn it.",
+      "owner": "src/blizzard/hub/domain/claim.py#rekey",
+      "owner_kind": "module",
+      "owner_assert": {
+        "quote": "a claim whose route-token response was never read back has no other way to learn it"
+      },
+      "markers": [
+        "the lost plaintext recovery"
+      ],
+      "sites": [
+        {
+          "file": "src/blizzard/hub/domain/claim.py",
+          "symbol": "rekey",
+          "role": "owner"
+        },
+        {
+          "file": "src/blizzard/hub/api/fleet.py",
+          "symbol": "rekey_route_token",
+          "role": "allowed",
+          "reason": "This docstring generates into openapi/ and thence the generated client — a published surface with no source tree to point at; restated inline per one-prose-home.md's published-surface clause, the same structural cause as the chunk_ingest survivor."
+        }
+      ]
     },
     {
-     "file": "src/blizzard/runner/transcripts/caps.py",
-     "symbol": "<module>",
-     "role": "allowed",
-     "reason": "The runner cannot import the hub's constant across the daemon boundary, so its own cap must restate which side of the ordering it is on; test_record_caps.py asserts the gap. Moved here from loop/transcript_pump.py in blizzard#338, so runner.config can read the defaults it renders without importing the pump that imports it."
-    }
-   ]
-  },
-  {
-   "id": "sse-keepalive-cadence-shared",
-   "statement": "Both daemons' SSE routes idle at the one shared keepalive cadence — neither the hub's nor the runner's route overrides DEFAULT_KEEPALIVE_SECONDS; the per-daemon difference is the reserved open-of-stream comment's text alone.",
-   "owner": "src/blizzard/foundation/events/stream.py#<module>",
-   "owner_kind": "module",
-   "owner_assert": {
-    "quote": "both production routes idle at the one shared keepalive cadence"
-   },
-   "markers": [
-    "keepalive cadence",
-    "keepalive adjacent"
-   ],
-   "marker_acknowledgments": {
-    "keepalive cadence": "R1: 2 words, kept short; markers match literal normalized bigrams, so this buys precision over recall — it catches a restatement using this exact phrasing, not any phrasing of the claim ('keepalive interval'/'keepalive period'/a bare figure would not fire it). Verified via a check --owners run to match only the owner in-tree, with no false positive observed.",
-    "keepalive adjacent": "R1: 2 words, the exact coinage of the contradicting restatement this fact was declared against (polling.ts's since-removed 'keepalive-adjacent guarantee' clause); kept so a re-introduction of that phrasing at an in-repo site (this sweep's roots are src/tests/docs/README.md/web/projects plus ../blizzard-mock/src) trips the sweep there. ../blizzard-context is only this sweep's --context-root, used to resolve owner citations, never walked for sites — a restatement there is outside this sweep's reach regardless of phrasing."
-   },
-   "sites": [
-    {
-     "file": "src/blizzard/foundation/events/stream.py",
-     "symbol": "<module>",
-     "role": "owner"
+      "id": "federation-origin-declared-not-derived",
+      "statement": "A runner's federation redirect_uri is selected from the origins it declared in public_url and registered with the hub, never derived from the request; the browser follows it, so a loopback-only declaration is reachable from the runner's own host alone.",
+      "owner": "docs/deployment/human-auth.md#federating-a-runners-web-surface",
+      "owner_kind": "doc-section",
+      "owner_assert": {
+        "quote": "the browser not the runner posts the federation token"
+      },
+      "markers": [
+        "the browser not the runner posts the federation token"
+      ],
+      "sites": [
+        {
+          "file": "docs/deployment/human-auth.md",
+          "symbol": "federating-a-runners-web-surface",
+          "role": "owner"
+        }
+      ],
+      "marker_acknowledgments": {
+        "the browser not the runner posts the federation token": "R1: 9 words, chosen because the fact's other phrasings all carry an apostrophe and so cannot normalize to themselves as a marker. The runner's generated blizzard-runner.toml scaffold comment (src/blizzard/runner/config.py's to_toml) is a fourth, sanctioned restatement under bzh:one-prose-home's published-surface clause, but it is not carried as a site: it lives inside string literals, which prose_spans.py does not extract, so a site entry for it is unobservable and reads as stale. Named here instead of dropped."
+      }
     },
     {
-     "file": "tests/test_events_stream.py",
-     "symbol": "test_stream_endpoint_binds_the_default_keepalive_cadence",
-     "role": "allowed",
-     "reason": "Pinning-test docstring stating what its own assertion verifies (the route constructs Stream with no keepalive_seconds override, so it inherits the shared default); documentation of the test's own check, not a second narrative copy of the module fact."
+      "id": "transcript-record-cap-runner-under-hub",
+      "statement": "The runner's per-record transcript cap is held below the hub's: over the runner's, content is shrunk and every turn survives; over the hub's, the record is rejected and its turns stored as [].",
+      "owner": "src/blizzard/hub/domain/transcripts.py#<module>",
+      "owner_kind": "module",
+      "owner_assert": {
+        "quote": "the rogue-runner backstop, not the working"
+      },
+      "markers": [
+        "rogue runner backstop not the working limit",
+        "rejects what this one merely shrinks",
+        "loses its turns whole"
+      ],
+      "marker_acknowledgments": {
+        "rejects what this one merely shrinks": "R1: 6 words, the runner-side constant's own phrasing of the ordering; distinct enough that no unrelated cap prose in-tree matches it.",
+        "loses its turns whole": "R2: 4 words, the phrasing both scaffolded config templates use for the hub-side consequence. blizzard#338 made both caps operator-settable, so the ordering now has to travel with the keys an operator is invited to edit: HubConfig._transcript_cap_lines and RunnerConfig.to_toml each restate it in the file they scaffold. Both are sanctioned under bzh:one-prose-home's published-surface clause — an operator reads blizzard-hub.toml / blizzard-runner.toml with no source tree to point at — and both are unobservable for the same structural reason named on federation-origin-declared-not-derived: the text lives inside string literals, which prose_spans.py does not extract, so a site entry reads as stale. Named here rather than dropped."
+      },
+      "sites": [
+        {
+          "file": "src/blizzard/hub/domain/transcripts.py",
+          "symbol": "<module>",
+          "role": "owner"
+        },
+        {
+          "file": "src/blizzard/runner/transcripts/caps.py",
+          "symbol": "<module>",
+          "role": "allowed",
+          "reason": "The runner cannot import the hub's constant across the daemon boundary, so its own cap must restate which side of the ordering it is on; test_record_caps.py asserts the gap. Moved here from loop/transcript_pump.py in blizzard#338, so runner.config can read the defaults it renders without importing the pump that imports it."
+        }
+      ]
     },
     {
-     "file": "tests/test_runner_events_stream.py",
-     "symbol": "test_stream_endpoint_binds_the_default_keepalive_cadence",
-     "role": "allowed",
-     "reason": "Pinning-test docstring stating what its own assertion verifies (the route constructs Stream with no keepalive_seconds override, so it inherits the shared default); documentation of the test's own check, not a second narrative copy of the module fact."
-    }
-   ]
-  },
-  {
-   "id": "crash-sweep-whole-process-case",
-   "statement": "A whole-process case is a crash-sweep case that signals a whole daemon process or process group rather than arming a single registry crash point; a graceful SIGTERM qualifies as readily as a kill -9.",
-   "owner": "blizzard-context:/verification/blizzard/commands/test-tiers/crash-sweep.md#blizzardcrash-sweep",
-   "owner_kind": "doc-section",
-   "owner_assert": {
-    "quote": "signal a whole daemon process or process group"
-   },
-   "markers": [
-    "signals a whole daemon process or process group"
-   ],
-   "sites": []
-  },
-  {
-   "id": "chunk-delete-hub-item-pairing",
-   "statement": "A hub item and its chunk live and die together: deleting a chunk withdraws every open hub:-source pointer it holds (a forge:-source pointer on the same chunk survives untouched), and withdrawing a hub item deletes its unacquired holder chunk in the same stroke rather than refusing the withdrawal — a genuinely acquired, still-live holder still refuses it, and a terminal holder's withdrawal is unaffected either way.",
-   "owner": "blizzard-context:/domain/work/chunk.md#deletion",
-   "owner_kind": "domain",
-   "owner_assert": {
-    "quote": "hub item and its chunk live and die together"
-   },
-   "markers": [
-    "any source pointer on the same chunk survives untouched",
-    "deletes its unacquired holder chunk in the same stroke"
-   ],
-   "sites": [
-    {
-     "file": "docs/deployment/control-verbs.md",
-     "symbol": "delete",
-     "role": "allowed",
-     "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivors: an operator deleting a chunk reads this section from outside the workspace and cannot resolve a source path, so the delete/withdraw pairing is restated plainly here rather than left as a bare pointer."
-    }
-   ]
-  },
-  {
-   "id": "docket-finding-description-bound",
-   "statement": "A docket finding's description is one or two sentences, at most 300 characters, with any acting-on fact confined to a detail: continuation of at most two lines.",
-   "owner": "src/blizzard/hub/graphs/advanced-development-workflow/docket.md#docket-entry",
-   "owner_kind": "doc-section",
-   "owner_assert": {
-    "quote": "one or two sentences, at most 300 characters"
-   },
-   "markers": [
-    "one or two sentences at most 300 characters"
-   ],
-   "sites": [
-    {
-     "file": "src/blizzard/hub/graphs/advanced-development-workflow/docket.md",
-     "symbol": "docket-entry",
-     "role": "owner"
+      "id": "sse-keepalive-cadence-shared",
+      "statement": "Both daemons' SSE routes idle at the one shared keepalive cadence — neither the hub's nor the runner's route overrides DEFAULT_KEEPALIVE_SECONDS; the per-daemon difference is the reserved open-of-stream comment's text alone.",
+      "owner": "src/blizzard/foundation/events/stream.py#<module>",
+      "owner_kind": "module",
+      "owner_assert": {
+        "quote": "both production routes idle at the one shared keepalive cadence"
+      },
+      "markers": [
+        "keepalive cadence",
+        "keepalive adjacent"
+      ],
+      "marker_acknowledgments": {
+        "keepalive cadence": "R1: 2 words, kept short; markers match literal normalized bigrams, so this buys precision over recall — it catches a restatement using this exact phrasing, not any phrasing of the claim ('keepalive interval'/'keepalive period'/a bare figure would not fire it). Verified via a check --owners run to match only the owner in-tree, with no false positive observed.",
+        "keepalive adjacent": "R1: 2 words, the exact coinage of the contradicting restatement this fact was declared against (polling.ts's since-removed 'keepalive-adjacent guarantee' clause); kept so a re-introduction of that phrasing at an in-repo site (this sweep's roots are src/tests/docs/README.md/web/projects plus ../blizzard-mock/src) trips the sweep there. ../blizzard-context is only this sweep's --context-root, used to resolve owner citations, never walked for sites — a restatement there is outside this sweep's reach regardless of phrasing."
+      },
+      "sites": [
+        {
+          "file": "src/blizzard/foundation/events/stream.py",
+          "symbol": "<module>",
+          "role": "owner"
+        },
+        {
+          "file": "tests/test_events_stream.py",
+          "symbol": "test_stream_endpoint_binds_the_default_keepalive_cadence",
+          "role": "allowed",
+          "reason": "Pinning-test docstring stating what its own assertion verifies (the route constructs Stream with no keepalive_seconds override, so it inherits the shared default); documentation of the test's own check, not a second narrative copy of the module fact."
+        },
+        {
+          "file": "tests/test_runner_events_stream.py",
+          "symbol": "test_stream_endpoint_binds_the_default_keepalive_cadence",
+          "role": "allowed",
+          "reason": "Pinning-test docstring stating what its own assertion verifies (the route constructs Stream with no keepalive_seconds override, so it inherits the shared default); documentation of the test's own check, not a second narrative copy of the module fact."
+        }
+      ]
     },
     {
-     "file": "src/blizzard/hub/graphs/advanced-development-workflow/prompts/plan-review.md",
-     "symbol": "submit",
-     "role": "allowed",
-     "reason": "Published rendered surface: this node prompt is injected verbatim into a fleet worker's turn — a reader with no blizzard source tree to resolve a path into — so the bound is restated at the point of submission. The in-prompt docket read that would fetch the full spec is a graph-scope read that can miss, so the pointer beneath the restatement must stay additive (bzh:graph-artifact-pointer-fallback)."
+      "id": "crash-sweep-whole-process-case",
+      "statement": "A whole-process case is a crash-sweep case that signals a whole daemon process or process group rather than arming a single registry crash point; a graceful SIGTERM qualifies as readily as a kill -9.",
+      "owner": "blizzard-context:/verification/blizzard/commands/test-tiers/crash-sweep.md#blizzardcrash-sweep",
+      "owner_kind": "doc-section",
+      "owner_assert": {
+        "quote": "signal a whole daemon process or process group"
+      },
+      "markers": [
+        "signals a whole daemon process or process group"
+      ],
+      "sites": []
     },
     {
-     "file": "src/blizzard/hub/graphs/advanced-development-workflow/prompts/review.md",
-     "symbol": "submit",
-     "role": "allowed",
-     "reason": "Published rendered surface: this node prompt is injected verbatim into a fleet worker's turn — a reader with no blizzard source tree to resolve a path into — so the bound is restated at the point of submission. The in-prompt docket read that would fetch the full spec is a graph-scope read that can miss, so the pointer beneath the restatement must stay additive (bzh:graph-artifact-pointer-fallback)."
-    }
-   ]
-  },
-  {
-   "id": "work-item-proposal-materializes-at-delivery",
-   "statement": "A node-step's proposed work items ride its completion inertly through the graph; once the chunk actually delivers, the hub materializes every accumulated proposal of that chunk, best-effort and eventually convergent, never blocking the delivery itself — a create mints a fleet-authored hub item resting on its own fresh not_ready chunk, an update appends its evidence to an open item and stamps its last-edit instant, and an unresolvable proposal (its target closed, withdrawn, gone, or sourced somewhere with no editor) is recorded with its reason rather than retried forever.",
-   "owner": "blizzard-context:/domain/work/chunk.md#materialization",
-   "owner_kind": "domain",
-   "owner_assert": {
-    "quote": "best-effort, eventually convergent, and not atomic with the landing"
-   },
-   "markers": [
-    "materializes every accumulated proposal of a chunk",
-    "recorded with its reason rather than retried forever"
-   ],
-   "sites": [
+      "id": "chunk-delete-hub-item-pairing",
+      "statement": "A hub item and its chunk live and die together: deleting a chunk withdraws every open hub:-source pointer it holds (a forge:-source pointer on the same chunk survives untouched), and withdrawing a hub item deletes its unacquired holder chunk in the same stroke rather than refusing the withdrawal — a genuinely acquired, still-live holder still refuses it, and a terminal holder's withdrawal is unaffected either way.",
+      "owner": "blizzard-context:/domain/work/chunk.md#deletion",
+      "owner_kind": "domain",
+      "owner_assert": {
+        "quote": "hub item and its chunk live and die together"
+      },
+      "markers": [
+        "any source pointer on the same chunk survives untouched",
+        "deletes its unacquired holder chunk in the same stroke"
+      ],
+      "sites": [
+        {
+          "file": "docs/deployment/control-verbs.md",
+          "symbol": "delete",
+          "role": "allowed",
+          "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivors: an operator deleting a chunk reads this section from outside the workspace and cannot resolve a source path, so the delete/withdraw pairing is restated plainly here rather than left as a bare pointer."
+        }
+      ]
+    },
     {
-     "file": "docs/deployment/work-sources.md",
-     "symbol": "hub-owned-items",
-     "role": "allowed",
-     "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivors: an operator reading this section from outside the workspace cannot resolve a domain-doc path, so what a proposed work item becomes at delivery is restated plainly here rather than left as a bare pointer."
+      "id": "docket-finding-description-bound",
+      "statement": "A docket finding's description is one or two sentences, at most 300 characters, with any acting-on fact confined to a detail: continuation of at most two lines.",
+      "owner": "src/blizzard/hub/graphs/advanced-development-workflow/docket.md#docket-entry",
+      "owner_kind": "doc-section",
+      "owner_assert": {
+        "quote": "one or two sentences, at most 300 characters"
+      },
+      "markers": [
+        "one or two sentences at most 300 characters"
+      ],
+      "sites": [
+        {
+          "file": "src/blizzard/hub/graphs/advanced-development-workflow/docket.md",
+          "symbol": "docket-entry",
+          "role": "owner"
+        },
+        {
+          "file": "src/blizzard/hub/graphs/advanced-development-workflow/prompts/plan-review.md",
+          "symbol": "submit",
+          "role": "allowed",
+          "reason": "Published rendered surface: this node prompt is injected verbatim into a fleet worker's turn — a reader with no blizzard source tree to resolve a path into — so the bound is restated at the point of submission. The in-prompt docket read that would fetch the full spec is a graph-scope read that can miss, so the pointer beneath the restatement must stay additive (bzh:graph-artifact-pointer-fallback)."
+        },
+        {
+          "file": "src/blizzard/hub/graphs/advanced-development-workflow/prompts/review.md",
+          "symbol": "submit",
+          "role": "allowed",
+          "reason": "Published rendered surface: this node prompt is injected verbatim into a fleet worker's turn — a reader with no blizzard source tree to resolve a path into — so the bound is restated at the point of submission. The in-prompt docket read that would fetch the full spec is a graph-scope read that can miss, so the pointer beneath the restatement must stay additive (bzh:graph-artifact-pointer-fallback)."
+        }
+      ]
+    },
+    {
+      "id": "work-item-proposal-materializes-at-delivery",
+      "statement": "A node-step's proposed work items ride its completion inertly through the graph; once the chunk actually delivers, the hub materializes every accumulated proposal of that chunk, best-effort and eventually convergent, never blocking the delivery itself — a create mints a fleet-authored hub item resting on its own fresh not_ready chunk, an update appends its evidence to an open item and stamps its last-edit instant, and an unresolvable proposal (its target closed, withdrawn, gone, or sourced somewhere with no editor) is recorded with its reason rather than retried forever.",
+      "owner": "blizzard-context:/domain/work/chunk.md#materialization",
+      "owner_kind": "domain",
+      "owner_assert": {
+        "quote": "best-effort, eventually convergent, and not atomic with the landing"
+      },
+      "markers": [
+        "materializes every accumulated proposal of a chunk",
+        "recorded with its reason rather than retried forever"
+      ],
+      "sites": [
+        {
+          "file": "docs/deployment/work-sources.md",
+          "symbol": "hub-owned-items",
+          "role": "allowed",
+          "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivors: an operator reading this section from outside the workspace cannot resolve a domain-doc path, so what a proposed work item becomes at delivery is restated plainly here rather than left as a bare pointer."
+        }
+      ]
     }
-   ]
-  }
- ]
+  ]
 }

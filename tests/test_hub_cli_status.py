@@ -7,12 +7,12 @@ marker — without a running hub.
 
 from __future__ import annotations
 
+import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
-from blizzard.hub.cli import DEFAULT_HUB_URL
 from blizzard.hub.cli import hub as hub_group
+from blizzard.hub.cli.context import DEFAULT_HUB_URL
 
 pytestmark = pytest.mark.component
 
@@ -38,7 +38,7 @@ def _install(monkeypatch: pytest.MonkeyPatch, responses: dict[str, object]) -> N
     def fake_get(url: str, *, timeout: float, params: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(responses[url])
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
 
 def _cost(cost_usd: float, *, partial: bool) -> dict:

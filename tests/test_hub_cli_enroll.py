@@ -8,7 +8,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 
@@ -35,7 +34,7 @@ def test_enroll_posts_to_the_enrollments_endpoint_and_prints_the_token(monkeypat
         calls.append(url)
         return _FakeResponse(201, {"runner_id": "runner-a", "token": "sekrit-token"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group, ["runner", "enroll", "runner-a"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
@@ -50,7 +49,7 @@ def test_enroll_maps_an_unknown_runner(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["runner", "enroll", "ghost"])
 
     assert result.exit_code != 0

@@ -15,7 +15,6 @@ import httpx
 import pytest
 from click.testing import CliRunner, Result
 
-import blizzard.hub.cli as hub_cli
 from blizzard.auth_core import Role
 from blizzard.hub.cli import hub as hub_group
 from tests.support import HubHarness, seed_session, seed_user
@@ -42,8 +41,8 @@ def _relay(hub: HubHarness, token: str, monkeypatch: pytest.MonkeyPatch) -> None
         with hub.client.stream(method, url, params=params, headers=headers) as resp:
             yield resp
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
-    monkeypatch.setattr(hub_cli.httpx, "stream", fake_stream)
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "stream", fake_stream)
 
 
 @contextlib.contextmanager
@@ -125,7 +124,7 @@ def test_the_auth_triad_returns_the_apis_own_detail(tmp_path: Path, monkeypatch:
     def relay_anonymous(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object):
         return hub.client.get(url, params=params)
 
-    monkeypatch.setattr(hub_cli.httpx, "get", relay_anonymous)
+    monkeypatch.setattr(httpx, "get", relay_anonymous)
     anon = _invoke()
     assert anon.exit_code != 0
     assert "blizzard hub login" in anon.output

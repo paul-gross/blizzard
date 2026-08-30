@@ -20,7 +20,6 @@ import pytest
 import uvicorn
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.cli import hub as hub_group
 from blizzard.runner.app import build_hosted_app
@@ -62,7 +61,7 @@ def test_ingest_posts_the_tokens_verbatim_and_reports_the_chunk(monkeypatch: pyt
         calls.append((url, json))
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group,
         ["chunk", "ingest", "blizzard:8", "widget:1"],
@@ -86,7 +85,7 @@ def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.Monke
         calls.append(json)
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "ingest", "blizzard#8"])
 
     assert result.exit_code == 0, result.output
@@ -103,7 +102,7 @@ def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeyp
         calls.append(json)
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "ingest", "https://github.com/paul-gross/blizzard/issues/26"])
 
     assert result.exit_code == 0, result.output
@@ -122,7 +121,7 @@ def test_ingest_warns_on_the_deprecated_github_prefix_but_still_passes_the_rest_
         calls.append(json)
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group, ["chunk", "ingest", "github:https://github.com/paul-gross/blizzard/issues/26"]
     )
@@ -139,7 +138,7 @@ def test_ingest_maps_a_pointer_conflict(monkeypatch: pytest.MonkeyPatch) -> None
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"existing_chunk_id": "ch_old", "source": "blizzard", "ref": "8"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "ingest", "blizzard:8"])
 
     assert result.exit_code != 0
@@ -158,7 +157,7 @@ def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.Monkey
             {"detail": "token 'no-separator-here' is not claimed by any configured work source (configured: blizzard)"},
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "ingest", "no-separator-here"])
 
     assert result.exit_code != 0
@@ -180,7 +179,7 @@ def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch
             {"detail": "token '...' is not claimed by any configured work source (configured: blizzard)"},
         )
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     tokens = ("https://github.com/paul-gross/blizzard/pull/5", "https://example.com/nothing/here")
     for token in tokens:
         result = CliRunner().invoke(hub_group, ["chunk", "ingest", token])
@@ -203,7 +202,7 @@ def test_promote_posts_to_the_chunk_and_reports_ready(monkeypatch: pytest.Monkey
         calls.append(url)
         return _FakeResponse(202)
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "promote", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
@@ -218,7 +217,7 @@ def test_promote_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "promote", "ch_nope"])
 
     assert result.exit_code != 0
@@ -238,7 +237,7 @@ def test_detach_posts_to_the_chunk_and_reports_released(monkeypatch: pytest.Monk
         calls.append(url)
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "detach", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
@@ -253,7 +252,7 @@ def test_detach_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.Monk
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk ch_42 has no live route"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "detach", "ch_42"])
 
     assert result.exit_code != 0
@@ -267,7 +266,7 @@ def test_detach_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "detach", "ch_nope"])
 
     assert result.exit_code != 0
@@ -287,7 +286,7 @@ def test_stop_posts_to_the_chunk_and_reports_stopped(monkeypatch: pytest.MonkeyP
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group, ["chunk", "stop", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
@@ -306,7 +305,7 @@ def test_stop_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.Monkey
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk ch_42 is stopped, not stoppable"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "stop", "ch_42"])
 
     assert result.exit_code != 0
@@ -320,7 +319,7 @@ def test_stop_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "stop", "ch_nope"])
 
     assert result.exit_code != 0
@@ -335,7 +334,7 @@ def test_stop_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "stop", "ch_42"])
 
     assert result.exit_code == 0, result.output
@@ -356,7 +355,7 @@ def test_done_posts_to_the_chunk_and_reports_completed(monkeypatch: pytest.Monke
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group, ["chunk", "done", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
@@ -375,7 +374,7 @@ def test_done_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "done", "ch_nope"])
 
     assert result.exit_code != 0
@@ -390,7 +389,7 @@ def test_done_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "done", "ch_42"])
 
     assert result.exit_code == 0, result.output
@@ -411,7 +410,7 @@ def test_pause_chunk_posts_to_the_chunk_and_reports_paused(monkeypatch: pytest.M
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group, ["chunk", "pause", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
@@ -430,7 +429,7 @@ def test_pause_chunk_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk ch_42 is delivering, not pausable"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "pause", "ch_42"])
 
     assert result.exit_code != 0
@@ -444,7 +443,7 @@ def test_pause_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> N
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "pause", "ch_nope"])
 
     assert result.exit_code != 0
@@ -460,7 +459,7 @@ def test_resume_chunk_posts_to_the_chunk_and_reports_resumed(monkeypatch: pytest
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group, ["chunk", "resume", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
@@ -479,7 +478,7 @@ def test_resume_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "resume", "ch_nope"])
 
     assert result.exit_code != 0
@@ -498,7 +497,7 @@ def test_chunk_delete_confirms_and_sends_the_delete_with_by(monkeypatch: pytest.
         calls.append((method, url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "request", fake_request)
+    monkeypatch.setattr(httpx, "request", fake_request)
     result = CliRunner().invoke(
         hub_group,
         ["chunk", "delete", "ch_42", "--by", "alice"],
@@ -519,7 +518,7 @@ def test_chunk_delete_aborts_when_confirmation_is_declined(monkeypatch: pytest.M
     def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
         raise AssertionError("must not call the API when the user declines")
 
-    monkeypatch.setattr(hub_cli.httpx, "request", fake_request)
+    monkeypatch.setattr(httpx, "request", fake_request)
     result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42"], input="n\n")
 
     assert result.exit_code != 0
@@ -533,7 +532,7 @@ def test_chunk_delete_yes_skips_the_prompt_and_defaults_by_to_operator(monkeypat
         calls.append((method, url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "request", fake_request)
+    monkeypatch.setattr(httpx, "request", fake_request)
     result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42", "--yes"])
 
     assert result.exit_code == 0, result.output
@@ -548,7 +547,7 @@ def test_chunk_delete_maps_a_conflict_with_the_servers_detail(monkeypatch: pytes
     def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk ch_42 is running — deletion needs an unacquired chunk"})
 
-    monkeypatch.setattr(hub_cli.httpx, "request", fake_request)
+    monkeypatch.setattr(httpx, "request", fake_request)
     result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42", "--yes"])
 
     assert result.exit_code != 0
@@ -560,7 +559,7 @@ def test_chunk_delete_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> 
     def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "request", fake_request)
+    monkeypatch.setattr(httpx, "request", fake_request)
     result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_nope", "--yes"])
 
     assert result.exit_code != 0

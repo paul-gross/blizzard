@@ -14,7 +14,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 pytestmark = pytest.mark.unit
@@ -70,7 +69,7 @@ def _get_returning(body: object):
 
 def test_counts_dataset_renders_the_counts_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_get, _ = _get_returning({"counts": [{"key": "src/a.py", "count": 3}]})
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "counts-files"])
 
@@ -82,7 +81,7 @@ def test_durations_dataset_renders_the_durations_shape(monkeypatch: pytest.Monke
     fake_get, _ = _get_returning(
         {"durations": [{"key": "nd_build", "completed_steps": 2, "total_seconds": 90.0, "avg_seconds": 45.0}]}
     )
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "durations-nodes"])
 
@@ -108,7 +107,7 @@ def test_spend_dataset_renders_the_spend_shape(monkeypatch: pytest.MonkeyPatch) 
             ]
         }
     )
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes"])
 
@@ -134,7 +133,7 @@ def test_spend_chunks_dataset_renders_the_chunk_spend_shape(monkeypatch: pytest.
             "next_cursor": None,
         }
     )
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks"])
 
@@ -147,7 +146,7 @@ def test_outcomes_dataset_renders_the_outcomes_shape(monkeypatch: pytest.MonkeyP
     fake_get, _ = _get_returning(
         {"outcomes": [{"node_id": "nd_build", "choice_counts": {"pass": 3, "fail": 1}, "attempt_failures": 2}]}
     )
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "outcomes-nodes"])
 
@@ -160,7 +159,7 @@ def test_outcomes_dataset_renders_the_outcomes_shape(monkeypatch: pytest.MonkeyP
 def test_json_prints_the_raw_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
     body = {"counts": [{"key": "wf-commit", "count": 1}]}
     fake_get, _ = _get_returning(body)
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "counts-skills", "--json"])
 
@@ -172,7 +171,7 @@ def test_json_prints_the_raw_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_a_filter_the_dataset_does_not_expose_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
 
     # counts-nodes does not offer --node (it would select a single group).
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "counts-nodes", "--node", "nd_build"])
@@ -182,7 +181,7 @@ def test_a_filter_the_dataset_does_not_expose_is_refused(monkeypatch: pytest.Mon
 
 
 def test_kind_is_refused_for_a_fixed_kind_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "counts-files", "--kind", "file_read"])
 
@@ -191,7 +190,7 @@ def test_kind_is_refused_for_a_fixed_kind_dataset(monkeypatch: pytest.MonkeyPatc
 
 
 def test_extractor_version_is_refused_for_an_operational_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "durations-nodes", "--extractor-version", "v2"])
 
@@ -200,7 +199,7 @@ def test_extractor_version_is_refused_for_an_operational_dataset(monkeypatch: py
 
 
 def test_cursor_is_refused_outside_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes", "--cursor", "cur_1"])
 
@@ -210,7 +209,7 @@ def test_cursor_is_refused_outside_spend_chunks(monkeypatch: pytest.MonkeyPatch)
 
 def test_a_scope_filter_applies_to_every_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_get, calls = _get_returning({"outcomes": []})
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "outcomes-nodes", "--graph", "gr_1"])
 
@@ -220,7 +219,7 @@ def test_a_scope_filter_applies_to_every_dataset(monkeypatch: pytest.MonkeyPatch
 
 def test_the_default_limit_is_200_for_spend_chunks_only(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_get, calls = _get_returning({"spend": [], "next_cursor": None})
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks"])
 
@@ -230,7 +229,7 @@ def test_the_default_limit_is_200_for_spend_chunks_only(monkeypatch: pytest.Monk
 
 def test_non_paginated_datasets_get_no_limit_param(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_get, calls = _get_returning({"outcomes": []})
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "outcomes-nodes"])
 
@@ -243,8 +242,8 @@ def test_non_paginated_datasets_get_no_limit_param(monkeypatch: pytest.MonkeyPat
 
 def test_ndjson_streams_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
     resp = _FakeStreamResponse(200, lines=['{"chunk_id": "ch_1"}'])
-    monkeypatch.setattr(hub_cli.httpx, "stream", _stream_returning(resp))
-    monkeypatch.setattr(hub_cli.httpx, "get", lambda *a, **k: pytest.fail("--ndjson must not hit the paged route"))
+    monkeypatch.setattr(httpx, "stream", _stream_returning(resp))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("--ndjson must not hit the paged route"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson"])
 
@@ -253,8 +252,8 @@ def test_ndjson_streams_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_ndjson_is_refused_outside_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
-    monkeypatch.setattr(hub_cli.httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes", "--ndjson"])
 
@@ -263,7 +262,7 @@ def test_ndjson_is_refused_outside_spend_chunks(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_ndjson_rejects_json_on_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson", "--json"])
 
@@ -272,7 +271,7 @@ def test_ndjson_rejects_json_on_spend_chunks(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_ndjson_rejects_cursor_on_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson", "--cursor", "cur_1"])
 
@@ -281,7 +280,7 @@ def test_ndjson_rejects_cursor_on_spend_chunks(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_ndjson_rejects_limit_on_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
 
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson", "--limit", "10"])
 

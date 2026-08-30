@@ -8,7 +8,6 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import blizzard.hub.cli as hub_cli
 from blizzard.hub.cli import hub as hub_group
 
 
@@ -43,8 +42,8 @@ def _stub(monkeypatch: pytest.MonkeyPatch, peek_order: list[str]) -> list[tuple[
         calls.append((url, json))
         return _queue_response(peek_order)
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
     return calls
 
 
@@ -97,8 +96,8 @@ def test_queue_move_reports_409_when_chunk_is_not_ready(monkeypatch: pytest.Monk
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk ch_a is not in the ready list (it is not_ready)"})
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
 
     result = CliRunner().invoke(hub_group, ["queue", "move", "ch_a", "0"])
 
@@ -118,8 +117,8 @@ def test_queue_move_falls_back_to_the_updated_both_lists_refusal_when_the_body_n
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {})
 
-    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
-    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
 
     result = CliRunner().invoke(hub_group, ["queue", "move", "ch_a", "0"])
 
@@ -133,7 +132,7 @@ def test_queue_set_reports_409_when_a_named_chunk_is_not_ready(monkeypatch: pyte
     def fake_put(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk ch_a is not in the ready list (it is not_ready)"})
 
-    monkeypatch.setattr(hub_cli.httpx, "put", fake_put)
+    monkeypatch.setattr(httpx, "put", fake_put)
 
     result = CliRunner().invoke(hub_group, ["queue", "set", "ch_a"])
 
@@ -148,7 +147,7 @@ def test_queue_set_falls_back_to_the_updated_both_lists_refusal_when_the_body_na
     def fake_put(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {})
 
-    monkeypatch.setattr(hub_cli.httpx, "put", fake_put)
+    monkeypatch.setattr(httpx, "put", fake_put)
 
     result = CliRunner().invoke(hub_group, ["queue", "set", "ch_a"])
 
