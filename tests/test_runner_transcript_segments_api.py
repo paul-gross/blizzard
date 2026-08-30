@@ -16,11 +16,11 @@ from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.store.repository import NewLease
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
-from tests.runner_fakes import make_store
+from tests.runner_fakes import make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -53,12 +53,14 @@ def _app_with_segments(tmp_path: Path, *, repo: FakeTranscriptRepository | None 
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = TranscriptService(
-        store=store,
+        leases=store,
+        transcript_ledger=store,
+        environments=store,
         transcripts=repo or FakeTranscriptRepository(),
         archived=RaisingArchivedTranscriptRepository(),
         workspace_root="",
     )
-    return create_app(config, runner_store=store, transcripts=service), store
+    return create_app(config, runner_stores=make_stores(store), transcripts=service), store
 
 
 def _mint(store, *, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1", runner_id="r1"):  # type: ignore[no-untyped-def]

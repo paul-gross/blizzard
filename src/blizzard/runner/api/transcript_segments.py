@@ -13,7 +13,7 @@ from fastapi.exceptions import HTTPException
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.transcript_rendering import turn_view
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.store.repository import TranscriptSegmentLedgerRow
+from blizzard.runner.transcripts.ledger import TranscriptSegmentLedgerRow
 from blizzard.runner.transcripts.service import ResolvedSegmentContent
 from blizzard.wire.transcript_segment import (
     TranscriptSegmentContentView,
