@@ -95,9 +95,7 @@ class IReadTranscriptRepository(Protocol):
     def read_turns(self, session_id: str, *, spawn_cwd: str | None, since: str | None = None) -> Transcript:
         """The session's parsed transcript, located by ``session_id`` alone.
 
-        ``spawn_cwd`` is an optional **disambiguation hint**, not the lookup key — used
-        only when more than one project directory holds a file with this session id, and
-        legitimately ``None``. ``since`` is a forward-read cursor token (a
-        ``TranscriptSegmentLedgerRow.cursor``) bounding the read to what was written after
-        it; ``None`` reads from the start."""
+        ``spawn_cwd`` disambiguates when several project directories hold a same-id file,
+        else ``None``. ``since`` is a forward-read cursor (``TranscriptSegmentLedgerRow.cursor``)
+        bounding the read to what followed it; ``None`` reads from the start."""
         ...
