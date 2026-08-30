@@ -51,12 +51,16 @@ def _misrouted_moved_names(root: Path) -> list[str]:
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
-            if not (isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0):
+            if not isinstance(node, ast.ImportFrom):
                 continue
             for alias in node.names:
                 home = _MOVED_HOMES.get(alias.name)
-                if home is not None and node.module != home:
-                    violations.append(f"{path.relative_to(_REPO_ROOT)} imports {alias.name} from {node.module}")
+                if home is None:
+                    continue
+                misrouted = node.level > 0 or (node.module is not None and node.module.startswith("blizzard"))
+                if misrouted and node.module != home:
+                    origin = f"{'.' * node.level}{node.module or ''}"
+                    violations.append(f"{path.relative_to(_REPO_ROOT)} imports {alias.name} from {origin}")
     return violations
 
 
@@ -77,6 +81,4 @@ def test_runner_does_not_import_hub() -> None:
 
 def test_moved_vocabulary_has_exactly_one_importable_home() -> None:
     violations = _misrouted_moved_names(_SRC_DIR) + _misrouted_moved_names(_TESTS_DIR)
-    assert not violations, (
-        f"D — a re-export shim resolves through exactly this shape (every import here is absolute): {violations}"
-    )
+    assert not violations, f"D — imported from somewhere other than its declared foundation home: {violations}"

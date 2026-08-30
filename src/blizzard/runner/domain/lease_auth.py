@@ -1,7 +1,7 @@
 """Lease-token authorization — the check a worker's attach call must pass first (issue #113).
 
 :class:`LeaseToken` owns the mint and the constant-time check against its
-:class:`~blizzard.hub.domain.enrollment.TokenHash` digest. There is no ``warn``/``enforce`` rollout
+:class:`~blizzard.foundation.tokens.TokenHash` digest. There is no ``warn``/``enforce`` rollout
 mode — a token is minted fresh at every spawn and never leaves this runner."""
 
 from __future__ import annotations

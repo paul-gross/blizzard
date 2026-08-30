@@ -11,7 +11,7 @@
         "type": "string"
       },
       "ArtifactScope": {
-        "description": "Where an artifact is pinned \u2014 a chunk's node-step, the graph mint (``artifacts:``),\nor blizzard's own published, global-namespace documents (``system``).",
+        "description": "Where an artifact is pinned \u2014 a chunk's node-step, the graph mint that baked it into\nthe graph itself (``artifacts:``), or blizzard's own published, global-namespace\ndocuments, resolved at call time (``system``).",
         "enum": [
           "node",
           "graph",

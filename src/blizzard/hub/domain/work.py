@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
-from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.artifacts import ArtifactRow
@@ -634,6 +634,13 @@ class DecisionRow:
     @property
     def resolved(self) -> bool:
         return self.resolved_choice is not None
+
+
+def holds_claim(status: ChunkStatus) -> bool:
+    """Whether a chunk at this status still holds the route it may be carrying (issue #140).
+    Terminal outranks route liveness: a terminal transition from a runner node stamps no
+    ``route.released``, so the raw route fact outlives it."""
+    return status not in TERMINAL_STATUSES
 
 
 @dataclass(frozen=True)

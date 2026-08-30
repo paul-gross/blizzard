@@ -1,5 +1,3 @@
-"""Where a node's step runs, judges its exit, mints its session — `Node` itself stays hub policy."""
-
 from __future__ import annotations
 
 from enum import StrEnum
