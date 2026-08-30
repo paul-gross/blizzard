@@ -12,11 +12,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
+from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Reap, ResumeIntents
-from blizzard.runner.store.repository import NewLease
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
+from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store, make_stores
 
 pytestmark = pytest.mark.unit
 
@@ -147,12 +146,12 @@ def test_mark_resume_intents_skips_a_pause_parked_lease(tmp_path):  # type: igno
     live worker to resume, so a graceful shutdown must not mark it."""
     store = _store(tmp_path)
     _seed_spawned_lease(store)
-    assert ResumeIntents(store).mark_graceful(now=_NOW) == 1  # unparked: marked
+    assert ResumeIntents(make_stores(store)).mark_graceful(now=_NOW) == 1  # unparked: marked
     store.record_resume_clear(lease_id="lease_1", cleared_at=_NOW + timedelta(seconds=1))
 
     store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW + timedelta(seconds=2))
 
-    assert ResumeIntents(store).mark_graceful(now=_NOW + timedelta(seconds=3)) == 0
+    assert ResumeIntents(make_stores(store)).mark_graceful(now=_NOW + timedelta(seconds=3)) == 0
 
 
 def test_mark_crash_resume_intents_skips_a_pause_parked_lease(tmp_path):  # type: ignore[no-untyped-def]
@@ -164,9 +163,9 @@ def test_mark_crash_resume_intents_skips_a_pause_parked_lease(tmp_path):  # type
     probe = FakeProbe()  # the worker's process is gone — a crash to resume
     later = _NOW + timedelta(seconds=1)
 
-    assert ResumeIntents(store).mark_crashed(process=probe, now=later) == 1  # unparked: marked
+    assert ResumeIntents(make_stores(store)).mark_crashed(process=probe, now=later) == 1  # unparked: marked
     store.record_resume_clear(lease_id="lease_1", cleared_at=later)
 
     store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=later)
 
-    assert ResumeIntents(store).mark_crashed(process=probe, now=_NOW + timedelta(seconds=2)) == 0
+    assert ResumeIntents(make_stores(store)).mark_crashed(process=probe, now=_NOW + timedelta(seconds=2)) == 0

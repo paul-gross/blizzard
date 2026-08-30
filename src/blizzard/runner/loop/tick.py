@@ -28,7 +28,7 @@ def tick(ctx: LoopContext) -> None:
     _log.debug("tick start", runner_id=ctx.config.runner_id)
     # Stamp liveness first (issue #13), so a pass that dies mid-step still leaves the beat
     # proving the daemon reached it — the reference the next startup's scan ages against.
-    ctx.store.record_daemon_liveness(runner_id=ctx.config.runner_id, alive_at=ctx.clock.now())
+    ctx.stores.pause.record_daemon_liveness(runner_id=ctx.config.runner_id, alive_at=ctx.clock.now())
     # The spend-ceiling kill-switch (issue #61b) — first, so it brakes the same tick it fires in.
     SpendCeiling(ctx).run()
     Reap(ctx).run()  # startup recovery IS reap running early

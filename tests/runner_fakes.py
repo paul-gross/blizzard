@@ -11,7 +11,7 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import MetaData
+from sqlalchemy import Engine, MetaData
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock
@@ -38,10 +38,31 @@ from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore, RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.internal.ask_store import AskStore
+from blizzard.runner.store.internal.attachment_store import AttachmentStore
+from blizzard.runner.store.internal.base import RunnerStoreConnections
+from blizzard.runner.store.internal.check_store import CheckStore
+from blizzard.runner.store.internal.environment_store import EnvironmentStore
+from blizzard.runner.store.internal.escalation_store import EscalationStore
+from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
+from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.lease_store import LeaseStore
+from blizzard.runner.store.internal.outbound_store import OutboundStore
+from blizzard.runner.store.internal.pause_store import PauseStore
+from blizzard.runner.store.internal.requeue_store import RequeueStore
+from blizzard.runner.store.internal.takeover_store import TakeoverStore
+from blizzard.runner.store.internal.token_store import TokenStore
+from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
+from blizzard.runner.store.internal.usage_store import UsageStore
+from blizzard.runner.store.internal.workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_segments
+from blizzard.runner.stores import (
+    IReadRunnerStore,
+    IWriteRunnerStore,
+    RunnerStores,
+)
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
@@ -63,6 +84,52 @@ from blizzard.wire.route import RouteClaim, RouteClaimResponse, RouteTokenRekeyR
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
+class SqlAlchemyRunnerStore(
+    LeaseStore,
+    EnvironmentStore,
+    TranscriptLedgerStore,
+    TokenStore,
+    WorkspacePromptStore,
+    OutboundStore,
+    AskStore,
+    PauseStore,
+    TakeoverStore,
+    RequeueStore,
+    EscalationStore,
+    UsageStore,
+    AttachmentStore,
+    GitCommitDeclarationStore,
+    CheckStore,
+    GraphArtifactStore,
+):
+    """The flat, every-concept-at-once runner store — test support only (D3, blizzard#410):
+    production composes the extracted concept adapters individually via
+    :func:`~blizzard.runner.composition.build_stores`, never this class. Kept here because a
+    test fixture wants one object standing in for every concept at once, structurally
+    satisfying every one of the sixteen concept Protocols by inheritance."""
+
+    def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
+        store = RunnerStoreConnections(engine, errors)
+        LeaseStore.__init__(self, store)
+        EnvironmentStore.__init__(self, store)
+        TranscriptLedgerStore.__init__(self, store)
+        TokenStore.__init__(self, store)
+        WorkspacePromptStore.__init__(self, store)
+        OutboundStore.__init__(self, store)
+        AskStore.__init__(self, store)
+        PauseStore.__init__(self, store)
+        TakeoverStore.__init__(self, store)
+        RequeueStore.__init__(self, store)
+        EscalationStore.__init__(self, store)
+        UsageStore.__init__(self, store)
+        AttachmentStore.__init__(self, store)
+        GitCommitDeclarationStore.__init__(self, store)
+        CheckStore.__init__(self, store)
+        GraphArtifactStore.__init__(self, store)
+        self._engine = engine
+        self._errors = errors
+
+
 def runner_store_errors() -> RunnerStoreErrorFactory:
     """The runner-store seam (issue #413) every test's ``SqlAlchemyRunnerStore``
     construction supplies — one helper so its call sites construct it identically."""
@@ -76,14 +143,40 @@ def make_store(tmp_path_url: str) -> SqlAlchemyRunnerStore:
     return SqlAlchemyRunnerStore(engine, runner_store_errors())
 
 
+def make_stores(store: IWriteRunnerStore) -> RunnerStores:
+    """The :class:`RunnerStores` bundle over one flat store — every field the same object,
+    since :class:`SqlAlchemyRunnerStore` structurally satisfies every concept Protocol."""
+    return RunnerStores(
+        leases=store,
+        environments=store,
+        transcript_ledger=store,
+        tokens=store,
+        workspace_prompt=store,
+        outbound=store,
+        asks=store,
+        pause=store,
+        takeover=store,
+        requeue=store,
+        escalations=store,
+        usage=store,
+        attachments=store,
+        git_commit_declarations=store,
+        checks=store,
+        graph_artifacts=store,
+    )
+
+
 def _create_all(md: MetaData, engine: object) -> None:
     md.create_all(engine)  # type: ignore[arg-type]
 
 
-def strip_transcript_segments(store: IWriteRunnerStore) -> None:
+def strip_transcript_segments(store: object) -> None:
     """Erase the segment ledger and its lane buffer — the pre-lane store shape the
     blizzard#250 backfill exists for. Unreachable through the write API, whose only
-    session-id writer stamps a segment in the same transaction."""
+    session-id writer stamps a segment in the same transaction.
+
+    ``store`` is typed loosely: any one field of a :func:`make_stores` bundle is, at
+    runtime, the same flat :class:`SqlAlchemyRunnerStore` this asserts for."""
     assert isinstance(store, SqlAlchemyRunnerStore)
     with store._engine.begin() as conn:
         conn.execute(transcript_outbound_buffer.delete())
@@ -107,7 +200,7 @@ class StubbedBufferBytesStore:
         return getattr(self._inner, name)
 
 
-def runner_invariant_violations(store: IWriteRunnerStore) -> list[Violation]:
+def runner_invariant_violations(store: object) -> list[Violation]:
     """The runner store's durable invariants, asserted over this store's own engine — the
     checker the crash sweep runs, reachable from a component test."""
     assert isinstance(store, SqlAlchemyRunnerStore)
@@ -697,8 +790,9 @@ def make_context(
     _check_runner: ICheckRunner = check_runner if check_runner is not None else FakeCheckRunner()
     _clock: IClock = clock if clock is not None else FixedClock(datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC))
     _files = WorkerStdoutFiles(resolved_config.worker_stdout_dir, store)
+    _stores = make_stores(store)
     return LoopContext(
-        store=store,
+        stores=_stores,
         clock=_clock,
         hub=_hub,
         provider=_provider,
@@ -709,7 +803,8 @@ def make_context(
         config=resolved_config,
         worker_files=_files,
         usage=UsageRecorder(
-            store=store,
+            leases=store,
+            usage=store,
             clock=_clock,
             harness=_harness,
             worker_files=_files,
@@ -717,9 +812,9 @@ def make_context(
             transcripts=harness.transcript_source(),
             events=events,
         ),
-        sessions=SessionResolver(store=store, harness=_harness, transcripts=harness.transcript_source()),
+        sessions=SessionResolver(leases=store, harness=_harness, transcripts=harness.transcript_source()),
         env_release=EnvironmentRelease(
-            store=store, clock=_clock, provider=_provider, worker_files=_files, events=events
+            environments=store, leases=store, clock=_clock, provider=_provider, worker_files=_files, events=events
         ),
         # Mirrors `LoopWiring.context`'s own composition: the same source `harness`
         # itself holds, resolved once here rather than reached through `ctx.harness`.
@@ -733,7 +828,8 @@ def make_usage_recorder(
 ) -> UsageRecorder:
     """A recorder for a context assembled without :func:`make_context`, recording nowhere useful."""
     return UsageRecorder(
-        store=store,
+        leases=store,
+        usage=store,
         clock=clock,
         harness=harness
         if harness is not None
@@ -746,7 +842,7 @@ def make_usage_recorder(
 def make_session_resolver(store: IReadRunnerStore, *, harness: IHarnessAdapter | None = None) -> SessionResolver:
     """A resolver for a context assembled without :func:`make_context`."""
     return SessionResolver(
-        store=store,
+        leases=store,
         harness=harness
         if harness is not None
         else FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None),

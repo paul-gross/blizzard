@@ -17,6 +17,7 @@ from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.runner.api.hub_proxy import HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.domain.artifacts import IReadGraphArtifactRepository
 from blizzard.wire.envelope import EnvelopeArtifact, NodeEnvelope, WorkerArtifact
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -41,10 +42,10 @@ def _node_row(artifact: EnvelopeArtifact) -> WorkerArtifact:
 
 def _graph_rows(graph_id: str, request: Request) -> list[WorkerArtifact]:
     """This lease's pinned mint's graph-scoped declarations, store-read only — never the hub."""
-    reads = RunnerWiring.of(request).reads()
+    graph_artifacts: IReadGraphArtifactRepository = RunnerWiring.of(request).stores().graph_artifacts
     return [
         WorkerArtifact(scope=ArtifactScope.GRAPH, name=r.name, kind=r.kind, content=r.content)
-        for r in reads.graph_artifacts_for_graph(graph_id)
+        for r in graph_artifacts.graph_artifacts_for_graph(graph_id)
     ]
 
 

@@ -12,9 +12,9 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageKind, UsageSample
-from blizzard.runner.store.repository import NewLease
 from blizzard.runner.store.schema import transcript_outbound_buffer
 from tests.runner_fakes import make_store
 

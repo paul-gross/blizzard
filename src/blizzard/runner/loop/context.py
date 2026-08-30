@@ -1,4 +1,4 @@
-"""The loop context — the ``(store, clock, seam clients)`` a step is a function of.
+"""The loop context — the ``(stores, clock, seam clients)`` a step is a function of.
 
 ``bzh:steppable-loop`` requires each phase to be a pure function of its parameters,
 reading the clock and every seam from them rather than a module global. This bundle is
@@ -22,7 +22,7 @@ from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
-from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.stores import RunnerStores
 
 #: The retry budget a node with no ``retries.max`` falls back to — a chosen constant:
 #: two execution attempts before escalation to needs-human.
@@ -92,7 +92,7 @@ class LoopConfig:
 class LoopContext:
     """Everything a step function reads — passed in, never module-global."""
 
-    store: IWriteRunnerStore
+    stores: RunnerStores
     clock: IClock
     hub: IHubClient
     provider: IWorkspaceProvider

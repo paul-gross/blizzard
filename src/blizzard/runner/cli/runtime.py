@@ -18,14 +18,14 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
+from blizzard.runner.composition import build_stores
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0
@@ -137,8 +137,8 @@ def _resume_marked(config: RunnerConfig, mark: Callable[[ResumeMarking], int]) -
     ``ResumeMarking`` itself used to own, relocated here now that its store is injected."""
     engine = create_engine_from_url(config.db_url)
     try:
-        store = SqlAlchemyRunnerStore(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
-        return mark(ResumeMarking(store, SystemClock(), LinuxProcessProbe()))
+        stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+        return mark(ResumeMarking(stores, SystemClock(), LinuxProcessProbe()))
     finally:
         engine.dispose()
 

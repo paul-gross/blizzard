@@ -6,9 +6,13 @@ from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
+from blizzard.runner.domain.leases import (
+    IReadLeaseRepository,
+    LeaseRecord,
+    PoolHead,
+)
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.runner.store.repository import IReadRunnerStore, LeaseRecord, PoolHead
 from blizzard.wire.envelope import NodeConfig
 
 _log = get_logger("blizzard.runner.loop")
@@ -27,7 +31,7 @@ class ResumedSession:
 class SessionResolver:
     """Resolves a spawn's session identity against the store's own session history."""
 
-    store: IReadRunnerStore
+    leases: IReadLeaseRepository
     harness: IHarnessAdapter
     transcripts: IHarnessTranscriptSource | None = None
 
@@ -41,7 +45,7 @@ class SessionResolver:
             return None
         if node.session_name is not None:
             return self._pool_head(chunk_id, node, spawn_cwd)
-        return self.store.latest_session_id(chunk_id, node.session_source)
+        return self.leases.latest_session_id(chunk_id, node.session_source)
 
     def resumption(self, resume_from: str | None) -> ResumedSession | None:
         """The session this spawn resumes with its newest recorded lease, or ``None`` for a
@@ -49,7 +53,7 @@ class SessionResolver:
         ``resume_from`` is a brand-new session, never a lookup key (issue #149)."""
         if not resume_from:
             return None
-        return ResumedSession(session_id=resume_from, lease=self.store.lease_for_session(resume_from))
+        return ResumedSession(session_id=resume_from, lease=self.leases.lease_for_session(resume_from))
 
     def session_stamps(
         self, node: NodeConfig, resume: ResumedSession | None
@@ -73,7 +77,7 @@ class SessionResolver:
     def _pool_head(self, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> str | None:
         """The named pool's head if it is still resumable, else ``None`` to mint a new one."""
         pool = node.session_name or ""
-        head = self.store.pool_head(chunk_id, pool)
+        head = self.leases.pool_head(chunk_id, pool)
         if head is None:
             return None  # an empty pool — this member mints the head
         breach = self._rotation_breach(head, node, spawn_cwd)
@@ -114,7 +118,7 @@ class SessionResolver:
         # A count is never an unknown — it is the number of rows that exist.
         if (
             rotate.max_invocations is not None
-            and self.store.session_invocation_count(head.session_id) > rotate.max_invocations
+            and self.leases.session_invocation_count(head.session_id) > rotate.max_invocations
         ):
             return "max_invocations"
 

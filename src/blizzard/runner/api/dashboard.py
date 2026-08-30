@@ -22,6 +22,7 @@ from blizzard.runner.api.fleet_summary import _fleet_summary
 from blizzard.runner.api.hub_proxy import HubProxy
 from blizzard.runner.api.takeovers import _open_takeover_list
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.domain.asks import IReadAskRepository
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.runner_status import DashboardView
 
@@ -38,10 +39,11 @@ def get_dashboard(request: Request) -> DashboardView:
     populate; ``fleet_summary`` is ``None`` on a hub outage or an unwired runner."""
     wiring = RunnerWiring.of(request)
     service = wiring.status()
+    asks: IReadAskRepository = wiring.stores().asks
     return DashboardView(
         runner=_runner_status_view(service),
         environments=_environment_list(service),
-        asks=_ask_list(wiring.reads()),
+        asks=_ask_list(asks),
         escalations=_escalation_list(service),
         takeovers=_open_takeover_list(service),
         facts=_fact_list(service, DEFAULT_FACT_LIMIT),

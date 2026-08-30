@@ -9,10 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy.exc import OperationalError
-
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.migrations import MigrationRunner
+from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
 from blizzard.hub.config import CONFIG_FILENAME, ConfigError, HubConfig
 from blizzard.hub.store import MIGRATIONS_DIR, STORE_NAME
 
@@ -68,7 +66,7 @@ class Runtime:
 
         try:
             Migrations(config).runner.upgrade("head")
-        except OperationalError as exc:
+        except MigrationConnectionError as exc:
             raise ConfigError(f"cannot open the hub store at {config.db_url}: {exc}") from exc
         _log.info("hub store migrated to head", root=str(root), db_url=config.db_url)
         return config

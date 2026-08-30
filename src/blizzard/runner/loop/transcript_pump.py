@@ -27,8 +27,8 @@ from blizzard.runner.harness.transcript import (
 )
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.store.repository import TranscriptSegmentLedgerRow
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
+from blizzard.runner.transcripts.ledger import TranscriptSegmentLedgerRow
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -109,7 +109,7 @@ class TranscriptPump:
         reserving the rest for the flush."""
         if not self.ctx.config.transcripts_ship or self.ctx.transcripts is None:
             return
-        for segment in self.ctx.store.open_transcript_segments():
+        for segment in self.ctx.stores.transcript_ledger.open_transcript_segments():
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 break  # this run's bound reached — the rest catch up on a later tick
             self._pump_one_safe(segment)
@@ -122,7 +122,7 @@ class TranscriptPump:
         before ``deadline`` is marked truncated too, same as a partially-drained one."""
         if not self.ctx.config.transcripts_ship or self.ctx.transcripts is None:
             return
-        segments = [s for s in self.ctx.store.open_transcript_segments() if s.lease_id == lease_id]
+        segments = [s for s in self.ctx.stores.transcript_ledger.open_transcript_segments() if s.lease_id == lease_id]
         for i, segment in enumerate(segments):
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 # Every remaining segment loses just as silently as a partially-drained one.
@@ -139,7 +139,7 @@ class TranscriptPump:
         ``True`` iff the source was read to its end: a caller that closes the segment out
         must not do so on ``False``, or content it never read is sealed away."""
         for _ in range(_PUMP_LEASE_MAX_ITERATIONS):
-            segment = self.ctx.store.transcript_segment(segment_id)
+            segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
             if segment is None:
                 return False  # the segment vanished from under us — nothing left to drain
             outcome = self._pump_one_safe(segment)
@@ -154,7 +154,7 @@ class TranscriptPump:
                 return False
         # The safety valve: a source that never reports `complete=True` across this many
         # reads is misbehaving — stop and mark, rather than spin forever.
-        segment = self.ctx.store.transcript_segment(segment_id)
+        segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
         if segment is not None:
             self._mark_record_truncated(segment, incomplete_reason)
         return False
@@ -183,15 +183,15 @@ class TranscriptPump:
         if segment.shipping_stopped_reason is not None:
             return _CAUGHT_UP  # permanently stopped past the per-chunk budget (D4)
         chunk_max_bytes = self._chunk_max_bytes
-        budget_before = self.ctx.store.chunk_transcript_shipped_bytes(segment.chunk_id)
+        budget_before = self.ctx.stores.transcript_ledger.chunk_transcript_shipped_bytes(segment.chunk_id)
         if budget_before >= chunk_max_bytes:
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
             return _CAUGHT_UP
-        if self.ctx.store.outstanding_transcript_buffer_bytes() >= MAX_BUFFERED_BYTES:
+        if self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes() >= MAX_BUFFERED_BYTES:
             # Transient backpressure, not a latch — self-clears once the drain catches up.
             return _NOT_ATTEMPTED
 
-        bindings = self.ctx.store.bindings_for_chunk(segment.chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(segment.chunk_id)
         spawn_cwd = SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
         source = self.ctx.transcripts
         if source is None:
@@ -215,7 +215,7 @@ class TranscriptPump:
         if not (batch.turns or batch.late_tool_outputs or _linkable(batch, parents)):
             if new_cursor != segment.cursor:
                 assert new_cursor is not None
-                self.ctx.store.advance_transcript_cursor(
+                self.ctx.stores.transcript_ledger.advance_transcript_cursor(
                     segment.segment_id,
                     cursor=new_cursor,
                     normalizer_version=batch.normalizer_version,
@@ -261,7 +261,7 @@ class TranscriptPump:
                 self._warn_sidechains_dropped(segment, dropped_sidechains)
             return _CAUGHT_UP
 
-        self.ctx.store.record_transcript_deltas(
+        self.ctx.stores.transcript_ledger.record_transcript_deltas(
             segment_id=segment.segment_id,
             chunk_id=segment.chunk_id,
             cursor=new_cursor,
@@ -286,13 +286,13 @@ class TranscriptPump:
         return _CAUGHT_UP if batch.complete else _INCOMPLETE
 
     def _stop_shipping(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
-        changed = self.ctx.store.stop_transcript_segment_shipping(segment.segment_id, reason=reason)
+        changed = self.ctx.stores.transcript_ledger.stop_transcript_segment_shipping(segment.segment_id, reason=reason)
         if changed:
             self._warn(segment, reason)
 
     def _mark_record_truncated(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
         # Latched per (segment, reason) by the store — see its own docstring.
-        changed = self.ctx.store.mark_transcript_record_truncated(
+        changed = self.ctx.stores.transcript_ledger.mark_transcript_record_truncated(
             segment.segment_id, reason=reason, severity=TRUNCATION_REASON_SEVERITY[reason]
         )
         if changed:
@@ -309,7 +309,7 @@ class TranscriptPump:
         newly = [
             agent_id
             for agent_id in agent_ids
-            if self.ctx.store.mark_sidechain_dropped_warned(segment.segment_id, agent_id=agent_id)
+            if self.ctx.stores.transcript_ledger.mark_sidechain_dropped_warned(segment.segment_id, agent_id=agent_id)
         ]
         if not newly:
             return

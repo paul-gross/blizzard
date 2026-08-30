@@ -21,7 +21,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
+from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.preamble import (
@@ -40,8 +40,7 @@ from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.worktree import IWorktreeGit
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import NewLease, RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.wire.chunk import ChunkDetail, ChunkUsageTotalView, RouteView
 from blizzard.wire.completion import SubmittedArtifact
@@ -55,10 +54,12 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeWorktreeGit,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
     make_store,
+    make_stores,
     runner_store_errors,
 )
 
@@ -1012,7 +1013,7 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
     _first_build_spawn(store, hub, provider, env, session="sess-build-1", at=_NOW)
 
     # --- The graceful-restart re-attach, interleaved: mark, then RESUME in place.
-    ResumeIntents(store).mark_graceful(now=_NOW + timedelta(seconds=30))
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW + timedelta(seconds=30))
     hub.chunks["ch_1"] = ChunkDetail(
         chunk_id="ch_1",
         graph_id="gr_1",

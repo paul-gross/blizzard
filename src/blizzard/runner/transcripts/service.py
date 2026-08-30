@@ -1,6 +1,6 @@
 """The transcript route's domain read model (issue #29) — resolves a lease's transcript to
 a home per Decision 1 (blizzard#249). Holds only read-only seams (``bzh:repository-split``),
-so a controller may hold it directly (``bzh:controller-read-only``). ``store.lease(lease_id)``
+so a controller may hold it directly (``bzh:controller-read-only``). ``leases.lease(lease_id)``
 spans closure — unlike ``active_lease`` — because a transcript outlives its lease.
 Local until acked, hub after (issue #249 AC1): see :meth:`TranscriptService.for_lease`."""
 
@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.runner.domain.leases import IReadLeaseRepository, LeaseRecord
+from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.store.repository import IReadRunnerStore, LeaseRecord
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
+from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository, Transcript, TranscriptProvenance
 
 
@@ -31,12 +33,16 @@ class TranscriptService:
 
     def __init__(
         self,
-        store: IReadRunnerStore,
+        leases: IReadLeaseRepository,
+        transcript_ledger: IReadTranscriptLedgerRepository,
+        environments: IReadEnvironmentRepository,
         transcripts: IReadTranscriptRepository,
         archived: IReadArchivedTranscriptRepository,
         workspace_root: str,
     ) -> None:
-        self._store = store
+        self._leases = leases
+        self._transcript_ledger = transcript_ledger
+        self._environments = environments
         self._transcripts = transcripts
         self._archived = archived
         self._workspace_root = workspace_root
@@ -45,7 +51,7 @@ class TranscriptService:
         """The lease's resolved transcript, or ``None`` when no lease with this id ever
         existed — never for a lease that exists but has no session yet or no transcript
         anywhere, which are ``ResolvedTranscript(transcript=Transcript(available=False, …))``."""
-        lease = self._store.lease(lease_id)
+        lease = self._leases.lease(lease_id)
         if lease is None:
             return None
         if lease.session_id is None:
@@ -54,7 +60,7 @@ class TranscriptService:
             transcript = Transcript(session_id=None, available=False, reason="spawning", turns=[], truncated=False)
             return ResolvedTranscript(transcript=transcript, provenance="local", hub_unreachable=False)
 
-        if self._store.active_lease(lease_id) is not None or self._store.has_unshipped_transcript_content(
+        if self._leases.active_lease(lease_id) is not None or self._transcript_ledger.has_unshipped_transcript_content(
             lease.chunk_id
         ):
             # Local until acked (AC1): an open lease, and a closed one whose chunk still
@@ -83,7 +89,7 @@ class TranscriptService:
 
     def _read_local(self, lease: LeaseRecord) -> Transcript:
         assert lease.session_id is not None
-        bindings = self._store.bindings_for_chunk(lease.chunk_id)
+        bindings = self._environments.bindings_for_chunk(lease.chunk_id)
         # A closed lease's bindings are already released, so `bindings_for_chunk` returns `[]` and the
         # hint is legitimately `None`; the primary by-session-id lookup does not need it.
         fallback_workdir = bindings[0].workdir if bindings else None

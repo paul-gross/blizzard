@@ -15,11 +15,11 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking
-from blizzard.runner.store.repository import NewLease
-from tests.runner_fakes import FakeHub, FakeProbe, make_store
+from tests.runner_fakes import FakeHub, FakeProbe, make_store, make_stores
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -243,7 +243,7 @@ def test_resume_marking_on_shutdown_marks_via_its_injected_clock(tmp_path: Path)
     """No real process and no wall clock: the marking hook is driven entirely off a
     virtual clock and a scripted probe, both supplied as constructor dependencies."""
     store = _seeded_running_lease_store(tmp_path)
-    marking = ResumeMarking(store, FixedClock(_NOW), FakeProbe())
+    marking = ResumeMarking(make_stores(store), FixedClock(_NOW), FakeProbe())
 
     marked = marking.on_shutdown()
 
@@ -255,7 +255,7 @@ def test_resume_marking_on_shutdown_marks_via_its_injected_clock(tmp_path: Path)
 def test_resume_marking_on_startup_marks_via_its_injected_clock_and_probe(tmp_path: Path) -> None:
     store = _seeded_running_lease_store(tmp_path)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # was actively working when killed
-    marking = ResumeMarking(store, FixedClock(_NOW), FakeProbe(alive=set()))  # the pid is dead
+    marking = ResumeMarking(make_stores(store), FixedClock(_NOW), FakeProbe(alive=set()))  # the pid is dead
 
     marked = marking.on_startup()
 

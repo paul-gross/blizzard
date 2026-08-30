@@ -5,13 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
+from blizzard.runner.domain.leases import IReadLeaseRepository, LeaseRecord
+from blizzard.runner.domain.usage import IWriteUsageRepository
+from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
-from blizzard.runner.store.repository import EnvBindingRecord, IWriteRunnerStore, LeaseRecord
 from blizzard.wire.facts import USAGE_RECORDED
 
 
@@ -20,7 +22,8 @@ class UsageRecorder:
     """Records a lease's usage facts, keyed ``(lease, generation, kind)`` so they are
     idempotent across a re-run and a crash finds each durable or absent."""
 
-    store: IWriteRunnerStore
+    leases: IReadLeaseRepository
+    usage: IWriteUsageRepository
     clock: IClock
     harness: IHarnessAdapter
     worker_files: WorkerStdoutFiles
@@ -32,7 +35,7 @@ class UsageRecorder:
 
     def record_worker(self, lease: LeaseRecord, bindings: list[EnvBindingRecord]) -> None:
         """Record just this attempt's spawn/resume invocation usage — no judgement ran."""
-        generation = self.store.lease_generation(lease.lease_id)
+        generation = self.leases.lease_generation(lease.lease_id)
         kind: UsageKind = "spawn" if generation <= 1 else "resume"
         sample = self._worker_sample(lease, bindings, generation=generation, kind=kind)
         if sample is not None:
@@ -42,7 +45,7 @@ class UsageRecorder:
         """Record the spawn/resume invocation ADVANCE is judging and the judgement resume
         that elicited its verdict — each its own fact."""
         self.record_worker(lease, bindings)
-        generation = self.store.lease_generation(lease.lease_id)
+        generation = self.leases.lease_generation(lease.lease_id)
         # Attribute to the lease's own `resolved_model` stamp (issue #144), not the adapter
         # default: a judge turn on a sonnet session would otherwise book its spend against opus.
         judge_sample = self.harness.parse_usage(judge_output, "judge", model=lease.resolved_model)
@@ -51,7 +54,7 @@ class UsageRecorder:
 
     def record_sample(self, lease: LeaseRecord, *, generation: int, sample: UsageSample) -> None:
         """Make one already-parsed sample durable against this lease's generation."""
-        seq = self.store.record_usage(
+        seq = self.usage.record_usage(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,
             node_id=lease.node_id,

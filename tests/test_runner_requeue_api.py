@@ -15,9 +15,9 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.requeue import RequeueService
-from blizzard.runner.store.repository import NewLease
-from tests.runner_fakes import make_store
+from tests.runner_fakes import make_store, make_stores
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 _LATER = datetime(2026, 7, 17, 13, 0, 0, tzinfo=UTC)  # strictly after the seeded lease's _NOW
@@ -26,8 +26,8 @@ _LATER = datetime(2026, 7, 17, 13, 0, 0, tzinfo=UTC)  # strictly after the seede
 def _app_with_requeue(tmp_path: Path, *, clock: FixedClock | None = None):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = RequeueService(store, clock or FixedClock(_LATER))
-    return create_app(config, runner_store=store, requeue=service), store
+    service = RequeueService(store, clock or FixedClock(_LATER), takeover=store, escalations=store)
+    return create_app(config, runner_stores=make_stores(store), requeue=service), store
 
 
 def _seed_escalated_chunk(store) -> None:  # type: ignore[no-untyped-def]

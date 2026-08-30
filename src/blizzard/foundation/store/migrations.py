@@ -14,12 +14,18 @@ from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import Column, MetaData, String, Table
+from sqlalchemy.exc import OperationalError
 
 from blizzard.foundation.store.engine import create_engine_from_url
 
 # Alembic's default `version_num String(32)` truncates `YYYYMMDD_HHMM_slug` ids on postgres (#191).
 # Pinned by tests/test_pin_foundation.py::test_the_version_table_admits_this_projects_revision_ids.
 _VERSION_TABLE_COLUMN_LENGTH = 255
+
+
+class MigrationConnectionError(RuntimeError):
+    """Raised when a migration cannot reach the store — the domain-level fault a daemon's
+    runtime should catch, not sqlalchemy's own driver-specific ``OperationalError``."""
 
 
 class RevisionMismatchError(RuntimeError):
@@ -63,8 +69,11 @@ class MigrationRunner:
 
     def upgrade(self, revision: str = "head") -> None:
         """Apply pending revisions up to ``revision`` (idempotent — a no-op when current)."""
-        self._ensure_wide_version_table()
-        command.upgrade(self._config(), revision)
+        try:
+            self._ensure_wide_version_table()
+            command.upgrade(self._config(), revision)
+        except OperationalError as exc:
+            raise MigrationConnectionError(str(exc)) from exc
 
     def downgrade(self, revision: str) -> None:
         """Reverse revisions down to ``revision`` (``"base"`` unwinds the whole tree)."""

@@ -8,12 +8,14 @@ from datetime import datetime
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.domain.asks import AskRecord
+from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.spawn import Spawner
-from blizzard.runner.store.repository import AskRecord, EnvBindingRecord, LeaseRecord
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -65,9 +67,9 @@ class DormantSession:
         judged; env bindings stay held so the session is warm for the resume."""
         lease = self.lease
         now = self.ctx.clock.now()
-        self.ctx.usage.record_worker(lease, self.ctx.store.bindings_for_chunk(lease.chunk_id))
+        self.ctx.usage.record_worker(lease, self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id))
         OutboundFacts(self.ctx).question_asked(lease, ask, at=now)
-        self.ctx.store.record_park(
+        self.ctx.stores.asks.record_park(
             lease_id=lease.lease_id, chunk_id=lease.chunk_id, question_id=ask.question_id, parked_at=now
         )
         if self.ctx.events is not None:
@@ -114,7 +116,7 @@ class DormantSession:
         lease = self.lease
         if Spawner(self.ctx).suppressed(via="answer-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
             return
-        park = self.ctx.store.open_park(lease.lease_id)
+        park = self.ctx.stores.asks.open_park(lease.lease_id)
         if park is None:
             return  # not actually parked (raced with a resume)
         try:
@@ -123,7 +125,7 @@ class DormantSession:
             return  # hub unreachable — the park is durable; retry next tick
         if not question.answered or question.answer is None:
             return  # still waiting — reap clock stays stopped
-        bindings = self.ctx.store.bindings_for_chunk(lease.chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings:
             _log.warning("answered park with no bound env — cannot resume", chunk_id=lease.chunk_id)
             return
@@ -131,7 +133,7 @@ class DormantSession:
         # payload; the exact prose is unpinned.
         who = question.answered_by or "operator"
         pid, now = self._wake(f"# Answer from {who}. Continue.\n{question.answer}", bindings)
-        self.ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
+        self.ctx.stores.asks.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
         if self.ctx.events is not None:
             self.ctx.events.publish_ask_changed(
                 lease.lease_id,
@@ -163,18 +165,18 @@ class DormantSession:
         if detail.route is None or detail.route.runner_id != self.ctx.config.runner_id:
             return  # detached/reassigned while parked — PULL's sweep abandons it, not this step
         now = self.ctx.clock.now()
-        if lease.lease_id in self.ctx.store.ask_parked_lease_ids():
+        if lease.lease_id in self.ctx.stores.asks.ask_parked_lease_ids():
             # Dormant on a question underneath the pause: clearing the pause-park is the whole
             # action, and an answer — not this resume — restarts it.
-            self.ctx.store.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
+            self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
             _log.info("pause lifted on an ask-parked chunk — awaiting its answer", chunk_id=lease.chunk_id)
             return
-        bindings = self.ctx.store.bindings_for_chunk(lease.chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings or lease.session_id is None:
             _log.warning("unpaused chunk has no warm env/session — cannot resume", chunk_id=lease.chunk_id)
             return
         pid, _ = self._wake(_UNPAUSE_MESSAGE, bindings, at=now)
-        self.ctx.store.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
+        self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
         _log.info(
             "resumed dormant session after an operator unpause",
             chunk_id=lease.chunk_id,
@@ -196,7 +198,7 @@ class DormantSession:
         if lease.pid is not None:
             self.ctx.process.kill(lease.pid)  # kill-first — never two processes on one session
         _CP_RESUME_AFTER_KILL.reached()  # re-run kills the dead pid (no-op) then re-attaches
-        bindings = self.ctx.store.bindings_for_chunk(lease.chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings or lease.session_id is None:
             _log.warning(
                 "marked lease has no warm env/session — abandoning", chunk_id=lease.chunk_id, lease_id=lease.lease_id
@@ -204,7 +206,7 @@ class DormantSession:
             Attempt(self.ctx, lease).abandon(killed=True, via="resume")
             return
         pid, _ = self._wake(_RESTART_MESSAGE, bindings, at=now)
-        self.ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        self.ctx.stores.leases.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         _CP_RESUME_AFTER.reached()  # pid recorded, intent cleared — a crash here re-runs as a no-op
         _log.info(
             "resumed in-flight session after restart",
@@ -238,7 +240,7 @@ class DormantSession:
             compaction_window=lease.resolved_compaction_window,
         )
         stamped = at if at is not None else self.ctx.clock.now()
-        self.ctx.store.record_spawn(
+        self.ctx.stores.leases.record_spawn(
             lease.lease_id,
             pid=pid,
             process_start_time=self.ctx.process.start_time(pid) or "",

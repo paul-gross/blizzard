@@ -11,8 +11,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
+from blizzard.runner.domain.asks import AskRecord
+from blizzard.runner.domain.outbound import OutboundFactRecord
+from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import IHarnessAdapter
-from blizzard.runner.store.repository import AskRecord, EnvBindingRecord, IReadRunnerStore, OutboundFactRecord
+from blizzard.runner.stores import RunnerStores
 
 __all__ = [
     "HUB_CONTACT_STALENESS_THRESHOLD",
@@ -119,11 +122,14 @@ class OpenTakeoverView:
 
 class RunnerStatusService:
     """Composition-root-wired: the store, clock, harness, and this runner's own
-    identity/config — everything ``blizzard runner status`` renders (issue #51)."""
+    identity/config — everything ``blizzard runner status`` renders (issue #51).
+
+    Reads across seven concepts (pause, leases, outbound, environments, asks, takeover,
+    escalations), so it holds the :class:`~blizzard.runner.stores.RunnerStores` bundle (D4)."""
 
     def __init__(
         self,
-        store: IReadRunnerStore,
+        stores: RunnerStores,
         clock: IClock,
         harness: IHarnessAdapter,
         *,
@@ -134,7 +140,7 @@ class RunnerStatusService:
         env_pool: tuple[str, ...],
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
     ) -> None:
-        self._store = store
+        self._stores = stores
         self._clock = clock
         self._harness = harness
         self._runner_id = runner_id
@@ -145,10 +151,10 @@ class RunnerStatusService:
         self._contact_staleness = contact_staleness
 
     def summary(self) -> RunnerStatusSummary:
-        local_paused = self._store.local_paused(self._runner_id)
-        hub_paused = self._store.hub_paused(self._runner_id)
-        used = len(self._store.list_active_leases())
-        contact_at = self._store.hub_contact_at(self._runner_id)
+        local_paused = self._stores.pause.local_paused(self._runner_id)
+        hub_paused = self._stores.pause.hub_paused(self._runner_id)
+        used = len(self._stores.leases.list_active_leases())
+        contact_at = self._stores.pause.hub_contact_at(self._runner_id)
         reachable = contact_at is not None and (self._clock.now() - contact_at) <= self._contact_staleness
         return RunnerStatusSummary(
             runner_id=self._runner_id,
@@ -159,9 +165,9 @@ class RunnerStatusService:
                 endpoint=self._hub_url,
                 reachable=reachable,
                 last_contact_at=contact_at,
-                buffer_depth=len(self._store.pending_outbound()),
+                buffer_depth=len(self._stores.outbound.pending_outbound()),
             ),
-            last_tick_at=self._store.last_daemon_liveness(),
+            last_tick_at=self._stores.pause.last_daemon_liveness(),
         )
 
     def environments(self) -> list[EnvironmentSlot]:
@@ -170,7 +176,7 @@ class RunnerStatusService:
         the pool still surfaces, and — since ``env_bindings`` has no unique constraint on
         ``environment_id`` — so does every extra binding past the first on one id."""
         held_by_env: dict[str, list[EnvBindingRecord]] = {}
-        for binding in self._store.held_bindings():
+        for binding in self._stores.environments.held_bindings():
             held_by_env.setdefault(binding.environment_id, []).append(binding)
         slots = []
         for env_id in self._env_pool:
@@ -205,24 +211,24 @@ class RunnerStatusService:
         return slots
 
     def open_asks(self) -> list[AskRecord]:
-        return self._store.open_asks()
+        return self._stores.asks.open_asks()
 
     def recent_facts(self, limit: int) -> list[OutboundFactRecord]:
         """The newest hub-bound facts, acked or not — the local panel's fact log."""
-        return self._store.recent_outbound(limit)
+        return self._stores.outbound.recent_outbound(limit)
 
     def open_takeovers(self) -> list[OpenTakeoverView]:
         return [
             OpenTakeoverView(chunk_id=t.chunk_id, takeover_id=t.takeover_id, held_since=t.opened_at)
-            for t in self._store.open_takeovers()
+            for t in self._stores.takeover.open_takeovers()
         ]
 
     def escalations(self) -> list[EscalationView]:
         views = []
-        for escalation in self._store.open_escalations():
+        for escalation in self._stores.escalations.open_escalations():
             resume_command = ""
             if escalation.session_id is not None:
-                bindings = self._store.bindings_for_chunk(escalation.chunk_id)
+                bindings = self._stores.environments.bindings_for_chunk(escalation.chunk_id)
                 if bindings:
                     # Composed from the escalation's own stamps (issue #144), not a fresh
                     # resolution: the operator lands in the configuration it ran with.

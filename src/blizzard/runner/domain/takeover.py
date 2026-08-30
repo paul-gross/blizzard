@@ -10,16 +10,22 @@ from __future__ import annotations
 import json
 import shlex
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
 from blizzard.runner.domain.lease_auth import LeaseToken
+from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerPreamble
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.store.repository import IWriteRunnerStore, LeaseRecord
 from blizzard.wire.facts import LEASE_MINTED
+
+if TYPE_CHECKING:
+    # Deferred: ``runner/stores.py`` composes this module's own Protocol (blizzard#410).
+    from blizzard.runner.stores import RunnerStores
 
 # What a takeover forwards from the identity env (issue #258). Nothing else leaves the
 # daemon: the operator's terminal supplies the rest, and no secret crosses the local API.
@@ -28,12 +34,89 @@ _FORWARDED_EXECUTION_VARS = ("PATH", "HOME")
 
 __all__ = [
     "ChunkNotTakeable",
+    "IReadTakeoverRepository",
+    "IWriteTakeoverRepository",
     "LiveWorkerConflict",
     "OpenedTakeover",
     "SubmissionPending",
     "TakeoverCommand",
+    "TakeoverRecord",
     "TakeoverService",
 ]
+
+
+@dataclass(frozen=True)
+class TakeoverRecord:
+    """An open operator takeover — the human-in-session fact (issue #52).
+
+    ``lease_id`` always names the reference lease — active or already closed, never
+    ``None``. ``fence_epoch`` is set only when a live worker was force-killed."""
+
+    takeover_id: str
+    chunk_id: str
+    lease_id: str | None
+    session_id: str | None
+    workdir: str
+    fence_epoch: int | None
+    opened_at: datetime
+
+
+class IReadTakeoverRepository(Protocol):
+    """Read-only takeover queries (held by read-path edges)."""
+
+    def lease_for_open_takeover(self, lease_id: str) -> LeaseRecord | None:
+        """The lease by id iff an open takeover names it (issue #291), regardless of the
+        lease's own closure — the worker-authorization resolver's second half, alongside
+        :meth:`~blizzard.runner.domain.leases.IReadLeaseRepository.active_lease`. The
+        open-takeover fact is what authorizes a resumed session's worker verbs against the
+        reference lease it names, not the lease's own activeness."""
+        ...
+
+    def open_takeover_for_chunk(self, chunk_id: str) -> TakeoverRecord | None:
+        """The chunk's open takeover, or ``None`` — a ``takeovers`` row with no
+        ``takeover_ends`` row for the same ``takeover_id`` (issue #52).
+
+        At most one open takeover per chunk by construction: ``TakeoverService`` refuses
+        a second ``POST`` while one is already open."""
+        ...
+
+    def open_takeover_chunk_ids(self) -> set[str]:
+        """Every chunk id currently under an open takeover (issue #52).
+
+        The loop's per-tick skip set, so no step touches a chunk's session while the
+        human holds it."""
+        ...
+
+    def open_takeovers(self) -> list[TakeoverRecord]:
+        """Every open takeover, across every chunk (issue #51).
+
+        :meth:`open_takeover_for_chunk` widened to the fleet, mirroring
+        :mod:`~blizzard.runner.domain.escalations`'s own ``open_escalations`` shape — the
+        read that names a takeover left open by a stranded CLI, otherwise wedging its chunk."""
+        ...
+
+
+class IWriteTakeoverRepository(IReadTakeoverRepository, Protocol):
+    """Read-write takeover store — held only by the domain."""
+
+    def record_takeover(
+        self,
+        *,
+        takeover_id: str,
+        chunk_id: str,
+        lease_id: str | None,
+        session_id: str | None,
+        workdir: str,
+        fence_epoch: int | None,
+        opened_at: datetime,
+    ) -> None:
+        """Open a takeover — recorded before any kill and before the interactive command
+        is returned (issue #52), so no later tick can race the human for the chunk."""
+        ...
+
+    def record_takeover_end(self, *, takeover_id: str, ended_at: datetime) -> None:
+        """Close a takeover."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -91,11 +174,14 @@ class OpenedTakeover:
 
 
 class TakeoverService:
-    """Composition-root-wired: the store, clock, harness, and process probe (issue #52)."""
+    """Composition-root-wired: the clock, harness, and process probe (issue #52).
+
+    Spans six concepts (takeover, environments, leases, asks, outbound, tokens), so it
+    holds the :class:`~blizzard.runner.stores.RunnerStores` bundle (D4)."""
 
     def __init__(
         self,
-        store: IWriteRunnerStore,
+        stores: RunnerStores,
         clock: IClock,
         harness: IHarnessAdapter,
         process: IProcessProbe,
@@ -103,7 +189,7 @@ class TakeoverService:
         local_api_url: str,
         events: IRunnerEventPublisher | None = None,
     ) -> None:
-        self._store = store
+        self._stores = stores
         self._clock = clock
         self._harness = harness
         self._process = process
@@ -113,32 +199,39 @@ class TakeoverService:
         self._events = events
 
     def open(self, chunk_id: str, *, force: bool) -> OpenedTakeover:
-        if self._store.open_takeover_for_chunk(chunk_id) is not None:
+        if self._stores.takeover.open_takeover_for_chunk(chunk_id) is not None:
             raise ChunkNotTakeable(f"chunk {chunk_id} already has an open takeover")
-        bindings = self._store.bindings_for_chunk(chunk_id)
+        bindings = self._stores.environments.bindings_for_chunk(chunk_id)
         if not bindings:
             raise ChunkNotTakeable(f"chunk {chunk_id} is not held by this runner — nothing to take over")
         workdir = bindings[0].workdir
 
-        active = self._store.active_lease_for_chunk(chunk_id)
-        live = active is not None and active.lease_id not in self._store.parked_lease_ids()
+        active = self._stores.leases.active_lease_for_chunk(chunk_id)
+        live = active is not None and active.lease_id not in self._stores.asks.parked_lease_ids()
         if live and not force:
             raise LiveWorkerConflict(f"chunk {chunk_id} has a live worker attempt — pass --force to take it over")
-        if live and force and active is not None and active.lease_id in self._store.pending_submission_lease_ids():
+        if (
+            live
+            and force
+            and active is not None
+            and active.lease_id in self._stores.outbound.pending_submission_lease_ids()
+        ):
             raise SubmissionPending(f"chunk {chunk_id}'s attempt already submitted — let it land, then `requeue`")
 
-        reference: LeaseRecord | None = active if active is not None else self._store.latest_lease_for_chunk(chunk_id)
+        reference: LeaseRecord | None = (
+            active if active is not None else self._stores.leases.latest_lease_for_chunk(chunk_id)
+        )
         if reference is None or reference.session_id is None:
             raise ChunkNotTakeable(f"chunk {chunk_id} has no resumable session to take over")
         session_id = reference.session_id
 
         now = self._clock.now()
         takeover_id = Id.mint(TAKEOVER_PREFIX, self._clock).value
-        fence_epoch = self._store.latest_epoch(chunk_id) + 1 if live else None
+        fence_epoch = self._stores.leases.latest_epoch(chunk_id) + 1 if live else None
 
         # Fact-before-command (bzh:crash-correctness): recorded — and so reachable by
         # every loop step's open-takeover skip — before anything is killed or returned.
-        self._store.record_takeover(
+        self._stores.takeover.record_takeover(
             takeover_id=takeover_id,
             chunk_id=chunk_id,
             lease_id=reference.lease_id,
@@ -153,7 +246,7 @@ class TakeoverService:
         if live and active is not None:
             # The fence bump: reported like a fresh lease mint, so the killed worker's
             # buffered completion lands on a stale epoch.
-            seq = self._store.enqueue_outbound(
+            seq = self._stores.outbound.enqueue_outbound(
                 kind=LEASE_MINTED,
                 chunk_id=chunk_id,
                 lease_id=None,
@@ -177,7 +270,7 @@ class TakeoverService:
         # A resume inherits no spawn env, so identity must be handed over (issue #258).
         # The token plaintext is never persisted, so it is re-minted, invalidating the prior.
         lease_token, token_hash = LeaseToken.mint()
-        self._store.record_lease_token(reference.lease_id, token_hash, now)
+        self._stores.tokens.record_lease_token(reference.lease_id, token_hash, now)
         preamble = WorkerPreamble(
             environments=[AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in bindings],
             lease_id=reference.lease_id,
@@ -205,11 +298,11 @@ class TakeoverService:
         same call racing ``Pull``'s own closer, or a retried end-PATCH — is the desired state,
         so it succeeds rather than raising. Only a genuinely *different* takeover holding the
         chunk is the real conflict this still refuses."""
-        record = self._store.open_takeover_for_chunk(chunk_id)
+        record = self._stores.takeover.open_takeover_for_chunk(chunk_id)
         if record is not None and record.takeover_id != takeover_id:
             raise TakeoverEndedElsewhere(f"takeover {takeover_id} on chunk {chunk_id} is not open")
         if record is None:
             return
-        self._store.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())
+        self._stores.takeover.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())
         if self._events is not None:
             self._events.publish_takeover_changed(chunk_id, takeover_id, cause="closed")

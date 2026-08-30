@@ -16,7 +16,6 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
@@ -30,7 +29,7 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _winter_source,
 )
-from tests.runner_fakes import runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 
 pytestmark = [
     pytest.mark.e2e,

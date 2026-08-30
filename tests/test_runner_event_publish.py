@@ -19,6 +19,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.broker import EventBroker
@@ -30,7 +31,6 @@ from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.steps import Advance, ContextSample, ExternalUsageSample, Fill, Pull, SpendCeiling
-from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
 from blizzard.wire.facts import (
     EVENT_RECORDED,
@@ -50,6 +50,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    make_stores,
 )
 
 pytestmark = pytest.mark.component
@@ -242,7 +243,7 @@ def test_asks_api_route_publishes_ask_asked(tmp_path: Path) -> None:
     token = "the-lease-token"
     store.record_lease_token("lease_1", TokenHash(token).hex, _NOW)
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    app = create_app(config, runner_store=store, events=events)
+    app = create_app(config, runner_stores=make_stores(store), events=events)
 
     with TestClient(app) as client:
         resp = client.post(
@@ -487,7 +488,7 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
     _seed_lease(store, retries_max=2)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
     service = TakeoverService(
-        store,
+        make_stores(store),
         FixedClock(_NOW),
         FakeHarness(handle=_HANDLE, verdict=None),
         FakeProbe(),
@@ -520,7 +521,7 @@ def test_takeover_force_open_over_a_live_worker_publishes_the_fence_bump_as_fact
     _seed_lease(store, retries_max=2)  # active, live worker
     probe = FakeProbe(alive={(100, "start-100")})
     service = TakeoverService(
-        store,
+        make_stores(store),
         FixedClock(_NOW),
         FakeHarness(handle=_HANDLE, verdict=None),
         probe,
@@ -649,7 +650,7 @@ def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
     store = _store(tmp_path)
     events = EventBroker()
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    app = create_app(config, runner_store=store, events=events)
+    app = create_app(config, runner_stores=make_stores(store), events=events)
 
     with TestClient(app) as client:
         resp = client.patch("/api/runner", json={"paused": True, "by": "operator"})

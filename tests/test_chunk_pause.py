@@ -16,12 +16,11 @@ from sqlalchemy import select
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
+from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Advance, Fill, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store import schema as runner_schema
-from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
 from blizzard.wire.facts import ESCALATION_RECORDED, RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 from blizzard.wire.question import QuestionView
@@ -33,6 +32,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    make_stores,
 )
 
 pytestmark = pytest.mark.component
@@ -129,7 +129,7 @@ def test_restart_into_a_standing_pause_keeps_the_claim(tmp_path):  # type: ignor
     _seed_running_lease(store)
     probe = FakeProbe()  # the worker died with the daemon — a real restart's shape
     # Startup crash-recovery marks the killed-mid-work lease (the ungraceful path, #13).
-    assert ResumeIntents(store).mark_crashed(process=probe, now=_NOW + timedelta(seconds=1)) == 1
+    assert ResumeIntents(make_stores(store)).mark_crashed(process=probe, now=_NOW + timedelta(seconds=1)) == 1
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _paused_chunk()  # paused while the runner was down; route still ours
@@ -172,7 +172,7 @@ def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path):  # type:
     store = _store(tmp_path)
     _seed_running_lease(store)
     probe = FakeProbe()
-    assert ResumeIntents(store).mark_crashed(process=probe, now=_NOW + timedelta(seconds=1)) == 1
+    assert ResumeIntents(make_stores(store)).mark_crashed(process=probe, now=_NOW + timedelta(seconds=1)) == 1
 
     hub = FakeHub()
     detached = _paused_chunk()

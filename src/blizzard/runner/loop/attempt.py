@@ -8,13 +8,13 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.takeover import TakeoverCommand
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.runner.loop.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
-from blizzard.runner.store.repository import LeaseRecord
 from blizzard.wire.facts import EVENT_RECORDED
 from blizzard.wire.sse_runner import LeaseChangeCause
 
@@ -82,7 +82,7 @@ class Attempt:
         tail = self.ctx.worker_files.stderr_tail(lease)
 
         # attempt_count includes this lease, and a first attempt is not a retry.
-        retried = self.ctx.store.attempt_count(lease.chunk_id, lease.node_id) - 1
+        retried = self.ctx.stores.leases.attempt_count(lease.chunk_id, lease.node_id) - 1
         if retried < lease.retries_max:
             # Retry: enqueued ATOMICALLY with the closure it describes (issue #125).
             self.close(
@@ -105,7 +105,7 @@ class Attempt:
             )
             self.abandon(killed=True, via=via)
             return
-        if self.ctx.store.local_paused(self.ctx.config.runner_id):
+        if self.ctx.stores.pause.local_paused(self.ctx.config.runner_id):
             # Deliberate deferral, not a surfaced failure — emit nothing (issue #125).
             _log.info(
                 "escalation deferred — locally paused",
@@ -129,7 +129,7 @@ class Attempt:
         active lease behind for any later sweep to clean up — the binding would be held
         forever. It is therefore released here rather than retried (blizzard#9)."""
         lease = self.lease
-        bindings = self.ctx.store.bindings_for_chunk(lease.chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings:
             _log.warning("requeue with no bound env — cannot re-spawn", chunk_id=lease.chunk_id)
             return
@@ -147,7 +147,7 @@ class Attempt:
     def escalate(self, *, reason: str = "retries exhausted") -> None:
         """Park the chunk needs-human at the hub, envs held for takeover."""
         lease = self.lease
-        bindings = self.ctx.store.bindings_for_chunk(lease.chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         takeover = ""
         wrapped = ""
         if lease.session_id is not None and bindings:
@@ -187,11 +187,13 @@ class Attempt:
         _CP_ABANDON_AFTER_KILL.reached()  # recovery is the next tick's re-scan
         self.ctx.env_release.release_chunk(lease.chunk_id)
         _CP_ABANDON_AFTER_RELEASE.reached()  # re-run releases nothing more, then records the closure
-        park = self.ctx.store.open_park(lease.lease_id)
+        park = self.ctx.stores.asks.open_park(lease.lease_id)
         if park is not None:
-            self.ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
+            self.ctx.stores.asks.record_park_resume(
+                lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now
+            )
         self.close(RELEASED, now)
-        self.ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        self.ctx.stores.leases.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         _log.info(
             "abandoned reassigned/detached/unknown chunk", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via
         )
@@ -207,8 +209,8 @@ class Attempt:
         if lease.pid is not None:
             self.ctx.process.kill(lease.pid)
         _CP_PAUSE_PARK_AFTER_KILL.reached()  # worker dead; the park is not yet durable
-        self.ctx.store.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
-        self.ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        self.ctx.stores.pause.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
+        self.ctx.stores.leases.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         if self.ctx.events is not None:
             # Same "dormant" cause `park_on_ask` publishes (dormant.py) — this write flips the
             # same LeaseActivity.state to "parked", just via the operator-pause path.
@@ -232,7 +234,7 @@ class Attempt:
         — and no retry is consumed. Deferred entirely while locally paused, as :meth:`fail`'s
         escalation branch defers (#45): the re-entry is a spawn that brake suppresses."""
         lease = self.lease
-        if self.ctx.store.local_paused(self.ctx.config.runner_id):
+        if self.ctx.stores.pause.local_paused(self.ctx.config.runner_id):
             _log.info(
                 "preempt deferred — locally paused",
                 runner_id=self.ctx.config.runner_id,
@@ -245,11 +247,13 @@ class Attempt:
         if lease.pid is not None:
             self.ctx.process.kill(lease.pid)  # best-effort hygiene; the epoch fence is the guarantee
         _CP_PREEMPT_AFTER_KILL.reached()  # recovery is the next tick's re-scan, off the still-higher fence
-        park = self.ctx.store.open_park(lease.lease_id)
+        park = self.ctx.stores.asks.open_park(lease.lease_id)
         if park is not None:
-            self.ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
+            self.ctx.stores.asks.record_park_resume(
+                lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now
+            )
         self.close(PREEMPTED, now)
-        self.ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        self.ctx.stores.leases.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         _log.info("preempted by an operator restart", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via)
         self.reenter()
 
@@ -260,7 +264,7 @@ class Attempt:
         preempted attempt is already closed, so a hub failure here leaves the chunk held with no
         lease — the shape ADVANCE's held-chunk poll re-drives next tick."""
         lease = self.lease
-        bindings = self.ctx.store.bindings_for_chunk(lease.chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings:
             _log.warning("restart with no bound env — cannot re-enter", chunk_id=lease.chunk_id)
             return
@@ -297,7 +301,7 @@ class Attempt:
         closure path funnels through here — the one place to pump this lease's own open
         transcript segment(s) before ``record_closure`` finalizes them (issue #246)."""
         self._pump_lease_before_close()
-        event_seq = self.ctx.store.record_closure(
+        event_seq = self.ctx.stores.leases.record_closure(
             lease_id=self.lease.lease_id,
             chunk_id=self.lease.chunk_id,
             node_id=self.lease.node_id,

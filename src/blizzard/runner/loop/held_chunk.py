@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.spawn import Environments, Spawner
-from blizzard.runner.store.repository import EnvBindingRecord
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.envelope import ApplyOutcome, NodeEnvelope
@@ -69,7 +69,7 @@ class HeldChunk:
         if (
             detail.status == ChunkStatus.RUNNING
             and hub_epoch is not None
-            and hub_epoch > self.ctx.store.latest_epoch(self.chunk_id)
+            and hub_epoch > self.ctx.stores.leases.latest_epoch(self.chunk_id)
         ):
             # The strictly-higher epoch is load-bearing: a just-escalated chunk still derives
             # `running` at the SAME epoch until its fact flushes, and would re-spawn forever (#63).
@@ -95,7 +95,7 @@ class HeldChunk:
 
         The chunk advanced while this runner retained the route, so no active lease was minted
         for it and nothing else will spawn it (#63)."""
-        bindings = self.ctx.store.bindings_for_chunk(self.chunk_id)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(self.chunk_id)
         if not bindings:
             _log.warning("held chunk advanced with no bound env — cannot spawn", chunk_id=self.chunk_id)
             return
@@ -123,7 +123,7 @@ class HeldChunk:
             artifacts=[],  # the decision's artifacts already landed
             decision_id=decision.decision_id,
             # Not buffered, so stamped directly at submit (issue #84a).
-            route_token=self.ctx.store.route_token(self.chunk_id),
+            route_token=self.ctx.stores.tokens.route_token(self.chunk_id),
         )
         try:
             response = self.ctx.hub.submit_completion(self.chunk_id, submission)
@@ -133,4 +133,6 @@ class HeldChunk:
             _log.warning("resolving transition rejected", chunk_id=self.chunk_id, detail=response.detail or "")
             return
         _log.info("gate resolved — advancing chunk", chunk_id=self.chunk_id, choice=decision.resolved_choice)
-        self.apply(response.outcome, response.next_envelope, self.ctx.store.bindings_for_chunk(self.chunk_id))
+        self.apply(
+            response.outcome, response.next_envelope, self.ctx.stores.environments.bindings_for_chunk(self.chunk_id)
+        )

@@ -16,13 +16,13 @@ from blizzard.foundation.clock import IClock
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
-from blizzard.runner.domain.leases import LocalLeaseService
+from blizzard.runner.domain.leases import LeaseRecord, LocalLeaseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.selftest.service import SelfTestService
-from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore, LeaseRecord
+from blizzard.runner.stores import RunnerStores
 from blizzard.runner.transcripts.service import TranscriptService
 
 _STORE = "runner store"
@@ -47,20 +47,17 @@ class RunnerWiring:
         clock: IClock | None = getattr(self.state, "clock", None)
         return clock if clock is not None else self._refuse(_STORE)
 
-    def store(self) -> IWriteRunnerStore:
-        store = self.maybe_store()
-        return store if store is not None else self._refuse(_STORE)
-
-    def reads(self) -> IReadRunnerStore:
-        return self.store()
+    def stores(self) -> RunnerStores:
+        stores = self.maybe_stores()
+        return stores if stores is not None else self._refuse(_STORE)
 
     def worker_lease(self, lease_id: str) -> LeaseRecord:
         """The lease a worker verb may act against: the active lease, or — when the ordinary
         active lease is gone — the one an open takeover names (issue #291). An open takeover
         is a second, independent source of worker-verb authorization, not a re-mint: the
         resolved record's id, node and epoch are unchanged from whatever they already were."""
-        store = self.store()
-        lease = store.active_lease(lease_id) or store.lease_for_open_takeover(lease_id)
+        stores = self.stores()
+        lease = stores.leases.active_lease(lease_id) or stores.takeover.lease_for_open_takeover(lease_id)
         if lease is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -110,8 +107,8 @@ class RunnerWiring:
     def maybe_config(self) -> RunnerConfig | None:
         return getattr(self.state, "config", None)
 
-    def maybe_store(self) -> IWriteRunnerStore | None:
-        return getattr(self.state, "runner_store", None)
+    def maybe_stores(self) -> RunnerStores | None:
+        return getattr(self.state, "runner_stores", None)
 
     @staticmethod
     def _refuse(what: str) -> NoReturn:

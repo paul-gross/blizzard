@@ -15,8 +15,8 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.store.repository import NewLease
-from tests.runner_fakes import make_store
+from blizzard.runner.domain.leases import NewLease
+from tests.runner_fakes import make_store, make_stores
 
 _NOW = datetime(2026, 7, 23, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -25,7 +25,7 @@ _TOKEN = "the-lease-token"
 def _app_with_store(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    return create_app(config, runner_store=store), store
+    return create_app(config, runner_stores=make_stores(store)), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]

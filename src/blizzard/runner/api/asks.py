@@ -16,7 +16,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.federation import require_human_api
-from blizzard.runner.store.repository import AskRecord, IReadRunnerStore
+from blizzard.runner.domain.asks import AskRecord, IReadAskRepository
 from blizzard.wire.runner_status import AskListResponse, AskView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -45,10 +45,10 @@ def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> Ask
     this route's whole gate, which would have widened admission with no credential behind it
     once an open takeover's closed reference lease qualified too."""
     wiring = RunnerWiring.of(request)
-    store, clock = wiring.store(), wiring.clock()
+    asks, clock = wiring.stores().asks, wiring.clock()
     lease = authorized_lease(lease_id, request)
     question_id = Id.mint(QUESTION_PREFIX, clock).value
-    store.record_ask(
+    asks.record_ask(
         lease_id=lease_id,
         chunk_id=lease.chunk_id,
         question_id=question_id,
@@ -87,8 +87,9 @@ def list_asks(request: Request, open_only: bool = Query(True, alias="open")) -> 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="only open asks are queryable — no closed-ask history is kept",
         )
-    return _ask_list(RunnerWiring.of(request).reads())
+    asks: IReadAskRepository = RunnerWiring.of(request).stores().asks
+    return _ask_list(asks)
 
 
-def _ask_list(store: IReadRunnerStore) -> AskListResponse:
-    return AskListResponse(items=[_ask_view(a) for a in store.open_asks()])
+def _ask_list(asks: IReadAskRepository) -> AskListResponse:
+    return AskListResponse(items=[_ask_view(a) for a in asks.open_asks()])

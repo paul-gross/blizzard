@@ -9,15 +9,20 @@ from datetime import datetime
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, Id
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.domain.artifacts import GraphArtifactRecord
 from blizzard.runner.domain.lease_auth import LeaseToken
+from blizzard.runner.domain.leases import (
+    LeaseRecord,
+    NewLease,
+)
 from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.session import ResumedSession
-from blizzard.runner.store.repository import EnvBindingRecord, GraphArtifactRecord, LeaseRecord, NewLease
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")
@@ -65,7 +70,7 @@ class Spawner:
 
         Reads ``local_paused`` only. Which call sites must consult it is held mechanically by
         ``tests/test_spawn_suppressed_registry.py``, not by an enumeration to recount by hand."""
-        if not self.ctx.store.local_paused(self.ctx.config.runner_id):
+        if not self.ctx.stores.pause.local_paused(self.ctx.config.runner_id):
             return False
         _log.info(
             "spawn suppressed — locally paused",
@@ -124,7 +129,7 @@ class Spawner:
                 stderr_tail=str(exc),
             )
             raise
-        self.ctx.store.record_spawn(
+        self.ctx.stores.leases.record_spawn(
             lease.lease_id,
             pid=handle.pid,
             process_start_time=handle.process_start_time,
@@ -140,7 +145,7 @@ class Spawner:
             )
         # Keyed on the HANDLE's session id — the authoritative continuation id (issue #149).
         # Written after the spawn, so a durable fingerprint always implies the prose was sent.
-        self.ctx.store.record_session_preamble(handle.session_id, fingerprint=rendered.fingerprint, at=now)
+        self.ctx.stores.leases.record_session_preamble(handle.session_id, fingerprint=rendered.fingerprint, at=now)
         _CP_AFTER_SPAWN.reached()
 
     def enter_node(
@@ -157,7 +162,7 @@ class Spawner:
     def generation(self, lease_id: str) -> int:
         """The spawn generation this lease's next start is about to mint — one past the
         durably-recorded count, read *before* that start's own ``record_spawn`` lands."""
-        return self.ctx.store.lease_generation(lease_id) + 1
+        return self.ctx.stores.leases.lease_generation(lease_id) + 1
 
     def stdout_path(self, lease_id: str) -> str:
         return self.ctx.worker_files.stdout_path(lease_id, self.generation(lease_id))
@@ -168,7 +173,7 @@ class Spawner:
         A resume inherits none of the spawn env, so the identity is re-supplied. Only the
         token's hash is ever persisted, so the token itself is **re-minted** here."""
         lease_token, token_hash = LeaseToken.mint()
-        self.ctx.store.record_lease_token(lease.lease_id, token_hash, self.ctx.clock.now())
+        self.ctx.stores.tokens.record_lease_token(lease.lease_id, token_hash, self.ctx.clock.now())
         return WorkerPreamble(
             environments=Environments(bindings).acquired,
             lease_id=lease.lease_id,
@@ -188,14 +193,14 @@ class Spawner:
         hash, and buffer the hub's fact."""
         # Mint above the max of both floors (bzh:epoch-fencing, #112): the local fence alone is 0
         # for a chunk this runner never drove, so a migrated chunk would mint below hub truth.
-        epoch = max(self.ctx.store.latest_epoch(chunk_id), envelope.epoch) + 1
+        epoch = max(self.ctx.stores.leases.latest_epoch(chunk_id), envelope.epoch) + 1
         lease_id = Id.mint(LEASE_PREFIX, self.ctx.clock).value
         node = envelope.node
         retries_max = node.retries_max if node.retries_max is not None else self.ctx.config.default_retries_max
         model, effort, compaction_window = self.ctx.sessions.session_stamps(node, resume)
         # Before `record_lease`: a crash here leaves only an orphan row a retry
         # writes again identically — never a lease whose mint's declarations are absent.
-        self.ctx.store.record_graph_artifacts(
+        self.ctx.stores.graph_artifacts.record_graph_artifacts(
             graph_id=envelope.graph_id,
             artifacts=[
                 GraphArtifactRecord(name=a.name, ordinal=i, kind=a.kind, content=a.content)
@@ -203,7 +208,7 @@ class Spawner:
             ],
             recorded_at=at,
         )
-        self.ctx.store.record_lease(
+        self.ctx.stores.leases.record_lease(
             NewLease(
                 lease_id=lease_id,
                 chunk_id=chunk_id,
@@ -225,7 +230,7 @@ class Spawner:
         # A per-lease capability token (issue #113): only its hash is stashed durably, the
         # plaintext carried forward to the spawn preamble alone and never persisted.
         token, token_hash = LeaseToken.mint()
-        self.ctx.store.record_lease_token(lease_id, token_hash, at)
+        self.ctx.stores.tokens.record_lease_token(lease_id, token_hash, at)
         OutboundFacts(self.ctx).lease_minted(chunk_id, lease_id, epoch=epoch, at=at)
         return MintedLease(
             lease_id=lease_id, epoch=epoch, token=token, model=model, effort=effort, compaction_window=compaction_window
@@ -242,7 +247,7 @@ class Spawner:
     ) -> Preamble:
         # The store's runtime override when set, else the static config prompt — read here so a
         # replace applies to the next spawn with no restart.
-        override = self.ctx.store.workspace_prompt_override(self.ctx.config.workspace_id)
+        override = self.ctx.stores.workspace_prompt.workspace_prompt_override(self.ctx.config.workspace_id)
         # `prior` is read ONLY when this spawn resumes a session (issue #149), so a fresh one can
         # never elide prose it has never seen; nothing recorded reads `None` and renders in full.
         return Preamble.of(
@@ -252,7 +257,7 @@ class Spawner:
             lease_id=lease_id,
             runner_id=self.ctx.config.runner_id,
             chunk_id=chunk_id,
-            prior=self.ctx.store.session_preamble_fingerprint(resume.session_id) if resume else None,
+            prior=self.ctx.stores.leases.session_preamble_fingerprint(resume.session_id) if resume else None,
             node=node_name,
             prior_node=resume.lease.node_name if resume and resume.lease else None,
         )

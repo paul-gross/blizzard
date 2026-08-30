@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationRecord
+from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.store.repository import EnvBindingRecord, GitCommitDeclarationRecord, LeaseRecord
 from blizzard.wire.completion import SubmittedArtifact
 
 Key = tuple[str, str]
@@ -32,7 +34,9 @@ class DeclaredCommits:
         order. Spans **every** bound environment, since the key carries the env."""
         origins = self._origins()
         artifacts: list[SubmittedArtifact] = []
-        for key, declared in self.ctx.store.git_commit_declarations_for_lease(self.lease.lease_id).items():
+        for key, declared in self.ctx.stores.git_commit_declarations.git_commit_declarations_for_lease(
+            self.lease.lease_id
+        ).items():
             if self._resolved.get(key) == declared:
                 continue
             self._resolved[key] = declared

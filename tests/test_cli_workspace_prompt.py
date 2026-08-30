@@ -17,8 +17,7 @@ from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.workspace_prompts import WORKSPACE_PROMPT_FILENAME
-from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from tests.runner_fakes import runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 
 pytestmark = pytest.mark.unit
 

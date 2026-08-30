@@ -13,10 +13,10 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.requeue import ChunkNotRequeueable, RequeueBlockedByOpenTakeover, RequeueService
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Fill
-from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
 
@@ -33,7 +33,7 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
 
 
 def _service(store, *, clock=None):  # type: ignore[no-untyped-def]
-    return RequeueService(store, clock or FixedClock(_LATER))
+    return RequeueService(store, clock or FixedClock(_LATER), takeover=store, escalations=store)
 
 
 def _seed_escalated_chunk(store, *, chunk="ch_1", lease="lease_1", node_id="nd_build", node_name="build", epoch=1):  # type: ignore[no-untyped-def]

@@ -17,9 +17,9 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Advance, Pull
-from blizzard.runner.store.repository import NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (
     FakeHarness,
@@ -30,6 +30,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    make_stores,
 )
 
 _NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
@@ -44,8 +45,8 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
     both to the shared assessment."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    attachments = AttachmentService(store, FixedClock(_NOW))
-    app = create_app(config, runner_store=store, attachments=attachments)
+    attachments = AttachmentService(store, FixedClock(_NOW), tokens=store)
+    app = create_app(config, runner_stores=make_stores(store), attachments=attachments)
 
     store.record_lease(
         NewLease(

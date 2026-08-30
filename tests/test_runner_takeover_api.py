@@ -16,10 +16,10 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.store.repository import NewLease
-from tests.runner_fakes import FakeHarness, FakeProbe, make_store
+from tests.runner_fakes import FakeHarness, FakeProbe, make_store, make_stores
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -31,9 +31,13 @@ def _app_with_takeover(tmp_path: Path, *, clock: FixedClock | None = None, probe
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict=None
     )
     service = TakeoverService(
-        store, clock or FixedClock(_NOW), harness, probe or FakeProbe(), local_api_url="http://127.0.0.1:8431"
+        make_stores(store),
+        clock or FixedClock(_NOW),
+        harness,
+        probe or FakeProbe(),
+        local_api_url="http://127.0.0.1:8431",
     )
-    return create_app(config, runner_store=store, takeover=service), store
+    return create_app(config, runner_stores=make_stores(store), takeover=service), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]

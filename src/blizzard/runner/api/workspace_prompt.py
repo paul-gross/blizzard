@@ -39,9 +39,11 @@ class WorkspacePromptReplacement(BaseModel):
 def read_workspace_prompt(request: Request) -> WorkspacePromptResponse:
     """The effective spawn preamble prompt: the runtime override if set, else static config (issue #17)."""
     wiring = RunnerWiring.of(request)
-    store, config = wiring.maybe_store(), wiring.maybe_config()
+    stores, config = wiring.maybe_stores(), wiring.maybe_config()
     override = (
-        store.workspace_prompt_override(config.workspace_id) if store is not None and config is not None else None
+        stores.workspace_prompt.workspace_prompt_override(config.workspace_id)
+        if stores is not None and config is not None
+        else None
     )
     if override is not None:
         return WorkspacePromptResponse(prompt=override, source="override")
@@ -53,8 +55,8 @@ def read_workspace_prompt(request: Request) -> WorkspacePromptResponse:
 def replace_workspace_prompt(request_body: WorkspacePromptReplacement, request: Request) -> WorkspacePromptResponse:
     """Replace the runtime workspace-prompt override — effective on subsequent spawns (issue #17)."""
     wiring = RunnerWiring.of(request)
-    store, config = wiring.store(), wiring.config()
-    store.set_workspace_prompt(config.workspace_id, prompt=request_body.prompt, at=wiring.clock().now())
+    workspace_prompt, config = wiring.stores().workspace_prompt, wiring.config()
+    workspace_prompt.set_workspace_prompt(config.workspace_id, prompt=request_body.prompt, at=wiring.clock().now())
     return WorkspacePromptResponse(prompt=request_body.prompt, source="override")
 
 
@@ -65,6 +67,6 @@ def clear_workspace_prompt(request: Request) -> WorkspacePromptResponse:
     Distinct from overriding with empty text, which is itself a standing override; the response
     carries whatever the config now resolves to, effective on subsequent spawns."""
     wiring = RunnerWiring.of(request)
-    store, config = wiring.store(), wiring.config()
-    store.clear_workspace_prompt(config.workspace_id)
+    workspace_prompt, config = wiring.stores().workspace_prompt, wiring.config()
+    workspace_prompt.clear_workspace_prompt(config.workspace_id)
     return WorkspacePromptResponse(prompt=config.resolved_workspace_prompt(), source="config")

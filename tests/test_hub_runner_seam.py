@@ -12,13 +12,13 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.steps import Pull
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
-from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import (
     FakeHarness,
     FakeProbe,
@@ -26,6 +26,7 @@ from tests.runner_fakes import (
     FakeWorktreeGit,
     make_session_resolver,
     make_store,
+    make_stores,
     make_usage_recorder,
 )
 from tests.support import build_hub, pointer_token, report_lease
@@ -116,7 +117,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
     provider = FakeProvider({"e1": "/ws/e1"})
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = LoopContext(
-        store=store,
+        stores=make_stores(store),
         clock=hub.clock,
         hub=HttpHubClient(hub.client),
         provider=provider,
@@ -128,7 +129,11 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
         env_release=EnvironmentRelease(
-            store=store, clock=hub.clock, provider=provider, worker_files=WorkerStdoutFiles("", store)
+            environments=store,
+            leases=store,
+            clock=hub.clock,
+            provider=provider,
+            worker_files=WorkerStdoutFiles("", store),
         ),
     )
 
@@ -191,7 +196,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
     provider = FakeProvider({"e1": "/ws/e1"})
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = LoopContext(
-        store=store,
+        stores=make_stores(store),
         clock=hub.clock,
         hub=HttpHubClient(hub.client),
         provider=provider,
@@ -203,7 +208,11 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
         env_release=EnvironmentRelease(
-            store=store, clock=hub.clock, provider=provider, worker_files=WorkerStdoutFiles("", store)
+            environments=store,
+            leases=store,
+            clock=hub.clock,
+            provider=provider,
+            worker_files=WorkerStdoutFiles("", store),
         ),
     )
 

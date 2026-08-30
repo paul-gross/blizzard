@@ -12,10 +12,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
-from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
 from tests.runner_fakes import (
     FakeHarness,
@@ -24,6 +24,7 @@ from tests.runner_fakes import (
     FakeProvider,
     make_context,
     make_store,
+    make_stores,
 )
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -74,7 +75,7 @@ def test_marks_active_session_bearing_lease(tmp_path):  # type: ignore[no-untype
     store = _store(tmp_path)
     _seed_running_lease(store)
 
-    marked = ResumeIntents(store).mark_graceful(now=_NOW)
+    marked = ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     assert marked == 1
     assert store.resume_intent_lease_ids() == {"lease_1"}
@@ -115,7 +116,7 @@ def test_marking_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[n
         )
     )
 
-    marked = ResumeIntents(store).mark_graceful(now=_NOW)
+    marked = ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     assert marked == 0
     assert store.resume_intent_lease_ids() == set()
@@ -126,11 +127,11 @@ def test_remark_across_two_restarts_reopens_the_intent(tmp_path):  # type: ignor
     store = _store(tmp_path)
     _seed_running_lease(store)
     # First restart: mark then clear (RESUME consumed it).
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
     store.record_resume_clear(lease_id="lease_1", cleared_at=_NOW)
     assert store.resume_intent_lease_ids() == set()
     # Second graceful restart while the same lease is still in flight — re-marked strictly later.
-    ResumeIntents(store).mark_graceful(now=_NOW + timedelta(minutes=5))
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW + timedelta(minutes=5))
     assert store.resume_intent_lease_ids() == {"lease_1"}
 
 
@@ -141,7 +142,7 @@ def test_remark_across_two_restarts_reopens_the_intent(tmp_path):  # type: ignor
 def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()
@@ -171,7 +172,7 @@ def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path):  # ty
 def test_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()
@@ -198,7 +199,7 @@ def test_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore[no-un
 def test_resume_abandons_chunk_reassigned_to_another_runner(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk(runner_id="r2")  # another runner holds it now
@@ -224,7 +225,7 @@ def test_resume_abandons_chunk_reassigned_to_another_runner(tmp_path):  # type: 
 def test_resume_abandons_detached_chunk(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkDetail(  # detached: re-derived ready, route released
@@ -254,7 +255,7 @@ def test_resume_abandons_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-
     (blizzard#9)."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
     hub.not_found = {"ch_1"}
@@ -277,7 +278,7 @@ def test_resume_abandons_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-
 def test_resume_defers_when_hub_unreachable(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
     hub.down = True  # get_chunk cannot be reached — ownership unverifiable this tick
@@ -312,7 +313,7 @@ def test_resume_is_a_noop_without_intents(tmp_path):  # type: ignore[no-untyped-
 def test_resume_clears_intent_for_lease_closed_while_down(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
-    ResumeIntents(store).mark_graceful(now=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
     # The lease closed while the runner was down (unusual) — RESUME just clears the intent.
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
 

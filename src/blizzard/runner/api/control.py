@@ -14,8 +14,8 @@ from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.domain.pause import IWritePauseRepository
 from blizzard.runner.domain.status import RunnerStatusService
-from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 from blizzard.wire.runner_status import CapacitiesView, HubConnectivityView, PauseStateView, RunnerStatusView
 
@@ -46,12 +46,12 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
     writes the hub's flag. Every spawn site honors it, and escalation at an exhausted budget is
     deferred. Not a drain: a live worker is left running, and no retry is consumed."""
     wiring = RunnerWiring.of(request)
-    store, config = wiring.store(), wiring.config()
+    pause, config = wiring.stores().pause, wiring.config()
     now = wiring.clock().now()
     report_kind = RUNNER_LOCALLY_PAUSED if request_body.paused else RUNNER_LOCALLY_RESUMED
     # The brake and its upward report are one write: mirroring runs hub→runner only, so a
     # brake never reported up would never be repaired (tests/test_ingest_and_pause_verbs.py).
-    seq = store.record_local_pause(
+    seq = pause.record_local_pause(
         config.runner_id,
         paused=request_body.paused,
         at=now,
@@ -62,7 +62,7 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
     events = wiring.events()
     if events is not None:
         events.publish_fact_changed(seq=seq, kind=report_kind, chunk_id=None, lease_id=None)
-    return _view(store, config.runner_id)
+    return _view(pause, config.runner_id)
 
 
 @router.get("/runner", response_model=RunnerStatusView)
@@ -94,9 +94,9 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
     )
 
 
-def _view(store: IWriteRunnerStore, runner_id: str) -> RunnerControlView:
-    local_paused = store.local_paused(runner_id)
-    hub_paused = store.hub_paused(runner_id)
+def _view(pause: IWritePauseRepository, runner_id: str) -> RunnerControlView:
+    local_paused = pause.local_paused(runner_id)
+    hub_paused = pause.hub_paused(runner_id)
     return RunnerControlView(
         runner_id=runner_id,
         local_paused=local_paused,

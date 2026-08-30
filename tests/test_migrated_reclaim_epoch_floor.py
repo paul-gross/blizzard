@@ -25,6 +25,7 @@ from tests.runner_fakes import (
     FakeWorktreeGit,
     make_session_resolver,
     make_store,
+    make_stores,
     make_usage_recorder,
 )
 from tests.support import build_hub, ingest, report_lease
@@ -115,7 +116,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
     assert store.latest_epoch(chunk_id) == 0, "the fresh runner store must carry no local history"
     provider = FakeProvider({"e9": "/ws/e9"})
     ctx = LoopContext(
-        store=store,
+        stores=make_stores(store),
         clock=hub.clock,
         hub=HttpHubClient(hub.client),
         provider=provider,
@@ -127,7 +128,11 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
         env_release=EnvironmentRelease(
-            store=store, clock=hub.clock, provider=provider, worker_files=WorkerStdoutFiles("", store)
+            environments=store,
+            leases=store,
+            clock=hub.clock,
+            provider=provider,
+            worker_files=WorkerStdoutFiles("", store),
         ),
     )
     Fill(ctx).run()
