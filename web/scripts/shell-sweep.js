@@ -18,7 +18,7 @@
  *
  *   npm run shell-sweep   (from web/)
  *
- * The thirteen specs:
+ * The fourteen specs:
  *   - projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts — the hub
  *     board shell (BoardHeader + AppNavMenu), swept over width only (no
  *     username is ever shown there): never lets the profile menu drift
@@ -87,6 +87,14 @@
  *     `BoardCardComponent`'s control row (D8, issue #364): PROMOTE and DELETE
  *     genuinely sit side by side with no overlap or overflow at the board right
  *     rail's narrow widths — a real CSS flex-row layout claim jsdom cannot make.
+ *   - projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts — the
+ *     graphs container/presentational split's two Phase-2 children
+ *     (`GraphDetailHeader`, `GraphDetailEdges`): the header's identity row,
+ *     lifecycle actions, error line, and entry line genuinely stack with the
+ *     real gap `:host`'s flex column has to reproduce now that they moved out
+ *     from under `.body`'s own flex column, and the edges section's per-node
+ *     blocks and prompt addendum genuinely stack too — real CSS layout claims
+ *     jsdom cannot make.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -105,6 +113,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/design/hover-tint.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-control-row.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {
@@ -127,7 +136,7 @@ function main() {
     return;
   }
 
-  console.log('\nshell-sweep: all thirteen specs clean.\n');
+  console.log('\nshell-sweep: all fourteen specs clean.\n');
 }
 
 main();

@@ -9,14 +9,6 @@ import { OPERATOR_ME_RESPONSE } from '../testing/auth-fixtures';
 import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import { GraphDetail } from './graph-detail';
 
-/** A `contributor`'s `/api/me` — no admin-tier `graph:edit` (#93), so the retire/enable
- * lifecycle controls must not render for it. */
-const CONTRIBUTOR_ME = {
-  ...OPERATOR_ME_RESPONSE,
-  role: 'contributor',
-  permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'runner:pause' && p !== 'graph:edit' && p !== 'user:manage'),
-};
-
 const GRAPH = {
   graph_id: 'gr_build_v2',
   name: 'build',
@@ -29,12 +21,6 @@ const GRAPH = {
       executor: 'claude',
       session: 'fresh',
       judged_by: 'reviewer',
-      mode: 'edit',
-      checks: ['lint', 'test'],
-      produces: [{ name: 'branch' }],
-      retries_max: 3,
-      retries_exhausted: 'escalate',
-      prompt: 'Build the feature.',
       choices: [{ choice_id: 'c_pass', name: 'pass', description: 'Build succeeded' }],
     },
     {
@@ -78,38 +64,6 @@ describe('GraphDetail', () => {
 
   afterEach(() => stub?.restore());
 
-  it('renders the entry node, node table, and edges/choices', async () => {
-    const fixture = await mount('gr_build_v2', (method, path) => {
-      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
-      return {};
-    });
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="graph-detail-entry"]')?.textContent).toContain('build');
-
-    const rows = el.querySelectorAll('[data-testid="graph-detail-node-row"]');
-    expect(rows).toHaveLength(2);
-    // Scoped to the node table: `data-node-id` now also appears on the diagram's SVG
-    // node groups (`graph-diagram.ts`), mounted above the table in the same view.
-    const buildRow = el.querySelector('[data-testid="graph-detail-nodes"] [data-node-id="n_build"]') as HTMLElement;
-    expect(buildRow.querySelector('[data-testid="graph-detail-entry-badge"]')).toBeTruthy();
-    expect(buildRow.textContent).toContain('claude');
-    expect(buildRow.textContent).toContain('reviewer');
-    expect(buildRow.textContent).toContain('3');
-    expect(buildRow.textContent).toContain('escalate');
-    expect(buildRow.textContent).toContain('lint, test');
-    expect(buildRow.textContent).toContain('branch');
-
-    const edge = el.querySelector('[data-testid="graph-detail-edge"]');
-    expect(edge?.querySelector('[data-testid="graph-detail-edge-choice"]')?.textContent).toContain('pass');
-    expect(edge?.querySelector('[data-testid="graph-detail-edge-to"]')?.textContent).toContain('review');
-    expect(edge?.querySelector('[data-testid="graph-detail-edge-addendum"]')?.textContent).toContain(
-      'Focus on tests.',
-    );
-
-    expect(el.querySelector('[data-testid="graph-detail-prompts"]')).toBeNull();
-  });
-
   it('shows an error state for an unknown graph id', async () => {
     const fixture = await mount('gr_missing', () => stubError(404, { detail: 'unknown graph' }));
     const el = fixture.nativeElement as HTMLElement;
@@ -118,33 +72,9 @@ describe('GraphDetail', () => {
     expect(el.querySelector('[data-testid="graph-detail-body"]')).toBeNull();
   });
 
-  // --- Retire / re-enable (issue #101) -----------------------------------------
+  // --- Retire / re-enable mutation wiring (issue #101) -----------------------------
 
-  it('shows the enabled badge and a Retire button for a non-retired graph', async () => {
-    const fixture = await mount('gr_build_v2', (method, path) => {
-      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
-      return {};
-    });
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('enabled');
-    expect(el.querySelector('[data-testid="graph-detail-retire"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="graph-detail-enable"]')).toBeNull();
-  });
-
-  it('shows the retired badge and an Enable button for a retired graph', async () => {
-    const fixture = await mount('gr_build_v2', (method, path) => {
-      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return { ...GRAPH, enabled: false, retired: true };
-      return {};
-    });
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('retired');
-    expect(el.querySelector('[data-testid="graph-detail-enable"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="graph-detail-retire"]')).toBeNull();
-  });
-
-  it('fires the retire client call once the operator confirms', async () => {
+  it('fires the retire client call once the header emits retire (operator confirmed)', async () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await mount('gr_build_v2', (method, path) => {
       if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
@@ -161,22 +91,7 @@ describe('GraphDetail', () => {
     confirmSpy.mockRestore();
   });
 
-  it('does not fire the retire call when the operator cancels the confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
-    const fixture = await mount('gr_build_v2', (method, path) => {
-      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
-      return {};
-    });
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.click();
-    await settle(fixture);
-
-    expect(stub.forRoute('/api/graphs/gr_build_v2/retire', 'POST')).toHaveLength(0);
-    confirmSpy.mockRestore();
-  });
-
-  it('fires the enable client call for a retired graph once the operator confirms', async () => {
+  it('fires the enable client call for a retired graph once the header emits enable (operator confirmed)', async () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await mount('gr_build_v2', (method, path) => {
       if (method === 'GET' && path === '/api/graphs/gr_build_v2') return { ...GRAPH, enabled: false, retired: true };
@@ -191,27 +106,6 @@ describe('GraphDetail', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toMatchObject({ by: 'operator' });
     confirmSpy.mockRestore();
-  });
-
-  it('withholds the retire/enable controls for a contributor (no graph:edit, #93), keeping the structure and badge', async () => {
-    // The adjudication case: `graph:edit` is admin-tier. A contributor reads a graph's
-    // full immutable structure and its enabled/retired badge, but is not offered the
-    // lifecycle controls it could only 403 on.
-    const fixture = await mount(
-      'gr_build_v2',
-      (method, path) => {
-        if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
-        return {};
-      },
-      CONTRIBUTOR_ME,
-    );
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="graph-detail-body"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('enabled');
-    expect(el.querySelector('[data-testid="graph-detail-nodes"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="graph-detail-retire"]')).toBeNull();
-    expect(el.querySelector('[data-testid="graph-detail-enable"]')).toBeNull();
   });
 
   it('surfaces a 409 refusal from retire rather than swallowing it', async () => {
