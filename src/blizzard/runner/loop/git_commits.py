@@ -5,10 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.store.repository import EnvBindingRecord, GitCommitDeclarationRecord, LeaseRecord
+from blizzard.runner.store.repository import (
+    EnvBindingRecord,
+    GitCommitDeclarationRecord,
+)
 from blizzard.wire.completion import SubmittedArtifact
 
 Key = tuple[str, str]

@@ -9,7 +9,8 @@ from __future__ import annotations
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.runner.domain.lease_auth import LeaseToken
-from blizzard.runner.store.repository import IWriteRunnerStore, LeaseRecord
+from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.store.repository import IWriteRunnerStore
 
 __all__ = ["AttachmentRejected", "AttachmentService"]
 

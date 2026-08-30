@@ -15,10 +15,10 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking
-from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import FakeHub, FakeProbe, make_store
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)

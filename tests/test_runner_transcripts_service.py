@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.store.repository import NewLease
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService

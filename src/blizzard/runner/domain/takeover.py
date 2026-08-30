@@ -14,11 +14,12 @@ from dataclasses import dataclass, field
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
 from blizzard.runner.domain.lease_auth import LeaseToken
+from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerPreamble
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.store.repository import IWriteRunnerStore, LeaseRecord
+from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.wire.facts import LEASE_MINTED
 
 # What a takeover forwards from the identity env (issue #258). Nothing else leaves the

@@ -5,13 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
+from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
-from blizzard.runner.store.repository import EnvBindingRecord, IWriteRunnerStore, LeaseRecord
+from blizzard.runner.store.repository import (
+    EnvBindingRecord,
+    IWriteRunnerStore,
+)
 from blizzard.wire.facts import USAGE_RECORDED
 
 

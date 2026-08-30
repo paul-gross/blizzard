@@ -16,13 +16,16 @@ from blizzard.foundation.clock import IClock
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
-from blizzard.runner.domain.leases import LocalLeaseService
+from blizzard.runner.domain.leases import LeaseRecord, LocalLeaseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.selftest.service import SelfTestService
-from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore, LeaseRecord
+from blizzard.runner.store.repository import (
+    IReadRunnerStore,
+    IWriteRunnerStore,
+)
 from blizzard.runner.transcripts.service import TranscriptService
 
 _STORE = "runner store"

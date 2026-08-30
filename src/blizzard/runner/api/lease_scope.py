@@ -8,7 +8,7 @@ from fastapi.exceptions import HTTPException
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.domain.lease_auth import LeaseToken
-from blizzard.runner.store.repository import LeaseRecord
+from blizzard.runner.domain.leases import LeaseRecord
 
 
 def authorized_lease(lease_id: str, request: Request) -> LeaseRecord:

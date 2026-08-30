@@ -6,7 +6,8 @@ import contextlib
 import os
 from dataclasses import dataclass
 
-from blizzard.runner.store.repository import IReadRunnerStore, LeaseRecord
+from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.store.repository import IReadRunnerStore
 
 
 @dataclass(frozen=True)

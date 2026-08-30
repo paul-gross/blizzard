@@ -20,9 +20,9 @@ from click.testing import CliRunner
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.takeover import TakeoverCommand
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import runner_store_errors
 from tests.test_runner_status_cli import _init_runner, _serve_local_api
 

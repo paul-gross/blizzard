@@ -12,8 +12,12 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
+from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.store.errors import (
+    RunnerStoreError,
+    RunnerStoreErrorFactory,
+)
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import NewLease, RunnerStoreError, RunnerStoreErrorFactory
 from blizzard.runner.store.schema import park_facts, pause_parks
 from tests.runner_fakes import make_store, runner_store_errors
 

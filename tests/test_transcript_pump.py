@@ -15,6 +15,7 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES as HUB_RECORD_MAX_BYTES
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.transcript import (
     LateToolOutput,
@@ -37,7 +38,10 @@ from blizzard.runner.loop.transcript_pump import (
     _record_overhead,
     _turn_wire,
 )
-from blizzard.runner.store.repository import BufferedTranscriptDelta, NewLease, TranscriptSegmentLedgerRow
+from blizzard.runner.store.repository import (
+    BufferedTranscriptDelta,
+    TranscriptSegmentLedgerRow,
+)
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

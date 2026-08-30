@@ -16,8 +16,7 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import LocalLeaseService
-from blizzard.runner.store.repository import NewLease
+from blizzard.runner.domain.leases import LocalLeaseService, NewLease
 from tests.runner_fakes import FakeProbe, make_store
 from tests.support import assert_all_timestamps_utc
 

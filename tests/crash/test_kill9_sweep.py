@@ -24,10 +24,10 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.config import HubConfig
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.store import schema as runner_schema
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import NewLease
 from blizzard.tools.invariants import Invariants
 from tests.crash.support import (
     LAND_STEP,

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.loop.attempt import FAILED, Attempt
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
@@ -17,7 +18,10 @@ from blizzard.runner.loop.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.spawn import Spawner
-from blizzard.runner.store.repository import CheckResultRecord, EnvBindingRecord, LeaseRecord
+from blizzard.runner.store.repository import (
+    CheckResultRecord,
+    EnvBindingRecord,
+)
 from blizzard.wire.completion import CheckResult, ChecksGate, CompletionSubmission, SubmittedArtifact
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import NodeEnvelope

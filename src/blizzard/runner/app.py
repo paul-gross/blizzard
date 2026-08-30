@@ -78,8 +78,9 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import IWriteRunnerStore, RunnerStoreErrorFactory
+from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.runner.transcripts.internal.http_archived_transcript_repository import (
     HttpArchivedTranscriptRepository,
 )

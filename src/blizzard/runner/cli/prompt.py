@@ -16,8 +16,8 @@ from blizzard.runner.harness.workspace_prompts import (
     WORKSPACE_PROMPT_FILENAME,
     UnknownWorkspacePromptSample,
 )
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import RunnerStoreErrorFactory
 
 
 @click.group("prompt")

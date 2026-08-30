@@ -12,12 +12,12 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
 from blizzard.runner.loop import transcript_drain as transcript_drain_module
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.transcript_drain import TranscriptDrain
-from blizzard.runner.store.repository import NewLease
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 from tests.runner_fakes import (
     FakeHarness,

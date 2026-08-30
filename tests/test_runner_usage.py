@@ -12,12 +12,12 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.steps import Advance
-from blizzard.runner.store.repository import NewLease
 from blizzard.wire.facts import USAGE_RECORDED
 from tests.runner_fakes import (
     FakeHarness,

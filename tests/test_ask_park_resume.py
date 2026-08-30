@@ -13,10 +13,9 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
+from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Advance, Pull, Reap
-from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.facts import ANSWER_DELIVERED, QUESTION_ASKED
 from blizzard.wire.question import QuestionView

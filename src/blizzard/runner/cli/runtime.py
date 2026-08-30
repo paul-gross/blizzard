@@ -24,8 +24,8 @@ from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import RunnerStoreErrorFactory
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0

@@ -11,11 +11,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
+from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
-from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

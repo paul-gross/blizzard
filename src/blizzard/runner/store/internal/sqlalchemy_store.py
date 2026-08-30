@@ -1,44 +1,51 @@
 """SQLAlchemy adapter for the runner-store repository (package-private).
 
-The one place the runner's facts touch the engine (``bzh:pluggable-seams``). All library usage
-is confined here, and a driver failure is wrapped once into
-:class:`~blizzard.runner.store.repository.RunnerStoreError` (``bzh:structlog-logging``). Every
-derived query realizes the facts-only invariant in SQL (``bzh:facts-not-status``)."""
+The one place the runner's facts touch the engine (``bzh:pluggable-seams``). Composes
+:class:`~blizzard.runner.store.internal.lease_store.LeaseStore` (blizzard#410) so this
+class still answers the whole ``IWriteRunnerStore`` surface while the remaining concepts
+await their own extraction."""
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Engine, and_, case, func, or_, select
+from sqlalchemy import Connection, Engine, and_, case, func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
-from blizzard.runner.harness.fingerprint import PreambleFingerprint
+from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.internal.base import (
+    HELD_BINDING,
+    LIVE_ESCALATION,
+    NO_NORMALIZER_VERSION,
+    OPEN_PAUSE_PARK,
+    UNRESOLVED_ESCALATION,
+    RunnerStoreConnections,
+    Unclosed,
+    Unsuperseded,
+    enqueue_transcript_final,
+)
+from blizzard.runner.store.internal.lease_store import LeaseStore
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
     BufferedTranscriptDelta,
     CheckResultRecord,
-    ClosedLeaseRecord,
     ContextSampleState,
     EnvBindingRecord,
     EscalationRecord,
     GitCommitDeclarationRecord,
     GraphArtifactRecord,
     IWriteRunnerStore,
-    LeaseRecord,
-    NewLease,
     OutboundFactRecord,
     ParkRecord,
-    PoolHead,
-    RunnerStoreErrorFactory,
     TakeoverRecord,
     TranscriptBackfillLease,
     TranscriptSegmentLedgerRow,
@@ -57,11 +64,9 @@ from blizzard.runner.store.schema import (
     external_usage_samples,
     git_commit_declarations,
     graph_artifacts,
-    heartbeats,
     hub_control,
     lease_closures,
     lease_context,
-    lease_spawns,
     lease_tokens,
     leases,
     local_pause_facts,
@@ -72,11 +77,7 @@ from blizzard.runner.store.schema import (
     pause_park_resumes,
     pause_parks,
     requeues,
-    resume_clears,
-    resume_intents,
     route_tokens,
-    session_ends,
-    session_preamble_facts,
     takeover_ends,
     takeovers,
     transcript_outbound_buffer,
@@ -92,92 +93,8 @@ _log = get_logger("blizzard.runner.store")
 # (issue #51).
 _ESCALATED_REASON = "escalated"
 
-# The closure reason an attempt an operator's restart superseded carries (issue #370) —
-# read back to keep that attempt out of the node's retry budget.
-_PREEMPTED_REASON = "preempted"
-
-# A fresh segment's placeholder, before its first pump read — the harness seam's own
-# sentinel convention, restated rather than imported (the store never depends on it).
-_NO_NORMALIZER_VERSION = ""
-
-
-@dataclass(frozen=True)
-class Unsuperseded:
-    """A fact row stands while no superseding row exists — one correlated ``NOT EXISTS``.
-
-    Correlated on the superseding row's own ordering column, an instant or an epoch, never
-    a bare key ``NOT IN``: a re-mark above an earlier close reads as open again."""
-
-    marker: Any
-    conditions: tuple[Any, ...]
-
-    @property
-    def clause(self):  # type: ignore[no-untyped-def]
-        return ~select(self.marker).where(*self.conditions).exists()
-
-
-@dataclass(frozen=True)
-class Unclosed:
-    """A row stands while no closing row names its id — a plain ``NOT IN``.
-
-    Its key is a fresh ULID per open, so there is no re-open-under-the-same-key hazard for
-    the correlated form above to guard against."""
-
-    key: Any
-    closers: Any
-
-    @property
-    def clause(self):  # type: ignore[no-untyped-def]
-        return self.key.not_in(select(self.closers))
-
-
-# Every predicate below answers "what closes this?" — and a new one must answer it for a chunk
-# the HUB ends terminally too, not only for runner-local events (`bzh:open-facts-declare-closure`).
-
-# Pinned by tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held.
-HELD_BINDING = Unsuperseded(
-    binding_releases.c.id,
-    (
-        binding_releases.c.chunk_id == env_bindings.c.chunk_id,
-        binding_releases.c.environment_id == env_bindings.c.environment_id,
-        binding_releases.c.released_at >= env_bindings.c.bound_at,
-    ),
-)
-
-# Pinned by tests/test_runner_restart_resume.py::test_remark_across_two_restarts_reopens_the_intent.
-OPEN_INTENT = Unsuperseded(
-    resume_clears.c.id,
-    (
-        resume_clears.c.lease_id == resume_intents.c.lease_id,
-        resume_clears.c.cleared_at >= resume_intents.c.marked_at,
-    ),
-)
-
-# A second pause under one lease is not masked by the first pause's resume.
-OPEN_PAUSE_PARK = Unsuperseded(
-    pause_park_resumes.c.id,
-    (
-        pause_park_resumes.c.lease_id == pause_parks.c.lease_id,
-        pause_park_resumes.c.resumed_at >= pause_parks.c.parked_at,
-    ),
-)
-
-# Correlated against ``open_escalations``'s own outer ``leases``/``lease_closures`` join.
-_LATER_LEASE = leases.alias("later_escalation_leases")
-LIVE_ESCALATION = Unsuperseded(
-    _LATER_LEASE.c.lease_id,
-    (_LATER_LEASE.c.chunk_id == leases.c.chunk_id, _LATER_LEASE.c.epoch > leases.c.epoch),
-)
-
-# Strict ``>``, not ``>=`` (#292) — pinned by
-# tests/test_pin_runner_store.py::test_a_same_instant_escalation_closure_does_not_mask_its_escalation.
-UNRESOLVED_ESCALATION = Unsuperseded(
-    escalation_closures.c.id,
-    (
-        escalation_closures.c.chunk_id == lease_closures.c.chunk_id,
-        escalation_closures.c.closed_at > lease_closures.c.closed_at,
-    ),
-)
+# Every predicate below answers "what closes this?" (`bzh:open-facts-declare-closure`).
+# The single-concept ones stay here; the shared ones moved to ``store/internal/base.py``.
 
 # ``>=``: a mint at the mark's own instant is the spawn the mark itself triggered
 # (pinned by tests/test_pin_runner_store.py::test_a_same_instant_mint_consumes_its_requeue_mark).
@@ -187,52 +104,20 @@ UNCONSUMED_REQUEUE = Unsuperseded(
 )
 
 OPEN_TAKEOVER = Unclosed(takeovers.c.takeover_id, takeover_ends.c.takeover_id)
-OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
 
 
-def _enqueue_transcript_final(conn, segment, *, at: datetime) -> None:  # type: ignore[no-untyped-def]
-    """Enqueue a marker noting ``segment`` is finalized (issue #246) — a minimal row; the
-    wire-shaped ``TranscriptSegmentRecord`` itself is rendered at the drain boundary from
-    the ledger row (``bzh:dependency-inversion``). Ships unconditionally, regardless of
-    ``[transcripts] ship`` or whether a pump ever ran."""
-    conn.execute(
-        transcript_outbound_buffer.insert().values(
-            segment_id=str(segment.segment_id),
-            chunk_id=str(segment.chunk_id),
-            final=True,
-            payload=json.dumps({"segment_id": str(segment.segment_id)}),
-            created_at=at,
-        )
-    )
+class SqlAlchemyRunnerStore(LeaseStore):
+    """Read-write runner store over a SQLAlchemy engine.
 
-
-class SqlAlchemyRunnerStore:
-    """Read-write runner store over a SQLAlchemy engine."""
+    Inherits the lease seam (blizzard#410); its own methods below answer whatever
+    concept has not yet been extracted into its own ``store/internal/`` adapter."""
 
     def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
+        super().__init__(RunnerStoreConnections(engine, errors))
         self._engine = engine
         self._errors = errors
 
     # --- reads --------------------------------------------------------------
-
-    def list_active_leases(self) -> list[LeaseRecord]:
-        stmt = self._lease_select().where(OPEN_LEASE.clause)
-        return [self._row_to_lease(r) for r in self._all(stmt)]
-
-    def active_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
-        stmt = (
-            self._lease_select()
-            .where(leases.c.chunk_id == chunk_id)
-            .where(OPEN_LEASE.clause)
-            .order_by(leases.c.created_at.desc())
-        )
-        rows = self._all(stmt)
-        return self._row_to_lease(rows[0]) if rows else None
-
-    def active_lease(self, lease_id: str) -> LeaseRecord | None:
-        stmt = self._lease_select().where(leases.c.lease_id == lease_id).where(OPEN_LEASE.clause)
-        rows = self._all(stmt)
-        return self._row_to_lease(rows[0]) if rows else None
 
     def lease_for_open_takeover(self, lease_id: str) -> LeaseRecord | None:
         stmt = (
@@ -243,92 +128,6 @@ class SqlAlchemyRunnerStore:
         )
         rows = self._all(stmt)
         return self._row_to_lease(rows[0]) if rows else None
-
-    def latest_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
-        stmt = self._lease_select().where(leases.c.chunk_id == chunk_id).order_by(leases.c.created_at.desc())
-        rows = self._all(stmt)
-        return self._row_to_lease(rows[0]) if rows else None
-
-    def latest_session_id(self, chunk_id: str, node_name: str | None) -> str | None:
-        stmt = self._lease_select().where(leases.c.chunk_id == chunk_id).where(leases.c.session_id.is_not(None))
-        if node_name is not None:
-            stmt = stmt.where(lease_context.c.node_name == node_name)
-        stmt = stmt.order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
-        rows = self._all(stmt)
-        return str(rows[0].session_id) if rows else None
-
-    def pool_head(self, chunk_id: str, session_name: str) -> PoolHead | None:
-        """The newest session-bearing lease stamping ``session_name`` — the pool's head.
-
-        Same ordering and same session-bearing filter as :meth:`latest_session_id`,
-        keyed on the stamped pool name rather than the node name."""
-        stmt = (
-            self._lease_select()
-            .where(leases.c.chunk_id == chunk_id)
-            .where(leases.c.session_id.is_not(None))
-            .where(lease_context.c.session_name == session_name)
-            .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
-        )
-        rows = self._all(stmt)
-        if not rows:
-            return None
-        row = rows[0]
-        return PoolHead(
-            session_id=str(row.session_id),
-            lease_id=str(row.lease_id),
-            resolved_model=row.resolved_model,
-            resolved_effort=row.resolved_effort,
-        )
-
-    def session_invocation_count(self, session_id: str) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(usage_facts)
-            .join(leases, leases.c.lease_id == usage_facts.c.lease_id)
-            .where(leases.c.session_id == session_id)
-        )
-        rows = self._all(stmt)
-        return int(rows[0][0]) if rows else 0
-
-    def lease_for_session(self, session_id: str) -> LeaseRecord | None:
-        """The newest lease that ran ``session_id`` — same ordering as `pool_head`."""
-        stmt = (
-            self._lease_select()
-            .where(leases.c.session_id == session_id)
-            .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
-        )
-        rows = self._all(stmt)
-        return self._row_to_lease(rows[0]) if rows else None
-
-    def lease(self, lease_id: str) -> LeaseRecord | None:
-        stmt = self._lease_select().where(leases.c.lease_id == lease_id)
-        rows = self._all(stmt)
-        return self._row_to_lease(rows[0]) if rows else None
-
-    def list_closed_leases(self, limit: int) -> list[ClosedLeaseRecord]:
-        stmt = (
-            self._lease_select()
-            .add_columns(lease_closures.c.reason, lease_closures.c.closed_at)
-            .join(lease_closures, lease_closures.c.lease_id == leases.c.lease_id)
-            .order_by(lease_closures.c.closed_at.desc())
-            .limit(limit)
-        )
-        return [
-            ClosedLeaseRecord(lease=self._row_to_lease(r), reason=str(r.reason), closed_at=r.closed_at)
-            for r in self._all(stmt)
-        ]
-
-    def latest_heartbeat(self, lease_id: str) -> datetime | None:
-        stmt = select(func.max(heartbeats.c.beat_at)).where(heartbeats.c.lease_id == lease_id)
-        with self._connect() as conn:
-            value = conn.execute(stmt).scalar_one_or_none()
-        return value
-
-    def latest_spawn(self, lease_id: str) -> datetime | None:
-        stmt = select(func.max(lease_spawns.c.spawned_at)).where(lease_spawns.c.lease_id == lease_id)
-        with self._connect() as conn:
-            value = conn.execute(stmt).scalar_one_or_none()
-        return value
 
     def pending_submission_lease_ids(self) -> set[str]:
         stmt = select(outbound_buffer.c.lease_id).where(
@@ -364,29 +163,6 @@ class SqlAlchemyRunnerStore:
     def live_tenure_chunk_ids(self) -> list[str]:
         stmt = select(env_bindings.c.chunk_id).where(HELD_BINDING.clause).distinct()
         return [str(r.chunk_id) for r in self._all(stmt)]
-
-    def attempt_count(self, chunk_id: str, node_id: str) -> int:
-        # A preempted attempt was superseded, not spent (issue #370): counting it would carry
-        # the node toward exhaustion and escalate the very chunk the operator is rescuing.
-        preempted = select(lease_closures.c.lease_id).where(lease_closures.c.reason == _PREEMPTED_REASON)
-        stmt = (
-            select(func.count())
-            .select_from(lease_context)
-            .where(and_(lease_context.c.chunk_id == chunk_id, lease_context.c.node_id == node_id))
-            .where(lease_context.c.lease_id.not_in(preempted))
-        )
-        with self._connect() as conn:
-            return int(conn.execute(stmt).scalar_one())
-
-    def latest_epoch(self, chunk_id: str) -> int:
-        lease_stmt = select(func.max(leases.c.epoch)).where(leases.c.chunk_id == chunk_id)
-        # A forced takeover's fence bump (issue #52) mints no local lease, so it is folded
-        # in here alongside the lease-minted epochs.
-        fence_stmt = select(func.max(takeovers.c.fence_epoch)).where(takeovers.c.chunk_id == chunk_id)
-        with self._connect() as conn:
-            lease_max = conn.execute(lease_stmt).scalar_one_or_none()
-            fence_max = conn.execute(fence_stmt).scalar_one_or_none()
-        return max(int(lease_max) if lease_max is not None else 0, int(fence_max) if fence_max is not None else 0)
 
     def pending_outbound(self) -> list[BufferedFact]:
         stmt = select(outbound_buffer).where(outbound_buffer.c.acked_at.is_(None)).order_by(outbound_buffer.c.seq)
@@ -706,51 +482,9 @@ class SqlAlchemyRunnerStore:
             for r in rows
         ]
 
-    def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
-        # Ordered on the autoincrement pk, not on `recorded_at` or implicit insert order
-        # (`bzh:sql-portable`).
-        rows = self._all(
-            select(session_preamble_facts.c.blizzard_digest, session_preamble_facts.c.workspace_digest)
-            .where(session_preamble_facts.c.session_id == session_id)
-            .order_by(session_preamble_facts.c.id.desc())
-            .limit(1)
-        )
-        if not rows:
-            return None
-        return PreambleFingerprint(blizzard=str(rows[0].blizzard_digest), workspace=str(rows[0].workspace_digest))
-
-    def resume_intent_lease_ids(self) -> set[str]:
-        stmt = select(resume_intents.c.lease_id).where(OPEN_INTENT.clause).distinct()
-        return {str(r.lease_id) for r in self._all(stmt)}
-
-    def session_ended_lease_ids(self) -> set[str]:
-        newest_spawn = (
-            select(lease_spawns.c.lease_id, func.max(lease_spawns.c.spawned_at).label("spawned_at"))
-            .group_by(lease_spawns.c.lease_id)
-            .subquery()
-        )
-        stmt = (
-            select(session_ends.c.lease_id)
-            .select_from(session_ends.outerjoin(newest_spawn, newest_spawn.c.lease_id == session_ends.c.lease_id))
-            # No spawn fact: fall back to the unscoped reading, which over-reports
-            # "declared done" and so can only suppress a resume, never invent one.
-            .where(or_(newest_spawn.c.spawned_at.is_(None), session_ends.c.ended_at >= newest_spawn.c.spawned_at))
-            .distinct()
-        )
-        return {str(r.lease_id) for r in self._all(stmt)}
-
     def last_daemon_liveness(self) -> datetime | None:
         rows = self._all(select(func.max(daemon_liveness.c.alive_at).label("alive_at")))
         return rows[0].alive_at if rows and rows[0].alive_at is not None else None
-
-    def lease_generation(self, lease_id: str) -> int:
-        stmt = select(func.count()).select_from(lease_spawns).where(lease_spawns.c.lease_id == lease_id)
-        with self._connect() as conn:
-            return int(conn.execute(stmt).scalar_one())
-
-    def lease_ids_for_chunk(self, chunk_id: str) -> list[str]:
-        stmt = select(leases.c.lease_id).where(leases.c.chunk_id == chunk_id)
-        return [str(r.lease_id) for r in self._all(stmt)]
 
     def usage_since(self, at: datetime) -> UsageTotals:
         stmt = select(
@@ -808,103 +542,6 @@ class SqlAlchemyRunnerStore:
                 )
         _log.info("graph artifacts pinned", graph_id=graph_id, count=len(artifacts))
 
-    def record_lease(self, lease: NewLease) -> None:
-        with self._begin() as conn:
-            conn.execute(
-                leases.insert().values(
-                    lease_id=lease.lease_id,
-                    chunk_id=lease.chunk_id,
-                    epoch=lease.epoch,
-                    runner_id=lease.runner_id,
-                    created_at=lease.created_at,
-                )
-            )
-            conn.execute(
-                lease_context.insert().values(
-                    lease_id=lease.lease_id,
-                    chunk_id=lease.chunk_id,
-                    graph_id=lease.graph_id,
-                    node_id=lease.node_id,
-                    node_name=lease.node_name,
-                    retries_max=lease.retries_max,
-                    session_name=lease.session_name,
-                    resolved_model=lease.resolved_model,
-                    resolved_effort=lease.resolved_effort,
-                    resolved_compaction_window=lease.resolved_compaction_window,
-                    recorded_at=lease.created_at,
-                )
-            )
-        _log.info(
-            "lease minted", lease_id=lease.lease_id, chunk_id=lease.chunk_id, node=lease.node_name, epoch=lease.epoch
-        )
-
-    def record_spawn(
-        self, lease_id: str, *, pid: int, process_start_time: str, session_id: str, spawned_at: datetime
-    ) -> None:
-        with self._begin() as conn:
-            conn.execute(
-                leases.update()
-                .where(leases.c.lease_id == lease_id)
-                .values(pid=pid, process_start_time=process_start_time, session_id=session_id)
-            )
-            # One transaction with the in-place pid rewrite: the spawn generation and the process
-            # it describes are one fact, and a crash between them would leave the two disagreeing.
-            conn.execute(lease_spawns.insert().values(lease_id=lease_id, spawned_at=spawned_at))
-            generation = int(
-                conn.execute(
-                    select(func.count()).select_from(lease_spawns).where(lease_spawns.c.lease_id == lease_id)
-                ).scalar_one()
-            )
-            # Every start path reaching this transaction is a segment boundary (issue #246,
-            # D1) — stamped here, not at the call sites, so a fourth can't miss it.
-            context_row = conn.execute(
-                select(leases.c.chunk_id, leases.c.epoch, lease_context.c.node_id)
-                .select_from(leases.join(lease_context, leases.c.lease_id == lease_context.c.lease_id))
-                .where(leases.c.lease_id == lease_id)
-            ).one()
-            # Carries a resumed session's cursor forward — the cross-lease case finds its
-            # predecessor already finalized, so this reads regardless of finalization.
-            prior_segment = conn.execute(
-                select(transcript_segments)
-                .where(transcript_segments.c.chunk_id == context_row.chunk_id)
-                .where(transcript_segments.c.session_id == session_id)
-                # `segment_id` tie-breaks `stamped_at` (`bzh:sql-portable`) — a same-instant
-                # pair would otherwise pick nondeterministically across backends.
-                .order_by(transcript_segments.c.stamped_at.desc(), transcript_segments.c.segment_id.desc())
-                .limit(1)
-            ).one_or_none()
-            carried_cursor: str | None = None
-            if prior_segment is not None:
-                carried_cursor = str(prior_segment.cursor) if prior_segment.cursor is not None else None
-                if prior_segment.finalized_at is None:
-                    conn.execute(
-                        transcript_segments.update()
-                        .where(transcript_segments.c.segment_id == prior_segment.segment_id)
-                        .values(finalized_at=spawned_at)
-                    )
-                    _enqueue_transcript_final(conn, prior_segment, at=spawned_at)
-            conn.execute(
-                transcript_segments.insert().values(
-                    segment_id=Id.mint_at(SEGMENT_PREFIX, spawned_at).value,
-                    chunk_id=str(context_row.chunk_id),
-                    node_id=str(context_row.node_id),
-                    epoch=int(context_row.epoch),
-                    generation=generation,
-                    lease_id=lease_id,
-                    session_id=session_id,
-                    cursor=carried_cursor,
-                    shipped_bytes=0,
-                    shipped_turns=0,
-                    normalizer_version=_NO_NORMALIZER_VERSION,
-                    harness_version=None,
-                    truncated_reason=None,
-                    shipping_stopped_reason=None,
-                    finalized_at=None,
-                    stamped_at=spawned_at,
-                )
-            )
-        _log.info("worker spawned", lease_id=lease_id, pid=pid, session_id=session_id)
-
     def record_daemon_liveness(self, *, runner_id: str, alive_at: datetime) -> None:
         with self._begin() as conn:
             existing = conn.execute(
@@ -926,66 +563,6 @@ class SqlAlchemyRunnerStore:
                 )
             )
         _log.info("env bound", chunk_id=chunk_id, environment_id=environment_id, workdir=workdir)
-
-    def record_heartbeat(self, *, lease_id: str, beat_at: datetime) -> None:
-        with self._begin() as conn:
-            conn.execute(heartbeats.insert().values(lease_id=lease_id, beat_at=beat_at))
-        _log.debug("heartbeat recorded", lease_id=lease_id)
-
-    def record_closure(
-        self,
-        *,
-        lease_id: str,
-        chunk_id: str,
-        node_id: str,
-        reason: str,
-        closed_at: datetime,
-        event_kind: str | None = None,
-        event_payload: str | None = None,
-    ) -> int | None:
-        # The closure and its operational event land in ONE transaction, so a `kill -9`
-        # can neither surface an event for a closure that never happened nor drop one (#125).
-        event_seq: int | None = None
-        with self._begin() as conn:
-            conn.execute(
-                lease_closures.insert().values(
-                    lease_id=lease_id, chunk_id=chunk_id, node_id=node_id, reason=reason, closed_at=closed_at
-                )
-            )
-            if event_kind is not None and event_payload is not None:
-                result = conn.execute(
-                    outbound_buffer.insert().values(
-                        kind=event_kind,
-                        chunk_id=chunk_id,
-                        lease_id=lease_id,
-                        payload=event_payload,
-                        created_at=closed_at,
-                    )
-                )
-                key = result.inserted_primary_key
-                event_seq = int(key[0]) if key is not None else 0
-            # Segments are final by step close (issue #246) — finalized atomically here, on
-            # the transcript lane's OWN buffer (D3), never `outbound_buffer` above.
-            open_segments = conn.execute(
-                select(transcript_segments)
-                .where(transcript_segments.c.lease_id == lease_id)
-                .where(transcript_segments.c.finalized_at.is_(None))
-            ).all()
-            for segment in open_segments:
-                conn.execute(
-                    transcript_segments.update()
-                    .where(transcript_segments.c.segment_id == segment.segment_id)
-                    .values(finalized_at=closed_at)
-                )
-                _enqueue_transcript_final(conn, segment, at=closed_at)
-        _log.info(
-            "lease closed",
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            reason=reason,
-            transcript_segments_finalized=len(open_segments),
-        )
-        return event_seq
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
         with self._begin() as conn:
@@ -1165,7 +742,7 @@ class SqlAlchemyRunnerStore:
                     cursor=None,
                     shipped_bytes=0,
                     shipped_turns=0,
-                    normalizer_version=_NO_NORMALIZER_VERSION,
+                    normalizer_version=NO_NORMALIZER_VERSION,
                     harness_version=None,
                     truncated_reason=None,
                     shipping_stopped_reason=None,
@@ -1193,7 +770,7 @@ class SqlAlchemyRunnerStore:
                 .where(transcript_segments.c.segment_id == segment_id)
                 .values(finalized_at=finalized_at)
             )
-            _enqueue_transcript_final(conn, segment, at=finalized_at)
+            enqueue_transcript_final(conn, segment, at=finalized_at)
         _log.info("transcript segment finalized", segment_id=segment_id)
         return True
 
@@ -1471,35 +1048,6 @@ class SqlAlchemyRunnerStore:
                 return
             conn.execute(checks_ran.insert().values(lease_id=lease_id, epoch=epoch, ran_at=at))
         _log.info("checks marked ran", lease_id=lease_id, epoch=epoch)
-
-    def record_session_preamble(self, session_id: str, *, fingerprint: PreambleFingerprint, at: datetime) -> None:
-        # A plain append, no check-then-insert: a per-spawn fact whose newest row is the
-        # answer, not a once-per-key guard.
-        with self._begin() as conn:
-            conn.execute(
-                session_preamble_facts.insert().values(
-                    session_id=session_id,
-                    blizzard_digest=fingerprint.blizzard,
-                    workspace_digest=fingerprint.workspace,
-                    recorded_at=at,
-                )
-            )
-        _log.info("session preamble recorded", session_id=session_id)
-
-    def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
-        with self._begin() as conn:
-            conn.execute(resume_intents.insert().values(lease_id=lease_id, marked_at=marked_at))
-        _log.info("resume intent marked", lease_id=lease_id)
-
-    def record_resume_clear(self, *, lease_id: str, cleared_at: datetime) -> None:
-        with self._begin() as conn:
-            conn.execute(resume_clears.insert().values(lease_id=lease_id, cleared_at=cleared_at))
-        _log.info("resume intent cleared", lease_id=lease_id)
-
-    def record_session_end(self, *, lease_id: str, ended_at: datetime) -> None:
-        with self._begin() as conn:
-            conn.execute(session_ends.insert().values(lease_id=lease_id, ended_at=ended_at))
-        _log.info("session end recorded", lease_id=lease_id)
 
     def record_takeover(
         self,
@@ -1787,49 +1335,8 @@ class SqlAlchemyRunnerStore:
             opened_at=r.opened_at,
         )
 
-    @staticmethod
-    def _lease_select():  # type: ignore[no-untyped-def]
-        return select(
-            leases.c.lease_id,
-            leases.c.chunk_id,
-            leases.c.epoch,
-            leases.c.runner_id,
-            leases.c.pid,
-            leases.c.process_start_time,
-            leases.c.session_id,
-            leases.c.created_at,
-            lease_context.c.graph_id,
-            lease_context.c.node_id,
-            lease_context.c.node_name,
-            lease_context.c.retries_max,
-            # The session stamps (issue #144) — selected on the shared join rather than a
-            # second query, so every lease read carries them.
-            lease_context.c.session_name,
-            lease_context.c.resolved_model,
-            lease_context.c.resolved_effort,
-            lease_context.c.resolved_compaction_window,
-        ).join(lease_context, lease_context.c.lease_id == leases.c.lease_id)
-
-    @staticmethod
-    def _row_to_lease(r) -> LeaseRecord:  # type: ignore[no-untyped-def]
-        return LeaseRecord(
-            lease_id=str(r.lease_id),
-            chunk_id=str(r.chunk_id),
-            graph_id=str(r.graph_id),
-            node_id=str(r.node_id),
-            node_name=str(r.node_name),
-            epoch=int(r.epoch),
-            runner_id=str(r.runner_id),
-            retries_max=int(r.retries_max),
-            created_at=r.created_at,
-            session_name=r.session_name,
-            resolved_model=r.resolved_model,
-            resolved_effort=r.resolved_effort,
-            resolved_compaction_window=r.resolved_compaction_window,
-            pid=int(r.pid) if r.pid is not None else None,
-            process_start_time=str(r.process_start_time) if r.process_start_time is not None else None,
-            session_id=str(r.session_id) if r.session_id is not None else None,
-        )
+    # ``_lease_select``/``_row_to_lease`` are inherited from
+    # :class:`~blizzard.runner.store.internal.lease_store.LeaseStore` (blizzard#410).
 
     def _connect(self):  # type: ignore[no-untyped-def]
         try:

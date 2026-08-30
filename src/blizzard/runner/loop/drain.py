@@ -7,12 +7,13 @@ from dataclasses import dataclass
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.loop.attempt import FAILED, PARKED, TRANSITIONED, Attempt
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.held_chunk import HeldChunk
 from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.outbound import COMPLETION_KIND, DECISION_KIND
-from blizzard.runner.store.repository import BufferedFact, LeaseRecord
+from blizzard.runner.store.repository import BufferedFact
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse

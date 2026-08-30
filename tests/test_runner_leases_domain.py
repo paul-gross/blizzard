@@ -17,11 +17,13 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.domain.leases import (
     HEARTBEAT_STALENESS_THRESHOLD,
     LeaseActivity,
+    LeaseRecord,
     Liveness,
     LocalLeaseService,
+    NewLease,
 )
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import LeaseRecord, NewLease, RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
 from tests.runner_fakes import FakeProbe, make_store, runner_store_errors
 

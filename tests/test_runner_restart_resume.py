@@ -12,10 +12,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
-from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
 from tests.runner_fakes import (
     FakeHarness,

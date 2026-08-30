@@ -10,6 +10,10 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.lease_auth import LeaseToken
+from blizzard.runner.domain.leases import (
+    LeaseRecord,
+    NewLease,
+)
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.preamble import Preamble
@@ -17,7 +21,10 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.session import ResumedSession
-from blizzard.runner.store.repository import EnvBindingRecord, GraphArtifactRecord, LeaseRecord, NewLease
+from blizzard.runner.store.repository import (
+    EnvBindingRecord,
+    GraphArtifactRecord,
+)
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")

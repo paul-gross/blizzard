@@ -6,9 +6,13 @@ from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
+from blizzard.runner.domain.leases import (
+    LeaseRecord,
+    PoolHead,
+)
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.runner.store.repository import IReadRunnerStore, LeaseRecord, PoolHead
+from blizzard.runner.store.repository import IReadRunnerStore
 from blizzard.wire.envelope import NodeConfig
 
 _log = get_logger("blizzard.runner.loop")

@@ -11,104 +11,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
-import structlog
-
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.runner.harness.fingerprint import PreambleFingerprint
+from blizzard.runner.domain.leases import IReadLeaseRepository, IWriteLeaseRepository, LeaseRecord
 from blizzard.runner.harness.usage import UsageSample
-
-
-class RunnerStoreError(RuntimeError):
-    """A runner-store operation failed — the domain-facing error the loop sees.
-
-    Wraps the driver exception at the adapter boundary, so callers never depend on it."""
-
-
-class RunnerStoreErrorFactory:
-    """The injected error-wrapping seam :class:`SqlAlchemyRunnerStore` takes in place of
-    a module-level logger — the substitutability the hub-store seam's
-    ``HubStoreErrorFactory`` also gives its own adapters (blizzard#413)."""
-
-    def __init__(self, log: structlog.stdlib.BoundLogger) -> None:
-        self._log = log
-
-    def from_driver(self, exc: Exception, *, operation: str) -> RunnerStoreError:
-        """Wrap `exc` into a :class:`RunnerStoreError`, logged once at ERROR. Callers
-        must not log it again."""
-        detail = str(exc).strip()
-        self._log.error("runner store operation failed", operation=operation, detail=detail)
-        return RunnerStoreError(f"runner store {operation} failed: {detail}")
-
-
-@dataclass(frozen=True)
-class NewLease:
-    """A node-step lease at mint — before the worker exists."""
-
-    lease_id: str
-    chunk_id: str
-    graph_id: str
-    node_id: str
-    node_name: str
-    epoch: int
-    runner_id: str
-    retries_max: int
-    created_at: datetime
-    # What session this attempt runs and under what configuration (issue #144), stamped on
-    # the mint's own `lease_context` insert. `None` means *unknown*, never a value.
-    session_name: str | None = None
-    resolved_model: str | None = None
-    resolved_effort: str | None = None
-    resolved_compaction_window: str | None = None
-
-
-@dataclass(frozen=True)
-class PoolHead:
-    """A named session pool's current head (issue #144). ``resolved_model``/
-    ``resolved_effort`` are the head's own **stamps**, not a fresh resolution; ``None``
-    on either means *unknown*, never a value."""
-
-    session_id: str
-    lease_id: str
-    resolved_model: str | None
-    resolved_effort: str | None
-
-
-@dataclass(frozen=True)
-class LeaseRecord:
-    """A lease joined with its node context — the loop's per-attempt fact.
-
-    ``pid`` / ``process_start_time`` / ``session_id`` are ``None`` until spawn-return."""
-
-    lease_id: str
-    chunk_id: str
-    graph_id: str
-    node_id: str
-    node_name: str
-    epoch: int
-    runner_id: str
-    retries_max: int
-    created_at: datetime
-    # This attempt's session stamps, read back (issue #144). `None` on any of the three
-    # means *unknown*, never a value.
-    session_name: str | None = None
-    resolved_model: str | None = None
-    resolved_effort: str | None = None
-    resolved_compaction_window: str | None = None
-    pid: int | None = None
-    process_start_time: str | None = None
-    session_id: str | None = None
-
-
-@dataclass(frozen=True)
-class ClosedLeaseRecord:
-    """A lease joined with its closure fact — the panel's recent-history read (issue #29).
-
-    ``reason`` is the closure vocabulary: ``transitioned`` | ``reaped`` | ``failed`` |
-    ``escalated`` | ``parked`` | ``released``."""
-
-    lease: LeaseRecord
-    reason: str
-    closed_at: datetime
 
 
 @dataclass(frozen=True)
@@ -325,90 +230,8 @@ class TakeoverRecord:
     opened_at: datetime
 
 
-class IReadRunnerStore(Protocol):
+class IReadRunnerStore(IReadLeaseRepository, Protocol):
     """Read-only runner-store queries (held by read-path edges)."""
-
-    def list_active_leases(self) -> list[LeaseRecord]:
-        """Leases with no closure fact — the attempts currently in flight."""
-        ...
-
-    def active_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
-        """The chunk's single active lease, if any (P6: at most one — MAX_AGENTS math)."""
-        ...
-
-    def active_lease(self, lease_id: str) -> LeaseRecord | None:
-        """The lease by id iff it is still active (no closure fact), else ``None``.
-
-        The flusher's ack-idempotency check: an already-closed lease means the completion
-        applied on an earlier flush whose ack was lost.
-        """
-        ...
-
-    def latest_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
-        """The chunk's most-recently-minted lease, active or closed (issue #52).
-
-        Unlike :meth:`active_lease_for_chunk`, spans closed leases too: a takeover can be
-        requested with no active lease left, and the closed one still carries the session
-        id it resumes."""
-        ...
-
-    def latest_session_id(self, chunk_id: str, node_name: str | None) -> str | None:
-        """The chunk's most-recent session-bearing lease's ``session_id``, or ``None``.
-
-        The newest lease for this chunk whose ``session_id`` is non-null, optionally
-        filtered to ``node_name`` (issue #115). ``None`` is the fresh-fallback signal."""
-        ...
-
-    def pool_head(self, chunk_id: str, session_name: str) -> PoolHead | None:
-        """The named session pool's current head for this chunk, or ``None`` (issue #144).
-
-        The newest session-bearing lease whose ``lease_context.session_name`` matches;
-        derived, never a column. **Runner-local**: a chunk reclaimed elsewhere mints fresh.
-        """
-        ...
-
-    def session_invocation_count(self, session_id: str) -> int:
-        """How many harness invocations this session has recorded (issue #144).
-
-        The signal behind a declared ``rotate.max_invocations`` — ``usage_facts`` rows
-        across every lease that ran ``session_id``. **Harness invocations, not
-        node-steps.** Zero is a real answer here, not an unknown."""
-        ...
-
-    def lease_for_session(self, session_id: str) -> LeaseRecord | None:
-        """The newest lease that ran ``session_id``, or ``None`` (issue #144).
-
-        Keyed on the *session*, which outlives the lease that minted it: several leases
-        share one session id and the newest describes the running configuration."""
-        ...
-
-    def lease(self, lease_id: str) -> LeaseRecord | None:
-        """The lease by id, regardless of closure — the transcript read (issue #29).
-
-        Distinct from :meth:`active_lease`: a transcript outlives its lease.
-        """
-        ...
-
-    def list_closed_leases(self, limit: int) -> list[ClosedLeaseRecord]:
-        """The most recently closed leases, newest first — the panel's recent-history
-        read (issue #29).
-
-        ``limit`` bounds rows returned, never how long a closure fact lives on disk.
-        """
-        ...
-
-    def latest_heartbeat(self, lease_id: str) -> datetime | None:
-        """The lease's most recent heartbeat stamp, or ``None`` if it never beat.
-
-        REAP's stall signal; on ``None`` the caller falls back to :meth:`latest_spawn`."""
-        ...
-
-    def latest_spawn(self, lease_id: str) -> datetime | None:
-        """When this lease's newest process was spawned, or ``None`` if it never was.
-
-        The second half of REAP's staleness baseline (issue #150). A lease outlives its
-        processes, so the newest ``lease_spawns`` row is when the running worker started."""
-        ...
 
     def pending_submission_lease_ids(self) -> set[str]:
         """Lease ids with an unacked ``completion.submitted`` or ``decision.submitted``
@@ -428,17 +251,6 @@ class IReadRunnerStore(Protocol):
 
     def live_tenure_chunk_ids(self) -> list[str]:
         """Chunks still held by this runner — those with an unreleased binding."""
-        ...
-
-    def attempt_count(self, chunk_id: str, node_id: str) -> int:
-        """How many leases have been minted for this chunk at this node (retry budget).
-
-        Excludes an attempt an operator's restart preempted (issue #370) — that attempt was
-        superseded rather than spent, so it does not carry the node toward exhaustion."""
-        ...
-
-    def latest_epoch(self, chunk_id: str) -> int:
-        """The highest lease epoch minted for this chunk, or 0 — the fence source."""
         ...
 
     def pending_outbound(self) -> list[BufferedFact]:
@@ -574,22 +386,6 @@ class IReadRunnerStore(Protocol):
         #45). Defaults False when the operator has never set it."""
         ...
 
-    def resume_intent_lease_ids(self) -> set[str]:
-        """Leases carrying an **open** restart resume-intent.
-
-        A ``resume_intents`` mark with no ``resume_clears`` for the same lease at or
-        after it (#12, #13). Empty on any normal tick; non-empty only on the first tick
-        after a restart."""
-        ...
-
-    def session_ended_lease_ids(self) -> set[str]:
-        """Leases whose **current spawn** recorded a session-end — it declared done.
-
-        A dead pid *with* a session-end is a done declaration, not a crash to re-attach.
-        Scoped to the lease's newest ``lease_spawns`` fact, because a lease outlives its
-        sessions and an unscoped read would suppress every later crash's resume."""
-        ...
-
     def last_daemon_liveness(self) -> datetime | None:
         """When the runner was last known alive, or ``None`` if it never ticked (issue #13).
 
@@ -655,22 +451,6 @@ class IReadRunnerStore(Protocol):
         lands at or after the requeue."""
         ...
 
-    def lease_generation(self, lease_id: str) -> int:
-        """This lease's current spawn generation — the count of its ``lease_spawns`` rows
-        (issue #58): 1 at the initial spawn, incrementing at each resume that calls
-        ``record_spawn`` again under this lease. Usage's idempotency co-key
-        (:meth:`IWriteRunnerStore.record_usage`) and its kind discriminator — generation 1
-        is a ``spawn``, every later generation a ``resume``."""
-        ...
-
-    def lease_ids_for_chunk(self, chunk_id: str) -> list[str]:
-        """Every lease id ever minted for this chunk, active or closed (issue #58).
-
-        A chunk's tenure can span several node-steps and retries, each its own lease —
-        this is the release-time read that finds every one of them, not just the
-        currently-active lease."""
-        ...
-
     def usage_since(self, at: datetime) -> UsageTotals:
         """Sum every local usage fact recorded at or after ``at`` (issue #58) — see
         :class:`UsageTotals` for the lower-bound + PARTIAL contract on ``cost_usd``."""
@@ -733,16 +513,8 @@ class IReadRunnerStore(Protocol):
         pinned before this runner ever recorded a pin."""
         ...
 
-    def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
-        """The standing preamble prose this session was last sent, or ``None`` (issue #149).
 
-        The newest ``session_preamble_facts`` row for the session. ``None`` renders the
-        full preamble — the safe direction, since an over-eager match would cost the
-        worker its updated instructions."""
-        ...
-
-
-class IWriteRunnerStore(IReadRunnerStore, Protocol):
+class IWriteRunnerStore(IWriteLeaseRepository, IReadRunnerStore, Protocol):
     """Read-write runner store — held only by the domain (the loop steps)."""
 
     def record_graph_artifacts(
@@ -754,20 +526,6 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         the two leaves only an orphan row a retry re-writes identically."""
         ...
 
-    def record_lease(self, lease: NewLease) -> None:
-        """Persist a minted lease and its node context, atomically."""
-        ...
-
-    def record_spawn(
-        self, lease_id: str, *, pid: int, process_start_time: str, session_id: str, spawned_at: datetime
-    ) -> None:
-        """Fill a lease's spawn-return facts: pid, process start time, session id.
-
-        ``spawned_at`` additionally appends the lease's spawn generation, so a fact recorded
-        by an earlier session of the same lease can be told from one recorded by the process
-        running now (issue #13)."""
-        ...
-
     def record_daemon_liveness(self, *, runner_id: str, alive_at: datetime) -> None:
         """Stamp the runner as alive at ``alive_at`` — the tick's liveness beat (issue #13).
 
@@ -777,28 +535,6 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def record_binding(self, *, chunk_id: str, environment_id: str, workdir: str, bound_at: datetime) -> None:
         """Persist a chunk→env binding fact (written with the route claim)."""
-        ...
-
-    def record_heartbeat(self, *, lease_id: str, beat_at: datetime) -> None:
-        """Append a heartbeat for a lease — a worker tool call fired its hook."""
-        ...
-
-    def record_closure(
-        self,
-        *,
-        lease_id: str,
-        chunk_id: str,
-        node_id: str,
-        reason: str,
-        closed_at: datetime,
-        event_kind: str | None = None,
-        event_payload: str | None = None,
-    ) -> int | None:
-        """Close a lease — a clean transition or a failure/escalation.
-
-        When ``event_kind``/``event_payload`` are given (issue #125), the event is
-        enqueued to the outbound buffer **in the same transaction** as the closure —
-        the two land together or not at all; return its seq, ``None`` when no event."""
         ...
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
@@ -971,18 +707,6 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         previous token. The plaintext is never persisted, only this sha256 hash."""
         ...
 
-    def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
-        """Mark a lease for same-lease restart-resume at graceful shutdown."""
-        ...
-
-    def record_resume_clear(self, *, lease_id: str, cleared_at: datetime) -> None:
-        """Clear a lease's resume-intent — the RESUME step resumed or abandoned it."""
-        ...
-
-    def record_session_end(self, *, lease_id: str, ended_at: datetime) -> None:
-        """Record a worker's session-end — the ``SessionEnd`` hook fired on exit."""
-        ...
-
     def record_takeover(
         self,
         *,
@@ -1127,12 +851,4 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         and only for a node with a non-empty ``checks:``, so the marker implies its result
         rows exist. Idempotent by its own check-then-insert (``bzh:sql-portable``), mirroring
         :meth:`record_nudge_fired`."""
-        ...
-
-    def record_session_preamble(self, session_id: str, *, fingerprint: PreambleFingerprint, at: datetime) -> None:
-        """Record what standing preamble prose this session was just sent (issue #149).
-
-        Append-only; the newest row is what the fingerprint read returns. The fact is
-        *"this prose was sent to this session"*, not *"a spawn happened"*, and is written
-        after the spawn so a durable fingerprint implies the prose reached the process."""
         ...

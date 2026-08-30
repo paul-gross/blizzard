@@ -13,10 +13,10 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.steps import Advance, Pull
-from blizzard.runner.store.repository import NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.graph import ProducesEntry
 from tests.runner_fakes import (

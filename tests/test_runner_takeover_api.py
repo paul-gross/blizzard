@@ -16,9 +16,9 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import FakeHarness, FakeProbe, make_store
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)

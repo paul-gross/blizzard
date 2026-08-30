@@ -10,12 +10,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.transcript_backfill import TranscriptBackfill, TranscriptReshipError
 from blizzard.runner.loop.transcript_pump import CHUNK_TRANSCRIPT_MAX_BYTES, MAX_BUFFERED_BYTES
-from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
