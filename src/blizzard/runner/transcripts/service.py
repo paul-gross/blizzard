@@ -112,12 +112,13 @@ class TranscriptService:
         """One segment's content, resolved through its session file (D1) — ``None`` iff no such
         segment exists under this chunk on this store (404, mirroring :meth:`for_lease`).
         Windowed to this segment's own turns: a same-session resume shares one file across
-        segments, so the read is bounded by the adjacent siblings' own carried-forward
-        cursors — unbounded only for the latest segment of its session."""
+        segments, so the read starts where the preceding sibling left off and ends at this
+        segment's own frozen cursor once finalized — never a sibling's, which keeps advancing
+        until that sibling is itself finalized."""
         segment = self._transcript_ledger.transcript_segment(segment_id)
         if segment is None or segment.chunk_id != chunk_id:
             return None
-        start_cursor, end_cursor = self._session_window(chunk_id, segment)
+        start_cursor = self._session_start(chunk_id, segment)
         spawn_cwd = self._spawn_cwd(chunk_id)
         local = self._transcripts.read_turns(segment.session_id, spawn_cwd=spawn_cwd, since=start_cursor)
         final = segment.finalized_at is not None
@@ -125,28 +126,25 @@ class TranscriptService:
             return ResolvedSegmentContent(final=final, available=False, truncated=True, turns=[])
         turns = local.turns
         truncated = local.truncated or segment.truncated_reason is not None
-        if end_cursor is not None:
-            tail = self._transcripts.read_turns(segment.session_id, spawn_cwd=spawn_cwd, since=end_cursor)
+        if final and segment.cursor is not None:
+            tail = self._transcripts.read_turns(segment.session_id, spawn_cwd=spawn_cwd, since=segment.cursor)
             if tail.available:
                 turns = turns[: max(0, len(turns) - len(tail.turns))]
                 truncated = truncated or tail.truncated
         return ResolvedSegmentContent(final=final, available=True, truncated=truncated, turns=turns)
 
-    def _session_window(self, chunk_id: str, segment: TranscriptSegmentLedgerRow) -> tuple[str | None, str | None]:
-        """This segment's own read bounds within its session file — a same-session resume
+    def _session_start(self, chunk_id: str, segment: TranscriptSegmentLedgerRow) -> str | None:
+        """This segment's own read start within its session file — a same-session resume
         (``record_spawn``'s cursor carry-forward) chains several segments over one file, so
-        the window starts where the chronologically preceding sibling left off and ends
-        where the following one picked up; the latest segment for its session has no end
-        bound."""
+        the window starts where the chronologically preceding sibling left off; the first
+        segment of its session has no start bound."""
         siblings = [
             s
             for s in self._transcript_ledger.transcript_segments_for_chunk(chunk_id)
             if s.session_id == segment.session_id
         ]
         index = next(i for i, s in enumerate(siblings) if s.segment_id == segment.segment_id)
-        start_cursor = siblings[index - 1].cursor if index > 0 else None
-        end_cursor = siblings[index + 1].cursor if index + 1 < len(siblings) else None
-        return start_cursor, end_cursor
+        return siblings[index - 1].cursor if index > 0 else None
 
     def _read_local(self, lease: LeaseRecord) -> Transcript:
         assert lease.session_id is not None

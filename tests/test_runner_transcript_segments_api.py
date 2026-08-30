@@ -198,6 +198,19 @@ def test_content_windows_a_same_session_resume_to_each_segments_own_turns(tmp_pa
         "lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
     )
     [gen2] = store.open_transcript_segments()
+    # gen2 ships further turns after gen1 is already finalized — gen1's own bound must stay
+    # its own frozen cursor, never gen2's still-advancing one (round 2, F1).
+    store.record_transcript_deltas(
+        segment_id=gen2.segment_id,
+        chunk_id="ch_1",
+        cursor="4",
+        shipped_bytes=20,
+        shipped_turns=4,
+        normalizer_version="v1",
+        harness_version=None,
+        payloads=["{}", "{}"],
+        created_at=_NOW,
+    )
 
     client = TestClient(app)
     gen1_body = client.get(f"/api/chunks/ch_1/transcripts/{gen1.segment_id}").json()
