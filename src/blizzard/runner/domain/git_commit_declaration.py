@@ -5,18 +5,77 @@ spawn (issue #113). :meth:`GitCommitDeclarationService.declare` is the one place
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+from typing import TYPE_CHECKING, Protocol
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.environments.provider import IWorkspaceProvider
-from blizzard.runner.store.repository import IWriteRunnerStore
+
+if TYPE_CHECKING:
+    # Deferred: ``runner/stores.py`` composes this module's own Protocol (blizzard#410).
+    from blizzard.runner.stores import IWriteRunnerStore
 
 __all__ = [
+    "GitCommitDeclarationRecord",
     "GitCommitDeclarationRejected",
     "GitCommitDeclarationService",
     "GitCommitDeclarationUnknownRepo",
+    "IReadGitCommitDeclarationRepository",
+    "IWriteGitCommitDeclarationRepository",
 ]
+
+
+@dataclass(frozen=True)
+class GitCommitDeclarationRecord:
+    """A worker's explicit git-commit declaration for one repo in one environment.
+
+    Carries no forge: the origin it is verified against is read from the environment's
+    repo manifest. ``environment_id`` is part of the identity, never a decoration."""
+
+    environment_id: str
+    repo: str
+    branch: str
+    commit: str
+
+
+class IReadGitCommitDeclarationRepository(Protocol):
+    """Read-only git-commit declaration queries (held by read-path edges)."""
+
+    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
+        """The lease's explicit git-commit declarations, newest per ``(environment_id,
+        repo)`` (issue #143, Phase 3), keyed the same way.
+
+        Append-only, latest-wins. Keying on the environment as well as the repo keeps
+        several environments from collapsing one env's branch onto another's."""
+        ...
+
+
+class IWriteGitCommitDeclarationRepository(IReadGitCommitDeclarationRepository, Protocol):
+    """Read-write git-commit declaration store — held only by the domain."""
+
+    def record_git_commit_declaration(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        environment_id: str,
+        repo: str,
+        branch: str,
+        commit: str,
+        declared_at: datetime,
+    ) -> None:
+        """Append a worker's explicit git-commit declaration for ``repo`` in
+        ``environment_id`` (issue #143), a single committed transaction so it survives a
+        ``kill -9`` before the collection reads it. Append-only: a later call for the
+        same key is a correction, read back as the replacement, never merged."""
+        ...
+
 
 # Armed window: the declaration row is durable but the ``200`` has not returned; recovery owes nothing
 # but durability. Swept by tests/crash/test_kill9_sweep.py (``bzh:crash-point-registry``).

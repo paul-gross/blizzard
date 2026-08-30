@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.store.repository import IReadRunnerStore
+from blizzard.runner.stores import IReadRunnerStore
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository, Transcript, TranscriptProvenance
 

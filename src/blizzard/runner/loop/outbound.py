@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.store.repository import AskRecord
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.facts import (

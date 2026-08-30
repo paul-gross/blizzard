@@ -1,9 +1,9 @@
 """The write-protocol census exhaustiveness gate (D5, blizzard#317 Phase 3).
 
-Introspects :class:`~blizzard.runner.store.repository.IWriteRunnerStore` at runtime for its
+Introspects :class:`~blizzard.runner.stores.IWriteRunnerStore` at runtime for its
 write-only members — declared on its own class body or inherited from a concept Protocol
 such as :class:`~blizzard.runner.domain.leases.IWriteLeaseRepository` (blizzard#410), but
-never a member also reachable through :class:`~blizzard.runner.store.repository.IReadRunnerStore`
+never a member also reachable through :class:`~blizzard.runner.stores.IReadRunnerStore`
 — and asserts ``tests/runner_event_census.py`` names exactly that set — exhaustiveness by
 test, not review."""
 
@@ -12,7 +12,10 @@ from __future__ import annotations
 import pytest
 
 from blizzard.runner.events.broker import EVENT_TYPES
-from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore
+from blizzard.runner.stores import (
+    IReadRunnerStore,
+    IWriteRunnerStore,
+)
 from tests.runner_event_census import WRITE_PROTOCOL_CENSUS, Published, Silent
 
 pytestmark = pytest.mark.unit

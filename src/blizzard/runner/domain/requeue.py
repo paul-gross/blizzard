@@ -7,10 +7,46 @@ budget is **carried, not reset**: a requeue buys exactly one more try."""
 
 from __future__ import annotations
 
-from blizzard.foundation.clock import IClock
-from blizzard.runner.store.repository import IWriteRunnerStore
+from datetime import datetime
+from typing import TYPE_CHECKING, Protocol
 
-__all__ = ["ChunkNotRequeueable", "RequeueBlockedByOpenTakeover", "RequeueService"]
+from blizzard.foundation.clock import IClock
+
+if TYPE_CHECKING:
+    # Deferred: ``runner/stores.py`` composes this module's own Protocol (blizzard#410).
+    from blizzard.runner.stores import IWriteRunnerStore
+
+__all__ = [
+    "ChunkNotRequeueable",
+    "IReadRequeueRepository",
+    "IWriteRequeueRepository",
+    "RequeueBlockedByOpenTakeover",
+    "RequeueService",
+]
+
+
+class IReadRequeueRepository(Protocol):
+    """Read-only requeue queries (held by read-path edges)."""
+
+    def pending_requeue_chunk_ids(self) -> set[str]:
+        """Every chunk id carrying a requeue mark not yet consumed by a later lease mint
+        (issue #53).
+
+        The mark is consumed by the next lease mint for the chunk, whose ``created_at``
+        lands at or after the requeue."""
+        ...
+
+
+class IWriteRequeueRepository(IReadRequeueRepository, Protocol):
+    """Read-write requeue store — held only by the domain."""
+
+    def record_requeue(self, *, chunk_id: str, at: datetime) -> None:
+        """Append the clearing fact for a chunk's local needs_human hold (issue #53).
+
+        Recorded before anything else runs (``bzh:crash-correctness``): the fact alone is
+        durable the instant this returns, and is read back via
+        :meth:`pending_requeue_chunk_ids` — this call never spawns anything itself."""
+        ...
 
 
 class RequeueError(Exception):

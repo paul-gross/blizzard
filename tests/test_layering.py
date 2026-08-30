@@ -14,6 +14,8 @@ _FOUNDATION_DIR = _SRC_DIR / "foundation"
 _HUB_DIR = _SRC_DIR / "hub"
 _RUNNER_DIR = _SRC_DIR / "runner"
 _HUB_STORE_INTERNAL_DIR = _HUB_DIR / "store" / "internal"
+_RUNNER_STORE_DIR = _RUNNER_DIR / "store"
+_RUNNER_DOMAIN_DIR = _RUNNER_DIR / "domain"
 
 _MOVED_HOMES = {
     "ChunkStatus": "blizzard.foundation.chunk_status",
@@ -105,3 +107,31 @@ def test_hub_store_internal_acquires_no_connection_outside_the_seam() -> None:
     assert not violations, (
         f"E — hub/store/internal/ must route every connection through HubStoreConnections: {violations}"
     )
+
+
+def _protocol_declarations(root: Path) -> list[str]:
+    violations: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            for base in node.bases:
+                name = base.id if isinstance(base, ast.Name) else getattr(base, "attr", None)
+                if name == "Protocol":
+                    violations.append(f"{path.relative_to(_REPO_ROOT)} declares Protocol class {node.name}")
+    return violations
+
+
+def test_no_protocol_is_declared_under_runner_store() -> None:
+    """AC1 (blizzard#410): every seam Protocol lives beside the concept that uses it —
+    ``runner/store/`` holds only adapters, schema, and errors, never a Protocol."""
+    violations = _protocol_declarations(_RUNNER_STORE_DIR)
+    assert not violations, f"F — runner/store/ must declare no Protocol: {violations}"
+
+
+def test_no_runner_domain_module_imports_from_runner_store() -> None:
+    """AC1 (blizzard#410): a domain module owns its own seam Protocol — it never reaches
+    into ``runner/store/`` for one, which would invert the dependency arrow."""
+    violations = _violations(_RUNNER_DOMAIN_DIR, ("blizzard.runner.store",))
+    assert not violations, f"G — runner/domain/ must not import from runner/store/: {violations}"

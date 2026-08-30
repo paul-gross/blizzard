@@ -12,7 +12,7 @@ from blizzard.runner.domain.leases import (
 )
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.runner.store.repository import IReadRunnerStore
+from blizzard.runner.stores import IReadRunnerStore
 from blizzard.wire.envelope import NodeConfig
 
 _log = get_logger("blizzard.runner.loop")

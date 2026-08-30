@@ -22,7 +22,7 @@ from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.selftest.service import SelfTestService
-from blizzard.runner.store.repository import (
+from blizzard.runner.stores import (
     IReadRunnerStore,
     IWriteRunnerStore,
 )

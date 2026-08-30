@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.domain.status import RunnerStatusService
-from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.stores import IWriteRunnerStore
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 from blizzard.wire.runner_status import CapacitiesView, HubConnectivityView, PauseStateView, RunnerStatusView
 

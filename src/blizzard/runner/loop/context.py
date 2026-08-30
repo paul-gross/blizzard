@@ -22,7 +22,7 @@ from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
-from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.stores import IWriteRunnerStore
 
 #: The retry budget a node with no ``retries.max`` falls back to — a chosen constant:
 #: two execution attempts before escalation to needs-human.

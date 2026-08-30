@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.runner.store.repository import CheckResultRecord
+from blizzard.runner.domain.checks import CheckResultRecord
 from blizzard.wire.envelope import NodeEnvelope
 
 

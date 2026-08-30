@@ -6,13 +6,51 @@ place the write happens (``bzh:controller-read-only``)."""
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import TYPE_CHECKING, Protocol
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import LeaseRecord
-from blizzard.runner.store.repository import IWriteRunnerStore
 
-__all__ = ["AttachmentRejected", "AttachmentService"]
+if TYPE_CHECKING:
+    # Deferred: ``runner/stores.py`` composes this module's own Protocol (blizzard#410).
+    from blizzard.runner.stores import IWriteRunnerStore
+
+__all__ = ["AttachmentRejected", "AttachmentService", "IReadAttachmentRepository", "IWriteAttachmentRepository"]
+
+
+class IReadAttachmentRepository(Protocol):
+    """Read-only attachment queries (held by read-path edges)."""
+
+    def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
+        """The lease's explicit artifact submissions, newest content per ``name``
+        (issue #113). Append-only, latest-wins-per-``(lease_id, name)``: a re-attach of
+        the same name reads back as the replacement, never a duplicate."""
+        ...
+
+
+class IWriteAttachmentRepository(IReadAttachmentRepository, Protocol):
+    """Read-write attachment store — held only by the domain."""
+
+    def record_attachment(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        name: str,
+        content: str,
+        attached_at: datetime,
+    ) -> None:
+        """Append a worker's explicit artifact submission for ``name`` (issue #113), a
+        single committed transaction so it survives a ``kill -9`` before the completion
+        submission reads it. Append-only: a later call for the same ``(lease_id, name)``
+        is a correction, read back as the replacement, never merged."""
+        ...
+
 
 # The armed crash window (issue #113, ``bzh:crash-point-registry``): the attach row is
 # durable but the ``200`` has not returned. Recovery owes nothing but durability.

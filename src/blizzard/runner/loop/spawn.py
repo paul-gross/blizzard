@@ -9,6 +9,7 @@ from datetime import datetime
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, Id
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.domain.artifacts import GraphArtifactRecord
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import (
     LeaseRecord,
@@ -22,7 +23,6 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.session import ResumedSession
-from blizzard.runner.store.repository import GraphArtifactRecord
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")

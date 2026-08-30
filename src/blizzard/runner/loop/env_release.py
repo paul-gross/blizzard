@@ -8,7 +8,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import AcquiredEnvironment, IWorkspaceProvider
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
-from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.stores import IWriteRunnerStore
 
 
 @dataclass(frozen=True)

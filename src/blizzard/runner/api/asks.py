@@ -16,7 +16,8 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.federation import require_human_api
-from blizzard.runner.store.repository import AskRecord, IReadRunnerStore
+from blizzard.runner.domain.asks import AskRecord
+from blizzard.runner.stores import IReadRunnerStore
 from blizzard.wire.runner_status import AskListResponse, AskView
 
 router = APIRouter(prefix="/api", tags=["runner"])

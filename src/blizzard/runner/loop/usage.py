@@ -13,7 +13,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
-from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.stores import IWriteRunnerStore
 from blizzard.wire.facts import USAGE_RECORDED
 
 

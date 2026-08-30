@@ -17,8 +17,8 @@ from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 
 if TYPE_CHECKING:
-    # Deferred: ``store/repository.py`` composes this module's own Protocol (blizzard#410).
-    from blizzard.runner.store.repository import IReadRunnerStore
+    # Deferred: ``runner/stores.py`` composes this module's own Protocol (blizzard#410).
+    from blizzard.runner.stores import IReadRunnerStore
 
 __all__ = [
     "HEARTBEAT_STALENESS_THRESHOLD",

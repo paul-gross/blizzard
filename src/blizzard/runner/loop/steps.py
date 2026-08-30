@@ -31,7 +31,7 @@ from blizzard.runner.loop.held_chunk import HeldChunk
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.stores import IWriteRunnerStore
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.facts import (
     EVENT_RECORDED,

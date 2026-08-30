@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 
 from blizzard.runner.domain.leases import LeaseRecord
-from blizzard.runner.store.repository import IReadRunnerStore
+from blizzard.runner.stores import IReadRunnerStore
 
 
 @dataclass(frozen=True)

@@ -1,19 +1,85 @@
-"""The runner-store bundle (blizzard#410, D4).
+"""The runner-store bundle and umbrella Protocols (blizzard#410, D4).
 
-A frozen bundle of the write-capable Protocol seams :mod:`~blizzard.runner.composition`
-builds, for a collaborator spanning several concepts rather than just one or two. Every
-field is the **write** variant — narrowing one to read-only is the sibling issue this
-bundle does not take on."""
+``RunnerStores`` is the frozen bundle of write-capable Protocol seams
+:mod:`~blizzard.runner.composition` builds, for a collaborator spanning several concepts.
+``IReadRunnerStore``/``IWriteRunnerStore`` compose every concept Protocol into the one seam
+a many-concept collaborator still takes directly until narrowed — this module, not
+``runner/store/``, is their home, since no Protocol may be declared there."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
-from blizzard.runner.auth.tokens import IWriteTokenRepository
-from blizzard.runner.domain.leases import IWriteLeaseRepository
-from blizzard.runner.environments.repository import IWriteEnvironmentRepository
-from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepository
-from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository
+from blizzard.runner.auth.tokens import IReadTokenRepository, IWriteTokenRepository
+from blizzard.runner.domain.artifacts import IReadGraphArtifactRepository, IWriteGraphArtifactRepository
+from blizzard.runner.domain.asks import IReadAskRepository, IWriteAskRepository
+from blizzard.runner.domain.attachments import IReadAttachmentRepository, IWriteAttachmentRepository
+from blizzard.runner.domain.checks import IReadCheckRepository, IWriteCheckRepository
+from blizzard.runner.domain.escalations import IReadEscalationRepository, IWriteEscalationRepository
+from blizzard.runner.domain.git_commit_declaration import (
+    IReadGitCommitDeclarationRepository,
+    IWriteGitCommitDeclarationRepository,
+)
+from blizzard.runner.domain.leases import IReadLeaseRepository, IWriteLeaseRepository
+from blizzard.runner.domain.outbound import IReadOutboundRepository, IWriteOutboundRepository
+from blizzard.runner.domain.pause import IReadPauseRepository, IWritePauseRepository
+from blizzard.runner.domain.requeue import IReadRequeueRepository, IWriteRequeueRepository
+from blizzard.runner.domain.takeover import IReadTakeoverRepository, IWriteTakeoverRepository
+from blizzard.runner.domain.usage import IReadUsageRepository, IWriteUsageRepository
+from blizzard.runner.environments.repository import IReadEnvironmentRepository, IWriteEnvironmentRepository
+from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
+from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, IWriteTranscriptLedgerRepository
+
+__all__ = ["IReadRunnerStore", "IWriteRunnerStore", "RunnerStores"]
+
+
+class IReadRunnerStore(
+    IReadLeaseRepository,
+    IReadEnvironmentRepository,
+    IReadTranscriptLedgerRepository,
+    IReadTokenRepository,
+    IReadWorkspacePromptRepository,
+    IReadOutboundRepository,
+    IReadAskRepository,
+    IReadPauseRepository,
+    IReadTakeoverRepository,
+    IReadRequeueRepository,
+    IReadEscalationRepository,
+    IReadUsageRepository,
+    IReadAttachmentRepository,
+    IReadGitCommitDeclarationRepository,
+    IReadCheckRepository,
+    IReadGraphArtifactRepository,
+    Protocol,
+):
+    """Read-only runner-store queries, every concept's read seam composed (held by
+    read-path edges) — the pre-narrowing umbrella a many-concept collaborator still takes
+    directly."""
+
+
+class IWriteRunnerStore(
+    IWriteLeaseRepository,
+    IWriteEnvironmentRepository,
+    IWriteTranscriptLedgerRepository,
+    IWriteTokenRepository,
+    IWriteWorkspacePromptRepository,
+    IWriteOutboundRepository,
+    IWriteAskRepository,
+    IWritePauseRepository,
+    IWriteTakeoverRepository,
+    IWriteRequeueRepository,
+    IWriteEscalationRepository,
+    IWriteUsageRepository,
+    IWriteAttachmentRepository,
+    IWriteGitCommitDeclarationRepository,
+    IWriteCheckRepository,
+    IWriteGraphArtifactRepository,
+    IReadRunnerStore,
+    Protocol,
+):
+    """Read-write runner store, every concept's write seam composed — held only by the
+    domain (the loop steps)."""
 
 
 @dataclass(frozen=True)
@@ -26,3 +92,14 @@ class RunnerStores:
     transcript_ledger: IWriteTranscriptLedgerRepository
     tokens: IWriteTokenRepository
     workspace_prompt: IWriteWorkspacePromptRepository
+    outbound: IWriteOutboundRepository
+    asks: IWriteAskRepository
+    pause: IWritePauseRepository
+    takeover: IWriteTakeoverRepository
+    requeue: IWriteRequeueRepository
+    escalations: IWriteEscalationRepository
+    usage: IWriteUsageRepository
+    attachments: IWriteAttachmentRepository
+    git_commit_declarations: IWriteGitCommitDeclarationRepository
+    checks: IWriteCheckRepository
+    graph_artifacts: IWriteGraphArtifactRepository

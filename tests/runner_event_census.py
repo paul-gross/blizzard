@@ -1,5 +1,5 @@
 """The write-protocol census (D5, blizzard#317 Phase 3) — every write-only member
-:class:`~blizzard.runner.store.repository.IWriteRunnerStore` requires, whether declared on
+:class:`~blizzard.runner.stores.IWriteRunnerStore` requires, whether declared on
 its own class body or on a concept Protocol it inherits (e.g.
 :class:`~blizzard.runner.domain.leases.IWriteLeaseRepository`, blizzard#410), mapped to
 either the event kind its mutation publishes (:class:`Published`) or a stated reason it

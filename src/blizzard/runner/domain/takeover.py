@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import shlex
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
@@ -19,8 +21,11 @@ from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerPreamble
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.wire.facts import LEASE_MINTED
+
+if TYPE_CHECKING:
+    # Deferred: ``runner/stores.py`` composes this module's own Protocol (blizzard#410).
+    from blizzard.runner.stores import IWriteRunnerStore
 
 # What a takeover forwards from the identity env (issue #258). Nothing else leaves the
 # daemon: the operator's terminal supplies the rest, and no secret crosses the local API.
@@ -29,12 +34,89 @@ _FORWARDED_EXECUTION_VARS = ("PATH", "HOME")
 
 __all__ = [
     "ChunkNotTakeable",
+    "IReadTakeoverRepository",
+    "IWriteTakeoverRepository",
     "LiveWorkerConflict",
     "OpenedTakeover",
     "SubmissionPending",
     "TakeoverCommand",
+    "TakeoverRecord",
     "TakeoverService",
 ]
+
+
+@dataclass(frozen=True)
+class TakeoverRecord:
+    """An open operator takeover — the human-in-session fact (issue #52).
+
+    ``lease_id`` always names the reference lease — active or already closed, never
+    ``None``. ``fence_epoch`` is set only when a live worker was force-killed."""
+
+    takeover_id: str
+    chunk_id: str
+    lease_id: str | None
+    session_id: str | None
+    workdir: str
+    fence_epoch: int | None
+    opened_at: datetime
+
+
+class IReadTakeoverRepository(Protocol):
+    """Read-only takeover queries (held by read-path edges)."""
+
+    def lease_for_open_takeover(self, lease_id: str) -> LeaseRecord | None:
+        """The lease by id iff an open takeover names it (issue #291), regardless of the
+        lease's own closure — the worker-authorization resolver's second half, alongside
+        :meth:`~blizzard.runner.domain.leases.IReadLeaseRepository.active_lease`. The
+        open-takeover fact is what authorizes a resumed session's worker verbs against the
+        reference lease it names, not the lease's own activeness."""
+        ...
+
+    def open_takeover_for_chunk(self, chunk_id: str) -> TakeoverRecord | None:
+        """The chunk's open takeover, or ``None`` — a ``takeovers`` row with no
+        ``takeover_ends`` row for the same ``takeover_id`` (issue #52).
+
+        At most one open takeover per chunk by construction: ``TakeoverService`` refuses
+        a second ``POST`` while one is already open."""
+        ...
+
+    def open_takeover_chunk_ids(self) -> set[str]:
+        """Every chunk id currently under an open takeover (issue #52).
+
+        The loop's per-tick skip set, so no step touches a chunk's session while the
+        human holds it."""
+        ...
+
+    def open_takeovers(self) -> list[TakeoverRecord]:
+        """Every open takeover, across every chunk (issue #51).
+
+        :meth:`open_takeover_for_chunk` widened to the fleet, mirroring
+        :mod:`~blizzard.runner.domain.escalations`'s own ``open_escalations`` shape — the
+        read that names a takeover left open by a stranded CLI, otherwise wedging its chunk."""
+        ...
+
+
+class IWriteTakeoverRepository(IReadTakeoverRepository, Protocol):
+    """Read-write takeover store — held only by the domain."""
+
+    def record_takeover(
+        self,
+        *,
+        takeover_id: str,
+        chunk_id: str,
+        lease_id: str | None,
+        session_id: str | None,
+        workdir: str,
+        fence_epoch: int | None,
+        opened_at: datetime,
+    ) -> None:
+        """Open a takeover — recorded before any kill and before the interactive command
+        is returned (issue #52), so no later tick can race the human for the chunk."""
+        ...
+
+    def record_takeover_end(self, *, takeover_id: str, ended_at: datetime) -> None:
+        """Close a takeover."""
+        ...
 
 
 @dataclass(frozen=True)

@@ -8,6 +8,7 @@ from datetime import datetime
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.loop.attempt import Attempt
@@ -15,7 +16,6 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.spawn import Spawner
-from blizzard.runner.store.repository import AskRecord
 
 _log = get_logger("blizzard.runner.loop")
 

@@ -20,8 +20,8 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.artifacts import GraphArtifactRecord
 from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.store.repository import GraphArtifactRecord
 from tests.runner_fakes import make_store
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)

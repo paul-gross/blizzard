@@ -40,12 +40,12 @@ from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import (
+from blizzard.runner.store.schema import metadata as runner_metadata
+from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_segments
+from blizzard.runner.stores import (
     IReadRunnerStore,
     IWriteRunnerStore,
 )
-from blizzard.runner.store.schema import metadata as runner_metadata
-from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_segments
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
