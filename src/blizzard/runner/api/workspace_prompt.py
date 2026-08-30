@@ -22,7 +22,7 @@ WorkspacePromptSource = Literal["override", "config"]
 class WorkspacePromptResponse(BaseModel):
     """The effective workspace prompt prepended to a worker spawn. Sent in full on a fresh
     spawn; on a resumed one, only when it differs from what that session was last given —
-    and then announced as updated (openapi-ts consumes this)."""
+    and then announced as updated."""
 
     prompt: str
     #: Which of the two lanes produced `prompt`: the runtime override, or the runner's config.

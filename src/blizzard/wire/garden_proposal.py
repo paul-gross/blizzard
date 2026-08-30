@@ -23,7 +23,7 @@ class GardenProposalCandidate(BaseModel):
 
 
 class GardenProposalView(BaseModel):
-    """A garden proposal as served by the read routes and CLI verbs."""
+    """A garden proposal."""
 
     model_config = ConfigDict(populate_by_name=True)
 

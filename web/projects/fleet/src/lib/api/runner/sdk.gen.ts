@@ -122,7 +122,7 @@ export const openTakeoverApiChunksChunkIdTakeoversPost = <ThrowOnError extends b
 /**
  * End Takeover
  *
- * Mark a takeover ended — the CLI calls this once its exec'd interactive child exits.
+ * Mark a takeover ended.
  */
 export const endTakeoverApiChunksChunkIdTakeoversTakeoverIdPatch = <ThrowOnError extends boolean = false>(options: Options<EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchData, ThrowOnError>): RequestResult<EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/takeovers/{takeover_id}', ...options });
 

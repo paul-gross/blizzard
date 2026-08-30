@@ -73,7 +73,7 @@ class DecisionView(BaseModel):
 
 
 class OpenDecisionsResponse(BaseModel):
-    """The fleet's open (unresolved) decisions — ``blizzard hub decisions``."""
+    """The fleet's open (unresolved) decisions."""
 
     decisions: list[DecisionView] = []
 

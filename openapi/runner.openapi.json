@@ -163,7 +163,7 @@
         "type": "object"
       },
       "AskResponse": {
-        "description": "The recorded ask \u2014 its minted question id (openapi-ts consumes this).",
+        "description": "The recorded ask \u2014 its minted question id.",
         "properties": {
           "lease_id": {
             "title": "Lease Id",
@@ -581,7 +581,7 @@
         "type": "object"
       },
       "ChunkEscalationView": {
-        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open \u2014 a later lease mint, requeue, or completion supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed. Named for the chunk rather\nthan the bare concept: ``wire.runner_status`` publishes its own differently-shaped\n``EscalationView``, and the runner serves both \u2014 two same-names in one app mangle each.",
+        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open \u2014 a later lease mint, requeue, or completion supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed.",
         "properties": {
           "epoch": {
             "title": "Epoch",
@@ -1413,7 +1413,7 @@
         "type": "object"
       },
       "HeartbeatResponse": {
-        "description": "The recorded acknowledgement (openapi-ts consumes this).",
+        "description": "The recorded acknowledgement.",
         "properties": {
           "lease_id": {
             "title": "Lease Id",
@@ -2146,7 +2146,7 @@
         "type": "object"
       },
       "ReadinessResponse": {
-        "description": "The wire shape of a readiness reading (openapi-ts consumes this).",
+        "description": "The wire shape of a readiness reading.",
         "properties": {
           "detail": {
             "title": "Detail",
@@ -2396,7 +2396,7 @@
         "type": "object"
       },
       "RunnerControlView": {
-        "description": "The runner singleton's derived pause state (openapi-ts consumes this).",
+        "description": "The runner singleton's derived pause state.",
         "properties": {
           "hub_paused": {
             "title": "Hub Paused",
@@ -2468,7 +2468,7 @@
         "type": "object"
       },
       "SelfTestCheckView": {
-        "description": "One check's pass/fail result (openapi-ts consumes this).",
+        "description": "One check's pass/fail result.",
         "properties": {
           "detail": {
             "title": "Detail",
@@ -2549,7 +2549,7 @@
         "type": "object"
       },
       "SessionEndResponse": {
-        "description": "The recorded acknowledgement (openapi-ts consumes this).",
+        "description": "The recorded acknowledgement.",
         "properties": {
           "lease_id": {
             "title": "Lease Id",
@@ -3440,7 +3440,7 @@
         "type": "object"
       },
       "WorkspacePromptResponse": {
-        "description": "The effective workspace prompt prepended to a worker spawn. Sent in full on a fresh\nspawn; on a resumed one, only when it differs from what that session was last given \u2014\nand then announced as updated (openapi-ts consumes this).",
+        "description": "The effective workspace prompt prepended to a worker spawn. Sent in full on a fresh\nspawn; on a resumed one, only when it differs from what that session was last given \u2014\nand then announced as updated.",
         "properties": {
           "prompt": {
             "title": "Prompt",
@@ -3882,7 +3882,7 @@
     },
     "/api/chunks/{chunk_id}/takeovers/{takeover_id}": {
       "patch": {
-        "description": "Mark a takeover ended \u2014 the CLI calls this once its exec'd interactive child exits.",
+        "description": "Mark a takeover ended.",
         "operationId": "end_takeover_api_chunks__chunk_id__takeovers__takeover_id__patch",
         "parameters": [
           {

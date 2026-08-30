@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 
 class QuestionAsked(BaseModel):
-    """A ``question.asked`` fact the runner forwards to the hub.
+    """A ``question.asked`` fact.
 
     ``question_id`` is runner-minted (``qn_<ulid>``); ``epoch`` is the parked lease's
     fence, ``session_id`` the dormant session, ``options`` the offered choices."""

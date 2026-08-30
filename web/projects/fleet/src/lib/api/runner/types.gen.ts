@@ -110,7 +110,7 @@ export type AskRequest = {
 /**
  * AskResponse
  *
- * The recorded ask — its minted question id (openapi-ts consumes this).
+ * The recorded ask — its minted question id.
  */
 export type AskResponse = {
     /**
@@ -347,9 +347,7 @@ export type ChunkDetail = {
  *
  * An open escalation on a ``needs_human`` chunk — the takeover command(s) for the parked session,
  * present only while the escalation is open — a later lease mint, requeue, or completion supersedes it.
- * ``wrapped_takeover_command`` is optional, empty when none was composed. Named for the chunk rather
- * than the bare concept: ``wire.runner_status`` publishes its own differently-shaped
- * ``EscalationView``, and the runner serves both — two same-names in one app mangle each.
+ * ``wrapped_takeover_command`` is optional, empty when none was composed.
  */
 export type ChunkEscalationView = {
     /**
@@ -904,7 +902,7 @@ export type HeartbeatRequest = {
 /**
  * HeartbeatResponse
  *
- * The recorded acknowledgement (openapi-ts consumes this).
+ * The recorded acknowledgement.
  */
 export type HeartbeatResponse = {
     /**
@@ -1347,7 +1345,7 @@ export type QuestionView = {
 /**
  * ReadinessResponse
  *
- * The wire shape of a readiness reading (openapi-ts consumes this).
+ * The wire shape of a readiness reading.
  */
 export type ReadinessResponse = {
     /**
@@ -1504,7 +1502,7 @@ export type RunnerControlPatch = {
 /**
  * RunnerControlView
  *
- * The runner singleton's derived pause state (openapi-ts consumes this).
+ * The runner singleton's derived pause state.
  */
 export type RunnerControlView = {
     /**
@@ -1551,7 +1549,7 @@ export type RunnerStatusView = {
 /**
  * SelfTestCheckView
  *
- * One check's pass/fail result (openapi-ts consumes this).
+ * One check's pass/fail result.
  */
 export type SelfTestCheckView = {
     /**
@@ -1611,7 +1609,7 @@ export type SelfTestView = {
 /**
  * SessionEndResponse
  *
- * The recorded acknowledgement (openapi-ts consumes this).
+ * The recorded acknowledgement.
  */
 export type SessionEndResponse = {
     /**
@@ -2141,7 +2139,7 @@ export type WorkspacePromptReplacement = {
  *
  * The effective workspace prompt prepended to a worker spawn. Sent in full on a fresh
  * spawn; on a resumed one, only when it differs from what that session was last given —
- * and then announced as updated (openapi-ts consumes this).
+ * and then announced as updated.
  */
 export type WorkspacePromptResponse = {
     /**

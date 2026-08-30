@@ -73,7 +73,7 @@ class FindingDelta(BaseModel):
 
 
 class FindingView(BaseModel):
-    """A finding as served by the read routes and CLI verbs."""
+    """A finding."""
 
     model_config = ConfigDict(populate_by_name=True)
 

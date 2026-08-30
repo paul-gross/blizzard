@@ -1336,11 +1336,11 @@ class IReadChunkRepository(Protocol):
         ...
 
     def decision_for_chunk(self, chunk_id: str) -> DecisionRow | None:
-        """The chunk's newest not-yet-transitioned decision — what the board/runner act on."""
+        """The chunk's newest not-yet-transitioned decision."""
         ...
 
     def list_open_decisions(self) -> list[DecisionRow]:
-        """Every unresolved decision across the fleet — the ``blizzard hub decisions`` view."""
+        """Every unresolved decision across the fleet."""
         ...
 
     def usage_since(self, since: datetime, *, until: datetime | None = None) -> list[UsageFact]:

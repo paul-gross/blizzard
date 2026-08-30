@@ -616,8 +616,7 @@ export type BounceView = {
  *
  * One deterministic check's **runner-executed** outcome (issue #114).
  *
- * Carries only ``(command, passed)``; the runner's captured ``output_tail``
- * deliberately does not ride the wire.
+ * Carries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire.
  */
 export type CheckResult = {
     /**
@@ -772,9 +771,7 @@ export type ChunkDetail = {
  *
  * An open escalation on a ``needs_human`` chunk — the takeover command(s) for the parked session,
  * present only while the escalation is open — a later lease mint, requeue, or completion supersedes it.
- * ``wrapped_takeover_command`` is optional, empty when none was composed. Named for the chunk rather
- * than the bare concept: ``wire.runner_status`` publishes its own differently-shaped
- * ``EscalationView``, and the runner serves both — two same-names in one app mangle each.
+ * ``wrapped_takeover_command`` is optional, empty when none was composed.
  */
 export type ChunkEscalationView = {
     /**
@@ -1585,7 +1582,7 @@ export type ExternalSubscriptionUsageWindowView = {
 /**
  * FindingView
  *
- * A finding as served by the read routes and CLI verbs.
+ * A finding.
  */
 export type FindingView = {
     /**
@@ -1701,7 +1698,7 @@ export type FleetSummaryView = {
 /**
  * GardenProposalView
  *
- * A garden proposal as served by the read routes and CLI verbs.
+ * A garden proposal.
  */
 export type GardenProposalView = {
     /**
@@ -1738,8 +1735,7 @@ export type GardenProposalView = {
  * GraphArtifact
  *
  * One graph-scoped artifact baked into the mint — the loader-inlined content of
- * a graph's ``artifacts:`` entry, carried to the runner alongside every envelope for that
- * graph.
+ * a graph's ``artifacts:`` entry, carried alongside every envelope for that graph.
  */
 export type GraphArtifact = {
     /**
@@ -2431,7 +2427,7 @@ export type NodeConfig = {
 /**
  * NodeEnvelope
  *
- * Everything a runner needs to work one node-step.
+ * Everything needed to work one node-step.
  */
 export type NodeEnvelope = {
     /**
@@ -2474,7 +2470,7 @@ export type NodeEnvelope = {
 /**
  * OpenDecisionsResponse
  *
- * The fleet's open (unresolved) decisions — ``blizzard hub decisions``.
+ * The fleet's open (unresolved) decisions.
  */
 export type OpenDecisionsResponse = {
     /**
@@ -2574,7 +2570,7 @@ export type ProviderSummary = {
 /**
  * QuestionAsked
  *
- * A ``question.asked`` fact the runner forwards to the hub.
+ * A ``question.asked`` fact.
  *
  * ``question_id`` is runner-minted (``qn_<ulid>``); ``epoch`` is the parked lease's
  * fence, ``session_id`` the dormant session, ``options`` the offered choices.
@@ -2803,7 +2799,7 @@ export type ReDeriveResponse = {
 /**
  * ReadinessResponse
  *
- * The wire shape of a readiness reading (openapi-ts consumes this).
+ * The wire shape of a readiness reading.
  */
 export type ReadinessResponse = {
     /**

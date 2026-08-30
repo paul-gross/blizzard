@@ -149,9 +149,7 @@ class RouteView(BaseModel):
 class ChunkEscalationView(BaseModel):
     """An open escalation on a ``needs_human`` chunk — the takeover command(s) for the parked session,
     present only while the escalation is open — a later lease mint, requeue, or completion supersedes it.
-    ``wrapped_takeover_command`` is optional, empty when none was composed. Named for the chunk rather
-    than the bare concept: ``wire.runner_status`` publishes its own differently-shaped
-    ``EscalationView``, and the runner serves both — two same-names in one app mangle each."""
+    ``wrapped_takeover_command`` is optional, empty when none was composed."""
 
     epoch: int
     takeover_command: str

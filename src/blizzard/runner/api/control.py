@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 
 class RunnerControlView(BaseModel):
-    """The runner singleton's derived pause state (openapi-ts consumes this)."""
+    """The runner singleton's derived pause state."""
 
     runner_id: str
     local_paused: bool  # this runner's own brake — "I won't try"

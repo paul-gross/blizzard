@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api", tags=["meta"])
 
 
 class ReadinessResponse(BaseModel):
-    """The wire shape of a readiness reading (openapi-ts consumes this)."""
+    """The wire shape of a readiness reading."""
 
     ready: bool
     store_reachable: bool

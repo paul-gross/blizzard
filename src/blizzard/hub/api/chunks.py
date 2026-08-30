@@ -74,7 +74,7 @@ router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_
 
 @dataclass(frozen=True)
 class OpenDecision:
-    """A chunk's graph gate as the board must hear about it (issue #87)."""
+    """A chunk's graph gate (issue #87)."""
 
     services: HubServices
     chunk_id: str

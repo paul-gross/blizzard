@@ -30,7 +30,7 @@ class AskRequest(BaseModel):
 
 
 class AskResponse(BaseModel):
-    """The recorded ask — its minted question id (openapi-ts consumes this)."""
+    """The recorded ask — its minted question id."""
 
     recorded: bool
     question_id: str

@@ -999,7 +999,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         ...
 
     def record_takeover_end(self, *, takeover_id: str, ended_at: datetime) -> None:
-        """Close a takeover — the CLI calls this once its exec'd interactive child exits."""
+        """Close a takeover."""
         ...
 
     def record_requeue(self, *, chunk_id: str, at: datetime) -> None:

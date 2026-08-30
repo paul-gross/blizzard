@@ -43,7 +43,7 @@ def open_takeover(chunk_id: str, request_body: TakeoverRequest, request: Request
 
 @router.patch("/chunks/{chunk_id}/takeovers/{takeover_id}", response_model=TakeoverEndResponse)
 def end_takeover(chunk_id: str, takeover_id: str, request: Request) -> TakeoverEndResponse:
-    """Mark a takeover ended — the CLI calls this once its exec'd interactive child exits."""
+    """Mark a takeover ended."""
     service = RunnerWiring.of(request).takeover()
     try:
         service.close(chunk_id, takeover_id)

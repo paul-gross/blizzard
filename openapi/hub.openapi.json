@@ -893,7 +893,7 @@
         "type": "object"
       },
       "CheckResult": {
-        "description": "One deterministic check's **runner-executed** outcome (issue #114).\n\nCarries only ``(command, passed)``; the runner's captured ``output_tail``\ndeliberately does not ride the wire.",
+        "description": "One deterministic check's **runner-executed** outcome (issue #114).\n\nCarries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire.",
         "properties": {
           "command": {
             "title": "Command",
@@ -1194,7 +1194,7 @@
         "type": "object"
       },
       "ChunkEscalationView": {
-        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open \u2014 a later lease mint, requeue, or completion supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed. Named for the chunk rather\nthan the bare concept: ``wire.runner_status`` publishes its own differently-shaped\n``EscalationView``, and the runner serves both \u2014 two same-names in one app mangle each.",
+        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open \u2014 a later lease mint, requeue, or completion supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed.",
         "properties": {
           "epoch": {
             "title": "Epoch",
@@ -2424,7 +2424,7 @@
         "type": "object"
       },
       "FindingView": {
-        "description": "A finding as served by the read routes and CLI verbs.",
+        "description": "A finding.",
         "properties": {
           "class": {
             "title": "Class",
@@ -2580,7 +2580,7 @@
         "type": "object"
       },
       "GardenProposalView": {
-        "description": "A garden proposal as served by the read routes and CLI verbs.",
+        "description": "A garden proposal.",
         "properties": {
           "body": {
             "title": "Body",
@@ -2627,7 +2627,7 @@
         "type": "object"
       },
       "GraphArtifact": {
-        "description": "One graph-scoped artifact baked into the mint \u2014 the loader-inlined content of\na graph's ``artifacts:`` entry, carried to the runner alongside every envelope for that\ngraph.",
+        "description": "One graph-scoped artifact baked into the mint \u2014 the loader-inlined content of\na graph's ``artifacts:`` entry, carried alongside every envelope for that graph.",
         "properties": {
           "content": {
             "title": "Content",
@@ -3730,7 +3730,7 @@
         "type": "object"
       },
       "NodeEnvelope": {
-        "description": "Everything a runner needs to work one node-step.",
+        "description": "Everything needed to work one node-step.",
         "properties": {
           "artifacts": {
             "default": [],
@@ -3809,7 +3809,7 @@
         "type": "object"
       },
       "OpenDecisionsResponse": {
-        "description": "The fleet's open (unresolved) decisions \u2014 ``blizzard hub decisions``.",
+        "description": "The fleet's open (unresolved) decisions.",
         "properties": {
           "decisions": {
             "default": [],
@@ -3928,7 +3928,7 @@
         "type": "object"
       },
       "QuestionAsked": {
-        "description": "A ``question.asked`` fact the runner forwards to the hub.\n\n``question_id`` is runner-minted (``qn_<ulid>``); ``epoch`` is the parked lease's\nfence, ``session_id`` the dormant session, ``options`` the offered choices.",
+        "description": "A ``question.asked`` fact.\n\n``question_id`` is runner-minted (``qn_<ulid>``); ``epoch`` is the parked lease's\nfence, ``session_id`` the dormant session, ``options`` the offered choices.",
         "properties": {
           "asked_at": {
             "title": "Asked At",
@@ -4265,7 +4265,7 @@
         "type": "object"
       },
       "ReadinessResponse": {
-        "description": "The wire shape of a readiness reading (openapi-ts consumes this).",
+        "description": "The wire shape of a readiness reading.",
         "properties": {
           "detail": {
             "title": "Detail",

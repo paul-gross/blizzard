@@ -25,7 +25,7 @@ class SelfTestStartRequest(BaseModel):
 
 
 class SelfTestCheckView(BaseModel):
-    """One check's pass/fail result (openapi-ts consumes this)."""
+    """One check's pass/fail result."""
 
     name: str
     passed: bool

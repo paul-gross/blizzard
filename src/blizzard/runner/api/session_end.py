@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 
 class SessionEndResponse(BaseModel):
-    """The recorded acknowledgement (openapi-ts consumes this)."""
+    """The recorded acknowledgement."""
 
     recorded: bool
     lease_id: str

@@ -23,7 +23,7 @@ class SubmittedArtifact(BaseModel):
     name: str
     kind: ArtifactKind
     # git_commit variant — the branch is pushed to the forge before submission. `forge` is
-    # the worker's own declared origin (issue #143), verified by the runner before it rides.
+    # the worker's own declared origin (issue #143).
     forge: str | None = None
     repo: str | None = None
     branch_name: str | None = None
@@ -104,8 +104,7 @@ class Coverage:
 class CheckResult(BaseModel):
     """One deterministic check's **runner-executed** outcome (issue #114).
 
-    Carries only ``(command, passed)``; the runner's captured ``output_tail``
-    deliberately does not ride the wire."""
+    Carries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire."""
 
     command: str
     passed: bool

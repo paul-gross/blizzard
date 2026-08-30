@@ -33,8 +33,7 @@ class EnvelopeArtifact(BaseModel):
 
 class GraphArtifact(BaseModel):
     """One graph-scoped artifact baked into the mint — the loader-inlined content of
-    a graph's ``artifacts:`` entry, carried to the runner alongside every envelope for that
-    graph."""
+    a graph's ``artifacts:`` entry, carried alongside every envelope for that graph."""
 
     name: str
     kind: ArtifactKind
@@ -115,7 +114,7 @@ class NodeConfig(BaseModel):
 
 
 class NodeEnvelope(BaseModel):
-    """Everything a runner needs to work one node-step."""
+    """Everything needed to work one node-step."""
 
     chunk_id: str
     graph_id: str
