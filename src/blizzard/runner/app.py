@@ -319,7 +319,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     # Takes the workspace provider too: a declaration is checked against the
     # environment's repo manifest, which is the provider's to declare (issue #143).
     git_commit_declarations = GitCommitDeclarationService(runner_store, SystemClock(), workspace_provider)
-    jti_cache = JtiCacheRepository(engine)
+    jti_cache = JtiCacheRepository(engine, SystemClock())
     # The real, network-reaching hub client — only `host` wires one (issue #95).
     hub_http_client = httpx.Client(base_url=config.hub_url, timeout=5.0)
     return create_app(

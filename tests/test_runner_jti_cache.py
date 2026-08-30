@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
+from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepository
 from blizzard.runner.store.schema import jwt_jti_seen, metadata
@@ -17,7 +18,7 @@ pytestmark = pytest.mark.unit
 
 
 def _repository(tmp_path: Path) -> JtiCacheRepository:
-    return JtiCacheRepository(_engine(tmp_path))
+    return JtiCacheRepository(_engine(tmp_path), SystemClock())
 
 
 def _engine(tmp_path: Path):  # type: ignore[no-untyped-def]
@@ -59,7 +60,7 @@ def test_distinct_jtis_are_independently_admitted(tmp_path: Path) -> None:
 
 def test_an_expired_row_is_opportunistically_pruned_on_the_next_insert(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
-    cache = JtiCacheRepository(engine)
+    cache = JtiCacheRepository(engine, SystemClock())
     past = datetime.now(UTC) - timedelta(hours=1)
     cache.check_and_record("jti-old", aud="runner-a", expires_at=past)
 
@@ -72,7 +73,7 @@ def test_an_expired_row_is_opportunistically_pruned_on_the_next_insert(tmp_path:
 
 def test_pruning_never_admits_a_replayed_still_live_jti(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
-    cache = JtiCacheRepository(engine)
+    cache = JtiCacheRepository(engine, SystemClock())
     live = datetime.now(UTC) + timedelta(minutes=1)
     past = datetime.now(UTC) - timedelta(hours=1)
     assert cache.check_and_record("jti-live", aud="runner-a", expires_at=live) is True
@@ -81,3 +82,19 @@ def test_pruning_never_admits_a_replayed_still_live_jti(tmp_path: Path) -> None:
     cache.check_and_record("jti-old", aud="runner-a", expires_at=past)
     replayed = cache.check_and_record("jti-live", aud="runner-a", expires_at=live)
     assert replayed is False
+
+
+def test_advancing_the_injected_clock_moves_the_prune_boundary(tmp_path: Path) -> None:
+    """No `datetime.now(UTC)` anywhere: the cutoff comes solely from the injected clock, so
+    moving it — not sleeping — is what crosses a row from live to prunable."""
+    engine = _engine(tmp_path)
+    clock = FixedClock(datetime(2030, 1, 1, tzinfo=UTC))
+    cache = JtiCacheRepository(engine, clock)
+    cache.check_and_record("jti-old", aud="runner-a", expires_at=datetime(2030, 1, 1, 0, 0, 30, tzinfo=UTC))
+
+    clock.advance(timedelta(minutes=1))
+    cache.check_and_record("jti-new", aud="runner-a", expires_at=datetime(2030, 1, 2, tzinfo=UTC))
+
+    with engine.connect() as conn:
+        remaining = {row.jti for row in conn.execute(select(jwt_jti_seen.c.jti))}
+    assert remaining == {"jti-new"}

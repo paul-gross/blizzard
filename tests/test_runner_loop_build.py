@@ -7,16 +7,43 @@ Both roots that build a ``ClaudeCodeAdapter`` are covered (issue #276).
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.loop.build import LoopWiring, PeriodicDriver
-from tests.runner_fakes import FakeHub
+from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking
+from blizzard.runner.store.repository import NewLease
+from tests.runner_fakes import FakeHub, FakeProbe, make_store
+
+_NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+
+
+def _seeded_running_lease_store(tmp_path: Path):  # type: ignore[no-untyped-def]
+    """A store holding one live, session-bearing build lease — the shape both restart-resume
+    hooks mark, seeded exactly as ``tests/test_runner_restart_resume.py`` does."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    return store
 
 
 @pytest.mark.unit
@@ -209,3 +236,28 @@ def test_periodic_driver_resolves_prompts_eagerly_at_construction(tmp_path: Path
 
     with pytest.raises(ConfigError):
         PeriodicDriver(config, interval_seconds=30.0)
+
+
+@pytest.mark.unit
+def test_resume_marking_on_shutdown_marks_via_its_injected_clock(tmp_path: Path) -> None:
+    """No real process and no wall clock: the marking hook is driven entirely off a
+    virtual clock and a scripted probe, both supplied as constructor dependencies."""
+    store = _seeded_running_lease_store(tmp_path)
+    marking = ResumeMarking(store, FixedClock(_NOW), FakeProbe())
+
+    marked = marking.on_shutdown()
+
+    assert marked == 1
+    assert store.resume_intent_lease_ids() == {"lease_1"}
+
+
+@pytest.mark.unit
+def test_resume_marking_on_startup_marks_via_its_injected_clock_and_probe(tmp_path: Path) -> None:
+    store = _seeded_running_lease_store(tmp_path)
+    store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # was actively working when killed
+    marking = ResumeMarking(store, FixedClock(_NOW), FakeProbe(alive=set()))  # the pid is dead
+
+    marked = marking.on_startup()
+
+    assert marked == 1
+    assert store.resume_intent_lease_ids() == {"lease_1"}

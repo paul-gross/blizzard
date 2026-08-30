@@ -13,6 +13,7 @@ import signal
 import subprocess
 import time
 import types
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -24,6 +25,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.cli.host_directory import HostDirectory
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.events.server import EarlyShutdownServer
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
@@ -45,6 +47,7 @@ from blizzard.runner.loop.build import (
     PeriodicDriver,
     ResumeMarking,
 )
+from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.transcript_backfill import TranscriptReshipError
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
@@ -194,7 +197,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
 
     # Ungraceful-restart recovery (#13): a `kill -9` never ran the graceful shutdown marker below, so
     # sessions killed mid-work are marked here for the same startup RESUME the first tick runs.
-    resumable = ResumeMarking(config).on_startup()
+    resumable = _resume_marked(config, lambda marking: marking.on_startup())
     if resumable:
         click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
 
@@ -205,12 +208,22 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         # Stop the loop first so no in-flight tick races the marking: `stop()` blocks on the tick
         # thread, so the loop is quiescent before every in-flight lease is marked.
         driver.stop()
-        marked = ResumeMarking(config).on_shutdown()
+        marked = _resume_marked(config, lambda marking: marking.on_shutdown())
         if marked:
             click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
         # uvicorn closes a pre-bound socket but does not unlink its file; leaving it would
         # make the next start take the stale-corpse path in `Uds.bound` for nothing.
         Uds(config.socket_path).unlink()
+
+
+def _resume_marked(config: RunnerConfig, mark: Callable[[ResumeMarking], int]) -> int:
+    """Wire one :class:`ResumeMarking` over its own short-lived engine — the engine lifecycle
+    ``ResumeMarking`` itself used to own, relocated here now that its store is injected."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        return mark(ResumeMarking(SqlAlchemyRunnerStore(engine), SystemClock(), LinuxProcessProbe()))
+    finally:
+        engine.dispose()
 
 
 @runner.command("tick")

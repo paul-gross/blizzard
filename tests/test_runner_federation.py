@@ -101,7 +101,7 @@ def _build_app(
         runner_store=store,
         runner_status=runner_status,
         hub_http_client=_hub_client(oauth_enabled=oauth_enabled, jwk=jwk),
-        jti_cache=JtiCacheRepository(engine),
+        jti_cache=JtiCacheRepository(engine, SystemClock()),
     )
     kwargs: dict[str, object] = {}
     if client_host is not None:

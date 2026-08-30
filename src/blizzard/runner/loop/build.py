@@ -7,13 +7,12 @@ injected into a :class:`LoopContext`. Both :meth:`LoopWiring.tick_once` and
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
@@ -28,7 +27,7 @@ from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
-from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
 from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.steps import ResumeIntents
 from blizzard.runner.loop.tick import tick
@@ -40,6 +39,7 @@ from blizzard.runner.loop.transcript_backfill import (
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
+from blizzard.runner.store.repository import IWriteRunnerStore
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -180,24 +180,19 @@ class ResumeMarking:
 
     Store-only — no hub, no workspace provider."""
 
-    config: RunnerConfig
+    store: IWriteRunnerStore
+    clock: IClock
+    process: IProcessProbe
 
     def on_shutdown(self) -> int:
         """Mark in-flight leases as the daemon exits gracefully; an ungraceful ``kill -9``
         never reaches this path, which is the intended scope boundary."""
-        return self._marked(lambda intents: intents.mark_graceful(now=SystemClock().now()))
+        return ResumeIntents(self.store).mark_graceful(now=self.clock.now())
 
     def on_startup(self) -> int:
         """Mark the sessions a crash orphaned, before the loop starts — the ungraceful
         counterpart, needing a process probe as well as the store."""
-        return self._marked(lambda intents: intents.mark_crashed(process=LinuxProcessProbe(), now=SystemClock().now()))
-
-    def _marked(self, mark: Callable[[ResumeIntents], int]) -> int:
-        engine = create_engine_from_url(self.config.db_url)
-        try:
-            return mark(ResumeIntents(SqlAlchemyRunnerStore(engine)))
-        finally:
-            engine.dispose()
+        return ResumeIntents(self.store).mark_crashed(process=self.process, now=self.clock.now())
 
 
 class PeriodicDriver:
