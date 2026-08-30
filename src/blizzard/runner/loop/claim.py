@@ -291,7 +291,7 @@ class InterruptedClaims:
             return None  # hub unreachable — the binding is durable; retry next tick
 
     def _unknown(self, chunk_id: str, what: str) -> None:
-        _log.warning(f"hub reports {what} chunk unknown — releasing envs", chunk_id=chunk_id)
+        _log.warning("hub reports chunk unknown — releasing envs", what=what, chunk_id=chunk_id)
         self.ctx.env_release.release_chunk(chunk_id)
 
     def _release(self, chunk_id: str, message: str, **fields: object) -> None:

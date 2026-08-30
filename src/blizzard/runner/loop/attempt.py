@@ -170,7 +170,9 @@ class Attempt:
                 bound_envs=len(bindings),
             )
         OutboundFacts(self.ctx).escalation(lease, takeover=takeover, wrapped_takeover=wrapped, at=self.ctx.clock.now())
-        _log.info(f"escalated to needs-human — {reason}", chunk_id=lease.chunk_id, takeover=takeover, wrapped=wrapped)
+        _log.info(
+            "escalated to needs-human", reason=reason, chunk_id=lease.chunk_id, takeover=takeover, wrapped=wrapped
+        )
 
     def abandon(self, *, killed: bool = False, via: str) -> None:
         """Release a chunk the hub reassigned, detached, or no longer knows about (blizzard#9) —

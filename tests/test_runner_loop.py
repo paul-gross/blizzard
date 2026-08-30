@@ -2060,7 +2060,7 @@ def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path)
     assert "PARTIAL" in park_events[0]["event"]
     escalate_events = [e for e in captured if e.get("event", "").startswith("escalated to needs-human")]
     assert len(escalate_events) == 1
-    assert "PARTIAL" in escalate_events[0]["event"] and "spend cap" in escalate_events[0]["event"]
+    assert "PARTIAL" in escalate_events[0]["reason"] and "spend cap" in escalate_events[0]["reason"]
 
 
 @pytest.mark.unit
