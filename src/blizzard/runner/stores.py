@@ -2,8 +2,11 @@
 
 ``RunnerStores`` is the frozen bundle of write-capable Protocol seams
 :mod:`~blizzard.runner.composition` builds, for a collaborator spanning several concepts.
-``IReadRunnerStore``/``IWriteRunnerStore`` compose every concept Protocol into the one seam
-a many-concept collaborator still takes directly until narrowed — this module, not
+``IReadRunnerStore``/``IWriteRunnerStore`` compose every concept Protocol into one seam —
+no ``src/`` collaborator holds either directly, every one now narrowed to a concept Protocol
+or the ``RunnerStores`` bundle, but ``tests/runner_fakes.py`` still takes ``IWriteRunnerStore``
+to type a fake that structurally satisfies every concept at once, and the write-protocol
+census gate walks both to check every concept's write-only surface. This module, not
 ``runner/store/``, is their home, since no Protocol may be declared there."""
 
 from __future__ import annotations

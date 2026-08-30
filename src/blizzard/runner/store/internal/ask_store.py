@@ -1,8 +1,10 @@
 """SQLAlchemy adapter for the ask/park repository seam (package-private, blizzard#410).
 
-:meth:`AskStore.parked_lease_ids` reaches into :class:`~blizzard.runner.store.internal.
-pause_store.PauseStore` for its pause-park half — the union both concepts' Protocols agree
-:meth:`~blizzard.runner.domain.asks.IReadAskRepository.parked_lease_ids` answers."""
+:meth:`AskStore.parked_lease_ids` takes the pause-park half of its answer from
+``base.PAUSE_PARKED_LEASE_IDS``, the union both concepts' Protocols agree
+:meth:`~blizzard.runner.domain.asks.IReadAskRepository.parked_lease_ids` answers — never
+by reaching into the pause adapter itself, a sibling-adapter edge the concept split exists
+to avoid."""
 
 from __future__ import annotations
 
@@ -13,8 +15,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.asks import AskRecord, IWriteAskRepository, ParkRecord
-from blizzard.runner.store.internal.base import RunnerStoreConnections
-from blizzard.runner.store.internal.pause_store import PauseStore
+from blizzard.runner.store.internal.base import PAUSE_PARKED_LEASE_IDS, RunnerStoreConnections
 from blizzard.runner.store.schema import asks, lease_closures, park_facts, park_resumes
 
 _log = get_logger("blizzard.runner.store")
@@ -37,7 +38,8 @@ class AskStore:
         return self._row_to_ask(rows[0]) if rows else None
 
     def parked_lease_ids(self) -> set[str]:
-        return self.ask_parked_lease_ids() | PauseStore(self._store).pause_parked_lease_ids()
+        pause_parked = {str(r.lease_id) for r in self._store.all(PAUSE_PARKED_LEASE_IDS)}
+        return self.ask_parked_lease_ids() | pause_parked
 
     def ask_parked_lease_ids(self) -> set[str]:
         stmt = select(park_facts.c.lease_id).where(park_facts.c.question_id.not_in(select(park_resumes.c.question_id)))

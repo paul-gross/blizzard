@@ -18,7 +18,7 @@ from blizzard.runner.store.schema import git_commit_declarations
 _log = get_logger("blizzard.runner.store")
 
 
-class GitDeclarationStore:
+class GitCommitDeclarationStore:
     """Read-write git-commit declaration adapter over the runner store engine."""
 
     def __init__(self, store: RunnerStoreConnections) -> None:
@@ -83,5 +83,5 @@ class GitDeclarationStore:
         _log.info("git-commit declaration recorded", lease_id=lease_id, repo=repo)
 
 
-def _conforms_git_declaration_store(x: GitDeclarationStore) -> IWriteGitCommitDeclarationRepository:
+def _conforms_git_commit_declaration_store(x: GitCommitDeclarationStore) -> IWriteGitCommitDeclarationRepository:
     return x

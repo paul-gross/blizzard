@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import click
-from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -17,7 +16,7 @@ from blizzard.runner.harness.workspace_prompts import (
     WORKSPACE_PROMPT_FILENAME,
     UnknownWorkspacePromptSample,
 )
-from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreError, RunnerStoreErrorFactory
 
 
 @click.group("prompt")
@@ -169,7 +168,7 @@ def _stored_override(config: RunnerConfig) -> str | None:
             create_engine_from_url(config.db_url), errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
         )
         return stores.workspace_prompt.workspace_prompt_override(config.workspace_id)
-    except SQLAlchemyError as exc:
+    except RunnerStoreError as exc:
         raise click.ClickException(f"could not read the runner store at {config.db_url}: {exc}") from exc
 
 

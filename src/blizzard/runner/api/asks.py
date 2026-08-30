@@ -87,7 +87,8 @@ def list_asks(request: Request, open_only: bool = Query(True, alias="open")) -> 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="only open asks are queryable — no closed-ask history is kept",
         )
-    return _ask_list(RunnerWiring.of(request).stores().asks)
+    asks: IReadAskRepository = RunnerWiring.of(request).stores().asks
+    return _ask_list(asks)
 
 
 def _ask_list(asks: IReadAskRepository) -> AskListResponse:

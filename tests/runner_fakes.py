@@ -45,7 +45,7 @@ from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.store.internal.check_store import CheckStore
 from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
-from blizzard.runner.store.internal.git_declaration_store import GitDeclarationStore
+from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
 from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
 from blizzard.runner.store.internal.lease_store import LeaseStore
 from blizzard.runner.store.internal.outbound_store import OutboundStore
@@ -98,7 +98,7 @@ class SqlAlchemyRunnerStore(
     EscalationStore,
     UsageStore,
     AttachmentStore,
-    GitDeclarationStore,
+    GitCommitDeclarationStore,
     CheckStore,
     GraphArtifactStore,
 ):
@@ -123,7 +123,7 @@ class SqlAlchemyRunnerStore(
         EscalationStore.__init__(self, store)
         UsageStore.__init__(self, store)
         AttachmentStore.__init__(self, store)
-        GitDeclarationStore.__init__(self, store)
+        GitCommitDeclarationStore.__init__(self, store)
         CheckStore.__init__(self, store)
         GraphArtifactStore.__init__(self, store)
         self._engine = engine

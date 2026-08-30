@@ -154,8 +154,6 @@ _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     # A wholly separate, unrelated store (the JWT jti-seen cache) under its own
     # package-private internal/ — never part of RunnerStore.
     _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": None,
-    # A read-only driver-exception catch, not schema/query access.
-    _RUNNER_DIR / "cli" / "prompt.py": ("SQLAlchemyError",),
 }
 
 
@@ -216,7 +214,7 @@ def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter()
     takes a Protocol seam or the ``RunnerStores`` bundle it builds."""
     adapters = _runner_store_adapter_names()
     violations: list[str] = []
-    for path in sorted(_RUNNER_DIR.rglob("*.py")):
+    for path in sorted(_SRC_DIR.rglob("*.py")):
         if path.is_relative_to(_RUNNER_STORE_INTERNAL_DIR) or path == _RUNNER_COMPOSITION_FILE:
             continue
         tree = ast.parse(path.read_text(), filename=str(path))

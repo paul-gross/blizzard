@@ -15,7 +15,7 @@ _log = get_logger("blizzard.runner.store")
 
 # ``>=``: a mint at the mark's own instant is the spawn the mark itself triggered
 # (pinned by tests/test_pin_runner_store.py::test_a_same_instant_mint_consumes_its_requeue_mark).
-UNCONSUMED_REQUEUE = Unsuperseded(
+_UNCONSUMED_REQUEUE = Unsuperseded(
     leases.c.lease_id,
     (leases.c.chunk_id == requeues.c.chunk_id, leases.c.created_at >= requeues.c.requeued_at),
 )
@@ -28,7 +28,7 @@ class RequeueStore:
         self._store = store
 
     def pending_requeue_chunk_ids(self) -> set[str]:
-        stmt = select(requeues.c.chunk_id).where(UNCONSUMED_REQUEUE.clause).distinct()
+        stmt = select(requeues.c.chunk_id).where(_UNCONSUMED_REQUEUE.clause).distinct()
         return {str(r.chunk_id) for r in self._store.all(stmt)}
 
     def record_requeue(self, *, chunk_id: str, at: datetime) -> None:

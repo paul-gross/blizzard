@@ -6,11 +6,12 @@ predicate used by exactly one concept is defined at that concept's own adapter i
 from __future__ import annotations
 
 import json
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Engine, select
+from sqlalchemy import Connection, Engine, Row, Select, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.runner.domain.leases import LeaseRecord
@@ -42,19 +43,19 @@ class RunnerStoreConnections:
         self._engine = engine
         self._errors = errors
 
-    def connect(self):  # type: ignore[no-untyped-def]
+    def connect(self) -> Connection:
         try:
             return self._engine.connect()
         except SQLAlchemyError as exc:
             raise self._errors.from_driver(exc, operation="connect") from exc
 
-    def begin(self):  # type: ignore[no-untyped-def]
+    def begin(self) -> AbstractContextManager[Connection]:
         try:
             return self._engine.begin()
         except SQLAlchemyError as exc:
             raise self._errors.from_driver(exc, operation="begin") from exc
 
-    def all(self, stmt):  # type: ignore[no-untyped-def]
+    def all(self, stmt: Select[Any]) -> list[Row[Any]]:
         try:
             with self._engine.connect() as conn:
                 return list(conn.execute(stmt))
@@ -119,6 +120,10 @@ OPEN_PAUSE_PARK = Unsuperseded(
         pause_park_resumes.c.resumed_at >= pause_parks.c.parked_at,
     ),
 )
+
+#: The pause-park half of ask/park's ``parked_lease_ids`` union — shared so the ask
+#: adapter never reaches into a sibling adapter for it (blizzard#410 review F3).
+PAUSE_PARKED_LEASE_IDS = select(pause_parks.c.lease_id).where(OPEN_PAUSE_PARK.clause).distinct()
 
 # Correlated against ``open_escalations``'s own outer ``leases``/``lease_closures`` join.
 _LATER_LEASE = leases.alias("later_escalation_leases")

@@ -2140,12 +2140,12 @@
   "blizzard/runner/api/artifacts.py": {
    "comments": 6,
    "docstrings": 26,
-   "total": 207
+   "total": 208
   },
   "blizzard/runner/api/asks.py": {
    "comments": 0,
    "docstrings": 18,
-   "total": 94
+   "total": 95
   },
   "blizzard/runner/api/attachments.py": {
    "comments": 0,
@@ -2165,7 +2165,7 @@
   "blizzard/runner/api/dashboard.py": {
    "comments": 7,
    "docstrings": 11,
-   "total": 65
+   "total": 67
   },
   "blizzard/runner/api/environments.py": {
    "comments": 0,
@@ -2220,7 +2220,7 @@
   "blizzard/runner/api/lease_scope.py": {
    "comments": 0,
    "docstrings": 5,
-   "total": 25
+   "total": 27
   },
   "blizzard/runner/api/lease_token.py": {
    "comments": 0,
@@ -2365,7 +2365,7 @@
   "blizzard/runner/cli/prompt.py": {
    "comments": 0,
    "docstrings": 27,
-   "total": 206
+   "total": 205
   },
   "blizzard/runner/cli/runtime.py": {
    "comments": 17,
@@ -2814,8 +2814,8 @@
   },
   "blizzard/runner/store/internal/ask_store.py": {
    "comments": 3,
-   "docstrings": 6,
-   "total": 130
+   "docstrings": 8,
+   "total": 132
   },
   "blizzard/runner/store/internal/attachment_store.py": {
    "comments": 2,
@@ -2823,9 +2823,9 @@
    "total": 62
   },
   "blizzard/runner/store/internal/base.py": {
-   "comments": 17,
+   "comments": 16,
    "docstrings": 21,
-   "total": 201
+   "total": 206
   },
   "blizzard/runner/store/internal/check_store.py": {
    "comments": 7,
@@ -2842,7 +2842,7 @@
    "docstrings": 2,
    "total": 92
   },
-  "blizzard/runner/store/internal/git_declaration_store.py": {
+  "blizzard/runner/store/internal/git_commit_declaration_store.py": {
    "comments": 2,
    "docstrings": 3,
    "total": 87
@@ -2865,7 +2865,7 @@
   "blizzard/runner/store/internal/pause_store.py": {
    "comments": 2,
    "docstrings": 3,
-   "total": 111
+   "total": 110
   },
   "blizzard/runner/store/internal/requeue_store.py": {
    "comments": 2,
@@ -3094,8 +3094,8 @@
   },
   "blizzard/runner/stores.py": {
    "comments": 0,
-   "docstrings": 14,
-   "total": 105
+   "docstrings": 17,
+   "total": 108
   },
   "blizzard/runner/transcripts/__init__.py": {
    "comments": 0,
@@ -4475,9 +4475,9 @@
    "total": 1009
   },
   "test_layering.py": {
-   "comments": 9,
+   "comments": 8,
    "docstrings": 13,
-   "total": 228
+   "total": 226
   },
   "test_lease_auth.py": {
    "comments": 0,

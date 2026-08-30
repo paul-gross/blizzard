@@ -48,7 +48,7 @@ _PREEMPTED_REASON = "preempted"
 
 # Pinned by tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held's
 # sibling lease cases.
-OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
+_OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
 
 
 class LeaseStore:
@@ -60,21 +60,21 @@ class LeaseStore:
     # --- reads --------------------------------------------------------------
 
     def list_active_leases(self) -> list[LeaseRecord]:
-        stmt = lease_select().where(OPEN_LEASE.clause)
+        stmt = lease_select().where(_OPEN_LEASE.clause)
         return [row_to_lease(r) for r in self._store.all(stmt)]
 
     def active_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
         stmt = (
             lease_select()
             .where(leases.c.chunk_id == chunk_id)
-            .where(OPEN_LEASE.clause)
+            .where(_OPEN_LEASE.clause)
             .order_by(leases.c.created_at.desc())
         )
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
     def active_lease(self, lease_id: str) -> LeaseRecord | None:
-        stmt = lease_select().where(leases.c.lease_id == lease_id).where(OPEN_LEASE.clause)
+        stmt = lease_select().where(leases.c.lease_id == lease_id).where(_OPEN_LEASE.clause)
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 

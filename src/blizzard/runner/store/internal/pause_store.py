@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.pause import IWritePauseRepository
-from blizzard.runner.store.internal.base import OPEN_PAUSE_PARK, RunnerStoreConnections
+from blizzard.runner.store.internal.base import PAUSE_PARKED_LEASE_IDS, RunnerStoreConnections
 from blizzard.runner.store.schema import (
     daemon_liveness,
     hub_control,
@@ -50,8 +50,7 @@ class PauseStore:
         return rows[0].alive_at if rows and rows[0].alive_at is not None else None
 
     def pause_parked_lease_ids(self) -> set[str]:
-        stmt = select(pause_parks.c.lease_id).where(OPEN_PAUSE_PARK.clause).distinct()
-        return {str(r.lease_id) for r in self._store.all(stmt)}
+        return {str(r.lease_id) for r in self._store.all(PAUSE_PARKED_LEASE_IDS)}
 
     def record_daemon_liveness(self, *, runner_id: str, alive_at: datetime) -> None:
         with self._store.begin() as conn:

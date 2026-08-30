@@ -14,7 +14,7 @@ from blizzard.runner.store.schema import leases, takeover_ends, takeovers
 
 _log = get_logger("blizzard.runner.store")
 
-OPEN_TAKEOVER = Unclosed(takeovers.c.takeover_id, takeover_ends.c.takeover_id)
+_OPEN_TAKEOVER = Unclosed(takeovers.c.takeover_id, takeover_ends.c.takeover_id)
 
 
 class TakeoverStore:
@@ -28,7 +28,7 @@ class TakeoverStore:
             lease_select()
             .join(takeovers, takeovers.c.lease_id == leases.c.lease_id)
             .where(leases.c.lease_id == lease_id)
-            .where(OPEN_TAKEOVER.clause)
+            .where(_OPEN_TAKEOVER.clause)
         )
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
@@ -37,18 +37,18 @@ class TakeoverStore:
         stmt = (
             select(takeovers)
             .where(takeovers.c.chunk_id == chunk_id)
-            .where(OPEN_TAKEOVER.clause)
+            .where(_OPEN_TAKEOVER.clause)
             .order_by(takeovers.c.opened_at.desc())
         )
         rows = self._store.all(stmt)
         return self._row_to_takeover(rows[0]) if rows else None
 
     def open_takeover_chunk_ids(self) -> set[str]:
-        stmt = select(takeovers.c.chunk_id).where(OPEN_TAKEOVER.clause).distinct()
+        stmt = select(takeovers.c.chunk_id).where(_OPEN_TAKEOVER.clause).distinct()
         return {str(r.chunk_id) for r in self._store.all(stmt)}
 
     def open_takeovers(self) -> list[TakeoverRecord]:
-        stmt = select(takeovers).where(OPEN_TAKEOVER.clause).order_by(takeovers.c.opened_at.desc())
+        stmt = select(takeovers).where(_OPEN_TAKEOVER.clause).order_by(takeovers.c.opened_at.desc())
         return [self._row_to_takeover(r) for r in self._store.all(stmt)]
 
     def record_takeover(
