@@ -6,101 +6,14 @@
   font-size: var(--fs-base);
   color: var(--text);
 }
-.gd-lbl {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
 .gd-panel {
   background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
   border: 1px solid var(--bezel);
   min-height: 0;
-}
-.gd-hdr {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--line);
-  background: var(--overlay-25);
-}
-.gid {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-}
-.lifecycle-badge {
-  padding: 1px 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: var(--fs-xs);
-}
-.lifecycle-badge.enabled {
-  color: var(--cyan);
-  border: 1px solid var(--cyan);
-}
-.lifecycle-badge.retired {
-  color: var(--red);
-  border: 1px solid var(--red);
-}
-.lifecycle-actions {
-  display: flex;
-  padding: 4px 8px 0;
-}
-.lifecycle-error {
-  margin: 0;
-  padding: 0 8px;
-  color: var(--red);
-  font-size: var(--fs-xs);
 }
 .body {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 8px;
-}
-.entry {
-  margin: 0;
-  font-size: var(--fs-sm);
-  color: var(--label-dim);
-}
-.entry strong {
-  color: var(--cyan);
-}
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.node-edges {
-  border: 1px solid var(--line);
-  padding: 4px 6px;
-}
-.from {
-  color: var(--cyan);
-  font-size: var(--fs-sm);
-}
-.edge-list {
-  list-style: none;
-  margin: 4px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.edge {
-  font-size: var(--fs-xs);
-}
-.choice {
-  color: var(--amber-hi);
-}
-.arrow {
-  color: var(--label-dim);
-  margin: 0 4px;
-}
-.addendum {
-  margin: 2px 0 0;
-  color: var(--label-dim);
-  white-space: pre-wrap;
 }

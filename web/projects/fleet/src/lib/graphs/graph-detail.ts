@@ -4,21 +4,14 @@ import type { GraphEdgeView, GraphNodeView, GraphSessionView } from '../api/hub'
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { errorMessage } from '../error-message';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
-import { KitButton } from '../kit/kit-button';
 import { asyncState } from '../query-state';
+import { GraphDetailEdges } from './graph-detail-edges';
+import { GraphDetailHeader } from './graph-detail-header';
 import { GraphDiagramView } from './graph-diagram-view';
 import { injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
 import { GraphNodeTable } from './graph-node-table';
 import { GraphSessionTable } from './graph-session-table';
 import { injectHubGraphQuery } from './graphs.query';
-
-/** One outgoing edge, resolved against the choice it fires on (the choice lives on
- * the *source* node's `choices`, edges only carry the `choice_id`). */
-interface ResolvedEdge {
-  readonly edge: GraphEdgeView;
-  readonly choiceName: string;
-  readonly choiceDescription: string;
-}
 
 /**
  * The graph explorer's **detail** view — one minted graph's immutable structure,
@@ -35,11 +28,19 @@ interface ResolvedEdge {
  * failure. A node's prompt/judgement text and an edge's prompt addendum are read via
  * that diagram selection pane, not duplicated here in a standalone prompts list
  * (issue #208).
+ *
+ * Container only: keeps the injections (`injectHubGraphQuery`,
+ * `injectGraphLifecycleMutation`, `injectMeQuery`), the derived state, the mutation
+ * calls, and the `.gd-panel`/`.body` layout wrapper hosting five presentational
+ * children — {@link GraphDetailHeader}, `fleet-graph-diagram-view`,
+ * `fleet-graph-node-table`, `fleet-graph-session-table`, and
+ * {@link GraphDetailEdges} — each of which forwards data down and re-emits outputs up
+ * (`bzh:frontend-container-presentational`).
  */
 @Component({
   selector: 'fleet-graph-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GraphDiagramView, GraphNodeTable, GraphSessionTable, KitAsyncState, KitButton],
+  imports: [GraphDetailEdges, GraphDetailHeader, GraphDiagramView, GraphNodeTable, GraphSessionTable, KitAsyncState],
   templateUrl: './graph-detail.html',
   styleUrl: './graph-detail.css',
 })
@@ -59,7 +60,8 @@ export class GraphDetail {
   protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.graphQuery, false));
 
   /** Whether the current identity may author graphs (`graph:edit`, admin-tier — issue
-   * #93) — gates the retire/re-enable controls; `null`/pending resolves to `false`. */
+   * #93) — gates the retire/re-enable controls, forwarded to {@link GraphDetailHeader};
+   * `null`/pending resolves to `false`. */
   protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
 
   /** Set on a failed retire/enable (issue #42's report-don't-swallow pattern);
@@ -67,6 +69,8 @@ export class GraphDetail {
   protected readonly actionError = signal<string | null>(null);
 
   protected readonly nodes = computed<readonly GraphNodeView[]>(() => this.graph()?.nodes ?? []);
+
+  protected readonly edges = computed<readonly GraphEdgeView[]>(() => this.graph()?.edges ?? []);
 
   /** The graph's declared sessions (issue #144) — empty for every graph minted before
    * #144, which is what makes the session table render nothing at all there. */
@@ -78,14 +82,8 @@ export class GraphDetail {
     return this.nodes().find((n) => n.node_id === g.entry_node_id)?.name ?? g.entry_node_id;
   });
 
-  /** Confirm, then fire the retire mutation (issue #101) — mirrors
-   * `chunk-detail-header.ts`'s confirm-then-emit pattern for pause/detach. */
+  /** Fires the retire mutation once {@link GraphDetailHeader} has already confirmed. */
   protected onRetire(graphId: string): void {
-    const confirmed = globalThis.confirm(
-      `Retire graph ${graphId}? It is excluded from name resolution and refuses new ` +
-        `re-pins; any chunk already running on it is left to run out.`,
-    );
-    if (!confirmed) return;
     this.actionError.set(null);
     this.lifecycleMutation.mutate(
       { graphId, retired: true },
@@ -93,33 +91,12 @@ export class GraphDetail {
     );
   }
 
-  /** Confirm, then fire the enable mutation (issue #101). */
+  /** Fires the enable mutation once {@link GraphDetailHeader} has already confirmed. */
   protected onEnable(graphId: string): void {
-    const confirmed = globalThis.confirm(`Re-enable graph ${graphId}? It resumes normal newest-per-name derivation.`);
-    if (!confirmed) return;
     this.actionError.set(null);
     this.lifecycleMutation.mutate(
       { graphId, retired: false },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Enable failed.')) },
     );
-  }
-
-  /** This node's outgoing edges, each resolved against the matching choice on the
-   * same node (edges only carry `choice_id`; the choice's name/description live on
-   * the source node's `choices`). */
-  protected resolvedEdges(node: GraphNodeView): readonly ResolvedEdge[] {
-    const g = this.graph();
-    if (!g) return [];
-    const choices = node.choices ?? [];
-    return (g.edges ?? [])
-      .filter((edge) => edge.from_node_id === node.node_id)
-      .map((edge) => {
-        const choice = choices.find((c) => c.choice_id === edge.choice_id);
-        return {
-          edge,
-          choiceName: choice?.name ?? edge.choice_id,
-          choiceDescription: choice?.description ?? '',
-        };
-      });
   }
 }

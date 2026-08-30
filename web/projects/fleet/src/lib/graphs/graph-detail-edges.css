@@ -1,0 +1,42 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gd-lbl {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.node-edges {
+  border: 1px solid var(--line);
+  padding: 4px 6px;
+}
+.from {
+  color: var(--cyan);
+  font-size: var(--fs-sm);
+}
+.edge-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.edge {
+  font-size: var(--fs-xs);
+}
+.choice {
+  color: var(--amber-hi);
+}
+.arrow {
+  color: var(--label-dim);
+  margin: 0 4px;
+}
+.addendum {
+  margin: 2px 0 0;
+  color: var(--label-dim);
+  white-space: pre-wrap;
+}

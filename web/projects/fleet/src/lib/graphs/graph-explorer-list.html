@@ -1,0 +1,45 @@
+<ul class="groups" data-testid="graph-explorer-groups">
+  @for (group of groups(); track group.name) {
+    <li class="group" data-testid="graph-explorer-group" [attr.data-name]="group.name">
+      <button
+        type="button"
+        class="group-head"
+        data-testid="graph-explorer-group-toggle"
+        (click)="toggle(group)"
+      >
+        <span class="name">{{ group.name }}</span>
+        <span class="count" data-testid="graph-explorer-group-count">({{ group.versions.length }})</span>
+        <span class="summary" data-testid="graph-explorer-group-effective">{{
+          shortId(group.effective.graph_id)
+        }}</span>
+      </button>
+      @if (isExpanded(group)) {
+        <ol class="lineage" data-testid="graph-explorer-lineage">
+          @for (version of group.versions; track version.graph_id) {
+            <li class="row-item">
+              <button
+                type="button"
+                class="row"
+                data-testid="graph-explorer-row"
+                [class.selected]="version.graph_id === selectedGraphId()"
+                [attr.data-graph-id]="version.graph_id"
+                (click)="selectGraph.emit(version.graph_id)"
+              >
+                <span class="gid" data-testid="graph-explorer-graph-id">{{ shortId(version.graph_id) }}</span>
+                <fleet-when class="created" data-testid="graph-explorer-created-at" [iso]="version.created_at" />
+                <span
+                  class="badge"
+                  data-testid="graph-explorer-badge"
+                  [class.effective]="version.effective"
+                  [class.retired]="version.retired"
+                  [class.superseded]="!version.effective && !version.retired"
+                  >{{ versionLabel(version) }}</span
+                >
+              </button>
+            </li>
+          }
+        </ol>
+      }
+    </li>
+  }
+</ul>
