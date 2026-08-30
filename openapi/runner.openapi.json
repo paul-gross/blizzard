@@ -2857,6 +2857,136 @@
         "title": "TranscriptResponse",
         "type": "object"
       },
+      "TranscriptSegmentContentView": {
+        "description": "One segment's decompressed turns, concatenated across its stored records in\nturn-range order \u2014 the lazy per-segment content read (D12).",
+        "properties": {
+          "final": {
+            "title": "Final",
+            "type": "boolean"
+          },
+          "segment_id": {
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "turns": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TurnSegmentView"
+            },
+            "title": "Turns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "segment_id",
+          "final",
+          "truncated"
+        ],
+        "title": "TranscriptSegmentContentView",
+        "type": "object"
+      },
+      "TranscriptSegmentIndexEntry": {
+        "description": "One segment's metadata row (D12) \u2014 byte counts and completion state, never turn\ncontent. ``truncated`` is true iff any record was cap-rejected (D5) OR the runner\nitself declared ``record_truncated`` on one, so a consumer can tell an incomplete\nsegment from a short one without fetching it.",
+        "properties": {
+          "byte_count": {
+            "title": "Byte Count",
+            "type": "integer"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "final": {
+            "title": "Final",
+            "type": "boolean"
+          },
+          "harness_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Version"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "normalizer_version": {
+            "title": "Normalizer Version",
+            "type": "string"
+          },
+          "received_at": {
+            "title": "Received At",
+            "type": "string"
+          },
+          "segment_id": {
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "spawn_generation": {
+            "title": "Spawn Generation",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "turn_range_end": {
+            "title": "Turn Range End",
+            "type": "integer"
+          },
+          "turn_range_start": {
+            "title": "Turn Range Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "segment_id",
+          "node_id",
+          "epoch",
+          "spawn_generation",
+          "turn_range_start",
+          "turn_range_end",
+          "final",
+          "truncated",
+          "byte_count",
+          "normalizer_version",
+          "harness_version",
+          "received_at"
+        ],
+        "title": "TranscriptSegmentIndexEntry",
+        "type": "object"
+      },
+      "TranscriptSegmentIndexView": {
+        "description": "The per-chunk segment discovery read (D12) \u2014 unreachable content, only what a\ncaller needs to then ask for one segment's turns.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "segments": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegmentIndexEntry"
+            },
+            "title": "Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_id"
+        ],
+        "title": "TranscriptSegmentIndexView",
+        "type": "object"
+      },
       "TransitionView": {
         "description": "One accepted transition in a chunk's history: the edge a node-step took \u2014 origin node, the\njudgement choice that routed it, destination \u2014 oldest first on the detail.\n``from_node_name``/``to_node_name`` are the nodes' human graph names, null when unresolvable.\n``graph_id``/``graph_name`` name the graph this step happened in (issue #90), both null on old rows.",
         "properties": {
@@ -3927,6 +4057,101 @@
           }
         },
         "summary": "End Takeover",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/transcripts": {
+      "get": {
+        "description": "The chunk's segment index, straight off the local ledger \u2014 metadata and byte counts\nonly, never turns (D12). A chunk this runner never held a lease for returns ``[]``.",
+        "operationId": "list_transcript_segments_api_chunks__chunk_id__transcripts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptSegmentIndexView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Transcript Segments",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/transcripts/{segment_id}": {
+      "get": {
+        "description": "One segment's turns, read from its session file, local-only (D1) \u2014 404 iff no such\nsegment exists under this chunk on this runner's own store.",
+        "operationId": "get_transcript_segment_api_chunks__chunk_id__transcripts__segment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "segment_id",
+            "required": true,
+            "schema": {
+              "title": "Segment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptSegmentContentView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Transcript Segment",
         "tags": [
           "runner"
         ]
