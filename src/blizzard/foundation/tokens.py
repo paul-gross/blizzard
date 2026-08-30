@@ -1,5 +1,4 @@
-"""A fleet bearer token's digest wrapper — shared by every daemon that mints, stores,
-or checks one (enrollment, route, or lease)."""
+"""A fleet bearer token's digest, shared by every daemon."""
 
 from __future__ import annotations
 
@@ -10,8 +9,7 @@ from blizzard.foundation.hashing import Sha256Hex
 
 @dataclass(frozen=True)
 class TokenHash:
-    """A fleet bearer token in plaintext — enrollment, route, or lease — and the digest
-    it is stored and compared as (:class:`~blizzard.foundation.hashing.Sha256Hex`)."""
+    """A fleet bearer token in plaintext, and the digest it is stored and compared as."""
 
     plaintext: str
 

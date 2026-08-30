@@ -1,6 +1,4 @@
-"""The three things a node declares about its step: where it runs, who judges its exit,
-and how its session is minted. Both daemons read this vocabulary; the :class:`Node`
-entity it describes is hub policy and stays in ``hub/domain/graph.py``."""
+"""Where a node's step runs, judges its exit, mints its session — `Node` itself stays hub policy."""
 
 from __future__ import annotations
 

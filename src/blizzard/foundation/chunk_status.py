@@ -1,6 +1,4 @@
-"""A chunk's derived status vocabulary (``bzh:facts-not-status``) — never stored, always
-a query result. Both daemons read it; the derivation itself stays in
-``hub/domain/work.py::ChunkFacts.status``."""
+"""A chunk's derived status, read by both daemons — the derivation stays in `work.py`."""
 
 from __future__ import annotations
 
@@ -28,6 +26,5 @@ class ChunkStatus(StrEnum):
         return self not in TERMINAL_STATUSES
 
 
-# The two statuses a chunk never leaves — the one owner of "this chunk is finished",
-# defined beside the enum it folds rather than re-spelled per call site.
+# The two statuses a chunk never leaves — the one owner of "this chunk is finished".
 TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
