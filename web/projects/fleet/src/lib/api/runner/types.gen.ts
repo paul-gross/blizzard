@@ -14,9 +14,8 @@ export type ArtifactKind = 'git_commit' | 'asset';
 /**
  * ArtifactScope
  *
- * Where an artifact is pinned — a chunk's node-step, the graph mint that baked it
- * into the graph itself (``artifacts:``), or blizzard's own published, global-namespace
- * documents, resolved at call time (``system``).
+ * Where an artifact is pinned — a chunk's node-step, the graph mint (``artifacts:``),
+ * or blizzard's own published, global-namespace documents (``system``).
  */
 export type ArtifactScope = 'node' | 'graph' | 'system';
 
