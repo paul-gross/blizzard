@@ -35,7 +35,7 @@ class FakeTranscriptRepository:
         self._by_session_id = by_session_id or {}
         self.calls: list[tuple[str, str | None]] = []
 
-    def read_turns(self, session_id: str, *, spawn_cwd: str | None) -> Transcript:
+    def read_turns(self, session_id: str, *, spawn_cwd: str | None, since: str | None = None) -> Transcript:
         self.calls.append((session_id, spawn_cwd))
         if session_id in self._by_session_id:
             return self._by_session_id[session_id]

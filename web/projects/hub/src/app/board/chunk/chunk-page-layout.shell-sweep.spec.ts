@@ -3,12 +3,11 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkGeneralTab, hubClient, type hubApi } from 'fleet';
+import { ChunkGeneralTab, ChunkTranscriptsTab, hubClient, type hubApi } from 'fleet';
 import { OPERATOR_ME_RESPONSE, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { ChunkPage } from './chunk-page';
-import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 /**
  * The chunk detail page's General tab two-column arrangement half of
@@ -569,7 +568,7 @@ describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shel
         await page.viewport(390, 900);
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
-        const host = root.querySelector<HTMLElement>('app-chunk-transcripts-tab');
+        const host = root.querySelector<HTMLElement>('fleet-chunk-transcripts-tab');
         const status = root.querySelector<HTMLElement>('[data-testid="transcripts-forbidden"]');
         expect(host, 'no app-chunk-transcripts-tab host in the composed chain').not.toBeNull();
         expect(status, 'no transcripts-forbidden status line rendered').not.toBeNull();

@@ -21,8 +21,6 @@ import { ChunkDetailPage } from './chunk-detail-page';
  * own specs).
  */
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
-const NEW_LEASE = 'lease_01KXKVVF1J3D6H6VYZ3XYNNEW1';
-const OLD_LEASE = 'lease_01KXKVVF1J3D6H6VYZ3XYNOLD1';
 
 const DETAIL = {
   chunk_id: CHUNK_ID,
@@ -60,26 +58,6 @@ const DETAIL = {
   ],
 };
 
-const NEWEST = {
-  lease_id: NEW_LEASE,
-  chunk_id: CHUNK_ID,
-  graph_id: 'gr_1',
-  node_id: 'nd_review',
-  node_name: 'review',
-  epoch: 2,
-  session_id: 'sess-new',
-  pid: 4821,
-  environment_id: 'beta',
-  workdir: '/ws/beta',
-  created_at: '2026-07-16T11:00:00.000Z',
-  last_heartbeat_at: '2026-07-16T11:59:26.000Z',
-  state: 'running',
-  closed_at: null,
-  closure_reason: null,
-};
-
-const OLDER = { ...NEWEST, lease_id: OLD_LEASE, epoch: 1, session_id: 'sess-old', state: 'closed', closure_reason: 'failed' };
-
 /** Stands in for the board route — only its resolving matters here. */
 @Component({ selector: 'app-board-stub', template: '' })
 class BoardStub {}
@@ -89,17 +67,17 @@ const ROUTES = [
   { path: 'board/chunk/:chunkId', component: ChunkDetailPage },
 ];
 
-function routes(leases: readonly unknown[] = [NEWEST]): (method: string, path: string) => unknown {
+function routes(segments: readonly unknown[] = []): (method: string, path: string) => unknown {
   return (method, path) => {
     if (method !== 'GET') return {};
     if (path === `/api/chunks/${CHUNK_ID}`) return DETAIL;
     if (path === `/api/chunks/${CHUNK_ID}/work-items`) {
       return { items: [{ source: 'blizzard', ref: '318', label: 'blizzard#318', title: 'Chunk detail route', body: 'x', comments: [] }] };
     }
-    if (path === '/api/leases') return { items: leases };
-    const transcriptMatch = /^\/api\/leases\/([^/]+)\/transcript$/.exec(path);
-    if (transcriptMatch) {
-      return { lease_id: transcriptMatch[1], session_id: 'sess', available: true, reason: null, truncated: false, turns: [] };
+    if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments };
+    const segmentMatch = /^\/api\/chunks\/[^/]+\/transcripts\/([^/]+)$/.exec(path);
+    if (segmentMatch) {
+      return { segment_id: segmentMatch[1], final: true, truncated: false, turns: [] };
     }
     return {};
   };
@@ -220,9 +198,9 @@ describe('ChunkDetailPage', () => {
     expect(el.querySelector('[data-testid="node-history-artifact-key"]')?.textContent).toContain('build.retrospective.1');
   });
 
-  it('switches tabs on click, writing ?tab= with no full reload, and keeps ?attempt= across the switch', async () => {
+  it('switches tabs on click, writing ?tab= with no full reload, and keeps an unrelated param across the switch', async () => {
     const harness = await RouterTestingHarness.create();
-    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?attempt=${NEW_LEASE}`);
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?attempt=lease_1`);
     await settle(harness.fixture);
     let el = harness.fixture.nativeElement as HTMLElement;
 
@@ -230,15 +208,15 @@ describe('ChunkDetailPage', () => {
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
 
-    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?attempt=${NEW_LEASE}&tab=transcripts`);
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?attempt=lease_1&tab=transcripts`);
     expect(el.querySelector('[data-testid="tab-transcripts"]')?.getAttribute('aria-selected')).toBe('true');
-    expect(el.querySelector('[data-testid="section-transcript"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="chunk-transcripts-tab"]')).not.toBeNull();
 
     el.querySelector<HTMLButtonElement>('[data-testid="tab-general"]')?.click();
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
 
-    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?attempt=${NEW_LEASE}&tab=general`);
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?attempt=lease_1&tab=general`);
     expect(el.querySelector('[data-testid="section-work-item"]')).not.toBeNull();
   });
 
@@ -249,50 +227,62 @@ describe('ChunkDetailPage', () => {
     expect(el.querySelector('[data-testid="section-work-item"]')).not.toBeNull();
   });
 
-  it('renders the transcript for the newest attempt by default on the Transcripts tab', async () => {
-    stub.restore();
-    stub = stubRequestClient(runnerClient, routes([NEWEST, OLDER]));
-    const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
-
-    expect(stub.forRoute(`/api/leases/${NEW_LEASE}/transcript`, 'GET').length).toBeGreaterThan(0);
-    const tabs = el.querySelectorAll('[data-testid="attempt-tab"]');
-    expect(tabs).toHaveLength(2);
-    expect(tabs[1].getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('hydrates the requested attempt from ?attempt= when it names one of the chunk\u2019s leases', async () => {
-    stub.restore();
-    stub = stubRequestClient(runnerClient, routes([NEWEST, OLDER]));
-    const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts&attempt=${OLD_LEASE}`);
-
-    expect(stub.forRoute(`/api/leases/${OLD_LEASE}/transcript`, 'GET').length).toBeGreaterThan(0);
-    const tabs = el.querySelectorAll('[data-testid="attempt-tab"]');
-    expect(tabs[0].getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('writes an attempt pick to ?attempt= with no full reload, keeping the chunk id in the path', async () => {
-    stub.restore();
-    stub = stubRequestClient(runnerClient, routes([NEWEST, OLDER]));
+  it('shows the Transcripts tab and switches to it, fetching the segment index through the runner\u2019s own client', async () => {
     const harness = await RouterTestingHarness.create();
-    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
     await settle(harness.fixture);
-    let el = harness.fixture.nativeElement as HTMLElement;
 
-    el.querySelectorAll<HTMLElement>('[data-testid="attempt-tab"]')[0].click();
+    let el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="tab-transcripts"]')).not.toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="tab-transcripts"]')?.click();
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
 
-    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=transcripts&attempt=${OLD_LEASE}`);
-    expect(el.querySelectorAll('[data-testid="attempt-tab"]')[0].getAttribute('aria-pressed')).toBe('true');
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
+    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/transcripts`, 'GET').length).toBeGreaterThan(0);
+    expect(el.querySelector('[data-testid="chunk-transcripts-tab"]')).not.toBeNull();
+    const step = el.querySelector('[data-testid="transcript-step"]');
+    expect(step?.textContent).toContain('build \u00b7 epoch 1');
+    expect(step?.textContent).toContain('No segments.');
   });
 
-  it('renders an empty state for a chunk with no recorded leases, gated on the resolved read', async () => {
+  it('renders the open segment\u2019s content on the Transcripts tab, resolved through plane="runner"', async () => {
     stub.restore();
-    stub = stubRequestClient(runnerClient, routes([]));
+    stub = stubRequestClient(
+      runnerClient,
+      routes([
+        {
+          segment_id: 'sg_1',
+          node_id: 'nd_build',
+          epoch: 1,
+          spawn_generation: 0,
+          turn_range_start: 0,
+          turn_range_end: 1,
+          final: true,
+          truncated: false,
+          byte_count: 40,
+          normalizer_version: 'v1',
+          harness_version: null,
+          received_at: '2026-07-16T11:05:00.000Z',
+        },
+      ]),
+    );
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts&segment=sg_1`);
+
+    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/transcripts/sg_1`, 'GET').length).toBeGreaterThan(0);
+    expect(el.querySelector('[data-testid="transcript-segment-body"]')).not.toBeNull();
+  });
+
+  it('renders an explicit empty state for a chunk with no history transitions and no transcript segments', async () => {
+    stub.restore();
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) return { ...DETAIL, history: [], current_node_id: 'done' };
+      return routes()(method, path);
+    });
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
 
-    expect(el.querySelector('[data-testid="attempts-empty"]')?.textContent).toContain('NO RECENT ATTEMPTS');
-    expect(el.querySelector('local-transcript-panel')).toBeNull();
+    expect(el.querySelector('[data-testid="transcripts-empty"]')?.textContent).toContain('NO TRANSCRIPT SEGMENTS YET');
   });
 
   it('renders the open escalation through the shared awaiting-human section', async () => {
@@ -321,7 +311,7 @@ describe('ChunkDetailPage', () => {
   it('sends the back link to the board carrying only its ?chunk= selection', async () => {
     // `?attempt=` is this route's own param — the board has no attempt selection to
     // restore it into, so the back link never writes one.
-    const el = await open(`/board/chunk/${CHUNK_ID}?attempt=${NEW_LEASE}`);
+    const el = await open(`/board/chunk/${CHUNK_ID}?attempt=lease_1`);
 
     const back = el.querySelector<HTMLAnchorElement>('[data-testid="chunk-detail-back"]');
     expect(back?.getAttribute('href')).toBe(`/board?chunk=${CHUNK_ID}`);

@@ -38,11 +38,18 @@
         />
       }
       @case ('transcripts') {
-        <app-chunk-transcripts-tab
-          [attemptsState]="attemptsState()"
-          [attemptOptions]="attemptOptions()"
-          [activeAttemptLeaseId]="activeAttemptLeaseId()"
-          (selectAttempt)="selectAttempt($event)"
+        <fleet-chunk-transcripts-container
+          [client]="runnerClient"
+          plane="runner"
+          [chunkId]="chunkId()"
+          [history]="d.history ?? []"
+          [currentNodeId]="d.current_node_id"
+          [currentNodeName]="d.current_node_name ?? null"
+          [latestEpoch]="d.latest_epoch"
+          [segmentId]="segmentId()"
+          [sidechainPath]="sidechainPath()"
+          (pickSegment)="onSelectTranscriptSegment($event)"
+          (pickSidechain)="onSelectTranscriptSidechain($event)"
         />
       }
     }

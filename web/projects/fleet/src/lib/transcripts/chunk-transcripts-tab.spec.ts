@@ -1,7 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import type { hubApi, KitAsyncStateValue, TranscriptSegmentContentView, TranscriptSegmentIndexEntry } from 'fleet';
 
+import type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry, TurnSegmentViewOutput } from '../api/hub';
+import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 interface Props {
@@ -57,7 +58,7 @@ const HISTORY = [
   },
 ];
 
-function turn(overrides: Partial<hubApi.TurnSegmentViewOutput> = {}): hubApi.TurnSegmentViewOutput {
+function turn(overrides: Partial<TurnSegmentViewOutput> = {}): TurnSegmentViewOutput {
   return {
     index: 0,
     kind: 'asst',
@@ -157,9 +158,7 @@ describe('ChunkTranscriptsTab', () => {
   });
 
   it('caps a large segment’s rendered turns and says so (review:F7)', async () => {
-    const turns: hubApi.TurnSegmentViewOutput[] = Array.from({ length: 1200 }, (_, i) =>
-      turn({ index: i, text: `turn ${i}` }),
-    );
+    const turns: TurnSegmentViewOutput[] = Array.from({ length: 1200 }, (_, i) => turn({ index: i, text: `turn ${i}` }));
     const { el } = await render({
       history: HISTORY,
       segments: [segment()],

@@ -662,6 +662,30 @@ def test_record_spawn_stamps_a_segment_keyed_by_chunk_node_epoch_generation(tmp_
 
 
 @pytest.mark.unit
+def test_transcript_segments_for_chunk_returns_every_segment_open_or_finalized(tmp_path):  # type: ignore[no-untyped-def]
+    """The chunk-scoped index read (D6, runner-node-grouped-transcripts) — unlike
+    ``open_transcript_segments``, a finalized segment stays in the result, and a chunk
+    this store never held a lease for reads back ``[]`` (D3's ownership exclusion)."""
+    store = _store(tmp_path)
+    _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    gen1 = store.open_transcript_segments()[0]
+    # A same-session resume finalizes gen1 and opens gen2, so the chunk holds one of each.
+    store.record_spawn(
+        "lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+    )
+    gen2 = store.open_transcript_segments()[0]
+
+    segments = store.transcript_segments_for_chunk("ch_1")
+
+    assert {s.segment_id for s in segments} == {gen1.segment_id, gen2.segment_id}
+    finalized_gen1 = store.transcript_segment(gen1.segment_id)
+    assert finalized_gen1 is not None
+    assert finalized_gen1.finalized_at is not None
+    assert store.transcript_segments_for_chunk("ch_other") == []
+
+
+@pytest.mark.unit
 def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on_a_same_session_resume(
     tmp_path,  # type: ignore[no-untyped-def]
 ):

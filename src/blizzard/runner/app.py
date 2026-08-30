@@ -47,6 +47,7 @@ from blizzard.runner.api.requeues import router as requeues_router
 from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
 from blizzard.runner.api.takeovers import router as takeovers_router
+from blizzard.runner.api.transcript_segments import router as transcript_segments_router
 from blizzard.runner.api.transcripts import router as transcripts_router
 from blizzard.runner.api.work_items import router as work_items_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
@@ -127,6 +128,7 @@ _HUMAN = (
     chunk_detail_router,
     leases_router,
     transcripts_router,
+    transcript_segments_router,
     selftests_router,
     fleet_summary_router,
     workspace_prompt_router,

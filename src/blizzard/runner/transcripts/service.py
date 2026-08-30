@@ -1,8 +1,9 @@
 """The transcript route's domain read model (issue #29) — resolves a lease's transcript to
 a home per Decision 1 (blizzard#249). Holds only read-only seams (``bzh:repository-split``),
 so a controller may hold it directly (``bzh:controller-read-only``). ``leases.lease(lease_id)``
-spans closure — unlike ``active_lease`` — because a transcript outlives its lease.
-Local until acked, hub after (issue #249 AC1): see :meth:`TranscriptService.for_lease`."""
+spans closure — unlike ``active_lease`` — because a transcript outlives its lease. Local until
+acked, hub after (issue #249 AC1, :meth:`TranscriptService.for_lease`); the runner-plane's
+chunk-scoped segment reads (D1/D4) resolve locally too, through that same session-file read."""
 
 from __future__ import annotations
 
@@ -12,8 +13,8 @@ from blizzard.runner.domain.leases import IReadLeaseRepository, LeaseRecord
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
-from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
-from blizzard.runner.transcripts.repository import IReadTranscriptRepository, Transcript, TranscriptProvenance
+from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, TranscriptSegmentLedgerRow
+from blizzard.runner.transcripts.repository import IReadTranscriptRepository, Transcript, TranscriptProvenance, Turn
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,19 @@ class ResolvedTranscript:
     transcript: Transcript
     provenance: TranscriptProvenance
     hub_unreachable: bool
+
+
+@dataclass(frozen=True)
+class ResolvedSegmentContent:
+    """One segment's resolved content, read straight from its session file (D1) — never
+    from the ledger's own shipped-turn accounting, which only bounds the index read (D6).
+    ``turns`` is ``[]`` with ``available=False`` when the session file is gone; a caller
+    renders that as ``truncated=True, turns=[]`` (D2's wire model has no unavailability field)."""
+
+    final: bool
+    available: bool
+    truncated: bool
+    turns: list[Turn]
 
 
 class TranscriptService:
@@ -87,11 +101,56 @@ class TranscriptService:
         hub_unreachable = archived.status == "unreachable" and local.reason == "not_found"
         return ResolvedTranscript(transcript=local, provenance="local", hub_unreachable=hub_unreachable)
 
+    def segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentLedgerRow]:
+        """The chunk's segment ledger rows, straight off the store (D6) — open or
+        finalized, superseded or not. A chunk this store holds no lease for returns
+        ``[]``, which is also this method's whole ownership-exclusion behavior (D3):
+        the store never wrote another runner's segments in the first place."""
+        return self._transcript_ledger.transcript_segments_for_chunk(chunk_id)
+
+    def segment_content(self, chunk_id: str, segment_id: str) -> ResolvedSegmentContent | None:
+        """One segment's content, resolved through its session file (D1) — ``None`` iff no such
+        segment exists under this chunk on this store (404, mirroring :meth:`for_lease`). Windowed
+        to this segment's own turns: starts where the preceding sibling left off, ends at this
+        segment's own frozen cursor once finalized — never a sibling's still-advancing one."""
+        segment = self._transcript_ledger.transcript_segment(segment_id)
+        if segment is None or segment.chunk_id != chunk_id:
+            return None
+        start_cursor = self._session_start(chunk_id, segment)
+        spawn_cwd = self._spawn_cwd(chunk_id)
+        local = self._transcripts.read_turns(segment.session_id, spawn_cwd=spawn_cwd, since=start_cursor)
+        final = segment.finalized_at is not None
+        if not local.available:
+            return ResolvedSegmentContent(final=final, available=False, truncated=True, turns=[])
+        turns = local.turns
+        truncated = local.truncated or segment.truncated_reason is not None
+        if final and segment.cursor is not None:
+            tail = self._transcripts.read_turns(segment.session_id, spawn_cwd=spawn_cwd, since=segment.cursor)
+            if tail.available:
+                turns = turns[: max(0, len(turns) - len(tail.turns))]
+                truncated = truncated or tail.truncated
+        return ResolvedSegmentContent(final=final, available=True, truncated=truncated, turns=turns)
+
+    def _session_start(self, chunk_id: str, segment: TranscriptSegmentLedgerRow) -> str | None:
+        """This segment's own read start within its session file — a same-session resume
+        (``record_spawn``'s cursor carry-forward) chains several segments over one file, so
+        the window starts where the chronologically preceding sibling left off; the first
+        segment of its session has no start bound."""
+        siblings = [
+            s
+            for s in self._transcript_ledger.transcript_segments_for_chunk(chunk_id)
+            if s.session_id == segment.session_id
+        ]
+        index = next(i for i, s in enumerate(siblings) if s.segment_id == segment.segment_id)
+        return siblings[index - 1].cursor if index > 0 else None
+
     def _read_local(self, lease: LeaseRecord) -> Transcript:
         assert lease.session_id is not None
-        bindings = self._environments.bindings_for_chunk(lease.chunk_id)
+        return self._transcripts.read_turns(lease.session_id, spawn_cwd=self._spawn_cwd(lease.chunk_id))
+
+    def _spawn_cwd(self, chunk_id: str) -> str | None:
+        bindings = self._environments.bindings_for_chunk(chunk_id)
         # A closed lease's bindings are already released, so `bindings_for_chunk` returns `[]` and the
         # hint is legitimately `None`; the primary by-session-id lookup does not need it.
         fallback_workdir = bindings[0].workdir if bindings else None
-        spawn_cwd = SpawnCwd(self._workspace_root, fallback_workdir).path
-        return self._transcripts.read_turns(lease.session_id, spawn_cwd=spawn_cwd)
+        return SpawnCwd(self._workspace_root, fallback_workdir).path

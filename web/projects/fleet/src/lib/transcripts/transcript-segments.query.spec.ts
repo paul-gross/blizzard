@@ -2,11 +2,19 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
+import * as hubApi from '../api/hub';
+import type { Client } from '../api/hub/client';
 import { client as hubClient } from '../api/hub/client.gen';
+import * as runnerApi from '../api/runner';
+import { client as runnerClient } from '../api/runner/client.gen';
+import type { TranscriptPlane } from '../query-keys';
 import { settle } from '../testing/settle';
 import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import {
+  TRANSCRIPT_SEGMENTS_API,
   TranscriptFetchError,
+  injectChunkTranscriptSegmentQuery,
+  injectChunkTranscriptsQuery,
   injectHubChunkTranscriptSegmentQuery,
   injectHubChunkTranscriptsQuery,
   shouldRetryTranscriptFetch,
@@ -116,5 +124,123 @@ describe('injectHubChunkTranscriptSegmentQuery', () => {
     // ran, so the segment's content is fetched once rather than once per placement.
     expect(stub.forRoute('/api/chunks/ch_1/transcripts/seg-1', 'GET')).toHaveLength(1);
     expect(fixture.componentInstance.query.data()?.segment_id).toBe('s1');
+  });
+});
+
+/** A real call site passes `client`/`plane` as closed-over constants, exactly like
+ * {@link injectHubChunkTranscriptsQuery} does internally — never as reactive Angular
+ * inputs, since which plane a component reads from never changes over its lifetime. One
+ * host class per plane mirrors that: each closes over its own plane's client the same way
+ * a hub-app or runner-app call site would (D5). */
+function definePlaneTranscriptsQueryHost(client: Client, plane: TranscriptPlane) {
+  @Component({
+    selector: 'fleet-test-plane-transcripts-query-host',
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    template: '',
+  })
+  class TestPlaneTranscriptsQueryHost {
+    readonly chunkId = signal<string | null>('ch_1');
+    readonly query = injectChunkTranscriptsQuery(
+      () => client,
+      () => plane,
+      () => this.chunkId(),
+    );
+  }
+  return TestPlaneTranscriptsQueryHost;
+}
+
+describe('injectChunkTranscriptsQuery — plane-generic (D5)', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub?.restore());
+
+  it.each([
+    ['hub', hubClient] as const,
+    ['runner', runnerClient] as const,
+  ])('resolves against the %s plane’s own stubbed client', async (plane, client) => {
+    stub = stubRequestClient(client, () => ({ chunk_id: 'ch_1', segments: [] }));
+    const HostComponent = definePlaneTranscriptsQueryHost(client, plane);
+    TestBed.configureTestingModule({
+      imports: [HostComponent],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(HostComponent);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.query.data()?.chunk_id).toBe('ch_1');
+    expect(stub.forRoute('/api/chunks/ch_1/transcripts', 'GET')).toHaveLength(1);
+  });
+});
+
+describe('injectChunkTranscriptSegmentQuery — plane-generic (D5)', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub?.restore());
+
+  it.each([
+    ['hub', hubClient] as const,
+    ['runner', runnerClient] as const,
+  ])('resolves against the %s plane’s own stubbed client', async (plane, client) => {
+    stub = stubRequestClient(client, () => ({ segment_id: 's1', final: true, truncated: false, turns: [] }));
+
+    @Component({
+      selector: 'fleet-test-plane-transcript-segment-query-host',
+      changeDetection: ChangeDetectionStrategy.OnPush,
+      template: '',
+    })
+    class TestPlaneTranscriptSegmentQueryHost {
+      readonly query = injectChunkTranscriptSegmentQuery(
+        () => client,
+        () => plane,
+        () => 'ch_1',
+        () => 'seg-1',
+        () => true,
+      );
+    }
+    TestBed.configureTestingModule({
+      imports: [TestPlaneTranscriptSegmentQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestPlaneTranscriptSegmentQueryHost);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.query.data()?.segment_id).toBe('s1');
+    expect(stub.forRoute('/api/chunks/ch_1/transcripts/seg-1', 'GET')).toHaveLength(1);
+  });
+});
+
+/**
+ * `bzh:generated-client`, over the dispatch table both plane-generic queries share
+ * ({@link TRANSCRIPT_SEGMENTS_API}) — a reference-identity check, not a spy: this
+ * workspace's own Angular test harness refuses `vi.mock` for relative imports outright
+ * ("Please use Angular TestBed for mocking dependencies"), and a frozen ESM namespace
+ * export cannot be `vi.spyOn`'d in place either. Reference identity is also the only
+ * property that genuinely distinguishes the two calls at all: given the same explicit
+ * `client`, the hub's and runner's generated wrappers are byte-identical at runtime
+ * (same hardcoded URL, same `options.client ?? client` shape) — a black-box behavioral
+ * test cannot tell "the right module" from "the wrong module with the client swapped
+ * in" apart, which is exactly the silent-drift risk the rule exists to close off.
+ */
+describe('TRANSCRIPT_SEGMENTS_API — plane dispatch (bzh:generated-client)', () => {
+  it('maps the hub plane to the hub’s own generated operations, never the runner’s', () => {
+    expect(TRANSCRIPT_SEGMENTS_API.hub.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet).toBe(
+      hubApi.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet,
+    );
+    expect(TRANSCRIPT_SEGMENTS_API.hub.getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet).toBe(
+      hubApi.getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet,
+    );
+    expect(TRANSCRIPT_SEGMENTS_API.hub.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet).not.toBe(
+      runnerApi.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet,
+    );
+  });
+
+  it('maps the runner plane to the runner’s own generated operations, never the hub’s', () => {
+    expect(TRANSCRIPT_SEGMENTS_API.runner.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet).toBe(
+      runnerApi.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet,
+    );
+    expect(TRANSCRIPT_SEGMENTS_API.runner.getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet).toBe(
+      runnerApi.getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet,
+    );
+    expect(TRANSCRIPT_SEGMENTS_API.runner.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet).not.toBe(
+      hubApi.listTranscriptSegmentsApiChunksChunkIdTranscriptsGet,
+    );
   });
 });

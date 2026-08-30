@@ -9,7 +9,12 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NormalizedTurn, SidechainConversation
+from blizzard.runner.harness.transcript import (
+    IHarnessTranscriptSource,
+    NormalizedTurn,
+    SidechainConversation,
+    TranscriptPosition,
+)
 from blizzard.runner.harness.transcript import ToolCall as HarnessToolCall
 from blizzard.runner.transcripts.repository import (
     IReadTranscriptRepository,
@@ -125,8 +130,9 @@ class ProjectedTranscriptRepository:
     def __init__(self, source: IHarnessTranscriptSource) -> None:
         self._source = source
 
-    def read_turns(self, session_id: str, *, spawn_cwd: str | None) -> Transcript:
-        batch = self._source.turns_since(session_id, spawn_cwd=spawn_cwd, since=None)
+    def read_turns(self, session_id: str, *, spawn_cwd: str | None, since: str | None = None) -> Transcript:
+        position = TranscriptPosition(since) if since is not None else None
+        batch = self._source.turns_since(session_id, spawn_cwd=spawn_cwd, since=position)
         if not batch.available:
             return Transcript(session_id=session_id, available=False, reason=batch.reason, turns=[], truncated=False)
 

@@ -10,50 +10,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.api.transcript_rendering import turn_view
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.transcripts.repository import Sidechain, ToolCall, Turn
 from blizzard.runner.transcripts.service import ResolvedTranscript
 from blizzard.wire.transcript import TranscriptResponse
-from blizzard.wire.transcript_segment import SidechainSegmentView, ToolCallSegmentView, TurnSegmentView
 
 router = APIRouter(prefix="/api", tags=["runner"])
-
-
-def _tool_view(tool: ToolCall) -> ToolCallSegmentView:
-    return ToolCallSegmentView(
-        name=tool.name,
-        input=dict(tool.input),
-        input_unparsed=tool.input_unparsed,
-        input_shape=tool.input_shape,
-        tool_use_id=tool.tool_use_id,
-        output=tool.output,
-        output_truncated=tool.output_truncated,
-        output_patch=tool.output_patch,
-    )
-
-
-def _sidechain_view(sidechain: Sidechain) -> SidechainSegmentView:
-    return SidechainSegmentView(
-        agent_id=sidechain.agent_id,
-        agent_type=sidechain.agent_type,
-        link=sidechain.link,
-        turns=[_turn_view(turn) for turn in sidechain.turns],
-        parent_tool_use_id=sidechain.parent_tool_use_id,
-    )
-
-
-def _turn_view(turn: Turn) -> TurnSegmentView:
-    return TurnSegmentView(
-        index=turn.index,
-        kind=turn.kind,
-        timestamp=iso_utc(turn.timestamp) if turn.timestamp is not None else None,
-        text=turn.text,
-        tool=_tool_view(turn.tool) if turn.tool is not None else None,
-        thinking_redacted=turn.thinking_redacted,
-        sidechain=_sidechain_view(turn.sidechain) if turn.sidechain is not None else None,
-        truncated=turn.truncated,
-    )
 
 
 def _view(lease_id: str, resolved: ResolvedTranscript) -> TranscriptResponse:
@@ -63,7 +25,7 @@ def _view(lease_id: str, resolved: ResolvedTranscript) -> TranscriptResponse:
         session_id=transcript.session_id,
         available=transcript.available,
         reason=transcript.reason,
-        turns=[_turn_view(turn) for turn in transcript.turns],
+        turns=[turn_view(turn) for turn in transcript.turns],
         truncated=transcript.truncated,
         provenance=resolved.provenance,
         hub_unreachable=resolved.hub_unreachable,

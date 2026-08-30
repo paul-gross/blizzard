@@ -48,6 +48,14 @@ class TranscriptLedgerStore:
         )
         return [self._row_to_transcript_segment(r) for r in self._store.all(stmt)]
 
+    def transcript_segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentLedgerRow]:
+        stmt = (
+            select(transcript_segments)
+            .where(transcript_segments.c.chunk_id == chunk_id)
+            .order_by(transcript_segments.c.stamped_at, transcript_segments.c.segment_id)
+        )
+        return [self._row_to_transcript_segment(r) for r in self._store.all(stmt)]
+
     def chunk_transcript_shipped_bytes(self, chunk_id: str) -> int:
         stmt = select(func.coalesce(func.sum(transcript_segments.c.shipped_bytes), 0)).where(
             transcript_segments.c.chunk_id == chunk_id

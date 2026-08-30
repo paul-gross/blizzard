@@ -6,8 +6,10 @@ import {
   ChunkGeneralTab,
   ChunkPageHeader,
   ChunkPageShell,
+  ChunkTranscriptsContainer,
   deriveWorkItemsState,
   type EditGraphEvent,
+  hubClient,
   KitAsyncState,
   type KitAsyncStateValue,
   KitBackBar,
@@ -30,7 +32,6 @@ import {
 import { ChunkArtifactsTab } from './chunk-artifacts-tab';
 import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-selection';
 import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
-import { ChunkTranscriptsContainer } from './chunk-transcripts-container';
 
 /**
  * The chunk detail page (`/board/chunk/:chunkId`, issue #160) — reached from
@@ -95,6 +96,11 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
 })
 export class ChunkPage {
   private readonly route = inject(ActivatedRoute);
+
+  /** The plane seam {@link ChunkTranscriptsContainer} crosses (D5, runner-node-grouped-
+   * transcripts) — exposed as an instance field so the template can bind it; a plain
+   * module import is not itself a template expression. */
+  protected readonly hubClient = hubClient;
 
   /** The chunk this page is for, off the route's own `:chunkId` segment —
    * seeded from the snapshot so the first render already keys the reads. */

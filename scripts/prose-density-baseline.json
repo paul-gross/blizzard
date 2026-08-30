@@ -2257,10 +2257,20 @@
    "docstrings": 11,
    "total": 67
   },
+  "blizzard/runner/api/transcript_rendering.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "total": 45
+  },
+  "blizzard/runner/api/transcript_segments.py": {
+   "comments": 4,
+   "docstrings": 10,
+   "total": 74
+  },
   "blizzard/runner/api/transcripts.py": {
    "comments": 0,
    "docstrings": 7,
-   "total": 80
+   "total": 42
   },
   "blizzard/runner/api/wiring.py": {
    "comments": 0,
@@ -2280,7 +2290,7 @@
   "blizzard/runner/app.py": {
    "comments": 36,
    "docstrings": 25,
-   "total": 357
+   "total": 359
   },
   "blizzard/runner/auth/__init__.py": {
    "comments": 0,
@@ -2885,7 +2895,7 @@
   "blizzard/runner/store/internal/transcript_ledger_store.py": {
    "comments": 20,
    "docstrings": 7,
-   "total": 374
+   "total": 382
   },
   "blizzard/runner/store/internal/usage_store.py": {
    "comments": 13,
@@ -3125,7 +3135,7 @@
   "blizzard/runner/transcripts/internal/projected_transcript_repository.py": {
    "comments": 5,
    "docstrings": 17,
-   "total": 150
+   "total": 156
   },
   "blizzard/runner/transcripts/internal/segment_projection.py": {
    "comments": 0,
@@ -3134,8 +3144,8 @@
   },
   "blizzard/runner/transcripts/ledger.py": {
    "comments": 3,
-   "docstrings": 74,
-   "total": 219
+   "docstrings": 77,
+   "total": 225
   },
   "blizzard/runner/transcripts/repository.py": {
    "comments": 5,
@@ -3144,8 +3154,8 @@
   },
   "blizzard/runner/transcripts/service.py": {
    "comments": 10,
-   "docstrings": 13,
-   "total": 97
+   "docstrings": 30,
+   "total": 156
   },
   "blizzard/tools/__init__.py": {
    "comments": 0,
@@ -5012,7 +5022,7 @@
   "test_runner_route_gating.py": {
    "comments": 12,
    "docstrings": 21,
-   "total": 152
+   "total": 154
   },
   "test_runner_selftest.py": {
    "comments": 24,
@@ -5040,9 +5050,9 @@
    "total": 224
   },
   "test_runner_store.py": {
-   "comments": 118,
-   "docstrings": 72,
-   "total": 1111
+   "comments": 120,
+   "docstrings": 75,
+   "total": 1135
   },
   "test_runner_takeover.py": {
    "comments": 72,
@@ -5064,6 +5074,11 @@
    "docstrings": 8,
    "total": 147
   },
+  "test_runner_transcript_segments_api.py": {
+   "comments": 5,
+   "docstrings": 16,
+   "total": 258
+  },
   "test_runner_transcripts.py": {
    "comments": 13,
    "docstrings": 32,
@@ -5075,9 +5090,9 @@
    "total": 241
   },
   "test_runner_transcripts_service.py": {
-   "comments": 15,
-   "docstrings": 24,
-   "total": 372
+   "comments": 20,
+   "docstrings": 31,
+   "total": 516
   },
   "test_runner_usage.py": {
    "comments": 38,

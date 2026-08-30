@@ -1,5 +1,7 @@
 export { TranscriptViewer, type SidechainOpenEvent } from './transcript-viewer';
 export { TranscriptSegmentView } from './transcript-segment-view';
+export { ChunkTranscriptsContainer } from './chunk-transcripts-container';
+export { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 export { mergeLateLinks } from './merge-late-links';
 export { deriveTranscriptSteps, resolveSegmentSeams, type SegmentSeams, type TranscriptStep } from './transcript-steps';
 export {
@@ -8,5 +10,11 @@ export {
   resolveSidechainByPath,
   type SidechainPath,
 } from './transcript-sidechain-path';
-export { injectHubChunkTranscriptSegmentQuery, injectHubChunkTranscriptsQuery, TranscriptFetchError } from './transcript-segments.query';
+export {
+  injectChunkTranscriptSegmentQuery,
+  injectChunkTranscriptsQuery,
+  injectHubChunkTranscriptSegmentQuery,
+  injectHubChunkTranscriptsQuery,
+  TranscriptFetchError,
+} from './transcript-segments.query';
 export type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry } from '../api/hub';
