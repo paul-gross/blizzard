@@ -17,7 +17,7 @@ ENV_LOG_FORMAT = "BZ_LOG_FORMAT"
 
 
 class LogFormat:
-    """The chosen renderer; the processor chain around it is the same either way."""
+    """A renderer and the exception processors its chain needs in front of it."""
 
     @classmethod
     def of(cls, json_logs: bool | None) -> LogFormat:
@@ -34,11 +34,19 @@ class LogFormat:
     def renderer(self) -> structlog.types.Processor:
         raise NotImplementedError
 
+    def exception_processors(self) -> list[structlog.types.Processor]:
+        """What turns a call's ``exc_info`` into a traceback this renderer will emit.
+
+        Abstract like :meth:`renderer`, so a format that formats no traceback of its own
+        must say so rather than inherit the silence as a default."""
+        raise NotImplementedError
+
     def apply(self) -> None:
         structlog.configure(
             processors=[
                 structlog.processors.add_log_level,
                 structlog.processors.TimeStamper(fmt="iso"),
+                *self.exception_processors(),
                 self.renderer(),
             ],
             logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
@@ -50,10 +58,21 @@ class Json(LogFormat):
     def renderer(self) -> structlog.types.Processor:
         return structlog.processors.JSONRenderer()
 
+    def exception_processors(self) -> list[structlog.types.Processor]:
+        """``format_exc_info`` renders the traceback into an ``exception`` field, which the
+        JSON renderer alone will not do — without it every ``log.exception`` ships
+        ``"exc_info": true`` and no trace at all."""
+        return [structlog.processors.format_exc_info]
+
 
 class Console(LogFormat):
     def renderer(self) -> structlog.types.Processor:
         return structlog.dev.ConsoleRenderer()
+
+    def exception_processors(self) -> list[structlog.types.Processor]:
+        """None: ``ConsoleRenderer`` renders ``exc_info`` itself, and formatting it first
+        would take that away from it."""
+        return []
 
 
 def configure(*, json_logs: bool | None = None) -> None:
