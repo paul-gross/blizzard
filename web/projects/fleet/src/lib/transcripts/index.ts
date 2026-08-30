@@ -8,5 +8,11 @@ export {
   resolveSidechainByPath,
   type SidechainPath,
 } from './transcript-sidechain-path';
-export { injectHubChunkTranscriptSegmentQuery, injectHubChunkTranscriptsQuery, TranscriptFetchError } from './transcript-segments.query';
+export {
+  injectChunkTranscriptSegmentQuery,
+  injectChunkTranscriptsQuery,
+  injectHubChunkTranscriptSegmentQuery,
+  injectHubChunkTranscriptsQuery,
+  TranscriptFetchError,
+} from './transcript-segments.query';
 export type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry } from '../api/hub';

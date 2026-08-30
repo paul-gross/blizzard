@@ -51,32 +51,57 @@ export function hubGraphKey(graphId: string | null): readonly unknown[] {
   return ['hub', 'graph', graphId];
 }
 
-/** One chunk's transcript-segment index (blizzard#248), keyed by id — deliberately under
- * the {@link hubChunkKey} prefix, so a `chunk-changed` SSE event refetches it: new
- * segments genuinely appear here as the chunk's steps progress. */
-export function hubChunkTranscriptsKey(chunkId: string | null): readonly unknown[] {
-  return ['hub', 'chunk', chunkId, 'transcripts'];
+/** Which daemon a transcript-segment query reads from (runner-node-grouped-transcripts,
+ * D5) — the hub's `chunk-changed` SSE stream and the runner's own both exist, so each
+ * plane's cache entries stay under their own key prefix even though they answer the
+ * identical wire shape (D2). */
+export type TranscriptPlane = 'hub' | 'runner';
+
+/** One chunk's transcript-segment index (blizzard#248), keyed by plane and id —
+ * deliberately under the plane's own chunk-key prefix (`[plane, 'chunk', chunkId]`), so a
+ * `chunk-changed` SSE event refetches it: new segments genuinely appear here as the
+ * chunk's steps progress. */
+export function chunkTranscriptsKey(plane: TranscriptPlane, chunkId: string | null): readonly unknown[] {
+  return [plane, 'chunk', chunkId, 'transcripts'];
 }
 
-/** One segment's decompressed turns (blizzard#248), keyed by chunk and segment id, plus
- * whether the segment is `final` — the placement, not just the id pair, is what decides
- * whether a `chunk-changed` SSE event refetches it (`review:F2`, tightening `review:F6`).
- * A `final` segment's content is immutable and the (chunkId, segmentId) pair already
- * uniquely identifies it, so it gets its own top-level prefix, *not* nested under
- * {@link hubChunkKey} — nesting it there would mean every SSE event on the chunk
- * refetches an already-rendered segment's content, a decompress+parse+per-turn-validate
- * on the hub for no reason, defeating this query's own `refetchInterval: false`
+/** One segment's decompressed turns (blizzard#248), keyed by plane, chunk, and segment
+ * id, plus whether the segment is `final` — the placement, not just the id pair, is what
+ * decides whether a `chunk-changed` SSE event refetches it (`review:F2`, tightening
+ * `review:F6`). A `final` segment's content is immutable and the (chunkId, segmentId)
+ * pair already uniquely identifies it, so it gets its own top-level prefix, *not* nested
+ * under the plane's chunk-key prefix — nesting it there would mean every SSE event on the
+ * chunk refetches an already-rendered segment's content, a decompress+parse+per-turn-
+ * validate for no reason, defeating this query's own `refetchInterval: false`
  * (`transcript-segments.query.ts`). A non-`final` (open) segment has no such immutability
  * guarantee — an operator watching it live needs its content to keep refreshing — so it
- * stays under the {@link hubChunkKey} prefix, the same live signal the index itself
+ * stays under the plane's chunk-key prefix, the same live signal the index itself
  * refetches on. Finality isn't known in advance of the index read, so a caller that
  * hasn't resolved it yet passes `final: false`, the safe (still-live) default. */
-export function hubChunkTranscriptSegmentKey(
+export function chunkTranscriptSegmentKey(
+  plane: TranscriptPlane,
   chunkId: string | null,
   segmentId: string | null,
   final: boolean,
 ): readonly unknown[] {
   return final
-    ? ['hub', 'chunk-transcript-segment', chunkId, segmentId]
-    : ['hub', 'chunk', chunkId, 'transcript-segment', segmentId];
+    ? [plane, 'chunk-transcript-segment', chunkId, segmentId]
+    : [plane, 'chunk', chunkId, 'transcript-segment', segmentId];
+}
+
+/** The hub-plane transcript-segment index key — a thin, permanently-hub-bound alias of
+ * {@link chunkTranscriptsKey} for callers (e.g. the Node History tab) that only ever read
+ * the hub's own transcripts and have no reason to thread a plane through. */
+export function hubChunkTranscriptsKey(chunkId: string | null): readonly unknown[] {
+  return chunkTranscriptsKey('hub', chunkId);
+}
+
+/** The hub-plane segment-content key — see {@link hubChunkTranscriptsKey}'s own doc for
+ * why a hub-bound alias of {@link chunkTranscriptSegmentKey} stays alongside it. */
+export function hubChunkTranscriptSegmentKey(
+  chunkId: string | null,
+  segmentId: string | null,
+  final: boolean,
+): readonly unknown[] {
+  return chunkTranscriptSegmentKey('hub', chunkId, segmentId, final);
 }

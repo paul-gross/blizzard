@@ -54,6 +54,9 @@ export {
   hubChunkKey,
   hubGraphsKey,
   hubGraphKey,
+  chunkTranscriptsKey,
+  chunkTranscriptSegmentKey,
+  type TranscriptPlane,
 } from './lib/query-keys';
 export * from './lib/query-state';
 
@@ -69,3 +72,4 @@ export * as runnerApi from './lib/api/runner';
  */
 export { client as runnerClient } from './lib/api/runner/client.gen';
 export { client as hubClient } from './lib/api/hub/client.gen';
+export type { Client } from './lib/api/hub/client';

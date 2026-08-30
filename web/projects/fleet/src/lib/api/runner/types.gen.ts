@@ -1813,6 +1813,107 @@ export type TranscriptResponse = {
 };
 
 /**
+ * TranscriptSegmentContentView
+ *
+ * One segment's decompressed turns, concatenated across its stored records in
+ * turn-range order — the lazy per-segment content read (D12).
+ */
+export type TranscriptSegmentContentView = {
+    /**
+     * Final
+     */
+    final: boolean;
+    /**
+     * Segment Id
+     */
+    segment_id: string;
+    /**
+     * Truncated
+     */
+    truncated: boolean;
+    /**
+     * Turns
+     */
+    turns?: Array<TurnSegmentView>;
+};
+
+/**
+ * TranscriptSegmentIndexEntry
+ *
+ * One segment's metadata row (D12) — byte counts and completion state, never turn
+ * content. ``truncated`` is true iff any record was cap-rejected (D5) OR the runner
+ * itself declared ``record_truncated`` on one, so a consumer can tell an incomplete
+ * segment from a short one without fetching it.
+ */
+export type TranscriptSegmentIndexEntry = {
+    /**
+     * Byte Count
+     */
+    byte_count: number;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Final
+     */
+    final: boolean;
+    /**
+     * Harness Version
+     */
+    harness_version: string | null;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Normalizer Version
+     */
+    normalizer_version: string;
+    /**
+     * Received At
+     */
+    received_at: string;
+    /**
+     * Segment Id
+     */
+    segment_id: string;
+    /**
+     * Spawn Generation
+     */
+    spawn_generation: number;
+    /**
+     * Truncated
+     */
+    truncated: boolean;
+    /**
+     * Turn Range End
+     */
+    turn_range_end: number;
+    /**
+     * Turn Range Start
+     */
+    turn_range_start: number;
+};
+
+/**
+ * TranscriptSegmentIndexView
+ *
+ * The per-chunk segment discovery read (D12) — unreachable content, only what a
+ * caller needs to then ask for one segment's turns.
+ */
+export type TranscriptSegmentIndexView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Segments
+     */
+    segments?: Array<TranscriptSegmentIndexEntry>;
+};
+
+/**
  * TransitionView
  *
  * One accepted transition in a chunk's history: the edge a node-step took — origin node, the
@@ -2469,6 +2570,70 @@ export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses = {
 };
 
 export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponse = EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses[keyof EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses];
+
+export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/transcripts';
+};
+
+export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetError = ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors[keyof ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors];
+
+export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptSegmentIndexView;
+};
+
+export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponse = ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses[keyof ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses];
+
+export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Segment Id
+         */
+        segment_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/transcripts/{segment_id}';
+};
+
+export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetError = GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors[keyof GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors];
+
+export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptSegmentContentView;
+};
+
+export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponse = GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses[keyof GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses];
 
 export type GetWorkItemsApiChunksChunkIdWorkItemsGetData = {
     body?: never;
