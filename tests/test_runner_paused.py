@@ -451,7 +451,8 @@ def test_exited_worker_judgement_suppressed_while_locally_paused(tmp_path):  # t
 
     # Unpause; ADVANCE re-drives the same exited worker and judges it this time.
     _pause_locally(store, ctx, paused=False)
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     assert len(harness.judged) == 1
     assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
@@ -469,7 +470,8 @@ def test_apply_response_next_spawn_suppressed_then_adopted_at_unpause(tmp_path):
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    Advance(ctx).run()  # the worker exited (no probe entry) -> buffers the completion
+    Advance(ctx).run()  # the worker exited -> launches the detached elicitation
+    Advance(ctx).run()  # collects it -> buffers the completion
     _pause_locally(store, ctx, paused=True)
     Pull(ctx).run()  # flushes the completion; the apply-response's next-node spawn is suppressed
 
@@ -540,7 +542,8 @@ def test_hub_paused_only_requeue_still_spawns(tmp_path):  # type: ignore[no-unty
     assert store.hub_paused("r1") is True
     assert store.local_paused("r1") is False
 
-    Advance(ctx).run()  # no parseable verdict -> failure -> requeue in place
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — no parseable verdict -> failure -> requeue in place
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.epoch == 2  # a fresh attempt was spawned
@@ -694,7 +697,8 @@ def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_pa
         ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
         if i == 1:
             _seed_running_lease(store, pid=300, start="start-0")
-        Advance(ctx).run()
+        Advance(ctx).run()  # launches the detached elicitation
+        Advance(ctx).run()  # collects it — verdict-less -> fails -> retries in place
 
     exhausted = store.active_lease_for_chunk("ch_1")
     assert exhausted is not None and exhausted.pid is not None and exhausted.process_start_time is not None
@@ -870,7 +874,8 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    Advance(ctx).run()  # the worker exited; judged, completion buffered (not paused yet)
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — judged, completion buffered (not paused yet)
     assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
 
     _pause_locally(store, ctx, paused=True)
@@ -885,7 +890,8 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
     # Unpause; the deferral self-drives to the same end — ADVANCE re-judges the still-exited
     # worker, PULL re-flushes, the hub rejects again, and this time it escalates.
     _pause_locally(store, ctx, paused=False)
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches a fresh elicitation for the still-exited worker
+    Advance(ctx).run()  # collects it — completion buffered again
     Pull(ctx).run()
 
     assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED]

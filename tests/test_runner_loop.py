@@ -292,7 +292,8 @@ def test_completion_and_decision_submissions_carry_the_stashed_route_token(tmp_p
     )
 
     Fill(ctx).run()  # claims and stashes the token, spawns the worker
-    Advance(ctx).run()  # worker "exited" (FakeProbe reports it dead) — judged and buffered
+    Advance(ctx).run()  # worker "exited" (FakeProbe reports it dead) — launches the elicitation
+    Advance(ctx).run()  # collects it — judged and buffered
 
     buffered = [b for b in store.pending_outbound() if b.kind == "completion.submitted"]
     assert len(buffered) == 1
@@ -313,7 +314,8 @@ def test_same_runner_requeue_after_failure_reuses_the_same_route_token(tmp_path)
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
     Fill(ctx).run()  # claims (epoch 1), stashes the token
-    Advance(ctx).run()  # verdict-less exit -> fail attempt -> requeue in place (fresh lease, epoch 2)
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — verdict-less exit -> fail attempt -> requeue in place (epoch 2)
 
     lease_mints = [json.loads(b.payload) for b in store.pending_outbound() if b.kind == LEASE_MINTED]
     assert [m["epoch"] for m in lease_mints] == [1, 2]
@@ -504,11 +506,20 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
     wt = FakeWorktreeGit()
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), worktree_git=wt)
 
-    Advance(ctx).run()  # probe reports the worker dead (empty alive set) -> exit-is-done
+    Advance(ctx).run()  # probe reports the worker dead (empty alive set) -> launches
+    Advance(ctx).run()  # collects it -> exit-is-done
 
     # The declared commit was verified read-only and the completion is BUFFERED — not
-    # yet submitted.
-    assert wt.verified_calls == [("file:///origins/toy-api.git", "e1", "abc123")]
+    # yet submitted. Verified TWICE (blizzard#443): once in the launch pass, ahead of the
+    # produces-reconcile check, and again in the collect pass, ahead of the completion it
+    # buffers — the two passes may be separated by a restart, so nothing durable carries
+    # the launch pass's in-memory verdict forward; re-reading is the same idempotent
+    # re-derivation `blizzard-context:/architecture/crash-correctness/runner.md`'s "Git-commit
+    # verify" entry already rests on, freshened right before the artifact it gates is trusted.
+    assert wt.verified_calls == [
+        ("file:///origins/toy-api.git", "e1", "abc123"),
+        ("file:///origins/toy-api.git", "e1", "abc123"),
+    ]
     assert hub.completions == []
     buffered = [b for b in store.pending_outbound() if b.kind == "completion.submitted"]
     assert len(buffered) == 1 and buffered[0].lease_id == "lease_1"
@@ -554,11 +565,17 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path)
     wt = FakeWorktreeGit(False)  # every declaration fails verification
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), worktree_git=wt)
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     # verify WAS called on the declaration, but the False verdict dropped it, so the
-    # buffered completion names no git-commit artifact.
-    assert wt.verified_calls == [("file:///origins/toy-api.git", "e1", "abc123")]
+    # buffered completion names no git-commit artifact. Verified twice (blizzard#443 — see
+    # the re-verification note on `test_advance_buffers_completion_...`): once in the
+    # launch pass, once in the collect pass.
+    assert wt.verified_calls == [
+        ("file:///origins/toy-api.git", "e1", "abc123"),
+        ("file:///origins/toy-api.git", "e1", "abc123"),
+    ]
 
     Pull(ctx).run()
 
@@ -593,11 +610,16 @@ def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):
     wt = FakeWorktreeGit()
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), worktree_git=wt)
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     # Only the read-only verify ran, over the worker's own declared branch — no branch
-    # was ever inferred off any local HEAD, detached or otherwise.
-    assert wt.verified_calls == [("file:///origins/toy-api.git", "feature/worker-declared", "deadbeef")]
+    # was ever inferred off any local HEAD, detached or otherwise. Verified twice
+    # (blizzard#443 — see the re-verification note on `test_advance_buffers_completion_...`).
+    assert wt.verified_calls == [
+        ("file:///origins/toy-api.git", "feature/worker-declared", "deadbeef"),
+        ("file:///origins/toy-api.git", "feature/worker-declared", "deadbeef"),
+    ]
 
     Pull(ctx).run()
 
@@ -622,7 +644,8 @@ def test_advance_elicits_verdict_exactly_once_while_flush_pending(tmp_path):  # 
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — judged and buffered
     Advance(ctx).run()  # completion already buffered -> the lease is skipped
 
     assert len(harness.judged) == 1  # judged once
@@ -643,7 +666,8 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-unty
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     lease = store.active_lease_for_chunk("ch_1")
@@ -707,7 +731,8 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
         probe=FakeProbe(),
         clock=FixedClock(_NOW + timedelta(minutes=1)),
     )
-    Advance(ctx2).run()  # build worker "exited" (empty alive set) -> judged pass -> buffered
+    Advance(ctx2).run()  # build worker "exited" (empty alive set) -> launches the elicitation
+    Advance(ctx2).run()  # collects it -> judged pass -> buffered
     Pull(ctx2).run()  # flush -> apply-response NEXT -> spawn review
 
     assert harness2.resume_froms == [None]  # (c) fresh review always gets a new sid
@@ -731,7 +756,8 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
         probe=FakeProbe(),
         clock=FixedClock(_NOW + timedelta(minutes=2)),
     )
-    Advance(ctx3).run()  # review worker "exited" -> judged fail -> buffered
+    Advance(ctx3).run()  # review worker "exited" -> launches the elicitation
+    Advance(ctx3).run()  # collects it -> judged fail -> buffered
     Pull(ctx3).run()  # flush -> apply-response NEXT -> spawn build, resuming in place
 
     assert harness3.resume_froms == ["sess-build-1"]  # (b) resumes build's own session
@@ -778,7 +804,8 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
         probe=FakeProbe(),
         clock=FixedClock(_NOW + timedelta(minutes=1)),
     )
-    Advance(ctx2).run()
+    Advance(ctx2).run()  # launches the detached elicitation
+    Advance(ctx2).run()  # collects it — the fake pid reads dead by default
     Pull(ctx2).run()
 
     hub.envelopes["ch_1"] = review_env  # `_advance_exited_worker`'s own idempotent re-read
@@ -794,7 +821,8 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
         probe=FakeProbe(),
         clock=FixedClock(_NOW + timedelta(minutes=2)),
     )
-    Advance(ctx3).run()
+    Advance(ctx3).run()  # launches the detached elicitation
+    Advance(ctx3).run()  # collects it — the fake pid reads dead by default
     Pull(ctx3).run()
 
     assert harness3.resume_froms == ["sess-review-1"]  # (a) chunk-most-recent, not build's own
@@ -816,7 +844,8 @@ def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    Advance(ctx).run()  # no parseable <Choice> -> failure -> requeue in place, fresh
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — no parseable <Choice> -> failure -> requeue in place, fresh
 
     assert harness.resume_froms == [None]  # (d) a retry never resolves a resume target
     lease = store.active_lease_for_chunk("ch_1")
@@ -873,7 +902,8 @@ def _reenter_node(store, hub, provider, env, *, session, pid, at, config=None): 
         clock=FixedClock(at),
         config=config if config is not None else _preamble_config(),
     )
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
     return harness
 
@@ -1146,7 +1176,9 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
     )
 
     # `review-findings` is never attached, so the first exit resumes rather than judges
-    # (issue #422); the second, past the one-resume cap, falls through to judgement.
+    # (issue #422); the second, past the one-resume cap, falls through to judgement —
+    # launching the detached elicitation; the third collects it.
+    Advance(ctx).run()
     Advance(ctx).run()
     Advance(ctx).run()
     Pull(ctx).run()  # the flusher delivers it to the hub (store-and-forward)
@@ -1194,7 +1226,9 @@ def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path): 
     )
 
     # `review-findings` is never attached, so the first exit is resumed rather than
-    # judged (issue #422); the second, past the one-resume cap, falls through to judgement.
+    # judged (issue #422); the second, past the one-resume cap, falls through to judgement —
+    # launching the detached elicitation; the third collects it.
+    Advance(ctx).run()
     Advance(ctx).run()
     Advance(ctx).run()
     Pull(ctx).run()
@@ -1301,7 +1335,8 @@ def test_flush_done_releases_environments(tmp_path):  # type: ignore[no-untyped-
         store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     assert provider.released == ["e1"]
@@ -1346,7 +1381,8 @@ def test_completion_survives_hub_outage_and_applies_once(tmp_path):  # type: ign
         probe=FakeProbe(),
     )
 
-    Advance(ctx).run()  # worker exited -> completion buffered
+    Advance(ctx).run()  # worker exited -> launches the detached elicitation
+    Advance(ctx).run()  # collects it -> completion buffered
 
     hub.down = True
     Pull(ctx).run()  # flush fails — the completion stays buffered
@@ -1546,7 +1582,8 @@ def test_verdict_less_exit_fails_and_requeues(tmp_path):  # type: ignore[no-unty
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    Advance(ctx).run()  # no parseable <Choice> -> failure -> requeue in place (local, no hub call)
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — no parseable <Choice> -> failure -> requeue in place
 
     assert hub.completions == []  # never submitted a completion
     lease = store.active_lease_for_chunk("ch_1")
@@ -1677,7 +1714,8 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
         ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
         if i == 1:
             _seed_running_lease(store, pid=300, start="start-0")
-        Advance(ctx).run()
+        Advance(ctx).run()  # launches the detached elicitation
+        Advance(ctx).run()  # collects it — verdict-less -> fails -> retries/escalates
 
     assert store.active_lease_for_chunk("ch_1") is None  # no more retries
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
@@ -1867,7 +1905,8 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
         config=_cap_config(5.0),
     )
 
-    Advance(ctx).run()  # the attempt finishes and its completion is buffered — not yet applied
+    Advance(ctx).run()  # the attempt finishes — launches the detached elicitation
+    Advance(ctx).run()  # collects it — the completion is buffered, not yet applied
     Pull(ctx).run()  # the flush applies it (NEXT); the cap check runs at that boundary and parks
 
     # No next attempt spawned — the cap parked before `Spawner.spawn`, not by killing anyone.
@@ -1910,6 +1949,7 @@ def test_cost_cap_park_leaves_wrapped_empty_without_runner_dir(tmp_path):  # typ
     )
 
     Advance(ctx).run()
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
@@ -1942,6 +1982,7 @@ def test_cost_cap_park_does_not_consume_a_retry(tmp_path):  # type: ignore[no-un
     )
 
     Advance(ctx).run()
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     assert store.attempt_count("ch_1", "nd_review") == 0  # no lease ever minted for the next node
@@ -1994,6 +2035,7 @@ def test_cost_cap_under_cap_continues_normally(tmp_path):  # type: ignore[no-unt
     )
 
     Advance(ctx).run()
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     lease = store.active_lease_for_chunk("ch_1")
@@ -2017,6 +2059,7 @@ def test_cost_cap_absent_never_parks_regardless_of_spend(tmp_path):  # type: ign
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
     Advance(ctx).run()
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     lease = store.active_lease_for_chunk("ch_1")
@@ -2049,6 +2092,7 @@ def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path)
     )
 
     Advance(ctx).run()
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     with capture_logs() as captured:
         Pull(ctx).run()
 
@@ -2086,6 +2130,7 @@ def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path):  # type: igno
         config=_cap_config(5.0),
     )
     Advance(ctx).run()
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
     assert store.active_lease_for_chunk("ch_1") is None  # parked
 
@@ -2136,14 +2181,20 @@ def test_full_happy_path_across_ticks(tmp_path):  # type: ignore[no-untyped-def]
     # The worker finishes and exits.
     probe.alive.clear()
 
-    # Tick 2: PULL flushes lease.minted; ADVANCE judges the exited worker and buffers
-    # its completion.
+    # Tick 2: PULL flushes lease.minted; ADVANCE finds the exited worker and launches
+    # the detached elicitation (blizzard#443) — not yet judged.
     tick(ctx)
     assert [f.kind for f in hub.pushed] == [LEASE_MINTED]
     assert hub.completions == []
+    assert store.active_lease_for_chunk("ch_1") is not None  # awaiting the collect pass
+
+    # Tick 3: PULL has nothing new to flush yet; ADVANCE collects the elicitation (the
+    # fake pid reads dead by default) and buffers the completion.
+    tick(ctx)
+    assert hub.completions == []
     assert store.active_lease_for_chunk("ch_1") is not None  # awaiting flush
 
-    # Tick 3: PULL flushes the completion -> deliver hub node; envs held.
+    # Tick 4: PULL flushes the completion -> deliver hub node; envs held.
     tick(ctx)
     assert len(hub.completions) == 1
     assert store.active_lease_for_chunk("ch_1") is None
@@ -2159,7 +2210,7 @@ def test_full_happy_path_across_ticks(tmp_path):  # type: ignore[no-untyped-def]
     )
     hub.queue = []
 
-    # Tick 4: the hub-node poll sees `done` and releases the environment.
+    # Tick 5: the hub-node poll sees `done` and releases the environment.
     tick(ctx)
     assert provider.released == ["e1"]
     assert store.held_environment_ids() == []
@@ -2284,7 +2335,8 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
         probe=FakeProbe(),
         clock=FixedClock(_NOW + timedelta(minutes=1)),
     )
-    Advance(ctx2).run()
+    Advance(ctx2).run()  # launches the detached elicitation
+    Advance(ctx2).run()  # collects it — the fake pid reads dead by default
     Pull(ctx2).run()
 
     assert harness2.resume_froms == ["sess-build-1"]
@@ -2356,10 +2408,13 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
         worktree_git=wt,
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
-    assert len(wt.verified_calls) == 2  # both envs' declarations were checked
+    # Both envs' declarations were checked, in each of the launch and collect passes
+    # (blizzard#443 — see the re-verification note on `test_advance_buffers_completion_...`).
+    assert len(wt.verified_calls) == 4
     _chunk_id, submission = hub.completions[0]
     branches = sorted(a.branch_name or "" for a in submission.artifacts if a.kind is ArtifactKind.GIT_COMMIT)
     assert branches == ["feat/from-e1", "feat/from-e2"]

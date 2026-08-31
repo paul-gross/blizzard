@@ -266,7 +266,8 @@ def test_unmet_produces_resume_picks_up_the_attach_on_the_next_exit(tmp_path: Pa
     )
 
     Advance(ctx).run()  # first exit: unmet produces — resumed, not judged
-    Advance(ctx).run()  # second exit: the attach landed — judged normally
+    Advance(ctx).run()  # second exit: the attach landed — launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     assert len(harness.resumed) == 1, "exactly one resume — the attach closed the gap"
@@ -322,7 +323,8 @@ def test_unmet_produces_resume_picks_up_a_git_commit_declared_on_the_next_exit(t
     )
 
     Advance(ctx).run()  # first exit: unmet produces — resumed, not judged
-    Advance(ctx).run()  # second exit: the declaration landed — judged normally
+    Advance(ctx).run()  # second exit: the declaration landed — launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     assert len(harness.resumed) == 1
@@ -373,7 +375,8 @@ def test_second_premature_exit_under_the_same_lease_and_epoch_falls_through_to_j
     )
 
     Advance(ctx).run()  # first exit: resumed, cap spent
-    Advance(ctx).run()  # second exit: still unmet, but the cap is spent — judged
+    Advance(ctx).run()  # second exit: still unmet, but the cap is spent — launches
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     assert len(harness.resumed) == 1, "the cap must not allow a second resume"
@@ -418,7 +421,8 @@ def test_resume_fact_already_set_skips_a_second_resume_attempt(tmp_path: Path) -
     )
 
     lease = store.list_active_leases()[0]
-    Advance(ctx)._advance_exited_worker(lease)
+    Advance(ctx)._advance_exited_worker(lease)  # launches the detached elicitation
+    Advance(ctx)._advance_exited_worker(lease)  # collects it — the fake pid reads dead by default
     Pull(ctx).run()  # the flusher delivers the buffered completion to the hub
 
     assert harness.resumed == [], "the fact already being set must suppress any resume attempt"
@@ -467,7 +471,8 @@ def test_fully_attached_node_does_not_resume(tmp_path: Path) -> None:
         clock=clock,
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     assert harness.resumed == [], "a fully-attached node must not be resumed"

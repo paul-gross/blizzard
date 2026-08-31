@@ -48,6 +48,17 @@ and ADVANCE claims it — the verdict elicited from the dead session, a retry co
 attempt recorded via ADVANCE rather than a reap. The session-end and stale-heartbeat cases converge on ADVANCE by
 different routes; ADVANCE consults no session-end fact — the exit, not the declaration, routes a lease to it.
 
+A worker whose exit ADVANCE already claimed, but whose verdict elicitation is itself still in flight (blizzard#443),
+survives a restart the same way any other durable state does: the launch that recorded the in-flight row and the pid it
+started are both facts on disk, not daemon memory. REAP still passes the lease (the worker's own pid is long gone,
+exit-is-done), and ADVANCE's collect check reads the elicitation's own pid against `/proc` fresh — a process that
+outlived the crash is re-adopted untouched, its reply collected whenever it finishes; one that did not is read as lost,
+exactly like an ordinary crash mid-elicitation, and relaunched under the same staleness bound a live loss uses (no retry
+consumed either way), or the attempt is failed once that bound has passed. A crash between the in-flight record landing
+and the process actually starting — the same un-armable gap `SPAWN`'s own mint-before-spawn window accepts — is read the
+same way: no recorded pid reads as "not running," so recovery relaunches rather than waiting on a process nothing can
+confirm exists.
+
 REAP expires narrowly: a lease minted but never spawned, and a worker still alive but stalled past the liveness window;
 a session-bearing lease whose process is simply gone is not reaped — that one belongs to ADVANCE (the worker declared
 done on the way out) or RESUME. What REAP expires becomes leasable again at its last-recorded node, never re-run from

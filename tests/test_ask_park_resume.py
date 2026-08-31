@@ -140,7 +140,8 @@ def test_ask_during_judgement_parks_instead_of_failing(tmp_path):  # type: ignor
     harness = FakeHarness(handle=_HANDLE, verdict=None, judge_side_effect=_ask_mid_judgement)
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation; the ask fires as its side effect
+    Advance(ctx).run()  # collects it — verdict-less, so it parks on the ask instead of failing
 
     # Parked, not failed: no retry consumed, same lease still active.
     assert store.parked_lease_ids() == {"lease_1"}

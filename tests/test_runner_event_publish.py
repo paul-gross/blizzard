@@ -140,7 +140,8 @@ def test_attempt_escalate_publishes_lease_escalated_and_escalation_opened(tmp_pa
         events=events,
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     lease_frames = _frames(events, "lease-changed")
     assert lease_frames and lease_frames[-1]["cause"] == "escalated"
@@ -168,7 +169,8 @@ def test_attempt_close_publishes_lease_changed_with_the_closure_reason_as_cause(
         events=events,
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     lease_frames = _frames(events, "lease-changed")
     causes = [f["cause"] for f in lease_frames]
@@ -784,7 +786,8 @@ def test_attempt_retry_closure_publishes_fact_changed_for_its_own_event(tmp_path
     )
     OutboundFacts(ctx).event(chunk_id=None, lease_id=None, payload={"detail": "seed"}, at=_NOW)
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     # Filter out the retry's own lease.minted frame and the seed above, to the
     # closure's own event by the chunk/lease it's actually scoped to.

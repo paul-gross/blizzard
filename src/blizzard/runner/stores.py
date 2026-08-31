@@ -19,6 +19,7 @@ from blizzard.runner.domain.artifacts import IReadGraphArtifactRepository, IWrit
 from blizzard.runner.domain.asks import IReadAskRepository, IWriteAskRepository
 from blizzard.runner.domain.attachments import IReadAttachmentRepository, IWriteAttachmentRepository
 from blizzard.runner.domain.checks import IReadCheckRepository, IWriteCheckRepository
+from blizzard.runner.domain.elicitation import IReadElicitationRepository, IWriteElicitationRepository
 from blizzard.runner.domain.escalations import IReadEscalationRepository, IWriteEscalationRepository
 from blizzard.runner.domain.git_commit_declaration import (
     IReadGitCommitDeclarationRepository,
@@ -54,6 +55,7 @@ class IReadRunnerStore(
     IReadGitCommitDeclarationRepository,
     IReadCheckRepository,
     IReadGraphArtifactRepository,
+    IReadElicitationRepository,
     Protocol,
 ):
     """Read-only runner-store queries, every concept's read seam composed (held by
@@ -78,6 +80,7 @@ class IWriteRunnerStore(
     IWriteGitCommitDeclarationRepository,
     IWriteCheckRepository,
     IWriteGraphArtifactRepository,
+    IWriteElicitationRepository,
     IReadRunnerStore,
     Protocol,
 ):
@@ -106,3 +109,4 @@ class RunnerStores:
     git_commit_declarations: IWriteGitCommitDeclarationRepository
     checks: IWriteCheckRepository
     graph_artifacts: IWriteGraphArtifactRepository
+    elicitations: IWriteElicitationRepository

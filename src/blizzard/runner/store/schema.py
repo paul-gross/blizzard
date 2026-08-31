@@ -410,6 +410,24 @@ checks_ran = Table(
     Column("ran_at", UtcDateTime, nullable=False),
 )
 
+# --- In-flight judgement elicitations (blizzard#443) --------------------------
+# One row per (lease_id, epoch) launch: durable BEFORE the process starts (D1), so an
+# orphaned Popen is never possible — only an un-armable record-with-no-process gap REAP's
+# generic staleness treatment absorbs. `pid`/`process_start_time` land once Popen returns.
+
+in_flight_elicitations = Table(
+    "in_flight_elicitations",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("pid", Integer, nullable=True),
+    Column("process_start_time", String, nullable=True),
+    Column("output_path", String, nullable=False),
+    Column("first_launched_at", UtcDateTime, nullable=False),
+    Column("relaunch_count", Integer, nullable=False),
+)
+
 # --- SSO federation jti replay cache (issue #95, decision D4) ----------------
 # The `jti` primary key alone is the single-use guarantee, enforced by the store.
 

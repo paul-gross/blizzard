@@ -316,13 +316,16 @@ class ClaudeCodeAdapter:
         workdir: str,
         session_id: str,
         judgement_prompt: str,
+        output_path: str,
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
-    ) -> str:
+    ) -> WorkerHandle:
+        if not output_path:
+            raise HarnessSpawnError("judge requires an output path — a detached verdict is unrecoverable without one")
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
         # No `--model` (sticky); `--effort`/`--autocompact` ARE reasserted. `model` is taken
         # only to attribute usage below, never to switch the session (issue #144, blizzard#343).
@@ -342,9 +345,17 @@ class ClaudeCodeAdapter:
             if preamble is not None
             else AllowlistedEnv.of(self._env_passthrough).variables
         )
-        result = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True, env=env)
-        _log.info("judgement resume", pid_returncode=result.returncode, session_id=session_id, cwd=workdir)
-        return result.stdout
+        # Detached (blizzard#443): the reply lands in `output_path`, never a pipe this
+        # call waits on — the collect half reads it back once the process has exited.
+        try:
+            with open(output_path, "wb") as stdout_file:
+                proc = subprocess.Popen(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL)
+        except OSError as exc:
+            _log.error("judgement launch failed", binary=self._binary, cwd=workdir, detail=str(exc))
+            raise HarnessSpawnError(f"failed to launch {self._binary} in {workdir}: {exc}") from exc
+        start_time = ProcStat.of(proc.pid).start_time or ""
+        _log.info("judgement launched", binary=self._binary, pid=proc.pid, session_id=session_id, cwd=workdir)
+        return WorkerHandle(session_id=session_id, pid=proc.pid, process_start_time=start_time)
 
     def resume_with_message(
         self,

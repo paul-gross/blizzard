@@ -468,9 +468,23 @@ class Advance(Step):
                 HeldChunk(ctx, chunk_id).drive()
 
     def _advance_exited_worker(self, lease: LeaseRecord) -> None:
-        """Park on an open ask, else elicit the verdict and buffer the completion."""
+        """Collect an in-flight elicitation, else park on an open ask, else launch the verdict
+        elicitation (blizzard#443).
+
+        The in-flight check runs BEFORE the ask pre-check (D3): once a launch is durable, this
+        lease's every later pass is a collect, not a fresh judge — and collecting must not be
+        pre-empted by an ask the worker raised *during its live turns, before it exited* (the
+        ordinary ask-and-exit shape below). An ask raised *during the elicitation itself* is a
+        different case, handled inside `Judgement._judged` after the verdict parse returns
+        ``None`` — this pre-check cannot see that one; it is recorded mid-elicitation."""
         if lease.session_id is None:
             return  # not spawned — REAP's residue (guarded by the caller too)
+        elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
+        if elicitation is not None:
+            judgement = Judgement.of(self.ctx, lease)
+            if judgement is not None:
+                judgement.collect(elicitation)
+            return
         # Ask-and-exit: an exit holding an unforwarded ask is a park, an exit with neither is a
         # failure. Not a spawn, so it proceeds regardless of the local brake.
         ask = self.ctx.stores.asks.unforwarded_ask(lease.lease_id)

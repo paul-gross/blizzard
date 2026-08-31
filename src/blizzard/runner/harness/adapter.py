@@ -96,18 +96,22 @@ class IHarnessAdapter(Protocol):
         workdir: str,
         session_id: str,
         judgement_prompt: str,
+        output_path: str,
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
-    ) -> str:
-        """Deliver the judgement prompt into the session and return the raw reply.
+    ) -> WorkerHandle:
+        """Launch the judgement prompt into the session and return immediately — the
+        detached half of the launch/collect elicitation (blizzard#443).
 
-        The synchronous half of the two-phase node judgement — the reply is captured, not
-        just the new pid. ``model`` only attributes usage, never passed on. ``preamble``/
-        ``chunk_id`` re-supply worker identity. ``compaction_window`` reasserts like ``effort``."""
+        Mirrors ``spawn``: the reply lands in ``output_path`` (never empty — an unwritable
+        target raises ``HarnessSpawnError`` rather than proceeding uncollectable, D4) and the
+        caller reads it back once the returned handle's process has exited. ``model`` only
+        attributes usage, never passed on. ``preamble``/``chunk_id`` re-supply worker
+        identity. ``compaction_window`` reasserts like ``effort``."""
         ...
 
     def resume_command(

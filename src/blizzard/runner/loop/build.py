@@ -23,6 +23,7 @@ from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapt
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
 from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
@@ -94,6 +95,10 @@ class LoopWiring:
         # stdout redirect target always exists by the time a spawn/resume opens it.
         worker_stdout_dir = config.root / "worker-stdout"
         worker_stdout_dir.mkdir(parents=True, exist_ok=True)
+        # The detached elicitation's own output directory (blizzard#443, D4) — load-bearing,
+        # so it is always created, unlike `worker_stdout_dir`'s empty-disables convention.
+        elicitation_output_dir = config.root / "elicitation-output"
+        elicitation_output_dir.mkdir(parents=True, exist_ok=True)
         loop_config = LoopConfig(
             runner_id=config.runner_id,
             workspace_id=config.workspace_id,
@@ -110,6 +115,7 @@ class LoopWiring:
             workspace_prompt=self.workspace_prompt,
             runner_prompt=self.runner_prompt,
             worker_stdout_dir=str(worker_stdout_dir),
+            elicitation_output_dir=str(elicitation_output_dir),
             chunk_cap_usd=config.chunk_cap_usd,
             runner_ceiling_usd=config.runner_ceiling_usd,
             runner_ceiling_window_hours=config.runner_ceiling_window_hours,
@@ -122,6 +128,7 @@ class LoopWiring:
             transcript_chunk_max_bytes=config.transcript_chunk_max_bytes,
         )
         _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), stores.leases)
+        _elicitation_files = ElicitationFiles(str(elicitation_output_dir))
         _clock = SystemClock()
         return LoopContext(
             stores=stores,
@@ -135,6 +142,7 @@ class LoopWiring:
             check_runner=SubprocessCheckRunner(env_passthrough=config.worker_env_passthrough),
             config=loop_config,
             worker_files=_worker_files,
+            elicitation_files=_elicitation_files,
             usage=UsageRecorder(
                 leases=stores.leases,
                 usage=stores.usage,
@@ -225,7 +233,9 @@ class PeriodicDriver:
 
         The join is **unbounded** on purpose: the graceful-shutdown resume marking runs
         right after this returns and must not race a live tick writing the same store. A
-        tick cannot run forever — every seam it touches is timeout-bounded."""
+        tick cannot run forever — every seam it touches is timeout-bounded, including the
+        judgement elicitation itself (blizzard#443): `judge` launches detached and returns
+        immediately rather than blocking a tick on a live model turn."""
         self._stop.set()
         self._thread.join()
 

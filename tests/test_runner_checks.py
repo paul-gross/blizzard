@@ -90,7 +90,8 @@ def test_advance_runs_checks_records_facts_and_injects_them_into_the_submission(
         clock=clock,
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     # Both checks ran, in the env workdir root (no checks_cwd), under the default timeout.
@@ -137,7 +138,8 @@ def test_advance_records_a_red_check_and_still_buffers_the_completion(tmp_path: 
         clock=clock,
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     records = store.check_results_for_lease("lease_b", 1)
@@ -172,7 +174,8 @@ def test_advance_with_no_checks_runs_nothing_and_carries_empty_check_results(tmp
         clock=clock,
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     assert check_runner.calls == []
@@ -411,7 +414,8 @@ def test_advance_gates_a_requires_checks_pass_with_a_red_check_and_consumes_a_re
         clock=FixedClock(_NOW),
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     # The gated `pass` over a red check never buffers a completion — it failed the attempt.
@@ -446,7 +450,8 @@ def test_advance_lets_a_red_check_route_through_a_non_gated_fail(tmp_path: Path)
         clock=FixedClock(_NOW),
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     # The non-gated `fail` buffers and applies normally, red check notwithstanding.
@@ -480,7 +485,8 @@ def test_advance_accepts_a_requires_checks_pass_when_checks_are_green(tmp_path: 
         clock=FixedClock(_NOW),
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
     assert len(hub.completions) == 1
