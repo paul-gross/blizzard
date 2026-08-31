@@ -16,8 +16,9 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.findings import Finding
+from blizzard.hub.domain.findings import FactEntry, Finding
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore
 from tests.support import hub_store_connections
 
@@ -89,6 +90,22 @@ def test_get_many_of_no_ids_is_empty(tmp_path: Path) -> None:
     store = _store(tmp_path)
 
     assert store.get_many([]) == {}
+
+
+def test_record_facts_is_all_or_nothing(tmp_path: Path) -> None:
+    """Pins D7: one bad entry in a batch rolls back every entry in it, not just its own."""
+    store = _store(tmp_path)
+    _add(store, finding_id="fin_1")
+
+    with pytest.raises(HubStoreError):
+        store.record_facts(
+            [
+                FactEntry(finding_id="fin_1", kind="observed", at=_LATER, note=None),
+                FactEntry(finding_id="fin_1", kind="observed", at=None, note=None),  # type: ignore[arg-type]
+            ]
+        )
+
+    assert store.get("fin_1").observed_count == 0  # type: ignore[union-attr]
 
 
 def test_a_finding_is_named_by_id_across_two_runs(tmp_path: Path) -> None:

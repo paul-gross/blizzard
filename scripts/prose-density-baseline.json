@@ -1699,8 +1699,8 @@
   },
   "blizzard/hub/store/internal/finding_store.py": {
    "comments": 5,
-   "docstrings": 21,
-   "total": 321
+   "docstrings": 23,
+   "total": 323
   },
   "blizzard/hub/store/internal/garden_delivery_store.py": {
    "comments": 9,
@@ -4285,9 +4285,9 @@
    "total": 185
   },
   "test_finding_store.py": {
-   "comments": 5,
-   "docstrings": 8,
-   "total": 162
+   "comments": 7,
+   "docstrings": 9,
+   "total": 179
   },
   "test_finding_wire.py": {
    "comments": 3,

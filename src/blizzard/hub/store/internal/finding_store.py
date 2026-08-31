@@ -99,6 +99,8 @@ class FindingStore:
         )
 
     def record_facts(self, entries: Sequence[FactEntry]) -> None:
+        """All-or-nothing (D7) — pinned by
+        `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`."""
         for entry in entries:
             if entry.kind not in FACT_KINDS:
                 raise UnknownFactKindError(entry.kind)

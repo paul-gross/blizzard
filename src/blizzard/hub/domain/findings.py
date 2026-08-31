@@ -198,8 +198,8 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
         ...
 
     def record_facts(self, entries: Sequence[FactEntry]) -> None:
-        """Append every entry in `entries` in one atomic transaction — all rows insert or
-        none do (D7)."""
+        """All-or-nothing (D7) — pinned by
+        `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`."""
         ...
 
 
