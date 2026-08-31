@@ -40,6 +40,13 @@ class GardenDeliveryStore:
 
     def deliver(self, plan: DeliveryPlan) -> DeliveryOutcome:
         with self._store.write("deliver") as conn:
+            # This select-then-insert marker check duplicates `ChunkStore.record_hub_artifact`'s
+            # own idempotent shape — necessarily: that method opens its *own* separate
+            # transaction via `self._store.write(...)`, which cannot fold into this method's
+            # own single transaction alongside every other insert below. Unlike that method,
+            # this marker name (`_DELIVERED_MARKER_NAME`, "garden-delivered") never starts with
+            # `_MARKER_PREFIX` ("merged/"), so `record_hub_artifact`'s close-intent-enqueue arm
+            # would never fire for it anyway — deliberately, correctly absent here too.
             already = conn.execute(
                 select(artifacts.c.artifact_id).where(
                     (artifacts.c.chunk_id == plan.chunk_id)
@@ -50,6 +57,21 @@ class GardenDeliveryStore:
             ).first()
             if already is not None:
                 return DeliveryOutcome.ALREADY_RECORDED
+
+            # A second, broader idempotence check (F12): a distinct delivery visit (a fresh
+            # (chunk, node, epoch) — e.g. after an `invalid` bounce to `reconcile` and back)
+            # can still resolve an artifact already materialized under a *different* epoch, if
+            # `reconcile` didn't produce a fresh one. The exact-marker check above misses this
+            # case; without it, the insert below would trip `finding_sets.artifact_id`'s unique
+            # constraint with a raw `IntegrityError` instead of this same graceful outcome.
+            if plan.finding_sets:
+                already_materialized = conn.execute(
+                    select(finding_sets.c.finding_set_id).where(
+                        finding_sets.c.artifact_id.in_([fs.artifact_id for fs in plan.finding_sets])
+                    )
+                ).first()
+                if already_materialized is not None:
+                    return DeliveryOutcome.ALREADY_RECORDED
 
             if plan.new_findings:
                 conn.execute(

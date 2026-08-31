@@ -15,7 +15,9 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
 from blizzard.hub.domain.garden_delivery import ValidatedDelivery
+from blizzard.hub.domain.graph import Node
 from blizzard.hub.domain.run_context import RunContext
+from blizzard.hub.domain.work import Chunk
 from blizzard.wire.finding import AddFindingOp, GoneFindingOp, ObservedFindingOp
 
 
@@ -120,17 +122,18 @@ class GardenDelivery:
         self,
         validated: ValidatedDelivery,
         *,
-        chunk_id: str,
-        node_id: str,
-        node_name: str,
+        chunk: Chunk,
+        node: Node,
         epoch: int,
         delta_artifact_ids: Sequence[str],
     ) -> DeliveryOutcome:
         """Materialize `validated`. `delta_artifact_ids` names the artifact each of
         `validated.deltas` came from, positionally parallel to it — `validated.deltas`
-        itself carries no artifact id (Phase 2 doesn't track one). `chunk_id`/`node_id`/
-        `node_name`/`epoch` identify the delivering node-step, the idempotence marker's
-        own key."""
+        itself carries no artifact id (Phase 2 doesn't track one). `chunk`/`node`/`epoch`
+        identify the delivering node-step, the idempotence marker's own key."""
+        chunk_id = chunk.chunk_id
+        node_id = node.node_id
+        node_name = node.name
         at = self._clock.now()
         new_findings: list[NewFinding] = []
         facts: list[FindingFactRecord] = []

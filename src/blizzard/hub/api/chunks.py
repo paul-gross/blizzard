@@ -237,14 +237,15 @@ def record_garden_delivery(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     graph = services.graphs.get(chunk.graph_id)
     node = graph.node_by_id(node_id) if graph is not None else None
-    node_name = node.name if node is not None else node_id
+    if node is None:
+        return GardenDeliveryResponse(outcome="invalid", detail=f"unknown node {node_id!r} for chunk {chunk_id}")
 
     run = services.run_context.for_chunk(chunk)
     if run is None:
         return GardenDeliveryResponse(outcome="invalid", detail=f"no run context for chunk {chunk_id}")
 
     delta_artifacts: dict[str, str] = {}
-    delta_artifact_ids: list[str] = []
+    delta_artifact_id_by_name: dict[str, str] = {}
     missing_delta: list[str] = []
     for name in request_body.delta:
         artifact = services.chunks.latest_artifact(chunk_id, name)
@@ -252,11 +253,12 @@ def record_garden_delivery(
             missing_delta.append(name)
             continue
         delta_artifacts[name] = artifact.data
-        delta_artifact_ids.append(artifact.artifact_id)
+        delta_artifact_id_by_name[name] = artifact.artifact_id
     if not delta_artifacts:
         return GardenDeliveryResponse(
             outcome="invalid", detail=f"no delta artifact resolved — missing: {', '.join(missing_delta) or '<none>'}"
         )
+    delta_artifact_ids = [delta_artifact_id_by_name[name] for name in delta_artifacts]
 
     proposal_artifacts: dict[str, str] = {}
     for name in request_body.proposals:
@@ -264,15 +266,15 @@ def record_garden_delivery(
         if artifact is not None:
             proposal_artifacts[name] = artifact.data
 
-    live_findings = {f.finding_id: f.scope_slug for f in services.findings.list_for_routine(run.routine_name)}
+    known_findings = services.findings.list_for_routine(run.routine_name, include_gone=True)
 
     try:
         validated = validate_delivery(
             run=run,
             delta_artifacts=delta_artifacts,
             proposal_artifacts=proposal_artifacts,
-            live_findings=live_findings,
-            resolve_commit=services.commit_resolver.resolve,
+            known_findings=known_findings,
+            resolve_commit=services.commit_resolver,
         )
     except GardenDeliveryRejected as exc:
         return GardenDeliveryResponse(outcome="invalid", detail=str(exc))
@@ -281,9 +283,8 @@ def record_garden_delivery(
     # (Phase 3's own docstring) — a replay minting nothing is not itself news.
     services.garden_delivery.deliver(
         validated,
-        chunk_id=chunk_id,
-        node_id=node_id,
-        node_name=node_name,
+        chunk=chunk,
+        node=node,
         epoch=epoch,
         delta_artifact_ids=delta_artifact_ids,
     )

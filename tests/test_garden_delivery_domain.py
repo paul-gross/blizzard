@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.ids import FINDING_PREFIX, Id
+from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_delivery import (
     CommitResolver,
     GardenDeliveryRejected,
@@ -47,6 +48,21 @@ _BAD_COMMIT = "not-a-sha"
 def _live(*, in_scope: bool = True) -> dict[str, str]:
     scope = _RUN.scope_slug if in_scope else "other-scope"
     return {_FIN1: scope, _FIN2: scope, _FIN3: scope}
+
+
+def _finding(finding_id: str, *, scope_slug: str = _RUN.scope_slug, live: bool = True) -> Finding:
+    return Finding(
+        finding_id=finding_id,
+        routine_name=_RUN.routine_name,
+        scope_slug=scope_slug,
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s",
+        introduced=None,
+        live=live,
+        last_seen_at=_T0,
+        observed_count=1,
+    )
 
 
 def _resolver(result: bool | None) -> CommitResolver:
@@ -126,6 +142,16 @@ def test_check_delta_rejects_a_finding_id_not_live_on_this_routine() -> None:
         check_delta(delta, run=_RUN, live_findings=_live())
 
 
+def test_check_delta_rejects_a_delta_whose_scope_differs_from_the_runs_declared_scope() -> None:
+    delta = FindingDelta(scope="other-scope", findings=[])
+
+    with pytest.raises(GardenDeliveryRejected, match=r"other-scope.*runner") as exc_info:
+        check_delta(delta, run=_RUN, live_findings=_live())
+
+    assert "other-scope" in str(exc_info.value)
+    assert "runner" in str(exc_info.value)
+
+
 def test_check_delta_rejects_a_transformation_outside_the_declared_scope() -> None:
     delta = FindingDelta(scope="runner", findings=[ObservedFindingOp(id=_FIN1)])
 
@@ -150,6 +176,13 @@ def test_check_proposal_accepts_a_live_finding() -> None:
 
 
 # --- commit checks -----------------------------------------------------------------
+
+
+def test_check_delta_rejects_a_commit_sha_with_a_trailing_newline() -> None:
+    delta = FindingDelta(scope="runner", revisions={"blizzard": "abcdef1\n"})
+
+    with pytest.raises(GardenDeliveryRejected, match="well-formed commit"):
+        check_delta(delta, run=_RUN, live_findings=_live(), resolve_commit=_resolver(True))
 
 
 def test_check_delta_rejects_a_malformed_commit_regardless_of_resolver() -> None:
@@ -185,14 +218,26 @@ def test_check_delta_degrades_to_well_formedness_when_no_resolver_is_given() -> 
 
 
 def test_check_delta_resolves_an_add_ops_introduced_commit_against_the_sole_repo() -> None:
+    # A well-formed-but-unresolvable sha, so this must pass the well-formedness check
+    # and actually reach the resolver — proving the sole-repo resolution branch runs at
+    # all, not merely that malformed shas are rejected regardless of it.
+    other_commit = "b" * 40
+    calls: list[tuple[str, str]] = []
+
+    def _stub(repo: str, sha: str) -> bool:
+        calls.append((repo, sha))
+        return sha != other_commit
+
     delta = FindingDelta(
         scope="runner",
         revisions={"blizzard": _GOOD_COMMIT},
-        findings=[_add(introduced=_BAD_COMMIT)],
+        findings=[_add(introduced=other_commit)],
     )
 
-    with pytest.raises(GardenDeliveryRejected, match="well-formed commit"):
-        check_delta(delta, run=_RUN, live_findings=_live(), resolve_commit=_resolver(True))
+    with pytest.raises(GardenDeliveryRejected, match="does not resolve"):
+        check_delta(delta, run=_RUN, live_findings=_live(), resolve_commit=_stub)
+
+    assert ("blizzard", other_commit) in calls
 
 
 # --- gone / observed fact shape -----------------------------------------------------
@@ -264,12 +309,27 @@ def test_validate_delivery_accepts_a_full_delivery_and_bundles_it() -> None:
         run=_RUN,
         delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
         proposal_artifacts={"proposals.json": f"[{proposal.model_dump_json(by_alias=True)}]"},
-        live_findings=_live(),
+        known_findings=[_finding(_FIN1), _finding(_FIN2), _finding(_FIN3)],
     )
 
     assert result.run == _RUN
     assert result.deltas == [delta]
     assert [p.ref for p in result.proposals] == ["p1"]
+
+
+def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> None:
+    # A finding recorded `gone` must still be present in `known_findings` (D3's
+    # reversibility) — an `observed` targeting it is accepted, not rejected as unknown.
+    delta = FindingDelta(scope="runner", findings=[ObservedFindingOp(id=_FIN1)])
+
+    result = validate_delivery(
+        run=_RUN,
+        delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
+        proposal_artifacts={},
+        known_findings=[_finding(_FIN1, live=False)],
+    )
+
+    assert result.deltas == [delta]
 
 
 def test_validate_delivery_rejects_on_the_first_failing_artifact() -> None:
@@ -280,5 +340,5 @@ def test_validate_delivery_rejects_on_the_first_failing_artifact() -> None:
             run=_RUN,
             delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
             proposal_artifacts={},
-            live_findings=_live(),
+            known_findings=[_finding(_FIN1), _finding(_FIN2), _finding(_FIN3)],
         )

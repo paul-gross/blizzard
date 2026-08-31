@@ -8,7 +8,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from blizzard.hub.delivery.internal.commit_resolver import GitHubCommitResolver
+from blizzard.hub.store.internal.commit_resolver import GitHubCommitResolver
 
 pytestmark = pytest.mark.unit
 
@@ -95,3 +95,17 @@ def test_a_transport_error_degrades_to_none_never_raises() -> None:
     resolver = GitHubCommitResolver(_client(handler), forge_url=_FORGE_URL, forge_token=_TOKEN, forge_owner=_OWNER)
 
     assert resolver.resolve("widget", _SHA) is None
+
+
+def test_a_malformed_url_component_degrades_to_none_never_raises() -> None:
+    """A repo/commit containing a control character raises ``httpx.InvalidURL`` at
+    request-construction time, before any transport call — not an ``httpx.HTTPError``
+    subclass, so this only passes if the resolver's catch is broad enough to still
+    honor its own never-raise contract."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        pytest.fail("must not reach the transport when the URL fails to construct")
+
+    resolver = GitHubCommitResolver(_client(handler), forge_url=_FORGE_URL, forge_token=_TOKEN, forge_owner=_OWNER)
+
+    assert resolver.resolve("a\nb", _SHA) is None

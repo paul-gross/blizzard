@@ -15,14 +15,17 @@ import pytest
 from sqlalchemy import insert, select
 
 from blizzard.foundation.ids import FINDING_PREFIX, Id
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.hub.graphs.scripts import garden_deliver, land_common
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_graph, seed_work_item
+from tests.support import HubHarness, build_hub, hub_store_connections, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -38,13 +41,32 @@ def _seed_scope(hub: HubHarness, slug: str) -> None:
         conn.execute(insert(s.scopes).values(slug=slug, description="", created_at=_NOW))
 
 
+def _deliver_node(node_id: str = _NODE_ID, *, graph_id: str = "gr_delivery") -> Node:
+    return Node(
+        node_id=node_id,
+        graph_id=graph_id,
+        name="deliver",
+        executor=Executor.HUB,
+        prompt=None,
+        checks=[],
+        produces=[],
+        session=SessionMode.FRESH,
+        judged_by=JudgedBy.WORKER,
+        retries_max=None,
+        retries_exhausted=None,
+        mode=None,
+    )
+
+
 def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
     """A work item with its own resting chunk (issue #357's own two-step mint), plus a
     recorded run context for it (Phase 1) unless ``with_run_context`` is False — the
-    chunk id the delivery route resolves through."""
+    chunk id the delivery route resolves through. The graph carries the one node the
+    route's ``node_id`` names, so ``graph.node_by_id`` resolves it."""
     store_connections = hub_store_connections(hub.engine)
-    with hub.engine.begin() as conn:
-        seed_graph(conn, "gr_delivery", at=_NOW)
+    node = _deliver_node()
+    graph = Graph(graph_id="gr_delivery", name="g", entry_node_id=node.node_id, nodes=[node], edges=[], created_at=_NOW)
+    GraphStore(store_connections).mint(graph, definition_yaml="", at=_NOW)
     items = WorkItemStore(store_connections)
     item = seed_work_item(items, graph_id="gr_delivery", author=WorkItemAuthor.user("u_1"), at=_NOW)
     if with_run_context:
@@ -185,6 +207,66 @@ def test_a_malformed_artifact_is_invalid(tmp_path: Path) -> None:
     assert body["outcome"] == "invalid"
     assert "delta" in body["detail"]
     assert _finding_count(hub) == 0
+
+
+def test_an_unknown_node_id_is_invalid(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op()]))
+
+    resp = _post(hub, chunk_id, delta=["delta"], node_id="nd_ghost")
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["outcome"] == "invalid"
+    assert "nd_ghost" in body["detail"]
+    assert _finding_count(hub) == 0
+
+
+def test_a_delta_declaring_a_scope_other_than_the_runs_own_is_invalid(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    _seed_scope(hub, "other-scope")
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(scope="other-scope", findings=[_add_op()]))
+
+    resp = _post(hub, chunk_id, delta=["delta"])
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["outcome"] == "invalid"
+    assert "other-scope" in body["detail"]
+    assert _SCOPE in body["detail"]
+    assert _finding_count(hub) == 0
+
+
+def test_a_repeated_delta_artifact_name_still_records_cleanly(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op()]))
+
+    resp = _post(hub, chunk_id, delta=["delta", "delta"])
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"outcome": "recorded", "detail": ""}
+    assert _finding_count(hub) == 1
+
+
+def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    _seed_finding(hub, finding_id)
+    FindingStore(hub_store_connections(hub.engine)).record_fact(finding_id, kind="gone", at=_NOW, note="fixed")
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(finding_id)]))
+
+    resp = _post(hub, chunk_id, delta=["delta"])
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"outcome": "recorded", "detail": ""}
 
 
 def test_an_unknown_finding_id_is_invalid(tmp_path: Path) -> None:

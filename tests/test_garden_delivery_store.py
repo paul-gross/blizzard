@@ -157,6 +157,46 @@ def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
         assert conn.execute(sa.select(sa.func.count()).select_from(artifacts)).scalar_one() == 1
 
 
+def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(tmp_path: Path) -> None:
+    """A second delivery visit at a fresh (node_id, epoch) — e.g. after an `invalid`
+    bounce to `reconcile` and back — that resolves the *same* already-materialized
+    artifact (`reconcile` minted nothing new) must return ALREADY_RECORDED cleanly,
+    not trip `finding_sets.artifact_id`'s unique constraint with a raw IntegrityError."""
+    store, engine = _store_and_engine(tmp_path)
+    first = _full_plan()
+    assert store.deliver(first) is DeliveryOutcome.RECORDED
+
+    second = DeliveryPlan(
+        chunk_id="ch_1",
+        node_id="nd_2",
+        node_name="garden-survey",
+        epoch=2,
+        at=_NOW,
+        run=_RUN,
+        new_findings=[],
+        facts=[],
+        finding_sets=[
+            NewFindingSet(
+                finding_set_id="fins_replay",
+                artifact_id="art_placeholder",  # same artifact_id as `first`'s finding set
+                scope_slug="blizzard",
+                revisions={"blizzard": "abc1234"},
+                measurement="12.3s",
+            )
+        ],
+        proposals=[],
+    )
+
+    outcome = store.deliver(second)
+
+    assert outcome is DeliveryOutcome.ALREADY_RECORDED
+    with engine.connect() as conn:
+        set_rows = conn.execute(sa.select(finding_sets)).all()
+        assert [r.finding_set_id for r in set_rows] == ["fins_1"]
+        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "garden-delivered")).all()
+        assert len(marker_rows) == 1
+
+
 def test_deliver_clean_plan_records_only_the_finding_set(tmp_path: Path) -> None:
     """No findings, no proposals — but an artifact's scope/revisions/measurement are
     still recorded, even for an empty delta (acceptance criterion)."""

@@ -39,7 +39,6 @@ from blizzard.hub.auth.users import IReadUserRepository, IWriteUserRepository
 from blizzard.hub.config import OAuthProviderConfig
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
-from blizzard.hub.delivery.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubCommandRunner
 from blizzard.hub.delivery.internal.hub_workdir import FilesystemHubWorkdir
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
@@ -57,6 +56,7 @@ from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSetRepository
+from blizzard.hub.domain.garden_delivery import CommitResolver
 from blizzard.hub.domain.garden_delivery_materialize import GardenDelivery
 from blizzard.hub.domain.garden_proposals import GardenProposalAuthoring, IReadGardenProposalRepository
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
@@ -70,7 +70,7 @@ from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.restart import RestartService
 from blizzard.hub.domain.routines import IReadRoutineRepository, RoutineAuthoring
-from blizzard.hub.domain.run_context import IWriteRunContextRepository
+from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptCaps, TranscriptIngestService
@@ -84,6 +84,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -207,13 +208,16 @@ class HubServices:
     garden_proposals: IReadGardenProposalRepository
     #: Create a garden proposal, rejecting an empty `findings` list (blizzard#390 D7).
     garden_proposal_authoring: GardenProposalAuthoring
-    #: A run's identity — routine, scope, and mode (blizzard#393 Phase 1).
-    run_context: IWriteRunContextRepository
+    #: A run's identity — routine, scope, and mode (blizzard#393 Phase 1). Read-only
+    #: (``bzh:controller-read-only``) — the only call site anywhere in ``src/`` is a read;
+    #: ``.record`` (the write method) has no call sites yet (blizzard#392).
+    run_context: IReadRunContextRepository
     #: Materialize a validated delivery in one transaction (blizzard#393 Phase 3).
     garden_delivery: GardenDelivery
-    #: Resolves a cited commit against the configured forge (blizzard#393 D2) — its bound
-    #: ``resolve`` is a `garden_delivery.CommitResolver`.
-    commit_resolver: GitHubCommitResolver
+    #: Resolves a cited commit against the configured forge (blizzard#393 D2) — a plain
+    #: `garden_delivery.CommitResolver`, not the concrete resolver class, so a fake is
+    #: trivially substitutable in a test or an alternate composition.
+    commit_resolver: CommitResolver
 
 
 def build_services(
@@ -316,9 +320,11 @@ def build_services(
     garden_proposal_store = GardenProposalStore(store_connections)
     run_context_store = RunContextStore(store_connections)
     garden_delivery_store = GardenDeliveryStore(store_connections)
+    # Bound as `.resolve` (a plain `garden_delivery.CommitResolver` callable), not the bare
+    # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
     commit_resolver = GitHubCommitResolver(
         httpx.Client(timeout=10.0), forge_url=forge_url, forge_token=forge_token, forge_owner=forge_owner
-    )
+    ).resolve
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,

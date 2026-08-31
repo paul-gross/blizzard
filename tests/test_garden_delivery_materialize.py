@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.garden_delivery import ValidatedDelivery
 from blizzard.hub.domain.garden_delivery_materialize import (
     DeliveryOutcome,
@@ -21,7 +22,9 @@ from blizzard.hub.domain.garden_delivery_materialize import (
     GardenDelivery,
     IWriteGardenDeliveryRepository,
 )
+from blizzard.hub.domain.graph import Node
 from blizzard.hub.domain.run_context import RunContext
+from blizzard.hub.domain.work import Chunk, WorkRef
 from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp
 from blizzard.wire.garden_proposal import GardenProposalCandidate
 
@@ -29,6 +32,22 @@ pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _RUN = RunContext(routine_name="nightly", scope_slug="runner", mode="full")
+
+_CHUNK = Chunk(chunk_id="ch_1", graph_id="gr_1", work_refs=[WorkRef(source="default", ref="1")], minted_at=_T0)
+_NODE = Node(
+    node_id="nd_1",
+    graph_id="gr_1",
+    name="garden-survey",
+    executor=Executor.HUB,
+    prompt=None,
+    checks=[],
+    produces=[],
+    session=SessionMode.FRESH,
+    judged_by=JudgedBy.WORKER,
+    retries_max=None,
+    retries_exhausted=None,
+    mode=None,
+)
 
 
 @dataclass
@@ -67,9 +86,7 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
     delta = FindingDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
 
-    outcome = service.deliver(
-        validated, chunk_id="ch_1", node_id="nd_1", node_name="garden-survey", epoch=1, delta_artifact_ids=["art_1"]
-    )
+    outcome = service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
 
     assert outcome is DeliveryOutcome.RECORDED
     assert len(repo.delivered) == 1
@@ -113,9 +130,7 @@ def test_deliver_builds_observed_and_gone_facts_carrying_the_gone_note() -> None
     )
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
 
-    service.deliver(
-        validated, chunk_id="ch_1", node_id="nd_1", node_name="garden-survey", epoch=1, delta_artifact_ids=["art_1"]
-    )
+    service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
 
     plan = repo.delivered[0]
     assert plan.new_findings == []
@@ -131,9 +146,7 @@ def test_deliver_on_an_empty_delta_yields_one_finding_set_and_no_findings_or_fac
     delta = FindingDelta(scope="runner", revisions={}, measurement="12 findings", findings=[])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
 
-    service.deliver(
-        validated, chunk_id="ch_1", node_id="nd_1", node_name="garden-survey", epoch=1, delta_artifact_ids=["art_1"]
-    )
+    service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
 
     plan = repo.delivered[0]
     assert plan.new_findings == []
@@ -149,9 +162,7 @@ def test_deliver_builds_a_proposal_and_its_finding_links() -> None:
     proposal = _proposal(findings=["fin_1", "fin_2"])
     validated = ValidatedDelivery(run=_RUN, deltas=[], proposals=[proposal])
 
-    service.deliver(
-        validated, chunk_id="ch_1", node_id="nd_1", node_name="garden-survey", epoch=1, delta_artifact_ids=[]
-    )
+    service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=[])
 
     plan = repo.delivered[0]
     assert plan.finding_sets == []
@@ -170,8 +181,6 @@ def test_deliver_returns_the_repository_outcome() -> None:
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
     validated = ValidatedDelivery(run=_RUN, deltas=[], proposals=[])
 
-    outcome = service.deliver(
-        validated, chunk_id="ch_1", node_id="nd_1", node_name="garden-survey", epoch=1, delta_artifact_ids=[]
-    )
+    outcome = service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=[])
 
     assert outcome is DeliveryOutcome.ALREADY_RECORDED
