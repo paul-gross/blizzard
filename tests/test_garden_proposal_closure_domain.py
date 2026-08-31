@@ -1,11 +1,8 @@
 """``GardenProposalClosureService`` (unit tier, blizzard#395): a blank pass reason is
-refused, a proposal already carrying a closure refuses either verb naming it, and an
-accept that declines to mint records `declined` without touching
-``WorkItemEditService`` at all. The accept-with-mint path is component-tested against a
-real store instead (``tests/test_garden_proposal_closure_store.py``,
-``tests/test_garden_proposal_closure_api.py``) — it depends on
-``WorkItemEditService``'s own store-backed mint machinery, the
-``tests/test_work_item_materialization.py`` shape."""
+refused, an already-closed proposal refuses either verb naming it, and a declining
+accept records `declined` without touching ``WorkItemEditService``. The
+accept-with-mint path is component-tested against a real store instead
+(``tests/test_garden_proposal_closure_store.py``, ``…_api.py``)."""
 
 from __future__ import annotations
 

@@ -837,14 +837,11 @@ export const getGardenProposalApiGardenProposalsProposalIdGet = <ThrowOnError ex
 /**
  * Accept Garden Proposal
  *
- * Accept the proposal at PROPOSAL_ID. Mints a linked hub work item by default,
- * carrying the proposal's own body unless a body override is given;
- * `mint_work_item: false` declines to mint, and the decline is recorded rather than
- * left to read as an absent link. Acceptance promotes nothing — a minted item rests at
- * `not_ready` behind the ordinary promote gate — and changes no finding's state. 404
- * for an unknown proposal, 409 when the proposal already carries a closure or an
- * out-of-band ingest already holds the allocated ref's pointer, 503 if every graph
- * named after the packaged default has been retired.
+ * Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default (the
+ * proposal's own body unless overridden), or records the decline when
+ * `mint_work_item` is false — never inferred from an absent link. Promotes nothing and
+ * changes no finding's state. 404 unknown proposal, 409 already closed or a raced
+ * ingest, 503 the packaged default graph retired.
  */
 export const acceptGardenProposalApiGardenProposalsProposalIdAcceptPost = <ThrowOnError extends boolean = false>(options: Options<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostData, ThrowOnError>): RequestResult<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses, AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors, ThrowOnError> => (options.client ?? client).post<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses, AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors, ThrowOnError>({
     url: '/api/garden-proposals/{proposal_id}/accept',

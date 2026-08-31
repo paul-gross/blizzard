@@ -6,6 +6,7 @@ linked hub work item by default). Closure is terminal, mirroring
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -83,6 +84,11 @@ class IReadGardenProposalClosureRepository(Protocol):
 
     def get(self, proposal_id: str) -> GardenProposalClosure | None: ...
 
+    def get_many(self, proposal_ids: Sequence[str]) -> dict[str, GardenProposalClosure]:
+        """Every closure among `proposal_ids`, keyed by `proposal_id` — a proposal with
+        no closure is simply absent. One batch read, for a list view's fan-out."""
+        ...
+
 
 class IWriteGardenProposalClosureRepository(IReadGardenProposalClosureRepository, Protocol):
     """Read-write garden-proposal-closure access — the pass and accept-declining-to-mint
@@ -147,13 +153,11 @@ class GardenProposalClosureService:
         mint: bool,
         graph: Graph | None,
     ) -> AcceptedGardenProposal:
-        """Accept ``proposal``. Minting is the default (``mint=True``, requiring
-        ``graph``): a hub work item is minted carrying ``body`` (or the proposal's own
-        body when ``body`` is ``None``), linked to the proposal in the same transaction.
+        """Accept ``proposal``: minting is the default (``mint=True``, requiring
+        ``graph``), linking a hub work item carrying ``body`` or the proposal's own;
         ``mint=False`` records the acceptance without minting. Raises
-        :class:`GardenProposalAlreadyClosed` when the proposal already carries a
-        closure, and :class:`~blizzard.hub.domain.ingest.IngestConflict` when minting
-        races an out-of-band ingest for the allocated ref."""
+        :class:`GardenProposalAlreadyClosed` when already closed, and
+        :class:`~blizzard.hub.domain.ingest.IngestConflict` on a raced ref."""
         self._refuse_if_closed(proposal.proposal_id)
         if not mint:
             at = self._clock.now()

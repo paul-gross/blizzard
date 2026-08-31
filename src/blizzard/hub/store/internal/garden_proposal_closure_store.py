@@ -1,17 +1,17 @@
 """SQLAlchemy adapter for the garden-proposal closure repository seam (blizzard#395).
 All ``sqlalchemy`` usage confined here (``bzh:dependency-inversion``). The
 accept-with-mint write lives in ``WorkItemStore.accept_create`` instead, reaching
-:func:`insert_garden_proposal_closure_row` the same way
-``blizzard.hub.store.internal.chunk_store.insert_materialization_row`` is reached from
-outside its own owning adapter — a deliberate two-adapter split, mirroring
-``work_item_materializations``: only the item's own adapter can enclose the item and
-chunk inserts in the accept-with-mint transaction."""
+:func:`insert_garden_proposal_closure_row` as ``chunk_store.insert_materialization_row``
+is reached from outside its own adapter — a deliberate two-adapter split, mirroring
+``work_item_materializations``."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import Connection, insert, select
+from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosure,
@@ -73,31 +73,46 @@ class GardenProposalClosureStore:
             ).one_or_none()
         return self._of(row) if row is not None else None
 
+    def get_many(self, proposal_ids: Sequence[str]) -> dict[str, GardenProposalClosure]:
+        if not proposal_ids:
+            return {}
+        with self._store.read("get_many") as conn:
+            rows = conn.execute(
+                select(garden_proposal_closures).where(garden_proposal_closures.c.proposal_id.in_(proposal_ids))
+            ).all()
+        return {row.proposal_id: self._of(row) for row in rows}
+
     def record_pass(self, proposal_id: str, *, reason: str, closed_by: str, at: datetime) -> bool:
-        with self._store.write("record_pass") as conn:
-            return insert_garden_proposal_closure_row(
-                conn,
-                proposal_id=proposal_id,
-                closure=GardenProposalClosureKind.PASSED,
-                reason=reason,
-                closed_by=closed_by,
-                at=at,
-                item_outcome=None,
-                pointer=None,
-            )
+        try:
+            with self._store.write("record_pass", expect=(IntegrityError,)) as conn:
+                return insert_garden_proposal_closure_row(
+                    conn,
+                    proposal_id=proposal_id,
+                    closure=GardenProposalClosureKind.PASSED,
+                    reason=reason,
+                    closed_by=closed_by,
+                    at=at,
+                    item_outcome=None,
+                    pointer=None,
+                )
+        except IntegrityError:
+            return False
 
     def record_accept_decline(self, proposal_id: str, *, reason: str | None, closed_by: str, at: datetime) -> bool:
-        with self._store.write("record_accept_decline") as conn:
-            return insert_garden_proposal_closure_row(
-                conn,
-                proposal_id=proposal_id,
-                closure=GardenProposalClosureKind.ACCEPTED,
-                reason=reason,
-                closed_by=closed_by,
-                at=at,
-                item_outcome=GardenProposalItemOutcome.DECLINED,
-                pointer=None,
-            )
+        try:
+            with self._store.write("record_accept_decline", expect=(IntegrityError,)) as conn:
+                return insert_garden_proposal_closure_row(
+                    conn,
+                    proposal_id=proposal_id,
+                    closure=GardenProposalClosureKind.ACCEPTED,
+                    reason=reason,
+                    closed_by=closed_by,
+                    at=at,
+                    item_outcome=GardenProposalItemOutcome.DECLINED,
+                    pointer=None,
+                )
+        except IntegrityError:
+            return False
 
     @staticmethod
     def _of(row) -> GardenProposalClosure:  # type: ignore[no-untyped-def]

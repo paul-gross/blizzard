@@ -1,8 +1,8 @@
 """garden_proposal_closures — one closure fact per pass or accept (blizzard#395). One
 new table.
 
-Revision ID: 20260831_0900_garden_proposal_closures
-Revises: 20260830_2015_garden_proposals_source_artifact
+Revision ID: 20260831_0945_garden_proposal_closures
+Revises: 20260831_0930_finding_sets_routine_name
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from alembic import op
 
 from blizzard.hub.store.schema import garden_proposal_closures
 
-revision: str = "20260831_0900_garden_proposal_closures"
-down_revision: str | None = "20260830_2015_garden_proposals_source_artifact"
+revision: str = "20260831_0945_garden_proposal_closures"
+down_revision: str | None = "20260831_0930_finding_sets_routine_name"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

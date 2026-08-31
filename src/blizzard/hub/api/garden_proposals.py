@@ -50,8 +50,7 @@ def _closure_view(closure: GardenProposalClosure) -> GardenProposalClosureView:
     )
 
 
-def _proposal_view(proposal: GardenProposal, services: HubServices) -> GardenProposalView:
-    closure = services.garden_proposal_closures.get(proposal.proposal_id)
+def _proposal_view(proposal: GardenProposal, closure: GardenProposalClosure | None) -> GardenProposalView:
     # `class_`'s alias is the Python keyword `class` — constructed by alias via
     # `model_validate`, the `_finding_view` shape.
     return GardenProposalView.model_validate(
@@ -78,7 +77,9 @@ def _get_or_404(proposal_id: str, services: HubServices) -> GardenProposal:
 @router.get("/garden-proposals", response_model=list[GardenProposalView], dependencies=[Depends(require(FLEET_VIEW))])
 def list_garden_proposals(services: Annotated[HubServices, Depends(get_services)]) -> list[GardenProposalView]:
     """Every garden proposal, newest first."""
-    return [_proposal_view(p, services) for p in services.garden_proposals.list_all()]
+    proposals = services.garden_proposals.list_all()
+    closures = services.garden_proposal_closures.get_many([p.proposal_id for p in proposals])
+    return [_proposal_view(p, closures.get(p.proposal_id)) for p in proposals]
 
 
 @router.get(
@@ -90,7 +91,8 @@ def get_garden_proposal(
     proposal_id: str, services: Annotated[HubServices, Depends(get_services)]
 ) -> GardenProposalView:
     """One garden proposal's whole record; 404 on an unknown id."""
-    return _proposal_view(_get_or_404(proposal_id, services), services)
+    proposal = _get_or_404(proposal_id, services)
+    return _proposal_view(proposal, services.garden_proposal_closures.get(proposal_id))
 
 
 @router.post("/garden-proposals/{proposal_id}/pass", response_model=GardenProposalView)
@@ -106,12 +108,12 @@ def pass_garden_proposal(
     the proposal already carries a closure — closure is terminal."""
     proposal = _get_or_404(proposal_id, services)
     try:
-        services.garden_proposal_closure.pass_(proposal, reason=request.reason, by=identity.user_id)
+        closure = services.garden_proposal_closure.pass_(proposal, reason=request.reason, by=identity.user_id)
     except GardenProposalPassReasonRequired as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return _proposal_view(_get_or_404(proposal_id, services), services)
+    return _proposal_view(proposal, closure)
 
 
 @router.post("/garden-proposals/{proposal_id}/accept", response_model=GardenProposalAcceptResponse)
@@ -121,15 +123,16 @@ def accept_garden_proposal(
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> object:
-    """Accept the proposal at PROPOSAL_ID. Mints a linked hub work item by default,
-    carrying the proposal's own body unless a body override is given;
-    `mint_work_item: false` declines to mint, and the decline is recorded rather than
-    left to read as an absent link. Acceptance promotes nothing — a minted item rests at
-    `not_ready` behind the ordinary promote gate — and changes no finding's state. 404
-    for an unknown proposal, 409 when the proposal already carries a closure or an
-    out-of-band ingest already holds the allocated ref's pointer, 503 if every graph
-    named after the packaged default has been retired."""
+    """Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default (the
+    proposal's own body unless overridden), or records the decline when
+    `mint_work_item` is false — never inferred from an absent link. Promotes nothing and
+    changes no finding's state. 404 unknown proposal, 409 already closed or a raced
+    ingest, 503 the packaged default graph retired."""
     proposal = _get_or_404(proposal_id, services)
+    existing = services.garden_proposal_closures.get(proposal_id)
+    if existing is not None:
+        already = GardenProposalAlreadyClosed(proposal_id, existing)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(already)) from None
     graph = None
     if request.mint_work_item:
         try:
@@ -161,5 +164,6 @@ def accept_garden_proposal(
             cause="minted", key=f"chunks:{accepted.chunk_id}"
         )
         services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
-    refreshed = _get_or_404(proposal_id, services)
-    return GardenProposalAcceptResponse(**_proposal_view(refreshed, services).model_dump(), chunk_id=accepted.chunk_id)
+    return GardenProposalAcceptResponse(
+        **_proposal_view(proposal, accepted.closure).model_dump(), chunk_id=accepted.chunk_id
+    )

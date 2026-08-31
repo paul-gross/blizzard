@@ -11785,7 +11785,7 @@
     },
     "/api/garden-proposals/{proposal_id}/accept": {
       "post": {
-        "description": "Accept the proposal at PROPOSAL_ID. Mints a linked hub work item by default,\ncarrying the proposal's own body unless a body override is given;\n`mint_work_item: false` declines to mint, and the decline is recorded rather than\nleft to read as an absent link. Acceptance promotes nothing \u2014 a minted item rests at\n`not_ready` behind the ordinary promote gate \u2014 and changes no finding's state. 404\nfor an unknown proposal, 409 when the proposal already carries a closure or an\nout-of-band ingest already holds the allocated ref's pointer, 503 if every graph\nnamed after the packaged default has been retired.",
+        "description": "Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default (the\nproposal's own body unless overridden), or records the decline when\n`mint_work_item` is false \u2014 never inferred from an absent link. Promotes nothing and\nchanges no finding's state. 404 unknown proposal, 409 already closed or a raced\ningest, 503 the packaged default graph retired.",
         "operationId": "accept_garden_proposal_api_garden_proposals__proposal_id__accept_post",
         "parameters": [
           {
