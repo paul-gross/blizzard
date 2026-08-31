@@ -98,10 +98,9 @@ def test_a_transport_error_degrades_to_none_never_raises() -> None:
 
 
 def test_a_malformed_url_component_degrades_to_none_never_raises() -> None:
-    """A repo/commit containing a control character raises ``httpx.InvalidURL`` at
-    request-construction time, before any transport call — not an ``httpx.HTTPError``
-    subclass, so this only passes if the resolver's catch is broad enough to still
-    honor its own never-raise contract."""
+    """A control character in the repo raises ``httpx.InvalidURL`` at request
+    construction, outside the ``httpx.HTTPError`` hierarchy — so this passes only if
+    the catch is broad enough to honor the never-raise contract."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         pytest.fail("must not reach the transport when the URL fails to construct")

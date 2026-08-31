@@ -158,10 +158,9 @@ def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
 
 
 def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(tmp_path: Path) -> None:
-    """A second delivery visit at a fresh (node_id, epoch) — e.g. after an `invalid`
-    bounce to `reconcile` and back — that resolves the *same* already-materialized
-    artifact (`reconcile` minted nothing new) must return ALREADY_RECORDED cleanly,
-    not trip `finding_sets.artifact_id`'s unique constraint with a raw IntegrityError."""
+    """A second visit at a fresh (node_id, epoch) resolving the *same* already-
+    materialized artifact must return ALREADY_RECORDED cleanly, not trip
+    `finding_sets.artifact_id`'s unique constraint with a raw IntegrityError."""
     store, engine = _store_and_engine(tmp_path)
     first = _full_plan()
     assert store.deliver(first) is DeliveryOutcome.RECORDED

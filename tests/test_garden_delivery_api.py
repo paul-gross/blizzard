@@ -8,7 +8,7 @@ artifacts recorded via ``services.chunks.record_hub_artifact`` — the
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -76,7 +76,14 @@ def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
     return f"ch_{item.ref}"
 
 
-def _seed_finding(hub: HubHarness, finding_id: str, *, scope_slug: str = _SCOPE, routine_name: str = _ROUTINE) -> None:
+def _seed_finding(
+    hub: HubHarness,
+    finding_id: str,
+    *,
+    scope_slug: str = _SCOPE,
+    routine_name: str = _ROUTINE,
+    at: datetime = _NOW,
+) -> None:
     FindingStore(hub_store_connections(hub.engine)).add(
         finding_id,
         routine_name=routine_name,
@@ -85,7 +92,7 @@ def _seed_finding(hub: HubHarness, finding_id: str, *, scope_slug: str = _SCOPE,
         locus="a.py:1",
         summary="s",
         introduced=None,
-        at=_NOW,
+        at=at,
     )
 
 
@@ -259,14 +266,21 @@ def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> Non
     _seed_scope(hub, _SCOPE)
     chunk_id = _seed_chunk(hub)
     finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
-    _seed_finding(hub, finding_id)
-    FindingStore(hub_store_connections(hub.engine)).record_fact(finding_id, kind="gone", at=_NOW, note="fixed")
+    # Both prior facts precede the delivering run's instant, so the delivered `observed`
+    # is genuinely newest — `derive_liveness` resolves on `recorded_at`, not row order.
+    before = hub.clock.now() - timedelta(days=1)
+    _seed_finding(hub, finding_id, at=before)
+    FindingStore(hub_store_connections(hub.engine)).record_fact(finding_id, kind="gone", at=before, note="fixed")
+    assert [f.finding_id for f in hub.services.findings.list_for_routine(_ROUTINE)] == []
     _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(finding_id)]))
 
     resp = _post(hub, chunk_id, delta=["delta"])
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"outcome": "recorded", "detail": ""}
+    # "Gone is reversible" is a liveness claim, not just a route outcome: the delivered
+    # `observed` fact must actually restore the finding to the live set.
+    assert [f.finding_id for f in hub.services.findings.list_for_routine(_ROUTINE)] == [finding_id]
 
 
 def test_an_unknown_finding_id_is_invalid(tmp_path: Path) -> None:

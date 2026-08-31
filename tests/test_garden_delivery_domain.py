@@ -218,9 +218,8 @@ def test_check_delta_degrades_to_well_formedness_when_no_resolver_is_given() -> 
 
 
 def test_check_delta_resolves_an_add_ops_introduced_commit_against_the_sole_repo() -> None:
-    # A well-formed-but-unresolvable sha, so this must pass the well-formedness check
-    # and actually reach the resolver — proving the sole-repo resolution branch runs at
-    # all, not merely that malformed shas are rejected regardless of it.
+    # Well-formed but unresolvable, so it reaches the resolver — proving the sole-repo
+    # branch runs at all, not merely that malformed shas are rejected before it.
     other_commit = "b" * 40
     calls: list[tuple[str, str]] = []
 
@@ -330,6 +329,33 @@ def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> N
     )
 
     assert result.deltas == [delta]
+
+
+def test_validate_delivery_resolves_each_distinct_commit_at_most_once() -> None:
+    """The resolver is a network call holding the fleet-wide hub-exec slot, so a delta
+    citing one commit across many findings must spend exactly one call on it."""
+    calls: list[tuple[str, str]] = []
+
+    def _stub(repo: str, sha: str) -> bool:
+        calls.append((repo, sha))
+        return True
+
+    shared = "c" * 40
+    delta = FindingDelta(
+        scope="runner",
+        revisions={"blizzard": _GOOD_COMMIT},
+        findings=[_add(locus=f"a.py:{i}", introduced=shared) for i in range(5)],
+    )
+
+    validate_delivery(
+        run=_RUN,
+        delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
+        proposal_artifacts={},
+        known_findings=[],
+        resolve_commit=_stub,
+    )
+
+    assert sorted(calls) == [("blizzard", _GOOD_COMMIT), ("blizzard", shared)]
 
 
 def test_validate_delivery_rejects_on_the_first_failing_artifact() -> None:

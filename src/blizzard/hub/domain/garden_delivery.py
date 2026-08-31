@@ -32,9 +32,8 @@ class GardenDeliveryRejected(Exception):
     error, never a stack of causes a person has to untangle."""
 
 
-# Every finding known to this routine — live or gone (a `gone` finding is not excluded:
-# a later `observed` may revive it), keyed by finding id and valued by that finding's own
-# recorded scope slug — what the caller reads the finding store for before calling in.
+# Every finding known to this routine, live or gone (a later `observed` may revive a
+# `gone` one), keyed by finding id and valued by that finding's own recorded scope slug.
 LiveFindings = Mapping[str, str]
 
 # Resolves whether `commit_sha` exists in `repo`: `True`/`False` when `repo` is
@@ -86,10 +85,9 @@ def check_delta(
     resolve_commit: CommitResolver | None = None,
 ) -> None:
     """Validate one already-parsed delta against `run` and `live_findings`, raising
-    :class:`GardenDeliveryRejected` on the first failure: `delta.scope` matches `run`'s
-    own declared scope, every revision's commit sha, every transformation's id
-    (well-formed, live on the routine, and inside `delta.scope`), every `add` op's
-    `introduced` commit, and a `gone` op's non-empty note.
+    :class:`GardenDeliveryRejected` on the first failure: `delta.scope` against `run`'s
+    own declared scope, every revision's and `add`'s commit sha, every transformation's
+    id (well-formed, known to the routine, in scope), and a `gone` op's non-empty note.
     `tests/test_garden_delivery_domain.py` pins one case per rejection reason."""
     if delta.scope != run.scope_slug:
         raise GardenDeliveryRejected(
@@ -132,21 +130,17 @@ def validate_delivery(
     resolve_commit: CommitResolver | None = None,
 ) -> ValidatedDelivery:
     """The delivery node's whole check. `delta_artifacts`/`proposal_artifacts` are
-    artifact-name → raw-JSON-text maps, what a route handler holds before anything is
-    parsed; `known_findings` is every finding known to `run.routine_name`, live or gone
-    (so a later `observed` may revive a `gone` one). Parses every artifact, then checks
-    each against `run` and the findings known to it. Raises :class:`GardenDeliveryRejected`
-    on the first failure; on success returns a :class:`ValidatedDelivery` for the next
-    phase — nothing here is durable yet."""
+    artifact-name → raw-JSON-text maps, what a route handler holds before parsing;
+    `known_findings` is every finding on `run.routine_name`, live or gone. Parses each
+    artifact, then checks it against `run`, raising :class:`GardenDeliveryRejected` on
+    the first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
     live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in known_findings}
     deltas = [parse_delta(name, raw) for name, raw in delta_artifacts.items()]
     proposals = [candidate for name, raw in proposal_artifacts.items() for candidate in parse_proposals(name, raw)]
 
     if resolve_commit is not None:
-        # Memoize per delivery: a delta citing the same (repo, sha) pair many times (common:
-        # many findings sharing one `introduced` commit) should not spend the fleet-wide
-        # hub-exec slot on redundant HTTP calls. Built fresh each call, never shared across
-        # requests, so this introduces no staleness.
+        # Memoize per delivery: many findings sharing one `introduced` commit must not
+        # spend the fleet-wide hub-exec slot twice. Built fresh here, so never stale.
         resolve_commit = functools.lru_cache(maxsize=None)(resolve_commit)
 
     for delta in deltas:

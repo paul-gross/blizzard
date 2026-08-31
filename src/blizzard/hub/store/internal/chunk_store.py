@@ -711,11 +711,8 @@ class ChunkStore:
 
     def latest_artifact(self, chunk_id: str, name: str) -> ArtifactRow | None:
         with self._store.read("latest_artifact") as conn:
-            # A third, always-distinct tiebreaker (`bzh:sql-portable`): `artifact_id` is a
-            # ULID, unique per row and time-encoded (roughly monotonic with `produced_at`
-            # already), so this only breaks *exact* (epoch, produced_at) ties — a real,
-            # designed-for state from crash-replay re-runs — deterministically, rather than
-            # leaving them to backend-dependent row order.
+            # `artifact_id` is the always-distinct third term (`bzh:sql-portable`): it
+            # settles exact (epoch, produced_at) ties off backend-dependent row order.
             a = conn.execute(
                 select(s.artifacts)
                 .where((s.artifacts.c.chunk_id == chunk_id) & (s.artifacts.c.name == name))

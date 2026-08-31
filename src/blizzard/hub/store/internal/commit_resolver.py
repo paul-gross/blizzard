@@ -1,11 +1,9 @@
 """The GitHub-backed commit resolver (blizzard#393 Phase 4, D2) — the real forge check
 behind `garden_delivery.CommitResolver`: resolves whether a cited commit exists on a
 repo when the hub has a forge configured and the repo is addressable, degrading to
-``None`` (well-formedness only, `garden_delivery.py`'s own degrade contract) otherwise.
-Confined to `hub/store/internal/` (``bzh:dependency-inversion``), beside
-`garden_delivery_store.py` — the other adapter for this same `garden_delivery.py`
-concept; ``httpx`` is used only here, mirroring `github_work_source.py`'s own
-client-injection shape."""
+``None`` (well-formedness only) otherwise. Confined to `hub/store/internal/`
+(``bzh:dependency-inversion``) beside `garden_delivery_store.py`, the other adapter for
+this concept; ``httpx`` is injected here as `github_work_source.py` injects its own."""
 
 from __future__ import annotations
 
@@ -47,10 +45,8 @@ class GitHubCommitResolver:
         try:
             resp = self._client.get(f"{self._forge_url}/repos/{qualified}/commits/{commit}", headers=headers)
         except Exception:
-            # Broader than ``httpx.HTTPError`` on purpose: a malformed URL component (e.g. a
-            # repo or commit sha with a newline) can raise at request-construction time,
-            # before any network I/O, with an exception ``httpx`` does not subclass from
-            # ``HTTPError`` — this method's own contract is that it must never raise.
+            # Broader than ``httpx.HTTPError`` on purpose: a malformed URL component raises
+            # at request-construction time, outside that hierarchy. This must never raise.
             return None
         if resp.status_code == 200:
             return True

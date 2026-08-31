@@ -208,15 +208,11 @@ class HubServices:
     garden_proposals: IReadGardenProposalRepository
     #: Create a garden proposal, rejecting an empty `findings` list (blizzard#390 D7).
     garden_proposal_authoring: GardenProposalAuthoring
-    #: A run's identity — routine, scope, and mode (blizzard#393 Phase 1). Read-only
-    #: (``bzh:controller-read-only``) — the only call site anywhere in ``src/`` is a read;
-    #: ``.record`` (the write method) has no call sites yet (blizzard#392).
+    #: A run's identity — routine, scope, and mode; read-only (``bzh:controller-read-only``).
     run_context: IReadRunContextRepository
     #: Materialize a validated delivery in one transaction (blizzard#393 Phase 3).
     garden_delivery: GardenDelivery
-    #: Resolves a cited commit against the configured forge (blizzard#393 D2) — a plain
-    #: `garden_delivery.CommitResolver`, not the concrete resolver class, so a fake is
-    #: trivially substitutable in a test or an alternate composition.
+    #: Resolves a cited commit against the configured forge (blizzard#393 D2).
     commit_resolver: CommitResolver
 
 
