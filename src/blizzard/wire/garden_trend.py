@@ -17,6 +17,7 @@ class TrendPeriodView(BaseModel):
     exits: dict[str, int]
     outflow: int
     withdrawn: int
+    reopened: int
 
 
 class TrendAgeView(BaseModel):

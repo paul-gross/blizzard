@@ -561,8 +561,9 @@ export const listEventsApiEventsGet = <ThrowOnError extends boolean = false>(opt
 /**
  * List Findings
  *
- * A routine's findings under one scope — live only, unless `include_gone` (D3);
- * the read a running pass calls to cross-reference its own bucket.
+ * A routine's findings under one scope — live only, unless `include_gone` (D3),
+ * which also surfaces every exited finding, not just a merely `gone` one; the read a
+ * running pass calls to cross-reference its own bucket.
  */
 export const listFindingsApiFindingsGet = <ThrowOnError extends boolean = false>(options: Options<ListFindingsApiFindingsGetData, ThrowOnError>): RequestResult<ListFindingsApiFindingsGetResponses, ListFindingsApiFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<ListFindingsApiFindingsGetResponses, ListFindingsApiFindingsGetErrors, ThrowOnError>({ url: '/api/findings', ...options });
 
@@ -632,7 +633,7 @@ export const resolveFindingsApiFindingsResolvePost = <ThrowOnError extends boole
  *
  * Withdraw every finding in `finding_ids` as superseded by `superseded_by`,
  * recording NOTE. 404 for an unknown id in either `finding_ids` or `superseded_by`, 422
- * for a blank note.
+ * for a blank note, a self-superseding id, or a `superseded_by` that isn't itself live.
  */
 export const supersedeFindingsApiFindingsSupersedePost = <ThrowOnError extends boolean = false>(options: Options<SupersedeFindingsApiFindingsSupersedePostData, ThrowOnError>): RequestResult<SupersedeFindingsApiFindingsSupersedePostResponses, SupersedeFindingsApiFindingsSupersedePostErrors, ThrowOnError> => (options.client ?? client).post<SupersedeFindingsApiFindingsSupersedePostResponses, SupersedeFindingsApiFindingsSupersedePostErrors, ThrowOnError>({
     url: '/api/findings/supersede',
@@ -1175,8 +1176,9 @@ export const createRoutineApiRoutinesPost = <ThrowOnError extends boolean = fals
  *
  * `routine`'s finding inflow-against-outflow over `[since, until)`: per
  * `period_days`-wide period, findings created and per-kind exit counts, the outflow/
- * withdrawn roll-ups (D2), and the D5 age cut of the window's created findings against
- * `introduced_boundary`. 422 on a malformed instant or a non-positive `period_days`.
+ * withdrawn roll-ups (D2), and the D5 age cut against `introduced_boundary`. 404 on an
+ * unknown routine name; 422 on a malformed instant, a non-positive `period_days`, a
+ * non-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`.
  */
 export const routineTrendApiRoutinesTrendGet = <ThrowOnError extends boolean = false>(options: Options<RoutineTrendApiRoutinesTrendGetData, ThrowOnError>): RequestResult<RoutineTrendApiRoutinesTrendGetResponses, RoutineTrendApiRoutinesTrendGetErrors, ThrowOnError> => (options.client ?? client).get<RoutineTrendApiRoutinesTrendGetResponses, RoutineTrendApiRoutinesTrendGetErrors, ThrowOnError>({ url: '/api/routines/trend', ...options });
 

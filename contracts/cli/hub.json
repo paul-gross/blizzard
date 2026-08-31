@@ -1409,7 +1409,7 @@
           "short_help": "Confirm by hand that FINDING_IDS no longer reproduce."
         },
         "list": {
-          "help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone.\n\nThis is the read a running pass calls to cross-reference its own bucket\n(blizzard-context:/domain/findings-and-proposals.md).",
+          "help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone, which\nalso surfaces every exited finding, not just a merely `gone` one.\n\nThis is the read a running pass calls to cross-reference its own bucket\n(blizzard-context:/domain/findings-and-proposals.md).",
           "params": [
             {
               "hidden": false,
@@ -1468,7 +1468,7 @@
             }
           ],
           "path": "hub finding list",
-          "short_help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone."
+          "short_help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone, which also surfaces every exited finding, not just a merely `gone` one."
         },
         "not-a-finding": {
           "help": "Withdraw FINDING_IDS as not findings.",

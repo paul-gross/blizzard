@@ -2,8 +2,8 @@
 Phase 4).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the window
-itself is bound in SQL, but period bucketing is left to `domain/garden_trend.py`'s
-`compute_trend` (D6, ``bzh:sql-portable``)."""
+itself is bound in SQL, but period bucketing is left to
+`src/blizzard/hub/domain/garden_trend.py`'s `compute_trend` (D6, ``bzh:sql-portable``)."""
 
 from __future__ import annotations
 

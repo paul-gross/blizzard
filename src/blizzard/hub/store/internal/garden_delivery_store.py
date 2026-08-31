@@ -38,18 +38,26 @@ class GardenDeliveryStore:
     def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
 
+    def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
+        with self._store.read("already_delivered") as conn:
+            return self._marker(conn, chunk_id=chunk_id, node_id=node_id, epoch=epoch) is not None
+
+    @staticmethod
+    def _marker(conn, *, chunk_id: str, node_id: str, epoch: int):  # type: ignore[no-untyped-def]
+        return conn.execute(
+            select(artifacts.c.artifact_id).where(
+                (artifacts.c.chunk_id == chunk_id)
+                & (artifacts.c.node_id == node_id)
+                & (artifacts.c.epoch == epoch)
+                & (artifacts.c.name == _DELIVERED_MARKER_NAME)
+            )
+        ).first()
+
     def deliver(self, plan: DeliveryPlan) -> DeliveryOutcome:
         with self._store.write("deliver") as conn:
             # Not `ChunkStore.record_hub_artifact`: that opens its own transaction, which
             # cannot fold into this one alongside every insert below.
-            already = conn.execute(
-                select(artifacts.c.artifact_id).where(
-                    (artifacts.c.chunk_id == plan.chunk_id)
-                    & (artifacts.c.node_id == plan.node_id)
-                    & (artifacts.c.epoch == plan.epoch)
-                    & (artifacts.c.name == _DELIVERED_MARKER_NAME)
-                )
-            ).first()
+            already = self._marker(conn, chunk_id=plan.chunk_id, node_id=plan.node_id, epoch=plan.epoch)
             if already is not None:
                 return DeliveryOutcome.ALREADY_RECORDED
 

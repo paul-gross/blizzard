@@ -93,13 +93,16 @@ def list_routines(services: Annotated[HubServices, Depends(get_services)]) -> li
 @dataclass(frozen=True)
 class _TrendWindow:
     """One ``GET /routines/trend`` request's parsed window (blizzard#394 Phase 4,
-    `SpendWindow`'s own shape, `api/spend.py`) — a malformed edge or a non-positive
-    ``period_days`` is the 422 it names."""
+    `SpendWindow`'s own shape, `src/blizzard/hub/api/spend.py`) — a malformed edge or a
+    non-positive ``period_days`` is the 422 it names."""
 
     since: datetime
     until: datetime
     introduced_boundary: datetime
     period_days: int
+
+    #: The span/`period_days` bucket cap — otherwise unbounded (blizzard#394).
+    _MAX_PERIODS = 366
 
     @classmethod
     def of(cls, *, since: str, until: str, introduced_boundary: str, period_days: int) -> _TrendWindow:
@@ -107,9 +110,19 @@ class _TrendWindow:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="period_days must be at least 1"
             )
+        parsed_since = cls._instant(since, field="since")
+        parsed_until = cls._instant(until, field="until")
+        if parsed_until <= parsed_since:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="until must be after since")
+        span_days = (parsed_until - parsed_since).total_seconds() / 86400
+        if span_days / period_days > cls._MAX_PERIODS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"since/until/period_days would bucket more than {cls._MAX_PERIODS} periods",
+            )
         return cls(
-            since=cls._instant(since, field="since"),
-            until=cls._instant(until, field="until"),
+            since=parsed_since,
+            until=parsed_until,
             introduced_boundary=cls._instant(introduced_boundary, field="introduced_boundary"),
             period_days=period_days,
         )
@@ -139,6 +152,7 @@ def _trend_view(trend: Trend) -> TrendView:
                 exits=p.exits,
                 outflow=p.outflow,
                 withdrawn=p.withdrawn,
+                reopened=p.reopened,
             )
             for p in trend.periods
         ],
@@ -162,8 +176,11 @@ def routine_trend(
 ) -> TrendView:
     """`routine`'s finding inflow-against-outflow over `[since, until)`: per
     `period_days`-wide period, findings created and per-kind exit counts, the outflow/
-    withdrawn roll-ups (D2), and the D5 age cut of the window's created findings against
-    `introduced_boundary`. 422 on a malformed instant or a non-positive `period_days`."""
+    withdrawn roll-ups (D2), and the D5 age cut against `introduced_boundary`. 404 on an
+    unknown routine name; 422 on a malformed instant, a non-positive `period_days`, a
+    non-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`."""
+    if services.routines.get_by_name(routine) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
     window = _TrendWindow.of(since=since, until=until, introduced_boundary=introduced_boundary, period_days=period_days)
     trend = services.garden_trend.trend(
         routine,

@@ -12,6 +12,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
+from blizzard.foundation.store.utc import UtcDateTime
+
 revision: str = "20260831_1030_finding_exits"
 down_revision: str | None = "20260831_0945_garden_proposal_closures"
 branch_labels: str | Sequence[str] | None = None
@@ -54,6 +56,8 @@ def _findings_columns(bind: sa.Connection) -> set[str]:
 def upgrade() -> None:
     bind = op.get_bind()
     if "actor" not in _facts_columns(bind):
+        # SQLite has no ALTER for a CHECK constraint, so this table-copy recreate is
+        # load-bearing (`blizzard-context:/standards/persistence.md`), not stylistic.
         with op.batch_alter_table(_FACTS_TABLE) as batch:
             batch.drop_constraint(_CHECK_NAME, type_="check")
             batch.add_column(sa.Column("actor", sa.String(), nullable=True))
@@ -75,7 +79,7 @@ def upgrade() -> None:
             )
             batch.create_check_constraint(_CHECK_NAME, _check_sql(_NEW_KINDS))
     if _INTRODUCED_AT_COLUMN not in _findings_columns(bind):
-        op.add_column(_FINDINGS_TABLE, sa.Column(_INTRODUCED_AT_COLUMN, sa.DateTime(), nullable=True))
+        op.add_column(_FINDINGS_TABLE, sa.Column(_INTRODUCED_AT_COLUMN, UtcDateTime, nullable=True))
 
 
 def downgrade() -> None:

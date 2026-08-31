@@ -129,6 +129,17 @@ class FindingStore:
             facts = self._facts(conn, finding_id)
         return self._of(row, facts)
 
+    def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
+        """`get`'s batched sibling — one row query plus one `_facts_for_many` query for
+        every id in `finding_ids`, so a bulk exit verb's read side never issues one query
+        pair per row (blizzard#394)."""
+        if not finding_ids:
+            return {}
+        with self._store.read("get_many") as conn:
+            rows = conn.execute(select(findings).where(findings.c.finding_id.in_(finding_ids))).all()
+            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
+            return {row.finding_id: self._of(row, facts_by_id[row.finding_id]) for row in rows}
+
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """The pass's own bucket read (D3) — filtered on `ix_findings_routine_scope`,
         ordered by `finding_id` so every backend returns the same rows."""
@@ -162,6 +173,15 @@ class FindingStore:
                 .select_from(findings)
                 .where(findings.c.routine_name == routine_name, findings.c.class_ == class_)
             ).scalar_one()
+
+    def has_resolution_for_proposal(self, proposal_id: str) -> bool:
+        with self._store.read("has_resolution_for_proposal") as conn:
+            row = conn.execute(
+                select(finding_facts.c.id)
+                .where(finding_facts.c.proposal_id == proposal_id, finding_facts.c.kind == "resolved")
+                .limit(1)
+            ).first()
+        return row is not None
 
     def _facts(self, conn, finding_id: str) -> list[FindingFact]:  # type: ignore[no-untyped-def]
         rows = conn.execute(

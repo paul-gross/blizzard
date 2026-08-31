@@ -237,6 +237,34 @@ def test_supersede_an_unknown_absorbing_finding_is_404(tmp_path: Path) -> None:
     assert hub.client.get("/api/findings/fin_1").json()["state"] == "live"
 
 
+def test_supersede_rejects_a_finding_naming_itself_as_the_absorber(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_finding(hub, "fin_1")
+
+    resp = hub.client.post(
+        "/api/findings/supersede",
+        json={"finding_ids": ["fin_1"], "note": "n", "superseded_by": "fin_1"},
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert hub.client.get("/api/findings/fin_1").json()["state"] == "live"
+
+
+def test_supersede_rejects_a_non_live_absorbing_finding(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_finding(hub, "fin_1")
+    _seed_finding(hub, "fin_2")
+    hub.client.post("/api/findings/wont-fix", json={"finding_ids": ["fin_2"], "note": "meh"})
+
+    resp = hub.client.post(
+        "/api/findings/supersede",
+        json={"finding_ids": ["fin_1"], "note": "n", "superseded_by": "fin_2"},
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert hub.client.get("/api/findings/fin_1").json()["state"] == "live"
+
+
 def test_reopen_undoes_an_exit_and_restores_liveness(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_finding(hub, "fin_1")

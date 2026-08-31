@@ -559,11 +559,13 @@ def build_hub(
     delete_service = DeleteService(
         chunks=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
     )
+    finding_store = FindingStore(store_connections)
+    finding_exit = FindingExitService(repo=finding_store, clock=clock)
     garden_proposal_resolution = GardenProposalDeliveryResolution(
         closures=GardenProposalClosureStore(store_connections),
         proposals=GardenProposalStore(store_connections),
-        findings=FindingStore(store_connections),
-        exits=FindingExitService(repo=FindingStore(store_connections), clock=clock),
+        findings=finding_store,
+        exits=finding_exit,
     )
     seat_hub_work_source(
         built_sources,
@@ -585,6 +587,8 @@ def build_hub(
         claim_lock=claim_lock,
         work_item_store=work_item_store,
         delete=delete_service,
+        finding_store=finding_store,
+        finding_exit=finding_exit,
         clock=clock,
         users=user_store,
         base_branch=base_branch,

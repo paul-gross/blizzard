@@ -6241,6 +6241,10 @@
             "title": "Period Start",
             "type": "string"
           },
+          "reopened": {
+            "title": "Reopened",
+            "type": "integer"
+          },
           "withdrawn": {
             "title": "Withdrawn",
             "type": "integer"
@@ -6252,7 +6256,8 @@
           "created",
           "exits",
           "outflow",
-          "withdrawn"
+          "withdrawn",
+          "reopened"
         ],
         "title": "TrendPeriodView",
         "type": "object"
@@ -10756,7 +10761,7 @@
     },
     "/api/findings": {
       "get": {
-        "description": "A routine's findings under one scope \u2014 live only, unless `include_gone` (D3);\nthe read a running pass calls to cross-reference its own bucket.",
+        "description": "A routine's findings under one scope \u2014 live only, unless `include_gone` (D3),\nwhich also surfaces every exited finding, not just a merely `gone` one; the read a\nrunning pass calls to cross-reference its own bucket.",
         "operationId": "list_findings_api_findings_get",
         "parameters": [
           {
@@ -11006,7 +11011,7 @@
     },
     "/api/findings/supersede": {
       "post": {
-        "description": "Withdraw every finding in `finding_ids` as superseded by `superseded_by`,\nrecording NOTE. 404 for an unknown id in either `finding_ids` or `superseded_by`, 422\nfor a blank note.",
+        "description": "Withdraw every finding in `finding_ids` as superseded by `superseded_by`,\nrecording NOTE. 404 for an unknown id in either `finding_ids` or `superseded_by`, 422\nfor a blank note, a self-superseding id, or a `superseded_by` that isn't itself live.",
         "operationId": "supersede_findings_api_findings_supersede_post",
         "requestBody": {
           "content": {
@@ -12996,7 +13001,7 @@
     },
     "/api/routines/trend": {
       "get": {
-        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups (D2), and the D5 age cut of the window's created findings against\n`introduced_boundary`. 422 on a malformed instant or a non-positive `period_days`.",
+        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups (D2), and the D5 age cut against `introduced_boundary`. 404 on an\nunknown routine name; 422 on a malformed instant, a non-positive `period_days`, a\nnon-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`.",
         "operationId": "routine_trend_api_routines_trend_get",
         "parameters": [
           {

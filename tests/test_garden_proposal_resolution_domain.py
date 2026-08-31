@@ -6,6 +6,7 @@ or an already-exited finding all resolve nothing. Plain unit tests over fakes
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -104,9 +105,13 @@ class _FakeProposals:
 @dataclass
 class _FakeFindings:
     by_id: dict[str, Finding] = field(default_factory=dict)
+    resolved_proposal_ids: frozenset[str] = frozenset()
 
     def get(self, finding_id: str) -> Finding | None:
         return self.by_id.get(finding_id)
+
+    def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
+        return {fid: f for fid in finding_ids if (f := self.by_id.get(fid)) is not None}
 
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         raise NotImplementedError
@@ -116,6 +121,9 @@ class _FakeFindings:
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
         raise NotImplementedError
+
+    def has_resolution_for_proposal(self, proposal_id: str) -> bool:
+        return proposal_id in self.resolved_proposal_ids
 
 
 @dataclass
@@ -244,3 +252,29 @@ def test_resolves_exactly_the_proposals_live_findings_attributed_to_it() -> None
         assert entry.actor == "u_1"
         assert entry.proposal_id == "gprop_1"
         assert entry.note
+
+
+def test_a_proposal_already_resolved_once_is_never_resolved_again_even_after_a_reopen() -> None:
+    """blizzard#394 review F1/F13: a person's `reopened` fact folds a resolved finding
+    back to `live` (`derive_liveness`) — a stray repeat call must not read that as "still
+    unresolved" and silently redo what the person undid. Gating on
+    `has_resolution_for_proposal` rather than each finding's own state closes that hole."""
+    closures = _FakeClosures(
+        by_item={
+            (_POINTER.source, _POINTER.ref): _closure(
+                kind=GardenProposalClosureKind.ACCEPTED, item_outcome=GardenProposalItemOutcome.MINTED
+            )
+        }
+    )
+    proposals = _FakeProposals(by_id={"gprop_1": _proposal(findings=["fin_1"])})
+    # Reopened after an earlier resolution: `state` reads "live" again, exactly like a
+    # never-yet-resolved finding — only the proposal-level marker tells them apart.
+    findings = _FakeFindings(
+        by_id={"fin_1": _finding("fin_1", state="live")}, resolved_proposal_ids=frozenset({"gprop_1"})
+    )
+    repo = _RecordingWriteRepo()
+    resolution = _resolution(closures=closures, proposals=proposals, findings=findings, repo=repo)
+
+    resolution.resolve_for_item(_POINTER)
+
+    assert repo.batches == []

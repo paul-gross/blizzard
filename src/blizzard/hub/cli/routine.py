@@ -189,7 +189,8 @@ class TrendDetail:
             exits = ", ".join(f"{kind}={count}" for kind, count in period["exits"].items())
             yield (
                 f"  {period['period_start']} .. {period['period_end']}  created={period['created']}  "
-                f"outflow={period['outflow']}  withdrawn={period['withdrawn']}  ({exits})"
+                f"outflow={period['outflow']}  withdrawn={period['withdrawn']}  reopened={period['reopened']}  "
+                f"({exits})"
             )
         age = body["age"]
         yield (
@@ -201,7 +202,7 @@ class TrendDetail:
 def _utc_query_value(value: datetime) -> str:
     """A bare ``--since``/``--until``/``--introduced-boundary`` is read as the operator's
     own local wall clock, not UTC — converted (not merely relabeled) before it crosses the
-    wire (`cli/analytics.py`'s own D6 rule)."""
+    wire (`src/blizzard/hub/cli/analytics.py`'s own D6 rule)."""
     return iso_utc(value.astimezone(UTC))
 
 

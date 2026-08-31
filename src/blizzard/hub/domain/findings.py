@@ -1,9 +1,9 @@
 """Finding domain model — a durable observation a routine's run recorded (blizzard#390).
 
-The no-stored-column contract is `src/blizzard/hub/store/schema.py`'s own (D2, D4); only
-a ``gone`` fact takes a finding out of the live bucket, reversibly (D3). ``class_``/
-``locus`` are opaque to the hub
-(blizzard-context:/domain/findings-and-proposals.md §`class` and `locus` are opaque)."""
+The no-stored-column contract is `src/blizzard/hub/store/schema.py`'s own (D2, D4).
+Liveness is a derived fold over facts, reversible only by a person's own verb once
+exited (blizzard-context:/domain/findings-and-proposals.md §Liveness is derived, and
+reversible); `class_`/`locus` are opaque to the hub, same doc."""
 
 from __future__ import annotations
 
@@ -30,8 +30,9 @@ WITHDRAWN_KINDS = EXIT_KINDS - OUTFLOW_KINDS
 
 
 class UnknownFactKindError(ValueError):
-    """A `finding_facts` row named a `kind` outside `FACT_KINDS` (D2) — a typo here would
-    otherwise silently fail every `!= "gone"` liveness check."""
+    """A `finding_facts` row named a `kind` outside `FACT_KINDS` (D2) — refused at the
+    write path so `derive_liveness`'s newest-fact-wins fold, which assumes every kind is
+    one of the nine, never has to reason about a stray value."""
 
     def __init__(self, kind: str) -> None:
         super().__init__(f"unknown finding-fact kind {kind!r}")
@@ -99,9 +100,10 @@ class FindingLiveness:
 
 
 def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
-    """The newest-fact-wins read over a finding's facts (D3, blizzard#394): any later fact
-    reverses `gone`, and `reopened` is the explicit undo. `last_seen_at` uses
-    `recorded_at`, not insertion order, so out-of-order ingestion still derives correctly."""
+    """The newest-fact-wins read over a finding's facts (D1-D3, blizzard#394): any later
+    fact reverses `gone`, but only `reopened` reverses an `EXIT_KINDS` verb. `last_seen_at`
+    uses `recorded_at`, not insertion order, so out-of-order ingestion still derives
+    correctly."""
     if not facts:
         return FindingLiveness(state="live", live=True, note=None, last_seen_at=None, observed_count=0)
     seen = [f for f in facts if f.kind in ("add", "observed")]
@@ -132,22 +134,34 @@ class IReadFindingRepository(Protocol):
 
     def get(self, finding_id: str) -> Finding | None: ...
 
+    def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
+        """`get`'s batched sibling, keyed by `finding_id` — a bulk exit verb's read side
+        (blizzard#394), so it costs one query pair, not one pair per row."""
+        ...
+
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """A routine's findings under one scope
         (blizzard-product:/plans/garden/machinery.md §Managing findings and proposals) —
-        live only, unless `include_gone` (D3)."""
+        live only, unless `include_gone` (D3), which also surfaces every exited finding,
+        not just a merely `gone` one."""
         ...
 
     def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
         """Every finding live on `routine_name`, across every scope it holds (blizzard#393
         Phase 4) — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter.
-        Live only, unless `include_gone` (D3)."""
+        Live only, unless `include_gone` (D3), which also surfaces every exited finding."""
         ...
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name`
         (blizzard-product:/plans/garden/machinery.md §What the store buys) — a count,
         never the rows themselves."""
+        ...
+
+    def has_resolution_for_proposal(self, proposal_id: str) -> bool:
+        """Whether any `resolved` fact already carries `proposal_id` — delivery-triggered
+        resolution's own once-only gate (blizzard#394), independent of any one finding's
+        current state so a later reopen of a resolved finding is never silently redone."""
         ...
 
 
@@ -185,8 +199,7 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
 
     def record_facts(self, entries: Sequence[FactEntry]) -> None:
         """Append every entry in `entries` in one atomic transaction — all rows insert or
-        none do (blizzard#394 D7: "a partially applied bulk exit is not a state anyone
-        has to reason about")."""
+        none do (D7)."""
         ...
 
 
@@ -202,6 +215,16 @@ class FactEntry:
     actor: str | None = None
     proposal_id: str | None = None
     superseded_by: str | None = None
+
+
+class IFindingExitResolver(Protocol):
+    """`FindingExitService.resolve`'s own shape — the one exit verb delivery-triggered
+    resolution calls, narrowed so that collaborator depends on a Protocol like every
+    other one it takes (blizzard#394)."""
+
+    def resolve(
+        self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None
+    ) -> None: ...
 
 
 class FindingExitService:

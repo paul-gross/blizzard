@@ -43,6 +43,10 @@ time. Either closing verb answers 409, naming the proposal's existing closure, w
 `--until`, and `--introduced-boundary` (each an instant, read in the operator's own local time, the same as
 `blizzard hub analytics`'s own since/until flags) plus an optional `--period-days` (default 7). Per period it reports
 findings created and exits per kind, plus the `outflow` (`resolved` and `gone-confirmed`) and `withdrawn` (the other
-three exit kinds) roll-ups. Alongside the periods, `age` cuts the window's created findings against
+three exit kinds) roll-ups, and `reopened` — an exited finding's own undo, counted on its own rather than folded into
+`created` or any exit count, so a resolve-reopen-resolve cycle inside one period reads as one creation, two exits, one
+reopen, not an unexplained imbalance. Alongside the periods, `age` cuts the window's created findings against
 `--introduced-boundary`: `recent` (at or after it), `older` (before it), and `unattributed` (no resolved `introduced`
-instant at all — never guessed into either bucket). A malformed instant or a `--period-days` under 1 answers 422.
+instant at all — never guessed into either bucket). An unknown routine name answers 404; a malformed instant, a
+`--period-days` under 1, `--until` not after `--since`, or a span/`--period-days` pair bucketing past 366 periods each
+answer 422.

@@ -1,5 +1,5 @@
-"""garden_proposal_closures(source, ref) index (blizzard#394 Phase 3) — the reverse read a
-delivered item's own pointer needs: which accepted proposal, if any, minted it.
+"""garden_proposal_closures(source, ref) unique index (blizzard#394 Phase 3) — the reverse
+read a delivered item's own pointer needs, DB-enforcing `find_by_item`'s `one_or_none()`.
 
 Revision ID: 20260831_1100_gpc_item_index
 Revises: 20260831_1030_finding_exits
@@ -29,7 +29,7 @@ def _has_index(bind: sa.Connection) -> bool:
 def upgrade() -> None:
     bind = op.get_bind()
     if not _has_index(bind):
-        op.create_index(_INDEX, _TABLE, _COLUMNS)
+        op.create_index(_INDEX, _TABLE, _COLUMNS, unique=True)
 
 
 def downgrade() -> None:

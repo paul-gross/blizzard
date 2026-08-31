@@ -418,6 +418,7 @@ _TREND_BODY = {
             "exits": {"resolved": 1},
             "outflow": 1,
             "withdrawn": 0,
+            "reopened": 0,
         }
     ],
     "age": {"boundary": "2026-01-01T00:00:00+00:00", "recent": 1, "older": 0, "unattributed": 1},

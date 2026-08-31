@@ -51,9 +51,12 @@ def finding_group() -> None:
 @finding_group.command("list", cls=FleetCommand)
 @click.option("--routine", "routine", required=True, help="The routine whose findings to list.")
 @click.option("--scope", "scope", required=True, help="The scope to filter to.")
-@click.option("--include-gone", is_flag=True, default=False, help="Also show findings whose newest fact is gone (D3).")
+@click.option(
+    "--include-gone", is_flag=True, default=False, help="Also show every exited finding, not just a live one (D3)."
+)
 def finding_list(cli: CliContext, routine: str, scope: str, include_gone: bool) -> None:
-    """List ROUTINE's findings under SCOPE — live only, unless --include-gone.
+    """List ROUTINE's findings under SCOPE — live only, unless --include-gone, which
+    also surfaces every exited finding, not just a merely `gone` one.
 
     This is the read a running pass calls to cross-reference its own bucket
     (blizzard-context:/domain/findings-and-proposals.md)."""

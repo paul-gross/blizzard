@@ -73,6 +73,24 @@ def test_get_unknown_id_is_none(tmp_path: Path) -> None:
     assert store.get("fin_ghost") is None
 
 
+def test_get_many_returns_only_the_known_ids_keyed_by_finding_id(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add(store, finding_id="fin_1")
+    _add(store, finding_id="fin_2")
+
+    fetched = store.get_many(["fin_1", "fin_ghost", "fin_2"])
+
+    assert set(fetched) == {"fin_1", "fin_2"}
+    assert fetched["fin_1"] == store.get("fin_1")
+    assert fetched["fin_2"] == store.get("fin_2")
+
+
+def test_get_many_of_no_ids_is_empty(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    assert store.get_many([]) == {}
+
+
 def test_a_finding_is_named_by_id_across_two_runs(tmp_path: Path) -> None:
     """The second run's `observed` op names the finding fin_1 recorded first (D2) —
     matching is a reference, never a recomputed fingerprint."""

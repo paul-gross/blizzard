@@ -438,7 +438,7 @@ def test_validate_delivery_rejects_an_op_naming_an_exited_finding() -> None:
     `gone`, an exit is not addressable by a later run's delta op."""
     delta = FindingDelta(scope="runner", findings=[ObservedFindingOp(id=_FIN1)])
 
-    with pytest.raises(GardenDeliveryRejected, match="not live on routine"):
+    with pytest.raises(GardenDeliveryRejected, match="has been exited"):
         validate_delivery(
             run=_RUN,
             delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},

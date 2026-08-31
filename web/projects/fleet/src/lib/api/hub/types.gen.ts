@@ -4131,6 +4131,10 @@ export type TrendPeriodView = {
      */
     period_start: string;
     /**
+     * Reopened
+     */
+    reopened: number;
+    /**
      * Withdrawn
      */
     withdrawn: number;

@@ -1,7 +1,7 @@
 """``compute_trend`` (unit tier, blizzard#394 Phase 4) — the pure fold over a window's
-own facts into fixed-length periods, the outflow/withdrawn roll-ups (D2), and the D5
-introduced-age cut. No store, no clock — a plain list of ``TrendFact`` in, a ``Trend``
-out."""
+own facts into fixed-length periods, the outflow/withdrawn/reopened counts (D2), and the
+D5 introduced-age cut. No store, no clock — a plain list of ``TrendFact`` in, a
+``Trend`` out."""
 
 from __future__ import annotations
 
@@ -99,6 +99,20 @@ def test_withdrawn_excludes_outflow() -> None:
 
     assert trend.periods[0].outflow == 1
     assert trend.periods[0].withdrawn == 3
+
+
+def test_reopened_is_counted_on_its_own_not_folded_into_created_or_any_exit() -> None:
+    facts = [_fact("add", day=2), _fact("resolved", day=3), _fact("reopened", day=4), _fact("resolved", day=5)]
+
+    trend = compute_trend(
+        facts, routine_name="nightly", since=_SINCE, until=_UNTIL, period_days=7, introduced_boundary=_SINCE
+    )
+
+    period = trend.periods[0]
+    assert period.created == 1
+    assert period.outflow == 2
+    assert period.reopened == 1
+    assert "reopened" not in period.exits
 
 
 def test_age_cut_splits_created_findings_by_introduced_at_against_the_boundary() -> None:

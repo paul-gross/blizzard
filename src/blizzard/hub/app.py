@@ -252,11 +252,13 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     # Own instances, ahead of `build_services` below — mirrors `work_item_store`'s own
     # early construction (blizzard#394 Phase 3): the built-in hub closer needs this seam
     # before `build_services` wires its own.
+    finding_store = FindingStore(store_connections)
+    finding_exit = FindingExitService(repo=finding_store, clock=clock)
     garden_proposal_resolution = GardenProposalDeliveryResolution(
         closures=GardenProposalClosureStore(store_connections),
         proposals=GardenProposalStore(store_connections),
-        findings=FindingStore(store_connections),
-        exits=FindingExitService(repo=FindingStore(store_connections), clock=clock),
+        findings=finding_store,
+        exits=finding_exit,
     )
     work_source_registry = WorkSourceEntry.registry(
         config.work_sources,
@@ -284,6 +286,8 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         claim_lock=claim_lock,
         work_item_store=work_item_store,
         delete=delete_service,
+        finding_store=finding_store,
+        finding_exit=finding_exit,
         clock=clock,
         users=user_store,
         base_branch=base_branch,

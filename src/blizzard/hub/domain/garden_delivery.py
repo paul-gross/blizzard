@@ -91,51 +91,66 @@ def parse_proposals(artifact_name: str, raw: str) -> list[GardenProposalCandidat
         ) from exc
 
 
+def single_repo_of(delta: FindingDelta) -> str | None:
+    """The one repository `delta.revisions` names, or `None` if it names zero or several
+    — `introduced` carries no repository of its own, so this is the sole case its commit
+    resolves against (blizzard#394 D5). Shared with `garden_delivery_materialize` so the
+    rule is asked once, not reimplemented and left to silently diverge."""
+    return next(iter(delta.revisions)) if len(delta.revisions) == 1 else None
+
+
 def check_delta(
     delta: FindingDelta,
     *,
     run: RunContext,
     live_findings: LiveFindings,
+    exited_ids: frozenset[str] = frozenset(),
     resolve_commit: CommitResolver | None = None,
 ) -> dict[tuple[str, str], datetime | None]:
     """Validate one already-parsed delta against `run` and `live_findings`, raising
-    :class:`GardenDeliveryRejected` on the first failure: `delta.scope` against `run`'s
-    own declared scope, every commit sha, every transformation's id, and a `gone` op's
-    non-empty note. Returns every `(repo, sha)` resolved for an `add`'s `introduced`
-    commit, keyed for `ValidatedDelivery.introduced_at` — never the revision shas."""
+    :class:`GardenDeliveryRejected` on the first failure: `delta.scope`, every commit sha,
+    every transformation's id, and a `gone` op's non-empty note. `exited_ids` only
+    distinguishes an exited id from an unknown one in the message (D3). Returns every
+    `(repo, sha)` resolved for an `add`'s `introduced` commit, for `introduced_at`."""
     if delta.scope != run.scope_slug:
         raise GardenDeliveryRejected(
             f"delta declares scope {delta.scope!r}, this run's declared scope is {run.scope_slug!r}"
         )
     for repo, sha in delta.revisions.items():
-        _check_commit_resolves(repo, sha, resolve_commit)
+        _resolve_commit(repo, sha, resolve_commit)
 
     introduced_at: dict[tuple[str, str], datetime | None] = {}
-    single_repo = next(iter(delta.revisions)) if len(delta.revisions) == 1 else None
+    single_repo = single_repo_of(delta)
     for op in delta.findings:
         if isinstance(op, AddFindingOp):
             if op.introduced is not None:
                 # `introduced` names no repository of its own, so it resolves only against
                 # a sole declared one; zero or several leave which one ambiguous.
                 if single_repo is not None:
-                    resolution = _check_commit_resolves(single_repo, op.introduced, resolve_commit)
+                    resolution = _resolve_commit(single_repo, op.introduced, resolve_commit)
                     introduced_at[(single_repo, op.introduced)] = resolution.authored_at if resolution else None
                 else:
                     _check_commit_wellformed(op.introduced, context="a finding addition's introduced commit")
             continue
-        _check_known_id(op.id, run=run, live_findings=live_findings, scope=delta.scope)
+        _check_known_id(op.id, run=run, live_findings=live_findings, scope=delta.scope, exited_ids=exited_ids)
         if isinstance(op, GoneFindingOp) and not op.note.strip():
             raise GardenDeliveryRejected(f"finding {op.id!r}'s gone fact must carry a non-empty note")
     return introduced_at
 
 
-def check_proposal(proposal: GardenProposalCandidate, *, run: RunContext, live_findings: LiveFindings) -> None:
+def check_proposal(
+    proposal: GardenProposalCandidate,
+    *,
+    run: RunContext,
+    live_findings: LiveFindings,
+    exited_ids: frozenset[str] = frozenset(),
+) -> None:
     """Validate one already-parsed proposal candidate: every id in `proposal.findings`
     must be a well-formed `fin_<ULID>` and live on `run.routine_name` — a proposal
     carries no scope of its own to check the finding against (unlike a delta's
     transformations, see :func:`check_delta`)."""
     for finding_id in proposal.findings:
-        _check_known_id(finding_id, run=run, live_findings=live_findings, scope=None)
+        _check_known_id(finding_id, run=run, live_findings=live_findings, scope=None, exited_ids=exited_ids)
 
 
 def check_proposal_refs(artifact_name: str, proposals: Sequence[GardenProposalCandidate]) -> None:
@@ -167,6 +182,7 @@ def validate_delivery(
     artifact, then checks it against `run`, raising :class:`GardenDeliveryRejected` on
     the first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
     live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in known_findings if f.state not in EXIT_KINDS}
+    exited_ids = frozenset(f.finding_id for f in known_findings if f.state in EXIT_KINDS)
     deltas = [parse_delta(name, raw) for name, raw in delta_artifacts.items()]
     proposals: list[GardenProposalCandidate] = []
     proposal_sources: list[str] = []
@@ -183,9 +199,13 @@ def validate_delivery(
 
     introduced_at: dict[tuple[str, str], datetime | None] = {}
     for delta in deltas:
-        introduced_at.update(check_delta(delta, run=run, live_findings=live_findings, resolve_commit=resolve_commit))
+        introduced_at.update(
+            check_delta(
+                delta, run=run, live_findings=live_findings, exited_ids=exited_ids, resolve_commit=resolve_commit
+            )
+        )
     for proposal in proposals:
-        check_proposal(proposal, run=run, live_findings=live_findings)
+        check_proposal(proposal, run=run, live_findings=live_findings, exited_ids=exited_ids)
 
     return ValidatedDelivery(
         run=run,
@@ -196,12 +216,24 @@ def validate_delivery(
     )
 
 
-def _check_known_id(finding_id: str, *, run: RunContext, live_findings: LiveFindings, scope: str | None) -> None:
+def _check_known_id(
+    finding_id: str,
+    *,
+    run: RunContext,
+    live_findings: LiveFindings,
+    scope: str | None,
+    exited_ids: frozenset[str] = frozenset(),
+) -> None:
     parsed = Id.parse(finding_id)
     if parsed is None or not parsed.has_prefix(FINDING_PREFIX):
         raise GardenDeliveryRejected(f"finding id {finding_id!r} is not a well-formed {FINDING_PREFIX}_<ULID> id")
     live_scope = live_findings.get(finding_id)
     if live_scope is None:
+        if finding_id in exited_ids:
+            raise GardenDeliveryRejected(
+                f"finding {finding_id!r} has been exited on routine {run.routine_name!r} and cannot be transformed "
+                "by a run — only a person's reopen can revive it"
+            )
         raise GardenDeliveryRejected(f"finding {finding_id!r} is not live on routine {run.routine_name!r}")
     if scope is not None and live_scope != scope:
         raise GardenDeliveryRejected(
@@ -214,7 +246,7 @@ def _check_commit_wellformed(sha: str, *, context: str) -> None:
         raise GardenDeliveryRejected(f"commit {sha!r} ({context}) is not a well-formed commit sha")
 
 
-def _check_commit_resolves(repo: str, sha: str, resolver: CommitResolver | None) -> CommitResolution | None:
+def _resolve_commit(repo: str, sha: str, resolver: CommitResolver | None) -> CommitResolution | None:
     _check_commit_wellformed(sha, context=f"repository {repo!r}")
     if resolver is None:
         return None

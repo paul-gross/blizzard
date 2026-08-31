@@ -12,9 +12,9 @@ from typing import Protocol
 
 from blizzard.hub.domain.findings import EXIT_KINDS, OUTFLOW_KINDS, WITHDRAWN_KINDS
 
-#: A finding's birth plus every way it leaves the live set — `observed`/`gone`/`reopened`
-#: carry no trend meaning of their own.
-TREND_FACT_KINDS = frozenset({"add"}) | EXIT_KINDS
+#: A finding's birth, every way it leaves the live set, and its own undo — `observed`/
+#: `gone` carry no trend meaning of their own.
+TREND_FACT_KINDS = frozenset({"add", "reopened"}) | EXIT_KINDS
 
 
 @dataclass(frozen=True)
@@ -29,9 +29,10 @@ class TrendFact:
 
 @dataclass(frozen=True)
 class TrendPeriod:
-    """One fixed-length slice of the window: findings created, exits per kind, and the
-    two roll-ups (D2) — `outflow` is `resolved` + `gone-confirmed`, `withdrawn` is the
-    other three."""
+    """One fixed-length slice of the window: findings created, exits per kind, the two
+    roll-ups (D2) — `outflow` is `resolved` + `gone-confirmed`, `withdrawn` is the other
+    three — and `reopened`, an exited finding's own undo, counted on its own so a
+    resolve-reopen-resolve cycle reads as one creation, two exits, one reopen."""
 
     period_start: datetime
     period_end: datetime
@@ -39,6 +40,7 @@ class TrendPeriod:
     exits: dict[str, int]
     outflow: int
     withdrawn: int
+    reopened: int
 
 
 @dataclass(frozen=True)
@@ -90,37 +92,51 @@ def compute_trend(
     introduced_boundary: datetime,
 ) -> Trend:
     """Fold `facts` (already windowed at the store) into `period_days`-wide periods
-    (D6) and the D5 age cut over the window's own `add` facts."""
-    periods = []
-    for period_start, period_end in _periods(since, until, period_days):
-        in_period = [f for f in facts if period_start <= f.recorded_at < period_end]
-        created = sum(1 for f in in_period if f.kind == "add")
-        exits = {kind: sum(1 for f in in_period if f.kind == kind) for kind in sorted(EXIT_KINDS)}
-        outflow = sum(count for kind, count in exits.items() if kind in OUTFLOW_KINDS)
-        withdrawn = sum(count for kind, count in exits.items() if kind in WITHDRAWN_KINDS)
-        periods.append(
-            TrendPeriod(
-                period_start=period_start,
-                period_end=period_end,
-                created=created,
-                exits=exits,
-                outflow=outflow,
-                withdrawn=withdrawn,
-            )
+    (D6) and the D5 age cut over the window's own `add` facts — one pass over `facts`,
+    each bucketed by its own period index rather than rescanned per period per kind."""
+    bounds = _periods(since, until, period_days)
+    step = timedelta(days=period_days)
+    created_counts = [0] * len(bounds)
+    reopened_counts = [0] * len(bounds)
+    exit_counts: list[dict[str, int]] = [dict.fromkeys(EXIT_KINDS, 0) for _ in bounds]
+    recent = older = unattributed = 0
+    for fact in facts:
+        if fact.kind == "add":
+            if fact.introduced_at is None:
+                unattributed += 1
+            elif fact.introduced_at >= introduced_boundary:
+                recent += 1
+            else:
+                older += 1
+        if bounds:
+            index = min(int((fact.recorded_at - since) / step), len(bounds) - 1)
+            if fact.kind == "add":
+                created_counts[index] += 1
+            elif fact.kind == "reopened":
+                reopened_counts[index] += 1
+            elif fact.kind in EXIT_KINDS:
+                exit_counts[index][fact.kind] += 1
+    periods = [
+        TrendPeriod(
+            period_start=period_start,
+            period_end=period_end,
+            created=created_counts[i],
+            exits=dict(sorted(exit_counts[i].items())),
+            outflow=sum(count for kind, count in exit_counts[i].items() if kind in OUTFLOW_KINDS),
+            withdrawn=sum(count for kind, count in exit_counts[i].items() if kind in WITHDRAWN_KINDS),
+            reopened=reopened_counts[i],
         )
-    created = [f for f in facts if f.kind == "add"]
-    age = TrendAgeCut(
-        boundary=introduced_boundary,
-        recent=sum(1 for f in created if f.introduced_at is not None and f.introduced_at >= introduced_boundary),
-        older=sum(1 for f in created if f.introduced_at is not None and f.introduced_at < introduced_boundary),
-        unattributed=sum(1 for f in created if f.introduced_at is None),
-    )
+        for i, (period_start, period_end) in enumerate(bounds)
+    ]
+    age = TrendAgeCut(boundary=introduced_boundary, recent=recent, older=older, unattributed=unattributed)
     return Trend(routine_name=routine_name, since=since, until=until, period_days=period_days, periods=periods, age=age)
 
 
 class GardenTrendService:
-    """Reads a routine's trend over a window, delegating the fold to `compute_trend`
-    (`bzh:domain-takes-objects` — the store hands over rows, this hands back the shape)."""
+    """Reads a routine's trend over a window, delegating the fold to `compute_trend` —
+    the store hands over rows, this hands back the shape. `routine_name` is a query
+    filter, like `list_for`'s own, not an entity resolved and passed by the caller; the
+    route resolves existence at the edge before this is ever invoked."""
 
     def __init__(self, *, repo: IReadGardenTrendRepository) -> None:
         self._repo = repo
