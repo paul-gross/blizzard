@@ -17,7 +17,7 @@ _log = get_logger("blizzard.runner.winter")
 
 # A tick reaches this seam (FILL), so it must be bounded — generous rather than tuned, since
 # a winter verb can provision, not just query.
-DEFAULT_WINTER_CLI_TIMEOUT = 120
+WINTER_CLI_TIMEOUT = 120
 
 
 class WinterCliError(RuntimeError):
@@ -51,12 +51,10 @@ class SubprocessWinterCli:
     @staticmethod
     def _run(cmd: list[str], *, cwd: Path, what: str) -> str:
         try:
-            result = subprocess.run(
-                cmd, cwd=str(cwd), capture_output=True, text=True, timeout=DEFAULT_WINTER_CLI_TIMEOUT
-            )
+            result = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=WINTER_CLI_TIMEOUT)
         except subprocess.TimeoutExpired as exc:
-            _log.error("winter timed out", what=what, timeout=DEFAULT_WINTER_CLI_TIMEOUT)
-            raise WinterCliError(f"{what} timed out after {DEFAULT_WINTER_CLI_TIMEOUT}s") from exc
+            _log.error("winter timed out", what=what, timeout=WINTER_CLI_TIMEOUT)
+            raise WinterCliError(f"{what} timed out after {WINTER_CLI_TIMEOUT}s") from exc
         if result.returncode != 0:
             tail = (result.stderr or result.stdout).strip()[-2000:]
             _log.error("winter failed", what=what, exit_code=result.returncode, detail=tail)

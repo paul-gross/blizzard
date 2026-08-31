@@ -2519,8 +2519,8 @@
   },
   "blizzard/runner/domain/elicitation.py": {
    "comments": 0,
-   "docstrings": 18,
-   "total": 59
+   "docstrings": 22,
+   "total": 66
   },
   "blizzard/runner/domain/escalations.py": {
    "comments": 0,
@@ -2590,7 +2590,7 @@
   "blizzard/runner/environments/internal/winter_cli.py": {
    "comments": 2,
    "docstrings": 10,
-   "total": 64
+   "total": 62
   },
   "blizzard/runner/environments/internal/winter_provider.py": {
    "comments": 19,
@@ -2629,8 +2629,8 @@
   },
   "blizzard/runner/harness/adapter.py": {
    "comments": 7,
-   "docstrings": 83,
-   "total": 205
+   "docstrings": 89,
+   "total": 214
   },
   "blizzard/runner/harness/env_allowlist.py": {
    "comments": 4,
@@ -2655,7 +2655,7 @@
   "blizzard/runner/harness/internal/claude_code_adapter.py": {
    "comments": 73,
    "docstrings": 41,
-   "total": 681
+   "total": 684
   },
   "blizzard/runner/harness/internal/claude_code_normalizer.py": {
    "comments": 40,
@@ -2709,8 +2709,8 @@
   },
   "blizzard/runner/loop/attempt.py": {
    "comments": 44,
-   "docstrings": 54,
-   "total": 384
+   "docstrings": 56,
+   "total": 387
   },
   "blizzard/runner/loop/build.py": {
    "comments": 18,
@@ -2744,8 +2744,8 @@
   },
   "blizzard/runner/loop/elicitation_files.py": {
    "comments": 0,
-   "docstrings": 14,
-   "total": 42
+   "docstrings": 16,
+   "total": 43
   },
   "blizzard/runner/loop/env_release.py": {
    "comments": 2,
@@ -2788,9 +2788,9 @@
    "total": 69
   },
   "blizzard/runner/loop/judgement.py": {
-   "comments": 36,
-   "docstrings": 57,
-   "total": 387
+   "comments": 34,
+   "docstrings": 71,
+   "total": 390
   },
   "blizzard/runner/loop/judgement_prompt.py": {
    "comments": 0,
@@ -2824,8 +2824,8 @@
   },
   "blizzard/runner/loop/steps.py": {
    "comments": 58,
-   "docstrings": 107,
-   "total": 648
+   "docstrings": 113,
+   "total": 655
   },
   "blizzard/runner/loop/tick.py": {
    "comments": 12,
@@ -2875,7 +2875,7 @@
   "blizzard/runner/selftest/checks.py": {
    "comments": 13,
    "docstrings": 15,
-   "total": 261
+   "total": 254
   },
   "blizzard/runner/selftest/internal/__init__.py": {
    "comments": 0,
@@ -2940,7 +2940,7 @@
   "blizzard/runner/store/internal/elicitation_store.py": {
    "comments": 2,
    "docstrings": 3,
-   "total": 104
+   "total": 108
   },
   "blizzard/runner/store/internal/environment_store.py": {
    "comments": 1,
@@ -3630,9 +3630,9 @@
    "total": 231
   },
   "runner_fakes.py": {
-   "comments": 70,
+   "comments": 74,
    "docstrings": 64,
-   "total": 960
+   "total": 969
   },
   "service/__init__.py": {
    "comments": 0,
@@ -4185,9 +4185,9 @@
    "total": 542
   },
   "test_elicitation_launch_collect.py": {
-   "comments": 33,
-   "docstrings": 8,
-   "total": 220
+   "comments": 44,
+   "docstrings": 14,
+   "total": 265
   },
   "test_envelope.py": {
    "comments": 27,
@@ -5045,9 +5045,9 @@
    "total": 236
   },
   "test_runner_crash_resume.py": {
-   "comments": 41,
-   "docstrings": 29,
-   "total": 325
+   "comments": 42,
+   "docstrings": 33,
+   "total": 341
   },
   "test_runner_detach.py": {
    "comments": 77,
@@ -5210,9 +5210,9 @@
    "total": 108
   },
   "test_runner_restart_resume.py": {
-   "comments": 40,
-   "docstrings": 10,
-   "total": 330
+   "comments": 41,
+   "docstrings": 14,
+   "total": 346
   },
   "test_runner_roles.py": {
    "comments": 2,
@@ -5227,7 +5227,7 @@
   "test_runner_selftest.py": {
    "comments": 24,
    "docstrings": 22,
-   "total": 573
+   "total": 579
   },
   "test_runner_session_pools.py": {
    "comments": 64,
@@ -5345,9 +5345,9 @@
    "total": 62
   },
   "test_spawn_suppressed_registry.py": {
-   "comments": 8,
+   "comments": 9,
    "docstrings": 18,
-   "total": 134
+   "total": 135
   },
   "test_sse_contract.py": {
    "comments": 2,

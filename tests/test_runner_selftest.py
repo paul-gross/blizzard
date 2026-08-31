@@ -308,6 +308,9 @@ class _HangingAdapter:
     def parse_assessment(self, output: str) -> str:
         raise AssertionError("unreachable — spawn never returns")
 
+    def has_usable_output(self, output: str) -> bool:
+        raise AssertionError("unreachable — spawn never returns")
+
     def resolve_model(self, preferences: Sequence[str]) -> str:
         return "fake-model"
 
@@ -424,6 +427,9 @@ class _FixedPidAdapter:
 
     def parse_assessment(self, output: str) -> str:
         return ""
+
+    def has_usable_output(self, output: str) -> bool:
+        return bool(output)
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         return "fake-model"

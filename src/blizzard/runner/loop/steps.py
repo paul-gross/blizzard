@@ -213,14 +213,21 @@ class ResumeIntents:
         return marked
 
     def _resumable(self) -> Iterator[LeaseRecord]:
-        """Active, session-bearing leases that are neither parked nor mid-submission —
-        an unspawned one is REAP's residue, with nothing to resume."""
+        """Active, session-bearing leases that are neither parked, mid-submission, nor
+        mid-elicitation — an unspawned one is REAP's residue, with nothing to resume.
+
+        The elicitation exclusion (D6, review F1/F2/F5) matters on both callers: a graceful
+        restart-resume would otherwise wake a second process on the same session, and an
+        ungraceful crash-orphan scan would otherwise leave the pre-resume elicitation's stale
+        record to be misread as the resumed generation's own verdict — neither path may
+        re-mint or resume a lease whose elicitation is in flight."""
         parked = self.stores.asks.parked_lease_ids()
         pending = self.stores.outbound.pending_submission_lease_ids()
+        eliciting = self.stores.elicitations.in_flight_elicitation_lease_ids()
         for lease in self.stores.leases.list_active_leases():
             if lease.pid is None or lease.session_id is None:
                 continue
-            if lease.lease_id in parked or lease.lease_id in pending:
+            if lease.lease_id in parked or lease.lease_id in pending or lease.lease_id in eliciting:
                 continue
             yield lease
 

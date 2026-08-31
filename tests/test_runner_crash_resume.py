@@ -271,6 +271,22 @@ def test_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[no-untype
     assert store.resume_intent_lease_ids() == set()
 
 
+@pytest.mark.unit
+def test_skips_a_lease_with_an_in_flight_elicitation(tmp_path):  # type: ignore[no-untyped-def]
+    """D6 (blizzard#443 review, F5) on the ungraceful crash-recovery path too: a lease whose
+    exited worker's verdict elicitation is already in flight is not this scan's to mark — a
+    crash-orphan resume here would leave the elicitation's own stale record misread as the
+    resumed generation's verdict once it later collects."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_elicitation_launch("lease_1", 1, output_path="/tmp/lease_1.1.0.elicitation", at=_NOW)
+
+    marked = ResumeIntents(make_stores(store)).mark_crashed(process=FakeProbe(alive=set()), now=_NOW)
+
+    assert marked == 0
+    assert store.resume_intent_lease_ids() == set()
+
+
 # --------------------------------------------------------------------------- #
 # Hand-off — the marked lease flows through the existing RESUME step
 

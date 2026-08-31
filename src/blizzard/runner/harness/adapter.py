@@ -164,6 +164,15 @@ class IHarnessAdapter(Protocol):
         """Parse the ``<Choice>{name}</Choice>`` reply into a choice name, else ``None``."""
         ...
 
+    def has_usable_output(self, output: str) -> bool:
+        """True when ``output`` carries a well-formed result envelope — independent of
+        whether it names a verdict, which a legitimate ask-instead-of-a-choice reply also
+        lacks. A process killed mid-write (an OOM, a ``kill -9``) can leave a non-empty but
+        truncated/malformed ``output``; the caller (:meth:`Judgement.collect
+        <blizzard.runner.loop.judgement.Judgement.collect>`) treats that the same as no
+        output at all — lost, not a verdict-less reply that would consume a retry."""
+        ...
+
     def parse_assessment(self, output: str) -> str:
         """Parse the judgement reply's free-text assessment — the payload after the Choice.
 

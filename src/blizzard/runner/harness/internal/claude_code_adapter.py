@@ -351,10 +351,10 @@ class ClaudeCodeAdapter:
             with open(output_path, "wb") as stdout_file:
                 proc = subprocess.Popen(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL)
         except OSError as exc:
-            _log.error("judgement launch failed", binary=self._binary, cwd=workdir, detail=str(exc))
+            _log.error("elicitation launch failed", binary=self._binary, cwd=workdir, detail=str(exc))
             raise HarnessSpawnError(f"failed to launch {self._binary} in {workdir}: {exc}") from exc
         start_time = ProcStat.of(proc.pid).start_time or ""
-        _log.info("judgement launched", binary=self._binary, pid=proc.pid, session_id=session_id, cwd=workdir)
+        _log.info("elicitation launched", binary=self._binary, pid=proc.pid, session_id=session_id, cwd=workdir)
         return WorkerHandle(session_id=session_id, pid=proc.pid, process_start_time=start_time)
 
     def resume_with_message(
@@ -420,6 +420,9 @@ class ClaudeCodeAdapter:
             return None
         name = text[start + len(_CHOICE_OPEN) : end].strip()
         return name or None
+
+    def has_usable_output(self, output: str) -> bool:
+        return ResultEnvelope.of(output) is not None
 
     def parse_assessment(self, output: str) -> str:
         """The reply text following ``</Choice>`` — the worker's prose assessment."""

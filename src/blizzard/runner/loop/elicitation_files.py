@@ -15,14 +15,15 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ElicitationFiles:
-    """One runner's elicitation-output file layout, rooted at ``root``."""
+    """One runner's elicitation-output file layout, rooted at ``root`` — created once at
+    wiring time (``build.py``), same as the sibling ``WorkerStdoutFiles``, so a path-computing
+    accessor stays pure rather than touching the filesystem on every call."""
 
     root: str
 
     def output_path(self, lease_id: str, epoch: int, attempt: int) -> str:
         """This launch attempt's own output file — never shared with another attempt."""
-        os.makedirs(self.root, exist_ok=True)
-        return os.path.join(self.root, f"{lease_id}.{epoch}.{attempt}.judge")
+        return os.path.join(self.root, f"{lease_id}.{epoch}.{attempt}.elicitation")
 
     def read(self, path: str) -> str:
         """The collected reply, or ``""`` when the file is absent/unreadable — the ordinary

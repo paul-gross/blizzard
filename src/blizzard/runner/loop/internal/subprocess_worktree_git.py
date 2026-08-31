@@ -16,7 +16,7 @@ _log = get_logger("blizzard.runner.worktree")
 
 # A tick reaches this seam (issue #143), so it must be bounded — the value is generous
 # (a remote round-trip, not a build) rather than tuned, mirroring `checks.py`'s own default.
-DEFAULT_WORKTREE_GIT_TIMEOUT = 60
+WORKTREE_GIT_TIMEOUT = 60
 
 
 class WorktreeGitError(RuntimeError):
@@ -53,11 +53,11 @@ class SubprocessWorktreeGit:
                 ["git", *args],
                 capture_output=True,
                 text=True,
-                timeout=DEFAULT_WORKTREE_GIT_TIMEOUT,
+                timeout=WORKTREE_GIT_TIMEOUT,
             )
         except subprocess.TimeoutExpired as exc:
-            _log.error("git timed out", args=list(args), timeout=DEFAULT_WORKTREE_GIT_TIMEOUT)
-            raise WorktreeGitError(f"git {' '.join(args)} timed out after {DEFAULT_WORKTREE_GIT_TIMEOUT}s") from exc
+            _log.error("git timed out", args=list(args), timeout=WORKTREE_GIT_TIMEOUT)
+            raise WorktreeGitError(f"git {' '.join(args)} timed out after {WORKTREE_GIT_TIMEOUT}s") from exc
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()
             _log.error("git failed", args=list(args), detail=detail)

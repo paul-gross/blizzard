@@ -140,23 +140,47 @@ class Judgement:
         """Poll this lease's in-flight elicitation; once its process has exited, read its
         reply back and continue exactly where a launch's own reply would have (blizzard#443).
 
-        Still running: pass over, no store write, collected on a later pass — never blocking
-        this one on a live model turn. Exited with no usable output at all is a **lost**
-        elicitation (a crash, an OOM kill), not a verdict-less reply — that relaunches under
-        the staleness bound rather than consuming a retry (D5)."""
-        if self.ctx.process.is_alive(elicitation.pid or -1, elicitation.process_start_time or ""):
+        Staleness is checked FIRST, unconditionally — before liveness — so a hung process
+        that never exits is still bounded, not just a lost-and-empty one (review F6). Still
+        running and under the bound: pass over, no store write, collected on a later pass —
+        never blocking this one on a live model turn. Exited with nothing usable at all —
+        empty, or a partial write with no result envelope at all, the shape a `kill -9`
+        mid-write leaves (review F7) — is a **lost** elicitation, not a verdict-less reply:
+        that relaunches under the staleness bound rather than consuming a retry (D5).
+
+        The record is cleared, and its output files swept, only AFTER the collected reply
+        is fully processed (review F3): a crash mid-processing leaves the record standing,
+        so the next pass re-reads the same still-present file and re-runs `_judged` — safe
+        because usage recording and completion buffering are already idempotent replays
+        under a crash, the same guarantee the once-synchronous elicitation always leaned on."""
+        lease = self.lease
+        now = self.ctx.clock.now()
+        if now - as_utc(elicitation.first_launched_at) > ELICITATION_STALENESS_THRESHOLD:
+            _log.warning(
+                "elicitation past its staleness bound — failing attempt",
+                chunk_id=lease.chunk_id,
+                lease_id=lease.lease_id,
+                relaunch_count=elicitation.relaunch_count,
+            )
+            # `Attempt.fail` kills the (possibly still-running) process and clears this
+            # record itself (D7) — no separate write of our own precedes it (review F4).
+            Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
+            return
+        pid, start_time = elicitation.pid, elicitation.process_start_time or ""
+        if pid is not None and self.ctx.process.is_alive(pid, start_time):
             return
         output = self.ctx.elicitation_files.read(elicitation.output_path)
-        if not output:
+        if not output or not self.ctx.harness.has_usable_output(output):
             self._lost(elicitation)
             return
-        self.ctx.stores.elicitations.clear_elicitation(self.lease.lease_id, self.lease.epoch)
         self._judged(output)
+        self.ctx.stores.elicitations.clear_elicitation(lease.lease_id, lease.epoch)
+        self.ctx.elicitation_files.cleanup(lease.lease_id, lease.epoch, through_attempt=elicitation.relaunch_count)
 
     def _lost(self, elicitation: ElicitationRecord) -> None:
-        """The elicitation's process exited without writing anything readable. Relaunch under
-        the staleness bound (D5) — measured from the FIRST launch, never reset by a relaunch,
-        so a crash-looping elicitation eventually abandons rather than relaunching forever.
+        """The elicitation's process exited without writing anything usable. Relaunch —
+        `collect` has already checked staleness unconditionally above, so reaching here means
+        this attempt is still under the bound (D5).
 
         The local-pause brake gates the relaunch exactly as it gates a fresh launch (issue
         #45): a paused runner defers rather than spawning, the record untouched, mirroring
@@ -166,17 +190,6 @@ class Judgement:
         extra time past the bound either."""
         lease = self.lease
         if Spawner(self.ctx).suppressed(via="advance", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
-            return
-        now = self.ctx.clock.now()
-        if now - as_utc(elicitation.first_launched_at) > ELICITATION_STALENESS_THRESHOLD:
-            _log.warning(
-                "elicitation lost past its staleness bound — failing attempt",
-                chunk_id=lease.chunk_id,
-                lease_id=lease.lease_id,
-                relaunch_count=elicitation.relaunch_count,
-            )
-            self.ctx.stores.elicitations.clear_elicitation(lease.lease_id, lease.epoch)
-            Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
             return
         _log.warning(
             "elicitation lost — relaunching, no retry consumed",
@@ -193,26 +206,11 @@ class Judgement:
         entry: a restart mid-relaunch reads the still-unset pid as not-running and relaunches
         again), not a `bzh:crash-point-registry` window."""
         lease = self.lease
-        checks = self.checks()
-        message = JudgementPrompt(self.envelope, checks).render()
         output_path = self.ctx.elicitation_files.output_path(
             lease.lease_id, lease.epoch, attempt=elicitation.relaunch_count + 1
         )
         self.ctx.stores.elicitations.record_elicitation_relaunch(lease.lease_id, lease.epoch, output_path=output_path)
-        handle = self.ctx.harness.judge(
-            self.bindings[0].workdir,
-            lease.session_id or "",
-            message,
-            output_path,
-            preamble=Spawner(self.ctx).preamble(lease, self.bindings),
-            chunk_id=lease.chunk_id,
-            effort=lease.resolved_effort,
-            model=lease.resolved_model,
-            compaction_window=lease.resolved_compaction_window,
-        )
-        self.ctx.stores.elicitations.record_elicitation_started(
-            lease.lease_id, lease.epoch, pid=handle.pid, process_start_time=handle.process_start_time
-        )
+        self._elicit(output_path)
 
     def checks(self) -> list[CheckResultRecord]:
         """Run the node's ``checks:`` at worker exit, or read the results back (issue #114).
@@ -272,13 +270,23 @@ class Judgement:
         a crash in the gap leaves a record with no process, which REAP's generic staleness
         treatment (Phase 2) absorbs the same way an orphaned lease mint is absorbed today."""
         lease = self.lease
-        checks = self.checks()
-        message = JudgementPrompt(self.envelope, checks).render()
         output_path = self.ctx.elicitation_files.output_path(lease.lease_id, lease.epoch, attempt=0)
         self.ctx.stores.elicitations.record_elicitation_launch(
             lease.lease_id, lease.epoch, output_path=output_path, at=self.ctx.clock.now()
         )
         _CP_ELICIT_AFTER_RECORD.reached()
+        self._elicit(output_path)
+        _CP_ELICIT_AFTER_LAUNCH.reached()
+
+    def _elicit(self, output_path: str) -> None:
+        """Render the judgement prompt against this attempt's own checks and launch it into
+        ``output_path`` (blizzard#443) — the shared half of a fresh launch and a lost
+        answer's relaunch (review F9), including reasserting the stamped effort/compaction-
+        window the same way on both: neither is session-sticky (issue #144, blizzard#343), so
+        a resume that omits them drops the declared value back to the ambient default."""
+        lease = self.lease
+        checks = self.checks()
+        message = JudgementPrompt(self.envelope, checks).render()
         handle = self.ctx.harness.judge(
             self.bindings[0].workdir,
             lease.session_id or "",
@@ -286,18 +294,13 @@ class Judgement:
             output_path,
             preamble=Spawner(self.ctx).preamble(lease, self.bindings),
             chunk_id=lease.chunk_id,
-            # Reassert the stamped effort (issue #144): effort is NOT session-sticky, so a
-            # resume that omits it drops the declared value back to the ambient default.
             effort=lease.resolved_effort,
             model=lease.resolved_model,
-            # Reassert the stamped compaction window (blizzard#343) too — not session-sticky
-            # either, mirroring effort's treatment.
             compaction_window=lease.resolved_compaction_window,
         )
         self.ctx.stores.elicitations.record_elicitation_started(
             lease.lease_id, lease.epoch, pid=handle.pid, process_start_time=handle.process_start_time
         )
-        _CP_ELICIT_AFTER_LAUNCH.reached()
 
     def _judged(self, output: str) -> None:
         """Continue from a collected reply — usage, verdict, the checks gate, the completion —

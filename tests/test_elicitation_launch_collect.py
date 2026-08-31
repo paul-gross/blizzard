@@ -151,6 +151,51 @@ def test_elicitation_past_staleness_bound_fails_the_attempt(tmp_path):  # type: 
     assert fresh is not None and fresh.epoch == 2
 
 
+def test_a_hung_elicitation_past_staleness_fails_even_while_alive(tmp_path):  # type: ignore[no-untyped-def]
+    """review F6: staleness is checked before liveness, so a process that never exits is
+    still bounded, not just a lost-and-empty one — a genuine hang cannot pin the lease
+    forever."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    probe = FakeProbe()
+    clock = FixedClock(_NOW)
+    ctx = _ctx(store, harness=harness, probe=probe, clock=clock)
+
+    Advance(ctx).run()  # launch
+    elicitation = store.in_flight_elicitation("lease_1", 1)
+    assert elicitation is not None and elicitation.pid is not None
+    probe.alive = {(elicitation.pid, elicitation.process_start_time)}  # still running — hung
+    clock.advance(ELICITATION_STALENESS_THRESHOLD + timedelta(seconds=1))
+
+    Advance(ctx).run()  # collect — past the bound even though the process is still alive
+
+    assert elicitation.pid in probe.killed  # the hung process is killed, not merely ignored
+    assert store.in_flight_elicitation("lease_1", 1) is None
+    assert store.active_lease("lease_1") is None  # closed
+
+
+def test_unusable_output_relaunches_without_consuming_a_retry(tmp_path):  # type: ignore[no-untyped-def]
+    """review F7: a process killed mid-write (an OOM, a `kill -9`) can leave a non-empty but
+    malformed reply — no result envelope at all — which is a lost elicitation exactly like
+    an empty one, not a verdict-less reply that would consume a retry."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    harness = FakeHarness(
+        handle=_HANDLE, verdict="pass", judge_output="not json, cut off mid-", judge_output_usable=False
+    )
+    ctx = _ctx(store, harness=harness, probe=FakeProbe())
+
+    Advance(ctx).run()  # launch
+    Advance(ctx).run()  # collect finds unusable output — lost, relaunches
+
+    assert len(harness.judged) == 2  # the relaunch is a second `judge` call
+    elicitation = store.in_flight_elicitation("lease_1", 1)
+    assert elicitation is not None
+    assert elicitation.relaunch_count == 1
+    assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
+
+
 def test_closing_a_lease_kills_its_in_flight_elicitation(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)

@@ -40,6 +40,10 @@ class ElicitationStore:
             relaunch_count=int(r.relaunch_count),
         )
 
+    def in_flight_elicitation_lease_ids(self) -> set[str]:
+        rows = self._store.all(select(in_flight_elicitations.c.lease_id))
+        return {str(r.lease_id) for r in rows}
+
     def record_elicitation_launch(self, lease_id: str, epoch: int, *, output_path: str, at: datetime) -> None:
         # Delete-then-insert: a fresh launch for this (lease, epoch) always starts a clean
         # record — the prior epoch's row, if any, was already cleared on its own collect.

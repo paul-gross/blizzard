@@ -16,6 +16,7 @@ from typing import Protocol
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
+from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.selftest.model import (
     AUTOMATED_RESUME,
     END_TO_END_EDIT_COMMIT,
@@ -182,19 +183,11 @@ class Judge(Check):
         # bounded poll `end_to_end_edit_commit` uses, then reads the reply back itself.
         if not Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time):
             return SelfTestCheck(VERDICT_ELICITATION, False, "judgement process never exited")
-        output = _read_output(output_path)
+        output = ElicitationFiles(root="").read(output_path)
         choice = scratch.adapter.parse_verdict(output)
         if choice is None:
             return SelfTestCheck(VERDICT_ELICITATION, False, "judgement resume produced no parseable <Choice>")
         return SelfTestCheck(VERDICT_ELICITATION, True, f"parsed verdict {choice!r}")
-
-
-def _read_output(path: str) -> str:
-    try:
-        with open(path, encoding="utf-8") as f:
-            return f.read()
-    except OSError:
-        return ""
 
 
 class Resume(Check):

@@ -16,7 +16,7 @@ _log = get_logger("blizzard.runner.env.git")
 
 # A tick reaches this seam (FILL), so it must be bounded — the value is generous rather
 # than tuned, mirroring `checks.py`'s own default.
-DEFAULT_ENV_GIT_TIMEOUT = 60
+ENV_GIT_TIMEOUT = 60
 
 
 class EnvGitError(RuntimeError):
@@ -48,11 +48,11 @@ class SubprocessEnvGit:
     def _capture(self, cwd: Path, *args: str) -> str:
         try:
             result = subprocess.run(
-                ["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=DEFAULT_ENV_GIT_TIMEOUT
+                ["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=ENV_GIT_TIMEOUT
             )
         except subprocess.TimeoutExpired as exc:
-            _log.error("git reset step timed out", args=list(args), cwd=str(cwd), timeout=DEFAULT_ENV_GIT_TIMEOUT)
-            raise EnvGitError(f"git {' '.join(args)} timed out in {cwd} after {DEFAULT_ENV_GIT_TIMEOUT}s") from exc
+            _log.error("git reset step timed out", args=list(args), cwd=str(cwd), timeout=ENV_GIT_TIMEOUT)
+            raise EnvGitError(f"git {' '.join(args)} timed out in {cwd} after {ENV_GIT_TIMEOUT}s") from exc
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()
             _log.error("git reset step failed", args=list(args), cwd=str(cwd), detail=detail)

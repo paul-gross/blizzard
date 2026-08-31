@@ -536,6 +536,7 @@ class FakeHarness:
         judge_pid: int = 8888,
         judge_process_start_time: str = "judge-start",
         judge_output: str = "<judged output>",
+        judge_output_usable: bool = True,
     ) -> None:
         self._handle = handle
         self.verdict = verdict
@@ -549,6 +550,11 @@ class FakeHarness:
         # `self.verdict`/`self.usage`/`self.assessment` instead), but a collect pass must
         # find a non-empty, readable file to know the launch actually landed something.
         self.judge_output = judge_output
+        # `has_usable_output`'s scripted reply (blizzard#443 review, F7) — True by default so
+        # every existing script's judged output reads as usable without opting in; a test
+        # simulating a killed-mid-write elicitation sets this False instead of writing real
+        # malformed JSON, since this fake's `parse_verdict`/`parse_usage` never inspect content.
+        self.judge_output_usable = judge_output_usable
         # Fires inside `judge()`, before its reply is returned — lets a test express "the
         # worker asked instead of returning a verdict" (e.g. `store.record_ask(...)`).
         self._judge_side_effect = judge_side_effect
@@ -708,6 +714,9 @@ class FakeHarness:
 
     def parse_verdict(self, output: str) -> str | None:
         return self.verdict
+
+    def has_usable_output(self, output: str) -> bool:
+        return self.judge_output_usable
 
     def parse_assessment(self, output: str) -> str:
         return self.assessment
