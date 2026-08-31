@@ -1580,7 +1580,7 @@
   "blizzard/hub/domain/work_items.py": {
    "comments": 0,
    "docstrings": 57,
-   "total": 273
+   "total": 274
   },
   "blizzard/hub/events/__init__.py": {
    "comments": 0,
@@ -3519,6 +3519,11 @@
    "docstrings": 11,
    "total": 198
   },
+  "e2e/test_garden_routine_e2e.py": {
+   "comments": 23,
+   "docstrings": 13,
+   "total": 350
+  },
   "e2e/test_gate_decision_e2e.py": {
    "comments": 14,
    "docstrings": 18,
@@ -4338,6 +4343,11 @@
    "comments": 0,
    "docstrings": 4,
    "total": 117
+  },
+  "test_garden_routine_graph.py": {
+   "comments": 18,
+   "docstrings": 17,
+   "total": 157
   },
   "test_gate_derivation.py": {
    "comments": 9,
