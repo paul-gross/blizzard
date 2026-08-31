@@ -49,6 +49,8 @@ from blizzard.hub.config import (
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.delete import DeleteService
+from blizzard.hub.domain.findings import FindingExitService
+from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.domain.work import (
@@ -63,6 +65,9 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
+from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
@@ -554,6 +559,12 @@ def build_hub(
     delete_service = DeleteService(
         chunks=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
     )
+    garden_proposal_resolution = GardenProposalDeliveryResolution(
+        closures=GardenProposalClosureStore(store_connections),
+        proposals=GardenProposalStore(store_connections),
+        findings=FindingStore(store_connections),
+        exits=FindingExitService(repo=FindingStore(store_connections), clock=clock),
+    )
     seat_hub_work_source(
         built_sources,
         editors,
@@ -563,6 +574,7 @@ def build_hub(
         users=user_store,
         items=work_item_store,
         delete=delete_service,
+        resolution=garden_proposal_resolution,
     )
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
     events = EventBroker()

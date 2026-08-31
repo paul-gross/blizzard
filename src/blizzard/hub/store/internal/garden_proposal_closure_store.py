@@ -82,6 +82,18 @@ class GardenProposalClosureStore:
             ).all()
         return {row.proposal_id: self._of(row) for row in rows}
 
+    def find_by_item(self, source: str, ref: str) -> GardenProposalClosure | None:
+        """Filtered on `ix_garden_proposal_closures_source_ref` — `source`/`ref` are
+        null on a pass or a declined accept, so an unminted item never joins a row here
+        regardless of what a caller passes."""
+        with self._store.read("find_by_item") as conn:
+            row = conn.execute(
+                select(garden_proposal_closures).where(
+                    garden_proposal_closures.c.source == source, garden_proposal_closures.c.ref == ref
+                )
+            ).one_or_none()
+        return self._of(row) if row is not None else None
+
     def record_pass(self, proposal_id: str, *, reason: str, closed_by: str, at: datetime) -> bool:
         try:
             with self._store.write("record_pass", expect=(IntegrityError,)) as conn:

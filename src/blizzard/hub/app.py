@@ -53,12 +53,17 @@ from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
 from blizzard.hub.domain.delete import DeleteService
+from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.forge_status import AnnotationReconciler
+from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
+from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 
@@ -244,6 +249,15 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     delete_service = DeleteService(
         chunks=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
     )
+    # Own instances, ahead of `build_services` below — mirrors `work_item_store`'s own
+    # early construction (blizzard#394 Phase 3): the built-in hub closer needs this seam
+    # before `build_services` wires its own.
+    garden_proposal_resolution = GardenProposalDeliveryResolution(
+        closures=GardenProposalClosureStore(store_connections),
+        proposals=GardenProposalStore(store_connections),
+        findings=FindingStore(store_connections),
+        exits=FindingExitService(repo=FindingStore(store_connections), clock=clock),
+    )
     work_source_registry = WorkSourceEntry.registry(
         config.work_sources,
         store_connections,
@@ -251,6 +265,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         users=user_store,
         work_item_store=work_item_store,
         delete=delete_service,
+        resolution=garden_proposal_resolution,
         close_forge_writes_enabled=config.close_forge_writes_enabled,
     )
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)

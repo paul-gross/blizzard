@@ -436,6 +436,12 @@ garden_proposal_closures = Table(
     UniqueConstraint("proposal_id", name="uq_garden_proposal_closures_proposal_id"),
 )
 
+# The reverse read a delivered item's own `(source, ref)` needs (blizzard#394 Phase 3):
+# which proposal, if any, an accepted closure minted it for. Both columns are null on a
+# pass or a declined accept, so this is a partial index in effect — `find_by_item` never
+# queries those rows.
+Index("ix_garden_proposal_closures_source_ref", garden_proposal_closures.c.source, garden_proposal_closures.c.ref)
+
 # --- Proposed work items (ride a node-step's completion, materialized at delivery) ----
 
 work_item_proposals = Table(

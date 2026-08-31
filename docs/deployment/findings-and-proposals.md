@@ -31,6 +31,8 @@ with a reason required.
 [--body-file <path>|-] [--no-work-item]` records
 agreement: by default it mints a linked hub work item carrying the proposal's own body, resting behind the ordinary
 promote gate; `--body-file` supplies a different body (`-` for stdin); `--no-work-item` declines to mint, and the
-decline is recorded rather than left to read as an absent link. Acceptance never promotes the minted item and never
-changes a finding's state. Either verb answers 409, naming the proposal's existing closure, when called again — closure
-is terminal.
+decline is recorded rather than left to read as an absent link. Acceptance itself never promotes the minted item and
+never changes a finding's state — but delivering the item it minted does: once that item closes, every finding the
+proposal named that is still live is resolved, attributed to the proposal, the same as a hand
+`blizzard hub finding resolve` but requiring no verb of its own. Re-delivering the same item resolves nothing a second
+time. Either closing verb answers 409, naming the proposal's existing closure, when called again — closure is terminal.
