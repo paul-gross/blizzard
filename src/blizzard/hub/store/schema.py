@@ -349,11 +349,15 @@ finding_sets = Table(
     Column("artifact_id", String, ForeignKey("artifacts.artifact_id"), nullable=False, unique=True),  # D6
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # D6 — the run that delivered it
     Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    # The routine that recorded this set, by name — a chunk may hold pointers from more
+    # than one source, so joining through it to a work item's routine is ambiguous (D5).
+    Column("routine_name", String, nullable=False, server_default=""),
     Column("revisions", Text, nullable=False),  # JSON {repo: revision} (`bzh:sql-portable`)
     Column("measurement", Text, nullable=True),  # opaque, routine-strategy-defined; null when none was recorded
 )
 
 Index("ix_finding_sets_chunk_id", finding_sets.c.chunk_id)
+Index("ix_finding_sets_routine_scope", finding_sets.c.routine_name, finding_sets.c.scope_slug)
 
 # --- Garden proposals (blizzard#390) ---------------------------------------------
 # A proposed response to one or more findings — never `proposals`, so neither this nor
@@ -1200,6 +1204,11 @@ work_items = Table(
     # Unset while open. Set together, once, when the item closes.
     Column("closed_at", UtcDateTime, nullable=True),
     Column("closure", String, nullable=True),  # delivered | withdrawn
+    # A routine run's own recorded values, nullable (blizzard#392) — unindexed: the pair's
+    # actual read path is `finding_sets(routine_name, scope_slug)`, not this table.
+    Column("routine_name", String, nullable=True),
+    Column("scope_slug", String, nullable=True),
+    Column("run_mode", String, nullable=True),
     UniqueConstraint("source", "ref", name="uq_work_items_source_ref"),
 )
 

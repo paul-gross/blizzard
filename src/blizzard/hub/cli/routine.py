@@ -133,3 +133,40 @@ def routine_edit(
     cli.check(resp, "PATCH /routines/{id}", on_status={404: f"unknown routine {routine_id}"})
     body = resp.json()
     cli.show_lines(body, f"routine {routine_id} updated")
+
+
+@routine_group.command("run", cls=FleetCommand)
+@click.argument("name")
+@click.option(
+    "--scope", "scope_slug", default=None, help="Override the routine's default scope slug — mints it if unseen."
+)
+@click.option(
+    "--mode",
+    type=click.Choice(["full", "delta"]),
+    default="full",
+    help="delta downgrades to full when the routine/scope pair has recorded no baseline.",
+)
+@click.option("--note", default=None, help='A note appended to the run\'s charge as a "This run" section.')
+def routine_run(cli: CliContext, name: str, scope_slug: str | None, mode: str, note: str | None) -> None:
+    """Mint, ingest, and promote a hub work item from routine NAME, in one act.
+
+    NAME is resolved to its routine_id through the routine list (D3)."""
+    rows = cli.get("/api/routines", "GET /routines").json()
+    matched = next((r for r in rows if r["name"] == name), None)
+    if matched is None:
+        raise click.ClickException(f"unknown routine {name!r}")
+    resp = cli.send(
+        "post",
+        f"/api/routines/{matched['routine_id']}/run",
+        json_body={"scope_slug": scope_slug, "mode": mode, "note": note},
+    )
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        raise click.ClickException(f"run rejected: {cli.detail(resp, 'validation failed')}")
+    if resp.status_code == httpx.codes.CONFLICT:
+        raise click.ClickException(f"run refused: {cli.detail(resp, 'conflict')}")
+    cli.check(resp, "POST /routines/{id}/run", on_status={404: f"unknown routine {name!r}"})
+    body = resp.json()
+    lines = [f"minted {body['chunk_id']} from routine {name!r} — mode={body['effective_mode']}"]
+    if body["downgraded"]:
+        lines.append("note: requested delta downgraded to full — the routine/scope pair has recorded no baseline yet")
+    cli.show_lines(body, *lines)

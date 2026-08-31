@@ -130,6 +130,7 @@ def test_deliver_writes_every_row(tmp_path: Path) -> None:
         assert set_rows[0].finding_set_id == "fins_1"
         assert set_rows[0].chunk_id == "ch_1"
         assert set_rows[0].artifact_id == "art_placeholder"
+        assert set_rows[0].routine_name == "nightly"
 
         proposal_rows = conn.execute(sa.select(garden_proposals)).all()
         assert [r.proposal_id for r in proposal_rows] == ["gprop_1"]

@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import (
     Chunk,
     IWriteWorkItemRepository,
@@ -25,7 +26,13 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_store import insert_chunk_rows, insert_materialization_row, record_deleted_row
+from blizzard.hub.store.internal.chunk_store import (
+    insert_chunk_rows,
+    insert_materialization_row,
+    insert_promote_rows,
+    record_deleted_row,
+)
+from blizzard.hub.store.internal.run_context_store import insert_run_context_row
 
 
 class WorkItemStore:
@@ -94,6 +101,60 @@ class WorkItemStore:
             edited_at=at,
         )
 
+    def create_with_chunk_and_promote(
+        self,
+        *,
+        pointer: WorkRef,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        routine_name: str,
+        scope_slug: str,
+        run_mode: str,
+        at: datetime,
+        chunk: Chunk,
+        position: float,
+    ) -> tuple[WorkItemRecord, int | None]:
+        """:meth:`create_with_chunk` plus the promote-then-tail-stamp pair
+        (:func:`~blizzard.hub.store.internal.chunk_store.insert_promote_rows`) plus the
+        run's own identity row (:func:`~blizzard.hub.store.internal.run_context_store.insert_run_context_row`,
+        blizzard#393), on one ``engine.begin()`` connection — a routine run's own one-act
+        mint (blizzard#392)."""
+        with self._store.write("create_with_chunk_and_promote") as conn:
+            work_item_id = self._insert_item(
+                conn,
+                source=pointer.source,
+                ref=pointer.ref,
+                title=title,
+                body=body,
+                author=author,
+                stated_priority=None,
+                at=at,
+                routine_name=routine_name,
+                scope_slug=scope_slug,
+                run_mode=run_mode,
+            )
+            insert_chunk_rows(conn, chunk)
+            promoted_id = insert_promote_rows(conn, chunk.chunk_id, position=position, at=at)
+            insert_run_context_row(
+                conn, work_item_id, RunContext(routine_name=routine_name, scope_slug=scope_slug, mode=run_mode)
+            )
+        record = WorkItemRecord(
+            work_item_id=work_item_id,
+            source=pointer.source,
+            ref=pointer.ref,
+            title=title,
+            body=body,
+            author=author,
+            stated_priority=None,
+            created_at=at,
+            edited_at=at,
+            routine_name=routine_name,
+            scope_slug=scope_slug,
+            run_mode=run_mode,
+        )
+        return record, promoted_id
+
     @staticmethod
     def _insert_item(
         conn: Connection,
@@ -105,8 +166,13 @@ class WorkItemStore:
         author: WorkItemAuthor,
         stated_priority: str | None,
         at: datetime,
+        routine_name: str | None = None,
+        scope_slug: str | None = None,
+        run_mode: str | None = None,
     ) -> str:
-        """Insert one ``work_items`` row on ``conn``, open, and return its minted id."""
+        """Insert one ``work_items`` row on ``conn``, open, and return its minted id.
+        ``routine_name``/``scope_slug``/``run_mode`` are a routine run's own indexed
+        values (blizzard#392) — ``None`` for every other item."""
         work_item_id = Id.mint_at(WORK_ITEM_PREFIX, at).value
         author_payload = (
             {"user_id": author.user_id}
@@ -127,6 +193,9 @@ class WorkItemStore:
                 edited_at=at,
                 closed_at=None,
                 closure=None,
+                routine_name=routine_name,
+                scope_slug=scope_slug,
+                run_mode=run_mode,
             )
         )
         return work_item_id
@@ -297,6 +366,9 @@ class WorkItemStore:
             edited_at=row.edited_at,
             closed_at=row.closed_at,
             closure=WorkItemClosure(row.closure) if row.closure is not None else None,
+            routine_name=row.routine_name,
+            scope_slug=row.scope_slug,
+            run_mode=row.run_mode,
         )
 
 

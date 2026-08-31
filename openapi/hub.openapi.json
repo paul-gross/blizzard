@@ -4687,6 +4687,125 @@
         "title": "RoutineEditRequest",
         "type": "object"
       },
+      "RoutineRunRequest": {
+        "additionalProperties": false,
+        "description": "``POST /api/routines/{routine_id}/run`` (blizzard#392) \u2014 ``scope_slug`` omitted\nor ``None`` defaults to the routine's own; ``mode`` is ``\"full\"`` or ``\"delta\"``, a\nrequested ``\"delta\"`` with no recorded baseline downgrading to ``\"full\"`` on the\nresponse rather than refusing.",
+        "properties": {
+          "mode": {
+            "default": "full",
+            "title": "Mode",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "scope_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Slug"
+          }
+        },
+        "title": "RoutineRunRequest",
+        "type": "object"
+      },
+      "RoutineRunResponse": {
+        "description": "The minted, ingested, and promoted run item \u2014 the chunk id, the item's own\npointer, the effective mode and whether it was downgraded from a requested delta,\nand the resolved baseline, when the mode settled on delta.",
+        "properties": {
+          "baseline_finding_set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Finding Set Id"
+          },
+          "baseline_revisions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Revisions"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "downgraded": {
+            "title": "Downgraded",
+            "type": "boolean"
+          },
+          "effective_mode": {
+            "title": "Effective Mode",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "scope_slug": {
+            "title": "Scope Slug",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "source",
+          "ref",
+          "title",
+          "body",
+          "routine_name",
+          "scope_slug",
+          "effective_mode",
+          "downgraded",
+          "created_at"
+        ],
+        "title": "RoutineRunResponse",
+        "type": "object"
+      },
       "RoutineView": {
         "description": "A routine as served by the create/list/read/edit routes.",
         "properties": {
@@ -12187,6 +12306,59 @@
           }
         },
         "summary": "Edit Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/routines/{routine_id}/run": {
+      "post": {
+        "description": "Mint, ingest, and promote a hub work item from the routine, in one act\n(blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug`` or an unknown\n``mode``; 503 on a retired effective scope or a graph name with no enabled mint (D5,\nmirroring ``POST /work-sources/{source}/items``'s own retired-default-graph shape);\n409 on an out-of-band ingest already holding the allocated ref's pointer.",
+        "operationId": "run_routine_api_routines__routine_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutineRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Routine",
         "tags": [
           "routines"
         ]

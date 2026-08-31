@@ -31,6 +31,31 @@ from blizzard.hub.domain.work import (
 )
 
 
+def prepare_mint(
+    items: IWriteWorkItemRepository,
+    chunks: IReadChunkRepository,
+    clock: IClock,
+    source: str,
+    *,
+    graph: Graph,
+    default_model: list[str] | None = None,
+    default_effort: str | None = None,
+) -> tuple[WorkRef, Chunk, datetime]:
+    """The guard sequence every item-minting create path shares: allocate the ref,
+    refuse a live holder, mint the resting chunk. Shared by :meth:`WorkItemEditService.create`,
+    :meth:`WorkItemEditService.materialize_create`, and a routine run's own mint
+    (blizzard#392) — the last of these the only caller sourcing ``default_model``/
+    ``default_effort`` from anywhere but ``mint_chunk``'s own empty-preference default."""
+    ref = items.allocate_ref(source)
+    pointer = WorkRef(source=source, ref=ref)
+    require_no_live_holder(chunks, pointer)
+    at = clock.now()
+    chunk = mint_chunk(
+        [pointer], graph_id=graph.graph_id, at=at, default_model=default_model, default_effort=default_effort
+    )
+    return pointer, chunk, at
+
+
 class WorkItemNotEditable(Exception):
     """An edit or withdrawal targeted a work item that already carries a closure —
     closure is terminal, so neither verb is retroactive."""
@@ -118,7 +143,7 @@ class WorkItemEditService:
         allocated pointer for a live holder before minting: an out-of-band ingest of the
         same ref can pre-empt it, raising :class:`~blizzard.hub.domain.ingest.IngestConflict`
         and burning the ref."""
-        pointer, chunk, at = self._prepare_mint(source, graph=graph)
+        pointer, chunk, at = prepare_mint(self._items, self._chunks, self._clock, source, graph=graph)
         item = self._items.create_with_chunk(
             pointer=pointer,
             title=title,
@@ -146,7 +171,7 @@ class WorkItemEditService:
         the mint and the outcome fact are one transaction. Raises
         :class:`~blizzard.hub.domain.ingest.IngestConflict` exactly as :meth:`create`
         does; returns ``False`` when ``proposal_id`` was already judged."""
-        pointer, chunk, at = self._prepare_mint(RESERVED_HUB_SOURCE_NAME, graph=graph)
+        pointer, chunk, at = prepare_mint(self._items, self._chunks, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph)
         return self._items.materialize_create(
             proposal_id=proposal_id,
             pointer=pointer,
@@ -157,18 +182,6 @@ class WorkItemEditService:
             at=at,
             chunk=chunk,
         )
-
-    def _prepare_mint(self, source: str, *, graph: Graph) -> tuple[WorkRef, Chunk, datetime]:
-        """The guard sequence every item-minting create path shares: allocate the ref,
-        refuse a live holder, mint the resting chunk. Shared by :meth:`create` and
-        :meth:`materialize_create` (D8) so the two diverge only in which store method
-        finishes the write."""
-        ref = self._items.allocate_ref(source)
-        pointer = WorkRef(source=source, ref=ref)
-        require_no_live_holder(self._chunks, pointer)
-        at = self._clock.now()
-        chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=at)
-        return pointer, chunk, at
 
     def edit(self, item: WorkItemRecord, edit: WorkItemEdit) -> WorkItemRecord:
         """Resolve ``edit``'s sentinel-tagged fields against ``item`` — the record this

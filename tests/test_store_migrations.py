@@ -221,6 +221,55 @@ def test_findings_and_proposals_tables_survive_migration_roundtrip(tmp_path: Pat
     assert set(tables) <= _table_names()
 
 
+def test_work_items_routine_run_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
+    """``work_items.routine_name``/``scope_slug``/``run_mode`` (blizzard#392) —
+    downgrades to this revision's own parent by id, so the drop half is asserted rather
+    than inferred from a revision marker a no-op ``downgrade()`` would satisfy just as
+    well."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+    columns = ("routine_name", "scope_slug", "run_mode")
+
+    def _columns() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return {c["name"] for c in sa.inspect(engine).get_columns("work_items")}
+        finally:
+            engine.dispose()
+
+    assert set(columns) <= _columns()
+
+    runner.downgrade("20260830_2015_garden_proposals_source_artifact")
+    assert not set(columns) & _columns()
+
+    runner.upgrade("head")
+    assert set(columns) <= _columns()
+
+
+def test_finding_sets_routine_name_column_survives_migration_roundtrip(tmp_path: Path) -> None:
+    """``finding_sets.routine_name`` (blizzard#392) — downgrades to this revision's own
+    parent by id, so the drop half is asserted rather than inferred from a revision
+    marker a no-op ``downgrade()`` would satisfy just as well."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+
+    def _has_column() -> bool:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            columns = {c["name"] for c in sa.inspect(engine).get_columns("finding_sets")}
+        finally:
+            engine.dispose()
+        return "routine_name" in columns
+
+    assert _has_column()
+
+    runner.downgrade("20260831_0900_work_items_routine_run")
+    assert not _has_column()
+
+    runner.upgrade("head")
+    assert _has_column()
+
+
 def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """The runner's own graph-artifact mirror table — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from a

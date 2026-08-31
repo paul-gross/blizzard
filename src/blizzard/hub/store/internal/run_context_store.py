@@ -7,11 +7,27 @@ blizzard#393 Phase 1). All ``sqlalchemy`` usage is confined here
 from __future__ import annotations
 
 from sqlalchemy import insert, select
+from sqlalchemy.engine import Connection
 
 from blizzard.hub.domain.run_context import IWriteRunContextRepository, RunContext
 from blizzard.hub.domain.work import Chunk
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+
+
+def insert_run_context_row(conn: Connection, work_item_id: str, context: RunContext) -> None:
+    """Insert one ``work_item_runs`` row on a caller-supplied ``conn`` — mirrors
+    :func:`~blizzard.hub.store.internal.chunk_store.insert_chunk_rows`'s shared-connection
+    shape, so a routine run's own composite write folds this into its own transaction
+    (blizzard#392/#393)."""
+    conn.execute(
+        insert(s.work_item_runs).values(
+            work_item_id=work_item_id,
+            routine_name=context.routine_name,
+            scope_slug=context.scope_slug,
+            mode=context.mode,
+        )
+    )
 
 
 class RunContextStore:
@@ -41,14 +57,7 @@ class RunContextStore:
 
     def record(self, work_item_id: str, context: RunContext) -> None:
         with self._store.write("record") as conn:
-            conn.execute(
-                insert(s.work_item_runs).values(
-                    work_item_id=work_item_id,
-                    routine_name=context.routine_name,
-                    scope_slug=context.scope_slug,
-                    mode=context.mode,
-                )
-            )
+            insert_run_context_row(conn, work_item_id, context)
 
 
 def _conforms_run_context_store(x: RunContextStore) -> IWriteRunContextRepository:

@@ -120,6 +120,7 @@ class GardenDeliveryStore:
                             "artifact_id": fs.artifact_id,
                             "chunk_id": plan.chunk_id,
                             "scope_slug": fs.scope_slug,
+                            "routine_name": plan.run.routine_name,
                             "revisions": json.dumps(fs.revisions),
                             "measurement": fs.measurement,
                         }

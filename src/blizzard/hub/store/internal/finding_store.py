@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import desc, func, insert, select
 
 from blizzard.hub.domain.findings import (
     FACT_KINDS,
@@ -172,6 +172,7 @@ class FindingSetStore:
         artifact_id: str,
         chunk_id: str,
         scope_slug: str,
+        routine_name: str,
         revisions: dict[str, str],
         measurement: str | None,
     ) -> FindingSet:
@@ -182,6 +183,7 @@ class FindingSetStore:
                     artifact_id=artifact_id,
                     chunk_id=chunk_id,
                     scope_slug=scope_slug,
+                    routine_name=routine_name,
                     revisions=json.dumps(revisions),
                     measurement=measurement,
                 )
@@ -191,6 +193,7 @@ class FindingSetStore:
             artifact_id=artifact_id,
             chunk_id=chunk_id,
             scope_slug=scope_slug,
+            routine_name=routine_name,
             revisions=dict(revisions),
             measurement=measurement,
         )
@@ -208,6 +211,18 @@ class FindingSetStore:
             rows = conn.execute(select(finding_sets).where(finding_sets.c.chunk_id == chunk_id)).all()
         return [self._of(row) for row in rows]
 
+    def newest_for_routine_scope(self, routine_name: str, scope_slug: str) -> FindingSet | None:
+        """The newest set for the pair, ordered by `finding_set_id` descending — a
+        monotonic-in-mint-instant ULID, so every backend returns the same row."""
+        with self._store.read("newest_for_routine_scope") as conn:
+            row = conn.execute(
+                select(finding_sets)
+                .where(finding_sets.c.routine_name == routine_name, finding_sets.c.scope_slug == scope_slug)
+                .order_by(desc(finding_sets.c.finding_set_id))
+                .limit(1)
+            ).one_or_none()
+        return self._of(row) if row is not None else None
+
     @staticmethod
     def _of(row) -> FindingSet:  # type: ignore[no-untyped-def]
         return FindingSet(
@@ -215,6 +230,7 @@ class FindingSetStore:
             artifact_id=row.artifact_id,
             chunk_id=row.chunk_id,
             scope_slug=row.scope_slug,
+            routine_name=row.routine_name,
             revisions=json.loads(row.revisions),
             measurement=row.measurement,
         )

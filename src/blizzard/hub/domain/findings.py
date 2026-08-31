@@ -135,6 +135,7 @@ class FindingSet:
     artifact_id: str
     chunk_id: str
     scope_slug: str
+    routine_name: str  # D5 — a routine's own name, not its surrogate id (blizzard#392)
     revisions: dict[str, str]
     measurement: str | None
 
@@ -148,6 +149,13 @@ class IReadFindingSetRepository(Protocol):
         """A run's own delivered sets (D6) — filtered on `ix_finding_sets_chunk_id`."""
         ...
 
+    def newest_for_routine_scope(self, routine_name: str, scope_slug: str) -> FindingSet | None:
+        """A routine run's own delta baseline (blizzard#392) — the newest set for the
+        (routine name, scope slug) pair, or `None` when the pair has recorded none.
+        `finding_sets` carries no timestamp, so newest is `finding_set_id` descending:
+        `fins_<ULID>` is monotonic in mint instant."""
+        ...
+
 
 class IWriteFindingSetRepository(IReadFindingSetRepository, Protocol):
     """Read-write finding-set access. Only the domain layer depends on this variant."""
@@ -159,6 +167,7 @@ class IWriteFindingSetRepository(IReadFindingSetRepository, Protocol):
         artifact_id: str,
         chunk_id: str,
         scope_slug: str,
+        routine_name: str,
         revisions: dict[str, str],
         measurement: str | None,
     ) -> FindingSet:
