@@ -55,7 +55,7 @@ from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
-from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSetRepository
+from blizzard.hub.domain.findings import FindingExitService, IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.garden_delivery import CommitResolver
 from blizzard.hub.domain.garden_delivery_materialize import GardenDelivery
 from blizzard.hub.domain.garden_proposal_closure import (
@@ -210,6 +210,9 @@ class HubServices:
     routine_run: RunService
     #: The finding read Protocol (blizzard#390).
     findings: IReadFindingRepository
+    #: The human-driven exit verbs over findings — resolve/confirm-gone/wont-fix/
+    #: not-a-finding/supersede/reopen (blizzard#394 Phase 1).
+    finding_exit: FindingExitService
     #: The finding-set read Protocol (blizzard#390) — one set per delivered artifact list.
     finding_sets: IReadFindingSetRepository
     #: The garden-proposal read Protocol (blizzard#390).
@@ -414,6 +417,7 @@ def build_services(
             clock=clock,
         ),
         findings=finding_store,
+        finding_exit=FindingExitService(repo=finding_store, clock=clock),
         finding_sets=finding_set_store,
         garden_proposals=garden_proposal_store,
         garden_proposal_authoring=GardenProposalAuthoring(proposals=garden_proposal_store, clock=clock),

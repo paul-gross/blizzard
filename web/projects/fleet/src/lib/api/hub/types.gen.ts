@@ -1580,9 +1580,51 @@ export type ExternalSubscriptionUsageWindowView = {
 };
 
 /**
+ * FindingExitRequest
+ *
+ * `POST /api/findings/{verb}` — the shared shape for every human-driven exit and
+ * `reopen` except `supersede` (blizzard#394 Phase 2): every finding named exits (or
+ * reopens) together, one call, carrying the same required note (D7).
+ */
+export type FindingExitRequest = {
+    /**
+     * Finding Ids
+     */
+    finding_ids: Array<string>;
+    /**
+     * Note
+     */
+    note: string;
+};
+
+/**
+ * FindingSupersedeRequest
+ *
+ * `POST /api/findings/supersede` — `FindingExitRequest` plus the absorbing finding
+ * (D4).
+ */
+export type FindingSupersedeRequest = {
+    /**
+     * Finding Ids
+     */
+    finding_ids: Array<string>;
+    /**
+     * Note
+     */
+    note: string;
+    /**
+     * Superseded By
+     */
+    superseded_by: string;
+};
+
+/**
  * FindingView
  *
- * A finding.
+ * A finding. `state` is the newest fact's own kind, folded to `"live"` for
+ * `add`/`observed`/`reopened` (blizzard#394) — `live` is kept alongside it as the
+ * `state == "live"` shorthand existing consumers already read. `note` is the newest
+ * fact's own note, whatever kind it is — `None` for a kind that carries none.
  */
 export type FindingView = {
     /**
@@ -1610,6 +1652,10 @@ export type FindingView = {
      */
     locus: string;
     /**
+     * Note
+     */
+    note?: string | null;
+    /**
      * Observed Count
      */
     observed_count: number;
@@ -1621,6 +1667,10 @@ export type FindingView = {
      * Scope Slug
      */
     scope_slug: string;
+    /**
+     * State
+     */
+    state: string;
     /**
      * Summary
      */
@@ -6335,6 +6385,168 @@ export type ListFindingsApiFindingsGetResponses = {
 };
 
 export type ListFindingsApiFindingsGetResponse = ListFindingsApiFindingsGetResponses[keyof ListFindingsApiFindingsGetResponses];
+
+export type ConfirmGoneFindingsApiFindingsConfirmGonePostData = {
+    body: FindingExitRequest;
+    path?: never;
+    query?: never;
+    url: '/api/findings/confirm-gone';
+};
+
+export type ConfirmGoneFindingsApiFindingsConfirmGonePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConfirmGoneFindingsApiFindingsConfirmGonePostError = ConfirmGoneFindingsApiFindingsConfirmGonePostErrors[keyof ConfirmGoneFindingsApiFindingsConfirmGonePostErrors];
+
+export type ConfirmGoneFindingsApiFindingsConfirmGonePostResponses = {
+    /**
+     * Response Confirm Gone Findings Api Findings Confirm Gone Post
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type ConfirmGoneFindingsApiFindingsConfirmGonePostResponse = ConfirmGoneFindingsApiFindingsConfirmGonePostResponses[keyof ConfirmGoneFindingsApiFindingsConfirmGonePostResponses];
+
+export type NotAFindingFindingsApiFindingsNotAFindingPostData = {
+    body: FindingExitRequest;
+    path?: never;
+    query?: never;
+    url: '/api/findings/not-a-finding';
+};
+
+export type NotAFindingFindingsApiFindingsNotAFindingPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type NotAFindingFindingsApiFindingsNotAFindingPostError = NotAFindingFindingsApiFindingsNotAFindingPostErrors[keyof NotAFindingFindingsApiFindingsNotAFindingPostErrors];
+
+export type NotAFindingFindingsApiFindingsNotAFindingPostResponses = {
+    /**
+     * Response Not A Finding Findings Api Findings Not A Finding Post
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type NotAFindingFindingsApiFindingsNotAFindingPostResponse = NotAFindingFindingsApiFindingsNotAFindingPostResponses[keyof NotAFindingFindingsApiFindingsNotAFindingPostResponses];
+
+export type ReopenFindingsApiFindingsReopenPostData = {
+    body: FindingExitRequest;
+    path?: never;
+    query?: never;
+    url: '/api/findings/reopen';
+};
+
+export type ReopenFindingsApiFindingsReopenPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReopenFindingsApiFindingsReopenPostError = ReopenFindingsApiFindingsReopenPostErrors[keyof ReopenFindingsApiFindingsReopenPostErrors];
+
+export type ReopenFindingsApiFindingsReopenPostResponses = {
+    /**
+     * Response Reopen Findings Api Findings Reopen Post
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type ReopenFindingsApiFindingsReopenPostResponse = ReopenFindingsApiFindingsReopenPostResponses[keyof ReopenFindingsApiFindingsReopenPostResponses];
+
+export type ResolveFindingsApiFindingsResolvePostData = {
+    body: FindingExitRequest;
+    path?: never;
+    query?: never;
+    url: '/api/findings/resolve';
+};
+
+export type ResolveFindingsApiFindingsResolvePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResolveFindingsApiFindingsResolvePostError = ResolveFindingsApiFindingsResolvePostErrors[keyof ResolveFindingsApiFindingsResolvePostErrors];
+
+export type ResolveFindingsApiFindingsResolvePostResponses = {
+    /**
+     * Response Resolve Findings Api Findings Resolve Post
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type ResolveFindingsApiFindingsResolvePostResponse = ResolveFindingsApiFindingsResolvePostResponses[keyof ResolveFindingsApiFindingsResolvePostResponses];
+
+export type SupersedeFindingsApiFindingsSupersedePostData = {
+    body: FindingSupersedeRequest;
+    path?: never;
+    query?: never;
+    url: '/api/findings/supersede';
+};
+
+export type SupersedeFindingsApiFindingsSupersedePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SupersedeFindingsApiFindingsSupersedePostError = SupersedeFindingsApiFindingsSupersedePostErrors[keyof SupersedeFindingsApiFindingsSupersedePostErrors];
+
+export type SupersedeFindingsApiFindingsSupersedePostResponses = {
+    /**
+     * Response Supersede Findings Api Findings Supersede Post
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type SupersedeFindingsApiFindingsSupersedePostResponse = SupersedeFindingsApiFindingsSupersedePostResponses[keyof SupersedeFindingsApiFindingsSupersedePostResponses];
+
+export type WontFixFindingsApiFindingsWontFixPostData = {
+    body: FindingExitRequest;
+    path?: never;
+    query?: never;
+    url: '/api/findings/wont-fix';
+};
+
+export type WontFixFindingsApiFindingsWontFixPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WontFixFindingsApiFindingsWontFixPostError = WontFixFindingsApiFindingsWontFixPostErrors[keyof WontFixFindingsApiFindingsWontFixPostErrors];
+
+export type WontFixFindingsApiFindingsWontFixPostResponses = {
+    /**
+     * Response Wont Fix Findings Api Findings Wont Fix Post
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type WontFixFindingsApiFindingsWontFixPostResponse = WontFixFindingsApiFindingsWontFixPostResponses[keyof WontFixFindingsApiFindingsWontFixPostResponses];
 
 export type GetFindingApiFindingsFindingIdGetData = {
     body?: never;
