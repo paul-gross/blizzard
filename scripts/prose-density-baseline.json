@@ -3520,9 +3520,9 @@
    "total": 198
   },
   "e2e/test_garden_routine_e2e.py": {
-   "comments": 23,
+   "comments": 22,
    "docstrings": 13,
-   "total": 350
+   "total": 349
   },
   "e2e/test_gate_decision_e2e.py": {
    "comments": 14,
@@ -4347,7 +4347,7 @@
   "test_garden_routine_graph.py": {
    "comments": 18,
    "docstrings": 17,
-   "total": 157
+   "total": 159
   },
   "test_gate_derivation.py": {
    "comments": 9,

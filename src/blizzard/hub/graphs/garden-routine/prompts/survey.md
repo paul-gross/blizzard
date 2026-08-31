@@ -16,20 +16,19 @@ is judging by its own taste.
 ## Scope discipline
 
 Sweep the scope you were given and nothing outside it. The scope is a name, not a path: your charge names it and the
-project's strategy says what it covers, so read that list before deciding where its edges are. In delta mode — only
-what changed since this routine last ran — the ground outside that change is not yours this run; a finding recorded
-outside your scope corrupts the one guarantee the machinery makes about scoped runs.
+project's strategy says what it covers. In delta mode — only what changed since this routine last ran — the ground
+outside that change is not yours; a finding outside your scope corrupts the one guarantee scoped runs make.
 
 ## Gut-check before you enumerate
 
 Before you record anything, sample enough of the scope to know roughly what is in it, then ask one question: **could
-you inventory this well within the context you have?** Not whether it would be tedious — whether you
-could finish the list and stand behind it.
+you inventory this well within the context you have** — not whether it would be tedious, but whether you could finish
+the list and stand behind it.
 
 If the answer is no, stop. Do not enumerate. Record a single finding, class `excessive-scope`, with the scope itself
-as its locus and an honest count or estimate in its summary, and nothing else at all. That one finding is your whole output, and your judgement choice is `excessive`. It is a real
-finding, not a failure report — and a truncated list pretending to be an inventory is worse than none, because every
-later run inherits the lie.
+as its locus and an honest count or estimate in its summary, and nothing else at all — that finding is your whole
+output, and your judgement choice is `excessive`. It is a real finding, not a failure report: a truncated list
+pretending to be an inventory is worse than none, because every later run inherits the lie.
 
 The threshold is your context, not a number; a tedious sweep or an unclear scope is what the retry and the escalation
 are for.
@@ -37,17 +36,18 @@ are for.
 ## What to record
 
 Record instances, not themes. One finding is one thing somebody could fix, at one locus: seventeen instances in one
-package are seventeen entries, never a single entry counting them — grouping is the docket's job, not yours. Each candidate's shape is the platform's, not this graph's: read it at runtime with
-`blizzard runner artifact get --scope system garden/finding-format --content` and follow it exactly, including the
-local `ref` on every entry.
+package are seventeen entries, never a single entry counting them — grouping is the docket's job, not yours.
 
-Attribute what you can: where `git blame` on the locus names the commit that introduced what you object to, record it,
-and otherwise leave it out rather than guessing — a wrong attribution is worse than an absent one.
+A candidate is `ref` (stable only within this submission), `class`, `locus`, `summary`, and `introduced` (best effort,
+omit rather than guess). Read the full shape live with
+`blizzard runner artifact get --scope system garden/finding-format --content` and follow it exactly; if that read
+fails or comes back empty, proceed on the restatement above. Attribute what you can: where `git blame` on the locus
+names the commit that introduced what you object to, record it in `introduced`, and otherwise leave it out — a wrong
+attribution is worse than an absent one.
 
-Record the measurement your routine's strategy declares whether or not you found anything. That number is this run's
-product even when the findings are none. And record only what you can point at: if you cannot cite the standard a
-thing violates and the place it violates it, you have an impression, not a finding, and it stays out of the list —
-everything that goes in outlives this run as durable evidence.
+Record the measurement your routine's strategy declares whether or not you found anything — that number is this run's
+product even when the findings are none. Record only what you can point at: if you cannot cite the standard a thing
+violates and the place it violates it, you have an impression, not a finding, and it stays out of the list.
 
 Publish two assets, each with content on stdin. `blizzard runner artifact create --name survey`: a JSON object
 carrying `scope`, `revisions` — the revision you read, per repository — `measurement`, and `candidates`; the envelope

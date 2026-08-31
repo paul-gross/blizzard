@@ -17,12 +17,9 @@
 name: garden-routine
 entry: survey
 
-# Two pools. `sweep` does the reading and the judging and is the expensive lineage —
-# it holds the project's context and the scope it swept. (The plan artifact named this
-# pool `survey`; a pool may not share a node's name, so the packaged copy renames it.)
-# `match` is cold-eyes only: reconcile enters fresh so that matching new observations
-# against live findings is done by something that has not spent a session convincing
-# itself the findings are real.
+# Two pools: `sweep` holds the expensive read-and-judge lineage, `match` is cold-eyes
+# only for reconcile. `sweep` is a rename over the plan artifact's `survey` — see
+# ./README.md's Corrections section for why.
 sessions:
   sweep:
     model: ["blizzard:advanced"]
@@ -46,12 +43,9 @@ nodes:
     produces:
       - survey                   # candidate observations, no ids yet — or, on the
                                  # `excessive` path, exactly one bail-out candidate
-      - delta                    # the run's delta skeleton: scope, revisions, and
-                                 # measurement with no findings. Declared here because a
-                                 # completion publishes only declared names, and `clean`
-                                 # routes straight to deliver — which reads the newest
-                                 # `delta`, so reconcile's assembled one supersedes this
-                                 # on every path where reconcile runs.
+      - delta                    # the empty skeleton `clean` delivers directly; see
+                                 # ./README.md's Corrections section for why survey
+                                 # also declares it
     judgement:
       prompt: ./prompts/survey.judgement.md
       choices:
@@ -128,3 +122,7 @@ nodes:
           description: An artifact failed shape validation — malformed entry, unknown finding id, or a commit that does not exist. Nothing was written.
           to: reconcile
           prompt_addendum: ./prompts/reconcile.from-deliver.md
+        failure:
+          description: garden_deliver itself failed or crashed rather than reporting a clean outcome — a missing env var, a non-2xx delivery POST, an unrecognized response outcome, or an unauthorized/failed marker write. The delta and docket stand as drafted; routed to propose to re-affirm them and retry, the same recovery point the sibling lanes return to on this outcome.
+          to: propose
+          prompt_addendum: ./prompts/propose.from-deliver-failure.md

@@ -44,8 +44,10 @@ same finding even when the words differ; two findings at the same file that obje
 genuinely cannot tell, add rather than merge — a duplicate costs a person one moment of recognition and closes alongside
 its twin, while a wrong merge hides new drift behind an old finding and nobody ever sees it.
 
-The delta's shape is the platform's: read it at runtime with
-`blizzard runner artifact get --scope system garden/finding-format --content`, and publish the delta with
-`blizzard runner artifact create --name delta` (content on stdin). Carry the survey envelope's `scope`, `revisions`,
-and `measurement` through onto it — the delivered artifact is where they become durable. Every transformation must
-name a `fin_` id that is actually live on this routine; the delivery step rejects the artifact if it does not.
+A `FindingDelta` carries `scope`, `revisions`, `measurement`, and `findings` — each entry an `add` (a candidate minus
+its `ref`), an `observed` (`{"op": "observed", "id": "fin_..."}`), or a `gone` (adds a `note`). That is the shape read
+live with `blizzard runner artifact get --scope system garden/finding-format --content`; if that read fails or comes
+back empty, proceed on the restatement above. Publish with `blizzard runner artifact create --name delta` (content on
+stdin). Carry the survey envelope's `scope`, `revisions`, and `measurement` through onto it — the delivered artifact is
+where they become durable. Every transformation must name a `fin_` id that is actually live on this routine; the
+delivery step rejects the artifact if it does not.

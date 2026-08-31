@@ -108,8 +108,7 @@ _SURVEY_JUDGEMENT = (
 )
 
 # reconcile: match the envelope's candidates against the live bucket. On the invalid
-# path the bad delta is republished until the addendum has run, so the corrected delta
-# exists only if the `invalid` edge's addendum actually threaded.
+# path the bad delta stays republished until the addendum has actually threaded.
 _RECONCILE = (
     "envelope = json.loads(sh('blizzard', 'runner', 'artifact', 'get', 'survey', '--content'))\n"
     "live = bucket()\n"

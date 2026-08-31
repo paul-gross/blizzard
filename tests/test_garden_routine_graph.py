@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.node_steps import Executor, SessionMode
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.graph_validation import Validator
 from blizzard.hub.graphs import PACKAGED
 
@@ -46,9 +46,9 @@ def test_garden_routine_shape_is_survey_reconcile_propose_deliver() -> None:
 def test_garden_routine_has_no_person_in_the_run() -> None:
     """The run goes end to end unattended; sign-off, when a deployment wants it, is a
     runner-imposed gate by config (blizzard-context:/domain/humans/gates.md), never a
-    node."""
+    node. A gate is `judged_by: human`, orthogonal to `executor` — pin that facet."""
     doc = _doc()
-    assert {n.executor for n in doc.nodes} == {Executor.RUNNER, Executor.HUB}
+    assert {n.judgement.by if n.judgement is not None else JudgedBy.WORKER for n in doc.nodes} == {JudgedBy.WORKER}
 
 
 def test_garden_routine_mints_with_no_artifacts_map() -> None:
@@ -104,12 +104,14 @@ def test_garden_routine_deliver_records_or_bounces_to_reconcile_with_the_addendu
     deliver = doc.node("deliver")
     assert deliver is not None and deliver.judgement is not None
     routes = {c.name: c.to for c in deliver.judgement.choices}
-    assert routes == {"recorded": "done", "invalid": "reconcile"}
+    assert routes == {"recorded": "done", "invalid": "reconcile", "failure": "propose"}
     invalid = next(c for c in deliver.judgement.choices if c.name == "invalid")
     assert invalid.prompt_addendum is not None
     # The addendum names the failure artifact the rejected delivery recorded, so the
     # re-entered reconcile can read what the shape check refused.
     assert "garden-delivery-failure" in invalid.prompt_addendum
+    failure = next(c for c in deliver.judgement.choices if c.name == "failure")
+    assert failure.prompt_addendum is not None
 
 
 def test_garden_routine_deliver_runs_the_packaged_script_naming_its_artifacts() -> None:
