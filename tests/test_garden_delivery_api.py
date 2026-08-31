@@ -329,6 +329,34 @@ def test_an_unresolved_delta_artifact_is_invalid_naming_it(tmp_path: Path) -> No
     assert "ghost-artifact" in body["detail"]
 
 
+def test_a_proposals_artifact_naming_one_ref_twice_is_invalid(tmp_path: Path) -> None:
+    """A duplicated `ref` collides on the very pair the store dedupes against, so it is
+    rejected as a legible `invalid` the graph can bounce on — never a raw store fault the
+    script can only report as a failed request."""
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    _seed_finding(hub, finding_id)
+    twice = json.dumps(
+        [
+            {"ref": "p1", "class": "c", "title": "one", "body": "b", "findings": [finding_id]},
+            {"ref": "p1", "class": "c", "title": "two", "body": "b", "findings": [finding_id]},
+        ]
+    )
+    _record_artifact(hub, chunk_id, name="delta", content=_delta())
+    _record_artifact(hub, chunk_id, name="docket", content=twice)
+
+    resp = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["outcome"] == "invalid"
+    assert "docket" in body["detail"] and "p1" in body["detail"]
+    with hub.engine.begin() as conn:
+        assert conn.execute(select(s.garden_proposals)).all() == []
+
+
 # --- replay --------------------------------------------------------------
 
 

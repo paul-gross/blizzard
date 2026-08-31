@@ -1439,8 +1439,8 @@
   },
   "blizzard/hub/domain/garden_delivery.py": {
    "comments": 10,
-   "docstrings": 35,
-   "total": 194
+   "docstrings": 40,
+   "total": 210
   },
   "blizzard/hub/domain/garden_delivery_materialize.py": {
    "comments": 6,
@@ -4256,13 +4256,13 @@
   },
   "test_garden_delivery_api.py": {
    "comments": 17,
-   "docstrings": 18,
-   "total": 501
+   "docstrings": 21,
+   "total": 529
   },
   "test_garden_delivery_domain.py": {
-   "comments": 25,
-   "docstrings": 11,
-   "total": 393
+   "comments": 28,
+   "docstrings": 13,
+   "total": 439
   },
   "test_garden_delivery_materialize.py": {
    "comments": 1,

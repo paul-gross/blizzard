@@ -19,6 +19,7 @@ from blizzard.hub.domain.garden_delivery import (
     GardenDeliveryRejected,
     check_delta,
     check_proposal,
+    check_proposal_refs,
     parse_delta,
     parse_proposals,
     validate_delivery,
@@ -173,6 +174,21 @@ def test_check_proposal_accepts_a_live_finding() -> None:
     proposal = _proposal(findings=[_FIN1])
 
     check_proposal(proposal, run=_RUN, live_findings=_live())  # does not raise
+
+
+def test_check_proposal_refs_rejects_one_artifact_naming_a_ref_twice() -> None:
+    # `(source artifact, ref)` is a delivered proposal's identity — one artifact naming
+    # `p1` twice claims two different proposals are the same one.
+    proposals = [_proposal(findings=[_FIN1]), _proposal(findings=[_FIN2])]
+
+    with pytest.raises(GardenDeliveryRejected, match="more than once"):
+        check_proposal_refs("docket", proposals)
+
+
+def test_check_proposal_refs_accepts_distinct_refs() -> None:
+    proposals = [_proposal(findings=[_FIN1], ref="p1"), _proposal(findings=[_FIN2], ref="p2")]
+
+    check_proposal_refs("docket", proposals)  # does not raise
 
 
 # --- commit checks -----------------------------------------------------------------
@@ -337,6 +353,36 @@ def test_validate_delivery_pairs_each_proposal_with_its_own_source_artifact_name
 
     assert [p.ref for p in result.proposals] == ["a1", "a2", "b1"]
     assert result.proposal_sources == ["docket-a", "docket-a", "docket-b"]
+
+
+def test_validate_delivery_accepts_two_artifacts_reusing_one_ref() -> None:
+    """A `ref` is stable only within its own submission, so two artifacts each naming
+    `p1` carry unrelated proposals — distinct under `(source artifact, ref)`."""
+    proposal = _proposal(findings=[_FIN1])
+    raw = f"[{proposal.model_dump_json(by_alias=True)}]"
+
+    result = validate_delivery(
+        run=_RUN,
+        delta_artifacts={},
+        proposal_artifacts={"docket-a": raw, "docket-b": raw},
+        known_findings=[_finding(_FIN1)],
+    )
+
+    assert [p.ref for p in result.proposals] == ["p1", "p1"]
+    assert result.proposal_sources == ["docket-a", "docket-b"]
+
+
+def test_validate_delivery_rejects_one_artifact_naming_a_ref_twice() -> None:
+    proposal = _proposal(findings=[_FIN1])
+    twice = f"[{proposal.model_dump_json(by_alias=True)}, {proposal.model_dump_json(by_alias=True)}]"
+
+    with pytest.raises(GardenDeliveryRejected, match="more than once"):
+        validate_delivery(
+            run=_RUN,
+            delta_artifacts={},
+            proposal_artifacts={"docket": twice},
+            known_findings=[_finding(_FIN1)],
+        )
 
 
 def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> None:

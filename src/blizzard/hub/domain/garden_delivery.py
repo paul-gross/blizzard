@@ -123,6 +123,21 @@ def check_proposal(proposal: GardenProposalCandidate, *, run: RunContext, live_f
         _check_known_id(finding_id, run=run, live_findings=live_findings, scope=None)
 
 
+def check_proposal_refs(artifact_name: str, proposals: Sequence[GardenProposalCandidate]) -> None:
+    """Validate that one artifact's candidates carry distinct `ref`s. A delivered
+    proposal is identified by its source artifact plus its submission-local `ref`, so an
+    artifact naming one twice says two different proposals are the same one — rejected
+    here as a legible bounce rather than left to collide at insert. Two *different*
+    artifacts reusing a `ref` name unrelated proposals and are fine."""
+    seen: set[str] = set()
+    for proposal in proposals:
+        if proposal.ref in seen:
+            raise GardenDeliveryRejected(
+                f"artifact {artifact_name!r} carries the proposal ref {proposal.ref!r} more than once"
+            )
+        seen.add(proposal.ref)
+
+
 def validate_delivery(
     *,
     run: RunContext,
@@ -141,9 +156,10 @@ def validate_delivery(
     proposals: list[GardenProposalCandidate] = []
     proposal_sources: list[str] = []
     for name, raw in proposal_artifacts.items():
-        for candidate in parse_proposals(name, raw):
-            proposals.append(candidate)
-            proposal_sources.append(name)
+        candidates = parse_proposals(name, raw)
+        check_proposal_refs(name, candidates)
+        proposals.extend(candidates)
+        proposal_sources.extend(name for _ in candidates)
 
     if resolve_commit is not None:
         # Memoize per delivery: many findings sharing one `introduced` commit must not
