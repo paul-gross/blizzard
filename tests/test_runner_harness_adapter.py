@@ -211,7 +211,8 @@ def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
     workdir.mkdir()
     adapter = ClaudeCodeAdapter(binary=str(dump_script))
 
-    adapter.judge(str(workdir), "sess-1", "assess")
+    handle = adapter.judge(str(workdir), "sess-1", "assess", str(workdir / "judge-output.json"))
+    os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert "BZ_HUB_TOKEN" not in dumped
@@ -235,7 +236,10 @@ def test_judge_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path) 
         lease_token="fresh-judge-token",
     )
 
-    adapter.judge(str(workdir), "sess-9", "assess", preamble=preamble, chunk_id="ch_9")
+    handle = adapter.judge(
+        str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
+    )
+    os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert dumped["BLIZZARD_LEASE_ID"] == "lease_42"
@@ -258,7 +262,10 @@ def test_judge_child_env_carries_the_elicitation_marker_when_given_a_preamble(tm
         local_api_url="http://127.0.0.1:8431",
     )
 
-    adapter.judge(str(workdir), "sess-9", "assess", preamble=preamble, chunk_id="ch_9")
+    handle = adapter.judge(
+        str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
+    )
+    os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert dumped["BLIZZARD_ELICITATION"] == "1"
@@ -544,8 +551,12 @@ def test_judge_resume_output_parses_to_choice(tmp_path: Path) -> None:
     workdir = tmp_path / "e1"
     workdir.mkdir()
     adapter = ClaudeCodeAdapter(binary=binary)
+    output_path = str(workdir / "judge-output.json")
 
-    output = adapter.judge(str(workdir), "sess-123", "Assess the build. Reply <Choice>name</Choice>.")
+    handle = adapter.judge(str(workdir), "sess-123", "Assess the build. Reply <Choice>name</Choice>.", output_path)
+    os.waitpid(handle.pid, 0)
+
+    output = Path(output_path).read_text()
     assert adapter.parse_verdict(output) == "pass"
 
 
@@ -558,7 +569,10 @@ def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
     workdir.mkdir()
     adapter = ClaudeCodeAdapter(binary=binary, permission_mode="bypassPermissions")
 
-    adapter.judge(str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.")
+    handle = adapter.judge(
+        str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.", str(workdir / "judge-output.json")
+    )
+    os.waitpid(handle.pid, 0)
 
     assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
 
@@ -593,7 +607,8 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(tmp_path:
     os.waitpid(pid, 0)
     resumed_prefix, _, resumed_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
-    adapter.judge(str(workdir), "sess-123", "assess", effort="high")
+    judge_handle = adapter.judge(str(workdir), "sess-123", "assess", str(workdir / "judge-output.json"), effort="high")
+    os.waitpid(judge_handle.pid, 0)
     judge_prefix, _, judge_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
     assert judge_prefix == resumed_prefix
@@ -1211,16 +1226,13 @@ def test_spawn_supplying_no_compaction_window_omits_the_flag(monkeypatch: pytest
 
 
 @pytest.mark.unit
-def test_judge_carries_the_compaction_window(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_judge_carries_the_compaction_window(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
-    def _fake_run(cmd: list[str], **kwargs: object) -> object:
-        captured["cmd"] = cmd
-        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
-    monkeypatch.setattr(subprocess, "run", _fake_run)
-
-    ClaudeCodeAdapter(binary="claude").judge("/ws", "sid", "verdict?", compaction_window="150k")
+    ClaudeCodeAdapter(binary="claude").judge(
+        "/ws", "sid", "verdict?", str(tmp_path / "judge-output.txt"), compaction_window="150k"
+    )
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--autocompact") + 1] == "150k"
@@ -1251,16 +1263,13 @@ def test_spawn_supplying_neither_behaves_exactly_as_before(monkeypatch: pytest.M
 
 
 @pytest.mark.unit
-def test_judge_carries_the_effort_but_never_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_judge_carries_the_effort_but_never_the_model(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
-    def _fake_run(cmd: list[str], **kwargs: object) -> object:
-        captured["cmd"] = cmd
-        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
-    monkeypatch.setattr(subprocess, "run", _fake_run)
-
-    ClaudeCodeAdapter(binary="claude").judge("/ws", "sid", "verdict?", effort="high", model="sonnet")
+    ClaudeCodeAdapter(binary="claude").judge(
+        "/ws", "sid", "verdict?", str(tmp_path / "judge-output.txt"), effort="high", model="sonnet"
+    )
 
     cmd = captured["cmd"]
     assert "--model" not in cmd

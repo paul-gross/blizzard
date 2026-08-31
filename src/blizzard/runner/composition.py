@@ -14,6 +14,7 @@ from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
 from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.store.internal.check_store import CheckStore
+from blizzard.runner.store.internal.elicitation_store import ElicitationStore
 from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
@@ -50,4 +51,5 @@ def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerSt
         git_commit_declarations=GitCommitDeclarationStore(connections),
         checks=CheckStore(connections),
         graph_artifacts=GraphArtifactStore(connections),
+        elicitations=ElicitationStore(connections),
     )

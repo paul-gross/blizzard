@@ -213,14 +213,21 @@ class ResumeIntents:
         return marked
 
     def _resumable(self) -> Iterator[LeaseRecord]:
-        """Active, session-bearing leases that are neither parked nor mid-submission —
-        an unspawned one is REAP's residue, with nothing to resume."""
+        """Active, session-bearing leases that are neither parked, mid-submission, nor
+        mid-elicitation — an unspawned one is REAP's residue, with nothing to resume.
+
+        The elicitation exclusion (D6, review F1/F2/F5) matters on both callers: a graceful
+        restart-resume would otherwise wake a second process on the same session, and an
+        ungraceful crash-orphan scan would otherwise leave the pre-resume elicitation's stale
+        record to be misread as the resumed generation's own verdict — neither path may
+        re-mint or resume a lease whose elicitation is in flight."""
         parked = self.stores.asks.parked_lease_ids()
         pending = self.stores.outbound.pending_submission_lease_ids()
+        eliciting = self.stores.elicitations.in_flight_elicitation_lease_ids()
         for lease in self.stores.leases.list_active_leases():
             if lease.pid is None or lease.session_id is None:
                 continue
-            if lease.lease_id in parked or lease.lease_id in pending:
+            if lease.lease_id in parked or lease.lease_id in pending or lease.lease_id in eliciting:
                 continue
             yield lease
 
@@ -468,9 +475,23 @@ class Advance(Step):
                 HeldChunk(ctx, chunk_id).drive()
 
     def _advance_exited_worker(self, lease: LeaseRecord) -> None:
-        """Park on an open ask, else elicit the verdict and buffer the completion."""
+        """Collect an in-flight elicitation, else park on an open ask, else launch the verdict
+        elicitation (blizzard#443).
+
+        The in-flight check runs BEFORE the ask pre-check (D3): once a launch is durable, this
+        lease's every later pass is a collect, not a fresh judge — and collecting must not be
+        pre-empted by an ask the worker raised *during its live turns, before it exited* (the
+        ordinary ask-and-exit shape below). An ask raised *during the elicitation itself* is a
+        different case, handled inside `Judgement._judged` after the verdict parse returns
+        ``None`` — this pre-check cannot see that one; it is recorded mid-elicitation."""
         if lease.session_id is None:
             return  # not spawned — REAP's residue (guarded by the caller too)
+        elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
+        if elicitation is not None:
+            judgement = Judgement.of(self.ctx, lease)
+            if judgement is not None:
+                judgement.collect(elicitation)
+            return
         # Ask-and-exit: an exit holding an unforwarded ask is a park, an exit with neither is a
         # failure. Not a spawn, so it proceeds regardless of the local brake.
         ask = self.ctx.stores.asks.unforwarded_ask(lease.lease_id)

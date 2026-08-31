@@ -7,6 +7,7 @@ tears down — no chunk, lease, environment binding, or hub call is ever on this
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from dataclasses import dataclass, replace
@@ -15,6 +16,7 @@ from typing import Protocol
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
+from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.selftest.model import (
     AUTOMATED_RESUME,
     END_TO_END_EDIT_COMMIT,
@@ -172,10 +174,16 @@ class Commit(Check):
 class Judge(Check):
     def run(self) -> SelfTestCheck:
         scratch = self.scratch
+        output_path = os.path.join(scratch.workdir, ".selftest-judge-output")
         try:
-            output = scratch.adapter.judge(scratch.workdir, scratch.session_id, _JUDGEMENT_PROMPT)
+            handle = scratch.adapter.judge(scratch.workdir, scratch.session_id, _JUDGEMENT_PROMPT, output_path)
         except Exception as exc:
             return SelfTestCheck(VERDICT_ELICITATION, False, f"judge raised: {exc}")
+        # The detached launch/collect shape (blizzard#443): the canary waits out the same
+        # bounded poll `end_to_end_edit_commit` uses, then reads the reply back itself.
+        if not Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time):
+            return SelfTestCheck(VERDICT_ELICITATION, False, "judgement process never exited")
+        output = ElicitationFiles(root="").read(output_path)
         choice = scratch.adapter.parse_verdict(output)
         if choice is None:
             return SelfTestCheck(VERDICT_ELICITATION, False, "judgement resume produced no parseable <Choice>")

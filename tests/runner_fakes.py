@@ -7,6 +7,7 @@ fakes standing in for the hub, provider, harness, probe, and worktree git.
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 
@@ -31,6 +32,7 @@ from blizzard.runner.harness.transcript import IHarnessTranscriptSource, Transcr
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.runner.loop.process import IProcessProbe
@@ -43,6 +45,7 @@ from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
 from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.store.internal.check_store import CheckStore
+from blizzard.runner.store.internal.elicitation_store import ElicitationStore
 from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
@@ -101,12 +104,13 @@ class SqlAlchemyRunnerStore(
     GitCommitDeclarationStore,
     CheckStore,
     GraphArtifactStore,
+    ElicitationStore,
 ):
     """The flat, every-concept-at-once runner store — test support only (D3, blizzard#410):
     production composes the extracted concept adapters individually via
     :func:`~blizzard.runner.composition.build_stores`, never this class. Kept here because a
     test fixture wants one object standing in for every concept at once, structurally
-    satisfying every one of the sixteen concept Protocols by inheritance."""
+    satisfying every one of the seventeen concept Protocols by inheritance."""
 
     def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
         store = RunnerStoreConnections(engine, errors)
@@ -126,6 +130,7 @@ class SqlAlchemyRunnerStore(
         GitCommitDeclarationStore.__init__(self, store)
         CheckStore.__init__(self, store)
         GraphArtifactStore.__init__(self, store)
+        ElicitationStore.__init__(self, store)
         self._engine = engine
         self._errors = errors
 
@@ -163,6 +168,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         git_commit_declarations=store,
         checks=store,
         graph_artifacts=store,
+        elicitations=store,
     )
 
 
@@ -527,9 +533,28 @@ class FakeHarness:
         external_usage_raises: Exception | None = None,
         transcript_source: IHarnessTranscriptSource | None = None,
         judge_side_effect: Callable[[], None] | None = None,
+        judge_pid: int = 8888,
+        judge_process_start_time: str = "judge-start",
+        judge_output: str = "<judged output>",
+        judge_output_usable: bool = True,
     ) -> None:
         self._handle = handle
         self.verdict = verdict
+        # The detached elicitation's own (pid, start_time) (blizzard#443) — distinct from
+        # `handle`'s worker pid by default, so a probe scripted around the worker's liveness
+        # never accidentally also governs the elicitation's.
+        self._judge_pid = judge_pid
+        self._judge_process_start_time = judge_process_start_time
+        # What `judge` writes to its `output_path` — content is irrelevant to this fake's
+        # own `parse_verdict`/`parse_usage`/`parse_assessment`, which ignore it (they read
+        # `self.verdict`/`self.usage`/`self.assessment` instead), but a collect pass must
+        # find a non-empty, readable file to know the launch actually landed something.
+        self.judge_output = judge_output
+        # `has_usable_output`'s scripted reply (blizzard#443 review, F7) — True by default so
+        # every existing script's judged output reads as usable without opting in; a test
+        # simulating a killed-mid-write elicitation sets this False instead of writing real
+        # malformed JSON, since this fake's `parse_verdict`/`parse_usage` never inspect content.
+        self.judge_output_usable = judge_output_usable
         # Fires inside `judge()`, before its reply is returned — lets a test express "the
         # worker asked instead of returning a verdict" (e.g. `store.record_ask(...)`).
         self._judge_side_effect = judge_side_effect
@@ -542,6 +567,7 @@ class FakeHarness:
         self.spawns: list[tuple[NodeEnvelope, WorkerPreamble]] = []
         self.resume_froms: list[str | None] = []  # `resume_from` as seen by each spawn (issue #115)
         self.judged: list[tuple[str, str, str]] = []
+        self.judge_output_paths: list[str] = []  # one entry per judge (launch) call
         self.judge_preambles: list[WorkerPreamble | None] = []  # one entry per judge call
         self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
         self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
@@ -602,20 +628,30 @@ class FakeHarness:
         workdir: str,
         session_id: str,
         judgement_prompt: str,
+        output_path: str,
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
-    ) -> str:
+    ) -> WorkerHandle:
         self.judged.append((workdir, session_id, judgement_prompt))
         self.judge_preambles.append(preamble)
         self.judge_model_effort.append((model, effort))
         self.judge_compaction_windows.append(compaction_window)
+        self.judge_output_paths.append(output_path)
+        # The side effect fires at LAUNCH, before the handle is returned — a test wanting
+        # "the worker asked instead of returning a verdict" scripts it here, same as before
+        # the launch/collect split (blizzard#443): the ask is recorded during the launch
+        # pass, and the collect half's file readback below is what parses `verdict` off it.
         if self._judge_side_effect is not None:
             self._judge_side_effect()
-        return "<judged output>"
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(self.judge_output)
+        return WorkerHandle(
+            session_id=self._handle.session_id, pid=self._judge_pid, process_start_time=self._judge_process_start_time
+        )
 
     def resume_with_message(
         self,
@@ -678,6 +714,9 @@ class FakeHarness:
 
     def parse_verdict(self, output: str) -> str | None:
         return self.verdict
+
+    def has_usable_output(self, output: str) -> bool:
+        return self.judge_output_usable
 
     def parse_assessment(self, output: str) -> str:
         return self.assessment
@@ -790,6 +829,11 @@ def make_context(
     _check_runner: ICheckRunner = check_runner if check_runner is not None else FakeCheckRunner()
     _clock: IClock = clock if clock is not None else FixedClock(datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC))
     _files = WorkerStdoutFiles(resolved_config.worker_stdout_dir, store)
+    # Load-bearing (D4) — unlike `worker_stdout_dir`, never the empty-disables convention,
+    # so an unset config falls back to a fresh throwaway directory rather than "" (which
+    # would make every `FakeHarness.judge` write raise `IsADirectoryError`/`FileNotFoundError`).
+    _elicitation_root = resolved_config.elicitation_output_dir or tempfile.mkdtemp(prefix="blizzard-elicit-")
+    _elicitation_files = ElicitationFiles(_elicitation_root)
     _stores = make_stores(store)
     return LoopContext(
         stores=_stores,
@@ -802,6 +846,7 @@ def make_context(
         check_runner=_check_runner,
         config=resolved_config,
         worker_files=_files,
+        elicitation_files=_elicitation_files,
         usage=UsageRecorder(
             leases=store,
             usage=store,

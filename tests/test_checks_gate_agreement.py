@@ -150,7 +150,8 @@ def _runner_fails(tmp_path: Path, requires_checks: bool, results: list[tuple[str
         check_runner=check_runner,
         clock=clock,
     )
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
     # A gate failure buffers no completion; an accepted `pass` buffers exactly one.
     return hub.completions == []

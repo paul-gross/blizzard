@@ -103,7 +103,8 @@ def test_a_fresh_named_member_mints_the_head_a_later_resume_member_continues(tmp
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h2 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t200"), verdict="pass")
     ctx2 = _ctx(store, hub, provider, h2, minutes=1)
-    Advance(ctx2).run()
+    Advance(ctx2).run()  # launches the detached elicitation
+    Advance(ctx2).run()  # collects it — the fake pid reads dead by default
     Pull(ctx2).run()
 
     # `verify` continues the head `build` minted — a session it never ran at its own node.
@@ -155,6 +156,7 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
     h2 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t2"), verdict="fail")
     ctx2 = _ctx(store, hub, provider, h2, minutes=1)
     Advance(ctx2).run()
+    Advance(ctx2).run()
     Pull(ctx2).run()
 
     # verify#1 fails -> back into build (`fresh:code`), which must MINT, not continue.
@@ -162,6 +164,7 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
     h3 = FakeHarness(handle=WorkerHandle(session_id="sess-code-2", pid=300, process_start_time="t3"), verdict="pass")
     ctx3 = _ctx(store, hub, provider, h3, minutes=2)
+    Advance(ctx3).run()
     Advance(ctx3).run()
     Pull(ctx3).run()
 
@@ -172,6 +175,7 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h4 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=400, process_start_time="t4"), verdict="pass")
     ctx4 = _ctx(store, hub, provider, h4, minutes=3)
+    Advance(ctx4).run()
     Advance(ctx4).run()
     Pull(ctx4).run()
 
@@ -224,6 +228,7 @@ def test_two_pools_in_one_chunk_keep_separate_heads(tmp_path):  # type: ignore[n
     h2 = FakeHarness(handle=WorkerHandle(session_id="sess-verify-1", pid=200, process_start_time="t2"), verdict="fail")
     ctx2 = _ctx(store, hub, provider, h2, minutes=1)
     Advance(ctx2).run()
+    Advance(ctx2).run()
     Pull(ctx2).run()
 
     assert h2.resume_froms == [None]
@@ -236,6 +241,7 @@ def test_two_pools_in_one_chunk_keep_separate_heads(tmp_path):  # type: ignore[n
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
     h3 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=300, process_start_time="t3"), verdict="pass")
     ctx3 = _ctx(store, hub, provider, h3, minutes=2)
+    Advance(ctx3).run()
     Advance(ctx3).run()
     Pull(ctx3).run()
 
@@ -268,7 +274,8 @@ def test_a_retry_at_a_pooled_node_becomes_the_head_a_later_member_continues(tmp_
     hub.envelopes["ch_1"] = build_env
     h2 = FakeHarness(handle=WorkerHandle(session_id="sess-attempt-2", pid=200, process_start_time="t2"), verdict=None)
     ctx2 = _ctx(store, hub, provider, h2, minutes=1)
-    Advance(ctx2).run()
+    Advance(ctx2).run()  # launches the detached elicitation
+    Advance(ctx2).run()  # collects it, and the unparseable verdict retries at once
 
     retry_lease = store.active_lease_for_chunk("ch_1")
     assert retry_lease is not None
@@ -281,6 +288,7 @@ def test_a_retry_at_a_pooled_node_becomes_the_head_a_later_member_continues(tmp_
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h3 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=300, process_start_time="t3"), verdict="pass")
     ctx3 = _ctx(store, hub, provider, h3, minutes=2)
+    Advance(ctx3).run()
     Advance(ctx3).run()
     Pull(ctx3).run()
 
@@ -352,6 +360,7 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
     h2.resolved_model = "opus"
     ctx2 = _ctx(store, hub, provider, h2, minutes=1)
     Advance(ctx2).run()
+    Advance(ctx2).run()
     Pull(ctx2).run()
 
     lease = store.active_lease_for_chunk("ch_1")
@@ -387,6 +396,7 @@ def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_p
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=resume_env)]
     h2 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t2"), verdict="pass")
     ctx2 = _ctx(store, hub, provider, h2, minutes=1)
+    Advance(ctx2).run()
     Advance(ctx2).run()
     Pull(ctx2).run()
 

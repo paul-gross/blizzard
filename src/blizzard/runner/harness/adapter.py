@@ -96,18 +96,22 @@ class IHarnessAdapter(Protocol):
         workdir: str,
         session_id: str,
         judgement_prompt: str,
+        output_path: str,
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
-    ) -> str:
-        """Deliver the judgement prompt into the session and return the raw reply.
+    ) -> WorkerHandle:
+        """Launch the judgement prompt into the session and return immediately — the
+        detached half of the launch/collect elicitation (blizzard#443).
 
-        The synchronous half of the two-phase node judgement — the reply is captured, not
-        just the new pid. ``model`` only attributes usage, never passed on. ``preamble``/
-        ``chunk_id`` re-supply worker identity. ``compaction_window`` reasserts like ``effort``."""
+        Mirrors ``spawn``: the reply lands in ``output_path`` (never empty — an unwritable
+        target raises ``HarnessSpawnError`` rather than proceeding uncollectable, D4) and the
+        caller reads it back once the returned handle's process has exited. ``model`` only
+        attributes usage, never passed on. ``preamble``/``chunk_id`` re-supply worker
+        identity. ``compaction_window`` reasserts like ``effort``."""
         ...
 
     def resume_command(
@@ -158,6 +162,15 @@ class IHarnessAdapter(Protocol):
 
     def parse_verdict(self, output: str) -> str | None:
         """Parse the ``<Choice>{name}</Choice>`` reply into a choice name, else ``None``."""
+        ...
+
+    def has_usable_output(self, output: str) -> bool:
+        """True when ``output`` carries a well-formed result envelope — independent of
+        whether it names a verdict, which a legitimate ask-instead-of-a-choice reply also
+        lacks. A process killed mid-write (an OOM, a ``kill -9``) can leave a non-empty but
+        truncated/malformed ``output``; the caller (:meth:`Judgement.collect
+        <blizzard.runner.loop.judgement.Judgement.collect>`) treats that the same as no
+        output at all — lost, not a verdict-less reply that would consume a retry."""
         ...
 
     def parse_assessment(self, output: str) -> str:

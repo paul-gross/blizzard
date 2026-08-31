@@ -111,7 +111,8 @@ def test_advance_records_spawn_and_judge_usage_facts(tmp_path):  # type: ignore[
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     payloads = _usage_payloads(store)
     assert len(payloads) == 2
@@ -154,7 +155,8 @@ def test_advance_records_resume_kind_on_a_later_generation(tmp_path):  # type: i
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     payloads = _usage_payloads(store)
     resume_payload = next(p for p in payloads if p["kind"] == "resume")
@@ -213,7 +215,8 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
     with open(ctx.worker_files.stdout_path("lease_1", 1), "w") as f:
         f.write("<generation-1's own envelope>")
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     payloads = _usage_payloads(store)
     resume_payload = next(p for p in payloads if p["kind"] == "resume")
@@ -257,7 +260,8 @@ def test_advance_falls_back_to_transcript_usage_when_no_envelope(tmp_path):  # t
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     payloads = _usage_payloads(store)
     spawn_payload = next(p for p in payloads if p["kind"] == "spawn")
@@ -284,7 +288,8 @@ def test_advance_records_no_usage_fact_when_no_envelope_and_no_transcript(tmp_pa
         config=LoopConfig(runner_id="r1", workspace_id="ws1"),  # no worker_stdout_dir, no transcripts
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     assert _usage_payloads(store) == []
 
@@ -464,7 +469,8 @@ def test_verdict_less_failure_still_records_spawn_and_judge_usage(tmp_path):  # 
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     # It failed the attempt: no completion buffered, the attempt requeued.
     completions = [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
@@ -509,7 +515,8 @@ def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(tmp_path / "missing")),
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     spawn_payload = next(p for p in _usage_payloads(store) if p["kind"] == "spawn")
     assert spawn_payload["cost_usd"] is None

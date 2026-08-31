@@ -14,6 +14,10 @@ from blizzard.foundation.logging import get_logger
 
 _log = get_logger("blizzard.runner.env.git")
 
+# A tick reaches this seam (FILL), so it must be bounded — the value is generous rather
+# than tuned, mirroring `checks.py`'s own default.
+ENV_GIT_TIMEOUT = 60
+
 
 class EnvGitError(RuntimeError):
     """A git reset-on-acquire operation failed."""
@@ -42,7 +46,13 @@ class SubprocessEnvGit:
         self._capture(cwd, *args)
 
     def _capture(self, cwd: Path, *args: str) -> str:
-        result = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=ENV_GIT_TIMEOUT
+            )
+        except subprocess.TimeoutExpired as exc:
+            _log.error("git reset step timed out", args=list(args), cwd=str(cwd), timeout=ENV_GIT_TIMEOUT)
+            raise EnvGitError(f"git {' '.join(args)} timed out in {cwd} after {ENV_GIT_TIMEOUT}s") from exc
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()
             _log.error("git reset step failed", args=list(args), cwd=str(cwd), detail=detail)

@@ -15,6 +15,7 @@ import pytest
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.steps import Pull
@@ -126,6 +127,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         worktree_git=FakeWorktreeGit(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
         worker_files=WorkerStdoutFiles("", store),
+        elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
         env_release=EnvironmentRelease(
@@ -205,6 +207,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         worktree_git=FakeWorktreeGit(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
         worker_files=WorkerStdoutFiles("", store),
+        elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
         env_release=EnvironmentRelease(

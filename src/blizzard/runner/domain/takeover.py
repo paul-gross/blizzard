@@ -257,6 +257,14 @@ class TakeoverService:
                 self._events.publish_fact_changed(seq=seq, kind=LEASE_MINTED, chunk_id=chunk_id, lease_id=None)
             if active.pid is not None:
                 self._process.kill(active.pid)  # the reap machinery's own best-effort kill
+            # A taken-over chunk's lease is skipped by every loop step from here on (Advance,
+            # Reap alike), so an in-flight elicitation would otherwise leak forever uncollected
+            # and unkilled (blizzard#443, D7) — killed here, the one path that closes it out.
+            elicitation = self._stores.elicitations.in_flight_elicitation(active.lease_id, active.epoch)
+            if elicitation is not None:
+                if elicitation.pid is not None:
+                    self._process.kill(elicitation.pid)
+                self._stores.elicitations.clear_elicitation(active.lease_id, active.epoch)
 
         # Read the reference lease's stamps (issue #144) rather than re-resolving, so the
         # operator continues under exactly the configuration the session ran with.

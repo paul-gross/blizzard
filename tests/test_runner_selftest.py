@@ -292,19 +292,23 @@ class _HangingAdapter:
         workdir: str,
         session_id: str,
         judgement_prompt: str,
+        output_path: str,
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
-    ) -> str:
+    ) -> WorkerHandle:
         raise AssertionError("unreachable — spawn never returns")
 
     def parse_verdict(self, output: str) -> str | None:
         raise AssertionError("unreachable — spawn never returns")
 
     def parse_assessment(self, output: str) -> str:
+        raise AssertionError("unreachable — spawn never returns")
+
+    def has_usable_output(self, output: str) -> bool:
         raise AssertionError("unreachable — spawn never returns")
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
@@ -406,20 +410,26 @@ class _FixedPidAdapter:
         workdir: str,
         session_id: str,
         judgement_prompt: str,
+        output_path: str,
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
-    ) -> str:
-        return json.dumps({"result": "<Choice>pass</Choice>"})
+    ) -> WorkerHandle:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"result": "<Choice>pass</Choice>"}))
+        return WorkerHandle(session_id=session_id, pid=self.spawn_pid, process_start_time="judge-t")
 
     def parse_verdict(self, output: str) -> str | None:
         return "pass" if "<Choice>pass</Choice>" in output else None
 
     def parse_assessment(self, output: str) -> str:
         return ""
+
+    def has_usable_output(self, output: str) -> bool:
+        return bool(output)
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         return "fake-model"

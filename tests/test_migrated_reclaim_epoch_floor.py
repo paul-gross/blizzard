@@ -14,6 +14,7 @@ import pytest
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.drain import OutboundDrain
+from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.steps import Fill
@@ -125,6 +126,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         worktree_git=FakeWorktreeGit(),
         config=LoopConfig(runner_id="r2", workspace_id="w2", max_agents=1),
         worker_files=WorkerStdoutFiles("", store),
+        elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
         env_release=EnvironmentRelease(

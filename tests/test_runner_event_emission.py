@@ -69,7 +69,8 @@ def _events(store):  # type: ignore[no-untyped-def]
 
 def _dead_worker_ctx(store, **kwargs):  # type: ignore[no-untyped-def]
     """A context whose worker is dead (empty alive set) and whose judgement is verdict-less
-    — driving ADVANCE straight into ``Attempt.fail(via="advance")``."""
+    — driving ADVANCE into ``Attempt.fail(via="advance")`` on its collect pass (the second
+    ``Advance().run()`` after the launch/collect split, blizzard#443)."""
     hub = FakeHub()
     hub.envelopes = {"ch_1": make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])}
     return make_context(
@@ -88,7 +89,9 @@ def _dead_worker_ctx(store, **kwargs):  # type: ignore[no-untyped-def]
 def test_retry_branch_emits_a_warning_attempt_failed(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_lease(store, retries_max=2)  # retried=0 < 2 -> retry
-    Advance(_dead_worker_ctx(store)).run()
+    ctx = _dead_worker_ctx(store)
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     events = _events(store)
     assert len(events) == 1
@@ -104,7 +107,9 @@ def test_retry_branch_emits_a_warning_attempt_failed(tmp_path):  # type: ignore[
 def test_escalate_branch_emits_a_critical_worker_lost(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_lease(store, retries_max=0)  # retried=0, not < 0 -> escalate
-    Advance(_dead_worker_ctx(store)).run()
+    ctx = _dead_worker_ctx(store)
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     events = _events(store)
     assert len(events) == 1
@@ -178,7 +183,8 @@ def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  # t
         probe=FakeProbe(),
     )
 
-    Advance(ctx).run()
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     events = _events(store)
     assert len(events) == 1
@@ -194,8 +200,9 @@ def test_at_most_once_a_second_tick_emits_no_duplicate(tmp_path):  # type: ignor
     _seed_lease(store, retries_max=0)  # escalate — no fresh lease to re-fail
     ctx = _dead_worker_ctx(store)
 
-    Advance(ctx).run()
-    Advance(ctx).run()  # the attempt is closed/escalated — nothing left to fail
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the attempt is closed/escalated here
+    Advance(ctx).run()  # nothing left to fail — no in-flight elicitation, no exited worker
 
     assert len(_events(store)) == 1
 
@@ -253,6 +260,7 @@ def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path):  # t
     ctx = _dead_worker_ctx(store, worktree_git=wt)
 
     Advance(ctx).run()  # no exception — a read-only verify failure never crash-loops the tick
+    Advance(ctx).run()  # collects the detached elicitation — the fake pid reads dead by default
 
     events = _events(store)
     assert [(e["severity"], e["kind"]) for e in events] == [

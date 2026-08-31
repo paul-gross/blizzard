@@ -123,6 +123,22 @@ def test_marking_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[n
 
 
 @pytest.mark.unit
+def test_marking_skips_a_lease_with_an_in_flight_elicitation(tmp_path):  # type: ignore[no-untyped-def]
+    """D6 (blizzard#443 review, F1/F2/F5): a lease whose worker already exited into a
+    detached verdict elicitation is neither parked nor pending, but resuming it would wake a
+    SECOND process on the same session — the elicitation's own collect pass is what must
+    claim it next, not a restart-resume re-attach."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_elicitation_launch("lease_1", 1, output_path="/tmp/lease_1.1.0.elicitation", at=_NOW)
+
+    marked = ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+
+    assert marked == 0
+    assert store.resume_intent_lease_ids() == set()
+
+
+@pytest.mark.unit
 def test_remark_across_two_restarts_reopens_the_intent(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)

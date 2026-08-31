@@ -78,6 +78,7 @@ class Attempt:
         now = self.ctx.clock.now()
         if lease.pid is not None:
             self.ctx.process.kill(lease.pid)  # best-effort hygiene; the epoch fence is the guarantee
+        self._kill_in_flight_elicitation()
         # Best-effort: a worker that never crashed to stderr wrote no tail, the ordinary case.
         tail = self.ctx.worker_files.stderr_tail(lease)
 
@@ -184,6 +185,7 @@ class Attempt:
         now = self.ctx.clock.now()
         if lease.pid is not None and not killed:
             self.ctx.process.kill(lease.pid)
+        self._kill_in_flight_elicitation()
         _CP_ABANDON_AFTER_KILL.reached()  # recovery is the next tick's re-scan
         self.ctx.env_release.release_chunk(lease.chunk_id)
         _CP_ABANDON_AFTER_RELEASE.reached()  # re-run releases nothing more, then records the closure
@@ -208,6 +210,7 @@ class Attempt:
         now = self.ctx.clock.now()
         if lease.pid is not None:
             self.ctx.process.kill(lease.pid)
+        self._kill_in_flight_elicitation()
         _CP_PAUSE_PARK_AFTER_KILL.reached()  # worker dead; the park is not yet durable
         self.ctx.stores.pause.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
         self.ctx.stores.leases.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
@@ -246,6 +249,7 @@ class Attempt:
         now = self.ctx.clock.now()
         if lease.pid is not None:
             self.ctx.process.kill(lease.pid)  # best-effort hygiene; the epoch fence is the guarantee
+        self._kill_in_flight_elicitation()
         _CP_PREEMPT_AFTER_KILL.reached()  # recovery is the next tick's re-scan, off the still-higher fence
         park = self.ctx.stores.asks.open_park(lease.lease_id)
         if park is not None:
@@ -332,6 +336,21 @@ class Attempt:
                     chunk_id=self.lease.chunk_id,
                     lease_id=lease_id,
                 )
+
+    def _kill_in_flight_elicitation(self) -> None:
+        """Closing a lease kills its in-flight elicitation, if any (blizzard#443, D7) — every
+        closing path (fail, abandon, park, preempt) reaches here, so no path may leave a
+        launched elicitation running against a lease nothing will ever collect. Its output
+        files are swept alongside the record (review F8) — this is the one place every
+        closing path already has the record, with its ``relaunch_count``, in hand."""
+        lease = self.lease
+        elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
+        if elicitation is None:
+            return
+        if elicitation.pid is not None:
+            self.ctx.process.kill(elicitation.pid)  # best-effort hygiene, mirroring the worker kill above
+        self.ctx.stores.elicitations.clear_elicitation(lease.lease_id, lease.epoch)
+        self.ctx.elicitation_files.cleanup(lease.lease_id, lease.epoch, through_attempt=elicitation.relaunch_count)
 
     def _pump_lease_before_close(self) -> None:
         """D3's promise applies here too, weaker: exceptions never fail the closure,

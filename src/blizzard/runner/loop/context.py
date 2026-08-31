@@ -15,6 +15,7 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.loop.checks import ICheckRunner
+from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.process import IProcessProbe
@@ -79,6 +80,10 @@ class LoopConfig:
     #: This runner's runtime directory (``RunnerConfig.root``), absolute; empty means
     #: unresolved, and readers compose nothing from it rather than guessing (issue #251).
     runner_dir: str = ""
+    #: The directory a detached judgement elicitation's reply file lands in (blizzard#443,
+    #: D4). Load-bearing, unlike ``worker_stdout_dir`` — always resolved to a real path by
+    #: composition, never the empty-disables convention.
+    elicitation_output_dir: str = ""
     #: The transcript outbound lane's own switch (``[transcripts] ship``, issue #246); off
     #: by default (D5) — the pump enqueues no delta while this is ``False``.
     transcripts_ship: bool = False
@@ -101,6 +106,7 @@ class LoopContext:
     worktree_git: IWorktreeGit
     config: LoopConfig
     worker_files: WorkerStdoutFiles
+    elicitation_files: ElicitationFiles
     usage: UsageRecorder
     sessions: SessionResolver
     env_release: EnvironmentRelease
