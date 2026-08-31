@@ -1696,6 +1696,42 @@ export type FleetSummaryView = {
 };
 
 /**
+ * GardenDeliveryRequest
+ *
+ * The garden-delivery route's body (blizzard#393 Phase 4) — the artifact names to
+ * consume, named the way `garden_deliver`'s repeatable ``--delta``/``--proposals``
+ * flags carry them.
+ */
+export type GardenDeliveryRequest = {
+    /**
+     * Delta
+     */
+    delta?: Array<string>;
+    /**
+     * Proposals
+     */
+    proposals?: Array<string>;
+};
+
+/**
+ * GardenDeliveryResponse
+ *
+ * The result of one garden delivery — ``recorded`` durably means it (materialized
+ * now or replayed, blizzard#393 Phase 3's own `DeliveryOutcome`); ``invalid`` carries
+ * the rejection reason in ``detail``, for the graph's ``invalid`` edge to attach.
+ */
+export type GardenDeliveryResponse = {
+    /**
+     * Detail
+     */
+    detail?: string;
+    /**
+     * Outcome
+     */
+    outcome: 'recorded' | 'invalid';
+};
+
+/**
  * GardenProposalView
  *
  * A garden proposal.
@@ -5545,6 +5581,45 @@ export type DetachChunkApiChunksChunkIdDetachPostResponses = {
 };
 
 export type DetachChunkApiChunksChunkIdDetachPostResponse = DetachChunkApiChunksChunkIdDetachPostResponses[keyof DetachChunkApiChunksChunkIdDetachPostResponses];
+
+export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostData = {
+    body: GardenDeliveryRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Node Id
+         */
+        node_id: string;
+        /**
+         * Epoch
+         */
+        epoch: number;
+    };
+    url: '/api/chunks/{chunk_id}/garden-delivery';
+};
+
+export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostError = RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors[keyof RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors];
+
+export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenDeliveryResponse;
+};
+
+export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponse = RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses[keyof RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses];
 
 export type GroupChunksApiChunksChunkIdGroupPostData = {
     body: ChunkGroupRequest;

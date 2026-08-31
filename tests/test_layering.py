@@ -109,6 +109,14 @@ def test_hub_store_internal_acquires_no_connection_outside_the_seam() -> None:
     )
 
 
+def test_hub_store_internal_holds_no_http_client() -> None:
+    """``hub/store/internal/`` is the SQL adapters' home, as every module there states. An
+    HTTP client belongs to the package owning its own seam — `hub/forge/internal/`,
+    `hub/work_sources/internal/` — never beside them."""
+    violations = _violations(_HUB_STORE_INTERNAL_DIR, ("httpx",))
+    assert not violations, f"E — hub/store/internal/ is SQL-only: {violations}"
+
+
 def _protocol_declarations(root: Path) -> list[str]:
     violations: list[str] = []
     for path in sorted(root.rglob("*.py")):

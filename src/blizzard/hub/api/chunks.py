@@ -34,6 +34,7 @@ from blizzard.hub.domain.edit import (
     MigrationTargetIsCurrentPin,
     TargetGraphRetired,
 )
+from blizzard.hub.domain.garden_delivery import GardenDeliveryRejected, validate_delivery
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pause import ChunkNotPausable
@@ -61,6 +62,8 @@ from blizzard.wire.chunk import (
     ChunkRestartRequest,
     ChunkStopRequest,
     ChunkSummary,
+    GardenDeliveryRequest,
+    GardenDeliveryResponse,
     HubMarkerRequest,
     HubMarkerResponse,
     WorkItemEntry,
@@ -210,6 +213,87 @@ def record_hub_marker(
         content=request_body.content,
     )
     return HubMarkerResponse(recorded=recorded, chunk_id=chunk_id, name=request_body.name)
+
+
+@router.post(
+    "/chunks/{chunk_id}/garden-delivery",
+    response_model=GardenDeliveryResponse,
+    dependencies=[Depends(require_marker_authority)],
+)
+def record_garden_delivery(
+    chunk_id: str,
+    node_id: str,
+    epoch: int,
+    request_body: GardenDeliveryRequest,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> GardenDeliveryResponse:
+    """The garden delivery node's own route — validates a delivering node's
+    ``--delta``/``--proposals`` artifacts and, on success, materializes them in one
+    transaction. An unresolvable run context or a failed validation is an ``invalid``
+    outcome at a 200, never an error response — the graph's own ``invalid`` edge reads
+    and routes on it."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    graph = services.graphs.get(chunk.graph_id)
+    node = graph.node_by_id(node_id) if graph is not None else None
+    if node is None:
+        return GardenDeliveryResponse(outcome="invalid", detail=f"unknown node {node_id!r} for chunk {chunk_id}")
+
+    run = services.run_context.for_chunk(chunk)
+    if run is None:
+        return GardenDeliveryResponse(outcome="invalid", detail=f"no run context for chunk {chunk_id}")
+
+    delta_artifacts: dict[str, str] = {}
+    delta_artifact_id_by_name: dict[str, str] = {}
+    missing_delta: list[str] = []
+    for name in request_body.delta:
+        artifact = services.chunks.latest_artifact(chunk_id, name)
+        if artifact is None:
+            missing_delta.append(name)
+            continue
+        delta_artifacts[name] = artifact.data
+        delta_artifact_id_by_name[name] = artifact.artifact_id
+    if not delta_artifacts:
+        return GardenDeliveryResponse(
+            outcome="invalid", detail=f"no delta artifact resolved — missing: {', '.join(missing_delta) or '<none>'}"
+        )
+    delta_artifact_ids = [delta_artifact_id_by_name[name] for name in delta_artifacts]
+
+    proposal_artifacts: dict[str, str] = {}
+    proposal_artifact_id_by_name: dict[str, str] = {}
+    for name in request_body.proposals:
+        artifact = services.chunks.latest_artifact(chunk_id, name)
+        if artifact is not None:
+            proposal_artifacts[name] = artifact.data
+            proposal_artifact_id_by_name[name] = artifact.artifact_id
+
+    known_findings = services.findings.list_for_routine(run.routine_name, include_gone=True)
+
+    try:
+        validated = validate_delivery(
+            run=run,
+            delta_artifacts=delta_artifacts,
+            proposal_artifacts=proposal_artifacts,
+            known_findings=known_findings,
+            resolve_commit=services.commit_resolver,
+        )
+    except GardenDeliveryRejected as exc:
+        return GardenDeliveryResponse(outcome="invalid", detail=str(exc))
+
+    proposal_artifact_ids = [proposal_artifact_id_by_name[name] for name in validated.proposal_sources]
+
+    # Both `DeliveryOutcome` members mean "durably recorded" to this route's caller
+    # (Phase 3's own docstring) — a replay minting nothing is not itself news.
+    services.garden_delivery.deliver(
+        validated,
+        chunk=chunk,
+        node=node,
+        epoch=epoch,
+        delta_artifact_ids=delta_artifact_ids,
+        proposal_artifact_ids=proposal_artifact_ids,
+    )
+    return GardenDeliveryResponse(outcome="recorded", detail="")
 
 
 @router.post(

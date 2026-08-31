@@ -323,6 +323,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260817_0900_hub_graph_artifacts", "graph_sessions", ("compaction_window",)),
     ("hub", "20260819_0900_chunk_restarts", "chunk_restarts", ("from_graph_id",)),
     ("hub", "20260825_1100_work_item_proposals", "work_item_proposals", ("runner_id",)),
+    ("hub", "20260830_1835_work_item_runs", "garden_proposals", ("source_artifact_id", "ref")),
     # runner tree — instance 6
     (
         "runner",

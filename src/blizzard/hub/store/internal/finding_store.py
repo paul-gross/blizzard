@@ -95,6 +95,17 @@ class FindingStore:
             result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
+    def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
+        """Every finding live on `routine_name`, across every scope (blizzard#393 Phase 4)
+        — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter."""
+        with self._store.read("list_for_routine") as conn:
+            rows = conn.execute(
+                select(findings).where(findings.c.routine_name == routine_name).order_by(findings.c.finding_id)
+            ).all()
+            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
+            result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
+        return [f for f in result if include_gone or f.live]
+
     def count_by_class(self, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name` — filtered on
         `ix_findings_routine_class`."""

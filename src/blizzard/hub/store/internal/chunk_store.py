@@ -709,6 +709,32 @@ class ChunkStore:
                 for a in conn.execute(select(s.artifacts).where(s.artifacts.c.chunk_id == chunk_id)).all()
             ]
 
+    def latest_artifact(self, chunk_id: str, name: str) -> ArtifactRow | None:
+        with self._store.read("latest_artifact") as conn:
+            # `artifact_id` is the always-distinct third term (`bzh:sql-portable`): it
+            # settles exact (epoch, produced_at) ties off backend-dependent row order.
+            a = conn.execute(
+                select(s.artifacts)
+                .where((s.artifacts.c.chunk_id == chunk_id) & (s.artifacts.c.name == name))
+                .order_by(
+                    s.artifacts.c.epoch.desc(), s.artifacts.c.produced_at.desc(), s.artifacts.c.artifact_id.desc()
+                )
+            ).first()
+            if a is None:
+                return None
+            return ArtifactRow(
+                kind=ArtifactKind(a.kind),
+                name=a.name,
+                data=a.data,
+                repo=a.repo,
+                forge=a.forge,
+                artifact_id=a.artifact_id,
+                chunk_id=a.chunk_id,
+                node_id=a.node_id,
+                node_name=a.node_name,
+                epoch=a.epoch,
+            )
+
     def route_of(self, chunk_id: str) -> Route | None:
         """The chunk's live route, or ``None`` if its newest release has caught up to it."""
         with self._store.read("route_of") as conn:

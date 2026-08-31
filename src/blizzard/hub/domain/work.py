@@ -1252,6 +1252,12 @@ class IReadChunkRepository(Protocol):
         """Every artifact row of a chunk; the caller resolves latest-by-epoch."""
         ...
 
+    def latest_artifact(self, chunk_id: str, name: str) -> ArtifactRow | None:
+        """The chunk's newest artifact row named ``name`` — highest epoch, then latest
+        ``produced_at`` (blizzard#393 Phase 4) — the garden-delivery route's own
+        by-name resolution. ``None`` when no artifact of that name exists."""
+        ...
+
     def route_of(self, chunk_id: str) -> Route | None:
         """The chunk's live route (runner/workspace/envs), or None if unclaimed/released."""
         ...

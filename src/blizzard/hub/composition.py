@@ -56,6 +56,8 @@ from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSetRepository
+from blizzard.hub.domain.garden_delivery import CommitResolver
+from blizzard.hub.domain.garden_delivery_materialize import GardenDelivery
 from blizzard.hub.domain.garden_proposals import GardenProposalAuthoring, IReadGardenProposalRepository
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
@@ -68,6 +70,7 @@ from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.restart import RestartService
 from blizzard.hub.domain.routines import IReadRoutineRepository, RoutineAuthoring
+from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptCaps, TranscriptIngestService
@@ -76,15 +79,18 @@ from blizzard.hub.domain.work_closure import CloseIntentDrainer
 from blizzard.hub.domain.work_item_materialization import WorkItemMaterializationReconciler
 from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
+from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
+from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
@@ -202,6 +208,12 @@ class HubServices:
     garden_proposals: IReadGardenProposalRepository
     #: Create a garden proposal, rejecting an empty `findings` list (blizzard#390 D7).
     garden_proposal_authoring: GardenProposalAuthoring
+    #: A run's identity — routine, scope, and mode; read-only (``bzh:controller-read-only``).
+    run_context: IReadRunContextRepository
+    #: Materialize a validated delivery in one transaction (blizzard#393 Phase 3).
+    garden_delivery: GardenDelivery
+    #: Resolves a cited commit against the configured forge (blizzard#393 D2).
+    commit_resolver: CommitResolver
 
 
 def build_services(
@@ -302,6 +314,13 @@ def build_services(
     finding_store = FindingStore(store_connections)
     finding_set_store = FindingSetStore(store_connections)
     garden_proposal_store = GardenProposalStore(store_connections)
+    run_context_store = RunContextStore(store_connections)
+    garden_delivery_store = GardenDeliveryStore(store_connections)
+    # Bound as `.resolve` (a plain `garden_delivery.CommitResolver` callable), not the bare
+    # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
+    commit_resolver = GitHubCommitResolver(
+        httpx.Client(timeout=10.0), forge_url=forge_url, forge_token=forge_token, forge_owner=forge_owner
+    ).resolve
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -375,4 +394,7 @@ def build_services(
         finding_sets=finding_set_store,
         garden_proposals=garden_proposal_store,
         garden_proposal_authoring=GardenProposalAuthoring(proposals=garden_proposal_store, clock=clock),
+        run_context=run_context_store,
+        garden_delivery=GardenDelivery(delivery=garden_delivery_store, clock=clock),
+        commit_resolver=commit_resolver,
     )

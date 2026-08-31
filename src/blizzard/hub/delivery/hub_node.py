@@ -100,6 +100,8 @@ ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"  # JSON list of {repo, branch, commit}
 ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"  # JSON list of already-recorded artifact names for this node
 ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"  # POST {name, content} records a marker mid-run
 ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"  # the capability token authorizing that POST (issue #230)
+# POST {delta, proposals} (artifact names) delivers a routine's run (blizzard#393 Phase 4)
+ENV_GARDEN_DELIVERY_URL = "BZ_HUB_GARDEN_DELIVERY_URL"
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirroring land_common.LandRun.repo
@@ -177,6 +179,7 @@ class HubEnv:
     artifacts: list  # list[ArtifactRow] — untyped here to avoid a domain->storage import cycle
     base_branch: str
     marker_callback_url: str
+    garden_delivery_url: str = ""
     forge_url: str | None = None
     forge_token: str | None = None
     forge_owner: str | None = None
@@ -204,6 +207,8 @@ class HubEnv:
             ENV_MARKER_CALLBACK_URL: self.marker_callback_url,
             ENV_EXPECT_GIT_COMMITS: "1" if self.expects_git_commits else "0",
         }
+        if self.garden_delivery_url:
+            env[ENV_GARDEN_DELIVERY_URL] = self.garden_delivery_url
         if self.forge_url:
             env[ENV_FORGE_URL] = self.forge_url
         if self.forge_token:
@@ -362,6 +367,7 @@ class HubNodeExecutor:
                     artifacts=artifacts,
                     base_branch=self._base_branch,
                     marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
+                    garden_delivery_url=self._garden_delivery_url(chunk.chunk_id, node.node_id, epoch),
                     forge_url=self._forge_url,
                     forge_token=self._forge_token,
                     forge_owner=self._forge_owner,
@@ -640,3 +646,9 @@ class HubNodeExecutor:
             return ""
         base = self._marker_callback_base_url.rstrip("/")
         return f"{base}/api/chunks/{chunk_id}/hub-markers?node_id={node_id}&epoch={epoch}"
+
+    def _garden_delivery_url(self, chunk_id: str, node_id: str, epoch: int) -> str:
+        if not self._marker_callback_base_url:
+            return ""
+        base = self._marker_callback_base_url.rstrip("/")
+        return f"{base}/api/chunks/{chunk_id}/garden-delivery?node_id={node_id}&epoch={epoch}"

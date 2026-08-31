@@ -368,9 +368,21 @@ garden_proposals = Table(
     Column("title", String, nullable=False),
     Column("body", Text, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
+    # A delivered proposal's idempotence key: the artifact it was delivered from plus
+    # its submission-local `ref` — null for a proposal minted outside delivery
+    # (`GardenProposalAuthoring`, blizzard#390), which carries no source artifact. No
+    # `ForeignKey` — SQLite cannot drop an FK column.
+    Column("source_artifact_id", String, nullable=True),
+    Column("ref", String, nullable=True),
 )
 
 Index("ix_garden_proposals_routine_class", garden_proposals.c.routine_name, garden_proposals.c.class_)
+Index(
+    "ux_garden_proposals_source_artifact_ref",
+    garden_proposals.c.source_artifact_id,
+    garden_proposals.c.ref,
+    unique=True,
+)
 
 # The findings a proposal answers (D7) — a join, not a JSON list, so which-work-resolved-
 # which-findings is a query rather than a scan (`bzh:sql-portable`). Required and
@@ -1192,6 +1204,20 @@ work_items = Table(
 )
 
 Index("ix_work_items_source", work_items.c.source)
+
+# --- Work item runs (a run's identity — blizzard#393 Phase 1) -----------------------
+# What routine, scope, and mode a work item's run is executing under — minted by
+# blizzard#392, read back through a chunk's first work ref (D1: `routine_name`, not a
+# surrogate `routine_id`, the `findings.routine_name` shape).
+
+work_item_runs = Table(
+    "work_item_runs",
+    metadata,
+    Column("work_item_id", String, ForeignKey("work_items.work_item_id"), primary_key=True),
+    Column("routine_name", String, nullable=False),
+    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("mode", String, nullable=False),
+)
 
 # A per-source allocation counter, one row per source, so ``ref`` allocation never
 # reads ``MAX(ref)+1`` (two concurrent first allocations on an empty source would both
