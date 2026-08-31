@@ -9381,7 +9381,7 @@
     },
     "/api/chunks/{chunk_id}/garden-delivery": {
       "post": {
-        "description": "The garden delivery node's own route \u2014 validates a delivering node's\n``--delta``/``--proposals`` artifacts and, on success, materializes them in one\ntransaction. An unresolvable run context or a failed validation is an ``invalid``\noutcome, always a 200 rather than an error response \u2014 the graph's own ``invalid``\nedge reads and routes on it.",
+        "description": "The garden delivery node's own route \u2014 validates a delivering node's\n``--delta``/``--proposals`` artifacts and, on success, materializes them in one\ntransaction. An unresolvable run context or a failed validation is an ``invalid``\noutcome at a 200, never an error response \u2014 the graph's own ``invalid`` edge reads\nand routes on it.",
         "operationId": "record_garden_delivery_api_chunks__chunk_id__garden_delivery_post",
         "parameters": [
           {

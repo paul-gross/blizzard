@@ -1,11 +1,8 @@
 """Delivery materialization (blizzard#393 Phase 3) — turning a :class:`ValidatedDelivery`
-(``garden_delivery.py``, Phase 2's own pure check) into the rows a passing delivery mints,
-written in one transaction (blizzard-product:/plans/garden/machinery.md §Delivery: "A
-valid delivery is applied in one transaction: new findings, new facts, the finding set,
-any proposals, and the delivery's own idempotence marker"). Kept as its own module,
-sibling to ``garden_delivery.py`` rather than folded into it, per the phase split — Phase
-2 stays pure validation, no I/O; this phase mints ids and hands a ready-to-insert plan to
-the store."""
+into the rows a passing delivery mints, written in one transaction
+(blizzard-product:/plans/garden/machinery.md §Delivery). Sibling to ``garden_delivery.py``
+rather than folded into it so that module stays pure validation with no I/O; this one
+mints ids and hands a ready-to-insert plan to the store."""
 
 from __future__ import annotations
 

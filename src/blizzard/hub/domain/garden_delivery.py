@@ -1,12 +1,8 @@
-"""Delivery validation (blizzard#393 Phase 2) — the hub-executed delivery node's own
-check, before anything is written (blizzard-product:/plans/garden/machinery.md
-§Delivery): "It validates each artifact's shape and nothing else: that it parses, that
-required fields are present, that ids are well-formed, that every finding id a
-transformation or a proposal names is live on this routine, and that any commit cited
-resolves." This module is that check, and only that check — pure functions over
-already-loaded objects (`bzh:domain-takes-objects`), no I/O and no store/repository
-calls. Materializing a passing result (minting rows, applying transformations) is a
-later phase's own concern."""
+"""Delivery validation (blizzard#393 Phase 2) — the hub-executed delivery node's shape
+check, before anything is written; the check itself is specified by
+blizzard-product:/plans/garden/machinery.md §Delivery. Pure functions over already-loaded
+objects (`bzh:domain-takes-objects`), no I/O. Materializing a passing result is
+`garden_delivery_materialize.py`'s."""
 
 from __future__ import annotations
 
@@ -30,24 +26,16 @@ _PROPOSALS_ADAPTER: TypeAdapter[list[GardenProposalCandidate]] = TypeAdapter(lis
 
 class GardenDeliveryRejected(Exception):
     """A delivered artifact failed validation. This exception's own message is the
-    operator-legible reason (blizzard-product:/plans/garden/machinery.md §Delivery: "A
-    rejected artifact routes back into the graph with the failure attached and nothing
-    written") — never a raw pydantic error, never a stack of causes a person has to
-    untangle."""
+    operator-legible reason the graph attaches to its bounce — never a raw pydantic
+    error, never a stack of causes a person has to untangle."""
 
 
-# "Every finding currently live on this routine" (machinery.md §Delivery), keyed by
-# finding id, valued by that finding's own recorded scope slug — the shape a later
-# phase queries the finding store for once (e.g. `IReadFindingRepository.list_for`)
-# before calling in here.
+# Every finding live on this routine, keyed by finding id and valued by that finding's
+# own recorded scope slug — what the caller reads the finding store for before calling in.
 LiveFindings = Mapping[str, str]
 
-# Resolves whether `commit_sha` exists in `repo`. Returns `True`/`False` when `repo` is
-# addressable, `None` when it is not (no forge configured for that repository) — a
-# `None` result degrades that one commit's check to well-formedness only, exactly like
-# passing `resolve_commit=None` to `validate_delivery`/`check_delta` degrades every
-# commit's check. This module never constructs a resolver, only calls the one it is
-# given — binding it to a real `ICommitResolver` is a later phase's job.
+# Resolves whether `commit_sha` exists in `repo`: `True`/`False` when `repo` is
+# addressable, `None` when it is not, degrading that commit to a well-formedness check.
 CommitResolver = Callable[[str, str], bool | None]
 
 
@@ -95,20 +83,10 @@ def check_delta(
     resolve_commit: CommitResolver | None = None,
 ) -> None:
     """Validate one already-parsed delta against `run` and `live_findings`, raising
-    :class:`GardenDeliveryRejected` on the first failure:
-
-    - every repository's revision in `delta.revisions` is a well-formed commit sha,
-      and — when `resolve_commit` is given and addresses that repository — resolves;
-    - every `observed`/`gone` op's `id` is a well-formed `fin_<ULID>`, live on
-      `run.routine_name`, and inside `delta.scope` (its live scope, from
-      `live_findings`, must equal `delta.scope`);
-    - an `add` op's `introduced` commit, when present, is always checked for
-      well-formedness; it is additionally resolved only when `delta.revisions` names
-      exactly one repository — `introduced` carries no repository of its own, so a
-      delta spanning zero or several repositories leaves it ambiguous which one to
-      resolve against, and the check degrades to well-formedness only;
-    - a `gone` op's `note` is non-empty (an `observed` op carries nothing else to
-      check)."""
+    :class:`GardenDeliveryRejected` on the first failure: every revision's commit sha,
+    every transformation's id (well-formed, live on the routine, and inside
+    `delta.scope`), every `add` op's `introduced` commit, and a `gone` op's non-empty
+    note. `tests/test_garden_delivery_domain.py` pins one case per rejection reason."""
     for repo, sha in delta.revisions.items():
         _check_commit_resolves(repo, sha, resolve_commit)
 
@@ -116,6 +94,8 @@ def check_delta(
     for op in delta.findings:
         if isinstance(op, AddFindingOp):
             if op.introduced is not None:
+                # `introduced` names no repository of its own, so it resolves only against
+                # a sole declared one; zero or several leave which one ambiguous.
                 if single_repo is not None:
                     _check_commit_resolves(single_repo, op.introduced, resolve_commit)
                 else:
@@ -143,16 +123,11 @@ def validate_delivery(
     live_findings: LiveFindings,
     resolve_commit: CommitResolver | None = None,
 ) -> ValidatedDelivery:
-    """The delivery node's whole check: `delta_artifacts` and `proposal_artifacts` are
-    artifact-name → raw-JSON-text maps, exactly what a route handler holds after
-    reading each named artifact's content and before anything is parsed. Parses every
-    artifact (:func:`parse_delta`/:func:`parse_proposals`), then validates every parsed
-    delta and proposal (:func:`check_delta`/:func:`check_proposal`) against `run` and
-    `live_findings`, resolving cited commits through `resolve_commit` (see
-    :data:`CommitResolver` for its degrade contract). Raises
-    :class:`GardenDeliveryRejected` on the first failure; on success, returns a
-    :class:`ValidatedDelivery` for the next phase to materialize — nothing here is
-    durable yet."""
+    """The delivery node's whole check. `delta_artifacts`/`proposal_artifacts` are
+    artifact-name → raw-JSON-text maps, what a route handler holds before anything is
+    parsed. Parses every artifact, then checks each against `run` and `live_findings`.
+    Raises :class:`GardenDeliveryRejected` on the first failure; on success returns a
+    :class:`ValidatedDelivery` for the next phase — nothing here is durable yet."""
     deltas = [parse_delta(name, raw) for name, raw in delta_artifacts.items()]
     proposals = [candidate for name, raw in proposal_artifacts.items() for candidate in parse_proposals(name, raw)]
 

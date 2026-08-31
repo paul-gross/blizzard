@@ -211,9 +211,8 @@ class HubServices:
     run_context: IWriteRunContextRepository
     #: Materialize a validated delivery in one transaction (blizzard#393 Phase 3).
     garden_delivery: GardenDelivery
-    #: Resolves a cited commit against the configured forge, degrading to well-formed-
-    #: only when unaddressable (blizzard#393 Phase 4, D2). Its bound ``resolve`` method
-    #: is a `garden_delivery.CommitResolver`.
+    #: Resolves a cited commit against the configured forge (blizzard#393 D2) — its bound
+    #: ``resolve`` is a `garden_delivery.CommitResolver`.
     commit_resolver: GitHubCommitResolver
 
 

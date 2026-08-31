@@ -54,9 +54,8 @@ def _resolver(result: bool | None) -> CommitResolver:
 
 
 def _add(*, locus: str = "a.py:1", summary: str = "s", introduced: str | None = None) -> AddFindingOp:
-    # `class` is a pydantic alias (`AddFindingOp.class_`) — constructed via
-    # `model_validate` rather than the `class_=` kwarg, the `tests/test_finding_wire.py`
-    # shape, since pyright resolves the generated `__init__` by alias.
+    # `class` is a pydantic alias (`AddFindingOp.class_`), so this builds via
+    # `model_validate` rather than the `class_=` kwarg — `tests/test_finding_wire.py`'s shape.
     payload: dict[str, object] = {"op": "add", "class": "stale-docstring", "locus": locus, "summary": summary}
     if introduced is not None:
         payload["introduced"] = introduced

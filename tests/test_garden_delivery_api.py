@@ -17,6 +17,7 @@ from sqlalchemy import insert, select
 from blizzard.foundation.ids import FINDING_PREFIX, Id
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import WorkItemAuthor
+from blizzard.hub.graphs.scripts import garden_deliver, land_common
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
@@ -250,6 +251,87 @@ def test_a_replayed_delivery_still_reports_recorded_and_mints_nothing_new(tmp_pa
     assert second.status_code == 200, second.text
     assert second.json()["outcome"] == "recorded"
     assert _finding_count(hub) == 1  # nothing new minted on replay
+
+
+# --- the script over the route ------------------------------------------------
+
+
+def _run_script(
+    hub: HubHarness,
+    chunk_id: str,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    delta: tuple[str, ...] = (),
+    proposals: tuple[str, ...] = (),
+) -> int:
+    """`garden_deliver.main()` driving this harness's own app — the script's one HTTP
+    seam (`land_common.forge_request`) forwarded to the TestClient, so its real argv,
+    injected env, request body and token header meet the real route over a real store."""
+
+    def _through_the_hub(method: str, url: str, *, token=None, body=None, headers=None):  # type: ignore[no-untyped-def]
+        resp = hub.client.request(method, url, json=body, headers=headers)
+        return resp.status_code, (resp.json() if resp.content else None)
+
+    monkeypatch.setattr(land_common, "forge_request", _through_the_hub)
+    visit = f"node_id={_NODE_ID}&epoch={_EPOCH}"
+    monkeypatch.setenv("BZ_HUB_CHUNK_ID", chunk_id)
+    monkeypatch.setenv("BZ_HUB_NODE_ID", _NODE_ID)
+    monkeypatch.setenv("BZ_HUB_EPOCH", str(_EPOCH))
+    monkeypatch.setenv("BZ_HUB_MARKER_TOKEN", "tok")
+    monkeypatch.setenv("BZ_HUB_GARDEN_DELIVERY_URL", f"http://testserver/api/chunks/{chunk_id}/garden-delivery?{visit}")
+    monkeypatch.setenv("BZ_HUB_MARKER_CALLBACK_URL", f"http://testserver/api/chunks/{chunk_id}/hub-markers?{visit}")
+    argv = ["garden_deliver"]
+    for name in delta:
+        argv += ["--delta", name]
+    for name in proposals:
+        argv += ["--proposals", name]
+    monkeypatch.setattr("sys.argv", argv)
+    return garden_deliver.main()
+
+
+def _artifact_content(hub: HubHarness, chunk_id: str, name: str) -> str | None:
+    with hub.engine.begin() as conn:
+        row = conn.execute(
+            select(s.artifacts).where((s.artifacts.c.chunk_id == chunk_id) & (s.artifacts.c.name == name))
+        ).first()
+    return None if row is None else row.data
+
+
+def test_the_script_delivers_through_the_route_and_prints_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    _seed_finding(hub, finding_id)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op(), _observed_op(finding_id)]))
+    _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
+
+    exit_code = _run_script(hub, chunk_id, monkeypatch, delta=("delta",), proposals=("docket",))
+
+    assert exit_code == 0
+    assert capsys.readouterr().out.strip() == "recorded"
+    assert _finding_count(hub) == 2  # the pre-seeded one plus the freshly-added one
+    with hub.engine.begin() as conn:
+        assert conn.execute(select(s.garden_proposals)).all()
+
+
+def test_the_scripts_failure_marker_is_durable_on_an_invalid_delivery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta", content="not valid json")
+
+    exit_code = _run_script(hub, chunk_id, monkeypatch, delta=("delta",))
+
+    assert exit_code == 0
+    assert capsys.readouterr().out.strip() == "invalid"
+    assert _finding_count(hub) == 0
+    failure = _artifact_content(hub, chunk_id, "garden-delivery-failure")
+    assert failure is not None and "delta" in failure
 
 
 # --- edges -----------------------------------------------------------------

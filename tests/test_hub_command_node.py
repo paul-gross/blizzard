@@ -24,6 +24,7 @@ from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.delivery.hub_node import (
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_TIMEOUT,
+    ENV_GARDEN_DELIVERY_URL,
     ENV_MARKER_TOKEN,
     HubEnv,
     PollPolicy,
@@ -668,6 +669,29 @@ def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
     assert len(land_transitions) == 1
     assert land_transitions[0]["choice_name"] == "success"
     assert land_transitions[0]["to_node_id"] == "done"  # the reserved terminal — no node to name
+
+
+@pytest.mark.component
+def test_the_env_addresses_this_visits_garden_delivery_route(tmp_path: Path) -> None:
+    """`garden_deliver` reaches the hub only through the injected
+    ``BZ_HUB_GARDEN_DELIVERY_URL`` (blizzard#393), so the executor must address this
+    chunk, node and epoch — an absent or mis-built URL fails the node at runtime."""
+    runner = FakeHubCommandRunner()
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, build_node_id, graph = _to_merge_node(hub)
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+
+    _command, _cwd, env = runner.calls[0]
+    assert env[ENV_GARDEN_DELIVERY_URL].endswith(
+        f"/api/chunks/{chunk_id}/garden-delivery?node_id={merge_node.node_id}&epoch=1"
+    )
+    # The route it addresses is served: a POST there answers, rather than 404ing a path
+    # only this test believes in.
+    delivery = hub.client.post(env[ENV_GARDEN_DELIVERY_URL], json={"delta": [], "proposals": []})
+    assert delivery.status_code == 200, delivery.text
 
 
 @pytest.mark.component

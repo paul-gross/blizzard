@@ -360,8 +360,8 @@ export const detachChunkApiChunksChunkIdDetachPost = <ThrowOnError extends boole
  * The garden delivery node's own route — validates a delivering node's
  * ``--delta``/``--proposals`` artifacts and, on success, materializes them in one
  * transaction. An unresolvable run context or a failed validation is an ``invalid``
- * outcome, always a 200 rather than an error response — the graph's own ``invalid``
- * edge reads and routes on it.
+ * outcome at a 200, never an error response — the graph's own ``invalid`` edge reads
+ * and routes on it.
  */
 export const recordGardenDeliveryApiChunksChunkIdGardenDeliveryPost = <ThrowOnError extends boolean = false>(options: Options<RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostData, ThrowOnError>): RequestResult<RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses, RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors, ThrowOnError> => (options.client ?? client).post<RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses, RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/garden-delivery',

@@ -13,9 +13,8 @@ import sys
 from blizzard.hub.graphs.scripts import land_common
 from blizzard.hub.graphs.scripts.land_common import MarkerWriteError, MarkerWriter, ScriptEnv
 
-# The mid-run marker callback's token header (issue #230) — restated rather than
-# imported, mirroring `land_common`'s own restatement, to keep this module's dependency
-# on that one purely at the `ScriptEnv`/`forge_request`/`MarkerWriter` seam.
+# The mid-run marker callback's token header (issue #230) — restated rather than imported,
+# mirroring `land_common`, to keep this module's dependency on that one at its seam only.
 _MARKER_TOKEN_HEADER = "X-Blizzard-Marker-Token"
 
 _ENV_CHUNK_ID = "BZ_HUB_CHUNK_ID"
@@ -66,9 +65,8 @@ def _deliver() -> int:
         headers={_MARKER_TOKEN_HEADER: token},
     )
     if not (200 <= status < 300):
-        # A fault in the POST itself — never printed over as a `recorded`/`invalid`
-        # outcome (the reviewed plan: "A non-2xx from either POST is fatal and exits
-        # non-zero — never a printed success over an unwritten delivery").
+        # A fault in the POST itself is fatal, never printed over as a `recorded`/`invalid`
+        # outcome — no printed success over an unwritten delivery.
         print(f"garden delivery request failed: HTTP {status} {body!r}", file=sys.stderr)
         return 1
 

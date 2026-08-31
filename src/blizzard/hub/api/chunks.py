@@ -230,9 +230,8 @@ def record_garden_delivery(
     """The garden delivery node's own route — validates a delivering node's
     ``--delta``/``--proposals`` artifacts and, on success, materializes them in one
     transaction. An unresolvable run context or a failed validation is an ``invalid``
-    outcome, always a 200 rather than an error response — the graph's own ``invalid``
-    edge reads and routes on it.
-    """
+    outcome at a 200, never an error response — the graph's own ``invalid`` edge reads
+    and routes on it."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
