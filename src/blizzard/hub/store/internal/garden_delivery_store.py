@@ -55,16 +55,26 @@ class GardenDeliveryStore:
 
             # Broader than the marker above: a fresh (node, epoch) can still resolve an
             # already-materialized artifact, which would trip the unique constraint raw.
-            if plan.finding_sets:
-                already_materialized = conn.execute(
-                    select(finding_sets.c.finding_set_id).where(
-                        finding_sets.c.artifact_id.in_([fs.artifact_id for fs in plan.finding_sets])
+            # `--delta` legitimately repeats several artifacts in one delivery call, so
+            # this is a per-delta skip, not a whole-plan bail — every delta whose artifact
+            # hasn't been materialized yet still lands, even alongside one that has.
+            surviving_deltas = plan.deltas
+            if plan.deltas:
+                already_materialized = {
+                    row.artifact_id
+                    for row in conn.execute(
+                        select(finding_sets.c.artifact_id).where(
+                            finding_sets.c.artifact_id.in_([d.finding_set.artifact_id for d in plan.deltas])
+                        )
                     )
-                ).first()
-                if already_materialized is not None:
-                    return DeliveryOutcome.ALREADY_RECORDED
+                }
+                surviving_deltas = [d for d in plan.deltas if d.finding_set.artifact_id not in already_materialized]
 
-            if plan.new_findings:
+            new_findings = [f for d in surviving_deltas for f in d.new_findings]
+            facts = [fact for d in surviving_deltas for fact in d.facts]
+            finding_set_rows = [d.finding_set for d in surviving_deltas]
+
+            if new_findings:
                 conn.execute(
                     insert(findings),
                     [
@@ -77,18 +87,18 @@ class GardenDeliveryStore:
                             "summary": f.summary,
                             "introduced": f.introduced,
                         }
-                        for f in plan.new_findings
+                        for f in new_findings
                     ],
                 )
-            if plan.facts:
+            if facts:
                 conn.execute(
                     insert(finding_facts),
                     [
                         {"finding_id": fact.finding_id, "kind": fact.kind, "recorded_at": plan.at, "note": fact.note}
-                        for fact in plan.facts
+                        for fact in facts
                     ],
                 )
-            if plan.finding_sets:
+            if finding_set_rows:
                 conn.execute(
                     insert(finding_sets),
                     [
@@ -100,7 +110,7 @@ class GardenDeliveryStore:
                             "revisions": json.dumps(fs.revisions),
                             "measurement": fs.measurement,
                         }
-                        for fs in plan.finding_sets
+                        for fs in finding_set_rows
                     ],
                 )
             if plan.proposals:
@@ -126,6 +136,11 @@ class GardenDeliveryStore:
                 if links:
                     conn.execute(insert(garden_proposal_findings), links)
 
+            # Always written, even when every delta was already materialized and there
+            # were no proposals: this call still represents a genuinely new
+            # (chunk_id, node_id, epoch) visit and needs its own idempotence key
+            # recorded, so a future replay of this exact visit short-circuits on the
+            # fast exact-marker check above instead of re-running this skip logic.
             conn.execute(
                 insert(artifacts).values(
                     artifact_id=Id.mint_at(ARTIFACT_PREFIX, plan.at).value,
@@ -141,7 +156,9 @@ class GardenDeliveryStore:
                     produced_at=plan.at,
                 )
             )
-            return DeliveryOutcome.RECORDED
+            if surviving_deltas or plan.proposals:
+                return DeliveryOutcome.RECORDED
+            return DeliveryOutcome.ALREADY_RECORDED
 
 
 def _conforms_garden_delivery_store(x: GardenDeliveryStore) -> IWriteGardenDeliveryRepository:

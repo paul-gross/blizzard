@@ -98,8 +98,11 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
     assert plan.at == _T0
     assert plan.run == _RUN
 
-    assert len(plan.new_findings) == 1
-    finding = plan.new_findings[0]
+    assert len(plan.deltas) == 1
+    delta_materialization = plan.deltas[0]
+
+    assert len(delta_materialization.new_findings) == 1
+    finding = delta_materialization.new_findings[0]
     assert finding.finding_id.startswith(f"{FINDING_PREFIX}_")
     assert finding.routine_name == "nightly"
     assert finding.scope_slug == "runner"
@@ -108,10 +111,9 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
     assert finding.summary == "s"
     assert finding.introduced == "b" * 40
 
-    assert [(f.finding_id, f.kind, f.note) for f in plan.facts] == [(finding.finding_id, "add", None)]
+    assert [(f.finding_id, f.kind, f.note) for f in delta_materialization.facts] == [(finding.finding_id, "add", None)]
 
-    assert len(plan.finding_sets) == 1
-    fset = plan.finding_sets[0]
+    fset = delta_materialization.finding_set
     assert fset.finding_set_id.startswith(f"{FINDING_SET_PREFIX}_")
     assert fset.artifact_id == "art_1"
     assert fset.scope_slug == "runner"
@@ -133,8 +135,9 @@ def test_deliver_builds_observed_and_gone_facts_carrying_the_gone_note() -> None
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
 
     plan = repo.delivered[0]
-    assert plan.new_findings == []
-    assert [(f.finding_id, f.kind, f.note) for f in plan.facts] == [
+    delta_materialization = plan.deltas[0]
+    assert delta_materialization.new_findings == []
+    assert [(f.finding_id, f.kind, f.note) for f in delta_materialization.facts] == [
         ("fin_1", "observed", None),
         ("fin_2", "gone", "fixed upstream"),
     ]
@@ -149,11 +152,43 @@ def test_deliver_on_an_empty_delta_yields_one_finding_set_and_no_findings_or_fac
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
 
     plan = repo.delivered[0]
-    assert plan.new_findings == []
-    assert plan.facts == []
-    assert len(plan.finding_sets) == 1
-    assert plan.finding_sets[0].artifact_id == "art_1"
-    assert plan.finding_sets[0].measurement == "12 findings"
+    assert len(plan.deltas) == 1
+    delta_materialization = plan.deltas[0]
+    assert delta_materialization.new_findings == []
+    assert delta_materialization.facts == []
+    assert delta_materialization.finding_set.artifact_id == "art_1"
+    assert delta_materialization.finding_set.measurement == "12 findings"
+
+
+def test_deliver_over_two_deltas_groups_each_deltas_own_rows_separately() -> None:
+    repo = _FakeGardenDeliveryRepo()
+    service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    delta_a = FindingDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(locus="a.py:1")])
+    delta_b = FindingDelta(
+        scope="runner",
+        revisions={"blizzard": "b" * 40},
+        findings=[ObservedFindingOp(id="fin_1"), _add(locus="b.py:2")],
+    )
+    validated = ValidatedDelivery(run=_RUN, deltas=[delta_a, delta_b], proposals=[])
+
+    service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_a", "art_b"])
+
+    plan = repo.delivered[0]
+    assert len(plan.deltas) == 2
+    materialized_a, materialized_b = plan.deltas
+
+    assert materialized_a.finding_set.artifact_id == "art_a"
+    assert len(materialized_a.new_findings) == 1
+    assert materialized_a.new_findings[0].locus == "a.py:1"
+    assert [(f.kind) for f in materialized_a.facts] == ["add"]
+
+    assert materialized_b.finding_set.artifact_id == "art_b"
+    assert len(materialized_b.new_findings) == 1
+    assert materialized_b.new_findings[0].locus == "b.py:2"
+    assert [f.kind for f in materialized_b.facts] == ["observed", "add"]
+
+    # Each group carries only its own delta's rows — no cross-contamination.
+    assert materialized_a.new_findings[0].finding_id != materialized_b.new_findings[0].finding_id
 
 
 def test_deliver_builds_a_proposal_and_its_finding_links() -> None:
@@ -165,7 +200,7 @@ def test_deliver_builds_a_proposal_and_its_finding_links() -> None:
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=[])
 
     plan = repo.delivered[0]
-    assert plan.finding_sets == []
+    assert plan.deltas == []
     assert len(plan.proposals) == 1
     built = plan.proposals[0]
     assert built.proposal_id.startswith(f"{GARDEN_PROPOSAL_PREFIX}_")

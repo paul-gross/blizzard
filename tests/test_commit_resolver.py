@@ -8,7 +8,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from blizzard.hub.store.internal.commit_resolver import GitHubCommitResolver
+from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 
 pytestmark = pytest.mark.unit
 

@@ -1,9 +1,9 @@
 """The GitHub-backed commit resolver (blizzard#393 Phase 4, D2) — the real forge check
 behind `garden_delivery.CommitResolver`: resolves whether a cited commit exists on a
 repo when the hub has a forge configured and the repo is addressable, degrading to
-``None`` (well-formedness only) otherwise. Confined to `hub/store/internal/`
-(``bzh:dependency-inversion``) beside `garden_delivery_store.py`, the other adapter for
-this concept; ``httpx`` is injected here as `github_work_source.py` injects its own."""
+``None`` (well-formedness only) otherwise. Confined to ``internal/``
+(``bzh:dependency-inversion``); ``httpx`` is used only here, as `github_work_source.py`
+uses its own client only in its own `internal/`."""
 
 from __future__ import annotations
 

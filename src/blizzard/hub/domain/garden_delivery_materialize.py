@@ -81,10 +81,25 @@ class NewProposal:
 
 
 @dataclass(frozen=True)
+class DeltaMaterialization:
+    """One delivered delta's own contribution to the plan — its `finding_sets` row and
+    every `findings`/`finding_facts` row that delta alone produced, grouped so a
+    per-artifact idempotence hit (this exact artifact already materialized under an
+    earlier visit) skips only this group, never the whole plan."""
+
+    finding_set: NewFindingSet
+    new_findings: list[NewFinding] = field(default_factory=list)
+    facts: list[FindingFactRecord] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class DeliveryPlan:
     """Everything :class:`IWriteGardenDeliveryRepository` needs to do its writes with no
     further computation — every id already minted, every timestamp already stamped
-    (`bzh:injected-clock`), so the store adapter is pure "insert these rows"."""
+    (`bzh:injected-clock`), so the store adapter is pure "insert these rows". Each
+    delivered delta's own rows are grouped into one :class:`DeltaMaterialization` so the
+    store can skip an already-materialized delta's rows without bailing the whole plan
+    (`--delta` legitimately repeats several artifacts in one delivery call)."""
 
     chunk_id: str
     node_id: str
@@ -92,9 +107,7 @@ class DeliveryPlan:
     epoch: int
     at: datetime
     run: RunContext
-    new_findings: list[NewFinding]
-    facts: list[FindingFactRecord]
-    finding_sets: list[NewFindingSet]
+    deltas: list[DeltaMaterialization]
     proposals: list[NewProposal]
 
 
@@ -135,11 +148,11 @@ class GardenDelivery:
         node_id = node.node_id
         node_name = node.name
         at = self._clock.now()
-        new_findings: list[NewFinding] = []
-        facts: list[FindingFactRecord] = []
-        finding_sets: list[NewFindingSet] = []
+        deltas: list[DeltaMaterialization] = []
 
         for delta, artifact_id in zip(validated.deltas, delta_artifact_ids, strict=True):
+            new_findings: list[NewFinding] = []
+            facts: list[FindingFactRecord] = []
             for op in delta.findings:
                 if isinstance(op, AddFindingOp):
                     finding_id = Id.mint(FINDING_PREFIX, self._clock).value
@@ -161,15 +174,14 @@ class GardenDelivery:
                     assert isinstance(op, GoneFindingOp)
                     facts.append(FindingFactRecord(finding_id=op.id, kind="gone", note=op.note))
             # One finding_set per delta, even an empty one (delta.findings == []).
-            finding_sets.append(
-                NewFindingSet(
-                    finding_set_id=Id.mint(FINDING_SET_PREFIX, self._clock).value,
-                    artifact_id=artifact_id,
-                    scope_slug=delta.scope,
-                    revisions=dict(delta.revisions),
-                    measurement=delta.measurement,
-                )
+            finding_set = NewFindingSet(
+                finding_set_id=Id.mint(FINDING_SET_PREFIX, self._clock).value,
+                artifact_id=artifact_id,
+                scope_slug=delta.scope,
+                revisions=dict(delta.revisions),
+                measurement=delta.measurement,
             )
+            deltas.append(DeltaMaterialization(finding_set=finding_set, new_findings=new_findings, facts=facts))
 
         proposals = [
             NewProposal(
@@ -190,9 +202,7 @@ class GardenDelivery:
             epoch=epoch,
             at=at,
             run=validated.run,
-            new_findings=new_findings,
-            facts=facts,
-            finding_sets=finding_sets,
+            deltas=deltas,
             proposals=proposals,
         )
         return self._delivery.deliver(plan)

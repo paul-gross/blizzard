@@ -79,12 +79,12 @@ from blizzard.hub.domain.work_closure import CloseIntentDrainer
 from blizzard.hub.domain.work_item_materialization import WorkItemMaterializationReconciler
 from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_store import ChunkStore
-from blizzard.hub.store.internal.commit_resolver import GitHubCommitResolver
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore

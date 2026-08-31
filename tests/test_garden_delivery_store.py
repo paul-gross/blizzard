@@ -16,6 +16,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.garden_delivery_materialize import (
     DeliveryOutcome,
     DeliveryPlan,
+    DeltaMaterialization,
     FindingFactRecord,
     NewFinding,
     NewFindingSet,
@@ -63,29 +64,31 @@ def _full_plan(*, at: datetime = _NOW) -> DeliveryPlan:
         epoch=1,
         at=at,
         run=_RUN,
-        new_findings=[
-            NewFinding(
-                finding_id="fin_1",
-                routine_name="nightly",
-                scope_slug="blizzard",
-                class_="stale-docstring",
-                locus="a.py:1",
-                summary="s1",
-                introduced=None,
-            )
-        ],
-        facts=[
-            FindingFactRecord(finding_id="fin_1", kind="add", note=None),
-            FindingFactRecord(finding_id="fin_2", kind="observed", note=None),
-            FindingFactRecord(finding_id="fin_3", kind="gone", note="couldn't reproduce"),
-        ],
-        finding_sets=[
-            NewFindingSet(
-                finding_set_id="fins_1",
-                artifact_id="art_placeholder",
-                scope_slug="blizzard",
-                revisions={"blizzard": "abc1234"},
-                measurement="12.3s",
+        deltas=[
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id="fins_1",
+                    artifact_id="art_placeholder",
+                    scope_slug="blizzard",
+                    revisions={"blizzard": "abc1234"},
+                    measurement="12.3s",
+                ),
+                new_findings=[
+                    NewFinding(
+                        finding_id="fin_1",
+                        routine_name="nightly",
+                        scope_slug="blizzard",
+                        class_="stale-docstring",
+                        locus="a.py:1",
+                        summary="s1",
+                        introduced=None,
+                    )
+                ],
+                facts=[
+                    FindingFactRecord(finding_id="fin_1", kind="add", note=None),
+                    FindingFactRecord(finding_id="fin_2", kind="observed", note=None),
+                    FindingFactRecord(finding_id="fin_3", kind="gone", note="couldn't reproduce"),
+                ],
             )
         ],
         proposals=[
@@ -160,7 +163,9 @@ def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
 def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(tmp_path: Path) -> None:
     """A second visit at a fresh (node_id, epoch) resolving the *same* already-
     materialized artifact must return ALREADY_RECORDED cleanly, not trip
-    `finding_sets.artifact_id`'s unique constraint with a raw IntegrityError."""
+    `finding_sets.artifact_id`'s unique constraint with a raw IntegrityError. The
+    delivery marker is still written for this fresh (node_id, epoch) visit, even though
+    nothing else was inserted."""
     store, engine = _store_and_engine(tmp_path)
     first = _full_plan()
     assert store.deliver(first) is DeliveryOutcome.RECORDED
@@ -172,15 +177,15 @@ def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(
         epoch=2,
         at=_NOW,
         run=_RUN,
-        new_findings=[],
-        facts=[],
-        finding_sets=[
-            NewFindingSet(
-                finding_set_id="fins_replay",
-                artifact_id="art_placeholder",  # same artifact_id as `first`'s finding set
-                scope_slug="blizzard",
-                revisions={"blizzard": "abc1234"},
-                measurement="12.3s",
+        deltas=[
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id="fins_replay",
+                    artifact_id="art_placeholder",  # same artifact_id as `first`'s finding set
+                    scope_slug="blizzard",
+                    revisions={"blizzard": "abc1234"},
+                    measurement="12.3s",
+                )
             )
         ],
         proposals=[],
@@ -193,7 +198,119 @@ def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(
         set_rows = conn.execute(sa.select(finding_sets)).all()
         assert [r.finding_set_id for r in set_rows] == ["fins_1"]
         marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "garden-delivered")).all()
-        assert len(marker_rows) == 1
+        assert len(marker_rows) == 2
+
+
+def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_path: Path) -> None:
+    """The regression this test guards: `--delta` legitimately repeats several artifacts
+    in one delivery call. A later visit resolving a *mix* of one already-materialized
+    artifact (`A`) and one genuinely new one (`B`) must still land `B`'s rows — the
+    broader idempotence check must skip only `A`'s group, never bail the whole plan."""
+    store, engine = _store_and_engine(tmp_path)
+    first = DeliveryPlan(
+        chunk_id="ch_1",
+        node_id="nd_1",
+        node_name="garden-survey",
+        epoch=1,
+        at=_NOW,
+        run=_RUN,
+        deltas=[
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id="fins_a",
+                    artifact_id="art_a",
+                    scope_slug="blizzard",
+                    revisions={"blizzard": "aaaaaaa"},
+                    measurement="1.0s",
+                ),
+                new_findings=[
+                    NewFinding(
+                        finding_id="fin_a",
+                        routine_name="nightly",
+                        scope_slug="blizzard",
+                        class_="stale-docstring",
+                        locus="a.py:1",
+                        summary="s_a",
+                        introduced=None,
+                    )
+                ],
+                facts=[FindingFactRecord(finding_id="fin_a", kind="add", note=None)],
+            )
+        ],
+        proposals=[],
+    )
+    assert store.deliver(first) is DeliveryOutcome.RECORDED
+
+    second = DeliveryPlan(
+        chunk_id="ch_1",
+        node_id="nd_2",
+        node_name="garden-survey",
+        epoch=2,
+        at=_NOW,
+        run=_RUN,
+        deltas=[
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id="fins_a_replay",
+                    artifact_id="art_a",  # already materialized under `first` — must be skipped
+                    scope_slug="blizzard",
+                    revisions={"blizzard": "aaaaaaa"},
+                    measurement="1.0s",
+                ),
+                new_findings=[
+                    NewFinding(
+                        finding_id="fin_a_replay",
+                        routine_name="nightly",
+                        scope_slug="blizzard",
+                        class_="stale-docstring",
+                        locus="a.py:1",
+                        summary="s_a",
+                        introduced=None,
+                    )
+                ],
+                facts=[FindingFactRecord(finding_id="fin_a_replay", kind="add", note=None)],
+            ),
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id="fins_b",
+                    artifact_id="art_b",  # genuinely new
+                    scope_slug="blizzard",
+                    revisions={"blizzard": "bbbbbbb"},
+                    measurement="2.0s",
+                ),
+                new_findings=[
+                    NewFinding(
+                        finding_id="fin_b",
+                        routine_name="nightly",
+                        scope_slug="blizzard",
+                        class_="stale-docstring",
+                        locus="b.py:1",
+                        summary="s_b",
+                        introduced=None,
+                    )
+                ],
+                facts=[FindingFactRecord(finding_id="fin_b", kind="add", note=None)],
+            ),
+        ],
+        proposals=[],
+    )
+
+    outcome = store.deliver(second)
+
+    assert outcome is DeliveryOutcome.RECORDED
+    with engine.connect() as conn:
+        finding_rows = conn.execute(sa.select(findings).order_by(findings.c.finding_id)).all()
+        assert [r.finding_id for r in finding_rows] == ["fin_a", "fin_b"]
+
+        fact_rows = conn.execute(sa.select(finding_facts).order_by(finding_facts.c.id)).all()
+        assert [(r.finding_id, r.kind) for r in fact_rows] == [("fin_a", "add"), ("fin_b", "add")]
+
+        set_rows = conn.execute(sa.select(finding_sets).order_by(finding_sets.c.finding_set_id)).all()
+        assert [r.finding_set_id for r in set_rows] == ["fins_a", "fins_b"]
+        assert [r.artifact_id for r in set_rows] == ["art_a", "art_b"]
+
+        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "garden-delivered")).all()
+        assert len(marker_rows) == 2
 
 
 def test_deliver_clean_plan_records_only_the_finding_set(tmp_path: Path) -> None:
@@ -207,15 +324,15 @@ def test_deliver_clean_plan_records_only_the_finding_set(tmp_path: Path) -> None
         epoch=1,
         at=_NOW,
         run=_RUN,
-        new_findings=[],
-        facts=[],
-        finding_sets=[
-            NewFindingSet(
-                finding_set_id="fins_2",
-                artifact_id="art_clean",
-                scope_slug="blizzard",
-                revisions={},
-                measurement=None,
+        deltas=[
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id="fins_2",
+                    artifact_id="art_clean",
+                    scope_slug="blizzard",
+                    revisions={},
+                    measurement=None,
+                )
             )
         ],
         proposals=[],
