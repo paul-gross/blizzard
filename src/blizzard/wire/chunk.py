@@ -7,6 +7,8 @@ views carry the **derived** status, never a stored column; work-item contents ar
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from blizzard.foundation.chunk_status import ChunkStatus
@@ -307,6 +309,24 @@ class HubMarkerResponse(BaseModel):
     recorded: bool
     chunk_id: str
     name: str
+
+
+class GardenDeliveryRequest(BaseModel):
+    """The garden-delivery route's body (blizzard#393 Phase 4) — the artifact names to
+    consume, named the way `garden_deliver`'s repeatable ``--delta``/``--proposals``
+    flags carry them."""
+
+    delta: list[str] = []
+    proposals: list[str] = []
+
+
+class GardenDeliveryResponse(BaseModel):
+    """The result of one garden delivery — ``recorded`` durably means it (materialized
+    now or replayed, blizzard#393 Phase 3's own `DeliveryOutcome`); ``invalid`` carries
+    the rejection reason in ``detail``, for the graph's ``invalid`` edge to attach."""
+
+    outcome: Literal["recorded", "invalid"]
+    detail: str = ""
 
 
 class ChunkPauseRequest(BaseModel):

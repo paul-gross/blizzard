@@ -90,6 +90,12 @@ class IReadFindingRepository(Protocol):
         live only, unless `include_gone` (D3)."""
         ...
 
+    def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
+        """Every finding live on `routine_name`, across every scope it holds (blizzard#393
+        Phase 4) — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter.
+        Live only, unless `include_gone` (D3)."""
+        ...
+
     def count_by_class(self, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name`
         (blizzard-product:/plans/garden/machinery.md §What the store buys) — a count,

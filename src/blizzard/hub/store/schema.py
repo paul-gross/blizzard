@@ -1193,6 +1193,20 @@ work_items = Table(
 
 Index("ix_work_items_source", work_items.c.source)
 
+# --- Work item runs (a run's identity — blizzard#393 Phase 1) -----------------------
+# What routine, scope, and mode a work item's run is executing under — minted by
+# blizzard#392, read back through a chunk's first work ref (D1: `routine_name`, not a
+# surrogate `routine_id`, the `findings.routine_name` shape).
+
+work_item_runs = Table(
+    "work_item_runs",
+    metadata,
+    Column("work_item_id", String, ForeignKey("work_items.work_item_id"), primary_key=True),
+    Column("routine_name", String, nullable=False),
+    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
+    Column("mode", String, nullable=False),
+)
+
 # A per-source allocation counter, one row per source, so ``ref`` allocation never
 # reads ``MAX(ref)+1`` (two concurrent first allocations on an empty source would both
 # compute 1) — every source gets a pre-existing row instead (`bzh:sql-portable`).

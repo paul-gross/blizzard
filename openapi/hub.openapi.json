@@ -2579,6 +2579,52 @@
         "title": "FleetSummaryView",
         "type": "object"
       },
+      "GardenDeliveryRequest": {
+        "description": "The garden-delivery route's body (blizzard#393 Phase 4) \u2014 the artifact names to\nconsume, named the way `garden_deliver`'s repeatable ``--delta``/``--proposals``\nflags carry them.",
+        "properties": {
+          "delta": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Delta",
+            "type": "array"
+          },
+          "proposals": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Proposals",
+            "type": "array"
+          }
+        },
+        "title": "GardenDeliveryRequest",
+        "type": "object"
+      },
+      "GardenDeliveryResponse": {
+        "description": "The result of one garden delivery \u2014 ``recorded`` durably means it (materialized\nnow or replayed, blizzard#393 Phase 3's own `DeliveryOutcome`); ``invalid`` carries\nthe rejection reason in ``detail``, for the graph's ``invalid`` edge to attach.",
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "recorded",
+              "invalid"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "GardenDeliveryResponse",
+        "type": "object"
+      },
       "GardenProposalView": {
         "description": "A garden proposal.",
         "properties": {
@@ -9328,6 +9374,77 @@
           }
         },
         "summary": "Detach Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/garden-delivery": {
+      "post": {
+        "description": "The garden delivery node's own route \u2014 validates a delivering node's\n``--delta``/``--proposals`` artifacts and, on success, materializes them in one\ntransaction. An unresolvable run context or a failed validation is an ``invalid``\noutcome, always a 200 rather than an error response \u2014 the graph's own ``invalid``\nedge reads and routes on it.",
+        "operationId": "record_garden_delivery_api_chunks__chunk_id__garden_delivery_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "epoch",
+            "required": true,
+            "schema": {
+              "title": "Epoch",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenDeliveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenDeliveryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Garden Delivery",
         "tags": [
           "chunks"
         ]
