@@ -85,6 +85,10 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/findings/{finding_id}"): FLEET_VIEW,
     ("GET", "/api/garden-proposals"): FLEET_VIEW,
     ("GET", "/api/garden-proposals/{proposal_id}"): FLEET_VIEW,
+    # Closing a garden proposal (blizzard#395) — CHUNK_CONTROL, the same permission a
+    # not-chunk-scoped work-item write already carries (D8).
+    ("POST", "/api/garden-proposals/{proposal_id}/pass"): CHUNK_CONTROL,
+    ("POST", "/api/garden-proposals/{proposal_id}/accept"): CHUNK_CONTROL,
     ("POST", "/api/chunks"): CHUNK_INGEST,
     ("GET", "/api/chunks"): FLEET_VIEW,
     ("GET", "/api/chunks/{chunk_id}"): FLEET_VIEW,
