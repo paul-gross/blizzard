@@ -42,6 +42,9 @@ class NewFinding:
     locus: str
     summary: str
     introduced: str | None
+    #: `introduced`'s own authored instant, already resolved by validation (blizzard#394
+    #: D5) — never re-resolved here, so a delivery spends the forge slot at most once.
+    introduced_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -156,9 +159,17 @@ class GardenDelivery:
         for delta, artifact_id in zip(validated.deltas, delta_artifact_ids, strict=True):
             new_findings: list[NewFinding] = []
             facts: list[FindingFactRecord] = []
+            # Mirrors `check_delta`'s own resolution rule (blizzard#394 D5): a single
+            # declared repository is the only case `introduced` resolves against.
+            single_repo = next(iter(delta.revisions)) if len(delta.revisions) == 1 else None
             for op in delta.findings:
                 if isinstance(op, AddFindingOp):
                     finding_id = Id.mint(FINDING_PREFIX, self._clock).value
+                    introduced_at = (
+                        validated.introduced_at.get((single_repo, op.introduced))
+                        if op.introduced is not None and single_repo is not None
+                        else None
+                    )
                     new_findings.append(
                         NewFinding(
                             finding_id=finding_id,
@@ -168,6 +179,7 @@ class GardenDelivery:
                             locus=op.locus,
                             summary=op.summary,
                             introduced=op.introduced,
+                            introduced_at=introduced_at,
                         )
                     )
                     facts.append(FindingFactRecord(finding_id=finding_id, kind="add", note=None))

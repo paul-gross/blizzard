@@ -110,6 +110,7 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
     assert finding.locus == "a.py:1"
     assert finding.summary == "s"
     assert finding.introduced == "b" * 40
+    assert finding.introduced_at is None  # no resolution supplied on `validated` (blizzard#394 D5)
 
     assert [(f.finding_id, f.kind, f.note) for f in delta_materialization.facts] == [(finding.finding_id, "add", None)]
 
@@ -121,6 +122,37 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
     assert fset.measurement is None
 
     assert plan.proposals == []
+
+
+def test_deliver_threads_a_resolved_introduced_at_onto_the_new_finding() -> None:
+    """`validated.introduced_at` is keyed `(repo, sha)` — the same pair `check_delta`
+    resolved during validation (blizzard#394 D5) — never re-resolved here."""
+    repo = _FakeGardenDeliveryRepo()
+    service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    commit_at = datetime(2025, 12, 25, tzinfo=UTC)
+    delta = FindingDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
+    validated = ValidatedDelivery(
+        run=_RUN, deltas=[delta], proposals=[], introduced_at={("blizzard", "b" * 40): commit_at}
+    )
+
+    service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
+
+    finding = repo.delivered[0].deltas[0].new_findings[0]
+    assert finding.introduced_at == commit_at
+
+
+def test_deliver_leaves_introduced_at_none_when_the_resolved_pair_is_absent() -> None:
+    """A missing entry (never resolved — no forge, ambiguous repo count) reads as
+    unattributed, never a `KeyError` (blizzard#394 D5)."""
+    repo = _FakeGardenDeliveryRepo()
+    service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    delta = FindingDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
+    validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[], introduced_at={})
+
+    service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
+
+    finding = repo.delivered[0].deltas[0].new_findings[0]
+    assert finding.introduced_at is None
 
 
 def test_deliver_builds_observed_and_gone_facts_carrying_the_gone_note() -> None:

@@ -82,6 +82,7 @@ def _full_plan(*, at: datetime = _NOW) -> DeliveryPlan:
                         locus="a.py:1",
                         summary="s1",
                         introduced=None,
+                        introduced_at=None,
                     )
                 ],
                 facts=[
@@ -233,6 +234,7 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
                         locus="a.py:1",
                         summary="s_a",
                         introduced=None,
+                        introduced_at=None,
                     )
                 ],
                 facts=[FindingFactRecord(finding_id="fin_a", kind="add", note=None)],
@@ -267,6 +269,7 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
                         locus="a.py:1",
                         summary="s_a",
                         introduced=None,
+                        introduced_at=None,
                     )
                 ],
                 facts=[FindingFactRecord(finding_id="fin_a_replay", kind="add", note=None)],
@@ -288,6 +291,7 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
                         locus="b.py:1",
                         summary="s_b",
                         introduced=None,
+                        introduced_at=None,
                     )
                 ],
                 facts=[FindingFactRecord(finding_id="fin_b", kind="add", note=None)],

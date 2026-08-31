@@ -317,24 +317,38 @@ findings = Table(
     Column("locus", String, nullable=False),  # a repo-relative path, optionally :line/::symbol; opaque to the hub
     Column("summary", Text, nullable=False),
     Column("introduced", String, nullable=True),  # best-effort blame commit; null when not resolvable
+    # `introduced`'s own authored instant (blizzard#394) — nullable, never backfilled: null
+    # wherever unresolved, by design.
+    Column("introduced_at", UtcDateTime, nullable=True),
 )
 
 Index("ix_findings_routine_scope", findings.c.routine_name, findings.c.scope_slug)
 Index("ix_findings_routine_class", findings.c.routine_name, findings.c.class_)
 
-# One row per `add`/`observed`/`gone` transformation a delivered list applied to a
-# finding (D2, D4) — first-recorded, last-seen, and the observed count are reads over
-# this table, never a cached summary on `findings` itself.
+# One row per `add`/`observed`/`gone`/exit/`reopened` transformation a delivered list or
+# a person applied to a finding (D2, D4, blizzard#394) — first-recorded, last-seen, and
+# the observed count are reads over this table, never a cached summary on `findings` itself.
 
 finding_facts = Table(
     "finding_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("finding_id", String, ForeignKey("findings.finding_id"), nullable=False),
-    Column("kind", String, nullable=False),  # add | observed | gone (FACT_KINDS, domain/findings.py)
+    Column("kind", String, nullable=False),  # FACT_KINDS, domain/findings.py
     Column("recorded_at", UtcDateTime, nullable=False),
-    Column("note", Text, nullable=True),  # gone's note; null for add/observed
-    CheckConstraint("kind IN ('add', 'observed', 'gone')", name="ck_finding_facts_kind"),
+    Column("note", Text, nullable=True),  # gone's/an exit's/reopened's note; null for add/observed
+    # Who recorded a human-driven fact (blizzard#394) — null for a run-driven add/observed/gone.
+    Column("actor", String, nullable=True),
+    # The proposal a `resolved` fact answered, when the delivery-triggered drain recorded
+    # it (blizzard#394 Phase 3) — always null for a hand resolution.
+    Column("proposal_id", String, ForeignKey("garden_proposals.proposal_id"), nullable=True),
+    # The absorbing finding, set only on a `superseded` fact (blizzard#394).
+    Column("superseded_by", String, ForeignKey("findings.finding_id"), nullable=True),
+    CheckConstraint(
+        "kind IN ('add', 'observed', 'gone', 'resolved', 'gone-confirmed', 'wont-fix', 'not-a-finding',"
+        " 'superseded', 'reopened')",
+        name="ck_finding_facts_kind",
+    ),
 )
 
 Index("ix_finding_facts_finding_id_id", finding_facts.c.finding_id, finding_facts.c.id)
