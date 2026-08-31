@@ -3272,6 +3272,90 @@
           ],
           "path": "hub routine show",
           "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults."
+        },
+        "trend": {
+          "help": "NAME's finding inflow-against-outflow over --since/--until: per-period created and\nper-kind exit counts, the outflow/withdrawn roll-ups, and the introduced-age cut\nagainst --introduced-boundary.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "since",
+              "opts": [
+                "--since"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "until",
+              "opts": [
+                "--until"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "introduced_boundary",
+              "opts": [
+                "--introduced-boundary"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "period_days",
+              "opts": [
+                "--period-days"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub routine trend",
+          "short_help": "NAME's finding inflow-against-outflow over --since/--until: per-period created and per-kind exit counts, the outflow/withdrawn roll-ups, and the introduced-age cut against --introduced-boundary."
         }
       },
       "help": "Operator verbs over routines: create, list, inspect, edit.",

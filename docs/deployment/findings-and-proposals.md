@@ -36,3 +36,13 @@ never changes a finding's state — but delivering the item it minted does: once
 proposal named that is still live is resolved, attributed to the proposal, the same as a hand
 `blizzard hub finding resolve` but requiring no verb of its own. Re-delivering the same item resolves nothing a second
 time. Either closing verb answers 409, naming the proposal's existing closure, when called again — closure is terminal.
+
+## Trend
+
+`blizzard hub routine trend <name>` reads a routine's finding inflow-against-outflow over a window, taking `--since`,
+`--until`, and `--introduced-boundary` (each an instant, read in the operator's own local time, the same as
+`blizzard hub analytics`'s own since/until flags) plus an optional `--period-days` (default 7). Per period it reports
+findings created and exits per kind, plus the `outflow` (`resolved` and `gone-confirmed`) and `withdrawn` (the other
+three exit kinds) roll-ups. Alongside the periods, `age` cuts the window's created findings against
+`--introduced-boundary`: `recent` (at or after it), `older` (before it), and `unattributed` (no resolved `introduced`
+instant at all — never guessed into either bucket). A malformed instant or a `--period-days` under 1 answers 422.

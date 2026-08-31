@@ -4083,6 +4083,87 @@ export type TransitionView = {
 };
 
 /**
+ * TrendAgeView
+ */
+export type TrendAgeView = {
+    /**
+     * Boundary
+     */
+    boundary: string;
+    /**
+     * Older
+     */
+    older: number;
+    /**
+     * Recent
+     */
+    recent: number;
+    /**
+     * Unattributed
+     */
+    unattributed: number;
+};
+
+/**
+ * TrendPeriodView
+ */
+export type TrendPeriodView = {
+    /**
+     * Created
+     */
+    created: number;
+    /**
+     * Exits
+     */
+    exits: {
+        [key: string]: number;
+    };
+    /**
+     * Outflow
+     */
+    outflow: number;
+    /**
+     * Period End
+     */
+    period_end: string;
+    /**
+     * Period Start
+     */
+    period_start: string;
+    /**
+     * Withdrawn
+     */
+    withdrawn: number;
+};
+
+/**
+ * TrendView
+ */
+export type TrendView = {
+    age: TrendAgeView;
+    /**
+     * Period Days
+     */
+    period_days: number;
+    /**
+     * Periods
+     */
+    periods: Array<TrendPeriodView>;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+    /**
+     * Since
+     */
+    since: string;
+    /**
+     * Until
+     */
+    until: string;
+};
+
+/**
  * TurnSegmentView
  *
  * One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),
@@ -7779,6 +7860,52 @@ export type CreateRoutineApiRoutinesPostResponses = {
 };
 
 export type CreateRoutineApiRoutinesPostResponse = CreateRoutineApiRoutinesPostResponses[keyof CreateRoutineApiRoutinesPostResponses];
+
+export type RoutineTrendApiRoutinesTrendGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Routine
+         */
+        routine: string;
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until: string;
+        /**
+         * Introduced Boundary
+         */
+        introduced_boundary: string;
+        /**
+         * Period Days
+         */
+        period_days?: number;
+    };
+    url: '/api/routines/trend';
+};
+
+export type RoutineTrendApiRoutinesTrendGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RoutineTrendApiRoutinesTrendGetError = RoutineTrendApiRoutinesTrendGetErrors[keyof RoutineTrendApiRoutinesTrendGetErrors];
+
+export type RoutineTrendApiRoutinesTrendGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TrendView;
+};
+
+export type RoutineTrendApiRoutinesTrendGetResponse = RoutineTrendApiRoutinesTrendGetResponses[keyof RoutineTrendApiRoutinesTrendGetResponses];
 
 export type GetRoutineApiRoutinesRoutineIdGetData = {
     body?: never;

@@ -6188,6 +6188,115 @@
         "title": "TransitionView",
         "type": "object"
       },
+      "TrendAgeView": {
+        "properties": {
+          "boundary": {
+            "title": "Boundary",
+            "type": "string"
+          },
+          "older": {
+            "title": "Older",
+            "type": "integer"
+          },
+          "recent": {
+            "title": "Recent",
+            "type": "integer"
+          },
+          "unattributed": {
+            "title": "Unattributed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "boundary",
+          "recent",
+          "older",
+          "unattributed"
+        ],
+        "title": "TrendAgeView",
+        "type": "object"
+      },
+      "TrendPeriodView": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "exits": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Exits",
+            "type": "object"
+          },
+          "outflow": {
+            "title": "Outflow",
+            "type": "integer"
+          },
+          "period_end": {
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "title": "Period Start",
+            "type": "string"
+          },
+          "withdrawn": {
+            "title": "Withdrawn",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "period_start",
+          "period_end",
+          "created",
+          "exits",
+          "outflow",
+          "withdrawn"
+        ],
+        "title": "TrendPeriodView",
+        "type": "object"
+      },
+      "TrendView": {
+        "properties": {
+          "age": {
+            "$ref": "#/components/schemas/TrendAgeView"
+          },
+          "period_days": {
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "periods": {
+            "items": {
+              "$ref": "#/components/schemas/TrendPeriodView"
+            },
+            "title": "Periods",
+            "type": "array"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "routine_name",
+          "since",
+          "until",
+          "period_days",
+          "periods",
+          "age"
+        ],
+        "title": "TrendView",
+        "type": "object"
+      },
       "TurnSegmentView-Input": {
         "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),\nstable across a segment's batches \u2014 EXCEPT under ``sidechain.turns``, where it restarts at 0 within\nthat one sidechain, and on a lease transcript read, where it numbers only the turns that read\nreturned and slides with the recency window (blizzard#248 D1). ``kind`` is closed.",
         "properties": {
@@ -12880,6 +12989,86 @@
           }
         },
         "summary": "Create Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/routines/trend": {
+      "get": {
+        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups (D2), and the D5 age cut of the window's created findings against\n`introduced_boundary`. 422 on a malformed instant or a non-positive `period_days`.",
+        "operationId": "routine_trend_api_routines_trend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "routine",
+            "required": true,
+            "schema": {
+              "title": "Routine",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": true,
+            "schema": {
+              "title": "Until",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "introduced_boundary",
+            "required": true,
+            "schema": {
+              "title": "Introduced Boundary",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "period_days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "title": "Period Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrendView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Routine Trend",
         "tags": [
           "routines"
         ]
