@@ -18,6 +18,7 @@ from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkRef, mint_chunk
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import hub_store_connections, seed_chunk, seed_graph
 
@@ -26,18 +27,18 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _stores(tmp_path: Path) -> tuple[WorkItemStore, ChunkStore, Engine]:
+def _stores(tmp_path: Path) -> tuple[WorkItemStore, ChunkStore, RunContextStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
     conns = hub_store_connections(engine)
-    return WorkItemStore(conns), ChunkStore(conns, FixedClock(_NOW)), engine
+    return WorkItemStore(conns), ChunkStore(conns, FixedClock(_NOW)), RunContextStore(conns), engine
 
 
 def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> None:
-    items, _chunks, _engine = _stores(tmp_path)
+    items, _chunks, run_context, _engine = _stores(tmp_path)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
     chunk = mint_chunk([pointer], graph_id="gr_1", at=_NOW, default_model=["opus"], default_effort="high")
 
@@ -62,9 +63,15 @@ def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> 
     assert fetched.run_mode == "full"
     assert fetched.closed_at is None
 
+    run = run_context.for_chunk(chunk)
+    assert run is not None
+    assert run.routine_name == "gardening"
+    assert run.scope_slug == "blizzard"
+    assert run.mode == "full"
+
 
 def test_chunk_lands_ready_carrying_the_routines_defaults(tmp_path: Path) -> None:
-    items, chunks, _engine = _stores(tmp_path)
+    items, chunks, _run_context, _engine = _stores(tmp_path)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
     chunk = mint_chunk([pointer], graph_id="gr_1", at=_NOW, default_model=["opus"], default_effort="high")
 
@@ -94,7 +101,7 @@ def test_chunk_lands_ready_carrying_the_routines_defaults(tmp_path: Path) -> Non
 def test_tail_position_is_whatever_the_caller_computed(tmp_path: Path) -> None:
     """No re-derivation inside the store write — ``position`` is trusted as given,
     exactly as ``record_promote_with_tail_position`` already trusts its own caller."""
-    items, chunks, _engine = _stores(tmp_path)
+    items, chunks, _run_context, _engine = _stores(tmp_path)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
     chunk = mint_chunk([pointer], graph_id="gr_1", at=_NOW)
 
@@ -118,7 +125,7 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
     """No window at all (``blizzard-context:/architecture/crash-correctness/hub.md``):
     a ``chunk_id`` collision fails the chunk-rows insert partway through the one
     transaction, and the item row it landed ahead of must not survive either."""
-    items, chunks, engine = _stores(tmp_path)
+    items, chunks, run_context, engine = _stores(tmp_path)
     with engine.begin() as conn:
         seed_chunk(conn, "ch_collide", graph_id="gr_1", at=_NOW)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
@@ -141,3 +148,4 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
     assert items.get("hub", pointer.ref) is None
     assert chunks.load_facts("ch_collide") is not None
     assert not chunks.load_facts("ch_collide").promoted  # type: ignore[union-attr]
+    assert run_context.for_chunk(colliding_chunk) is None

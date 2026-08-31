@@ -239,7 +239,7 @@ def test_work_items_routine_run_columns_survive_migration_roundtrip(tmp_path: Pa
 
     assert set(columns) <= _columns()
 
-    runner.downgrade("20260829_1930_fact_tables_chunk_id_index")
+    runner.downgrade("20260830_2015_garden_proposals_source_artifact")
     assert not set(columns) & _columns()
 
     runner.upgrade("head")

@@ -15,8 +15,8 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.routine_run import RoutineNotFoundError, RunService, ScopeRetiredError, compose_charge
-from blizzard.hub.domain.routines import IReadRoutineRepository, Routine, RoutineGraphUnresolvedError, RunMode
+from blizzard.hub.domain.routine_run import RunService, ScopeRetiredError, compose_charge
+from blizzard.hub.domain.routines import Routine, RoutineGraphUnresolvedError, RunMode
 from blizzard.hub.domain.scopes import IReadScopeRepository, IWriteScopeRepository, Scope, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.work import (
     Chunk,
@@ -40,17 +40,6 @@ _ROUTINE = Routine(
     default_model=["opus"],
     default_effort="high",
 )
-
-
-@dataclass
-class _FakeRoutines:
-    by_name: dict[str, Routine] = field(default_factory=lambda: {"gardening": _ROUTINE})
-
-    def get_by_name(self, name: str) -> Routine | None:
-        return self.by_name.get(name)
-
-    def __getattr__(self, name: str) -> Any:
-        raise NotImplementedError(f"should not touch {name!r}")
 
 
 @dataclass
@@ -162,7 +151,6 @@ class _FakeItems:
 
 def _service(
     *,
-    routines: _FakeRoutines | None = None,
     scopes: _FakeScopes | None = None,
     graphs: _FakeGraphs | None = None,
     finding_sets: _FakeFindingSets | None = None,
@@ -170,14 +158,12 @@ def _service(
     chunks: _FakeChunks | None = None,
 ) -> tuple[RunService, _FakeItems, _FakeScopes, _FakeChunks]:
     clock = FixedClock(instant=_T0)
-    routines = routines or _FakeRoutines()
     scopes = scopes or _FakeScopes()
     graphs = graphs or _FakeGraphs()
     finding_sets = finding_sets or _FakeFindingSets()
     items = items or _FakeItems()
     chunks = chunks or _FakeChunks()
     service = RunService(
-        routines=cast(IReadRoutineRepository, routines),
         scopes=cast(IReadScopeRepository, scopes),
         scope_registry=ScopeRegistry(scopes=cast(IWriteScopeRepository, scopes), clock=clock),
         graphs=cast(IReadGraphRepository, graphs),
@@ -192,25 +178,18 @@ def _service(
 _AUTHOR = WorkItemAuthor.user("usr_1")
 
 
-def test_run_unknown_routine_raises() -> None:
-    service, *_ = _service()
-
-    with pytest.raises(RoutineNotFoundError, match="ghost"):
-        service.run("ghost", scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
-
-
 def test_run_unresolved_graph_raises_naming_it() -> None:
     service, *_ = _service(graphs=_FakeGraphs(resolvable={}))
 
     with pytest.raises(RoutineGraphUnresolvedError, match="default"):
-        service.run("gardening", scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
 def test_run_retired_default_scope_is_refused() -> None:
     service, *_ = _service(scopes=_FakeScopes(retired={"blizzard"}))
 
     with pytest.raises(ScopeRetiredError, match="blizzard"):
-        service.run("gardening", scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
 def test_run_retired_override_scope_is_refused() -> None:
@@ -224,13 +203,13 @@ def test_run_retired_override_scope_is_refused() -> None:
     service, *_ = _service(scopes=scopes)
 
     with pytest.raises(ScopeRetiredError, match="cold"):
-        service.run("gardening", scope_slug=ScopeSlug.parse("cold"), mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope_slug=ScopeSlug.parse("cold"), mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
 def test_run_override_scope_mints_an_unseen_slug() -> None:
     service, items, scopes, _chunks = _service()
 
-    service.run("gardening", scope_slug=ScopeSlug.parse("new-scope"), mode=RunMode.FULL, note=None, author=_AUTHOR)
+    service.run(_ROUTINE, scope_slug=ScopeSlug.parse("new-scope"), mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     assert "new-scope" in scopes.ensured
     assert items.calls[0]["scope_slug"] == "new-scope"
@@ -239,7 +218,7 @@ def test_run_override_scope_mints_an_unseen_slug() -> None:
 def test_run_delta_with_no_baseline_downgrades_to_full() -> None:
     service, items, *_ = _service()
 
-    result = service.run("gardening", scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
+    result = service.run(_ROUTINE, scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
 
     assert result.effective_mode is RunMode.FULL
     assert result.downgraded is True
@@ -258,7 +237,7 @@ def test_run_delta_with_a_recorded_baseline_stays_delta() -> None:
     )
     service, items, *_ = _service(finding_sets=_FakeFindingSets(newest={("gardening", "blizzard"): baseline}))
 
-    result = service.run("gardening", scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
+    result = service.run(_ROUTINE, scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
 
     assert result.effective_mode is RunMode.DELTA
     assert result.downgraded is False
@@ -269,7 +248,7 @@ def test_run_delta_with_a_recorded_baseline_stays_delta() -> None:
 def test_run_full_mode_never_downgrades_even_with_no_baseline() -> None:
     service, *_ = _service()
 
-    result = service.run("gardening", scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     assert result.effective_mode is RunMode.FULL
     assert result.downgraded is False
@@ -278,7 +257,7 @@ def test_run_full_mode_never_downgrades_even_with_no_baseline() -> None:
 def test_run_threads_the_routines_model_and_effort_defaults_onto_the_chunk() -> None:
     service, items, *_ = _service()
 
-    service.run("gardening", scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     chunk = items.calls[0]["chunk"]
     assert chunk.default_model == ["opus"]
@@ -291,7 +270,7 @@ def test_run_computes_the_tail_position_before_the_write() -> None:
     )
     service, items, *_ = _service(chunks=chunks)
 
-    service.run("gardening", scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     assert items.calls[0]["position"] == 4.0
 
@@ -300,13 +279,13 @@ def test_run_raises_ingest_conflict_when_the_freshly_allocated_ref_races_a_live_
     service, *_ = _service(chunks=_FakeChunks(live_holder="ch_other"))
 
     with pytest.raises(IngestConflict):
-        service.run("gardening", scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
 def test_run_uses_the_injected_clock_not_the_wall_clock() -> None:
     service, items, *_ = _service()
 
-    service.run("gardening", scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     assert items.calls[0]["at"] == _T0
 

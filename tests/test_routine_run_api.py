@@ -144,7 +144,7 @@ def test_run_malformed_scope_slug_is_422(tmp_path: Path) -> None:
     assert "Not A Slug" in resp.json()["detail"]
 
 
-def test_run_against_a_routine_whose_graph_lost_its_enabled_mint_is_422(tmp_path: Path) -> None:
+def test_run_against_a_routine_whose_graph_lost_its_enabled_mint_is_503(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _mint_graph(hub)
     routine = _create_routine(hub)
@@ -154,11 +154,11 @@ def test_run_against_a_routine_whose_graph_lost_its_enabled_mint_is_422(tmp_path
 
     resp = hub.client.post(f"/api/routines/{routine['routine_id']}/run", json={})
 
-    assert resp.status_code == 422, resp.text
+    assert resp.status_code == 503, resp.text
     assert "alpha" in resp.json()["detail"]
 
 
-def test_run_against_a_retired_scope_is_409(tmp_path: Path) -> None:
+def test_run_against_a_retired_scope_is_503(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _mint_graph(hub)
     routine = _create_routine(hub)
@@ -167,7 +167,7 @@ def test_run_against_a_retired_scope_is_409(tmp_path: Path) -> None:
 
     resp = hub.client.post(f"/api/routines/{routine['routine_id']}/run", json={})
 
-    assert resp.status_code == 409, resp.text
+    assert resp.status_code == 503, resp.text
     assert "blizzard" in resp.json()["detail"]
 
 

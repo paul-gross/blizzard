@@ -1,9 +1,9 @@
 """Routine run — mint, ingest, and promote a hub work item from a routine in one act
 (blizzard#392): ``blizzard hub routine run <name>``.
 
-Resolves the routine and its scope, settles the mode against the pair's recorded
-baseline, composes the charge, and drives the one-act write atomically. A retired scope
-or an unresolvable graph refuses rather than defaults (D5)."""
+Takes an already-resolved routine (``bzh:domain-takes-objects``), settles the mode against
+the pair's recorded baseline, composes the charge, and drives the one-act write
+atomically. A retired scope or an unresolvable graph refuses rather than defaults (D5)."""
 
 from __future__ import annotations
 
@@ -13,26 +13,11 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.graph import IReadGraphRepository
-from blizzard.hub.domain.ingest import require_no_live_holder
 from blizzard.hub.domain.promote import tail_position
-from blizzard.hub.domain.routines import IReadRoutineRepository, RoutineGraphUnresolvedError, RunMode
+from blizzard.hub.domain.routines import Routine, RoutineGraphUnresolvedError, RunMode
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeRegistry, ScopeSlug
-from blizzard.hub.domain.work import (
-    IReadChunkRepository,
-    IWriteWorkItemRepository,
-    WorkItemAuthor,
-    WorkItemRecord,
-    WorkRef,
-    mint_chunk,
-)
-
-
-class RoutineNotFoundError(LookupError):
-    """A run named a routine no ``routines`` row carries."""
-
-    def __init__(self, name: str) -> None:
-        super().__init__(f"unknown routine {name!r}")
-        self.name = name
+from blizzard.hub.domain.work import IReadChunkRepository, IWriteWorkItemRepository, WorkItemAuthor, WorkItemRecord
+from blizzard.hub.domain.work_items import prepare_mint
 
 
 class ScopeRetiredError(ValueError):
@@ -62,7 +47,8 @@ def compose_charge(
     lines = [f"Routine: {routine_name} (graph: {graph_name})"]
     lines.append(f"Scope: {scope_slug} — {scope_description}" if scope_description else f"Scope: {scope_slug}")
     if mode is RunMode.DELTA:
-        assert baseline is not None, "a delta mode with no baseline must have already downgraded to full"
+        if baseline is None:
+            raise ValueError("a delta mode with no baseline must have already downgraded to full")
         revisions = ", ".join(f"{repo}@{rev}" for repo, rev in sorted(baseline.revisions.items()))
         lines.append(f"Mode: delta — baseline {baseline.finding_set_id} ({revisions or 'no repositories recorded'})")
     elif downgraded:
@@ -93,7 +79,6 @@ class RunService:
     def __init__(
         self,
         *,
-        routines: IReadRoutineRepository,
         scopes: IReadScopeRepository,
         scope_registry: ScopeRegistry,
         graphs: IReadGraphRepository,
@@ -102,7 +87,6 @@ class RunService:
         chunks: IReadChunkRepository,
         clock: IClock,
     ) -> None:
-        self._routines = routines
         self._scopes = scopes
         self._scope_registry = scope_registry
         self._graphs = graphs
@@ -113,16 +97,13 @@ class RunService:
 
     def run(
         self,
-        name: str,
+        routine: Routine,
         *,
         scope_slug: ScopeSlug | None,
         mode: RunMode,
         note: str | None,
         author: WorkItemAuthor,
     ) -> RunResult:
-        routine = self._routines.get_by_name(name)
-        if routine is None:
-            raise RoutineNotFoundError(name)
         graph = self._graphs.get_enabled_by_name(routine.graph_name)
         if graph is None:
             raise RoutineGraphUnresolvedError(routine.graph_name)
@@ -149,14 +130,12 @@ class RunService:
         )
         title = f"{routine.name} run ({effective_mode.value})"
 
-        ref = self._items.allocate_ref(RESERVED_HUB_SOURCE_NAME)
-        pointer_at = self._clock.now()
-        pointer = WorkRef(source=RESERVED_HUB_SOURCE_NAME, ref=ref)
-        require_no_live_holder(self._chunks, pointer)
-        chunk = mint_chunk(
-            [pointer],
-            graph_id=graph.graph_id,
-            at=pointer_at,
+        pointer, chunk, pointer_at = prepare_mint(
+            self._items,
+            self._chunks,
+            self._clock,
+            RESERVED_HUB_SOURCE_NAME,
+            graph=graph,
             default_model=routine.default_model,
             default_effort=routine.default_effort,
         )

@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import (
     Chunk,
     IWriteWorkItemRepository,
@@ -31,6 +32,7 @@ from blizzard.hub.store.internal.chunk_store import (
     insert_promote_rows,
     record_deleted_row,
 )
+from blizzard.hub.store.internal.run_context_store import insert_run_context_row
 
 
 class WorkItemStore:
@@ -114,8 +116,10 @@ class WorkItemStore:
         position: float,
     ) -> tuple[WorkItemRecord, int | None]:
         """:meth:`create_with_chunk` plus the promote-then-tail-stamp pair
-        (:func:`~blizzard.hub.store.internal.chunk_store.insert_promote_rows`), on one
-        ``engine.begin()`` connection — a routine run's own one-act mint (blizzard#392)."""
+        (:func:`~blizzard.hub.store.internal.chunk_store.insert_promote_rows`) plus the
+        run's own identity row (:func:`~blizzard.hub.store.internal.run_context_store.insert_run_context_row`,
+        blizzard#393), on one ``engine.begin()`` connection — a routine run's own one-act
+        mint (blizzard#392)."""
         with self._store.write("create_with_chunk_and_promote") as conn:
             work_item_id = self._insert_item(
                 conn,
@@ -132,6 +136,9 @@ class WorkItemStore:
             )
             insert_chunk_rows(conn, chunk)
             promoted_id = insert_promote_rows(conn, chunk.chunk_id, position=position, at=at)
+            insert_run_context_row(
+                conn, work_item_id, RunContext(routine_name=routine_name, scope_slug=scope_slug, mode=run_mode)
+            )
         record = WorkItemRecord(
             work_item_id=work_item_id,
             source=pointer.source,

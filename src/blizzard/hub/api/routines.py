@@ -21,7 +21,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.routine_run import RoutineNotFoundError, RunResult, ScopeRetiredError
+from blizzard.hub.domain.routine_run import RunResult, ScopeRetiredError
 from blizzard.hub.domain.routines import (
     Routine,
     RoutineGraphUnresolvedError,
@@ -150,9 +150,10 @@ def run_routine(
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> object:
     """Mint, ingest, and promote a hub work item from the routine, in one act
-    (blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
-    ``mode``, or a graph name with no enabled mint; 409 on a retired effective scope or
-    an out-of-band ingest already holding the allocated ref's pointer."""
+    (blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug`` or an unknown
+    ``mode``; 503 on a retired effective scope or a graph name with no enabled mint (D5,
+    mirroring ``POST /work-sources/{source}/items``'s own retired-default-graph shape);
+    409 on an out-of-band ingest already holding the allocated ref's pointer."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
@@ -165,18 +166,16 @@ def run_routine(
     try:
         slug = ScopeSlug.parse(request.scope_slug) if request.scope_slug is not None else None
         result = services.routine_run.run(
-            routine.name,
+            routine,
             scope_slug=slug,
             mode=mode,
             note=request.note,
             author=WorkItemAuthor.user(identity.user_id),
         )
-    except (ScopeSlugError, RoutineGraphUnresolvedError) as exc:
+    except ScopeSlugError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    except RoutineNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except ScopeRetiredError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except (RoutineGraphUnresolvedError, ScopeRetiredError) as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except IngestConflict as exc:
         conflict = ChunkIngestConflict(
             existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref

@@ -984,8 +984,8 @@
   },
   "blizzard/hub/api/routines.py": {
    "comments": 3,
-   "docstrings": 17,
-   "total": 191
+   "docstrings": 18,
+   "total": 190
   },
   "blizzard/hub/api/runners.py": {
    "comments": 1,
@@ -1280,7 +1280,7 @@
   "blizzard/hub/composition.py": {
    "comments": 62,
    "docstrings": 12,
-   "total": 413
+   "total": 412
   },
   "blizzard/hub/config.py": {
    "comments": 45,
@@ -1529,8 +1529,8 @@
   },
   "blizzard/hub/domain/routine_run.py": {
    "comments": 0,
-   "docstrings": 16,
-   "total": 183
+   "docstrings": 15,
+   "total": 162
   },
   "blizzard/hub/domain/routines.py": {
    "comments": 1,
@@ -1574,8 +1574,8 @@
   },
   "blizzard/hub/domain/work_items.py": {
    "comments": 0,
-   "docstrings": 51,
-   "total": 229
+   "docstrings": 52,
+   "total": 242
   },
   "blizzard/hub/events/__init__.py": {
    "comments": 0,
@@ -1690,7 +1690,7 @@
   "blizzard/hub/store/internal/garden_delivery_store.py": {
    "comments": 8,
    "docstrings": 8,
-   "total": 177
+   "total": 178
   },
   "blizzard/hub/store/internal/garden_proposal_store.py": {
    "comments": 2,
@@ -1709,8 +1709,8 @@
   },
   "blizzard/hub/store/internal/run_context_store.py": {
    "comments": 0,
-   "docstrings": 6,
-   "total": 55
+   "docstrings": 10,
+   "total": 64
   },
   "blizzard/hub/store/internal/runner_registry_store.py": {
    "comments": 16,
@@ -1734,8 +1734,8 @@
   },
   "blizzard/hub/store/internal/work_item_store.py": {
    "comments": 3,
-   "docstrings": 43,
-   "total": 369
+   "docstrings": 45,
+   "total": 376
   },
   "blizzard/hub/store/migrations/__init__.py": {
    "comments": 0,
@@ -2125,12 +2125,12 @@
   "blizzard/hub/store/migrations/versions/20260831_0900_work_items_routine_run.py": {
    "comments": 0,
    "docstrings": 6,
-   "total": 53
+   "total": 44
   },
   "blizzard/hub/store/migrations/versions/20260831_0930_finding_sets_routine_name.py": {
    "comments": 0,
    "docstrings": 6,
-   "total": 37
+   "total": 46
   },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
@@ -4287,7 +4287,7 @@
   "test_garden_delivery_store.py": {
    "comments": 7,
    "docstrings": 16,
-   "total": 441
+   "total": 442
   },
   "test_garden_proposal_api.py": {
    "comments": 1,
@@ -4456,8 +4456,8 @@
   },
   "test_hub_cli_routine.py": {
    "comments": 3,
-   "docstrings": 5,
-   "total": 367
+   "docstrings": 7,
+   "total": 385
   },
   "test_hub_cli_scope.py": {
    "comments": 1,
@@ -4892,12 +4892,12 @@
   "test_routine_run_domain.py": {
    "comments": 1,
    "docstrings": 4,
-   "total": 397
+   "total": 376
   },
   "test_routine_run_service.py": {
    "comments": 0,
-   "docstrings": 7,
-   "total": 198
+   "docstrings": 11,
+   "total": 210
   },
   "test_routine_store.py": {
    "comments": 2,
@@ -5467,7 +5467,7 @@
   "test_work_item_run_store.py": {
    "comments": 1,
    "docstrings": 8,
-   "total": 143
+   "total": 151
   },
   "test_work_item_seq_concurrency.py": {
    "comments": 5,

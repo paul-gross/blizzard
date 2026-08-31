@@ -357,6 +357,7 @@ finding_sets = Table(
 )
 
 Index("ix_finding_sets_chunk_id", finding_sets.c.chunk_id)
+Index("ix_finding_sets_routine_scope", finding_sets.c.routine_name, finding_sets.c.scope_slug)
 
 # --- Garden proposals (blizzard#390) ---------------------------------------------
 # A proposed response to one or more findings — never `proposals`, so neither this nor
@@ -1203,8 +1204,8 @@ work_items = Table(
     # Unset while open. Set together, once, when the item closes.
     Column("closed_at", UtcDateTime, nullable=True),
     Column("closure", String, nullable=True),  # delivered | withdrawn
-    # A routine run's own indexed values, nullable (blizzard#392). `scope_slug` carries
-    # no `ForeignKey` (SQLite cannot drop one); `run_mode` is a plain string, never a DB enum.
+    # A routine run's own recorded values, nullable (blizzard#392) — unindexed: the pair's
+    # actual read path is `finding_sets(routine_name, scope_slug)`, not this table.
     Column("routine_name", String, nullable=True),
     Column("scope_slug", String, nullable=True),
     Column("run_mode", String, nullable=True),
@@ -1212,7 +1213,6 @@ work_items = Table(
 )
 
 Index("ix_work_items_source", work_items.c.source)
-Index("ix_work_items_routine_scope", work_items.c.routine_name, work_items.c.scope_slug)
 
 # --- Work item runs (a run's identity — blizzard#393 Phase 1) -----------------------
 # What routine, scope, and mode a work item's run is executing under — minted by

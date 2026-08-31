@@ -12313,7 +12313,7 @@
     },
     "/api/routines/{routine_id}/run": {
       "post": {
-        "description": "Mint, ingest, and promote a hub work item from the routine, in one act\n(blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown\n``mode``, or a graph name with no enabled mint; 409 on a retired effective scope or\nan out-of-band ingest already holding the allocated ref's pointer.",
+        "description": "Mint, ingest, and promote a hub work item from the routine, in one act\n(blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug`` or an unknown\n``mode``; 503 on a retired effective scope or a graph name with no enabled mint (D5,\nmirroring ``POST /work-sources/{source}/items``'s own retired-default-graph shape);\n409 on an out-of-band ingest already holding the allocated ref's pointer.",
         "operationId": "run_routine_api_routines__routine_id__run_post",
         "parameters": [
           {

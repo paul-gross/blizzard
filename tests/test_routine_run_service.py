@@ -13,7 +13,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.routine_run import RoutineNotFoundError, ScopeRetiredError
+from blizzard.hub.domain.routine_run import ScopeRetiredError
 from blizzard.hub.domain.routines import Routine, RoutineGraphUnresolvedError, RunMode
 from blizzard.hub.domain.scopes import ScopeSlug
 from blizzard.hub.domain.work import WorkItemAuthor
@@ -55,7 +55,7 @@ def test_full_mode_mints_ingests_and_promotes(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
 
-    result = hub.services.routine_run.run(routine.name, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     assert result.effective_mode is RunMode.FULL
     assert result.downgraded is False
@@ -67,11 +67,29 @@ def test_full_mode_mints_ingests_and_promotes(tmp_path: Path) -> None:
     assert facts.status() == ChunkStatus.READY
 
 
+def test_the_minted_chunk_carries_a_resolvable_run_context(tmp_path: Path) -> None:
+    """The run's own identity row (blizzard#393's ``work_item_runs``) lands in the same
+    act, so garden delivery's own read of the chunk it will later deliver against
+    resolves rather than reading `None` (blizzard#392/#393 reconciliation)."""
+    hub = build_hub(tmp_path)
+    routine, _graph = _routine(hub)
+
+    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+
+    minted = hub.services.chunks.get(result.chunk_id)
+    assert minted is not None
+    run = hub.services.run_context.for_chunk(minted)
+    assert run is not None
+    assert run.routine_name == "gardening"
+    assert run.scope_slug == "blizzard"
+    assert run.mode == "full"
+
+
 def test_chunk_is_pinned_to_the_routines_graph(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, graph = _routine(hub)
 
-    result = hub.services.routine_run.run(routine.name, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     minted = hub.services.chunks.get(result.chunk_id)
     assert minted is not None
@@ -82,7 +100,7 @@ def test_the_routines_model_and_effort_defaults_reach_the_minted_chunk(tmp_path:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub, model=["opus"], effort="high")
 
-    result = hub.services.routine_run.run(routine.name, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     minted = hub.services.chunks.get(result.chunk_id)
     assert minted is not None
@@ -96,7 +114,7 @@ def test_a_scope_override_naming_no_existing_slug_mints_it_in_the_same_act(tmp_p
     assert hub.services.scopes.get("new-scope") is None
 
     result = hub.services.routine_run.run(
-        routine.name, scope_slug=ScopeSlug.parse("new-scope"), mode=RunMode.FULL, note=None, author=_AUTHOR
+        routine, scope_slug=ScopeSlug.parse("new-scope"), mode=RunMode.FULL, note=None, author=_AUTHOR
     )
 
     assert hub.services.scopes.get("new-scope") is not None
@@ -107,7 +125,7 @@ def test_delta_against_a_never_swept_pair_downgrades_to_full(tmp_path: Path) -> 
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
 
-    result = hub.services.routine_run.run(routine.name, scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
 
     assert result.effective_mode is RunMode.FULL
     assert result.downgraded is True
@@ -120,7 +138,7 @@ def test_delta_with_a_recorded_baseline_stays_delta_and_names_its_revisions(tmp_
     routine, graph = _routine(hub)
     _seed_baseline(hub, graph_id=graph.graph_id, routine_name=routine.name, scope_slug="blizzard")
 
-    result = hub.services.routine_run.run(routine.name, scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
 
     assert result.effective_mode is RunMode.DELTA
     assert result.downgraded is False
@@ -134,18 +152,11 @@ def test_a_note_lands_in_the_charge_as_a_this_run_section(tmp_path: Path) -> Non
     routine, _graph = _routine(hub)
 
     result = hub.services.routine_run.run(
-        routine.name, scope_slug=None, mode=RunMode.FULL, note="focus on the auth module", author=_AUTHOR
+        routine, scope_slug=None, mode=RunMode.FULL, note="focus on the auth module", author=_AUTHOR
     )
 
     assert "This run" in result.item.body
     assert "focus on the auth module" in result.item.body
-
-
-def test_unknown_routine_name_is_refused(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-
-    with pytest.raises(RoutineNotFoundError):
-        hub.services.routine_run.run("ghost", scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
 def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> None:
@@ -156,7 +167,7 @@ def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> Non
     hub.services.scope_lifecycle.retire(scope, by="operator")
 
     with pytest.raises(ScopeRetiredError):
-        hub.services.routine_run.run(routine.name, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
 def test_a_routine_whose_graph_has_no_enabled_mint_is_refused(tmp_path: Path) -> None:
@@ -165,12 +176,13 @@ def test_a_routine_whose_graph_has_no_enabled_mint_is_refused(tmp_path: Path) ->
     hub.services.graph_lifecycle.retire(graph, by="operator")
 
     with pytest.raises(RoutineGraphUnresolvedError):
-        hub.services.routine_run.run(routine.name, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
 def _seed_baseline(hub: HubHarness, *, graph_id: str, routine_name: str, scope_slug: str) -> None:
     """A prior run's own delivered finding set — a chunk + artifact row plus the
-    ``finding_sets`` row itself, seeded directly (there is no write route yet)."""
+    ``finding_sets`` row itself, seeded directly rather than through its real writer
+    (``GardenDeliveryStore.deliver``), which this test has no delivery plan to drive."""
     now = datetime(2026, 7, 1, tzinfo=UTC)
     with hub.engine.begin() as conn:
         conn.execute(s.chunks.insert().values(chunk_id="ch_prior", graph_id=graph_id, minted_at=now))

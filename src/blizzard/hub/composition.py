@@ -394,7 +394,6 @@ def build_services(
             routines=routine_store, graphs=graph_store, scope_registry=scope_registry, clock=clock
         ),
         routine_run=RunService(
-            routines=routine_store,
             scopes=scope_store,
             scope_registry=scope_registry,
             graphs=graph_store,

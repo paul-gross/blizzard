@@ -331,14 +331,32 @@ def test_routine_run_maps_a_409_to_a_click_exception(monkeypatch: pytest.MonkeyP
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(409, {"detail": "scope 'blizzard' is retired"})
+        return _FakeResponse(409, {"existing_chunk_id": "ch_1", "source": "hub", "ref": "1"})
 
     monkeypatch.setattr(httpx, "get", fake_get)
     monkeypatch.setattr(httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["routine", "run", "gardening"])
 
     assert result.exit_code != 0
-    assert "retired" in result.output
+    assert "conflict" in result.output
+
+
+@pytest.mark.unit
+def test_routine_run_maps_a_503_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A retired effective scope or an unresolvable graph refuses at 503 (D5), with no
+    bespoke CLI handling; the generic HTTP-failure path still exits non-zero."""
+
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(503, {"detail": "scope 'blizzard' is retired"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["routine", "run", "gardening"])
+
+    assert result.exit_code != 0
 
 
 @pytest.mark.unit
