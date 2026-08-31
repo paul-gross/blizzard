@@ -92,13 +92,10 @@ class HubWorkSource:
 
     def close(self, pointer: WorkRef) -> None:
         """Mark the item ``delivered`` via ``edits.deliver`` — the only failure this
-        raises is :class:`WorkItemGoneError`, for a ref with no item row. Idempotency
-        and the withdrawn-item guard both live in the store's own ``closed_at IS NULL``
-        update, reached through :meth:`WorkItemEditService.deliver`. Then resolves
+        raises is :class:`WorkItemGoneError`, for a ref with no item row. Then resolves
         whichever garden-proposal findings `pointer` answers, if any (blizzard#394 Phase
-        3) — a no-op for an item with no accepted, minted proposal behind it, and safe to
-        repeat: :meth:`GardenProposalDeliveryResolution.resolve_for_item` only ever
-        touches a finding still `live`."""
+        3), safe to repeat: :meth:`GardenProposalDeliveryResolution.resolve_for_item`
+        gates on its own durable marker, not the item write's idempotency."""
         item = self._items.get(pointer.source, pointer.ref)
         if item is None:
             raise WorkItemGoneError(f"no {RESERVED_HUB_SOURCE_NAME}:{pointer.ref} work item exists")
@@ -156,8 +153,7 @@ def seat_hub_work_source(
     :meth:`~blizzard.hub.work_sources.internal.factory.WorkSourceEntry.registry` and
     ``tests/support.py::build_hub``: never absent, never configured. ``users``/``items``/
     ``delete``/``resolution`` are the composition root's own instances (#362, #364,
-    blizzard#394), so the same claim-locked ``DeleteService`` (and the same garden-
-    proposal resolution seam) backs every write path regardless of the door reaching it."""
+    blizzard#394), so every write path shares the same claim-locked instances."""
     chunks = ChunkStore(store, clock)
     edits = WorkItemEditService(items=items, chunks=chunks, clock=clock, delete=delete)
     hub_source = HubWorkSource(items, chunks, edits, users, resolution)
