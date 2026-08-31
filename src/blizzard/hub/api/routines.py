@@ -1,10 +1,8 @@
-"""Routine routes — create, list, read, edit, run, and trend a routine (issue #389,
-blizzard#392, blizzard#394 Phase 4).
+"""Routine routes — create, list, read, edit, run, and trend a routine (issue #389, blizzard#392).
 
 The controller stays read-only over the store (``bzh:controller-read-only``), resolving
 a ``routine_id`` into an object before delegating to the domain
-(``bzh:domain-takes-objects``). ``reject_runner_principal`` confines a runner's bearer
-token to the fleet router. ``GET /routines/trend`` is declared ahead of
+(``bzh:domain-takes-objects``). ``GET /routines/trend`` is declared ahead of
 ``GET /routines/{routine_id}`` so the literal path wins the match."""
 
 from __future__ import annotations

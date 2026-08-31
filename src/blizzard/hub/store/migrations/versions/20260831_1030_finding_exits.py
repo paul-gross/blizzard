@@ -1,17 +1,5 @@
-"""Human-driven exit verbs (blizzard#394 Phase 1): widens the ``ck_finding_facts_kind``
-CHECK constraint from 3 kinds to the 9 in ``FACT_KINDS`` (``domain/findings.py``), adds
-``finding_facts.actor``/``proposal_id``/``superseded_by``, and adds
-``findings.introduced_at`` — nullable, never backfilled (D5): null wherever unresolved,
-by design.
-
-This tree's first CHECK-constraint widen (a Tested assumption worth flagging): SQLite
-exposes no ALTER for a CHECK constraint at all, so ``batch_alter_table``'s table-copy
-recreate is load-bearing here, not merely a style choice — the same recreate is what lets
-``proposal_id``/``superseded_by`` carry a real ``ForeignKey`` despite SQLite's inability to
-ALTER-add or ALTER-drop a constrained column outside a full rebuild (see
-``20260830_2015_garden_proposals_source_artifact.py``'s and
-``20260721_1500_cli_auth_state_user.py``'s docstrings for the plain-``add_column`` cases
-that route around it instead).
+"""Human-driven exit verbs (blizzard#394 Phase 1): widens ``ck_finding_facts_kind``,
+adds ``finding_facts.actor``/``proposal_id``/``superseded_by``, and adds ``findings.introduced_at``.
 
 Revision ID: 20260831_1030_finding_exits
 Revises: 20260831_0945_garden_proposal_closures

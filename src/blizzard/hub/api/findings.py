@@ -3,9 +3,7 @@
 ``GET /api/findings`` is the pass's own bucket read
 (blizzard-product:/plans/garden/machinery.md §Managing findings and proposals): a
 routine's live findings under one scope. The `POST /api/findings/{verb}` routes are the
-human-driven exit verbs and `reopen` — `FindingExitService`'s own methods, one call per
-verb over every finding named, gated the way a garden-proposal closure already is
-(`CHUNK_CONTROL`, `garden_proposals.py`'s own precedent)."""
+human-driven exit verbs and `reopen`, delegating to `FindingExitService`."""
 
 from __future__ import annotations
 

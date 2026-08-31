@@ -33,15 +33,13 @@ class GardenDeliveryRejected(Exception):
     error, never a stack of causes a person has to untangle."""
 
 
-# Every finding known to this routine, live or gone (a later `observed` may revive a
-# `gone` one) — minus an exited one (blizzard#394 D3): human-driven exit is terminal to a
-# run's delta ops. Keyed by finding id, valued by that finding's own recorded scope slug.
+# Every finding known to this routine, live or gone, minus an exited one (blizzard#394
+# D3): keyed by finding id, valued by that finding's own recorded scope slug.
 LiveFindings = Mapping[str, str]
 
 
-# Whether `(repo, commit)` resolves, and — when it does — the commit's own authored
-# instant (blizzard#394 D5): the GitHub adapter already fetches the commit body carrying
-# it, so widening this to carry the instant costs no extra forge round trip.
+# The GitHub adapter already fetches the commit body carrying `authored_at`, so widening
+# `CommitResolver` to return it costs no extra forge round trip.
 @dataclass(frozen=True)
 class CommitResolution:
     exists: bool
@@ -57,16 +55,14 @@ CommitResolver = Callable[[str, str], CommitResolution | None]
 class ValidatedDelivery:
     """What a passing :func:`validate_delivery` hands the next phase: the run it was
     delivered under and the parsed, checked deltas and proposal candidates to build a
-    `DeliveryPlan` from — nothing here is durable yet (machinery.md §Delivery).
-    `proposal_sources[i]` is the artifact name `proposals[i]` came from, positionally.
-    `introduced_at[(repo, sha)]` is that pair's own resolved authored instant (blizzard#394
-    D5) — `None` when the resolver ran but found none, absent when never resolved; either
-    way, materialization must not re-resolve to fill the gap (D5: no backfill)."""
+    `DeliveryPlan` from — nothing here is durable yet (machinery.md §Delivery)."""
 
     run: RunContext
     deltas: list[FindingDelta]
     proposals: list[GardenProposalCandidate]
-    proposal_sources: list[str] = field(default_factory=list)
+    proposal_sources: list[str] = field(default_factory=list)  # proposals[i]'s own artifact name, positionally
+    #: `(repo, sha)`'s resolved authored instant — `None` when unresolved, absent when
+    #: never attempted; materialization must not re-resolve to fill the gap (no backfill).
     introduced_at: dict[tuple[str, str], datetime | None] = field(default_factory=dict)
 
 
@@ -104,12 +100,9 @@ def check_delta(
 ) -> dict[tuple[str, str], datetime | None]:
     """Validate one already-parsed delta against `run` and `live_findings`, raising
     :class:`GardenDeliveryRejected` on the first failure: `delta.scope` against `run`'s
-    own declared scope, every revision's and `add`'s commit sha, every transformation's
-    id (well-formed, known to the routine, in scope), and a `gone` op's non-empty note.
-    `tests/test_garden_delivery_domain.py` pins one case per rejection reason. Returns
-    every `(repo, sha)` this delta resolved for an `add`'s `introduced` commit, keyed for
-    `ValidatedDelivery.introduced_at` (blizzard#394 D5) — never the revision shas, which
-    name no finding of their own."""
+    own declared scope, every commit sha, every transformation's id, and a `gone` op's
+    non-empty note. Returns every `(repo, sha)` resolved for an `add`'s `introduced`
+    commit, keyed for `ValidatedDelivery.introduced_at` — never the revision shas."""
     if delta.scope != run.scope_slug:
         raise GardenDeliveryRejected(
             f"delta declares scope {delta.scope!r}, this run's declared scope is {run.scope_slug!r}"
@@ -123,8 +116,7 @@ def check_delta(
         if isinstance(op, AddFindingOp):
             if op.introduced is not None:
                 # `introduced` names no repository of its own, so it resolves only against
-                # a sole declared one; zero or several leave which one ambiguous, and its
-                # instant stays unattributed (D5's own third bucket).
+                # a sole declared one; zero or several leave which one ambiguous.
                 if single_repo is not None:
                     resolution = _check_commit_resolves(single_repo, op.introduced, resolve_commit)
                     introduced_at[(single_repo, op.introduced)] = resolution.authored_at if resolution else None
@@ -171,10 +163,9 @@ def validate_delivery(
 ) -> ValidatedDelivery:
     """The delivery node's whole check. `delta_artifacts`/`proposal_artifacts` are
     artifact-name → raw-JSON-text maps, what a route handler holds before parsing;
-    `known_findings` is every finding on `run.routine_name`, live or gone, minus an
-    exited one (blizzard#394 D3). Parses each artifact, then checks it against `run`,
-    raising :class:`GardenDeliveryRejected` on the first failure; on success returns a
-    :class:`ValidatedDelivery`, nothing durable."""
+    `known_findings` is every finding on `run.routine_name`, live or gone. Parses each
+    artifact, then checks it against `run`, raising :class:`GardenDeliveryRejected` on
+    the first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
     live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in known_findings if f.state not in EXIT_KINDS}
     deltas = [parse_delta(name, raw) for name, raw in delta_artifacts.items()]
     proposals: list[GardenProposalCandidate] = []

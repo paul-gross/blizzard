@@ -3,13 +3,7 @@
 The no-stored-column contract is `src/blizzard/hub/store/schema.py`'s own (D2, D4); only
 a ``gone`` fact takes a finding out of the live bucket, reversibly (D3). ``class_``/
 ``locus`` are opaque to the hub
-(blizzard-context:/domain/findings-and-proposals.md §`class` and `locus` are opaque).
-
-blizzard#394 Phase 1 widens the vocabulary with human-driven exit verbs — `resolved`,
-`gone-confirmed`, `wont-fix`, `not-a-finding`, `superseded` — plus `reopened`, the way
-back to `live`. Every exit is an appended fact, never a stored column
-(blizzard-context:/domain/findings-and-proposals.md §Liveness is derived, and
-reversible)."""
+(blizzard-context:/domain/findings-and-proposals.md §`class` and `locus` are opaque)."""
 
 from __future__ import annotations
 
@@ -105,14 +99,9 @@ class FindingLiveness:
 
 
 def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
-    """`gone` and every `EXIT_KINDS` verb take a finding out of the live bucket only
-    until a later fact restores it — `reopened` explicitly, `gone` by any later fact at
-    all (D3, blizzard#394); `state` is the newest fact's own kind, folded to `"live"` for
-    `add`/`observed`/`reopened`. `last_seen_at` is the newest `add`/`observed` fact's
-    instant by `recorded_at` — not insertion order, so out-of-order ingestion still
-    derives correctly, and scoped to those two kinds only: they are the only facts that
-    represent a run actually seeing the finding. `observed_count` counts only `observed`
-    facts — re-confirmations, not the initial `add`."""
+    """The newest-fact-wins read over a finding's facts (D3, blizzard#394): any later fact
+    reverses `gone`, and `reopened` is the explicit undo. `last_seen_at` uses
+    `recorded_at`, not insertion order, so out-of-order ingestion still derives correctly."""
     if not facts:
         return FindingLiveness(state="live", live=True, note=None, last_seen_at=None, observed_count=0)
     seen = [f for f in facts if f.kind in ("add", "observed")]
@@ -216,13 +205,9 @@ class FactEntry:
 
 
 class FindingExitService:
-    """The human-driven exit verbs (blizzard#394) — `resolve`/`confirm_gone`/`wont_fix`/
-    `not_a_finding`/`supersede` take a finding out of the live set for good, and `reopen`
-    is the way back. Every method takes already-loaded :class:`Finding` objects
-    (`bzh:domain-takes-objects`) — the caller loads them, this only writes facts — and
-    refuses a blank or missing note before touching the repository. One
-    `record_facts` call per batch, so a multi-finding verb is atomic
-    (`GardenProposalClosureService`'s shape, `domain/garden_proposal_closure.py`)."""
+    """The human-driven exit verbs (blizzard#394) that decide a finding's fate for good,
+    plus `reopen`, the way back. Every method takes already-loaded :class:`Finding` objects
+    (`bzh:domain-takes-objects`) and refuses a blank or missing note before writing."""
 
     def __init__(self, *, repo: IWriteFindingRepository, clock: IClock) -> None:
         self._repo = repo

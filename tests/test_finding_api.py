@@ -1,11 +1,9 @@
 """Finding routes — the read half (blizzard#390) and the human-driven exit verbs
 (blizzard#394 Phase 2), component tier.
 
-The read half proves the acceptance scenario: a routine's live findings under one scope,
-and nothing else — seeded straight through ``FindingStore``. The exit routes prove each
-verb is reachable, refuses a missing note, exits many findings in one call, and the
-result reads back through both ``GET /findings/{id}`` and the route's own response
-(``tests/test_garden_proposal_closure_api.py``'s shape)."""
+The read half proves a routine's live findings under one scope, and nothing else, seeded
+through ``FindingStore``. The exit routes prove each verb is reachable, refuses a missing
+note, and exits many findings in one call, read back through ``GET /findings/{id}``."""
 
 from __future__ import annotations
 
@@ -127,9 +125,8 @@ def _seeded_scopes(hub) -> set[str]:  # type: ignore[no-untyped-def]
 
 
 def _seed_finding(hub, finding_id: str, *, scope: str = "blizzard") -> None:  # type: ignore[no-untyped-def]
-    # `at=hub.clock.now()` — not the module `_NOW` — since the exit routes stamp their
-    # own facts from `hub.clock` (fixed at 2026-07-13): an `add` fact recorded later than
-    # that would always outrank a same-fixed-instant exit fact under newest-fact-wins.
+    # `at=hub.clock.now()`, not module `_NOW`: exit-route facts stamp from `hub.clock`, and
+    # newest-fact-wins would let a later `_NOW` add outrank a same-instant exit fact.
     if scope not in _seeded_scopes(hub):
         _seed_scope(hub, scope)
     FindingStore(hub_store_connections(hub.engine)).add(

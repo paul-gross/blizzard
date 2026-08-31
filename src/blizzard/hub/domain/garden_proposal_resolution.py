@@ -1,13 +1,9 @@
-"""Delivery-triggered finding resolution (blizzard#394 Phase 3) — when the item an
-accepted garden proposal minted is delivered, the findings that proposal named are
-resolved, attributed to it. The hook is `HubWorkSource.close` → this, called after
-`WorkItemEditService.deliver` (`hub/work_sources/internal/hub_work_source.py`).
-
-Re-entrant by construction, not by a separate marker: only a finding still `live` is
-handed to `FindingExitService.resolve` (`bzh:domain-takes-objects`), so a drain retried
-after a crash — `CloseIntentDrainer.sweep`, `blizzard-context:/architecture/crash-
-correctness/hub.md` — resolves only what an earlier pass left live, and a second full
-pass over an already-resolved set appends nothing."""
+"""Delivery-triggered finding resolution (blizzard#394 Phase 3): when the item an
+accepted garden proposal minted is delivered, its still-live findings resolve,
+attributed to it. Re-entrant by construction — only a `live` finding is handed to
+`FindingExitService.resolve` — so a drain retried after a crash
+(`blizzard-context:/architecture/crash-correctness/hub.md`) resolves only what an
+earlier pass left live."""
 
 from __future__ import annotations
 

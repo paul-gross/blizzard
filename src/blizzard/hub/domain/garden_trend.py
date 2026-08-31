@@ -1,10 +1,8 @@
 """A routine's finding trend — a read over a window's `finding_facts`, folded into
 fixed-length periods with per-kind exit counts, the outflow/withdrawn roll-ups, and the
-D5 introduced-age cut (blizzard#394 Phase 4).
-
-Periods are cut in Python, not SQL (D6, `bzh:sql-portable`) — the window bounds the rows
-at the store, the fold over them happens here, the `derive_liveness` shape. The read
-never writes; every count derives at read time (`bzh:facts-not-status`)."""
+D5 introduced-age cut (blizzard#394 Phase 4). Periods are cut in Python, not SQL (D6,
+`bzh:sql-portable`); the read never writes, and every count derives at read time
+(`bzh:facts-not-status`)."""
 
 from __future__ import annotations
 
@@ -14,9 +12,8 @@ from typing import Protocol
 
 from blizzard.hub.domain.findings import EXIT_KINDS, OUTFLOW_KINDS, WITHDRAWN_KINDS
 
-#: The fact kinds a trend counts — a finding's birth plus every way it leaves the live
-#: set; `observed`/`gone`/`reopened` carry no trend meaning of their own. The store
-#: adapter's own `facts_for_trend` filters on this.
+#: A finding's birth plus every way it leaves the live set — `observed`/`gone`/`reopened`
+#: carry no trend meaning of their own.
 TREND_FACT_KINDS = frozenset({"add"}) | EXIT_KINDS
 
 
