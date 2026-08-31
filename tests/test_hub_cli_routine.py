@@ -196,3 +196,172 @@ def test_routine_edit_reads_the_current_name_then_patches(monkeypatch: pytest.Mo
             },
         )
     ]
+
+
+@pytest.mark.unit
+def test_routine_run_resolves_name_then_posts(monkeypatch: pytest.MonkeyPatch) -> None:
+    post_calls: list[tuple[str, object]] = []
+
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening", "graph_name": "alpha"}])
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        post_calls.append((url, json))
+        return _FakeResponse(
+            201,
+            {
+                "chunk_id": "ch_1",
+                "source": "hub",
+                "ref": "1",
+                "title": "gardening run (full)",
+                "body": "Routine: gardening (graph: alpha)",
+                "routine_name": "gardening",
+                "scope_slug": "blizzard",
+                "effective_mode": "full",
+                "downgraded": False,
+                "baseline_finding_set_id": None,
+                "baseline_revisions": None,
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["routine", "run", "gardening"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+
+    assert result.exit_code == 0, result.output
+    assert post_calls == [
+        ("http://hub.local:8421/api/routines/rtn_1/run", {"scope_slug": None, "mode": "full", "note": None})
+    ]
+    assert "ch_1" in result.output
+
+
+@pytest.mark.unit
+def test_routine_run_threads_scope_mode_and_note(monkeypatch: pytest.MonkeyPatch) -> None:
+    post_calls: list[tuple[str, object]] = []
+
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        post_calls.append((url, json))
+        return _FakeResponse(
+            201,
+            {
+                "chunk_id": "ch_1",
+                "source": "hub",
+                "ref": "1",
+                "title": "t",
+                "body": "b",
+                "routine_name": "gardening",
+                "scope_slug": "cold",
+                "effective_mode": "delta",
+                "downgraded": False,
+                "baseline_finding_set_id": "fins_1",
+                "baseline_revisions": {"blizzard": "a1b2c3d"},
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    CliRunner().invoke(
+        hub_group,
+        ["routine", "run", "gardening", "--scope", "cold", "--mode", "delta", "--note", "focus on auth"],
+    )
+
+    assert post_calls[0][1] == {"scope_slug": "cold", "mode": "delta", "note": "focus on auth"}
+
+
+@pytest.mark.unit
+def test_routine_run_names_a_downgrade_in_its_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            201,
+            {
+                "chunk_id": "ch_1",
+                "source": "hub",
+                "ref": "1",
+                "title": "t",
+                "body": "b",
+                "routine_name": "gardening",
+                "scope_slug": "blizzard",
+                "effective_mode": "full",
+                "downgraded": True,
+                "baseline_finding_set_id": None,
+                "baseline_revisions": None,
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["routine", "run", "gardening", "--mode", "delta"])
+
+    assert result.exit_code == 0, result.output
+    assert "downgraded" in result.output.lower()
+
+
+@pytest.mark.unit
+def test_routine_run_unknown_name_raises_without_a_run_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    post_calls: list[str] = []
+
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "other"}])
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        post_calls.append(url)
+        return _FakeResponse(201, {})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["routine", "run", "ghost"])
+
+    assert result.exit_code != 0
+    assert "ghost" in result.output
+    assert post_calls == []
+
+
+@pytest.mark.unit
+def test_routine_run_maps_a_409_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(409, {"detail": "scope 'blizzard' is retired"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["routine", "run", "gardening"])
+
+    assert result.exit_code != 0
+    assert "retired" in result.output
+
+
+@pytest.mark.unit
+def test_routine_run_mode_option_is_choice_restricted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--mode`` never reaches the server with an unknown value — click's own
+    ``Choice`` validation refuses it first, before any HTTP call."""
+    result = CliRunner().invoke(hub_group, ["routine", "run", "gardening", "--mode", "sideways"])
+
+    assert result.exit_code != 0
+    assert "sideways" in result.output
+
+
+@pytest.mark.unit
+def test_routine_run_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(422, {"detail": "scope slug must match [a-z0-9-]+, got 'Not A Slug'"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["routine", "run", "gardening", "--scope", "Not A Slug"])
+
+    assert result.exit_code != 0
+    assert "Not A Slug" in result.output

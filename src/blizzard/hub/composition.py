@@ -69,6 +69,7 @@ from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.restart import RestartService
+from blizzard.hub.domain.routine_run import RunService
 from blizzard.hub.domain.routines import IReadRoutineRepository, RoutineAuthoring
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
@@ -200,6 +201,8 @@ class HubServices:
     routines: IReadRoutineRepository
     #: Create and edit a routine, minting its default scope on demand (blizzard#389 D4).
     routine_authoring: RoutineAuthoring
+    #: Mint, ingest, and promote a hub work item from a routine, in one act (blizzard#392).
+    routine_run: RunService
     #: The finding read Protocol (blizzard#390).
     findings: IReadFindingRepository
     #: The finding-set read Protocol (blizzard#390) — one set per delivered artifact list.
@@ -389,6 +392,16 @@ def build_services(
         routines=routine_store,
         routine_authoring=RoutineAuthoring(
             routines=routine_store, graphs=graph_store, scope_registry=scope_registry, clock=clock
+        ),
+        routine_run=RunService(
+            routines=routine_store,
+            scopes=scope_store,
+            scope_registry=scope_registry,
+            graphs=graph_store,
+            finding_sets=finding_set_store,
+            items=work_item_store,
+            chunks=chunk_store,
+            clock=clock,
         ),
         findings=finding_store,
         finding_sets=finding_set_store,

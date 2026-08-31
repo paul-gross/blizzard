@@ -187,6 +187,20 @@ def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
         conn.execute(insert(s.chunk_work_refs).values(chunk_id=chunk.chunk_id, source=pointer.source, ref=pointer.ref))
 
 
+def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int | None:
+    """Insert one chunk's ``chunk_promoted`` and ``queue_positions`` rows on a
+    caller-supplied ``conn`` — mirrors :func:`insert_chunk_rows`'s shared-connection
+    shape, so :meth:`ChunkStore.record_promote_with_tail_position` and a routine run's
+    own mint-and-promote composite write both fold the promote-then-tail-stamp pair into
+    their own transaction (blizzard#392). No idempotency check: a caller minting a fresh
+    chunk has nothing to check against, and :meth:`record_promote_with_tail_position`
+    keeps its own ahead of this call. Returns the freshly-inserted ``chunk_promoted.id``."""
+    result = conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
+    conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
+    key = result.inserted_primary_key
+    return int(key[0]) if key is not None else None
+
+
 def record_deleted_row(conn: Connection, chunk_id: str, *, by: str, at: datetime) -> int:
     """Insert one ``chunk_deleted`` row on a caller-supplied ``conn`` (issue #364) —
     mirrors :func:`insert_chunk_rows`'s shared-connection shape, so the withdrawal
@@ -1632,10 +1646,7 @@ class ChunkStore:
         with self._store.write("record_promote_with_tail_position") as conn:
             if self._exists(conn, s.chunk_promoted, chunk_id):
                 return None
-            result = conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
-            conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
-            key = result.inserted_primary_key
-            return int(key[0]) if key is not None else None
+            return insert_promote_rows(conn, chunk_id, position=position, at=at)
 
     def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None:
         with self._store.write("record_lease") as conn:

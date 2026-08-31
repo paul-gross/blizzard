@@ -3079,6 +3079,89 @@ export type RoutineEditRequest = {
 };
 
 /**
+ * RoutineRunRequest
+ *
+ * ``POST /api/routines/{routine_id}/run`` (blizzard#392) — ``scope_slug`` omitted
+ * or ``None`` defaults to the routine's own; ``mode`` is ``"full"`` or ``"delta"``, a
+ * requested ``"delta"`` with no recorded baseline downgrading to ``"full"`` on the
+ * response rather than refusing.
+ */
+export type RoutineRunRequest = {
+    /**
+     * Mode
+     */
+    mode?: string;
+    /**
+     * Note
+     */
+    note?: string | null;
+    /**
+     * Scope Slug
+     */
+    scope_slug?: string | null;
+};
+
+/**
+ * RoutineRunResponse
+ *
+ * The minted, ingested, and promoted run item — the chunk id, the item's own
+ * pointer, the effective mode and whether it was downgraded from a requested delta,
+ * and the resolved baseline, when the mode settled on delta.
+ */
+export type RoutineRunResponse = {
+    /**
+     * Baseline Finding Set Id
+     */
+    baseline_finding_set_id?: string | null;
+    /**
+     * Baseline Revisions
+     */
+    baseline_revisions?: {
+        [key: string]: string;
+    } | null;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Downgraded
+     */
+    downgraded: boolean;
+    /**
+     * Effective Mode
+     */
+    effective_mode: string;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+    /**
+     * Scope Slug
+     */
+    scope_slug: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
  * RoutineView
  *
  * A routine as served by the create/list/read/edit routes.
@@ -7357,6 +7440,36 @@ export type EditRoutineApiRoutinesRoutineIdPatchResponses = {
 };
 
 export type EditRoutineApiRoutinesRoutineIdPatchResponse = EditRoutineApiRoutinesRoutineIdPatchResponses[keyof EditRoutineApiRoutinesRoutineIdPatchResponses];
+
+export type RunRoutineApiRoutinesRoutineIdRunPostData = {
+    body: RoutineRunRequest;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+    };
+    query?: never;
+    url: '/api/routines/{routine_id}/run';
+};
+
+export type RunRoutineApiRoutinesRoutineIdRunPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RunRoutineApiRoutinesRoutineIdRunPostError = RunRoutineApiRoutinesRoutineIdRunPostErrors[keyof RunRoutineApiRoutinesRoutineIdRunPostErrors];
+
+export type RunRoutineApiRoutinesRoutineIdRunPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RoutineRunResponse;
+};
+
+export type RunRoutineApiRoutinesRoutineIdRunPostResponse = RunRoutineApiRoutinesRoutineIdRunPostResponses[keyof RunRoutineApiRoutinesRoutineIdRunPostResponses];
 
 export type ListRunnersApiRunnersGetData = {
     body?: never;

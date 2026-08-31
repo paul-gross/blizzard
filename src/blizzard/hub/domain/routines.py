@@ -9,12 +9,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ROUTINE_PREFIX, Id
 from blizzard.hub.domain.graph import IReadGraphRepository
 from blizzard.hub.domain.scopes import ScopeRegistry, ScopeSlug
+
+
+class RunMode(StrEnum):
+    """How a routine run settles its delta baseline (blizzard#392) — a plain string
+    column, never a DB enum (``bzh:sql-portable``), the ``work_items.run_mode`` shape."""
+
+    FULL = "full"
+    DELTA = "delta"
 
 
 class RoutineNameTakenError(ValueError):

@@ -98,6 +98,11 @@ class WorkItemRecord:
     edited_at: datetime
     closed_at: datetime | None = None
     closure: WorkItemClosure | None = None
+    # A routine run's own indexed values (blizzard#392) — ``None`` for every item but a
+    # run's own.
+    routine_name: str | None = None
+    scope_slug: str | None = None
+    run_mode: str | None = None
 
     @property
     def pointer(self) -> WorkRef:
@@ -176,16 +181,26 @@ class Chunk:
     intended_migration: IntendedMigration | None = None
 
 
-def mint_chunk(work_refs: Sequence[WorkRef], *, graph_id: str, at: datetime) -> Chunk:
+def mint_chunk(
+    work_refs: Sequence[WorkRef],
+    *,
+    graph_id: str,
+    at: datetime,
+    default_model: list[str] | None = None,
+    default_effort: str | None = None,
+) -> Chunk:
     """Mint a resting chunk pinned to ``graph_id`` holding ``work_refs``, timestamped at
-    the caller's own already-stamped ``at`` (``bzh:injected-clock``) — neither model nor
-    effort default (issue #144), the empty-preference policy every chunk-minting call
-    site shares, given one home here."""
+    the caller's own already-stamped ``at`` (``bzh:injected-clock``). Every call site but
+    a routine run's own passes neither preference — the empty-preference policy (issue
+    #144) given one home here; a routine run is the first to source one, from its own
+    routine's defaults (blizzard#392)."""
     return Chunk(
         chunk_id=Id.mint_at(CHUNK_PREFIX, at).value,
         graph_id=graph_id,
         work_refs=list(work_refs),
         minted_at=at,
+        default_model=list(default_model or []),
+        default_effort=default_effort,
     )
 
 
@@ -1866,6 +1881,29 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         already minted for it, taken as its own explicit parameter — and ``chunk``'s own
         rows, atomically in one transaction (blizzard#359): a store failure leaves
         neither durable."""
+        ...
+
+    def create_with_chunk_and_promote(
+        self,
+        *,
+        pointer: WorkRef,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        routine_name: str,
+        scope_slug: str,
+        run_mode: str,
+        at: datetime,
+        chunk: Chunk,
+        position: float,
+    ) -> tuple[WorkItemRecord, int | None]:
+        """A routine run's own one-act mint (blizzard#392): :meth:`create_with_chunk`
+        plus the promote-then-tail-stamp pair, atomically in one transaction — no window
+        in which the item exists without its chunk, or the chunk without its ready
+        position. ``position`` is computed by the caller before the write (the same
+        already-accepted check-then-act shape
+        :meth:`~blizzard.hub.domain.promote.PromoteService.promote` uses). Returns the
+        item and the fresh ``chunk_promoted.id``."""
         ...
 
     def edit(

@@ -2719,6 +2719,79 @@
           "path": "hub routine list",
           "short_help": "List every routine, newest first \u2014 routine_id, name, graph, default scope."
         },
+        "run": {
+          "help": "Mint, ingest, and promote a hub work item from routine NAME, in one act.\n\nNAME is resolved to its routine_id through the routine list (D3).",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "scope_slug",
+              "opts": [
+                "--scope"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "mode",
+              "opts": [
+                "--mode"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "note",
+              "opts": [
+                "--note"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub routine run",
+          "short_help": "Mint, ingest, and promote a hub work item from routine NAME, in one act."
+        },
         "show": {
           "help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults.",
           "params": [
