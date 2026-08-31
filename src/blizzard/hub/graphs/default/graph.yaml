@@ -65,7 +65,7 @@ nodes:
           description: Work that warrants a plan — design or architecture decisions, multi-repo or schema changes, or vague acceptance criteria; migrates to the plan-gated adv-dwf lane.
           to: graph:adv-dwf
         harness:
-          description: The work item's subject IS the agentic harness itself — an agent skill, a convention rule the project holds its agents to, a graph prompt or graph definition, agent-facing docs, or another agent-capability surface; migrates to the frontier-tier bas-hwf lane regardless of complexity.
+          description: EVERY work item in the chunk is purely a change to agent-facing context — refining, changing, or adding prose an agent reads, such as an agent skill, a convention rule the project holds its agents to, a graph prompt, or agent-facing documentation. Disqualified by any coding or development at all, however small a fraction of the chunk it is; migrates to the frontier-tier bas-hwf lane regardless of complexity.
           to: graph:bas-hwf
     retries:
       max: 2
