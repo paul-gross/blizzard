@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import (
     Chunk,
@@ -32,6 +33,7 @@ from blizzard.hub.store.internal.chunk_store import (
     insert_promote_rows,
     record_deleted_row,
 )
+from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.run_context_store import insert_run_context_row
 
 
@@ -305,6 +307,58 @@ class WorkItemStore:
                 at=at,
             )
         return True
+
+    def accept_create(
+        self,
+        *,
+        proposal_id: str,
+        pointer: WorkRef,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        at: datetime,
+        chunk: Chunk,
+        reason: str | None,
+        closed_by: str,
+    ) -> WorkItemRecord | None:
+        """Insert the accepted-and-minted ``garden_proposal_closures`` row, the item, and
+        ``chunk``'s own rows on one ``engine.begin()`` connection (blizzard#395) —
+        :meth:`materialize_create`'s shape, the closure row checked first so an
+        already-closed proposal mints nothing."""
+        with self._store.write("accept_create") as conn:
+            if not insert_garden_proposal_closure_row(
+                conn,
+                proposal_id=proposal_id,
+                closure=GardenProposalClosureKind.ACCEPTED,
+                reason=reason,
+                closed_by=closed_by,
+                at=at,
+                item_outcome=GardenProposalItemOutcome.MINTED,
+                pointer=pointer,
+            ):
+                return None
+            work_item_id = self._insert_item(
+                conn,
+                source=pointer.source,
+                ref=pointer.ref,
+                title=title,
+                body=body,
+                author=author,
+                stated_priority=None,
+                at=at,
+            )
+            insert_chunk_rows(conn, chunk)
+        return WorkItemRecord(
+            work_item_id=work_item_id,
+            source=pointer.source,
+            ref=pointer.ref,
+            title=title,
+            body=body,
+            author=author,
+            stated_priority=None,
+            created_at=at,
+            edited_at=at,
+        )
 
     @staticmethod
     def _close_conn(conn: Connection, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> None:

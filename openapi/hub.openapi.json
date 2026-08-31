@@ -2625,8 +2625,215 @@
         "title": "GardenDeliveryResponse",
         "type": "object"
       },
+      "GardenProposalAcceptRequest": {
+        "additionalProperties": false,
+        "description": "`POST /api/garden-proposals/{proposal_id}/accept` (blizzard#395). `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` carries the minted item's body when the proposal's own\nbody should not be used verbatim; ignored when `mint_work_item` is `False`.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "mint_work_item": {
+            "default": true,
+            "title": "Mint Work Item",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "GardenProposalAcceptRequest",
+        "type": "object"
+      },
+      "GardenProposalAcceptResponse": {
+        "description": "`POST /api/garden-proposals/{proposal_id}/accept` \u2014 the proposal view, its fresh\nclosure included, plus the minted item's chunk id (null when acceptance declined to\nmint).",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "closure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GardenProposalClosureView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "proposal_id": {
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "routine_name",
+          "class",
+          "title",
+          "body",
+          "findings",
+          "created_at",
+          "chunk_id"
+        ],
+        "title": "GardenProposalAcceptResponse",
+        "type": "object"
+      },
+      "GardenProposalClosureKind": {
+        "description": "How a garden proposal closed \u2014 recorded on the row itself when it closes, never\nderived from anything else.",
+        "enum": [
+          "passed",
+          "accepted"
+        ],
+        "title": "GardenProposalClosureKind",
+        "type": "string"
+      },
+      "GardenProposalClosureView": {
+        "description": "How a garden proposal closed (blizzard#395) \u2014 a pass or an accept, either way\nterminal.",
+        "properties": {
+          "closed_at": {
+            "title": "Closed At",
+            "type": "string"
+          },
+          "closed_by": {
+            "title": "Closed By",
+            "type": "string"
+          },
+          "closure": {
+            "$ref": "#/components/schemas/GardenProposalClosureKind"
+          },
+          "item_outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GardenProposalItemOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "closure",
+          "reason",
+          "closed_by",
+          "closed_at",
+          "item_outcome",
+          "source",
+          "ref"
+        ],
+        "title": "GardenProposalClosureView",
+        "type": "object"
+      },
+      "GardenProposalItemOutcome": {
+        "description": "Whether an accepted proposal minted a work item \u2014 recorded positively rather than\ninferred from an absent link, so a declined mint reads as a decision, not a gap.",
+        "enum": [
+          "minted",
+          "declined"
+        ],
+        "title": "GardenProposalItemOutcome",
+        "type": "string"
+      },
+      "GardenProposalPassRequest": {
+        "additionalProperties": false,
+        "description": "`POST /api/garden-proposals/{proposal_id}/pass` \u2014 passing wants a reason more\nthan accepting does (blizzard#395).",
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "GardenProposalPassRequest",
+        "type": "object"
+      },
       "GardenProposalView": {
-        "description": "A garden proposal.",
+        "description": "A garden proposal, its closure carried alongside it once one exists.",
         "properties": {
           "body": {
             "title": "Body",
@@ -2635,6 +2842,16 @@
           "class": {
             "title": "Class",
             "type": "string"
+          },
+          "closure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GardenProposalClosureView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "created_at": {
             "title": "Created At",
@@ -11561,6 +11778,112 @@
           }
         },
         "summary": "Get Garden Proposal",
+        "tags": [
+          "garden-proposals"
+        ]
+      }
+    },
+    "/api/garden-proposals/{proposal_id}/accept": {
+      "post": {
+        "description": "Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default (the\nproposal's own body unless overridden), or records the decline when\n`mint_work_item` is false \u2014 never inferred from an absent link. Promotes nothing and\nchanges no finding's state. 404 unknown proposal, 409 already closed or a raced\ningest, 503 the packaged default graph retired.",
+        "operationId": "accept_garden_proposal_api_garden_proposals__proposal_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenProposalAcceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalAcceptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Garden Proposal",
+        "tags": [
+          "garden-proposals"
+        ]
+      }
+    },
+    "/api/garden-proposals/{proposal_id}/pass": {
+      "post": {
+        "description": "Pass the proposal at PROPOSAL_ID, recording the given reason. Passing is not a\ndismissal \u2014 it is the note that stops a later run raising the same response as\nthough it were new. 404 for an unknown proposal, 422 for a blank reason, 409 when\nthe proposal already carries a closure \u2014 closure is terminal.",
+        "operationId": "pass_garden_proposal_api_garden_proposals__proposal_id__pass_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenProposalPassRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pass Garden Proposal",
         "tags": [
           "garden-proposals"
         ]

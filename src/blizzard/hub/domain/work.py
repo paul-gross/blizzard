@@ -1952,3 +1952,23 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         when the item is no longer open (closed since the caller resolved it — left for
         the next sweep to classify as unresolved)."""
         ...
+
+    def accept_create(
+        self,
+        *,
+        proposal_id: str,
+        pointer: WorkRef,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        at: datetime,
+        chunk: Chunk,
+        reason: str | None,
+        closed_by: str,
+    ) -> WorkItemRecord | None:
+        """Mint the item and ``chunk``'s own rows, plus ``proposal_id``'s
+        accepted-and-minted ``garden_proposal_closures`` row, atomically in one
+        transaction (blizzard#395) — mirrors :meth:`materialize_create`, the closure row
+        written first as its idempotence guard. Returns ``None`` and writes nothing when
+        ``proposal_id`` already carries a closure."""
+        ...

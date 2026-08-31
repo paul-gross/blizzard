@@ -401,6 +401,27 @@ garden_proposal_findings = Table(
 
 Index("ix_garden_proposal_findings_finding_id", garden_proposal_findings.c.finding_id)
 
+# --- Garden proposal closures (blizzard#395) --------------------------------------
+# The record both closing verbs leave — pass or accept. A durable fact, not a status
+# column on `garden_proposals` itself: the proposal carries no edit verb, so its closure
+# is terminal the moment it exists, and the unique `proposal_id` makes a second close
+# fail at the write rather than in a read-then-write gap.
+
+garden_proposal_closures = Table(
+    "garden_proposal_closures",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("proposal_id", String, ForeignKey("garden_proposals.proposal_id"), nullable=False),
+    Column("closure", String, nullable=False),  # passed | accepted
+    Column("reason", String, nullable=True),
+    Column("closed_by", String, nullable=False),
+    Column("closed_at", UtcDateTime, nullable=False),
+    Column("item_outcome", String, nullable=True),  # minted | declined; null on a pass
+    Column("source", String, nullable=True),  # the minted item's pointer; null when none
+    Column("ref", String, nullable=True),
+    UniqueConstraint("proposal_id", name="uq_garden_proposal_closures_proposal_id"),
+)
+
 # --- Proposed work items (ride a node-step's completion, materialized at delivery) ----
 
 work_item_proposals = Table(

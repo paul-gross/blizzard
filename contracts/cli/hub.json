@@ -1467,6 +1467,79 @@
     },
     "garden-proposal": {
       "commands": {
+        "accept": {
+          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, carrying the proposal's own body unless\n--body-file supplies another; --no-work-item declines to mint, and the decline is\nrecorded rather than left to read as an absent link.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "proposal_id",
+              "opts": [
+                "proposal_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "reason",
+              "opts": [
+                "--reason"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "body_file",
+              "opts": [
+                "--body-file"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "no_work_item",
+              "opts": [
+                "--no-work-item"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub garden-proposal accept",
+          "short_help": "Accept PROPOSAL_ID."
+        },
         "list": {
           "help": "List every garden proposal, newest first.",
           "params": [
@@ -1495,6 +1568,57 @@
           ],
           "path": "hub garden-proposal list",
           "short_help": "List every garden proposal, newest first."
+        },
+        "pass": {
+          "help": "Pass PROPOSAL_ID, recording REASON.\n\nPassing is not a dismissal \u2014 it is the note that stops a later run raising the same\nresponse as though it were new.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "proposal_id",
+              "opts": [
+                "proposal_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "reason",
+              "opts": [
+                "--reason"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub garden-proposal pass",
+          "short_help": "Pass PROPOSAL_ID, recording REASON."
         },
         "show": {
           "help": "One garden proposal's whole record.",
@@ -1537,10 +1661,10 @@
           "short_help": "One garden proposal's whole record."
         }
       },
-      "help": "Read verbs over garden proposals: list every one, or inspect one by id.",
+      "help": "List, inspect, pass, or accept a garden proposal.",
       "params": [],
       "path": "hub garden-proposal",
-      "short_help": "Read verbs over garden proposals: list every one, or inspect one by id."
+      "short_help": "List, inspect, pass, or accept a garden proposal."
     },
     "graph": {
       "commands": {

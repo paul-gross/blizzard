@@ -1732,9 +1732,135 @@ export type GardenDeliveryResponse = {
 };
 
 /**
+ * GardenProposalAcceptRequest
+ *
+ * `POST /api/garden-proposals/{proposal_id}/accept` (blizzard#395). `mint_work_item`
+ * defaults to `True`: minting a linked hub work item is the default, and declining it
+ * is the deliberate act. `body` carries the minted item's body when the proposal's own
+ * body should not be used verbatim; ignored when `mint_work_item` is `False`.
+ */
+export type GardenProposalAcceptRequest = {
+    /**
+     * Body
+     */
+    body?: string | null;
+    /**
+     * Mint Work Item
+     */
+    mint_work_item?: boolean;
+    /**
+     * Reason
+     */
+    reason?: string | null;
+};
+
+/**
+ * GardenProposalAcceptResponse
+ *
+ * `POST /api/garden-proposals/{proposal_id}/accept` — the proposal view, its fresh
+ * closure included, plus the minted item's chunk id (null when acceptance declined to
+ * mint).
+ */
+export type GardenProposalAcceptResponse = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string | null;
+    /**
+     * Class
+     */
+    class: string;
+    closure?: GardenProposalClosureView | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Findings
+     */
+    findings: Array<string>;
+    /**
+     * Proposal Id
+     */
+    proposal_id: string;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * GardenProposalClosureKind
+ *
+ * How a garden proposal closed — recorded on the row itself when it closes, never
+ * derived from anything else.
+ */
+export type GardenProposalClosureKind = 'passed' | 'accepted';
+
+/**
+ * GardenProposalClosureView
+ *
+ * How a garden proposal closed (blizzard#395) — a pass or an accept, either way
+ * terminal.
+ */
+export type GardenProposalClosureView = {
+    /**
+     * Closed At
+     */
+    closed_at: string;
+    /**
+     * Closed By
+     */
+    closed_by: string;
+    closure: GardenProposalClosureKind;
+    item_outcome: GardenProposalItemOutcome | null;
+    /**
+     * Reason
+     */
+    reason: string | null;
+    /**
+     * Ref
+     */
+    ref: string | null;
+    /**
+     * Source
+     */
+    source: string | null;
+};
+
+/**
+ * GardenProposalItemOutcome
+ *
+ * Whether an accepted proposal minted a work item — recorded positively rather than
+ * inferred from an absent link, so a declined mint reads as a decision, not a gap.
+ */
+export type GardenProposalItemOutcome = 'minted' | 'declined';
+
+/**
+ * GardenProposalPassRequest
+ *
+ * `POST /api/garden-proposals/{proposal_id}/pass` — passing wants a reason more
+ * than accepting does (blizzard#395).
+ */
+export type GardenProposalPassRequest = {
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
  * GardenProposalView
  *
- * A garden proposal.
+ * A garden proposal, its closure carried alongside it once one exists.
  */
 export type GardenProposalView = {
     /**
@@ -1745,6 +1871,7 @@ export type GardenProposalView = {
      * Class
      */
     class: string;
+    closure?: GardenProposalClosureView | null;
     /**
      * Created At
      */
@@ -6963,6 +7090,66 @@ export type GetGardenProposalApiGardenProposalsProposalIdGetResponses = {
 };
 
 export type GetGardenProposalApiGardenProposalsProposalIdGetResponse = GetGardenProposalApiGardenProposalsProposalIdGetResponses[keyof GetGardenProposalApiGardenProposalsProposalIdGetResponses];
+
+export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostData = {
+    body: GardenProposalAcceptRequest;
+    path: {
+        /**
+         * Proposal Id
+         */
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/garden-proposals/{proposal_id}/accept';
+};
+
+export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostError = AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors[keyof AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors];
+
+export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalAcceptResponse;
+};
+
+export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponse = AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses[keyof AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses];
+
+export type PassGardenProposalApiGardenProposalsProposalIdPassPostData = {
+    body: GardenProposalPassRequest;
+    path: {
+        /**
+         * Proposal Id
+         */
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/garden-proposals/{proposal_id}/pass';
+};
+
+export type PassGardenProposalApiGardenProposalsProposalIdPassPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PassGardenProposalApiGardenProposalsProposalIdPassPostError = PassGardenProposalApiGardenProposalsProposalIdPassPostErrors[keyof PassGardenProposalApiGardenProposalsProposalIdPassPostErrors];
+
+export type PassGardenProposalApiGardenProposalsProposalIdPassPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalView;
+};
+
+export type PassGardenProposalApiGardenProposalsProposalIdPassPostResponse = PassGardenProposalApiGardenProposalsProposalIdPassPostResponses[keyof PassGardenProposalApiGardenProposalsProposalIdPassPostResponses];
 
 export type ListGraphsApiGraphsGetData = {
     body?: never;
