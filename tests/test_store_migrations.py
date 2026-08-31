@@ -270,6 +270,29 @@ def test_finding_sets_routine_name_column_survives_migration_roundtrip(tmp_path:
     assert _has_column()
 
 
+def test_garden_proposal_closures_table_survives_migration_roundtrip(tmp_path: Path) -> None:
+    """``garden_proposal_closures`` (blizzard#395) — one hand-written revision mints the
+    table; downgrades to its own parent by id, so the drop half is asserted rather than
+    inferred from a revision marker."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+
+    def _table_names() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return set(sa.inspect(engine).get_table_names())
+        finally:
+            engine.dispose()
+
+    assert "garden_proposal_closures" in _table_names()
+
+    runner.downgrade("20260830_2015_garden_proposals_source_artifact")
+    assert "garden_proposal_closures" not in _table_names()
+
+    runner.upgrade("head")
+    assert "garden_proposal_closures" in _table_names()
+
+
 def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """The runner's own graph-artifact mirror table — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from a

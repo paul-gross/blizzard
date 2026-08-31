@@ -183,6 +183,38 @@ class WorkItemEditService:
             chunk=chunk,
         )
 
+    def accept_create(
+        self,
+        proposal_id: str,
+        *,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        graph: Graph,
+        reason: str | None,
+        closed_by: str,
+    ) -> CreatedWorkItem | None:
+        """A garden-proposal acceptance's mint path (blizzard#395): :meth:`create`'s
+        guard sequence into the reserved hub source, writing the item, its chunk, and
+        the closure row on one connection. Raises
+        :class:`~blizzard.hub.domain.ingest.IngestConflict` as :meth:`create` does;
+        returns ``None`` when already closed."""
+        pointer, chunk, at = prepare_mint(self._items, self._chunks, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph)
+        item = self._items.accept_create(
+            proposal_id=proposal_id,
+            pointer=pointer,
+            title=title,
+            body=body,
+            author=author,
+            at=at,
+            chunk=chunk,
+            reason=reason,
+            closed_by=closed_by,
+        )
+        if item is None:
+            return None
+        return CreatedWorkItem(item=item, chunk_id=chunk.chunk_id)
+
     def edit(self, item: WorkItemRecord, edit: WorkItemEdit) -> WorkItemRecord:
         """Resolve ``edit``'s sentinel-tagged fields against ``item`` — the record this
         call itself guards — and replace them in place; raises :class:`WorkItemNotEditable`

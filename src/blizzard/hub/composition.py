@@ -58,6 +58,10 @@ from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.garden_delivery import CommitResolver
 from blizzard.hub.domain.garden_delivery_materialize import GardenDelivery
+from blizzard.hub.domain.garden_proposal_closure import (
+    GardenProposalClosureService,
+    IReadGardenProposalClosureRepository,
+)
 from blizzard.hub.domain.garden_proposals import GardenProposalAuthoring, IReadGardenProposalRepository
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
@@ -88,6 +92,7 @@ from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOpe
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
+from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
@@ -211,6 +216,11 @@ class HubServices:
     garden_proposals: IReadGardenProposalRepository
     #: Create a garden proposal, rejecting an empty `findings` list (blizzard#390 D7).
     garden_proposal_authoring: GardenProposalAuthoring
+    #: The garden-proposal-closure read Protocol (blizzard#395).
+    garden_proposal_closures: IReadGardenProposalClosureRepository
+    #: Pass or accept a garden proposal, minting a linked hub work item by default
+    #: (blizzard#395).
+    garden_proposal_closure: GardenProposalClosureService
     #: A run's identity — routine, scope, and mode; read-only (``bzh:controller-read-only``).
     run_context: IReadRunContextRepository
     #: Materialize a validated delivery in one transaction (blizzard#393 Phase 3).
@@ -317,6 +327,7 @@ def build_services(
     finding_store = FindingStore(store_connections)
     finding_set_store = FindingSetStore(store_connections)
     garden_proposal_store = GardenProposalStore(store_connections)
+    garden_proposal_closure_store = GardenProposalClosureStore(store_connections)
     run_context_store = RunContextStore(store_connections)
     garden_delivery_store = GardenDeliveryStore(store_connections)
     # Bound as `.resolve` (a plain `garden_delivery.CommitResolver` callable), not the bare
@@ -406,6 +417,10 @@ def build_services(
         finding_sets=finding_set_store,
         garden_proposals=garden_proposal_store,
         garden_proposal_authoring=GardenProposalAuthoring(proposals=garden_proposal_store, clock=clock),
+        garden_proposal_closures=garden_proposal_closure_store,
+        garden_proposal_closure=GardenProposalClosureService(
+            closures=garden_proposal_closure_store, items=materialization_edits, clock=clock
+        ),
         run_context=run_context_store,
         garden_delivery=GardenDelivery(delivery=garden_delivery_store, clock=clock),
         commit_resolver=commit_resolver,
