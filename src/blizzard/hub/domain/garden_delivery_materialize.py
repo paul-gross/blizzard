@@ -70,13 +70,17 @@ class NewFindingSet:
 @dataclass(frozen=True)
 class NewProposal:
     """A fully-formed ``garden_proposals`` row plus its ``garden_proposal_findings`` link
-    rows (``finding_ids``)."""
+    rows (``finding_ids``). ``source_artifact_id``/``ref`` are a delivered proposal's own
+    idempotence key, the pair the store dedupes a re-delivery visit against, the way
+    ``finding_sets.artifact_id`` already dedupes a delta."""
 
     proposal_id: str
     routine_name: str
     class_: str
     title: str
     body: str
+    source_artifact_id: str
+    ref: str
     finding_ids: list[str] = field(default_factory=list)
 
 
@@ -136,11 +140,13 @@ class GardenDelivery:
         node: Node,
         epoch: int,
         delta_artifact_ids: Sequence[str],
+        proposal_artifact_ids: Sequence[str] = (),
     ) -> DeliveryOutcome:
-        """Materialize `validated`. `delta_artifact_ids` names the artifact each of
-        `validated.deltas` came from, positionally parallel to it — `validated.deltas`
-        itself carries no artifact id (Phase 2 doesn't track one). `chunk`/`node`/`epoch`
-        identify the delivering node-step, the idempotence marker's own key."""
+        """Materialize `validated`. `delta_artifact_ids`/`proposal_artifact_ids` name the
+        artifact each of `validated.deltas`/`validated.proposals` came from, positionally
+        parallel — neither carries its own artifact id (Phase 2 doesn't track one).
+        `chunk`/`node`/`epoch` identify the delivering node-step, the idempotence
+        marker's own key."""
         chunk_id = chunk.chunk_id
         node_id = node.node_id
         node_name = node.name
@@ -187,9 +193,11 @@ class GardenDelivery:
                 class_=candidate.class_,
                 title=candidate.title,
                 body=candidate.body,
+                source_artifact_id=artifact_id,
+                ref=candidate.ref,
                 finding_ids=list(candidate.findings),
             )
-            for candidate in validated.proposals
+            for candidate, artifact_id in zip(validated.proposals, proposal_artifact_ids, strict=True)
         ]
 
         plan = DeliveryPlan(

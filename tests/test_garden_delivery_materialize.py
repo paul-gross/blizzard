@@ -195,9 +195,11 @@ def test_deliver_builds_a_proposal_and_its_finding_links() -> None:
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
     proposal = _proposal(findings=["fin_1", "fin_2"])
-    validated = ValidatedDelivery(run=_RUN, deltas=[], proposals=[proposal])
+    validated = ValidatedDelivery(run=_RUN, deltas=[], proposals=[proposal], proposal_sources=["docket"])
 
-    service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=[])
+    service.deliver(
+        validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=[], proposal_artifact_ids=["art_p"]
+    )
 
     plan = repo.delivered[0]
     assert plan.deltas == []
@@ -208,6 +210,8 @@ def test_deliver_builds_a_proposal_and_its_finding_links() -> None:
     assert built.class_ == "remediate"
     assert built.title == "t"
     assert built.body == "b"
+    assert built.source_artifact_id == "art_p"
+    assert built.ref == "p1"
     assert built.finding_ids == ["fin_1", "fin_2"]
 
 

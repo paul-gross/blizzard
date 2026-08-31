@@ -372,6 +372,30 @@ def test_a_later_delivery_adding_a_second_delta_still_lands_the_new_ones_finding
         assert len(set_rows) == 2  # one per delivered artifact, `a`'s recorded once
 
 
+def test_a_later_delivery_re_carrying_the_same_proposals_mints_no_duplicate(tmp_path: Path) -> None:
+    """Unlike a delta (deduped on `finding_sets.artifact_id`), a proposal has its own
+    idempotence key — `docket`'s `p1` must land exactly once across both visits."""
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    _seed_finding(hub, finding_id)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta())  # a clean delta — D3's own requirement
+    _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
+
+    first = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    assert first.status_code == 200 and first.json()["outcome"] == "recorded"
+    with hub.engine.begin() as conn:
+        assert conn.execute(select(s.garden_proposals)).all().__len__() == 1
+
+    second = _post(hub, chunk_id, delta=["delta"], proposals=["docket"], epoch=_EPOCH + 1)
+
+    assert second.status_code == 200, second.text
+    assert second.json()["outcome"] == "recorded"
+    with hub.engine.begin() as conn:
+        assert conn.execute(select(s.garden_proposals)).all().__len__() == 1  # not minted twice
+
+
 # --- the script over the route ------------------------------------------------
 
 

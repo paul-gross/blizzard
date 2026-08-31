@@ -78,9 +78,9 @@ def _add(*, locus: str = "a.py:1", summary: str = "s", introduced: str | None = 
     return AddFindingOp.model_validate(payload)
 
 
-def _proposal(*, findings: list[str]) -> GardenProposalCandidate:
+def _proposal(*, findings: list[str], ref: str = "p1") -> GardenProposalCandidate:
     return GardenProposalCandidate.model_validate(
-        {"ref": "p1", "class": "remediate", "title": "t", "body": "b", "findings": findings}
+        {"ref": ref, "class": "remediate", "title": "t", "body": "b", "findings": findings}
     )
 
 
@@ -314,6 +314,29 @@ def test_validate_delivery_accepts_a_full_delivery_and_bundles_it() -> None:
     assert result.run == _RUN
     assert result.deltas == [delta]
     assert [p.ref for p in result.proposals] == ["p1"]
+    assert result.proposal_sources == ["proposals.json"]
+
+
+def test_validate_delivery_pairs_each_proposal_with_its_own_source_artifact_name() -> None:
+    """`proposal_sources` stays positionally parallel to `proposals` across several
+    artifacts, each carrying several candidates — the materialize phase's `zip(...,
+    strict=True)` depends on this holding exactly."""
+    proposal_a1 = _proposal(findings=[_FIN1], ref="a1")
+    proposal_a2 = _proposal(findings=[_FIN1], ref="a2")
+    proposal_b1 = _proposal(findings=[_FIN2], ref="b1")
+
+    result = validate_delivery(
+        run=_RUN,
+        delta_artifacts={},
+        proposal_artifacts={
+            "docket-a": f"[{proposal_a1.model_dump_json(by_alias=True)}, {proposal_a2.model_dump_json(by_alias=True)}]",
+            "docket-b": f"[{proposal_b1.model_dump_json(by_alias=True)}]",
+        },
+        known_findings=[_finding(_FIN1), _finding(_FIN2)],
+    )
+
+    assert [p.ref for p in result.proposals] == ["a1", "a2", "b1"]
+    assert result.proposal_sources == ["docket-a", "docket-a", "docket-b"]
 
 
 def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> None:

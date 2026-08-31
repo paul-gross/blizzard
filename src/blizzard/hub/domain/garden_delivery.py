@@ -9,7 +9,7 @@ from __future__ import annotations
 import functools
 import re
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -45,11 +45,13 @@ CommitResolver = Callable[[str, str], bool | None]
 class ValidatedDelivery:
     """What a passing :func:`validate_delivery` hands the next phase: the run it was
     delivered under and the parsed, checked deltas and proposal candidates to build a
-    `DeliveryPlan` from — nothing here is durable yet (machinery.md §Delivery)."""
+    `DeliveryPlan` from — nothing here is durable yet (machinery.md §Delivery).
+    `proposal_sources[i]` is the artifact name `proposals[i]` came from, positionally."""
 
     run: RunContext
     deltas: list[FindingDelta]
     proposals: list[GardenProposalCandidate]
+    proposal_sources: list[str] = field(default_factory=list)
 
 
 def parse_delta(artifact_name: str, raw: str) -> FindingDelta:
@@ -136,7 +138,12 @@ def validate_delivery(
     the first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
     live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in known_findings}
     deltas = [parse_delta(name, raw) for name, raw in delta_artifacts.items()]
-    proposals = [candidate for name, raw in proposal_artifacts.items() for candidate in parse_proposals(name, raw)]
+    proposals: list[GardenProposalCandidate] = []
+    proposal_sources: list[str] = []
+    for name, raw in proposal_artifacts.items():
+        for candidate in parse_proposals(name, raw):
+            proposals.append(candidate)
+            proposal_sources.append(name)
 
     if resolve_commit is not None:
         # Memoize per delivery: many findings sharing one `introduced` commit must not
@@ -148,7 +155,7 @@ def validate_delivery(
     for proposal in proposals:
         check_proposal(proposal, run=run, live_findings=live_findings)
 
-    return ValidatedDelivery(run=run, deltas=deltas, proposals=proposals)
+    return ValidatedDelivery(run=run, deltas=deltas, proposals=proposals, proposal_sources=proposal_sources)
 
 
 def _check_known_id(finding_id: str, *, run: RunContext, live_findings: LiveFindings, scope: str | None) -> None:

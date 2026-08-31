@@ -368,9 +368,21 @@ garden_proposals = Table(
     Column("title", String, nullable=False),
     Column("body", Text, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
+    # A delivered proposal's idempotence key: the artifact it was delivered from plus
+    # its submission-local `ref` — null for a proposal minted outside delivery
+    # (`GardenProposalAuthoring`, blizzard#390), which carries no source artifact. No
+    # `ForeignKey` — SQLite cannot drop an FK column.
+    Column("source_artifact_id", String, nullable=True),
+    Column("ref", String, nullable=True),
 )
 
 Index("ix_garden_proposals_routine_class", garden_proposals.c.routine_name, garden_proposals.c.class_)
+Index(
+    "ux_garden_proposals_source_artifact_ref",
+    garden_proposals.c.source_artifact_id,
+    garden_proposals.c.ref,
+    unique=True,
+)
 
 # The findings a proposal answers (D7) — a join, not a JSON list, so which-work-resolved-
 # which-findings is a query rather than a scan (`bzh:sql-portable`). Required and

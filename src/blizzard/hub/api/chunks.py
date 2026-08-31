@@ -261,10 +261,12 @@ def record_garden_delivery(
     delta_artifact_ids = [delta_artifact_id_by_name[name] for name in delta_artifacts]
 
     proposal_artifacts: dict[str, str] = {}
+    proposal_artifact_id_by_name: dict[str, str] = {}
     for name in request_body.proposals:
         artifact = services.chunks.latest_artifact(chunk_id, name)
         if artifact is not None:
             proposal_artifacts[name] = artifact.data
+            proposal_artifact_id_by_name[name] = artifact.artifact_id
 
     known_findings = services.findings.list_for_routine(run.routine_name, include_gone=True)
 
@@ -279,6 +281,8 @@ def record_garden_delivery(
     except GardenDeliveryRejected as exc:
         return GardenDeliveryResponse(outcome="invalid", detail=str(exc))
 
+    proposal_artifact_ids = [proposal_artifact_id_by_name[name] for name in validated.proposal_sources]
+
     # Both `DeliveryOutcome` members mean "durably recorded" to this route's caller
     # (Phase 3's own docstring) — a replay minting nothing is not itself news.
     services.garden_delivery.deliver(
@@ -287,6 +291,7 @@ def record_garden_delivery(
         node=node,
         epoch=epoch,
         delta_artifact_ids=delta_artifact_ids,
+        proposal_artifact_ids=proposal_artifact_ids,
     )
     return GardenDeliveryResponse(outcome="recorded", detail="")
 

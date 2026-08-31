@@ -98,6 +98,8 @@ def _full_plan(*, at: datetime = _NOW) -> DeliveryPlan:
                 class_="fix-the-source",
                 title="Author a docstring standard",
                 body="the case",
+                source_artifact_id="art_docket",
+                ref="p1",
                 finding_ids=["fin_1"],
             )
         ],
@@ -309,6 +311,94 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
 
         marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "garden-delivered")).all()
         assert len(marker_rows) == 2
+
+
+def test_deliver_at_a_new_epoch_resolving_the_same_proposal_artifact_mints_no_duplicate(tmp_path: Path) -> None:
+    """The proposal twin of the delta idempotence test above: a fresh (node_id, epoch)
+    re-carrying the same `--proposals` artifact must mint the proposal exactly once,
+    keyed `(source_artifact_id, ref)`."""
+    store, engine = _store_and_engine(tmp_path)
+    first = _full_plan()
+    assert store.deliver(first) is DeliveryOutcome.RECORDED
+
+    second = DeliveryPlan(
+        chunk_id="ch_1",
+        node_id="nd_2",
+        node_name="garden-survey",
+        epoch=2,
+        at=_NOW,
+        run=_RUN,
+        deltas=[],
+        proposals=[
+            NewProposal(
+                proposal_id="gprop_replay",
+                routine_name="nightly",
+                class_="fix-the-source",
+                title="Author a docstring standard",
+                body="the case",
+                source_artifact_id="art_docket",  # same (artifact, ref) pair as `first`'s proposal
+                ref="p1",
+                finding_ids=["fin_1"],
+            )
+        ],
+    )
+
+    outcome = store.deliver(second)
+
+    assert outcome is DeliveryOutcome.ALREADY_RECORDED
+    with engine.connect() as conn:
+        proposal_rows = conn.execute(sa.select(garden_proposals)).all()
+        assert [r.proposal_id for r in proposal_rows] == ["gprop_1"]
+        link_rows = conn.execute(sa.select(garden_proposal_findings)).all()
+        assert [(r.proposal_id, r.finding_id) for r in link_rows] == [("gprop_1", "fin_1")]
+        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "garden-delivered")).all()
+        assert len(marker_rows) == 2
+
+
+def test_deliver_with_one_proposal_already_delivered_still_lands_the_other(tmp_path: Path) -> None:
+    """The proposal twin of the mixed-survival delta test above: a visit re-carrying an
+    already-delivered proposal (`p1`) alongside a new one (`p2`) must still land `p2`."""
+    store, engine = _store_and_engine(tmp_path)
+    assert store.deliver(_full_plan()) is DeliveryOutcome.RECORDED
+
+    second = DeliveryPlan(
+        chunk_id="ch_1",
+        node_id="nd_2",
+        node_name="garden-survey",
+        epoch=2,
+        at=_NOW,
+        run=_RUN,
+        deltas=[],
+        proposals=[
+            NewProposal(
+                proposal_id="gprop_replay",
+                routine_name="nightly",
+                class_="fix-the-source",
+                title="Author a docstring standard",
+                body="the case",
+                source_artifact_id="art_docket",
+                ref="p1",  # already delivered
+                finding_ids=["fin_1"],
+            ),
+            NewProposal(
+                proposal_id="gprop_2",
+                routine_name="nightly",
+                class_="fix-the-source",
+                title="A second candidate",
+                body="the other case",
+                source_artifact_id="art_docket",
+                ref="p2",  # genuinely new
+                finding_ids=["fin_1"],
+            ),
+        ],
+    )
+
+    outcome = store.deliver(second)
+
+    assert outcome is DeliveryOutcome.RECORDED
+    with engine.connect() as conn:
+        proposal_rows = conn.execute(sa.select(garden_proposals).order_by(garden_proposals.c.proposal_id)).all()
+        assert [r.proposal_id for r in proposal_rows] == ["gprop_1", "gprop_2"]
 
 
 def test_deliver_clean_plan_records_only_the_finding_set(tmp_path: Path) -> None:

@@ -67,6 +67,22 @@ class GardenDeliveryStore:
                 }
                 surviving_deltas = [d for d in plan.deltas if d.finding_set.artifact_id not in already_materialized]
 
+            # Same idea, keyed `(source_artifact_id, ref)` — one `--proposals` artifact
+            # yields many rows, unlike a delta's one-artifact-to-one-set.
+            surviving_proposals = plan.proposals
+            if plan.proposals:
+                already_delivered = {
+                    (row.source_artifact_id, row.ref)
+                    for row in conn.execute(
+                        select(garden_proposals.c.source_artifact_id, garden_proposals.c.ref).where(
+                            garden_proposals.c.source_artifact_id.in_({p.source_artifact_id for p in plan.proposals})
+                        )
+                    )
+                }
+                surviving_proposals = [
+                    p for p in plan.proposals if (p.source_artifact_id, p.ref) not in already_delivered
+                ]
+
             new_findings = [f for d in surviving_deltas for f in d.new_findings]
             facts = [fact for d in surviving_deltas for fact in d.facts]
             finding_set_rows = [d.finding_set for d in surviving_deltas]
@@ -110,7 +126,7 @@ class GardenDeliveryStore:
                         for fs in finding_set_rows
                     ],
                 )
-            if plan.proposals:
+            if surviving_proposals:
                 conn.execute(
                     insert(garden_proposals),
                     [
@@ -120,14 +136,16 @@ class GardenDeliveryStore:
                             "class_": p.class_,
                             "title": p.title,
                             "body": p.body,
+                            "source_artifact_id": p.source_artifact_id,
+                            "ref": p.ref,
                             "created_at": plan.at,
                         }
-                        for p in plan.proposals
+                        for p in surviving_proposals
                     ],
                 )
                 links = [
                     {"proposal_id": p.proposal_id, "finding_id": finding_id}
-                    for p in plan.proposals
+                    for p in surviving_proposals
                     for finding_id in p.finding_ids
                 ]
                 if links:
@@ -150,7 +168,7 @@ class GardenDeliveryStore:
                     produced_at=plan.at,
                 )
             )
-            if surviving_deltas or plan.proposals:
+            if surviving_deltas or surviving_proposals:
                 return DeliveryOutcome.RECORDED
             return DeliveryOutcome.ALREADY_RECORDED
 
