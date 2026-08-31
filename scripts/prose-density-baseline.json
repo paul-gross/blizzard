@@ -1444,8 +1444,8 @@
   },
   "blizzard/hub/domain/garden_delivery_materialize.py": {
    "comments": 6,
-   "docstrings": 29,
-   "total": 198
+   "docstrings": 33,
+   "total": 205
   },
   "blizzard/hub/domain/garden_proposals.py": {
    "comments": 2,
@@ -1582,6 +1582,21 @@
    "docstrings": 30,
    "total": 139
   },
+  "blizzard/hub/forge/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "total": 0
+  },
+  "blizzard/hub/forge/internal/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "total": 0
+  },
+  "blizzard/hub/forge/internal/commit_resolver.py": {
+   "comments": 2,
+   "docstrings": 17,
+   "total": 65
+  },
   "blizzard/hub/graph_sync.py": {
    "comments": 2,
    "docstrings": 24,
@@ -1662,20 +1677,15 @@
    "docstrings": 180,
    "total": 2869
   },
-  "blizzard/hub/store/internal/commit_resolver.py": {
-   "comments": 2,
-   "docstrings": 17,
-   "total": 65
-  },
   "blizzard/hub/store/internal/finding_store.py": {
    "comments": 4,
    "docstrings": 16,
    "total": 224
   },
   "blizzard/hub/store/internal/garden_delivery_store.py": {
-   "comments": 4,
+   "comments": 6,
    "docstrings": 8,
-   "total": 148
+   "total": 159
   },
   "blizzard/hub/store/internal/garden_proposal_store.py": {
    "comments": 2,
@@ -4240,9 +4250,9 @@
    "total": 179
   },
   "test_garden_delivery_api.py": {
-   "comments": 14,
-   "docstrings": 13,
-   "total": 454
+   "comments": 15,
+   "docstrings": 16,
+   "total": 477
   },
   "test_garden_delivery_domain.py": {
    "comments": 25,
@@ -4250,14 +4260,14 @@
    "total": 370
   },
   "test_garden_delivery_materialize.py": {
-   "comments": 0,
+   "comments": 1,
    "docstrings": 5,
-   "total": 186
+   "total": 221
   },
   "test_garden_delivery_store.py": {
-   "comments": 1,
-   "docstrings": 8,
-   "total": 236
+   "comments": 4,
+   "docstrings": 11,
+   "total": 351
   },
   "test_garden_proposal_api.py": {
    "comments": 1,
@@ -4561,8 +4571,8 @@
   },
   "test_layering.py": {
    "comments": 8,
-   "docstrings": 13,
-   "total": 226
+   "docstrings": 16,
+   "total": 234
   },
   "test_lease_auth.py": {
    "comments": 0,

@@ -55,9 +55,6 @@ class GardenDeliveryStore:
 
             # Broader than the marker above: a fresh (node, epoch) can still resolve an
             # already-materialized artifact, which would trip the unique constraint raw.
-            # `--delta` legitimately repeats several artifacts in one delivery call, so
-            # this is a per-delta skip, not a whole-plan bail — every delta whose artifact
-            # hasn't been materialized yet still lands, even alongside one that has.
             surviving_deltas = plan.deltas
             if plan.deltas:
                 already_materialized = {
@@ -136,11 +133,8 @@ class GardenDeliveryStore:
                 if links:
                     conn.execute(insert(garden_proposal_findings), links)
 
-            # Always written, even when every delta was already materialized and there
-            # were no proposals: this call still represents a genuinely new
-            # (chunk_id, node_id, epoch) visit and needs its own idempotence key
-            # recorded, so a future replay of this exact visit short-circuits on the
-            # fast exact-marker check above instead of re-running this skip logic.
+            # Always written, even when every delta was already materialized: this visit
+            # is a genuinely new (chunk_id, node_id, epoch) and owes its idempotence key.
             conn.execute(
                 insert(artifacts).values(
                     artifact_id=Id.mint_at(ARTIFACT_PREFIX, plan.at).value,

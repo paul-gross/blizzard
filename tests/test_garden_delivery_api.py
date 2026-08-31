@@ -349,6 +349,29 @@ def test_a_replayed_delivery_still_reports_recorded_and_mints_nothing_new(tmp_pa
     assert _finding_count(hub) == 1  # nothing new minted on replay
 
 
+def test_a_later_delivery_adding_a_second_delta_still_lands_the_new_ones_findings(tmp_path: Path) -> None:
+    """`--delta a`, then `--delta a --delta b` at a fresh epoch: `b`'s findings land
+    beside `a`'s, which are not minted twice — an already-materialized artifact in the
+    call may not drop the rest of it."""
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta-a", content=_delta(findings=[_add_op(locus="a.py:1")]))
+    _record_artifact(hub, chunk_id, name="delta-b", content=_delta(findings=[_add_op(locus="b.py:2")]))
+
+    first = _post(hub, chunk_id, delta=["delta-a"])
+    assert first.status_code == 200 and first.json()["outcome"] == "recorded"
+
+    second = _post(hub, chunk_id, delta=["delta-a", "delta-b"], epoch=_EPOCH + 1)
+
+    assert second.status_code == 200, second.text
+    assert second.json()["outcome"] == "recorded"
+    with hub.engine.begin() as conn:
+        assert sorted(r.locus for r in conn.execute(select(s.findings))) == ["a.py:1", "b.py:2"]
+        set_rows = conn.execute(select(s.finding_sets)).all()
+        assert len(set_rows) == 2  # one per delivered artifact, `a`'s recorded once
+
+
 # --- the script over the route ------------------------------------------------
 
 

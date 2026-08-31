@@ -163,9 +163,7 @@ def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
 def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(tmp_path: Path) -> None:
     """A second visit at a fresh (node_id, epoch) resolving the *same* already-
     materialized artifact must return ALREADY_RECORDED cleanly, not trip
-    `finding_sets.artifact_id`'s unique constraint with a raw IntegrityError. The
-    delivery marker is still written for this fresh (node_id, epoch) visit, even though
-    nothing else was inserted."""
+    `finding_sets.artifact_id`'s unique constraint with a raw IntegrityError."""
     store, engine = _store_and_engine(tmp_path)
     first = _full_plan()
     assert store.deliver(first) is DeliveryOutcome.RECORDED
@@ -198,14 +196,14 @@ def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(
         set_rows = conn.execute(sa.select(finding_sets)).all()
         assert [r.finding_set_id for r in set_rows] == ["fins_1"]
         marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "garden-delivered")).all()
+        # This fresh visit still gets its own marker, though it inserted nothing else.
         assert len(marker_rows) == 2
 
 
 def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_path: Path) -> None:
-    """The regression this test guards: `--delta` legitimately repeats several artifacts
-    in one delivery call. A later visit resolving a *mix* of one already-materialized
-    artifact (`A`) and one genuinely new one (`B`) must still land `B`'s rows — the
-    broader idempotence check must skip only `A`'s group, never bail the whole plan."""
+    """A visit resolving a *mix* of one already-materialized artifact (`A`) and one
+    genuinely new one (`B`) must still land `B`'s rows — the broader idempotence check
+    skips only `A`'s group, never bails the whole plan."""
     store, engine = _store_and_engine(tmp_path)
     first = DeliveryPlan(
         chunk_id="ch_1",

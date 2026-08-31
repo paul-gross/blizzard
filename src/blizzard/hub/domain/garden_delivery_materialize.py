@@ -96,10 +96,7 @@ class DeltaMaterialization:
 class DeliveryPlan:
     """Everything :class:`IWriteGardenDeliveryRepository` needs to do its writes with no
     further computation — every id already minted, every timestamp already stamped
-    (`bzh:injected-clock`), so the store adapter is pure "insert these rows". Each
-    delivered delta's own rows are grouped into one :class:`DeltaMaterialization` so the
-    store can skip an already-materialized delta's rows without bailing the whole plan
-    (`--delta` legitimately repeats several artifacts in one delivery call)."""
+    (`bzh:injected-clock`), so the store adapter is pure "insert these rows"."""
 
     chunk_id: str
     node_id: str
