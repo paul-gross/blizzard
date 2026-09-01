@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the lease-record repository seam (package-private,
-blizzard#411 Phase 4).
+"""SQLAlchemy adapter for the lease-record repository seam (package-private).
 
 Mint, closure, and lookups by lease or chunk identity. :meth:`LeaseRecordStore.record_closure`
 also finalizes the lease's open transcript segments in the SAME transaction — a

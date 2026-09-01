@@ -1,4 +1,4 @@
-"""The chunk-record repository seam (blizzard#411) — the chunk row itself: mint and its
+"""The chunk-record repository seam — the chunk row itself: mint and its
 mutable configuration columns."""
 
 from __future__ import annotations

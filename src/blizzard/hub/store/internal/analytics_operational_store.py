@@ -1,9 +1,10 @@
 """SQLAlchemy adapter for the operational analytics query seam (package-private,
 blizzard#256). Reads ``transitions``/``lease_facts``/``usage_facts``/``chunk_migrations``
-directly, the same tables :mod:`chunk_store` writes — two ``internal/`` adapters sharing
-one engine is established (see :mod:`analytics_event_query_store`). Filtering stays
-portable SQL (``bzh:sql-portable``); D2/D5's own business rules live in the domain-owned
-fold this adapter only fetches and maps rows for."""
+directly, the same tables the chunk-seam adapters (``hub/store/internal/chunk_*_store.py``)
+write — several ``internal/`` adapters sharing one engine is established (see
+:mod:`analytics_event_query_store`). Filtering stays portable SQL (``bzh:sql-portable``);
+D2/D5's own business rules live in the domain-owned fold this adapter only fetches and maps
+rows for."""
 
 from __future__ import annotations
 

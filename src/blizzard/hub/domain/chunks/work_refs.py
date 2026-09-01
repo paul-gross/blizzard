@@ -1,4 +1,4 @@
-"""The chunk-work-refs repository seam (blizzard#411) — the wrapped work items a chunk
+"""The chunk-work-refs repository seam — the wrapped work items a chunk
 holds, and merge-group survivorship over them."""
 
 from __future__ import annotations

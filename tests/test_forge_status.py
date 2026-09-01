@@ -53,7 +53,7 @@ def test_marker_of_maps_terminal_statuses_to_none(status: ChunkStatus) -> None:
     assert WorkStatusMarker.of(status) is None
 
 
-# --- IReadChunkRepository.live_work_refs() — real ChunkStore, real migrations ---
+# --- IReadChunkWorkRefsRepository.live_work_refs() — real store, real migrations ---
 
 
 @pytest.mark.component

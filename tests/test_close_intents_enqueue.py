@@ -5,10 +5,13 @@ that same transaction — real ``ChunkStore``, real migrations."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 from sqlalchemy import select
 
+from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.work import WorkItemCloseOutcome, WorkRef
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, ingest
@@ -18,7 +21,7 @@ pytestmark = pytest.mark.component
 
 def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     """Simulate a generic hub command node's mid-run ``merged/<repo>`` marker."""
-    hub.services.chunks.artifacts.record_hub_artifact(
+    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id="nd_deliver",
         node_name="deliver",
@@ -53,7 +56,7 @@ def test_a_replayed_landing_marker_enqueues_nothing_new(tmp_path: Path) -> None:
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
 
     _land(hub, chunk_id)
-    hub.services.chunks.artifacts.record_hub_artifact(
+    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id="nd_deliver",
         node_name="deliver",
@@ -121,7 +124,7 @@ def test_a_deleted_chunks_landing_marker_enqueues_nothing(tmp_path: Path) -> Non
 def test_a_ref_already_carrying_a_terminal_outcome_enqueues_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    hub.services.chunks.delivery.record_work_item_closure(
+    cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         chunk_id,
         pointer=WorkRef(source="default", ref="1"),
         outcome=WorkItemCloseOutcome.CLOSED,
@@ -137,7 +140,7 @@ def test_a_ref_already_carrying_a_terminal_outcome_enqueues_nothing(tmp_path: Pa
 def test_a_ref_carrying_only_a_failed_outcome_still_enqueues(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    hub.services.chunks.delivery.record_work_item_closure(
+    cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         chunk_id,
         pointer=WorkRef(source="default", ref="1"),
         outcome=WorkItemCloseOutcome.FAILED,

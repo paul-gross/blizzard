@@ -1,4 +1,4 @@
-"""The chunk-delivery repository seam (blizzard#411) — landed repos, the pending
+"""The chunk-delivery repository seam — landed repos, the pending
 close-intent and materialization tail a delivered chunk leaves behind."""
 
 from __future__ import annotations

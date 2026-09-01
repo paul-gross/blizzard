@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the chunk lifecycle seam (package-private, blizzard#411 Phase 3).
+"""SQLAlchemy adapter for the chunk lifecycle seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
 (``bzh:facts-not-status``): every write appends a row that happened; nothing here derives
@@ -8,20 +8,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import update
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
-from blizzard.hub.domain.work import Chunk
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import (
-    chunk_row,
-    enqueue_close_intents,
-    ephemeral_ids,
-    next_route_seq,
-    route_of_conn,
-)
+from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, next_route_seq, route_of_conn
 
 
 class ChunkLifecycleStore:
@@ -30,13 +23,6 @@ class ChunkLifecycleStore:
     def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
-
-    def get(self, chunk_id: str) -> Chunk | None:
-        with self._store.read("get") as conn:
-            row = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
-            if row is None or chunk_id in ephemeral_ids(conn):
-                return None  # a grouped-away or deleted chunk is ephemeral — gone from every read
-            return chunk_row(conn, row)
 
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""

@@ -93,8 +93,8 @@ _ADAPTER_CASES = [
     _AdapterCase(
         "ChunkLifecycleStore",
         lambda store: ChunkLifecycleStore(store, FixedClock(_NOW)),
-        lambda a: a.get("ch_x"),
-        "get",
+        lambda a: a.record_pause("ch_x", paused=True, by="test", at=_NOW),
+        "record_pause",
     ),
     _AdapterCase(
         "ChunkWorkRefsStore",

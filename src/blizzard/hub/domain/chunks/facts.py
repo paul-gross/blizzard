@@ -1,4 +1,4 @@
-"""The chunk-facts repository seam (blizzard#411) — read-only, D2.
+"""The chunk-facts repository seam — read-only, D2.
 
 ``load_facts``/``load_all_facts`` each project the union of every concept's fact tables for
 one chunk (or all chunks); the writes behind that projection are each concept seam's own, so

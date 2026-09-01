@@ -8,6 +8,7 @@ id via a direct transition-fact insert.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -28,11 +29,11 @@ _LAND_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"
 
 
 def _writable_movement(hub: HubHarness) -> IWriteChunkMovementRepository:
-    return hub.services.chunks.movement
+    return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
 
 
 def _writable_escalations(hub: HubHarness) -> IWriteChunkEscalationsRepository:
-    return hub.services.chunks.escalations
+    return cast(IWriteChunkEscalationsRepository, hub.services.chunks.escalations)
 
 
 def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:

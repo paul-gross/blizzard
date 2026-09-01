@@ -23,12 +23,12 @@ pytestmark = pytest.mark.component
 def _writable_record(hub: HubHarness) -> IWriteChunkRecordRepository:
     """These tests patch the chunk-record store's write methods to force the exact
     interleaving the shared lock must serialize."""
-    return hub.services.chunks.record
+    return cast(IWriteChunkRecordRepository, hub.services.chunks.record)
 
 
 def _writable_route(hub: HubHarness) -> IWriteChunkRouteRepository:
     """Same as :func:`_writable_record`, for the chunk-route seam."""
-    return hub.services.chunks.route
+    return cast(IWriteChunkRouteRepository, hub.services.chunks.route)
 
 
 _ALT_YAML = """

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -119,7 +119,7 @@ def test_a_terminal_failure_findings_write_failure_exits_non_zero_instead_of_rou
 
 
 def _writable(hub: HubHarness) -> IWriteChunkMovementRepository:
-    return hub.services.chunks.movement
+    return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
 
 
 def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:

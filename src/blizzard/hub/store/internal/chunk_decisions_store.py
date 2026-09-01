@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the chunk decisions seam (package-private, blizzard#411 Phase 3).
+"""SQLAlchemy adapter for the chunk decisions seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
 (``bzh:facts-not-status``): every write appends a row; nothing here derives status.
@@ -20,11 +20,7 @@ from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, insert_proposals, proposal_row
-
-# The generic ``merged/<repo>`` landing marker (issue #67) — mirrors domain/work.py's own
-# copy (``LandedRepos``'s), which reads it back; each side owns its own constant.
-_MARKER_PREFIX = "merged/"
+from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, enqueue_close_intents, insert_proposals, proposal_row
 
 
 class ChunkDecisionsStore:
@@ -112,7 +108,7 @@ class ChunkDecisionsStore:
                     )
                 )
             insert_proposals(conn, proposals, at=at)
-            if any(row.name.startswith(_MARKER_PREFIX) for row in artifacts):
+            if any(row.name.startswith(MARKER_PREFIX) for row in artifacts):
                 enqueue_close_intents(conn, chunk_id, at=at)
 
     def record_decision_resolution(

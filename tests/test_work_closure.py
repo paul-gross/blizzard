@@ -13,6 +13,7 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
 from blizzard.hub.domain.work import (
@@ -34,7 +35,7 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     the current landing truth :func:`~blizzard.hub.domain.work.has_landed_repos` reads
     (issue #67), independent of any real graph/node machinery. Enqueues a pending close
     intent (D1) as a side effect of the same write."""
-    hub.services.chunks.artifacts.record_hub_artifact(
+    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id="nd_deliver",
         node_name="deliver",
@@ -55,7 +56,7 @@ def test_record_work_item_closure_retires_the_matching_pending_intent(tmp_path: 
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
 
-    wrote = hub.services.chunks.delivery.record_work_item_closure(
+    wrote = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         chunk_id,
         pointer=WorkRef(source="default", ref="1"),
         outcome=WorkItemCloseOutcome.CLOSED,
@@ -76,11 +77,11 @@ def test_record_work_item_closure_replay_still_retires_an_interrupted_intent(tmp
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
     pointer = WorkRef(source="default", ref="1")
-    hub.services.chunks.delivery.record_work_item_closure(
+    cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
     )
 
-    wrote = hub.services.chunks.delivery.record_work_item_closure(
+    wrote = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
     )
 
@@ -92,7 +93,7 @@ def test_record_work_item_closure_replay_still_retires_an_interrupted_intent(tmp
 def test_record_work_item_closure_against_a_never_enqueued_ref_writes_no_intent_row(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 
-    wrote = hub.services.chunks.delivery.record_work_item_closure(
+    wrote = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         "ch_nonexistent",
         pointer=WorkRef(source="default", ref="1"),
         outcome=WorkItemCloseOutcome.CLOSED,
@@ -111,7 +112,7 @@ def test_record_work_item_closure_failed_outcome_leaves_the_intent_pending(tmp_p
     _land(hub, chunk_id)
     pointer = WorkRef(source="default", ref="1")
 
-    hub.services.chunks.delivery.record_work_item_closure(
+    cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.FAILED, reason="boom", at=hub.clock.now()
     )
 
@@ -299,8 +300,8 @@ def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Pat
     closer = FakeCloser()
     registry = WorkSourceRegistry({}, closers={"default": closer})
     drainer = CloseIntentDrainer(
-        delivery=hub.services.chunks.delivery,
-        events=hub.services.chunks.events,
+        delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+        events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
         work_sources=registry,
         clock=hub.clock,
     )
@@ -321,8 +322,8 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
     closer = FakeCloser(fail_refs={"1"})
     registry = WorkSourceRegistry({}, closers={"default": closer})
     drainer = CloseIntentDrainer(
-        delivery=hub.services.chunks.delivery,
-        events=hub.services.chunks.events,
+        delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+        events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
         work_sources=registry,
         clock=hub.clock,
     )
@@ -348,8 +349,8 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_p
     _land(hub, chunk_id)
     registry = WorkSourceRegistry({}, closers={})  # no closer seated for any source
     drainer = CloseIntentDrainer(
-        delivery=hub.services.chunks.delivery,
-        events=hub.services.chunks.events,
+        delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+        events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
         work_sources=registry,
         clock=hub.clock,
     )

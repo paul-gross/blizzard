@@ -269,7 +269,7 @@ def test_runner_id_is_stamped_on_a_cross_graph_migration(tmp_path: Path) -> None
 
 def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunks = hub.services.chunks
+    chunks = chunk_stores(hub.engine, hub.clock)
 
     def _mint() -> str:
         chunk = mint_chunk([], graph_id="gr_x", at=_T0)
@@ -389,7 +389,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
 
 def test_candidate_read_excludes_an_already_judged_proposal(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunks = hub.services.chunks
+    chunks = chunk_stores(hub.engine, hub.clock)
     chunk = mint_chunk([], graph_id="gr_x", at=_T0)
     chunks.record.mint(chunk)
     chunks.movement.record_transition(
@@ -419,7 +419,7 @@ def test_candidate_read_excludes_an_already_judged_proposal(tmp_path: Path) -> N
 
 def test_record_work_item_materialization_returns_false_on_a_second_call(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunks = hub.services.chunks
+    chunks = chunk_stores(hub.engine, hub.clock)
 
     first = chunks.delivery.record_work_item_materialization(
         "wip_1", outcome=WorkItemMaterializationOutcome.UNRESOLVED, pointer=None, reason="no proposer", at=_T0

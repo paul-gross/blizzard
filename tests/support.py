@@ -65,21 +65,8 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
-from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
-from blizzard.hub.store.internal.chunk_delivery_store import ChunkDeliveryStore
-from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
-from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
-from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
-from blizzard.hub.store.internal.chunk_lifecycle_store import ChunkLifecycleStore
-from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
-from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
-from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
-from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
-from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
-from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
-from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -103,30 +90,12 @@ def hub_store_connections(engine: Engine) -> HubStoreConnections:
 
 
 def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
-    """All 15 chunk-seam adapters (blizzard#411 Phase 3) over one engine/clock, bundled
-    the same shape ``hub/composition.py`` wires in production — the store-level test's
-    own single-object fixture-setup convenience a 15-way physical split would otherwise
-    take from it. A test calls ``stores.<seam>.<method>(...)`` in place of the old
-    single ``ChunkStore``'s bare method call."""
-    store = hub_store_connections(engine)
-    facts = ChunkFactsStore(store, clock)
-    return ChunkStores(
-        facts=facts,
-        record=ChunkRecordStore(store, clock, facts=facts),
-        lifecycle=ChunkLifecycleStore(store, clock),
-        work_refs=ChunkWorkRefsStore(store, clock, facts=facts),
-        queue=ChunkQueueStore(store, clock),
-        route=ChunkRouteStore(store, clock),
-        movement=ChunkMovementStore(store, clock),
-        artifacts=ChunkArtifactsStore(store, clock),
-        questions=ChunkQuestionsStore(store, clock),
-        decisions=ChunkDecisionsStore(store, clock),
-        escalations=ChunkEscalationsStore(store, clock, facts=facts),
-        events=ChunkEventsStore(store, clock),
-        usage=ChunkUsageStore(store, clock),
-        delivery=ChunkDeliveryStore(store, clock),
-        hub_exec=ChunkHubExecStore(store, clock),
-    )
+    """All 15 chunk-seam adapters over one engine/clock, bundled the same shape
+    ``hub/composition.py`` wires in production (:func:`build_chunk_stores`) — the
+    store-level test's own single-object fixture-setup convenience a 15-way physical
+    split would otherwise take from it. A test calls ``stores.<seam>.<method>(...)`` in
+    place of the old single ``ChunkStore``'s bare method call."""
+    return build_chunk_stores(hub_store_connections(engine), clock)
 
 
 def make_graph(
@@ -520,7 +489,7 @@ def github_double(
         return JSONResponse(status_code=200, content=items, headers=headers)
 
     client = TestClient(app)
-    client.forge_state = state  # type: ignore[attr-defined]  # tests flip PR fate (e.g. close-without-merge)
+    client.forge_state = state  # type: ignore[attr-defined] # tests flip PR fate (e.g. close-without-merge)
     return client
 
 

@@ -1,4 +1,4 @@
-"""The chunk-artifacts repository seam (blizzard#411) — a chunk's produced artifact rows,
+"""The chunk-artifacts repository seam — a chunk's produced artifact rows,
 including the hub-node marker/log artifacts written outside a transition."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""The chunk-decisions repository seam (blizzard#411) — a runner-config gate's open
+"""The chunk-decisions repository seam — a runner-config gate's open
 decision and its first-write-wins resolution."""
 
 from __future__ import annotations

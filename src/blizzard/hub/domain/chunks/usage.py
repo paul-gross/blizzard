@@ -1,4 +1,4 @@
-"""The chunk-usage repository seam (blizzard#411) — recorded model spend, per node-step."""
+"""The chunk-usage repository seam — recorded model spend, per node-step."""
 
 from __future__ import annotations
 

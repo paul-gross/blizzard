@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the lease-session repository seam (package-private,
-blizzard#411 Phase 4).
+"""SQLAlchemy adapter for the lease-session repository seam (package-private).
 
 Session-pool head, session-identity lookups, session-end, and preamble facts."""
 

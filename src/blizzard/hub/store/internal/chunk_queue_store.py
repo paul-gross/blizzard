@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the chunk queue seam (package-private, blizzard#411 Phase 3).
+"""SQLAlchemy adapter for the chunk queue seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
 (``bzh:facts-not-status``): every write appends a row; nothing here derives status.

@@ -186,11 +186,13 @@ class GroupService:
         *,
         work_refs: IWriteChunkWorkRefsRepository,
         lifecycle: IWriteChunkLifecycleRepository,
+        record: IReadChunkRecordRepository,
         facts: IReadChunkFactsRepository,
         clock: IClock,
     ) -> None:
         self._work_refs = work_refs
         self._lifecycle = lifecycle
+        self._record = record
         self._facts = facts
         self._clock = clock
 
@@ -215,7 +217,7 @@ class GroupService:
             merged=[t.chunk_id for t in targets],
             count=len(targets),
         )
-        merged = self._lifecycle.get(survivor_id)
+        merged = self._record.get(survivor_id)
         return GroupResult(
             survivor=merged if merged is not None else survivor, status=survivor_status, grouped_id=grouped_id
         )
@@ -231,7 +233,7 @@ class GroupService:
         return targets
 
     def _require_unacquired_chunk(self, chunk_id: str) -> tuple[Chunk, ChunkStatus]:
-        chunk = self._lifecycle.get(chunk_id)
+        chunk = self._record.get(chunk_id)
         facts = self._facts.load_facts(chunk_id)
         if chunk is None or facts is None:
             raise ChunkNotFound(chunk_id)

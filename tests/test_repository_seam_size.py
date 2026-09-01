@@ -1,4 +1,4 @@
-"""The repository-seam size gate (AC1, blizzard#411 Phase 1).
+"""The repository-seam size gate (AC1).
 
 AST-walks ``src/blizzard/`` for repository-seam Protocols — those named
 ``IRead<Concept>Repository`` / ``IWrite<Concept>Repository`` — and asserts each declares at
@@ -22,7 +22,6 @@ _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
 _SEAM_NAME = re.compile(r"^I(Read|Write).*Repository$")
 _SEAM_SIZE_LIMIT = 12
 
-# blizzard#411: Phase 2 emptied the chunk-repository entries; Phase 4 emptied the lease one.
 _ACCEPTED_VIOLATIONS: set[str] = set()
 
 

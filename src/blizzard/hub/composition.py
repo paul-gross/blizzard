@@ -4,7 +4,7 @@ One place the store-backed collaborators are constructed and injected. Controlle
 the stores through their **read** Protocols and mutate only through the services
 (``bzh:controller-read-only``); every chunk seam below — ``HubServices.chunks``'s bundle and
 every domain service's own narrow parameter alike — is the same one of the 15
-``hub/store/internal/chunk_<seam>_store.py`` instances built here (blizzard#411 Phase 3)."""
+``hub/store/internal/chunk_<seam>_store.py`` instances built here."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ from blizzard.hub.domain.analytics.derivation import EventDerivationReconciler, 
 from blizzard.hub.domain.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.apply import ApplyService
-from blizzard.hub.domain.chunks.stores import ChunkStores
+from blizzard.hub.domain.chunks.stores import ChunkReadStores
 from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.complete import CompleteService
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
@@ -91,21 +91,7 @@ from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
-from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
-from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
-from blizzard.hub.store.internal.chunk_delivery_store import ChunkDeliveryStore
-from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
-from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
-from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
-from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
-from blizzard.hub.store.internal.chunk_lifecycle_store import ChunkLifecycleStore
-from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
-from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
-from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
-from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
-from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
-from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
-from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
@@ -128,10 +114,11 @@ from blizzard.hub.work_sources.source import IWorkSourceRegistry
 class HubServices:
     """The wired fleet collaborators, stashed on ``app.state.services``."""
 
-    #: The controller-facing chunk-seam bundle (blizzard#411) — every field's read half is
-    #: what a read-only caller (``bzh:controller-read-only``) actually reaches for; the
-    #: domain services below hold their own narrower seams directly.
-    chunks: ChunkStores
+    #: The controller-facing chunk-seam bundle — every field typed to its
+    #: concept's read Protocol only (``bzh:controller-read-only``), so a route handler
+    #: mutating through it fails type-check; the domain services below hold their own
+    #: narrower, write-capable seams directly.
+    chunks: ChunkReadStores
     graphs: IReadGraphRepository
     ingest: IngestService
     promote: PromoteService
@@ -292,23 +279,23 @@ def build_services(
     # The hub-store seam (issue #413) — one collaborator shared by every
     # ``hub/store/internal/`` adapter, replacing the bare engine (D2).
     store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
-    # The 15 chunk-seam adapters (blizzard#411 Phase 3) — `facts` is built first since
-    # `record`/`work_refs`/`escalations` each hold it as their own read collaborator.
-    chunk_facts = ChunkFactsStore(store_connections, clock)
-    chunk_record = ChunkRecordStore(store_connections, clock, facts=chunk_facts)
-    chunk_lifecycle = ChunkLifecycleStore(store_connections, clock)
-    chunk_work_refs = ChunkWorkRefsStore(store_connections, clock, facts=chunk_facts)
-    chunk_queue = ChunkQueueStore(store_connections, clock)
-    chunk_route = ChunkRouteStore(store_connections, clock)
-    chunk_movement = ChunkMovementStore(store_connections, clock)
-    chunk_artifacts = ChunkArtifactsStore(store_connections, clock)
-    chunk_questions = ChunkQuestionsStore(store_connections, clock)
-    chunk_decisions = ChunkDecisionsStore(store_connections, clock)
-    chunk_escalations = ChunkEscalationsStore(store_connections, clock, facts=chunk_facts)
-    chunk_events = ChunkEventsStore(store_connections, clock)
-    chunk_usage = ChunkUsageStore(store_connections, clock)
-    chunk_delivery = ChunkDeliveryStore(store_connections, clock)
-    chunk_hub_exec = ChunkHubExecStore(store_connections, clock)
+    # The 15 chunk-seam adapters, in the one place their construction order is expressed.
+    chunk_stores = build_chunk_stores(store_connections, clock)
+    chunk_facts = chunk_stores.facts
+    chunk_record = chunk_stores.record
+    chunk_lifecycle = chunk_stores.lifecycle
+    chunk_work_refs = chunk_stores.work_refs
+    chunk_queue = chunk_stores.queue
+    chunk_route = chunk_stores.route
+    chunk_movement = chunk_stores.movement
+    chunk_artifacts = chunk_stores.artifacts
+    chunk_questions = chunk_stores.questions
+    chunk_decisions = chunk_stores.decisions
+    chunk_escalations = chunk_stores.escalations
+    chunk_events = chunk_stores.events
+    chunk_usage = chunk_stores.usage
+    chunk_delivery = chunk_stores.delivery
+    chunk_hub_exec = chunk_stores.hub_exec
     graph_store = GraphStore(store_connections)
     registry_store = RunnerRegistryStore(store_connections)
     transcript_store = TranscriptSegmentStore(store_connections)
@@ -393,7 +380,7 @@ def build_services(
         httpx.Client(timeout=10.0), forge_url=forge_url, forge_token=forge_token, forge_owner=forge_owner
     ).resolve
     return HubServices(
-        chunks=ChunkStores(
+        chunks=ChunkReadStores(
             facts=chunk_facts,
             record=chunk_record,
             lifecycle=chunk_lifecycle,
@@ -460,7 +447,9 @@ def build_services(
         runner_facts=RunnerFactsService(route=chunk_route, escalations=chunk_escalations, clock=clock),
         questions=QuestionService(questions=chunk_questions, clock=clock),
         queue=QueueService(queue=chunk_queue, record=chunk_record, clock=clock),
-        group=GroupService(work_refs=chunk_work_refs, lifecycle=chunk_lifecycle, facts=chunk_facts, clock=clock),
+        group=GroupService(
+            work_refs=chunk_work_refs, lifecycle=chunk_lifecycle, record=chunk_record, facts=chunk_facts, clock=clock
+        ),
         fleet=fleet,
         enrollment=enrollment,
         registry=registry_store,

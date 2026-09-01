@@ -1,4 +1,4 @@
-"""The chunk-movement repository seam (blizzard#411) — a chunk's graph-driven transitions,
+"""The chunk-movement repository seam — a chunk's graph-driven transitions,
 cross-graph migrations, restarts, and requeues."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the chunk movement seam (package-private, blizzard#411 Phase 3).
+"""SQLAlchemy adapter for the chunk movement seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
 (``bzh:facts-not-status``): every write appends a row that happened and status is
@@ -26,16 +26,13 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_MODEL,
+    MARKER_PREFIX,
     enqueue_close_intents,
     graph_id_of,
     insert_proposals,
     latest_epoch,
     next_route_seq,
 )
-
-# The generic ``merged/<repo>`` landing marker (issue #67) — mirrors domain/work.py's own
-# copy (``LandedRepos``'s), which reads it back; each side owns its own constant.
-_MARKER_PREFIX = "merged/"
 
 
 class ChunkMovementStore:
@@ -112,7 +109,7 @@ class ChunkMovementStore:
                     )
                 )
             insert_proposals(conn, proposals, at=at)
-            if any(row.name.startswith(_MARKER_PREFIX) for row in artifacts):
+            if any(row.name.startswith(MARKER_PREFIX) for row in artifacts):
                 enqueue_close_intents(conn, chunk_id, at=at)
 
     def record_migration(
@@ -193,7 +190,7 @@ class ChunkMovementStore:
                     )
                 )
             insert_proposals(conn, proposals, at=at)
-            if any(row.name.startswith(_MARKER_PREFIX) for row in artifacts):
+            if any(row.name.startswith(MARKER_PREFIX) for row in artifacts):
                 enqueue_close_intents(conn, chunk_id, at=at)
             return resolved_migration_id
 

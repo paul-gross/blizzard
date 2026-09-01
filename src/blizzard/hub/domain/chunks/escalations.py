@@ -1,4 +1,4 @@
-"""The chunk-escalations repository seam (blizzard#411) — a chunk parked on
+"""The chunk-escalations repository seam — a chunk parked on
 ``needs_human``, including one raised by a bounce-cap crossing."""
 
 from __future__ import annotations

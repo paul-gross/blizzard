@@ -1,4 +1,4 @@
-"""``IReadChunkRepository.usage_since``'s optional upper bound (issue #183, unit tier).
+"""``IReadChunkUsageRepository.usage_since``'s optional upper bound (issue #183, unit tier).
 
 ``since`` is inclusive, ``until`` — when given — is exclusive, so two adjacent windows
 sharing a boundary instant neither double-count nor drop that fact. Omitting ``until``

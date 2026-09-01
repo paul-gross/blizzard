@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
+from typing import cast
 
 import pytest
 
 from blizzard.foundation.node_steps import Executor, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.restart import SUPERSEDED_ANSWER
 from blizzard.hub.domain.work import Movement, MovementKind
 from blizzard.tools.invariants import HubInvariants
@@ -306,7 +310,7 @@ def test_restart_supersedes_an_open_escalation(tmp_path) -> None:  # type: ignor
     """Escalations carry no resolution fact, so the move closes this one by supersession."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
-    hub.services.chunks.escalations.record_escalation(
+    cast(IWriteChunkEscalationsRepository, hub.services.chunks.escalations).record_escalation(
         chunk_id, epoch=1, takeover_command="resume it", at=hub.clock.now(), wrapped_takeover_command=""
     )
     assert _detail(hub, chunk_id)["status"] == "needs_human"
@@ -435,7 +439,7 @@ def test_restart_refuses_a_chunk_standing_on_a_node_its_graph_does_not_carry(tmp
     # HTTP edit path refuses for a moved chunk.
     pinned = _detail(hub, chunk_id)["graph_id"]
     other = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["graph_id"] != pinned)
-    hub.services.chunks.record.set_graph(chunk_id, graph_id=other)
+    cast(IWriteChunkRecordRepository, hub.services.chunks.record).set_graph(chunk_id, graph_id=other)
 
     resp = _restart(hub, chunk_id)
 
@@ -455,7 +459,7 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
     assert _restart(hub, chunk_id, node="build").status_code == 202
     build_node = _detail(hub, chunk_id)["current_node_id"]
 
-    wrote = hub.services.chunks.hub_exec.record_hub_step_transition(
+    wrote = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec).record_hub_step_transition(
         chunk_id,
         from_node_id=plan_node,
         to_node_id=build_node,
@@ -480,7 +484,7 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path) -> None:  # type: 
     chunk_id = _mint(hub)
     plan_node = _detail(hub, chunk_id)["current_node_id"]
 
-    wrote = hub.services.chunks.hub_exec.record_hub_step_transition(
+    wrote = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec).record_hub_step_transition(
         chunk_id,
         from_node_id=plan_node,
         to_node_id="done",

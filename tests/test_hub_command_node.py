@@ -32,6 +32,8 @@ from blizzard.hub.delivery.hub_node import (
     UnconvergedDeliveryError,
 )
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph import HUB_PENDING_CHOICE, GraphDoc
 from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.domain.graph_validation import Validator
@@ -612,7 +614,7 @@ def test_produces_marker_skips_an_already_run_step(tmp_path: Path) -> None:
     assert merge_node is not None
 
     # Pre-record the step's marker, as if a prior (crashed) run already completed it.
-    hub.services.chunks.artifacts.record_hub_artifact(
+    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id=merge_node.node_id,
         node_name="merge",
@@ -900,7 +902,7 @@ nodes:
     assert merge_node is not None
     # The repo already landed — pre-record the marker as if the mid-run callback
     # wrote it ahead of this node's own run.
-    hub.services.chunks.artifacts.record_hub_artifact(
+    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id=merge_node.node_id,
         node_name="merge",
@@ -1009,7 +1011,7 @@ def test_serialization_barrier_two_chunks_never_run_hub_commands_concurrently(tm
         assert build_node is not None
         # Park directly at `merge`, bypassing the executor's own auto-run on
         # transition — the shape "two held chunks both poll hub-advance" needs.
-        hub.services.chunks.movement.record_transition(
+        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
             transition_id=f"tr_test_{pointer_ref}",
             chunk_id=chunk_id,
             from_node_id=build_node.node_id,

@@ -1,4 +1,4 @@
-"""The chunk-queue repository seam (blizzard#411) — the ready/not_ready lists' ordering and
+"""The chunk-queue repository seam — the ready/not_ready lists' ordering and
 a chunk's promotion between them."""
 
 from __future__ import annotations

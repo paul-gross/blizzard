@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the chunk facts seam (package-private, blizzard#411 Phase 3).
+"""SQLAlchemy adapter for the chunk facts seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
 (``bzh:facts-not-status``): every read below folds already-recorded rows; nothing derives
@@ -39,7 +39,7 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import ephemeral_ids
+from blizzard.hub.store.internal.chunk_rows import ephemeral_ids, row_exists
 
 
 class ChunkFactsStore:
@@ -228,12 +228,12 @@ class ChunkFactsStore:
             ).all()
             return ChunkFacts(
                 minted=True,
-                promoted=self._exists(conn, s.chunk_promoted, chunk_id),
+                promoted=row_exists(conn, s.chunk_promoted, chunk_id),
                 stopped=bool(stopped_rows),
                 stopped_at=max((r.stopped_at for r in stopped_rows), default=None),
                 operator_completed=bool(completed_rows),
                 operator_completed_at=max((r.completed_at for r in completed_rows), default=None),
-                delivery_landed=self._exists(conn, s.delivery_landed, chunk_id),
+                delivery_landed=row_exists(conn, s.delivery_landed, chunk_id),
                 landed_repos=landed_repos,
                 pr_closed=bool(pr_closed_rows),
                 # Newest across every repo's row (issue #175/#173) — `delivery_pr_closed`
@@ -515,10 +515,6 @@ class ChunkFactsStore:
                 select(s.chunk_restarts.c.decision_id).where(s.chunk_restarts.c.decision_id.in_(decision_ids))
             ).all()
         }
-
-    @staticmethod
-    def _exists(conn, table, chunk_id: str) -> bool:  # type: ignore[no-untyped-def]
-        return conn.execute(select(table.c.chunk_id).where(table.c.chunk_id == chunk_id).limit(1)).first() is not None
 
 
 def _conforms_facts(x: ChunkFactsStore) -> IReadChunkFactsRepository:

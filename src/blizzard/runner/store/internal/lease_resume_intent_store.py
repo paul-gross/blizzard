@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the lease resume-intent repository seam (package-private,
-blizzard#411 Phase 4).
+"""SQLAlchemy adapter for the lease resume-intent repository seam (package-private).
 
 The restart resume-intent mark and its clear — issue #12/#13."""
 

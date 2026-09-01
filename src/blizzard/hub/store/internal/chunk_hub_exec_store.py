@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the chunk hub-exec seam (package-private, blizzard#411 Phase 3).
+"""SQLAlchemy adapter for the chunk hub-exec seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
 (``bzh:facts-not-status``): every write appends a row or an atomically-guarded slot
@@ -21,11 +21,13 @@ from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, graph_id_of, latest_epoch, next_route_seq
-
-# The generic ``merged/<repo>`` landing marker (issue #67) — mirrors domain/work.py's own
-# copy (``LandedRepos``'s), which reads it back; each side owns its own constant.
-_MARKER_PREFIX = "merged/"
+from blizzard.hub.store.internal.chunk_rows import (
+    MARKER_PREFIX,
+    enqueue_close_intents,
+    graph_id_of,
+    latest_epoch,
+    next_route_seq,
+)
 
 
 class ChunkHubExecStore:
@@ -150,7 +152,7 @@ class ChunkHubExecStore:
                         chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                     )
                 )
-            if any(row.name.startswith(_MARKER_PREFIX) for row in artifacts):
+            if any(row.name.startswith(MARKER_PREFIX) for row in artifacts):
                 enqueue_close_intents(conn, chunk_id, at=at)
             return True
 

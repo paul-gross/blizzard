@@ -1,4 +1,4 @@
-"""The chunk-lifecycle repository seam (blizzard#411) — the terminal and paused states an
+"""The chunk-lifecycle repository seam — the terminal and paused states an
 operator or the fleet itself drives the chunk to outside its graph's own transitions."""
 
 from __future__ import annotations
@@ -6,13 +6,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.work import Chunk
-
 
 class IReadChunkLifecycleRepository(Protocol):
-    """Read-only chunk-lifecycle access."""
-
-    def get(self, chunk_id: str) -> Chunk | None: ...
+    """Read-only chunk-lifecycle access — empty: the concept's one read, ``get``, is the
+    same query as ``record``'s, so callers needing it depend on
+    :class:`~blizzard.hub.domain.chunks.record.IReadChunkRecordRepository` instead rather
+    than standing up a second adapter for byte-identical SQL."""
 
 
 class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):

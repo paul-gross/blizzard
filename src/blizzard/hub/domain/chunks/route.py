@@ -1,4 +1,4 @@
-"""The chunk-route repository seam (blizzard#411) — the live runner/workspace/env claim on
+"""The chunk-route repository seam — the live runner/workspace/env claim on
 a chunk, its capability token, and the per-runner applied-seq high-water mark."""
 
 from __future__ import annotations

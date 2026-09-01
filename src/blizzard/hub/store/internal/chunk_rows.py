@@ -1,4 +1,4 @@
-"""Shared SQL infrastructure for the chunk-seam adapters (blizzard#411 Phase 3).
+"""Shared SQL infrastructure for the chunk-seam adapters.
 
 Every ``chunk_<seam>_store.py`` adapter in this package is a thin, independently
 constructed class over the same ``chunks``-rooted schema; the column codecs, the
@@ -122,6 +122,10 @@ class QuestionQuery:
 INTENDED_MIGRATION = MigrationColumn()
 DEFAULT_MODEL = ModelColumn()
 QUESTIONS = QuestionQuery()
+
+# The generic ``merged/<repo>`` landing marker (issue #67) — mirrors domain/work.py's own
+# copy (``LandedRepos``'s), which reads it back; each side owns its own constant.
+MARKER_PREFIX = "merged/"
 
 
 def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:

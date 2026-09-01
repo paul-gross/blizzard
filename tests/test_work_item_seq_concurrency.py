@@ -1,7 +1,7 @@
 """Concurrent allocation of the ``work_item_sequence`` counter (issue #357).
 
 ``WorkItemStore.allocate_ref`` is optimistic-insert-then-increment, not one locking
-statement like ``ChunkStore._next_route_seq`` — a brand-new source has no row to lock.
+statement like ``chunk_rows.next_route_seq`` — a brand-new source has no row to lock.
 Proves the increment statement locks the row under any dialect, and that concurrent
 sqlite writers — including a race over a source's first allocation — never duplicate."""
 

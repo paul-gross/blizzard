@@ -8,10 +8,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.queue import QueueService
 from blizzard.hub.domain.work import ChunkFacts
 from blizzard.hub.store.errors import HubStoreConnections
@@ -86,7 +88,9 @@ def test_peek_reads_facts_in_bulk_and_never_per_chunk(tmp_path: Path, path: str,
     hub.app.state.services = replace(
         hub.services,
         chunks=replace(hub.services.chunks, facts=counting, record=record),
-        queue=QueueService(queue=hub.services.chunks.queue, record=record, clock=hub.clock),
+        queue=QueueService(
+            queue=cast(IWriteChunkQueueRepository, hub.services.chunks.queue), record=record, clock=hub.clock
+        ),
     )
 
     resp = hub.client.get(path)

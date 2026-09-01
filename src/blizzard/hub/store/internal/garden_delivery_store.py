@@ -55,7 +55,7 @@ class GardenDeliveryStore:
 
     def deliver(self, plan: DeliveryPlan) -> DeliveryOutcome:
         with self._store.write("deliver") as conn:
-            # Not `ChunkStore.record_hub_artifact`: that opens its own transaction, which
+            # Not `ChunkArtifactsStore.record_hub_artifact`: that opens its own transaction, which
             # cannot fold into this one alongside every insert below.
             already = self._marker(conn, chunk_id=plan.chunk_id, node_id=plan.node_id, epoch=plan.epoch)
             if already is not None:

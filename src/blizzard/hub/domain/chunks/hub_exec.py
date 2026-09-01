@@ -1,4 +1,4 @@
-"""The chunk-hub-exec repository seam (blizzard#411) — the generic hub command node's
+"""The chunk-hub-exec repository seam — the generic hub command node's
 (#65) fleet-wide serialization slot and its transition/poll bookkeeping."""
 
 from __future__ import annotations

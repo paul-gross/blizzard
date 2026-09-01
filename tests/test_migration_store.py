@@ -20,6 +20,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph import GraphDoc
 from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.domain.work import (
@@ -289,7 +290,7 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
 def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(tmp_path: Path) -> None:
     """Issue #111: a cross-graph migration whose landing node is hub-executed is
     retained by the hub — the chunk must derive ``delivering``, not runner-claimable
-    ``ready``, and so must be absent from :meth:`ChunkStore.list_ready`."""
+    ``ready``, and so must be absent from :meth:`ChunkRecordStore.list_ready`."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _SRC_YAML}).status_code == 201
     target = hub.client.post("/api/graphs", json={"definition_yaml": _HUB_TARGET_YAML}).json()
@@ -344,22 +345,23 @@ def test_set_intended_migration_sets_overwrites_and_clears(tmp_path: Path) -> No
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
 
+    record = cast(IWriteChunkRecordRepository, hub.services.chunks.record)
     pre = hub.services.chunks.record.get(chunk_id)
     assert pre is not None and pre.intended_migration is None  # unset by default
 
     auto = IntendedMigration(mode=MigrationMode.AUTO, graph_id="gr_target", node_name=None)
-    hub.services.chunks.record.set_intended_migration(chunk_id, intended=auto)
+    record.set_intended_migration(chunk_id, intended=auto)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     assert chunk.intended_migration == auto  # round-trips through the store
 
     forced = IntendedMigration(mode=MigrationMode.FORCED, graph_id="gr_other", node_name="build")
-    hub.services.chunks.record.set_intended_migration(chunk_id, intended=forced)
+    record.set_intended_migration(chunk_id, intended=forced)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     assert chunk.intended_migration == forced  # overwrite
 
-    hub.services.chunks.record.set_intended_migration(chunk_id, intended=None)
+    record.set_intended_migration(chunk_id, intended=None)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     assert chunk.intended_migration is None  # clear
@@ -372,12 +374,13 @@ def test_record_migration_with_clear_intent_clears_the_intent_atomically(tmp_pat
     hub = build_hub(tmp_path)
     chunk_id, node_id, target_graph_id = _claimed(hub)
     chunks = cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
+    record = cast(IWriteChunkRecordRepository, hub.services.chunks.record)
     pre_migration = hub.services.chunks.record.get(chunk_id)
     assert pre_migration is not None
     source_graph_id = pre_migration.graph_id
 
     intent = IntendedMigration(mode=MigrationMode.AUTO, graph_id=target_graph_id, node_name=None)
-    hub.services.chunks.record.set_intended_migration(chunk_id, intended=intent)
+    record.set_intended_migration(chunk_id, intended=intent)
     armed = hub.services.chunks.record.get(chunk_id)
     assert armed is not None and armed.intended_migration == intent
 
@@ -414,12 +417,13 @@ def test_record_migration_without_clear_intent_leaves_a_set_intent_untouched(tmp
     hub = build_hub(tmp_path)
     chunk_id, node_id, target_graph_id = _claimed(hub)
     chunks = cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
+    record = cast(IWriteChunkRecordRepository, hub.services.chunks.record)
     pre_migration = hub.services.chunks.record.get(chunk_id)
     assert pre_migration is not None
     source_graph_id = pre_migration.graph_id
 
     intent = IntendedMigration(mode=MigrationMode.FORCED, graph_id=target_graph_id, node_name="build")
-    hub.services.chunks.record.set_intended_migration(chunk_id, intended=intent)
+    record.set_intended_migration(chunk_id, intended=intent)
 
     wrote = chunks.record_migration(
         chunk_id,
@@ -466,8 +470,9 @@ def test_record_migration_with_clear_intent_on_a_hub_landing_retains_the_route(t
     source_graph_id = pre_migration.graph_id
 
     chunks = cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
+    record = cast(IWriteChunkRecordRepository, hub.services.chunks.record)
     intent = IntendedMigration(mode=MigrationMode.FORCED, graph_id=target_graph_id, node_name="build")
-    hub.services.chunks.record.set_intended_migration(chunk_id, intended=intent)
+    record.set_intended_migration(chunk_id, intended=intent)
 
     wrote = chunks.record_migration(
         chunk_id,

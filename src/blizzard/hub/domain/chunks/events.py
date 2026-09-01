@@ -1,4 +1,4 @@
-"""The chunk-events repository seam (blizzard#411) — the operational event log and the
+"""The chunk-events repository seam — the operational event log and the
 cross-table activity feed derived from it and the other concepts' own fact tables."""
 
 from __future__ import annotations

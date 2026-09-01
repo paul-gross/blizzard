@@ -1,4 +1,4 @@
-"""The chunk-questions repository seam (blizzard#411) — a runner-authored question and its
+"""The chunk-questions repository seam — a runner-authored question and its
 first-write-wins answer."""
 
 from __future__ import annotations
