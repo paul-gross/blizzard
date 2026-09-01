@@ -1,0 +1,70 @@
+.scope-field {
+  border: 1px solid var(--line);
+  padding: 8px;
+  margin: 0 0 12px;
+}
+
+.lbl {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+  padding: 0 4px;
+}
+
+.opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 2px;
+  cursor: pointer;
+}
+
+.opt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.opt-slug {
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+
+.opt-swept {
+  font-size: var(--fs-xs);
+  color: var(--cyan);
+}
+
+.opt-desc {
+  font-size: var(--fs-sm);
+  color: var(--label);
+}
+
+.new-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 2px 24px;
+}
+
+.new-scope input {
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  background: var(--overlay-35);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 4px 6px;
+}
+
+.new-scope input:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 0;
+}
+
+.near-match-warning {
+  margin: 4px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--amber);
+}

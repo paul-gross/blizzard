@@ -6,4 +6,10 @@ export * from './routine-run.mutations';
 export * from './routine-window';
 export * from './routines.query';
 export * from './scopes.query';
-export type { RoutineView } from '../api/hub';
+export type {
+  RoutineBaselineRepoView,
+  RoutineBaselineView,
+  RoutineRunResponse,
+  RoutineView,
+  ScopeView,
+} from '../api/hub';

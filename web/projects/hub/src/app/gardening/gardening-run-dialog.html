@@ -1,0 +1,13 @@
+<app-gardening-run-dialog-view
+  [open]="open()"
+  [routineName]="routineName()"
+  [scopes]="orderedScopes()"
+  [sweptSlugs]="sweptSlugs()"
+  [baselines]="baselinesQuery.data() ?? []"
+  [state]="state()"
+  [submitting]="submitting()"
+  [submitError]="submitError()"
+  [confirmedRun]="confirmedRun()"
+  (closed)="closed.emit()"
+  (runSubmitted)="onSubmit($event)"
+/>

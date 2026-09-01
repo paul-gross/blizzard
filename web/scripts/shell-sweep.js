@@ -111,6 +111,14 @@
  *     while the page behind it does not, and `CdkTrapFocus` keeps repeated
  *     real `Tab` presses cycling inside the panel rather than escaping to the
  *     page — real layout and focus-management claims jsdom cannot make.
+ *   - projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts —
+ *     the gardening run dialog's own three fields (blizzard#399 D6), at the
+ *     phone and desktop widths the dialog is reachable at: the scope field's
+ *     radio rows genuinely stack, the delta baseline block's finding-set-id
+ *     line genuinely sits above its per-repo landed-since lines, the
+ *     new-scope near-match warning genuinely renders below both new-scope
+ *     inputs, and the footer's Cancel/Run buttons genuinely sit side by side
+ *     with neither overflowing the panel.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -133,6 +141,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {

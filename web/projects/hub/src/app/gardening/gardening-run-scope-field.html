@@ -1,0 +1,62 @@
+<fieldset class="scope-field" data-testid="run-scope-field">
+  <legend class="lbl">Scope</legend>
+  @for (scope of scopes(); track scope.slug) {
+    <label class="opt">
+      <input
+        type="radio"
+        name="run-scope"
+        [checked]="!selection().isNew && selection().slug === scope.slug"
+        (change)="selectExisting(scope.slug)"
+        [attr.data-testid]="'run-scope-option-' + scope.slug"
+      />
+      <span class="opt-body">
+        <span class="opt-slug">{{ scope.slug }}</span>
+        @if (isSweptSlug(scope.slug)) {
+          <span class="opt-swept" data-testid="run-scope-swept-badge">previously swept</span>
+        }
+        @if (scope.description) {
+          <span class="opt-desc">{{ scope.description }}</span>
+        }
+      </span>
+    </label>
+  }
+
+  <label class="opt">
+    <input
+      type="radio"
+      name="run-scope"
+      [checked]="selection().isNew"
+      (change)="selectNew()"
+      data-testid="run-scope-option-new"
+    />
+    <span class="opt-body">
+      <span class="opt-slug">Mint a new one…</span>
+    </span>
+  </label>
+
+  @if (selection().isNew) {
+    <div class="new-scope">
+      <input
+        #newSlugInput
+        type="text"
+        placeholder="slug"
+        [value]="selection().slug"
+        (input)="onNewSlugInput(newSlugInput.value)"
+        data-testid="run-new-scope-slug"
+      />
+      <input
+        #newDescriptionInput
+        type="text"
+        placeholder="description (required)"
+        [value]="selection().newDescription"
+        (input)="onNewDescriptionInput(newDescriptionInput.value)"
+        data-testid="run-new-scope-description"
+      />
+      @if (nearMatches().length > 0) {
+        <p class="near-match-warning" data-testid="run-scope-near-match-warning">
+          Close to an existing scope: {{ nearMatches().join(', ') }} — minting anyway will not touch it.
+        </p>
+      }
+    </div>
+  }
+</fieldset>

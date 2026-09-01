@@ -1,0 +1,90 @@
+h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+.mode-field {
+  border: 1px solid var(--line);
+  padding: 8px;
+  margin: 0 0 12px;
+}
+
+.lbl {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+
+.opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  font-size: var(--fs-base);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.mode-note {
+  font-size: var(--fs-xs);
+  color: var(--label);
+  margin: 4px 0 0;
+}
+
+.baseline {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  background: var(--overlay-25);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+.baseline ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+.note-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 12px;
+}
+
+.note-field textarea {
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  background: var(--overlay-35);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 6px;
+  resize: vertical;
+}
+
+.note-field textarea:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 0;
+}
+
+.cli-verb {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--label);
+  word-break: break-all;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.submit-error {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--red);
+}
