@@ -1,0 +1,42 @@
+.scope-field {
+  margin: 0 0 12px;
+}
+
+.body {
+  padding: 8px;
+}
+
+.opt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.opt-slug {
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+
+.opt-swept {
+  font-size: var(--fs-xs);
+  color: var(--cyan);
+}
+
+.opt-desc {
+  font-size: var(--fs-sm);
+  color: var(--label);
+}
+
+.new-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 2px 24px;
+}
+
+.near-match-warning {
+  margin: 4px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--amber);
+}

@@ -1,0 +1,15 @@
+:host {
+  display: contents;
+}
+.opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  font-size: var(--fs-base);
+  color: var(--text);
+  cursor: pointer;
+}
+.opt--top {
+  align-items: flex-start;
+}

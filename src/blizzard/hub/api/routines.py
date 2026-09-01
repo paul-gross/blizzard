@@ -24,6 +24,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.garden_sweeps import GardenSweeps
 from blizzard.hub.domain.garden_trend import Trend
 from blizzard.hub.domain.ingest import IngestConflict
+from blizzard.hub.domain.routine_baselines import RoutineBaseline
 from blizzard.hub.domain.routine_run import RunResult, ScopeRetiredError
 from blizzard.hub.domain.routines import (
     Routine,
@@ -38,6 +39,8 @@ from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
 from blizzard.wire.garden_trend import TrendAgeView, TrendPeriodView, TrendView
 from blizzard.wire.routine import (
+    RoutineBaselineRepoView,
+    RoutineBaselineView,
     RoutineCreateRequest,
     RoutineEditRequest,
     RoutineRunRequest,
@@ -204,6 +207,35 @@ def get_routine(routine_id: str, services: Annotated[HubServices, Depends(get_se
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
     return _routine_view(routine)
+
+
+def _baseline_view(baseline: RoutineBaseline) -> RoutineBaselineView:
+    return RoutineBaselineView(
+        scope_slug=baseline.scope_slug,
+        finding_set_id=baseline.finding_set_id,
+        recorded_at=iso_utc(baseline.recorded_at),
+        repos=[
+            RoutineBaselineRepoView(repo=r.repo, revision=r.revision, landed_since=r.landed_since)
+            for r in baseline.repos
+        ],
+    )
+
+
+@router.get(
+    "/routines/{routine_id}/baselines",
+    response_model=list[RoutineBaselineView],
+    dependencies=[Depends(require(FLEET_VIEW))],
+)
+def routine_baselines(
+    routine_id: str, services: Annotated[HubServices, Depends(get_services)]
+) -> list[RoutineBaselineView]:
+    """Every scope `routine_id` has swept (D5) — see
+    `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.
+    404 on an unknown routine id."""
+    routine = services.routines.get(routine_id)
+    if routine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    return [_baseline_view(b) for b in services.routine_baselines.baselines_for(routine)]
 
 
 @router.patch("/routines/{routine_id}", response_model=RoutineView, dependencies=[Depends(require(GRAPH_EDIT))])

@@ -306,6 +306,23 @@ class FindingSetStore:
             ).one_or_none()
         return self._of(row) if row is not None else None
 
+    def newest_by_scope_for_routine(self, routine_name: str) -> list[FindingSet]:
+        """One row per scope, the newest by `finding_set_id` — a group-by-max join,
+        portable across backends (`bzh:sql-portable`)."""
+        newest_per_scope = (
+            select(finding_sets.c.scope_slug, func.max(finding_sets.c.finding_set_id).label("finding_set_id"))
+            .where(finding_sets.c.routine_name == routine_name)
+            .group_by(finding_sets.c.scope_slug)
+            .subquery()
+        )
+        with self._store.read("newest_by_scope_for_routine") as conn:
+            rows = conn.execute(
+                select(finding_sets).join(
+                    newest_per_scope, finding_sets.c.finding_set_id == newest_per_scope.c.finding_set_id
+                )
+            ).all()
+        return [self._of(row) for row in rows]
+
     @staticmethod
     def _of(row) -> FindingSet:  # type: ignore[no-untyped-def]
         return FindingSet(

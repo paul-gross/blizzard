@@ -33,6 +33,14 @@ list; `--scope` overrides the routine's own default, minting an unseen slug the 
 `full` rather than refusing — the CLI names the downgrade in its output, and the item's own charge does too. A retired
 effective scope, or a routine whose graph has lost every enabled mint, refuses the run rather than running it anyway.
 
+The hub board's gardening tab offers the same act as a dialog, reachable from the selected routine's own panel. It
+resolves the delta baseline *before* the operator submits, through `GET /api/routines/{routine_id}/baselines` — one
+entry per scope this routine has ever swept, each carrying its finding-set id, the instant it was recorded, and, per
+repo the sweep touched, how many `delivery_repo_landed` events that repo has recorded since. A scope absent from the
+list has never been swept by this routine; the dialog steers those pairs to full rather than offering a delta with
+nothing to run against. A new scope is minted through `POST /api/scopes`, with its description, before the run is
+ever submitted — never left to the run route's own empty-description mint.
+
 ## Reading a routine's health
 
 `blizzard hub routine trend <name> --since <time> --until <time> --introduced-boundary <time> [--period-days <n>]`
@@ -46,5 +54,5 @@ each delivered set records, cut to `--since`/`--until`. Unlike the last-swept ta
 windowed: a scope swept months ago still reads its true last-swept instant, never "never".
 
 The hub board's Gardening tab renders both reads, plus a routine's stored record and its strategy — the effective
-graph's own node preambles — as read-only prose. A routine whose graph has lost every enabled mint shows as blocked
-there instead of offering a run.
+graph's own node preambles — as read-only prose, and the Run action above it. A routine whose graph has lost every
+enabled mint shows as blocked there instead of offering a run.

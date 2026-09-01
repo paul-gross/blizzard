@@ -1,0 +1,60 @@
+<fleet-kit-panel class="scope-field" data-testid="run-scope-field" aria-label="Scope" label="Scope">
+  <div class="body">
+    <div role="radiogroup" aria-label="Scope">
+      @for (scope of scopes(); track scope.slug) {
+        <fleet-kit-option
+          alignTop
+          name="run-scope"
+          [checked]="!selection().isNew && selection().slug === scope.slug"
+          (changed)="selectExisting(scope.slug)"
+          [testid]="'run-scope-option-' + scope.slug"
+        >
+          <span class="opt-body">
+            <span class="opt-slug">{{ scope.slug }}</span>
+            @if (isSweptSlug(scope.slug)) {
+              <span class="opt-swept" data-testid="run-scope-swept-badge">previously swept</span>
+            }
+            @if (scope.description) {
+              <span class="opt-desc">{{ scope.description }}</span>
+            }
+          </span>
+        </fleet-kit-option>
+      }
+
+      <fleet-kit-option
+        alignTop
+        name="run-scope"
+        [checked]="selection().isNew"
+        (changed)="selectNew()"
+        testid="run-scope-option-new"
+      >
+        <span class="opt-body">
+          <span class="opt-slug">Mint a new one…</span>
+        </span>
+      </fleet-kit-option>
+    </div>
+
+    @if (selection().isNew) {
+      <div class="new-scope">
+        <fleet-kit-text-input
+          placeholder="slug"
+          [value]="selection().slug"
+          (valueChange)="onNewSlugInput($event)"
+          testid="run-new-scope-slug"
+        />
+        <fleet-kit-text-input
+          placeholder="description (required)"
+          [value]="selection().newDescription"
+          (valueChange)="onNewDescriptionInput($event)"
+          testid="run-new-scope-description"
+        />
+        @if (nearMatches().length > 0) {
+          <p class="near-match-warning" data-testid="run-scope-near-match-warning">
+            Close to an existing scope: {{ nearMatches().join(', ') }} — an exact match will reuse that scope instead
+            of creating a new one.
+          </p>
+        }
+      </div>
+    }
+  </div>
+</fleet-kit-panel>

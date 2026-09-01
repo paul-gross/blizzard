@@ -4950,6 +4950,62 @@
         "title": "RouteView",
         "type": "object"
       },
+      "RoutineBaselineRepoView": {
+        "description": "One repo's recorded baseline revision and how much has landed against it since\n(D1) \u2014 ``GET /api/routines/{routine_id}/baselines``.",
+        "properties": {
+          "landed_since": {
+            "title": "Landed Since",
+            "type": "integer"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo",
+          "revision",
+          "landed_since"
+        ],
+        "title": "RoutineBaselineRepoView",
+        "type": "object"
+      },
+      "RoutineBaselineView": {
+        "description": "One scope a routine has swept (D5) \u2014 see\n`IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.",
+        "properties": {
+          "finding_set_id": {
+            "title": "Finding Set Id",
+            "type": "string"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "repos": {
+            "items": {
+              "$ref": "#/components/schemas/RoutineBaselineRepoView"
+            },
+            "title": "Repos",
+            "type": "array"
+          },
+          "scope_slug": {
+            "title": "Scope Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope_slug",
+          "finding_set_id",
+          "recorded_at",
+          "repos"
+        ],
+        "title": "RoutineBaselineView",
+        "type": "object"
+      },
       "RoutineCreateRequest": {
         "properties": {
           "default_effort": {
@@ -13275,6 +13331,53 @@
           }
         },
         "summary": "Edit Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/routines/{routine_id}/baselines": {
+      "get": {
+        "description": "Every scope `routine_id` has swept (D5) \u2014 see\n`IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.\n404 on an unknown routine id.",
+        "operationId": "routine_baselines_api_routines__routine_id__baselines_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoutineBaselineView"
+                  },
+                  "title": "Response Routine Baselines Api Routines  Routine Id  Baselines Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Routine Baselines",
         "tags": [
           "routines"
         ]

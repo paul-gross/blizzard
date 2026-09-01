@@ -3245,6 +3245,52 @@ export type RouteView = {
 };
 
 /**
+ * RoutineBaselineRepoView
+ *
+ * One repo's recorded baseline revision and how much has landed against it since
+ * (D1) — ``GET /api/routines/{routine_id}/baselines``.
+ */
+export type RoutineBaselineRepoView = {
+    /**
+     * Landed Since
+     */
+    landed_since: number;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Revision
+     */
+    revision: string;
+};
+
+/**
+ * RoutineBaselineView
+ *
+ * One scope a routine has swept (D5) — see
+ * `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.
+ */
+export type RoutineBaselineView = {
+    /**
+     * Finding Set Id
+     */
+    finding_set_id: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Repos
+     */
+    repos: Array<RoutineBaselineRepoView>;
+    /**
+     * Scope Slug
+     */
+    scope_slug: string;
+};
+
+/**
  * RoutineCreateRequest
  */
 export type RoutineCreateRequest = {
@@ -8038,6 +8084,38 @@ export type EditRoutineApiRoutinesRoutineIdPatchResponses = {
 };
 
 export type EditRoutineApiRoutinesRoutineIdPatchResponse = EditRoutineApiRoutinesRoutineIdPatchResponses[keyof EditRoutineApiRoutinesRoutineIdPatchResponses];
+
+export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+    };
+    query?: never;
+    url: '/api/routines/{routine_id}/baselines';
+};
+
+export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetError = RoutineBaselinesApiRoutinesRoutineIdBaselinesGetErrors[keyof RoutineBaselinesApiRoutinesRoutineIdBaselinesGetErrors];
+
+export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses = {
+    /**
+     * Response Routine Baselines Api Routines  Routine Id  Baselines Get
+     *
+     * Successful Response
+     */
+    200: Array<RoutineBaselineView>;
+};
+
+export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponse = RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses[keyof RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses];
 
 export type RunRoutineApiRoutinesRoutineIdRunPostData = {
     body: RoutineRunRequest;

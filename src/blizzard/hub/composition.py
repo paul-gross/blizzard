@@ -77,6 +77,7 @@ from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.restart import RestartService
+from blizzard.hub.domain.routine_baselines import RoutineBaselineService
 from blizzard.hub.domain.routine_run import RunService
 from blizzard.hub.domain.routines import IReadRoutineRepository, RoutineAuthoring
 from blizzard.hub.domain.run_context import IReadRunContextRepository
@@ -217,6 +218,9 @@ class HubServices:
     routine_authoring: RoutineAuthoring
     #: Mint, ingest, and promote a hub work item from a routine, in one act (blizzard#392).
     routine_run: RunService
+    #: The per-scope delta baseline a routine has swept, and how much has landed since
+    #: (D5) — the run dialog's pre-submit read.
+    routine_baselines: RoutineBaselineService
     #: The finding read Protocol (blizzard#390).
     findings: IReadFindingRepository
     #: The human-driven exit verbs over findings — resolve/confirm-gone/wont-fix/
@@ -314,6 +318,7 @@ def build_services(
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
         artifacts=chunk_artifacts,
+        delivery=chunk_delivery,
         hub_exec=chunk_hub_exec,
         escalations=chunk_escalations,
         events=chunk_events,
@@ -511,6 +516,7 @@ def build_services(
             queue=chunk_queue,
             clock=clock,
         ),
+        routine_baselines=RoutineBaselineService(finding_sets=finding_set_store, delivery=chunk_delivery),
         findings=finding_store,
         finding_exit=finding_exit,
         finding_sets=finding_set_store,

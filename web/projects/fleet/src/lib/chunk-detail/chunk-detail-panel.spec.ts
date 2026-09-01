@@ -223,6 +223,8 @@ describe('ChunkDetailPanel', () => {
 
     const input = el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!;
     input.value = 'rest';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
 
     expect(emitted).toEqual({ questionId: 'qn_01', answer: 'rest', chunkId: WAITING_QUESTION_DETAIL.chunk_id });

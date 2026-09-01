@@ -53,6 +53,25 @@ class RoutineRunRequest(BaseModel):
     note: str | None = None
 
 
+class RoutineBaselineRepoView(BaseModel):
+    """One repo's recorded baseline revision and how much has landed against it since
+    (D1) — ``GET /api/routines/{routine_id}/baselines``."""
+
+    repo: str
+    revision: str
+    landed_since: int
+
+
+class RoutineBaselineView(BaseModel):
+    """One scope a routine has swept (D5) — see
+    `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means."""
+
+    scope_slug: str
+    finding_set_id: str
+    recorded_at: str
+    repos: list[RoutineBaselineRepoView]
+
+
 class RoutineRunResponse(BaseModel):
     """The minted, ingested, and promoted run item — the chunk id, the item's own
     pointer, the effective mode and whether it was downgraded from a requested delta,

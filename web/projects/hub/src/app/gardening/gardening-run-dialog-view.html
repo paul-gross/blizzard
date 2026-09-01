@@ -1,0 +1,120 @@
+<fleet-kit-dialog
+  [open]="true"
+  [ariaLabel]="'Run ' + routineName()"
+  testid="gardening-run-dialog"
+  (closed)="onClosed()"
+>
+  <h2 fleetKitDialogHeader data-testid="run-dialog-title">
+    @if (confirmedRun(); as run) {
+      Run started
+    } @else {
+      Run {{ routineName() }}
+    }
+  </h2>
+
+  @if (confirmedRun(); as run) {
+    <div data-testid="run-confirmation">
+      <p>
+        Chunk <strong data-testid="run-confirmation-chunk-id">{{ run.chunk_id }}</strong> is on the board.
+        @if (run.downgraded) {
+          <span data-testid="run-confirmation-downgraded">Downgraded to full — the pair had no recorded baseline.</span>
+        }
+      </p>
+      <a [routerLink]="['/board', 'chunk', run.chunk_id]" data-testid="run-confirmation-board-link">View on the board</a>
+    </div>
+  } @else {
+    <fleet-kit-async-state
+      [state]="state()"
+      placement="inline"
+      emptyText="No scopes declared yet."
+      emptyTestid="run-dialog-empty"
+      errorTestid="run-dialog-error"
+      loadingTestid="run-dialog-loading"
+    />
+    @if (state() === 'ready' || state() === 'empty') {
+      <app-gardening-run-scope-field
+        [scopes]="scopes()"
+        [sweptSlugs]="sweptSlugs()"
+        [existingSlugs]="existingSlugs()"
+        [selection]="scopeSelection()"
+        (selectionChange)="scopeSelection.set($event)"
+      />
+
+      <fleet-kit-panel class="mode-field" data-testid="run-mode-field" aria-label="Mode" label="Mode">
+        <div class="body">
+          <div role="radiogroup" aria-label="Mode">
+            <fleet-kit-option
+              name="run-mode"
+              [checked]="mode() === 'full'"
+              (changed)="mode.set('full')"
+              testid="run-mode-full"
+            >
+              Full
+            </fleet-kit-option>
+            <fleet-kit-option
+              name="run-mode"
+              [checked]="mode() === 'delta'"
+              [disabled]="!deltaAvailable()"
+              (changed)="mode.set('delta')"
+              testid="run-mode-delta"
+            >
+              Delta
+            </fleet-kit-option>
+          </div>
+          @if (!deltaAvailable()) {
+            <p class="mode-note" data-testid="run-mode-never-swept">
+              This routine has never swept this scope — delta has no baseline to run against, so only full is offered.
+            </p>
+          }
+          @if (mode() === 'delta' && selectedBaseline(); as baseline) {
+            <div class="baseline" data-testid="run-mode-baseline">
+              <p>
+                Baseline <strong>{{ baseline.finding_set_id }}</strong>, recorded
+                <fleet-when [iso]="baseline.recorded_at" />
+              </p>
+              <ul>
+                @for (repo of baseline.repos; track repo.repo) {
+                  <li>{{ repo.repo }}&#64;{{ repo.revision }} — {{ repo.landed_since }} landed since</li>
+                }
+              </ul>
+            </div>
+          }
+        </div>
+      </fleet-kit-panel>
+
+      <fleet-kit-panel class="note-field" data-testid="run-note-field" aria-label="Charge note" label="Charge note">
+        <div class="body">
+          <fleet-kit-text-input
+            multiline
+            [rows]="3"
+            placeholder="optional — folded into the run's own charge"
+            [value]="note()"
+            (valueChange)="note.set($event)"
+            testid="run-note-input"
+          />
+        </div>
+      </fleet-kit-panel>
+
+      <p class="cli-verb" data-testid="run-cli-verb">{{ cliVerb() }}</p>
+    }
+  }
+
+  <div fleetKitDialogFooter class="footer">
+    @if (confirmedRun()) {
+      <fleet-kit-button variant="primary" (click)="closed.emit()" testid="run-dialog-done">Done</fleet-kit-button>
+    } @else {
+      @if (submitError(); as error) {
+        <p class="submit-error" data-testid="run-submit-error">{{ error }}</p>
+      }
+      <fleet-kit-button [disabled]="submitting()" (click)="onClosed()" testid="run-dialog-cancel">Cancel</fleet-kit-button>
+      <fleet-kit-button
+        variant="primary"
+        [disabled]="!canSubmit()"
+        (click)="onSubmitClick()"
+        testid="run-dialog-submit"
+      >
+        Run
+      </fleet-kit-button>
+    }
+  </div>
+</fleet-kit-dialog>

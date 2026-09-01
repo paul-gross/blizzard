@@ -1,0 +1,25 @@
+/* A real block box, not `display: contents` — the single `.ctl` child fills it via
+   `width: 100%` below, so a consumer sizes the control by styling the host itself
+   (e.g. `flex: 1` in a row, same as it would style a raw `<input>`). */
+:host {
+  display: block;
+  min-width: 0;
+}
+.ctl {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  background: var(--overlay-35);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 4px 6px;
+  /* No-op on a single-line `<input>`; the multiline `<textarea>` is the one
+     consumer that resizes vertically. */
+  resize: vertical;
+}
+.ctl:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 0;
+}

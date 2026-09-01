@@ -313,6 +313,12 @@ class IReadFindingSetRepository(Protocol):
         `fins_<ULID>` is monotonic in mint instant."""
         ...
 
+    def newest_by_scope_for_routine(self, routine_name: str) -> list[FindingSet]:
+        """One entry per scope `routine_name` has swept — the newest set for each,
+        `newest_for_routine_scope`'s own batched sibling. A scope this routine has never
+        swept is simply absent, never a `None` placeholder."""
+        ...
+
 
 class IWriteFindingSetRepository(IReadFindingSetRepository, Protocol):
     """Read-write finding-set access. Only the domain layer depends on this variant."""

@@ -25,6 +25,11 @@
 .rp-blocked {
   color: var(--red, #c33);
 }
+.rp-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 table {
   width: 100%;
   table-layout: fixed;

@@ -22,6 +22,7 @@ from blizzard.hub.delivery.repo_ref import RepoRef
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
@@ -284,6 +285,7 @@ class HubNodeExecutor:
         *,
         facts: IReadChunkFactsRepository,
         artifacts: IWriteChunkArtifactsRepository,
+        delivery: IWriteChunkDeliveryRepository,
         hub_exec: IWriteChunkHubExecRepository,
         escalations: IWriteChunkEscalationsRepository,
         events: IWriteChunkEventsRepository,
@@ -301,6 +303,7 @@ class HubNodeExecutor:
     ) -> None:
         self._facts = facts
         self._artifacts = artifacts
+        self._delivery = delivery
         self._hub_exec = hub_exec
         self._escalations = escalations
         self._events = events
@@ -326,7 +329,7 @@ class HubNodeExecutor:
         """The mid-run marker callback's write (#65) — a ``run:`` step's own marker,
         recorded ahead of that step's exit. Idempotent per
         ``(chunk, node, name, epoch)``, like the executor's own ``produces:`` write."""
-        return self._artifacts.record_hub_artifact(
+        wrote = self._artifacts.record_hub_artifact(
             chunk_id,
             node_id=node_id,
             node_name=node_name,
@@ -335,6 +338,14 @@ class HubNodeExecutor:
             content=content,
             at=self._clock.now(),
         )
+        # A fresh `merged/<repo>` marker is the one production choke point for "a repo
+        # landed" — gated on `wrote` so crash-recovery replay never double-counts
+        # (blizzard#399 D1, `count_landed_since`).
+        if wrote and name.startswith(_MARKER_PREFIX):
+            self._delivery.record_delivery_repo_landed(
+                chunk_id, repo=name.removeprefix(_MARKER_PREFIX), commit_hash=content, at=self._clock.now()
+            )
+        return wrote
 
     def run(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int) -> HubRunResult | None:
         """Execute ``node``'s ``run:`` list once, to completion; ``None`` if deferred.

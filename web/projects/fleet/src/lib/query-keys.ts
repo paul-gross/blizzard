@@ -41,6 +41,8 @@ export const hubGardenProposalsKey = ['hub', 'garden-proposals'] as const;
 /** The gardening tab's routine list — `GET /api/routines`. Routines change rarely and
  * carry no SSE event of their own, the same standing `hubGraphsKey` has. */
 export const hubRoutinesKey = ['hub', 'routines'] as const;
+/** The gardening run dialog's scope picker read — `GET /api/scopes`. */
+export const hubScopesKey = ['hub', 'scopes'] as const;
 
 /** One routine's inflow-against-outflow trend over a window — `GET /api/routines/trend`.
  * Every window argument rides the key, `hubFleetSpendKey`'s own reason: a new window is
@@ -62,6 +64,12 @@ export function hubRoutineTrendKey(
  * disabled-query rest state. */
 export function hubRoutineSweepsKey(routineId: string | null, since: string, until: string): readonly unknown[] {
   return ['hub', 'routine-sweeps', routineId, since, until];
+}
+
+/** One routine's recorded scope baselines, keyed by routine id — `GET
+ * /api/routines/{routine_id}/baselines`. */
+export function hubRoutineBaselinesKey(routineId: string): readonly unknown[] {
+  return ['hub', 'routines', routineId, 'baselines'];
 }
 
 /** One chunk's full aggregate, keyed by id. */

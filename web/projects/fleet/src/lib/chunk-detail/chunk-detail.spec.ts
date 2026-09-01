@@ -337,7 +337,10 @@ describe('ChunkDetail container', () => {
   /** Type an answer into the dock and submit it. */
   async function answerFrom(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>): Promise<HTMLElement> {
     const el = fixture.nativeElement as HTMLElement;
-    el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!.value = 'graphql';
+    const input = el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!;
+    input.value = 'graphql';
+    input.dispatchEvent(new Event('input'));
+    await settle(fixture);
     el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
     await settle(fixture);
     return el;

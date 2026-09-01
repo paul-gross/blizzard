@@ -27,6 +27,10 @@
           Blocked — {{ panel.blockedReason }}. No run is offered.
         </p>
       } @else {
+        <p class="rp-run">
+          <fleet-kit-button (click)="run.emit()" testid="gardening-routine-run">Run</fleet-kit-button>
+          run with: <code>hub routine run {{ panel.record.name }}</code>
+        </p>
         <section class="rp-strategy" data-testid="gardening-routine-strategy">
           <h4>Strategy</h4>
           @for (step of panel.strategy; track step.name) {

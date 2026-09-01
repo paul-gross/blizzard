@@ -1,0 +1,58 @@
+h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+.mode-field {
+  margin: 0 0 12px;
+}
+
+.mode-field .body,
+.note-field .body {
+  padding: 8px;
+}
+
+.mode-note {
+  font-size: var(--fs-xs);
+  color: var(--label);
+  margin: 4px 0 0;
+}
+
+.baseline {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  background: var(--overlay-25);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+.baseline ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+.note-field {
+  margin: 0 0 12px;
+}
+
+.cli-verb {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--label);
+  word-break: break-all;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.submit-error {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--red);
+}
