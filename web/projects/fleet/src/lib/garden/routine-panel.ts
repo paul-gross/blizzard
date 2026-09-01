@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitButton } from '../kit/kit-button';
 import { FleetWhen } from '../when-display';
 
 /** The routine's own record — every field `RoutineView` carries, none it doesn't
@@ -66,15 +67,23 @@ export interface RoutinePanelVm {
  * interface.md §Declaring and running a routine). Presentational only: it renders
  * exactly the view model it is handed and injects no query (D1 ships no New/Edit
  * affordance; every block names the CLI verb behind its own read, D8).
+ *
+ * Also the panel's own Run trigger (blizzard#399 D7 — the run dialog this panel was
+ * always meant to open onto once it existed): a `run` output, emitted only while
+ * `blockedReason` is unset, mirroring the "No run is offered" branch it replaces. The
+ * container decides what running the selected routine then does — this component
+ * still injects nothing.
  */
 @Component({
   selector: 'fleet-routine-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen],
+  imports: [KitAsyncState, FleetWhen, KitButton],
   templateUrl: './routine-panel.html',
   styleUrl: './routine-panel.css',
 })
 export class FleetRoutinePanel {
   readonly vm = input<RoutinePanelVm | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
+
+  readonly run = output<void>();
 }

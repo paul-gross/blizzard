@@ -19,12 +19,15 @@ import {
   type StrategyStepVm,
 } from 'fleet';
 
+import { GardeningRunDialog } from './gardening-run-dialog';
+
 /**
  * The `/gardening/routines` sub-tab (blizzard#397, `plans/garden/user-interface.md`
  * §Declaring and running a routine) — the routine list, and the selected routine's
  * record, its read-only strategy, and the three health readings (D1 ships no New/Edit
- * affordance; run, scope authoring, and cross-routine scope health are each a later
- * issue's, per the issue's own Out of Scope note).
+ * affordance; scope authoring and cross-routine scope health are each a later issue's,
+ * per the issue's own Out of Scope note). Run itself (blizzard#399) opens the dialog
+ * off the panel's own `run` output.
  *
  * A container: it injects the routine, graph, trend, and sweeps queries, derives
  * `blocked` (D7) off the same effective-graph resolution a run itself refuses on, and
@@ -34,7 +37,7 @@ import {
 @Component({
   selector: 'app-gardening-routines-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRoutineList, FleetRoutinePanel],
+  imports: [FleetRoutineList, FleetRoutinePanel, GardeningRunDialog],
   templateUrl: './gardening-routines-page.html',
   styleUrl: './gardening-routines-page.css',
 })
@@ -170,5 +173,18 @@ export class GardeningRoutinesPage {
 
   protected select(routineId: string): void {
     this.explicitSelection.set(routineId);
+  }
+
+  /** The routine currently running the dialog against — `null` closes it (blizzard#399
+   * D6). Only {@link FleetRoutinePanel}'s own `run` output ever sets it, so it can only
+   * ever name the already-selected, already-unblocked routine. */
+  protected readonly runningRoutine = signal<RoutineView | null>(null);
+
+  protected run(): void {
+    this.runningRoutine.set(this.selectedRoutine());
+  }
+
+  protected closeDialog(): void {
+    this.runningRoutine.set(null);
   }
 }

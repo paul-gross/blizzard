@@ -6,5 +6,14 @@
     [state]="listState()"
     (routinePick)="select($event)"
   />
-  <fleet-routine-panel class="gr-panel" [vm]="panelVm()" [state]="panelState()" />
+  <fleet-routine-panel class="gr-panel" [vm]="panelVm()" [state]="panelState()" (run)="run()" />
 </div>
+
+@if (runningRoutine(); as routine) {
+  <app-gardening-run-dialog
+    [open]="true"
+    [routineId]="routine.routine_id"
+    [routineName]="routine.name"
+    (closed)="closeDialog()"
+  />
+}

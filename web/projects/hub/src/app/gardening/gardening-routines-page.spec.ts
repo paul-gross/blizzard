@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
@@ -67,12 +68,16 @@ describe('GardeningRoutinesPage', () => {
       if (method === 'GET' && path === '/api/graphs/gr_1') return GRAPH_DETAIL;
       if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') return SWEEPS;
       if (method === 'GET' && path === '/api/routines/trend') return TREND;
+      // The gardening run dialog's own reads, fired only once its Run trigger opens it.
+      if (method === 'GET' && path === '/api/scopes') return [];
+      if (method === 'GET' && path === '/api/routines/rtn_1/baselines') return [];
       return {};
     });
     await TestBed.configureTestingModule({
       imports: [GardeningRoutinesPage],
       providers: [
         provideZonelessChangeDetection(),
+        provideRouter([]),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();
@@ -93,7 +98,7 @@ describe('GardeningRoutinesPage', () => {
     expect(record?.textContent).toContain('medium');
   });
 
-  it('renders the strategy as read-only prose with no edit affordance anywhere on the panel', async () => {
+  it('renders the strategy as read-only prose with no edit affordance beyond the list picker and the Run trigger', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -101,8 +106,9 @@ describe('GardeningRoutinesPage', () => {
     expect(strategy?.textContent).toContain('Survey the repo.');
     expect(el.querySelectorAll('button, input, textarea, select, [contenteditable]')).toHaveLength(
       // The only interactive controls on this panel are the routine-list picker
-      // buttons — none inside the panel itself edits anything (D1).
-      el.querySelectorAll('[data-testid^="gardening-routine-row-"]').length,
+      // buttons and the panel's own Run trigger — none inside the strategy/trend/
+      // measurement/last-swept blocks themselves edits anything (D1).
+      el.querySelectorAll('[data-testid^="gardening-routine-row-"]').length + 1,
     );
   });
 
@@ -146,13 +152,31 @@ describe('GardeningRoutinesPage', () => {
     expect(el.textContent).not.toContain('hub routine run');
   });
 
-  it('names the CLI verb behind every read block', async () => {
+  it('names the CLI verb behind every read block, and the run verb behind the Run trigger', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.textContent).toContain('hub routine show');
     expect(el.textContent).toContain('hub routine trend');
     expect(el.textContent).toContain('hub routine sweeps');
+    expect(el.textContent).toContain('hub routine run');
+  });
+
+  it('opens the run dialog off the panel Run trigger, and closing it tears the dialog down', async () => {
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-run-dialog"]')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-run"]')!.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="run-dialog-title"]')?.textContent).toContain('nightly');
+
+    el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-cancel"]')!.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="gardening-run-dialog"]')).toBeNull();
   });
 
   it('renders its own empty state with no routines declared', async () => {
