@@ -41,7 +41,7 @@ export function injectHubRoutineTrendQuery(
   return injectQuery(() => {
     const name = routineName();
     return {
-      queryKey: name === null ? hubRoutineTrendKey('', '', '', '', 0) : hubRoutineTrendKey(name, since(), until(), introducedBoundary(), periodDays()),
+      queryKey: hubRoutineTrendKey(name, since(), until(), introducedBoundary(), periodDays()),
       enabled: name !== null,
       queryFn: async (): Promise<TrendView> => {
         const { data, error } = await routineTrendApiRoutinesTrendGet({
@@ -71,7 +71,7 @@ export function injectHubRoutineSweepsQuery(routineId: () => string | null, sinc
   return injectQuery(() => {
     const id = routineId();
     return {
-      queryKey: id === null ? hubRoutineSweepsKey('', '', '') : hubRoutineSweepsKey(id, since(), until()),
+      queryKey: hubRoutineSweepsKey(id, since(), until()),
       enabled: id !== null,
       queryFn: async (): Promise<GardenSweepsView> => {
         const { data, error } = await routineSweepsApiRoutinesRoutineIdSweepsGet({

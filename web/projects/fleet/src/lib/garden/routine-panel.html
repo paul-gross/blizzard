@@ -22,7 +22,7 @@
         <p class="rp-cli">read with: <code>hub routine show {{ panel.record.routineId }}</code></p>
       </header>
 
-      @if (panel.blocked) {
+      @if (panel.blockedReason !== null) {
         <p class="rp-blocked" data-testid="gardening-routine-blocked">
           Blocked — {{ panel.blockedReason }}. No run is offered.
         </p>

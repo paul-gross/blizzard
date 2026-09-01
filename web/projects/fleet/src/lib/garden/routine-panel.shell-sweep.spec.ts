@@ -29,7 +29,6 @@ const VM: RoutinePanelVm = {
     defaultModel: ['claude-sonnet-5'],
     defaultEffort: 'medium',
   },
-  blocked: false,
   blockedReason: null,
   strategy: [
     { name: 'survey', prompt: 'Survey the repo for stale docstrings and dead code, one weed per finding.' },

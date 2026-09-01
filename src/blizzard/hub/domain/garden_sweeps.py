@@ -84,15 +84,17 @@ def compute_sweeps(
         ):
             newest[fact.scope_slug] = fact
     covered = set(scope_slugs) | set(newest)
-    last_swept = [
-        ScopeSweep(
-            scope_slug=slug,
-            finding_set_id=newest[slug].finding_set_id if slug in newest else None,
-            produced_at=newest[slug].produced_at if slug in newest else None,
-            revisions=dict(newest[slug].revisions) if slug in newest else {},
+    last_swept = []
+    for slug in sorted(covered):
+        fact = newest.get(slug)
+        last_swept.append(
+            ScopeSweep(
+                scope_slug=slug,
+                finding_set_id=fact.finding_set_id if fact else None,
+                produced_at=fact.produced_at if fact else None,
+                revisions=dict(fact.revisions) if fact else {},
+            )
         )
-        for slug in sorted(covered)
-    ]
     measurements = sorted(
         (
             MeasurementReading(scope_slug=fact.scope_slug, produced_at=fact.produced_at, measurement=fact.measurement)

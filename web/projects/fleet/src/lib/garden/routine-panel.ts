@@ -47,10 +47,11 @@ export interface LastSweptRowVm {
 }
 
 /** The selected routine's whole panel view model (D1, D5, D7, D8) — plain data, no
- * query or wire type, so the presentational component and its spec never see one. */
+ * query or wire type, so the presentational component and its spec never see one.
+ * `blockedReason` alone carries blocked-ness: a non-`null` reason means blocked, so
+ * there is no separate `blocked` flag that could disagree with it. */
 export interface RoutinePanelVm {
   readonly record: RoutineRecordVm;
-  readonly blocked: boolean;
   readonly blockedReason: string | null;
   readonly strategy: readonly StrategyStepVm[];
   readonly trend: TrendSummaryVm | null;

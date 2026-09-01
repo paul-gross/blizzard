@@ -44,9 +44,10 @@ export const hubRoutinesKey = ['hub', 'routines'] as const;
 
 /** One routine's inflow-against-outflow trend over a window — `GET /api/routines/trend`.
  * Every window argument rides the key, `hubFleetSpendKey`'s own reason: a new window is
- * its own cache entry, not a collision with one already read. */
+ * its own cache entry, not a collision with one already read. `routineName` is nullable,
+ * `hubChunkKey`'s own null-tolerant shape, for the disabled-query rest state. */
 export function hubRoutineTrendKey(
-  routineName: string,
+  routineName: string | null,
   since: string,
   until: string,
   introducedBoundary: string,
@@ -56,8 +57,10 @@ export function hubRoutineTrendKey(
 }
 
 /** One routine's last-swept table and measurement series — `GET
- * /api/routines/{routine_id}/sweeps`, keyed by id since the route itself is (D6). */
-export function hubRoutineSweepsKey(routineId: string, since: string, until: string): readonly unknown[] {
+ * /api/routines/{routine_id}/sweeps`, keyed by id since the route itself is (D6).
+ * `routineId` is nullable, `hubChunkKey`'s own null-tolerant shape, for the
+ * disabled-query rest state. */
+export function hubRoutineSweepsKey(routineId: string | null, since: string, until: string): readonly unknown[] {
   return ['hub', 'routine-sweeps', routineId, since, until];
 }
 

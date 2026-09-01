@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import {
   asyncState,
-  asyncStateOf,
   defaultRoutineWindow,
   FleetRoutineList,
   FleetRoutinePanel,
@@ -140,7 +139,6 @@ export class GardeningRoutinesPage {
         defaultModel: routine.default_model ?? [],
         defaultEffort: routine.default_effort ?? null,
       },
-      blocked: this.blocked(),
       blockedReason: this.blocked() ? `graph ${routine.graph_name} has no effective mint` : null,
       strategy: this.strategy(),
       trend: trend
@@ -157,10 +155,17 @@ export class GardeningRoutinesPage {
     };
   });
 
+  /** Gates only on what the record and `blocked` (D7) need — `routinesQuery` to know
+   * there is a routine at all, `graphsQuery` to resolve `effectiveGraph`/`blocked`
+   * without ever answering a graph-list failure as a confident "blocked". The record is
+   * fully derivable from those two once resolved, so it is never held behind the
+   * slower, independent `trendQuery`/`sweepsQuery`/`graphQuery` reads their own
+   * sections already render around individually. */
   protected readonly panelState = computed<KitAsyncStateValue>(() => {
-    if (this.selectedRoutine() === null) return 'empty';
-    const queries = this.blocked() ? [this.trendQuery, this.sweepsQuery] : [this.trendQuery, this.sweepsQuery, this.graphQuery];
-    return asyncStateOf(queries, false);
+    if (this.selectedRoutine() === null) return asyncState(this.routinesQuery, true);
+    if (this.graphsQuery.isPending()) return 'loading';
+    if (this.graphsQuery.isError()) return 'error';
+    return 'ready';
   });
 
   protected select(routineId: string): void {

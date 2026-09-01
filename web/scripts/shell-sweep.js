@@ -100,6 +100,11 @@
  *     measurement, and last-swept blocks genuinely stack at 1280/390/320px
  *     with no horizontal overflow, and the last-swept table's own long
  *     revision hashes wrap inside their column rather than widening it.
+ *   - projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts —
+ *     the gardening routines container's own list-beside-panel grid
+ *     (blizzard#397): the list and panel sit side by side at 1280px, and
+ *     genuinely collapse into a single stacked column at 390/320px, with no
+ *     horizontal overflow of the layout itself.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -120,6 +125,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-control-row.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {

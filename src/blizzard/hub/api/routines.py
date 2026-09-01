@@ -91,6 +91,21 @@ def list_routines(services: Annotated[HubServices, Depends(get_services)]) -> li
     return [_routine_view(r) for r in services.routines.list_all()]
 
 
+def _parse_instant(value: str, *, field: str) -> datetime:
+    try:
+        return as_utc(datetime.fromisoformat(value))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field} {value!r} is not a valid ISO-8601 instant",
+        ) from exc
+
+
+def _require_until_after_since(since: datetime, until: datetime) -> None:
+    if until <= since:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="until must be after since")
+
+
 @dataclass(frozen=True)
 class _TrendWindow:
     """One ``GET /routines/trend`` request's parsed window (blizzard#394 Phase 4,
@@ -111,10 +126,9 @@ class _TrendWindow:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="period_days must be at least 1"
             )
-        parsed_since = cls._instant(since, field="since")
-        parsed_until = cls._instant(until, field="until")
-        if parsed_until <= parsed_since:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="until must be after since")
+        parsed_since = _parse_instant(since, field="since")
+        parsed_until = _parse_instant(until, field="until")
+        _require_until_after_since(parsed_since, parsed_until)
         span_days = (parsed_until - parsed_since).total_seconds() / 86400
         if span_days / period_days > cls._MAX_PERIODS:
             raise HTTPException(
@@ -124,19 +138,9 @@ class _TrendWindow:
         return cls(
             since=parsed_since,
             until=parsed_until,
-            introduced_boundary=cls._instant(introduced_boundary, field="introduced_boundary"),
+            introduced_boundary=_parse_instant(introduced_boundary, field="introduced_boundary"),
             period_days=period_days,
         )
-
-    @staticmethod
-    def _instant(value: str, *, field: str) -> datetime:
-        try:
-            return as_utc(datetime.fromisoformat(value))
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"{field} {value!r} is not a valid ISO-8601 instant",
-            ) from exc
 
 
 def _trend_view(trend: Trend) -> TrendView:
@@ -231,18 +235,17 @@ def edit_routine(
 class _SweepWindow:
     """One ``GET /routines/{routine_id}/sweeps`` request's parsed window — the
     measurement series' own ``[since, until)`` (D2); last-swept ignores it. Reuses
-    `_TrendWindow._instant`'s parsing so a malformed instant answers the same 422 both
-    routes name."""
+    `_parse_instant`/`_require_until_after_since` so a malformed instant or an
+    inverted span answers the same 422 both routes name."""
 
     since: datetime
     until: datetime
 
     @classmethod
     def of(cls, *, since: str, until: str) -> _SweepWindow:
-        parsed_since = _TrendWindow._instant(since, field="since")
-        parsed_until = _TrendWindow._instant(until, field="until")
-        if parsed_until <= parsed_since:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="until must be after since")
+        parsed_since = _parse_instant(since, field="since")
+        parsed_until = _parse_instant(until, field="until")
+        _require_until_after_since(parsed_since, parsed_until)
         return cls(since=parsed_since, until=parsed_until)
 
 
