@@ -1,0 +1,101 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  emptyText="Select a routine to see its record, strategy, and health."
+  emptyTestid="gardening-routine-panel-empty"
+>
+  @let panel = vm();
+  @if (panel) {
+    <section class="rp" data-testid="gardening-routine-panel">
+      <header class="rp-record" data-testid="gardening-routine-record">
+        <h3>{{ panel.record.name }}</h3>
+        <dl>
+          <dt>graph</dt>
+          <dd>{{ panel.record.graphName }}</dd>
+          <dt>default scope</dt>
+          <dd>{{ panel.record.defaultScopeSlug }}</dd>
+          <dt>default model</dt>
+          <dd>{{ panel.record.defaultModel.length ? panel.record.defaultModel.join(', ') : '—' }}</dd>
+          <dt>default effort</dt>
+          <dd>{{ panel.record.defaultEffort ?? '—' }}</dd>
+        </dl>
+        <p class="rp-cli">read with: <code>hub routine show {{ panel.record.routineId }}</code></p>
+      </header>
+
+      @if (panel.blocked) {
+        <p class="rp-blocked" data-testid="gardening-routine-blocked">
+          Blocked — {{ panel.blockedReason }}. No run is offered.
+        </p>
+      } @else {
+        <section class="rp-strategy" data-testid="gardening-routine-strategy">
+          <h4>Strategy</h4>
+          @for (step of panel.strategy; track step.name) {
+            <article class="rp-step">
+              <h5>{{ step.name }}</h5>
+              <p>{{ step.prompt ?? '(no prompt)' }}</p>
+            </article>
+          }
+          <p class="rp-cli">read with: <code>hub routine show {{ panel.record.routineId }}</code></p>
+        </section>
+      }
+
+      <section class="rp-trend" data-testid="gardening-routine-trend">
+        <h4>Inflow &amp; outflow — {{ panel.windowLabel }}</h4>
+        @if (panel.trend) {
+          <dl>
+            <dt>created</dt>
+            <dd data-testid="gardening-routine-trend-created">{{ panel.trend.created }}</dd>
+            <dt>outflow</dt>
+            <dd data-testid="gardening-routine-trend-outflow">{{ panel.trend.outflow }}</dd>
+            <dt>withdrawn</dt>
+            <dd data-testid="gardening-routine-trend-withdrawn">{{ panel.trend.withdrawn }}</dd>
+            <dt>reopened</dt>
+            <dd data-testid="gardening-routine-trend-reopened">{{ panel.trend.reopened }}</dd>
+          </dl>
+        }
+        <p class="rp-cli">read with: <code>hub routine trend {{ panel.record.name }}</code></p>
+      </section>
+
+      <section class="rp-measurements" data-testid="gardening-routine-measurements">
+        <h4>Measurement — {{ panel.windowLabel }}</h4>
+        @if (panel.measurements.length) {
+          <ul>
+            @for (m of panel.measurements; track m.scopeSlug + m.producedAt) {
+              <li><fleet-when [iso]="m.producedAt" /> — {{ m.scopeSlug }}: {{ m.measurement }}</li>
+            }
+          </ul>
+        } @else {
+          <p>No measurement recorded in this window.</p>
+        }
+        <p class="rp-cli">read with: <code>hub routine sweeps {{ panel.record.name }}</code></p>
+      </section>
+
+      <section class="rp-last-swept" data-testid="gardening-routine-last-swept">
+        <h4>Last swept</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>scope</th>
+              <th>swept</th>
+              <th>revision</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of panel.lastSwept; track row.scopeSlug) {
+              <tr [attr.data-testid]="'gardening-routine-last-swept-' + row.scopeSlug">
+                <td>{{ row.scopeSlug }}</td>
+                @if (row.producedAt) {
+                  <td><fleet-when [iso]="row.producedAt" /></td>
+                } @else {
+                  <td class="rp-never" data-testid="gardening-routine-last-swept-never">never</td>
+                }
+                <td>{{ row.revisionsLabel }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+        <p class="rp-cli">read with: <code>hub routine sweeps {{ panel.record.name }}</code></p>
+      </section>
+    </section>
+  }
+</fleet-kit-async-state>

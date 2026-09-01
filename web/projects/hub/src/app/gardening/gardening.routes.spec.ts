@@ -28,6 +28,8 @@ describe('the /gardening route subtree', () => {
   beforeEach(async () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/garden-proposals') return [];
+      if (method === 'GET' && path === '/api/routines') return [];
+      if (method === 'GET' && path === '/api/graphs') return [];
       return {};
     });
     await TestBed.configureTestingModule({

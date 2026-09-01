@@ -1,6 +1,10 @@
-<fleet-kit-async-state
-  state="empty"
-  placement="inline"
-  emptyText="No routines declared yet — tending begins when there is growth worth pruning."
-  emptyTestid="gardening-routines-empty"
-/>
+<div class="gr-layout">
+  <fleet-routine-list
+    class="gr-list"
+    [rows]="listRows()"
+    [selectedId]="selectedId()"
+    [state]="listState()"
+    (routinePick)="select($event)"
+  />
+  <fleet-routine-panel class="gr-panel" [vm]="panelVm()" [state]="panelState()" />
+</div>

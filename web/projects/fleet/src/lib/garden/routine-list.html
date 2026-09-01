@@ -1,0 +1,23 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  emptyText="No routines declared yet — tending begins when there is growth worth pruning."
+  emptyTestid="gardening-routines-empty"
+>
+  <ul class="rt-list" data-testid="gardening-routines-list">
+    @for (row of rows(); track row.routineId) {
+      <li>
+        <button
+          type="button"
+          class="rt-row"
+          [class.rt-row--selected]="row.routineId === selectedId()"
+          [attr.data-testid]="'gardening-routine-row-' + row.routineId"
+          (click)="pick(row.routineId)"
+        >
+          <span class="rt-name">{{ row.name }}</span>
+          <span class="rt-graph">{{ row.graphName }}</span>
+        </button>
+      </li>
+    }
+  </ul>
+</fleet-kit-async-state>
