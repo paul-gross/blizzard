@@ -4,7 +4,7 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import { enableScopeApiScopesSlugEnablePost, retireScopeApiScopesSlugRetirePost } from '../api/hub';
 import { hubScopesKey } from '../query-keys';
 
-/** Retire or re-enable a scope's reversible brake (blizzard#400): a retired scope is
+/** Retire or re-enable a scope's reversible brake: a retired scope is
  * excluded from every picker, but its findings stay live, queryable, and attributable
  * throughout — mirrors `GraphLifecycleVars`. */
 export interface ScopeLifecycleVars {

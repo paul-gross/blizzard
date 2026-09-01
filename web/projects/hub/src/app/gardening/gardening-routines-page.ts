@@ -44,7 +44,7 @@ import { GardeningRunDialog } from './gardening-run-dialog';
  * forwards plain view models to the presentational {@link FleetRoutineList} and
  * {@link FleetRoutinePanel} — neither of which injects a query of its own.
  *
- * Below the routine list/panel, also composes {@link FleetScopeList} (blizzard#400):
+ * Below the routine list/panel, also composes {@link FleetScopeList}:
  * every scope, editable in place and retire/enable-able, gated on `graph:edit`
  * (the same permission `src/blizzard/hub/api/scopes.py` requires) — `graph-detail.ts`'s
  * own `canEdit`/`actionError` shape, transliterated to scopes.

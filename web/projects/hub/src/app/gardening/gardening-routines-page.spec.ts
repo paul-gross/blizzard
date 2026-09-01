@@ -10,7 +10,7 @@ import { GardeningRoutinesPage } from './gardening-routines-page';
 
 /** A read-only identity — every permission `OPERATOR_ME_RESPONSE` carries except
  * `graph:edit` — the default for tests unconcerned with the scope list's gated
- * description-editor/retire/enable controls (blizzard#400). */
+ * description-editor/retire/enable controls. */
 const VIEWER_ME_RESPONSE: MeResponse = {
   ...OPERATOR_ME_RESPONSE,
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'graph:edit'),
@@ -213,7 +213,7 @@ describe('GardeningRoutinesPage', () => {
     expect(el.querySelector('[data-testid="gardening-routine-panel-empty"]')).not.toBeNull();
   });
 
-  describe('scopes (blizzard#400)', () => {
+  describe('scopes', () => {
     it('lists every scope with slug, description, and retired state, without an editor for a read-only identity', async () => {
       const fixture = await render({
         scopes: [SCOPE, { slug: 'stale-scope', description: 'no longer tended', retired: true, created_at: '2026-01-01T00:00:00Z' }],

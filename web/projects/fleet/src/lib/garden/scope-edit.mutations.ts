@@ -4,7 +4,7 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import { editScopeApiScopesSlugPatch } from '../api/hub';
 import { hubScopesKey } from '../query-keys';
 
-/** Change a scope's stored description in place (blizzard#400) — never touches its slug. */
+/** Change a scope's stored description in place — never touches its slug. */
 export interface ScopeEditVars {
   readonly slug: string;
   readonly description: string;

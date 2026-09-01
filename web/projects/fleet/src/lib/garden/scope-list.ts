@@ -3,23 +3,23 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitButton } from '../kit/kit-button';
 
-/** One row of the scope list — slug, description, and retired state (AC 1). */
+/** One row of the scope list — slug, description, and retired state. */
 export interface ScopeRowVm {
   readonly slug: string;
   readonly description: string;
   readonly retired: boolean;
 }
 
-/** Emitted when the operator sets a scope's description in place (AC 2). */
+/** Emitted when the operator sets a scope's description in place. */
 export interface ScopeDescriptionEditEvent {
   readonly slug: string;
   readonly description: string;
 }
 
 /**
- * The routines panel's scope list (blizzard#400) — every scope, retired ones
- * included and marked as such (AC 5), each with an in-place description editor and a
- * retire/re-enable control naming the CLI verb behind it (AC 3, AC 8). Presentational
+ * The routines panel's scope list — every scope, retired ones
+ * included and marked as such, each with an in-place description editor and a
+ * retire/re-enable control naming the CLI verb behind it. Presentational
  * only: no query injection, `FleetRoutineList`'s own shape — rows in,
  * `editDescription`/`retire`/`enable` events out, the container's mutations decide
  * what they do. Retire/enable confirm before emitting, `GraphDetailLifecycle`'s own

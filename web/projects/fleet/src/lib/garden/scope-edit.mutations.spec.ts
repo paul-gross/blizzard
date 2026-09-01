@@ -7,7 +7,7 @@ import { client as hubClient } from '../api/hub/client.gen';
 import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
 import { injectEditScopeMutation } from './scope-edit.mutations';
 
-describe('injectEditScopeMutation (blizzard#400)', () => {
+describe('injectEditScopeMutation', () => {
   let stub: RequestClientStub;
   let queryClient: QueryClient;
 

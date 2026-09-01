@@ -9,7 +9,7 @@ const ROWS: readonly ScopeRowVm[] = [
   { slug: 'stale-scope', description: 'no longer tended', retired: true },
 ];
 
-describe('FleetScopeList (blizzard#400)', () => {
+describe('FleetScopeList', () => {
   async function mount(inputs: { rows?: readonly ScopeRowVm[]; state?: 'loading' | 'error' | 'empty' | 'ready'; canEdit?: boolean }) {
     await TestBed.configureTestingModule({
       imports: [FleetScopeList],
@@ -23,7 +23,7 @@ describe('FleetScopeList (blizzard#400)', () => {
     return fixture;
   }
 
-  it('renders every scope with its slug, description, and retired state (AC 1, AC 5)', async () => {
+  it('renders every scope with its slug, description, and retired state', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
@@ -45,7 +45,7 @@ describe('FleetScopeList (blizzard#400)', () => {
     expect(el.querySelector('[data-testid="gardening-scope-enable-stale-scope"]')).toBeNull();
   });
 
-  it('emits editDescription with the trimmed value on Set (AC 2)', async () => {
+  it('emits editDescription with the trimmed value on Set', async () => {
     const fixture = await mount({ canEdit: true });
     const el = fixture.nativeElement as HTMLElement;
     let emitted: { slug: string; description: string } | undefined;
@@ -58,7 +58,7 @@ describe('FleetScopeList (blizzard#400)', () => {
     expect(emitted).toEqual({ slug: 'blizzard', description: 'updated description' });
   });
 
-  it('emits retire with the slug once the operator confirms (AC 3, AC 4)', async () => {
+  it('emits retire with the slug once the operator confirms', async () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await mount({ canEdit: true });
     const el = fixture.nativeElement as HTMLElement;
@@ -86,7 +86,7 @@ describe('FleetScopeList (blizzard#400)', () => {
     confirmSpy.mockRestore();
   });
 
-  it('emits enable with the slug once the operator confirms (AC 3, AC 6)', async () => {
+  it('emits enable with the slug once the operator confirms', async () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await mount({ canEdit: true });
     const el = fixture.nativeElement as HTMLElement;
