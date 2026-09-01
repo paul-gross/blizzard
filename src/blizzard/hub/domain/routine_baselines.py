@@ -1,11 +1,8 @@
 """Routine baselines — a read-only composition over the finding-set and delivery seams
 (blizzard#399, D5): one entry per scope a routine has swept, each carrying the baseline
-finding set's id, its recorded instant, and per repo the recorded revision with how
-much has landed since (D1).
-
-The instant is decoded from the finding-set id, never stored (D2) — the same idiom
-`foundation/ids.py`'s own docstring names. See
-`IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means."""
+finding set's id, its recorded instant (`Id.minted_at`, D2), and per repo how much has
+landed since (D1). See `IReadFindingSetRepository.newest_by_scope_for_routine` for what
+absence means."""
 
 from __future__ import annotations
 
