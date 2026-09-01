@@ -1,0 +1,19 @@
+<nav fleetKitTabStrip class="subnav" data-testid="gardening-subnav">
+  <a fleetKitTab routerLink="routines" routerLinkActive="active" data-testid="gardening-tab-routines">Routines</a>
+  <a
+    fleetKitTab
+    routerLink="runs-and-findings"
+    routerLinkActive="active"
+    data-testid="gardening-tab-runs-and-findings"
+  >Runs &amp; findings</a>
+  <a fleetKitTab routerLink="proposals" routerLinkActive="active" data-testid="gardening-tab-proposals">
+    Proposals
+    @if (proposalsWaitingCount() > 0) {
+      <span class="cnt" data-testid="gardening-proposals-count">{{ proposalsWaitingCount() }}</span>
+    }
+  </a>
+  <span class="note" data-testid="gardening-manual-note">Manual kickoff only — no routine carries a cadence.</span>
+</nav>
+<div class="body">
+  <router-outlet />
+</div>

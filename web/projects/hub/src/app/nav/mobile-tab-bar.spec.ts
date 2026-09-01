@@ -61,4 +61,13 @@ describe('MobileTabBar', () => {
 
     expect(el.querySelector('[data-testid="tab-asks-badge"]')?.textContent).toBe('2');
   });
+
+  it('renders a routed Gardening tab (blizzard#397)', async () => {
+    const fixture = await render([]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const gardening = el.querySelector('[data-testid="tab-gardening"]');
+    expect(gardening?.textContent).toContain('Gardening');
+    expect(gardening?.hasAttribute('disabled')).toBe(false);
+  });
 });

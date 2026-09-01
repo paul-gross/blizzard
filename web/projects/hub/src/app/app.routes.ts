@@ -39,6 +39,31 @@ export const routes: Routes = [
   { path: 'graphs', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'graphs/:graphId', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'events', loadComponent: () => import('./events/events-page').then((m) => m.EventsPage) },
+  // The gardening tab (blizzard#397) — a top-level peer of board/graphs/events, not a
+  // panel inside any of them. Three deep-linkable children, one per noun the garden
+  // machinery itself has (routines / runs and findings / proposals); each child page is
+  // this chunk's shell only — the sheet content behind every one of them is its own,
+  // later issue.
+  {
+    path: 'gardening',
+    loadComponent: () => import('./gardening/gardening-page').then((m) => m.GardeningPage),
+    children: [
+      { path: '', redirectTo: 'routines', pathMatch: 'full' },
+      {
+        path: 'routines',
+        loadComponent: () => import('./gardening/gardening-routines-page').then((m) => m.GardeningRoutinesPage),
+      },
+      {
+        path: 'runs-and-findings',
+        loadComponent: () =>
+          import('./gardening/gardening-runs-findings-page').then((m) => m.GardeningRunsFindingsPage),
+      },
+      {
+        path: 'proposals',
+        loadComponent: () => import('./gardening/gardening-proposals-page').then((m) => m.GardeningProposalsPage),
+      },
+    ],
+  },
   // The login surface (issue #93) — public, reached directly or via the 401
   // interceptor. Rendered outside the app shell (`App`'s own `authState` branch),
   // so it carries no header/nav chrome of its own.

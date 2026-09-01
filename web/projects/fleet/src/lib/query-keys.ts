@@ -35,6 +35,9 @@ export const hubAuthProvidersKey = ['hub', 'auth', 'providers'] as const;
 /** The admin page's user listing (issue #94) — `GET /api/users`. Invalidated by the
  * role-assignment mutation directly (no SSE event names a role change yet). */
 export const hubUsersKey = ['hub', 'users'] as const;
+/** The gardening tab's docket read (blizzard#397) — `GET /api/garden-proposals`. Not
+ * yet in the SSE event vocabulary, so nothing invalidates this key on a live event. */
+export const hubGardenProposalsKey = ['hub', 'garden-proposals'] as const;
 
 /** One chunk's full aggregate, keyed by id. */
 export function hubChunkKey(chunkId: string | null): readonly unknown[] {

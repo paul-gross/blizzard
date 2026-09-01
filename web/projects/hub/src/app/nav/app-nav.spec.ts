@@ -22,6 +22,14 @@ describe('AppNav', () => {
     expect(el.querySelector('[data-testid="nav-graphs"]')).not.toBeNull();
   });
 
+  it('renders the gardening tab (blizzard#397)', async () => {
+    const fixture = TestBed.createComponent(AppNav);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="nav-gardening"]')?.textContent).toContain('Gardening');
+  });
+
   it('hides the Admin tab by default and shows it when showAdmin is set (issue #93)', async () => {
     const fixture = TestBed.createComponent(AppNav);
     await fixture.whenStable();

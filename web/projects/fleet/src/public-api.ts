@@ -36,6 +36,7 @@ export * from './lib/queue';
 export * from './lib/runners';
 export * from './lib/questions';
 export * from './lib/graphs';
+export * from './lib/garden';
 export * from './lib/sse';
 export * from './lib/health';
 export * from './lib/fleet-spend';
@@ -51,6 +52,7 @@ export {
   hubBacklogKey,
   hubRunnersKey,
   hubQuestionsKey,
+  hubGardenProposalsKey,
   hubChunkKey,
   hubGraphsKey,
   hubGraphKey,

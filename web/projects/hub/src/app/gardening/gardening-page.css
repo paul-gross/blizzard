@@ -1,0 +1,35 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.subnav {
+  flex: none;
+}
+.note {
+  margin-left: auto;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  color: var(--label-dim);
+  white-space: nowrap;
+}
+.cnt {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: 6px;
+  padding: 0 5px;
+  background: var(--amber-dim);
+  color: var(--snow);
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0;
+  vertical-align: middle;
+}
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
