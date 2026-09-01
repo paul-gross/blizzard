@@ -25,6 +25,12 @@ from blizzard.foundation.node_steps import Executor, JudgedBy
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunks.route import IReadChunkRouteRepository
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Graph, Node
 from blizzard.hub.domain.produces_auth import Produces
@@ -35,7 +41,6 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     DecisionChoice,
-    IWriteChunkRepository,
     MigrationFact,
     MigrationMode,
     MigrationSource,
@@ -167,11 +172,21 @@ class ApplyService:
     def __init__(
         self,
         *,
-        chunks: IWriteChunkRepository,
+        facts: IReadChunkFactsRepository,
+        movement: IWriteChunkMovementRepository,
+        decisions: IWriteChunkDecisionsRepository,
+        escalations: IWriteChunkEscalationsRepository,
+        route: IReadChunkRouteRepository,
+        artifacts: IReadChunkArtifactsRepository,
         clock: IClock,
         hub_node_executor: HubNodeExecutor,
     ) -> None:
-        self._chunks = chunks
+        self._facts = facts
+        self._movement = movement
+        self._decisions = decisions
+        self._escalations = escalations
+        self._route = route
+        self._artifacts = artifacts
         self._clock = clock
         self._hub_node_executor = hub_node_executor
 
@@ -192,13 +207,13 @@ class ApplyService:
         ``target_graph`` (#90), ``intended_target_graph`` (#124), and ``follow_latest_graph``
         (#164) all arrive pre-resolved — ``None`` meaning "names no enabled graph" — so this
         holds no graph repo of its own (``bzh:domain-takes-objects``)."""
-        facts = self._chunks.load_facts(chunk.chunk_id)
+        facts = self._facts.load_facts(chunk.chunk_id)
         if facts is None:
             return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
 
         # Probed by natural key ahead of the graph lookup and the route-token check (issues
         # #90, #108): a migration re-pins the graph and releases the route a replay presents.
-        if self._chunks.accepted_migration(
+        if self._movement.accepted_migration(
             chunk.chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
         ):
             # A **hub-landing** migration (issue #111) retained the route, so its replay must
@@ -231,7 +246,7 @@ class ApplyService:
 
         # Idempotent replay first: a completion already applied at this (node, epoch)
         # returns its original outcome — even once the chunk is terminal.
-        replayed = self._chunks.accepted_transition_target(
+        replayed = self._movement.accepted_transition_target(
             chunk.chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
         )
         if replayed is not None:
@@ -292,7 +307,7 @@ class ApplyService:
             return migrated
 
         fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
-        self._chunks.record_transition(
+        self._movement.record_transition(
             transition_id=fresh_transition_id,
             chunk_id=chunk.chunk_id,
             from_node_id=from_node.node_id,
@@ -332,7 +347,7 @@ class ApplyService:
         below — the authored cross-graph edge, the migration consult, and the plain
         transition alike — carries none of either."""
         assert submission.decision_id is not None  # the caller dispatches only when set
-        decision = self._chunks.get_decision(submission.decision_id)
+        decision = self._decisions.get_decision(submission.decision_id)
         if decision is None or decision.chunk_id != chunk.chunk_id or decision.node_id != gate_node.node_id:
             return ApplyResult.failure(f"decision {submission.decision_id} does not match node `{gate_node.name}`")
         if decision.resolved_choice is None:
@@ -342,7 +357,7 @@ class ApplyService:
                 f"choice `{submission.choice}` is not the resolved choice `{decision.resolved_choice}`"
             )
 
-        facts = self._chunks.load_facts(chunk.chunk_id)
+        facts = self._facts.load_facts(chunk.chunk_id)
         if facts is None:
             return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
         if facts.status() in TERMINAL_STATUSES:
@@ -371,7 +386,7 @@ class ApplyService:
             return migrated
 
         fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
-        self._chunks.record_transition(
+        self._movement.record_transition(
             transition_id=fresh_transition_id,
             chunk_id=chunk.chunk_id,
             from_node_id=gate_node.node_id,
@@ -412,12 +427,12 @@ class ApplyService:
         :meth:`_land_migration`. Unresolved, it escalates to ``needs_human`` and answers
         ``PARKED_AT_GATE`` — ``FAILURE`` would requeue and supersede it (issue #110)."""
         if target_graph is None:
-            facts = self._chunks.load_facts(chunk.chunk_id)
+            facts = self._facts.load_facts(chunk.chunk_id)
             already = facts is not None and any(e.epoch == submission.epoch for e in facts.escalations)
             if not already:
                 # Hub-authored escalation, no runner runtime dir to compose a wrapped
                 # takeover command from — leaves wrapped_takeover_command at its store default.
-                self._chunks.record_escalation(
+                self._escalations.record_escalation(
                     chunk.chunk_id,
                     epoch=submission.epoch,
                     takeover_command=(
@@ -551,7 +566,7 @@ class ApplyService:
         ``migration_id`` is the fresh fact this call wrote (issue #213)."""
         landed_node = target_graph.node_by_id(landed_node_id)
         lands_on_hub = landed_node is not None and landed_node.executor is Executor.HUB
-        migration_id = self._chunks.record_migration(
+        migration_id = self._movement.record_migration(
             chunk.chunk_id,
             from_node_id=from_node.node_id,
             from_graph_id=from_node.graph_id,
@@ -616,7 +631,7 @@ class ApplyService:
             chunk=chunk,
             graph=graph,
             node=to_node,
-            artifacts=self._chunks.load_artifacts(chunk.chunk_id),
+            artifacts=self._artifacts.load_artifacts(chunk.chunk_id),
             epoch=submission.epoch,
             arrival_addendum=arrival.addendum,
         )
@@ -628,9 +643,9 @@ class ApplyService:
         The node's own choices become the decision's; no artifacts are attached (they
         arrived with the transition into the gate). The natural-key probe guards a
         double-open."""
-        if self._chunks.find_decision(chunk.chunk_id, node_id=gate_node.node_id, epoch=epoch) is not None:
+        if self._decisions.find_decision(chunk.chunk_id, node_id=gate_node.node_id, epoch=epoch) is not None:
             return
-        self._chunks.record_decision(
+        self._decisions.record_decision(
             decision_id=Id.mint(DECISION_PREFIX, self._clock).value,
             chunk_id=chunk.chunk_id,
             node_id=gate_node.node_id,
@@ -645,7 +660,7 @@ class ApplyService:
     def _check_route_token(
         self, chunk: Chunk, facts: ChunkFacts, submission: CompletionSubmission, *, route_token_mode: str
     ) -> ApplyResult | None:
-        route = self._chunks.route_of(chunk.chunk_id)
+        route = self._route.route_of(chunk.chunk_id)
         detail = RouteToken(
             facts=facts,
             presented=submission.route_token,

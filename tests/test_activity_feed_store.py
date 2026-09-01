@@ -1,4 +1,4 @@
-"""``IReadChunkRepository.activity_facts_since`` / ``IReadRunnerRegistry.list_pause_facts_since``
+"""``IReadChunkEventsRepository.activity_facts_since`` / ``IReadRunnerRegistry.list_pause_facts_since``
 (component tier) — the activity feed's bounded per-source reads (issue #213, AC4).
 
 One case per ``ChunkChangeCause`` member mapped to a fact table, plus the ``since``
@@ -15,9 +15,10 @@ import sqlalchemy as sa
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.chunks.events import IReadChunkEventsRepository
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.registry import IReadRunnerRegistry
-from blizzard.hub.domain.work import ActivityRow, DecisionChoice, IReadChunkRepository, MigrationSource
+from blizzard.hub.domain.work import ActivityRow, DecisionChoice, MigrationSource
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.chunk_store import ChunkStore, record_deleted_row
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -384,7 +385,7 @@ def test_no_single_source_read_exceeds_the_limit(tmp_path: Path) -> None:
     assert len(pause_rows) == 3  # chunk_pause_facts' own bounded read, capped at `limit`
 
 
-# --- the runner-pause seam: IReadRunnerRegistry, never IReadChunkRepository --
+# --- the runner-pause seam: IReadRunnerRegistry, never IReadChunkEventsRepository --
 
 
 def _registry_store(tmp_path: Path) -> RunnerRegistryStore:
@@ -427,5 +428,5 @@ def test_registered_and_heartbeat_kinds_are_never_sourced(tmp_path: Path) -> Non
 def test_read_chunk_repository_gains_no_runner_pause_method() -> None:
     """The seam boundary is honored: runner-pause reads live on ``IReadRunnerRegistry`` alone."""
     assert hasattr(IReadRunnerRegistry, "list_pause_facts_since")
-    assert not hasattr(IReadChunkRepository, "list_pause_facts_since")
-    assert hasattr(IReadChunkRepository, "activity_facts_since")
+    assert not hasattr(IReadChunkEventsRepository, "list_pause_facts_since")
+    assert hasattr(IReadChunkEventsRepository, "activity_facts_since")

@@ -61,7 +61,7 @@ def _work_deps(engine):  # type: ignore[no-untyped-def]
     store = hub_store_connections(engine)
     work_item_store = WorkItemStore(store)
     delete = DeleteService(
-        chunks=ChunkStore(store, _clock()), items=work_item_store, clock=_clock(), claim_lock=threading.Lock()
+        facts=ChunkStore(store, _clock()), items=work_item_store, clock=_clock(), claim_lock=threading.Lock()
     )
     return work_item_store, delete
 

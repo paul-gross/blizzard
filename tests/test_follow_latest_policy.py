@@ -148,7 +148,7 @@ def test_a_policy_true_graph_repins_the_chunk_to_the_newest_mint(tmp_path: Path)
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["graph_id"] == v2
     assert detail["current_node_name"] == "deliver"  # same-named landing on the destination
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     # Recorded as a migration fact, never disguised as a transition.
     assert len(facts.migrations) == 1
@@ -179,7 +179,7 @@ def test_a_graph_saying_false_overrides_a_true_hub(tmp_path: Path) -> None:
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["graph_id"] == pinned  # unchanged
     assert detail["current_node_name"] == "deliver"  # an ordinary transition still happened
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None and len(facts.transitions) == 1 and len(facts.migrations) == 0
 
 
@@ -238,7 +238,7 @@ def test_a_chunk_already_on_the_newest_mint_is_a_no_op(tmp_path: Path) -> None:
     assert _complete(hub, chunk_id, build_node).json()["outcome"] != "migrated"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["graph_id"] == v1
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None and len(facts.transitions) == 1
 
 
@@ -354,7 +354,7 @@ def test_the_terminal_transition_is_never_hijacked_by_the_policy(tmp_path: Path)
     final = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert final["status"] == "done"
     assert final["graph_id"] == v1, "a terminating chunk must not be re-pinned"
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None and len(facts.migrations) == 0
 
 
@@ -367,7 +367,7 @@ def test_a_policy_migration_is_attributed_to_the_policy_in_history(tmp_path: Pat
 
     assert _complete(hub, chunk_id, build_node).json()["outcome"] == "migrated"
 
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert [m.source for m in facts.migrations] == [MigrationSource.FOLLOW_LATEST]
     migrations = hub.client.get(f"/api/chunks/{chunk_id}").json()["migrations"]

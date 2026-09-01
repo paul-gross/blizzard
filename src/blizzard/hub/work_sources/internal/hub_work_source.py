@@ -9,11 +9,11 @@ from __future__ import annotations
 from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
-    IReadChunkRepository,
     IReadWorkItemRepository,
     IWriteWorkItemRepository,
     WorkItemAuthor,
@@ -39,13 +39,13 @@ class HubWorkSource:
     def __init__(
         self,
         items: IReadWorkItemRepository,
-        chunks: IReadChunkRepository,
+        work_refs: IReadChunkWorkRefsRepository,
         edits: WorkItemEditService,
         users: IReadUserRepository,
         resolution: GardenProposalDeliveryResolution,
     ) -> None:
         self._items = items
-        self._chunks = chunks
+        self._work_refs = work_refs
         self._edits = edits
         self._users = users
         self._resolution = resolution
@@ -81,7 +81,7 @@ class HubWorkSource:
         — from the moment create mints the item's resting chunk (blizzard#359) until
         that chunk reaches a terminal status (``stopped`` or ``done``); ``None`` before
         and after."""
-        chunk_id = self._chunks.find_live_holder(pointer)
+        chunk_id = self._work_refs.find_live_holder(pointer)
         return f"/board/chunk/{chunk_id}" if chunk_id is not None else None
 
     def branch_url(self, repo: str, branch_name: str) -> str | None:
@@ -155,7 +155,7 @@ def seat_hub_work_source(
     ``delete``/``resolution`` are the composition root's own instances (#362, #364,
     blizzard#394), so every write path shares the same claim-locked instances."""
     chunks = ChunkStore(store, clock)
-    edits = WorkItemEditService(items=items, chunks=chunks, clock=clock, delete=delete)
+    edits = WorkItemEditService(items=items, work_refs=chunks, record=chunks, facts=chunks, clock=clock, delete=delete)
     hub_source = HubWorkSource(items, chunks, edits, users, resolution)
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source

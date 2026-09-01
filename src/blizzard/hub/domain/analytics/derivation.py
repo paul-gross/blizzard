@@ -19,7 +19,8 @@ from blizzard.hub.domain.analytics.extraction import (
     ITurnEventExtractor,
     extract_events,
 )
-from blizzard.hub.domain.work import IReadChunkRepository
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 
 _log = get_logger("blizzard.hub.transcript_events")
 
@@ -27,20 +28,22 @@ _log = get_logger("blizzard.hub.transcript_events")
 class EventDerivationService:
     """The per-segment replacement unit (D6) and the candidate-set predicate (D1).
 
-    ``chunks`` resolves a node-step's ``graph_id`` (D4): the latest matching
+    ``facts``/``record`` resolve a node-step's ``graph_id`` (D4): the latest matching
     ``transitions`` row where one exists, else the chunk's own mint pin."""
 
     def __init__(
         self,
         *,
         events: IWriteTranscriptEvents,
-        chunks: IReadChunkRepository,
+        facts: IReadChunkFactsRepository,
+        record: IReadChunkRecordRepository,
         clock: IClock,
         extractors: Sequence[ITurnEventExtractor] = DEFAULT_EXTRACTORS,
         extractor_version: str = EXTRACTOR_VERSION,
     ) -> None:
         self._events = events
-        self._chunks = chunks
+        self._facts = facts
+        self._record = record
         self._clock = clock
         self._extractors = extractors
         self._extractor_version = extractor_version
@@ -110,7 +113,7 @@ class EventDerivationService:
         """The node-step's graph (D4), or ``None`` when no chunk resolves — a segment
         whose ``chunk_id`` names none breaches the foreign key its table declares, so
         derivation declines it and ``hub:segment-chunk-resolves`` is what reports it."""
-        facts = self._chunks.load_facts(chunk_id)
+        facts = self._facts.load_facts(chunk_id)
         matches = [
             t
             for t in (facts.transitions if facts is not None else [])
@@ -120,7 +123,7 @@ class EventDerivationService:
             newest = max(matches, key=lambda t: t.recorded_at)
             assert newest.graph_id is not None  # narrowed by the filter above
             return newest.graph_id
-        chunk = self._chunks.get(chunk_id)
+        chunk = self._record.get(chunk_id)
         return chunk.graph_id if chunk is not None else None
 
 

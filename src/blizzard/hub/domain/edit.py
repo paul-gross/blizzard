@@ -13,8 +13,10 @@ from enum import Enum
 from typing import Final
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
-from blizzard.hub.domain.work import Chunk, ChunkFacts, IntendedMigration, IWriteChunkRepository, MigrationMode
+from blizzard.hub.domain.work import Chunk, ChunkFacts, IntendedMigration, MigrationMode
 
 
 class UnsetType(Enum):
@@ -116,11 +118,13 @@ class EditService:
     def __init__(
         self,
         *,
-        chunks: IWriteChunkRepository,
+        facts: IReadChunkFactsRepository,
+        record: IWriteChunkRecordRepository,
         graphs: IReadGraphRepository,
         claim_lock: threading.Lock,
     ) -> None:
-        self._chunks = chunks
+        self._facts = facts
+        self._record = record
         self._graphs = graphs
         # The same lock ClaimService serializes its claim CAS with (issue #120).
         self._claim_lock = claim_lock
@@ -153,7 +157,7 @@ class EditService:
         intended_migration = edit.intended_migration
 
         with self._claim_lock:
-            facts = self._chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
+            facts = self._facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
             status = facts.status()
 
             if graph_id is not UNSET:
@@ -175,17 +179,17 @@ class EditService:
                     self._require_valid_migration_target(chunk, intended_migration, migration_target)
 
             if graph_id is not UNSET:
-                self._chunks.set_graph(chunk.chunk_id, graph_id=graph_id)
+                self._record.set_graph(chunk.chunk_id, graph_id=graph_id)
             if default_model is not UNSET or default_effort is not UNSET:
                 # One write for the pair, so an edit naming only one of them must carry
                 # the chunk's current value for the other rather than clearing it.
-                self._chunks.set_defaults(
+                self._record.set_defaults(
                     chunk.chunk_id,
                     default_model=list(chunk.default_model) if default_model is UNSET else default_model,
                     default_effort=chunk.default_effort if default_effort is UNSET else default_effort,
                 )
             if intended_migration is not UNSET:
-                self._chunks.set_intended_migration(chunk.chunk_id, intended=intended_migration)
+                self._record.set_intended_migration(chunk.chunk_id, intended=intended_migration)
 
     def _require_valid_migration_target(
         self, chunk: Chunk, intended: IntendedMigration, target_graph: Graph | None

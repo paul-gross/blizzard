@@ -152,7 +152,7 @@ def test_load_facts_resolves_each_transition_executor_against_its_own_graph(tmp_
             )
         )
 
-    facts = hub.services.chunks.load_facts("ch_1")
+    facts = hub.services.chunks.facts.load_facts("ch_1")
 
     assert facts is not None
     by_target = {t.to_node_id: t for t in facts.transitions}

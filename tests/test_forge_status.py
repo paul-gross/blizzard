@@ -62,7 +62,7 @@ def test_live_work_refs_includes_not_ready_and_ready_chunks(tmp_path: Path) -> N
     ingest(hub, [{"source": "default", "ref": "1"}], promote=False)
     ingest(hub, [{"source": "default", "ref": "2"}], promote=True)
 
-    refs = hub.services.chunks.live_work_refs()
+    refs = hub.services.chunks.work_refs.live_work_refs()
 
     assert refs[WorkRef(source="default", ref="1")] is ChunkStatus.NOT_READY
     assert refs[WorkRef(source="default", ref="2")] is ChunkStatus.READY
@@ -72,11 +72,11 @@ def test_live_work_refs_includes_not_ready_and_ready_chunks(tmp_path: Path) -> N
 def test_live_work_refs_excludes_a_terminal_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    chunk = hub.services.chunks.get(chunk_id)
+    chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     hub.services.stop.stop(chunk, by="test")
 
-    refs = hub.services.chunks.live_work_refs()
+    refs = hub.services.chunks.work_refs.live_work_refs()
 
     assert WorkRef(source="default", ref="1") not in refs
 
@@ -88,7 +88,7 @@ def test_live_work_refs_excludes_a_grouped_chunk_but_carries_its_ref_via_the_sur
     merged_id = ingest(hub, [{"source": "default", "ref": "2"}], promote=False)
 
     hub.services.group.group(survivor_id, [merged_id])
-    refs = hub.services.chunks.live_work_refs()
+    refs = hub.services.chunks.work_refs.live_work_refs()
 
     assert refs[WorkRef(source="default", ref="1")] is ChunkStatus.NOT_READY
     assert refs[WorkRef(source="default", ref="2")] is ChunkStatus.NOT_READY  # via the survivor now
@@ -103,7 +103,7 @@ def test_sweep_makes_zero_write_calls_for_an_already_correct_ref(tmp_path: Path)
     ingest(hub, [{"source": "default", "ref": "1"}], promote=True)  # ready -> ingested
     annotator = FakeAnnotator(initial={WorkRef(source="default", ref="1"): {WorkStatusMarker.INGESTED}})
     reconciler = AnnotationReconciler(
-        chunks=hub.services.chunks, work_sources=WorkSourceRegistry({}, {"default": annotator})
+        work_refs=hub.services.chunks.work_refs, work_sources=WorkSourceRegistry({}, {"default": annotator})
     )
 
     reconciler.sweep()
@@ -120,7 +120,7 @@ def test_sweep_corrects_a_doubly_marked_ref_to_the_one_desired_marker(tmp_path: 
         initial={WorkRef(source="default", ref="1"): {WorkStatusMarker.INGESTED, WorkStatusMarker.IN_PROGRESS}}
     )
     reconciler = AnnotationReconciler(
-        chunks=hub.services.chunks, work_sources=WorkSourceRegistry({}, {"default": annotator})
+        work_refs=hub.services.chunks.work_refs, work_sources=WorkSourceRegistry({}, {"default": annotator})
     )
 
     reconciler.sweep()
@@ -133,7 +133,7 @@ def test_sweep_clears_a_ref_the_hub_no_longer_holds(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
     annotator = FakeAnnotator(initial={WorkRef(source="default", ref="999"): {WorkStatusMarker.INGESTED}})
     reconciler = AnnotationReconciler(
-        chunks=hub.services.chunks, work_sources=WorkSourceRegistry({}, {"default": annotator})
+        work_refs=hub.services.chunks.work_refs, work_sources=WorkSourceRegistry({}, {"default": annotator})
     )
 
     reconciler.sweep()
@@ -145,12 +145,12 @@ def test_sweep_clears_a_ref_the_hub_no_longer_holds(tmp_path: Path) -> None:
 def test_sweep_clears_a_stopped_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    chunk = hub.services.chunks.get(chunk_id)
+    chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     hub.services.stop.stop(chunk, by="test")
     annotator = FakeAnnotator(initial={WorkRef(source="default", ref="1"): {WorkStatusMarker.INGESTED}})
     reconciler = AnnotationReconciler(
-        chunks=hub.services.chunks, work_sources=WorkSourceRegistry({}, {"default": annotator})
+        work_refs=hub.services.chunks.work_refs, work_sources=WorkSourceRegistry({}, {"default": annotator})
     )
 
     reconciler.sweep()
@@ -170,7 +170,7 @@ def test_sweep_scopes_each_annotator_to_its_own_source(tmp_path: Path) -> None:
     default_annotator = FakeAnnotator()
     other_annotator = FakeAnnotator()
     reconciler = AnnotationReconciler(
-        chunks=hub.services.chunks,
+        work_refs=hub.services.chunks.work_refs,
         work_sources=WorkSourceRegistry({}, {"default": default_annotator, "other": other_annotator}),
     )
 
@@ -187,7 +187,7 @@ def test_sweep_continues_past_a_failing_ref(tmp_path: Path) -> None:
     ingest(hub, [{"source": "default", "ref": "2"}], promote=True)
     annotator = FakeAnnotator(fail_refs={"1"})
     reconciler = AnnotationReconciler(
-        chunks=hub.services.chunks, work_sources=WorkSourceRegistry({}, {"default": annotator})
+        work_refs=hub.services.chunks.work_refs, work_sources=WorkSourceRegistry({}, {"default": annotator})
     )
 
     reconciler.sweep()  # must not raise
@@ -206,7 +206,7 @@ def test_sweep_reconverges_after_a_simulated_mid_sweep_crash(tmp_path: Path) -> 
     ingest(hub, [{"source": "default", "ref": "2"}], promote=True)
     annotator = FakeAnnotator()
     reconciler = AnnotationReconciler(
-        chunks=hub.services.chunks, work_sources=WorkSourceRegistry({}, {"default": annotator})
+        work_refs=hub.services.chunks.work_refs, work_sources=WorkSourceRegistry({}, {"default": annotator})
     )
 
     # Simulate a sweep truncated right after ref 1 landed on the forge.

@@ -311,7 +311,7 @@ def test_a_replayed_migration_completion_is_idempotent(tmp_path: Path) -> None:
     second = _migrate(hub, chunk_id, node_id)
     assert second.json()["outcome"] == "migrated"
 
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert len(facts.migrations) == 1  # exactly one migration fact, no duplicate
 
@@ -330,7 +330,7 @@ def test_a_replayed_hub_landing_migration_completion_returns_hub_node_taken(tmp_
     second = _migrate(hub, chunk_id, node_id)
     assert second.json()["outcome"] == "hub_node_taken"
 
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert len(facts.migrations) == 1  # exactly one migration fact, no duplicate
 
@@ -429,7 +429,7 @@ def test_a_human_gate_resolved_migration_closes_its_decision(tmp_path: Path) -> 
     # M1: the gate's decision is closed.
     assert detail["decision"] is None
     assert hub.client.get("/api/decisions").json()["decisions"] == []
-    closed = hub.services.chunks.get_decision(decision_id)
+    closed = hub.services.chunks.decisions.get_decision(decision_id)
     assert closed is not None and closed.transitioned is True
 
 
@@ -479,7 +479,7 @@ def test_a_human_gate_resolved_migration_to_an_unresolvable_target_closes_its_de
     # #110: the gate's decision is closed atomically with the escalation.
     assert detail["decision"] is None
     assert hub.client.get("/api/decisions").json()["decisions"] == []
-    closed = hub.services.chunks.get_decision(decision_id)
+    closed = hub.services.chunks.decisions.get_decision(decision_id)
     assert closed is not None and closed.transitioned is True
 
 
@@ -500,7 +500,7 @@ def test_a_replayed_migration_completion_is_idempotent_under_route_token_enforce
     assert second.status_code == 200, second.text
     assert second.json()["outcome"] == "migrated"
 
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert len(facts.migrations) == 1  # exactly one migration fact, no duplicate re-pin
 

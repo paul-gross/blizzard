@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.queue import QueueService
 from blizzard.hub.domain.work import ChunkFacts
 from blizzard.hub.store.errors import HubStoreConnections
@@ -79,7 +80,25 @@ def test_peek_reads_facts_in_bulk_and_never_per_chunk(tmp_path: Path, path: str,
     assert hub.app is not None
     # The peek reads through the queue service's own store handle, not `services.chunks`.
     hub.app.state.services = replace(
-        hub.services, chunks=counting, queue=QueueService(chunks=counting, clock=hub.clock)
+        hub.services,
+        chunks=ChunkStores(
+            facts=counting,
+            record=counting,
+            lifecycle=counting,
+            work_refs=counting,
+            queue=counting,
+            route=counting,
+            movement=counting,
+            artifacts=counting,
+            questions=counting,
+            decisions=counting,
+            escalations=counting,
+            events=counting,
+            usage=counting,
+            delivery=counting,
+            hub_exec=counting,
+        ),
+        queue=QueueService(queue=counting, record=counting, clock=hub.clock),
     )
 
     resp = hub.client.get(path)

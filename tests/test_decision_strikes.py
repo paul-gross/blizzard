@@ -67,7 +67,7 @@ def _submit_decision(hub: HubHarness, chunk_id: str, node_id: str, *, proposals:
         json={"from_node_id": node_id, "epoch": epoch, "runner_id": "r1", "artifacts": [], "proposals": proposals},
     )
     assert resp.status_code == 200, resp.text
-    decision = hub.services.chunks.decision_for_chunk(chunk_id)
+    decision = hub.services.chunks.decisions.decision_for_chunk(chunk_id)
     assert decision is not None
     return decision.decision_id
 
@@ -117,7 +117,7 @@ def test_resolving_with_a_subset_strikes_exactly_those_and_leaves_the_rest_pendi
     assert set(strikes) == {ids["strike"]}
     assert strikes[ids["strike"]] == (decision_id, "alice")
 
-    decision = hub.services.chunks.get_decision(decision_id)
+    decision = hub.services.chunks.decisions.get_decision(decision_id)
     assert decision is not None
     pending = {e.proposal.proposal_id for e in decision.docket if not e.struck}
     assert pending == {ids["keep"]}
@@ -143,7 +143,7 @@ def test_a_proposal_id_not_pending_for_the_chunk_is_rejected_and_writes_nothing(
         hub.services.decisions.resolve(decision_id, choice="pass", resolved_by="alice", struck=["wip_bogus"])
 
     assert _strike_rows(hub) == {}
-    decision = hub.services.chunks.get_decision(decision_id)
+    decision = hub.services.chunks.decisions.get_decision(decision_id)
     assert decision is not None and not decision.resolved
 
 

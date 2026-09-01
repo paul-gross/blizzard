@@ -112,5 +112,5 @@ def test_record_marker_is_accepted_by_a_real_oauth_hub(tmp_path: Path, monkeypat
     result = CliRunner().invoke(hub_group, ["record-marker", "merged/acme-widget", "sha:abc123"])
 
     assert result.exit_code == 0, result.output
-    names = {a.name for a in hub.services.chunks.load_artifacts(chunk_id)}
+    names = {a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
     assert "merged/acme-widget" in names

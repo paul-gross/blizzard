@@ -45,7 +45,16 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
     store = hub_store_connections(engine)
     chunks = ChunkStore(store, clock)
     fleet = FleetService(registry=RunnerRegistryStore(store), clock=clock)
-    return FactIngestService(chunks=chunks, fleet=fleet, clock=clock)
+    return FactIngestService(
+        facts=chunks,
+        route=chunks,
+        escalations=chunks,
+        questions=chunks,
+        usage=chunks,
+        events=chunks,
+        fleet=fleet,
+        clock=clock,
+    )
 
 
 def _row(engine: sa.Engine, runner_id: str):  # type: ignore[no-untyped-def]

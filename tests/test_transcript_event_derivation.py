@@ -100,7 +100,9 @@ class _Fixture:
             artifacts=[],
             proposals=[],
         )
-        self.service = EventDerivationService(events=self.events, chunks=self.chunks, clock=self.clock)
+        self.service = EventDerivationService(
+            events=self.events, facts=self.chunks, record=self.chunks, clock=self.clock
+        )
         self.reconciler = EventDerivationReconciler(service=self.service, events=self.events)
 
     def mint_chunk(self, chunk_id: str, *, node_id: str = "nd_build") -> None:
@@ -191,7 +193,11 @@ def test_a_version_bump_re_derives_history_leaving_the_prior_version_intact(fixt
     assert marker_v1 is not None
 
     bumped_service = EventDerivationService(
-        events=fixture.events, chunks=fixture.chunks, clock=fixture.clock, extractor_version=_NEXT_EXTRACTOR_VERSION
+        events=fixture.events,
+        facts=fixture.chunks,
+        record=fixture.chunks,
+        clock=fixture.clock,
+        extractor_version=_NEXT_EXTRACTOR_VERSION,
     )
     bumped_reconciler = EventDerivationReconciler(service=bumped_service, events=fixture.events)
     bumped_reconciler.sweep()
@@ -317,7 +323,9 @@ def test_one_underivable_segment_does_not_cost_the_rest_of_the_tick(fixture: _Fi
     fixture.segments.insert_accepted(
         _segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW
     )
-    poisoned = _PoisonedService(poison="sg_1", events=fixture.events, chunks=fixture.chunks, clock=fixture.clock)
+    poisoned = _PoisonedService(
+        poison="sg_1", events=fixture.events, facts=fixture.chunks, record=fixture.chunks, clock=fixture.clock
+    )
 
     EventDerivationReconciler(service=poisoned, events=fixture.events).sweep()
 

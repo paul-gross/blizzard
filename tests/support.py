@@ -557,7 +557,7 @@ def build_hub(
     store_connections = hub_store_connections(engine)
     work_item_store = WorkItemStore(store_connections)
     delete_service = DeleteService(
-        chunks=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
+        facts=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
     )
     finding_store = FindingStore(store_connections)
     finding_exit = FindingExitService(repo=finding_store, clock=clock)

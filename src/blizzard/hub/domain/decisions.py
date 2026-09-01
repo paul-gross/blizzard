@@ -1,7 +1,7 @@
 """Human-gate domain rules — decisions and requeue closure.
 
-Both services hold the **write** chunk repository (``bzh:controller-read-only``) and
-stamp time from the injected clock: :class:`DecisionService` gates a runner-configured
+Both services hold the **write** seams their writes land on (``bzh:controller-read-only``)
+and stamp time from the injected clock: :class:`DecisionService` gates a runner-configured
 node and resolves first-write-wins; :class:`RequeueService` closes an escalation.
 """
 
@@ -16,11 +16,15 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_PROPOSAL_PREFIX, Id
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.proposal_auth import ProposalPolicy
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.route_auth import RouteToken
-from blizzard.hub.domain.work import Chunk, DecisionChoice, IWriteChunkRepository
+from blizzard.hub.domain.work import Chunk, DecisionChoice
 from blizzard.wire.completion import SubmittedArtifact, WorkItemProposal
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -57,8 +61,17 @@ class NotEscalated(Exception):
 class DecisionService:
     """Open runner-config gate decisions and resolve them."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
-        self._chunks = chunks
+    def __init__(
+        self,
+        *,
+        facts: IReadChunkFactsRepository,
+        route: IWriteChunkRouteRepository,
+        decisions: IWriteChunkDecisionsRepository,
+        clock: IClock,
+    ) -> None:
+        self._facts = facts
+        self._route = route
+        self._decisions = decisions
         self._clock = clock
 
     def submit(
@@ -71,13 +84,13 @@ class DecisionService:
         if not node.choices:
             return DecisionSubmitResult.failure(f"node {node.name} has no choices to gate")
 
-        facts = self._chunks.load_facts(chunk.chunk_id)
+        facts = self._facts.load_facts(chunk.chunk_id)
         if facts is None:
             return DecisionSubmitResult.failure(f"unknown chunk {chunk.chunk_id}")
 
         # Route-token authorization (issue #84b): ahead of the idempotent-replay probe and
         # the epoch fence, so a post-release zombie's replayed decision is rejected too.
-        route = self._chunks.route_of(chunk.chunk_id)
+        route = self._route.route_of(chunk.chunk_id)
         detail = RouteToken(
             facts=facts,
             presented=submission.route_token,
@@ -89,7 +102,7 @@ class DecisionService:
 
         # Idempotent replay: a decision already open at this (node, epoch) — a
         # lost-ack re-submission — returns the parked outcome without a second row.
-        if self._chunks.find_decision(chunk.chunk_id, node_id=node.node_id, epoch=submission.epoch) is not None:
+        if self._decisions.find_decision(chunk.chunk_id, node_id=node.node_id, epoch=submission.epoch) is not None:
             return DecisionSubmitResult(
                 response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
             )
@@ -107,7 +120,7 @@ class DecisionService:
             return DecisionSubmitResult.failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
 
         decision_id = Id.mint(DECISION_PREFIX, self._clock).value
-        self._chunks.record_decision(
+        self._decisions.record_decision(
             decision_id=decision_id,
             chunk_id=chunk.chunk_id,
             node_id=node.node_id,
@@ -170,7 +183,7 @@ class DecisionService:
         rejection class as an invalid ``choice``. Skipped once this decision is already
         resolved, so a retry or duplicate submission falls straight through to the CAS
         and is told who won, instead of 400ing on ids this same decision already struck."""
-        decision = self._chunks.get_decision(decision_id)
+        decision = self._decisions.get_decision(decision_id)
         if decision is None:
             return None
         if choice not in {c.name for c in decision.choices}:
@@ -181,14 +194,14 @@ class DecisionService:
             unknown = set(struck) - strikeable
             if unknown:
                 raise ValueError(f"not a pending proposal of chunk {decision.chunk_id}: {', '.join(sorted(unknown))}")
-        won = self._chunks.record_decision_resolution(
+        won = self._decisions.record_decision_resolution(
             decision_id, choice=choice, resolved_by=resolved_by, at=self._clock.now(), struck=struck
         )
         if won:
             return ResolutionResult(resolved=True, choice=choice, resolved_by=resolved_by)
         # Lost the CAS — report the winner so the loser is told who resolved. No strike
         # was written either: the loser's whole write, not just the choice, applies nothing.
-        current = self._chunks.get_decision(decision_id)
+        current = self._decisions.get_decision(decision_id)
         assert current is not None and current.resolved_choice is not None
         return ResolutionResult(resolved=False, choice=current.resolved_choice, resolved_by=current.resolved_by or "")
 
@@ -196,8 +209,17 @@ class DecisionService:
 class RequeueService:
     """Close an open escalation by supersession — ``blizzard hub requeue``."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
-        self._chunks = chunks
+    def __init__(
+        self,
+        *,
+        facts: IReadChunkFactsRepository,
+        movement: IWriteChunkMovementRepository,
+        route: IWriteChunkRouteRepository,
+        clock: IClock,
+    ) -> None:
+        self._facts = facts
+        self._movement = movement
+        self._route = route
         self._clock = clock
 
     def requeue(self, chunk_id: str) -> int:
@@ -205,10 +227,10 @@ class RequeueService:
 
         Raises :class:`NotEscalated` if the chunk is not ``needs_human``. Returns the
         freshly-written ``requeues.id`` (issue #213)."""
-        facts = self._chunks.load_facts(chunk_id)
+        facts = self._facts.load_facts(chunk_id)
         if facts is None or facts.open_escalation() is None:
             raise NotEscalated(f"chunk {chunk_id} is not escalated (needs_human)")
         now = self._clock.now()
-        requeue_id = self._chunks.record_requeue(chunk_id, at=now)  # supersedes the escalation
-        self._chunks.record_route_released(chunk_id, at=now)  # -> ready, re-leasable at its current node
+        requeue_id = self._movement.record_requeue(chunk_id, at=now)  # supersedes the escalation
+        self._route.record_route_released(chunk_id, at=now)  # -> ready, re-leasable at its current node
         return requeue_id

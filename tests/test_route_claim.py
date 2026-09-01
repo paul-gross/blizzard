@@ -120,7 +120,7 @@ def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
     assert resp.status_code == 200 and resp.json()["outcome"] == "done", resp.text
     # The premise, asserted rather than asserted-about: apply landed the terminal and left
     # the route live. If that ever changes, this line fails and the fix's rationale is stale.
-    assert hub.services.chunks.route_of(finished) is not None
+    assert hub.services.chunks.route.route_of(finished) is not None
     assert hub.client.post(f"/api/chunks/{stopped}/stop", json={"by": "operator"}).status_code == 202
 
     summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()}

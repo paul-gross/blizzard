@@ -3,7 +3,8 @@
 :class:`RunnerFactsService` is the direct single-fact intake; :class:`FactIngestService` is the batched
 store-and-forward push, idempotent against a per-runner **high-water mark**. Landing each lease mint is
 what keeps the epoch fence in lockstep across a chunk's successive node-steps. Both hold the **write**
-chunk repository (``bzh:controller-read-only``) and stamp landing time from the injected clock."""
+chunk seams each fact lands on (``bzh:controller-read-only``) and stamp landing time from the injected
+clock."""
 
 from __future__ import annotations
 
@@ -15,9 +16,15 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.config import ROUTE_TOKEN_WARN
+from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
+from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.chunks.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.registry import FleetService
 from blizzard.hub.domain.route_auth import RouteToken
-from blizzard.hub.domain.work import ChunkFacts, IWriteChunkRepository
+from blizzard.hub.domain.work import ChunkFacts
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
@@ -91,13 +98,16 @@ class Payload:
 class RunnerFactsService:
     """Land runner-reported ``lease.minted`` / ``escalation.recorded`` facts."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
-        self._chunks = chunks
+    def __init__(
+        self, *, route: IWriteChunkRouteRepository, escalations: IWriteChunkEscalationsRepository, clock: IClock
+    ) -> None:
+        self._route = route
+        self._escalations = escalations
         self._clock = clock
 
     def record_lease_minted(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
         """Land a runner's ``lease.minted`` — advances the fence's latest epoch."""
-        self._chunks.record_lease(chunk_id, epoch=epoch, runner_id=runner_id, at=self._clock.now())
+        self._route.record_lease(chunk_id, epoch=epoch, runner_id=runner_id, at=self._clock.now())
 
     def record_escalation(
         self, chunk_id: str, *, epoch: int, takeover_command: str, wrapped_takeover_command: str = ""
@@ -105,7 +115,7 @@ class RunnerFactsService:
         """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``.
 
         Returns the freshly-written ``escalations.id`` (issue #213's activity-feed key)."""
-        return self._chunks.record_escalation(
+        return self._escalations.record_escalation(
             chunk_id,
             epoch=epoch,
             takeover_command=takeover_command,
@@ -126,15 +136,32 @@ class FactIngestResult:
 
 class FactIngestService:
     """Apply a runner's batched pushed facts idempotently against its high-water mark. Most facts are
-    chunk-scoped and land through ``chunks``; ``fleet`` is here for the runner-scoped ones (issue #43)."""
+    chunk-scoped and land through one of the seams above; ``fleet`` is here for the runner-scoped ones
+    (issue #43)."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, fleet: FleetService, clock: IClock) -> None:
-        self._chunks = chunks
+    def __init__(
+        self,
+        *,
+        facts: IReadChunkFactsRepository,
+        route: IWriteChunkRouteRepository,
+        escalations: IWriteChunkEscalationsRepository,
+        questions: IWriteChunkQuestionsRepository,
+        usage: IWriteChunkUsageRepository,
+        events: IWriteChunkEventsRepository,
+        fleet: FleetService,
+        clock: IClock,
+    ) -> None:
+        self._facts = facts
+        self._route = route
+        self._escalations = escalations
+        self._questions = questions
+        self._usage = usage
+        self._events = events
         self._fleet = fleet
         self._clock = clock
 
     def ingest(self, batch: RunnerFactBatch, *, route_token_mode: str = ROUTE_TOKEN_WARN) -> FactIngestResult:
-        mark = self._chunks.runner_high_water(batch.runner_id)
+        mark = self._route.runner_high_water(batch.runner_id)
         applied: list[int] = []
         already: list[int] = []
         rejected: list[int] = []
@@ -156,7 +183,7 @@ class FactIngestService:
                 row_id_by_seq[fact.seq] = row_id
 
         if applied:
-            self._chunks.set_runner_high_water(batch.runner_id, seq=mark, at=self._clock.now())
+            self._route.set_runner_high_water(batch.runner_id, seq=mark, at=self._clock.now())
         _log.info(
             "runner facts ingested",
             runner_id=batch.runner_id,
@@ -188,7 +215,7 @@ class FactIngestService:
             if chunk_id is None or not self._route_token_ok(chunk_id, runner_id, fact, mode=route_token_mode):
                 return False, None
         if kind == LEASE_MINTED:
-            self._chunks.record_lease(
+            self._route.record_lease(
                 fact.require_text("chunk_id"),
                 epoch=fact.require_number("epoch"),
                 runner_id=runner_id,
@@ -196,7 +223,7 @@ class FactIngestService:
             )
             return True, None
         if kind == ESCALATION_RECORDED:
-            escalation_id = self._chunks.record_escalation(
+            escalation_id = self._escalations.record_escalation(
                 fact.require_text("chunk_id"),
                 epoch=fact.require_number("epoch"),
                 takeover_command=fact.string("takeover_command"),
@@ -206,7 +233,7 @@ class FactIngestService:
             return True, escalation_id
         if kind == QUESTION_ASKED:
             # The runner authors the question_id so it can poll the answer back.
-            self._chunks.record_question(
+            self._questions.record_question(
                 question_id=fact.require_text("question_id"),
                 chunk_id=fact.require_text("chunk_id"),
                 node_id=fact.text("node_id"),
@@ -221,7 +248,7 @@ class FactIngestService:
         if kind == USAGE_RECORDED:
             # No epoch fence and no route-token gate: trailing-epoch spend is real and attributed to its
             # own epoch (issue #84b; pinned in tests/test_usage_facts_ingest.py, test_route_token_authz.py).
-            self._chunks.record_usage(
+            self._usage.record_usage(
                 fact.require_text("chunk_id"),
                 node_id=fact.require_text("node_id"),
                 epoch=fact.require_number("epoch"),
@@ -239,7 +266,7 @@ class FactIngestService:
         if kind == EVENT_RECORDED:
             # Neither epoch-fenced nor route-token-gated (issue #125): an event from a fenced-out or
             # dying worker is exactly the signal this log exists to surface. `chunk_id` is optional.
-            event_id = self._chunks.record_event(
+            event_id = self._events.record_event(
                 severity=fact.require_text("severity"),
                 kind=fact.require_text("kind"),
                 runner_id=runner_id,
@@ -253,7 +280,7 @@ class FactIngestService:
             return True, event_id
         if kind == ANSWER_DELIVERED:
             # Records that the resume-with-answer ran; derives no status of its own.
-            self._chunks.record_answer_delivered(
+            self._questions.record_answer_delivered(
                 question_id=fact.require_text("question_id"), chunk_id=fact.require_text("chunk_id"), at=now
             )
             return True, None
@@ -287,8 +314,8 @@ class FactIngestService:
         hub has never minted (``load_facts`` returns ``None``, e.g. a malformed/stale
         payload) falls back to an empty :class:`ChunkFacts`, which
         :class:`RouteToken` already rejects as having no live route."""
-        facts = self._chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-        route = self._chunks.route_of(chunk_id)
+        facts = self._facts.load_facts(chunk_id) or ChunkFacts(minted=True)
+        route = self._route.route_of(chunk_id)
         detail = RouteToken(
             facts=facts,
             presented=fact.text("route_token"),

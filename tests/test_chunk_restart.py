@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
-from typing import cast
 
 import pytest
 
 from blizzard.foundation.node_steps import Executor, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.restart import SUPERSEDED_ANSWER
-from blizzard.hub.domain.work import IWriteChunkRepository, Movement, MovementKind
+from blizzard.hub.domain.work import Movement, MovementKind
 from blizzard.tools.invariants import HubInvariants
 from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, ingest, report_lease
 
@@ -114,11 +113,6 @@ nodes:
           description: Audited.
           to: done
 """
-
-
-def _writable(hub) -> IWriteChunkRepository:  # type: ignore[no-untyped-def]
-    """A test-only cast — see ``test_chunk_complete.py``'s helper of the same name."""
-    return cast(IWriteChunkRepository, hub.services.chunks)
 
 
 def _claim(hub, chunk_id: str, *, epoch: int = 1) -> None:  # type: ignore[no-untyped-def]
@@ -312,7 +306,7 @@ def test_restart_supersedes_an_open_escalation(tmp_path) -> None:  # type: ignor
     """Escalations carry no resolution fact, so the move closes this one by supersession."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
-    _writable(hub).record_escalation(
+    hub.services.chunks.escalations.record_escalation(
         chunk_id, epoch=1, takeover_command="resume it", at=hub.clock.now(), wrapped_takeover_command=""
     )
     assert _detail(hub, chunk_id)["status"] == "needs_human"
@@ -441,7 +435,7 @@ def test_restart_refuses_a_chunk_standing_on_a_node_its_graph_does_not_carry(tmp
     # HTTP edit path refuses for a moved chunk.
     pinned = _detail(hub, chunk_id)["graph_id"]
     other = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["graph_id"] != pinned)
-    _writable(hub).set_graph(chunk_id, graph_id=other)
+    hub.services.chunks.record.set_graph(chunk_id, graph_id=other)
 
     resp = _restart(hub, chunk_id)
 
@@ -461,7 +455,7 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
     assert _restart(hub, chunk_id, node="build").status_code == 202
     build_node = _detail(hub, chunk_id)["current_node_id"]
 
-    wrote = _writable(hub).record_hub_step_transition(
+    wrote = hub.services.chunks.hub_exec.record_hub_step_transition(
         chunk_id,
         from_node_id=plan_node,
         to_node_id=build_node,
@@ -486,7 +480,7 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path) -> None:  # type: 
     chunk_id = _mint(hub)
     plan_node = _detail(hub, chunk_id)["current_node_id"]
 
-    wrote = _writable(hub).record_hub_step_transition(
+    wrote = hub.services.chunks.hub_exec.record_hub_step_transition(
         chunk_id,
         from_node_id=plan_node,
         to_node_id="done",
@@ -558,7 +552,7 @@ def test_the_restart_is_the_movement_the_chunk_stands_on(tmp_path) -> None:  # t
 
     assert _restart(hub, chunk_id, node="audit", to_graph=target).status_code == 202
 
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     migration, restart = facts.migrations[0], facts.restarts[0]
     assert (migration.recorded_at, migration.epoch) == (restart.recorded_at, restart.epoch)

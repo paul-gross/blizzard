@@ -256,7 +256,7 @@ def fleet_summary(services: Annotated[HubServices, Depends(get_services)]) -> Fl
 @router.get("/questions/{question_id}", response_model=QuestionView)
 def get_question(question_id: str, services: Annotated[HubServices, Depends(get_services)]) -> QuestionView:
     """The runner's answer poll before it resumes the dormant session."""
-    row = services.chunks.get_question(question_id)
+    row = services.chunks.questions.get_question(question_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
     return questions_api.question_view(row)
@@ -268,13 +268,13 @@ def get_question(question_id: str, services: Annotated[HubServices, Depends(get_
 @router.get("/chunks/{chunk_id}/envelope", response_model=NodeEnvelope)
 def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> NodeEnvelope:
     """The chunk's current node envelope, idempotent — the lost-apply re-read."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
     node_id = facts.current_node_id() or graph.entry_node_id
     node = graph.node_by_id(node_id)
     if node is None:
@@ -283,7 +283,7 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
         chunk=chunk,
         graph=graph,
         node=node,
-        artifacts=services.chunks.load_artifacts(chunk_id),
+        artifacts=services.chunks.artifacts.load_artifacts(chunk_id),
         epoch=facts.latest_epoch() or 0,
         arrival_addendum=Arrival.of_transition(graph, facts.newest_transition()).addendum,
         entered_by_restart=facts.entered_by_restart(),
@@ -300,13 +300,13 @@ def hub_advance(
     slot. ``ran=False`` is never an error: a different chunk holds the slot, or (#66) the node reported
     ``pending`` and ``poll_interval`` has not elapsed, or the chunk is not parked at a hub command node
     at all — ``detail`` names which. The request declares no ``runner_id`` to confine against."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
     node_id = facts.current_node_id()
     node = graph.node_by_id(node_id) if node_id is not None else None
     if node is None or not node.is_hub_command_node:
@@ -317,7 +317,7 @@ def hub_advance(
     change = chunk_events.ChunkChanged.of(services, chunk_id, prev_status=facts.status().value)
     epoch = facts.latest_epoch() or 0
     result = services.hub_node.run(chunk, graph, node, epoch=epoch)
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
     derived = facts.status()
     # `key` names the transition this call recorded — absent when the poll deferred or wrote a
     # poll-attempt fact instead, since there is no fresh `transitions` row to key on (issue #213).
@@ -352,7 +352,7 @@ def claim_route(
     """Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed
     or already terminal ({done, stopped}, issue #118), else the first node envelope."""
     fleet.assert_owns(claim.runner_id)
-    chunk = services.chunks.get(claim.chunk_id)
+    chunk = services.chunks.record.get(claim.chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {claim.chunk_id}")
     graph = services.graphs.get(chunk.graph_id)
@@ -399,7 +399,7 @@ def rekey_route_token(
     """Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext recovery for a
     claim whose response was never read back. Confined to the live route's own runner; this route
     presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting."""
-    route = services.chunks.route_of(chunk_id)
+    route = services.chunks.route.route_of(chunk_id)
     if route is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"chunk {chunk_id} has no live route")
     fleet.assert_owns(route.runner_id)
@@ -416,7 +416,7 @@ def submit_completion(
 ) -> ApplyResponse:
     """Apply a node-step's completion atomically; reply carries the next envelope."""
     fleet.assert_owns(submission.runner_id)
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     graph = services.graphs.get(chunk.graph_id)
@@ -425,7 +425,7 @@ def submit_completion(
     targets = MigrationTargets(services, chunk, graph, submission, follow_latest_default=fleet.follow_latest)
     # Must precede apply() below — after apply() this always answers True, silencing the
     # publish_queue_changed() fresh-migration check further down.
-    already_migrated = services.chunks.accepted_migration(
+    already_migrated = services.chunks.movement.accepted_migration(
         chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
     )
     change = chunk_events.ChunkChanged.before(services, chunk_id)
@@ -467,7 +467,7 @@ def submit_decision(
 ) -> ApplyResponse:
     """Runner-config gate: park the chunk on a decision in place of a transition."""
     fleet.assert_owns(submission.runner_id)
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     graph = services.graphs.get(chunk.graph_id)
@@ -491,7 +491,7 @@ def report_lease(
 ) -> dict[str, str]:
     """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep."""
     fleet.assert_owns(report.runner_id)
-    if services.chunks.get(chunk_id) is None:
+    if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     services.runner_facts.record_lease_minted(chunk_id, epoch=report.epoch, runner_id=report.runner_id)
     return {"chunk_id": chunk_id}
@@ -506,7 +506,7 @@ def report_escalation(
 ) -> dict[str, str]:
     """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``."""
     fleet.assert_owns(report.runner_id)
-    if services.chunks.get(chunk_id) is None:
+    if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     escalation_id = services.runner_facts.record_escalation(

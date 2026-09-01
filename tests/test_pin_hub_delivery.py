@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
@@ -18,7 +18,7 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.delivery.hub_node import UnconvergedDeliveryError
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.domain.artifacts import ArtifactRow
-from blizzard.hub.domain.work import IWriteChunkRepository
+from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_common, land_pr_ci
 from tests.support import FakeHubCommandRunner, FakeHubWorkdir, HubHarness, build_hub, pointer_token, report_lease
@@ -118,11 +118,8 @@ def test_a_terminal_failure_findings_write_failure_exits_non_zero_instead_of_rou
 # -- hub_node: an unconverged delivery routes the failure edge ------------------------
 
 
-def _writable(hub: HubHarness) -> IWriteChunkRepository:
-    """A test-only cast: ``HubHarness.services.chunks`` is read-typed
-    (``bzh:controller-read-only``), but the live object is always the write-capable
-    ``ChunkStore``."""
-    return cast(IWriteChunkRepository, hub.services.chunks)
+def _writable(hub: HubHarness) -> IWriteChunkMovementRepository:
+    return hub.services.chunks.movement
 
 
 def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
@@ -188,7 +185,7 @@ def test_an_unconverged_delivery_routes_the_failure_edge_instead_of_escaping_the
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_two_branches_for_one_repo(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    chunk = hub.services.chunks.get(chunk_id)
+    chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     graph = hub.services.graphs.get(chunk.graph_id)
     assert graph is not None

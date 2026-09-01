@@ -62,7 +62,7 @@ def test_full_mode_mints_ingests_and_promotes(tmp_path: Path) -> None:
     assert result.item.routine_name == "gardening"
     assert result.item.scope_slug == "blizzard"
     assert result.item.run_mode == "full"
-    facts = hub.services.chunks.load_facts(result.chunk_id)
+    facts = hub.services.chunks.facts.load_facts(result.chunk_id)
     assert facts is not None
     assert facts.status() == ChunkStatus.READY
 
@@ -76,7 +76,7 @@ def test_the_minted_chunk_carries_a_resolvable_run_context(tmp_path: Path) -> No
 
     result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
-    minted = hub.services.chunks.get(result.chunk_id)
+    minted = hub.services.chunks.record.get(result.chunk_id)
     assert minted is not None
     run = hub.services.run_context.for_chunk(minted)
     assert run is not None
@@ -91,7 +91,7 @@ def test_chunk_is_pinned_to_the_routines_graph(tmp_path: Path) -> None:
 
     result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
-    minted = hub.services.chunks.get(result.chunk_id)
+    minted = hub.services.chunks.record.get(result.chunk_id)
     assert minted is not None
     assert minted.graph_id == graph.graph_id
 
@@ -102,7 +102,7 @@ def test_the_routines_model_and_effort_defaults_reach_the_minted_chunk(tmp_path:
 
     result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
-    minted = hub.services.chunks.get(result.chunk_id)
+    minted = hub.services.chunks.record.get(result.chunk_id)
     assert minted is not None
     assert minted.default_model == ["opus"]
     assert minted.default_effort == "high"

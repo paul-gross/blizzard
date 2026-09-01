@@ -174,12 +174,12 @@ def test_create_does_not_promote_and_priority_never_writes_a_queue_position(tmp_
         "/api/work-sources/hub/items", json={"title": "t", "body": "b", "stated_priority": "high"}
     ).json()
 
-    assert created["chunk_id"] not in hub.services.chunks.queue_positions()
+    assert created["chunk_id"] not in hub.services.chunks.queue.queue_positions()
     assert hub.client.get("/api/queue").json()["entries"] == []
 
     promote = hub.client.post(f"/api/chunks/{created['chunk_id']}/promote")
     assert promote.status_code == 202
-    positions = hub.services.chunks.queue_positions()
+    positions = hub.services.chunks.queue.queue_positions()
     assert created["chunk_id"] in positions  # the tail stamp promotion always writes
     assert [e["chunk_id"] for e in hub.client.get("/api/queue").json()["entries"]] == [created["chunk_id"]]
 

@@ -15,9 +15,11 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.complete import CompleteService
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import Chunk, ChunkFacts, IWriteChunkRepository, RouteCreatedFact, TransitionFact
+from blizzard.hub.domain.work import Chunk, ChunkFacts, RouteCreatedFact, TransitionFact
 
 pytestmark = pytest.mark.unit
 
@@ -46,8 +48,12 @@ class _FakeChunkRepo:
         raise NotImplementedError(f"CompleteService should not touch {name!r}")
 
 
-def _as_write_repo(repo: _FakeChunkRepo) -> IWriteChunkRepository:
-    return cast(IWriteChunkRepository, repo)
+def _as_facts(repo: _FakeChunkRepo) -> IReadChunkFactsRepository:
+    return cast(IReadChunkFactsRepository, repo)
+
+
+def _as_lifecycle(repo: _FakeChunkRepo) -> IWriteChunkLifecycleRepository:
+    return cast(IWriteChunkLifecycleRepository, repo)
 
 
 def _not_ready_facts() -> ChunkFacts:
@@ -84,7 +90,7 @@ def _done_via_operator_completion_facts() -> ChunkFacts:
 def test_complete_allows_every_non_done_status(facts_factory: object) -> None:
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
-    service = CompleteService(chunks=_as_write_repo(repo), clock=clock)
+    service = CompleteService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
 
     fact_id = service.complete(_CHUNK, by="operator")
 
@@ -101,7 +107,7 @@ def test_complete_is_a_no_op_on_an_already_done_chunk(facts_factory: object) -> 
     """Idempotent by no-op — no second fact, never refused."""
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
-    service = CompleteService(chunks=_as_write_repo(repo), clock=clock)
+    service = CompleteService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
 
     fact_id = service.complete(_CHUNK, by="operator")
 
@@ -112,7 +118,7 @@ def test_complete_is_a_no_op_on_an_already_done_chunk(facts_factory: object) -> 
 def test_complete_records_who_completed_it() -> None:
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=_not_ready_facts())
-    service = CompleteService(chunks=_as_write_repo(repo), clock=clock)
+    service = CompleteService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
 
     service.complete(_CHUNK, by="paul")
 
@@ -123,7 +129,7 @@ def test_complete_uses_the_injected_clock_not_the_wall_clock() -> None:
     later = datetime(2026, 6, 1, tzinfo=UTC)
     clock = FixedClock(instant=later)
     repo = _FakeChunkRepo(facts=_not_ready_facts())
-    service = CompleteService(chunks=_as_write_repo(repo), clock=clock)
+    service = CompleteService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
 
     service.complete(_CHUNK, by="operator")
 

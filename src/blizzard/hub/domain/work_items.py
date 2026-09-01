@@ -1,7 +1,7 @@
 """Hub-owned work item editing (blizzard#358) plus delivery closure (issue #360) —
 create, in-place edit, withdraw, deliver.
 
-Holds the *write* repository (``bzh:controller-read-only``), reached only through a
+Holds the *write* work-item repository (``bzh:controller-read-only``), reached only through a
 work-source binding's ``IWorkEditor``/``IWorkCloser``. ``WorkItemClosure`` has exactly
 two members, so every closing write — withdraw or deliver — shares one guard."""
 
@@ -12,6 +12,9 @@ from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.delete import ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.edit import UNSET, UnsetType
 from blizzard.hub.domain.graph import Graph
@@ -20,7 +23,6 @@ from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
-    IReadChunkRepository,
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemClosure,
@@ -33,7 +35,7 @@ from blizzard.hub.domain.work import (
 
 def prepare_mint(
     items: IWriteWorkItemRepository,
-    chunks: IReadChunkRepository,
+    work_refs: IReadChunkWorkRefsRepository,
     clock: IClock,
     source: str,
     *,
@@ -48,7 +50,7 @@ def prepare_mint(
     ``default_effort`` from anywhere but ``mint_chunk``'s own empty-preference default."""
     ref = items.allocate_ref(source)
     pointer = WorkRef(source=source, ref=ref)
-    require_no_live_holder(chunks, pointer)
+    require_no_live_holder(work_refs, pointer)
     at = clock.now()
     chunk = mint_chunk(
         [pointer], graph_id=graph.graph_id, at=at, default_model=default_model, default_effort=default_effort
@@ -119,12 +121,16 @@ class WorkItemEditService:
         self,
         *,
         items: IWriteWorkItemRepository,
-        chunks: IReadChunkRepository,
+        work_refs: IReadChunkWorkRefsRepository,
+        record: IReadChunkRecordRepository,
+        facts: IReadChunkFactsRepository,
         clock: IClock,
         delete: DeleteService,
     ) -> None:
         self._items = items
-        self._chunks = chunks
+        self._work_refs = work_refs
+        self._record = record
+        self._facts = facts
         self._clock = clock
         self._delete = delete
 
@@ -143,7 +149,7 @@ class WorkItemEditService:
         allocated pointer for a live holder before minting: an out-of-band ingest of the
         same ref can pre-empt it, raising :class:`~blizzard.hub.domain.ingest.IngestConflict`
         and burning the ref."""
-        pointer, chunk, at = prepare_mint(self._items, self._chunks, self._clock, source, graph=graph)
+        pointer, chunk, at = prepare_mint(self._items, self._work_refs, self._clock, source, graph=graph)
         item = self._items.create_with_chunk(
             pointer=pointer,
             title=title,
@@ -171,7 +177,9 @@ class WorkItemEditService:
         the mint and the outcome fact are one transaction. Raises
         :class:`~blizzard.hub.domain.ingest.IngestConflict` exactly as :meth:`create`
         does; returns ``False`` when ``proposal_id`` was already judged."""
-        pointer, chunk, at = prepare_mint(self._items, self._chunks, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph)
+        pointer, chunk, at = prepare_mint(
+            self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph
+        )
         return self._items.materialize_create(
             proposal_id=proposal_id,
             pointer=pointer,
@@ -199,7 +207,9 @@ class WorkItemEditService:
         the closure row on one connection. Raises
         :class:`~blizzard.hub.domain.ingest.IngestConflict` as :meth:`create` does;
         returns ``None`` when already closed."""
-        pointer, chunk, at = prepare_mint(self._items, self._chunks, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph)
+        pointer, chunk, at = prepare_mint(
+            self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph
+        )
         item = self._items.accept_create(
             proposal_id=proposal_id,
             pointer=pointer,
@@ -243,14 +253,14 @@ class WorkItemEditService:
         #364); :class:`WorkItemHeldByLiveChunk` still raises for a runner- or human-held
         one. Names the cascade-deleted chunk, if any, for the caller's own delete frame."""
         self._require_open(item)
-        holder = self._chunks.find_live_holder(item.pointer)
+        holder = self._work_refs.find_live_holder(item.pointer)
         if holder is None:
             closed = self._items.close(item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now())
             return WithdrawnWorkItem(item=closed)
-        chunk = self._chunks.get(holder)
+        chunk = self._record.get(holder)
         if chunk is None:
             raise ChunkNotFound(holder)
-        facts = self._chunks.load_facts(holder)
+        facts = self._facts.load_facts(holder)
         prev_status = (facts if facts is not None else ChunkFacts(minted=True)).status().value
         try:
             deleted_id = self._delete.delete(chunk, by=by)

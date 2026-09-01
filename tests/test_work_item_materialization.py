@@ -119,9 +119,9 @@ def test_create_proposal_materializes_into_a_hub_item_with_fleet_authorship_and_
     assert item["author"]["chunk_id"] == chunk_id
     assert item["author"]["node_name"] == "build"
 
-    holder = hub.services.chunks.find_live_holder(WorkRef(source="hub", ref=item["ref"]))
+    holder = hub.services.chunks.work_refs.find_live_holder(WorkRef(source="hub", ref=item["ref"]))
     assert holder is not None and holder != chunk_id  # its own fresh chunk, not the proposing one
-    facts = hub.services.chunks.load_facts(holder)
+    facts = hub.services.chunks.facts.load_facts(holder)
     assert facts is not None
     assert facts.status().value == "not_ready"
 

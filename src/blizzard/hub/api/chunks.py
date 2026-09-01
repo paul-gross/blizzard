@@ -84,7 +84,7 @@ class OpenDecision:
 
     def publish(self) -> None:
         """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate."""
-        decision = self.services.chunks.decision_for_chunk(self.chunk_id)
+        decision = self.services.chunks.decisions.decision_for_chunk(self.chunk_id)
         if decision is not None and not decision.resolved and not decision.transitioned:
             self.services.events.publish_decision_opened(
                 self.chunk_id, decision.decision_id, key=f"decisions:{decision.decision_id}"
@@ -142,13 +142,13 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
     `load_facts`/`route_of` out per chunk (issue #421) — the `FleetPulse.view()` shape
     (issue #374), extended to routes and to the rendered row."""
     names = GraphNames(services.graphs.get)
-    facts = services.chunks.load_all_facts()
-    routes = services.chunks.load_all_routes()
+    facts = services.chunks.facts.load_all_facts()
+    routes = services.chunks.route.load_all_routes()
     return [
         ChunkView.injected(
             services, chunk, facts.get(chunk.chunk_id) or ChunkFacts(minted=True), routes.get(chunk.chunk_id), names
         ).summary()
-        for chunk in services.chunks.list_all()
+        for chunk in services.chunks.record.list_all()
     ]
 
 
@@ -163,7 +163,7 @@ class FleetPulse:
         :func:`list_chunks` does, but yields only the four bucket integers, so the payload
         is a fixed four numbers regardless of fleet size. Reads the fleet's facts with one
         bulk query rather than fanning ``load_facts`` out per chunk (issue #374)."""
-        summary = FleetSummary.of(facts.status() for facts in self.services.chunks.load_all_facts().values())
+        summary = FleetSummary.of(facts.status() for facts in self.services.chunks.facts.load_all_facts().values())
         return FleetSummaryView(
             ready=summary.ready,
             running=summary.running,
@@ -175,7 +175,7 @@ class FleetPulse:
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail, dependencies=[Depends(require(FLEET_VIEW))])
 def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkDetail:
     """One chunk aggregate in full — derived status, current node, route."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     return ChunkView.of(services, chunk).detail()
@@ -198,7 +198,7 @@ def record_hub_marker(
     Records a marker artifact mid-run, ahead of the producing command's own exit.
     Idempotent per ``(chunk, node, name, epoch)``.
     """
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     graph = services.graphs.get(chunk.graph_id)
@@ -232,7 +232,7 @@ def record_garden_delivery(
     transaction. An unresolvable run context or a failed validation is an ``invalid``
     outcome at a 200, never an error response — the graph's own ``invalid`` edge reads
     and routes on it."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     graph = services.graphs.get(chunk.graph_id)
@@ -248,7 +248,7 @@ def record_garden_delivery(
     delta_artifact_id_by_name: dict[str, str] = {}
     missing_delta: list[str] = []
     for name in request_body.delta:
-        artifact = services.chunks.latest_artifact(chunk_id, name)
+        artifact = services.chunks.artifacts.latest_artifact(chunk_id, name)
         if artifact is None:
             missing_delta.append(name)
             continue
@@ -263,7 +263,7 @@ def record_garden_delivery(
     proposal_artifacts: dict[str, str] = {}
     proposal_artifact_id_by_name: dict[str, str] = {}
     for name in request_body.proposals:
-        artifact = services.chunks.latest_artifact(chunk_id, name)
+        artifact = services.chunks.artifacts.latest_artifact(chunk_id, name)
         if artifact is not None:
             proposal_artifacts[name] = artifact.data
             proposal_artifact_id_by_name[name] = artifact.artifact_id
@@ -314,7 +314,7 @@ def record_garden_delivery(
 )
 def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
     """Close an escalation by supersession: requeue at the current node."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
@@ -341,7 +341,7 @@ def restart_chunk(
     At a bumped epoch, so the running attempt is fenced out and the holding runner re-enters;
     ``node`` omitted means its current node, or the entry of the graph it lands on when it never
     moved. 409 refuses a terminal chunk, an unmatched name, or its own pin; 404 an unknown target."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     graph = services.graphs.get(chunk.graph_id)
@@ -362,7 +362,7 @@ def restart_chunk(
     change.publish(cause="restarted", key=f"chunk_restarts:{restart_id}")
     services.events.publish_queue_changed()  # an unrouted chunk re-enters the queue at the target node
     # Re-read: a cross-graph move re-pinned the chunk, and the row's node name resolves off that pin.
-    return ChunkView.of(services, services.chunks.get(chunk_id) or chunk).summary()
+    return ChunkView.of(services, services.chunks.record.get(chunk_id) or chunk).summary()
 
 
 @router.post(
@@ -373,7 +373,7 @@ def restart_chunk(
 )
 def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
     """Forcibly release a chunk from its runner without touching any escalation."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
@@ -396,7 +396,7 @@ def pause_chunk(
     chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkSummary:
     """Set a chunk's operator pause brake — the claim is kept, unlike detach (issue #46)."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
@@ -419,7 +419,7 @@ def resume_chunk(
     chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkSummary:
     """Clear a chunk's operator pause brake — idempotent, never refused (issue #46)."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
@@ -443,7 +443,7 @@ def stop_chunk(
     Records the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never
     re-derives ``ready``, releases any live route, and supersedes any open escalation. 409
     when the chunk is already ``done`` or ``stopped`` — stopping is not retroactive."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
@@ -470,7 +470,7 @@ def complete_chunk(
     and held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:
     completing an already-``done`` chunk is a harmless no-op. 404 only when the chunk is
     unknown."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
@@ -492,7 +492,7 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
 
     Idempotent: promoting an already-ready or already-running chunk is a harmless no-op.
     404 only when the chunk is unknown."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
@@ -516,7 +516,7 @@ def patch_chunk(
 
     404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a
     refused edit."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
@@ -531,7 +531,7 @@ def patch_chunk(
     ) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
-    updated = services.chunks.get(chunk_id)
+    updated = services.chunks.record.get(chunk_id)
     assert updated is not None, "the chunk existed a moment ago and this edit does not delete chunks"
     change.publish(cause="edited")
     return ChunkPatchResponse(
@@ -557,7 +557,7 @@ def delete_chunk(
     between resolving it and this write; 409 for one a runner or a human holds, or one
     terminal — deletion needs a chunk at the same statuses grouping does. Irreversible:
     CHUNK is gone from every read the instant this returns."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
@@ -593,7 +593,7 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
     rather than failing the whole read. A chunk with no pointers is an empty list, not
     a 404; the built-in ``hub`` source is always seated, so a bare hub carries no
     configuration under which this ever 503s."""
-    chunk = services.chunks.get(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     fetched_at = iso_utc(services.clock.now())

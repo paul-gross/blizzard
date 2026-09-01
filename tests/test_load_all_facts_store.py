@@ -1,4 +1,4 @@
-"""``IReadChunkRepository.load_all_facts`` — the fleet-summary bulk read (component
+"""``IReadChunkFactsRepository.load_all_facts`` — the fleet-summary bulk read (component
 tier, issue #374).
 
 Proves the bulk read derives the exact same status per chunk as ``load_facts`` called
@@ -382,7 +382,7 @@ def test_fleet_pulse_view_calls_load_all_facts_and_never_load_facts_or_list_all(
             return super().list_all()
 
     counting = _CountingChunkStore(hub_store_connections(hub.engine), hub.clock)
-    services = replace(hub.services, chunks=counting)
+    services = replace(hub.services, chunks=replace(hub.services.chunks, facts=counting, record=counting))
 
     view = FleetPulse(services).view()
 

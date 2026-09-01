@@ -8,7 +8,6 @@ id via a direct transition-fact insert.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 
 import pytest
 
@@ -16,8 +15,9 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph import DEFAULT_BOUNCE_CAP
-from blizzard.hub.domain.work import IWriteChunkRepository
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_pr_ci
 from tests.support import FakeHubCommandRunner, FakeHubWorkdir, HubHarness, build_hub, pointer_token, report_lease
@@ -27,11 +27,12 @@ pytestmark = pytest.mark.component
 _LAND_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"
 
 
-def _writable(hub: HubHarness) -> IWriteChunkRepository:
-    """A test-only cast: ``HubHarness.services.chunks`` is read-typed
-    (``bzh:controller-read-only``), but the live object is always the write-capable
-    ``ChunkStore`` — mirrors ``tests/test_hub_command_node.py``'s own helper."""
-    return cast(IWriteChunkRepository, hub.services.chunks)
+def _writable_movement(hub: HubHarness) -> IWriteChunkMovementRepository:
+    return hub.services.chunks.movement
+
+
+def _writable_escalations(hub: HubHarness) -> IWriteChunkEscalationsRepository:
+    return hub.services.chunks.escalations
 
 
 def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
@@ -75,7 +76,7 @@ def _seed_at_deliver_with_an_unlanded_commit(hub: HubHarness, chunk_id: str, nod
         node_name="build",
         epoch=1,
     )
-    _writable(hub).record_transition(
+    _writable_movement(hub).record_transition(
         transition_id="tr_seed_deliver",
         chunk_id=chunk_id,
         from_node_id=None,
@@ -121,7 +122,7 @@ def test_a_dirty_conflict_routes_to_resolve_and_records_a_bounce(tmp_path: Path)
     unroutable_artifacts = [a for a in detail["artifacts"] if a["name"] == "hub-unroutable-outcome"]
     assert unroutable_artifacts == []
     unroutable_events = [
-        e for e in hub.services.chunks.list_events(chunk_id=chunk_id) if e.kind == "hub-node-unroutable-outcome"
+        e for e in hub.services.chunks.events.list_events(chunk_id=chunk_id) if e.kind == "hub-node-unroutable-outcome"
     ]
     assert unroutable_events == []
 
@@ -136,7 +137,9 @@ def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Pat
     # `deliver` falls back to `DEFAULT_BOUNCE_CAP` (5) — pre-seed that many prior bounces
     # (idempotent per `(chunk_id, epoch)`) so this run's kick-back crosses it.
     for epoch in range(1, DEFAULT_BOUNCE_CAP + 1):
-        _writable(hub).record_bounce(chunk_id, epoch=epoch, cause="conflict", envelope="{}", at=hub.clock.now())
+        _writable_escalations(hub).record_bounce(
+            chunk_id, epoch=epoch, cause="conflict", envelope="{}", at=hub.clock.now()
+        )
     report_lease(hub, chunk_id, epoch=DEFAULT_BOUNCE_CAP + 1, seq=1)
 
     advance = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")

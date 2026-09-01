@@ -16,6 +16,8 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.edit import (
     UNSET,
     ChunkAlreadyMoved,
@@ -32,7 +34,6 @@ from blizzard.hub.domain.work import (
     ChunkFacts,
     EscalationFact,
     IntendedMigration,
-    IWriteChunkRepository,
     MigrationMode,
     QuestionFact,
     RouteCreatedFact,
@@ -73,8 +74,8 @@ _TARGET_GRAPH_WITH_BUILD = make_graph(
 @dataclass
 class _FakeChunkRepo:
     """Only ``load_facts``/``set_graph``/``set_defaults``/``set_intended_migration`` are
-    live; anything else is a bug. Not typed against :class:`IWriteChunkRepository`
-    directly — callers wrap an instance in :func:`_as_write_repo` instead."""
+    live; anything else is a bug. Not typed against its Protocols directly — callers
+    wrap an instance in :func:`_as_facts`/:func:`_as_record` instead."""
 
     facts: ChunkFacts | None
     graphs_set: list[tuple[str, str]] = field(default_factory=list)
@@ -97,9 +98,14 @@ class _FakeChunkRepo:
         raise NotImplementedError(f"EditService should not touch {name!r}")
 
 
-def _as_write_repo(repo: _FakeChunkRepo) -> IWriteChunkRepository:
+def _as_facts(repo: _FakeChunkRepo) -> IReadChunkFactsRepository:
     """Assert the fake satisfies the Protocol EditService depends on (see module docstring)."""
-    return cast(IWriteChunkRepository, repo)
+    return cast(IReadChunkFactsRepository, repo)
+
+
+def _as_record(repo: _FakeChunkRepo) -> IWriteChunkRecordRepository:
+    """Assert the fake satisfies the Protocol EditService depends on (see module docstring)."""
+    return cast(IWriteChunkRecordRepository, repo)
 
 
 @dataclass
@@ -125,7 +131,8 @@ def _service(repo: _FakeChunkRepo, graphs: _FakeGraphRepo | None = None) -> Edit
     (see module docstring — the shared-lock race is proven at the component tier).
     ``graphs`` defaults to a fake reporting no graph retired."""
     return EditService(
-        chunks=_as_write_repo(repo),
+        facts=_as_facts(repo),
+        record=_as_record(repo),
         graphs=_as_read_graph_repo(graphs or _FakeGraphRepo()),
         claim_lock=threading.Lock(),
     )
@@ -286,7 +293,8 @@ def test_set_graph_holds_the_injected_lock_across_its_check_and_write() -> None:
             calls.append("release")
 
     service = EditService(
-        chunks=_as_write_repo(repo),
+        facts=_as_facts(repo),
+        record=_as_record(repo),
         graphs=_as_read_graph_repo(_FakeGraphRepo()),
         claim_lock=cast(threading.Lock, _SpyLock()),
     )

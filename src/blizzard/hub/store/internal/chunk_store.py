@@ -22,6 +22,21 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, HUB_EXEC_SLOT_PREFIX, MIGRATION_PREFIX, Id
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
+from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.chunks.usage import IWriteChunkUsageRepository
+from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.proposals import WorkItemProposalRow
@@ -41,7 +56,6 @@ from blizzard.hub.domain.work import (
     EventRow,
     HubNodePollFact,
     IntendedMigration,
-    IWriteChunkRepository,
     LeaseFact,
     MigrationFact,
     MigrationMode,
@@ -468,8 +482,9 @@ class ChunkStore:
             )
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
-        """See :meth:`IReadChunkRepository.load_all_facts` (issue #374) — one bounded
-        query per fact table across the whole store, grouped by chunk id in Python,
+        """See
+        :meth:`~blizzard.hub.domain.chunks.facts.IReadChunkFactsRepository.load_all_facts` (issue #374) —
+        one bounded query per fact table across the whole store, grouped by chunk id in Python,
         rather than :meth:`load_facts`'s per-chunk fan-out. ``activity_facts_since`` is
         this shape's precedent. Every family reproduces :meth:`load_facts`'s row
         construction verbatim; only ``chunk_pause_facts`` is read in an explicit order,
@@ -795,8 +810,9 @@ class ChunkStore:
         )
 
     def load_all_routes(self) -> dict[str, Route]:
-        """See :meth:`IReadChunkRepository.load_all_routes` (issue #421) — one bounded query
-        per route table, grouped by chunk id in Python the way :meth:`load_all_facts` is,
+        """See
+        :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.load_all_routes` (issue #421) —
+        one bounded query per route table, grouped by chunk id in Python the way :meth:`load_all_facts` is,
         deferring liveness to the same :class:`~blizzard.hub.domain.work.RouteHistory.newest`
         tie-break :meth:`_route_of_conn` uses."""
         with self._store.read("load_all_routes") as conn:
@@ -1205,7 +1221,9 @@ class ChunkStore:
         ]
 
     def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
-        """See :meth:`IReadChunkRepository.activity_facts_since` — one bounded read per
+        """See
+        :meth:`~blizzard.hub.domain.chunks.events.IReadChunkEventsRepository.activity_facts_since` — one
+        bounded read per
         mapped ``ChunkChangeCause`` fact table, concatenated, unsorted across sources.
         Every per-chunk source joins ``chunks`` for its current ``graph_id``, except
         ``transitions``/``chunk_migrations``, which carry their own column."""
@@ -2538,7 +2556,8 @@ class ChunkStore:
 
     def set_defaults(self, chunk_id: str, *, default_model: list[str], default_effort: str | None) -> None:
         """Repin a not-ready or ready-unclaimed chunk's default model/effort (issues #27,
-        #120, #144) — both in one write; see :meth:`IWriteChunkRepository.set_defaults`."""
+        #120, #144) — both in one write; see
+        :meth:`~blizzard.hub.domain.chunks.record.IWriteChunkRecordRepository.set_defaults`."""
         with self._store.write("set_defaults") as conn:
             conn.execute(
                 update(s.chunks)
@@ -2876,5 +2895,61 @@ class ChunkStore:
         return conn.execute(select(table.c.chunk_id).where(table.c.chunk_id == chunk_id).limit(1)).first() is not None
 
 
-def _conforms_chunk_store(x: ChunkStore) -> IWriteChunkRepository:
+def _conforms_facts(x: ChunkStore) -> IReadChunkFactsRepository:
+    return x
+
+
+def _conforms_record(x: ChunkStore) -> IWriteChunkRecordRepository:
+    return x
+
+
+def _conforms_lifecycle(x: ChunkStore) -> IWriteChunkLifecycleRepository:
+    return x
+
+
+def _conforms_work_refs(x: ChunkStore) -> IWriteChunkWorkRefsRepository:
+    return x
+
+
+def _conforms_queue(x: ChunkStore) -> IWriteChunkQueueRepository:
+    return x
+
+
+def _conforms_route(x: ChunkStore) -> IWriteChunkRouteRepository:
+    return x
+
+
+def _conforms_movement(x: ChunkStore) -> IWriteChunkMovementRepository:
+    return x
+
+
+def _conforms_artifacts(x: ChunkStore) -> IWriteChunkArtifactsRepository:
+    return x
+
+
+def _conforms_questions(x: ChunkStore) -> IWriteChunkQuestionsRepository:
+    return x
+
+
+def _conforms_decisions(x: ChunkStore) -> IWriteChunkDecisionsRepository:
+    return x
+
+
+def _conforms_escalations(x: ChunkStore) -> IWriteChunkEscalationsRepository:
+    return x
+
+
+def _conforms_events(x: ChunkStore) -> IWriteChunkEventsRepository:
+    return x
+
+
+def _conforms_usage(x: ChunkStore) -> IWriteChunkUsageRepository:
+    return x
+
+
+def _conforms_delivery(x: ChunkStore) -> IWriteChunkDeliveryRepository:
+    return x
+
+
+def _conforms_hub_exec(x: ChunkStore) -> IWriteChunkHubExecRepository:
     return x

@@ -57,7 +57,7 @@ def _post_marker(hub: HubHarness, url: str, *, headers: dict[str, str] | None = 
 
 
 def _recorded_marker_names(hub: HubHarness, chunk_id: str) -> set[str]:
-    return {a.name for a in hub.services.chunks.load_artifacts(chunk_id)}
+    return {a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
 
 
 def test_unauthenticated_post_is_refused_and_records_nothing(tmp_path: Path) -> None:

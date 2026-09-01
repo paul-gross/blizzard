@@ -82,7 +82,9 @@ def to_decision_view(row: DecisionRow) -> DecisionView:
 @router.get("/decisions", response_model=OpenDecisionsResponse, dependencies=[Depends(require(FLEET_VIEW))])
 def list_decisions(services: Annotated[HubServices, Depends(get_services)]) -> OpenDecisionsResponse:
     """The fleet's open (unresolved) decisions — gate surfacing."""
-    return OpenDecisionsResponse(decisions=[to_decision_view(d) for d in services.chunks.list_open_decisions()])
+    return OpenDecisionsResponse(
+        decisions=[to_decision_view(d) for d in services.chunks.decisions.list_open_decisions()]
+    )
 
 
 @router.post(
@@ -100,7 +102,7 @@ def resolve_decision(
 
     ``resolved_by`` is taken from the authenticated session identity, never the request
     body's ``resolved_by`` field — a spoofed value there is silently ignored (issue #91)."""
-    pre_decision = services.chunks.get_decision(decision_id)
+    pre_decision = services.chunks.decisions.get_decision(decision_id)
     change = chunk_events.ChunkChanged.before(services, pre_decision.chunk_id) if pre_decision is not None else None
     try:
         result = services.decisions.resolve(
@@ -110,7 +112,7 @@ def resolve_decision(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown decision {decision_id}")
-    decision = services.chunks.get_decision(decision_id)
+    decision = services.chunks.decisions.get_decision(decision_id)
     if not result.resolved:
         conflict = DecisionResolutionConflict(decision_id=decision_id, already_resolved_by=result.resolved_by)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())

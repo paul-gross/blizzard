@@ -46,7 +46,7 @@ def _stores(tmp_path: Path) -> tuple[ChunkStore, WorkItemStore, DeleteService, E
     store = hub_store_connections(engine)
     chunks = ChunkStore(store, clock)
     items = WorkItemStore(store)
-    delete = DeleteService(chunks=chunks, items=items, clock=clock, claim_lock=threading.Lock())
+    delete = DeleteService(facts=chunks, items=items, clock=clock, claim_lock=threading.Lock())
     return chunks, items, delete, engine
 
 
@@ -242,7 +242,7 @@ def test_reingest_after_delete_a_forge_pointer_mints_a_fresh_chunk_reading_norma
     hub_store = hub_store_connections(hub.engine)
     chunks = ChunkStore(hub_store, hub.clock)
     items = WorkItemStore(hub_store)
-    delete = DeleteService(chunks=chunks, items=items, clock=hub.clock, claim_lock=threading.Lock())
+    delete = DeleteService(facts=chunks, items=items, clock=hub.clock, claim_lock=threading.Lock())
     chunk = chunks.get(first["chunk_id"])
     assert chunk is not None
     delete.delete(chunk, by="operator")

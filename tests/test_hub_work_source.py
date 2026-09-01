@@ -54,8 +54,8 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStore, U
     items = WorkItemStore(store)
     clock = FixedClock(_T0)
     chunks = ChunkStore(store, clock)
-    delete = DeleteService(chunks=chunks, items=items, clock=clock, claim_lock=threading.Lock())
-    edits = WorkItemEditService(items=items, chunks=chunks, clock=clock, delete=delete)
+    delete = DeleteService(facts=chunks, items=items, clock=clock, claim_lock=threading.Lock())
+    edits = WorkItemEditService(items=items, work_refs=chunks, record=chunks, facts=chunks, clock=clock, delete=delete)
     users = UserRepository(engine, RepoErrorFactory(get_logger("tests.test_hub_work_source")))
     resolution = GardenProposalDeliveryResolution(
         closures=GardenProposalClosureStore(store),

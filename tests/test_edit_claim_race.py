@@ -13,18 +13,22 @@ from typing import cast
 
 import pytest
 
-from blizzard.hub.domain.work import IWriteChunkRepository
+from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from tests.support import HubHarness, build_hub, ingest
 
 pytestmark = pytest.mark.component
 
 
-def _writable(hub: HubHarness) -> IWriteChunkRepository:
-    """A test-only cast: ``HubHarness.services.chunks`` is read-typed
-    (``bzh:controller-read-only``), but the live object is always the write-capable
-    :class:`~blizzard.hub.store.internal.chunk_store.ChunkStore` — these tests patch its
-    write methods to force the exact interleaving the shared lock must serialize."""
-    return cast(IWriteChunkRepository, hub.services.chunks)
+def _writable_record(hub: HubHarness) -> IWriteChunkRecordRepository:
+    """These tests patch the chunk-record store's write methods to force the exact
+    interleaving the shared lock must serialize."""
+    return hub.services.chunks.record
+
+
+def _writable_route(hub: HubHarness) -> IWriteChunkRouteRepository:
+    """Same as :func:`_writable_record`, for the chunk-route seam."""
+    return hub.services.chunks.route
 
 
 _ALT_YAML = """
@@ -80,14 +84,14 @@ def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(tmp_path: 
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    real_set_graph = _writable(hub).set_graph
+    real_set_graph = _writable_record(hub).set_graph
 
     def _blocking_set_graph(cid: str, *, graph_id: str) -> None:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the edit's write"
         real_set_graph(cid, graph_id=graph_id)
 
-    _writable(hub).set_graph = _blocking_set_graph  # type: ignore[method-assign]
+    _writable_record(hub).set_graph = _blocking_set_graph  # type: ignore[method-assign]
 
     edit_result: dict[str, int] = {}
 
@@ -139,14 +143,14 @@ def test_an_edit_is_refused_while_a_claim_holds_the_shared_lock_mid_route_creati
 
     entered_record = threading.Event()
     release_record = threading.Event()
-    real_record_route = _writable(hub).record_route
+    real_record_route = _writable_route(hub).record_route
 
     def _blocking_record_route(route, *, token_hash, at):  # type: ignore[no-untyped-def]
         entered_record.set()
         assert release_record.wait(timeout=5), "test never released the claim's route record"
         real_record_route(route, token_hash=token_hash, at=at)
 
-    _writable(hub).record_route = _blocking_record_route  # type: ignore[method-assign]
+    _writable_route(hub).record_route = _blocking_record_route  # type: ignore[method-assign]
 
     claim_result: dict[str, int] = {}
 

@@ -21,6 +21,11 @@ from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.delivery.repo_ref import RepoRef
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.graph import (
     DEFAULT_BOUNCE_CAP,
     HUB_DEFAULT_FAILURE_CHOICE,
@@ -33,7 +38,6 @@ from blizzard.hub.domain.graph import (
 from blizzard.hub.domain.work import (
     Chunk,
     HubNodePollFact,
-    IWriteChunkRepository,
     LandedRepos,
 )
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -278,7 +282,11 @@ class HubNodeExecutor:
     def __init__(
         self,
         *,
-        chunks: IWriteChunkRepository,
+        facts: IReadChunkFactsRepository,
+        artifacts: IWriteChunkArtifactsRepository,
+        hub_exec: IWriteChunkHubExecRepository,
+        escalations: IWriteChunkEscalationsRepository,
+        events: IWriteChunkEventsRepository,
         runner: IHubCommandRunner,
         workdir: IHubWorkdir,
         clock: IClock,
@@ -291,7 +299,11 @@ class HubNodeExecutor:
         work_sources: IWorkSourceRegistry | None = None,
         slot_stale_after: timedelta = DEFAULT_SLOT_STALE_AFTER,
     ) -> None:
-        self._chunks = chunks
+        self._facts = facts
+        self._artifacts = artifacts
+        self._hub_exec = hub_exec
+        self._escalations = escalations
+        self._events = events
         self._runner = runner
         self._workdir = workdir
         self._clock = clock
@@ -314,7 +326,7 @@ class HubNodeExecutor:
         """The mid-run marker callback's write (#65) — a ``run:`` step's own marker,
         recorded ahead of that step's exit. Idempotent per
         ``(chunk, node, name, epoch)``, like the executor's own ``produces:`` write."""
-        return self._chunks.record_hub_artifact(
+        return self._artifacts.record_hub_artifact(
             chunk_id,
             node_id=node_id,
             node_name=node_name,
@@ -331,11 +343,11 @@ class HubNodeExecutor:
         (#66) — is neither an error nor a retry-consuming failure. The due check runs
         BEFORE the slot is acquired, so a pending chunk never contends for it."""
         now = self._clock.now()
-        facts = self._chunks.load_facts(chunk.chunk_id)
+        facts = self._facts.load_facts(chunk.chunk_id)
         poll_history = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch) if facts is not None else []
         if poll_history and now - poll_history[-1].polled_at < PollPolicy.of(node).interval:
             return None  # not yet due — never touches the fleet-wide slot
-        slot_id = self._chunks.acquire_hub_exec_slot(
+        slot_id = self._hub_exec.acquire_hub_exec_slot(
             chunk.chunk_id, node_id=node.node_id, at=now, stale_after=self._slot_stale_after
         )
         if slot_id is None:
@@ -343,7 +355,7 @@ class HubNodeExecutor:
         try:
             return self._run_locked(chunk, graph, node, epoch=epoch, poll_history=poll_history)
         finally:
-            self._chunks.release_hub_exec_slot(chunk.chunk_id, at=self._clock.now())
+            self._hub_exec.release_hub_exec_slot(chunk.chunk_id, at=self._clock.now())
 
     def _run_locked(
         self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int, poll_history: list[HubNodePollFact]
@@ -353,7 +365,7 @@ class HubNodeExecutor:
             # polling, and never run the `run:` list again this call.
             return self._route_pending_timeout(chunk, graph, node, epoch=epoch)
         workdir = self._workdir.ensure(chunk.chunk_id)
-        artifacts = self._chunks.load_artifacts(chunk.chunk_id)
+        artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
         # Minted before the env is built and revoked once this call is done with it, so
         # it is live only for this (chunk, node, epoch) visit (issue #230).
         marker_token = self._marker_authority.issue(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
@@ -378,7 +390,7 @@ class HubNodeExecutor:
             except UnconvergedDeliveryError as exc:
                 # Routed as a `failure` rather than allowed to escape, which would
                 # crash-loop the tick (tests/test_pin_hub_delivery.py).
-                self._chunks.record_hub_artifact(
+                self._artifacts.record_hub_artifact(
                     chunk.chunk_id,
                     node_id=node.node_id,
                     node_name=node.name,
@@ -392,13 +404,13 @@ class HubNodeExecutor:
             choice_names = frozenset(c.name for c in node.choices)
             chosen: str | None = None
             for index, step in enumerate(node.run or [_NoopStep()], start=1):
-                if step.produces and self._chunks.has_hub_artifact(
+                if step.produces and self._artifacts.has_hub_artifact(
                     chunk.chunk_id, node_id=node.node_id, epoch=epoch, name=step.produces
                 ):
                     continue  # already done — the at-least-once-per-step skip (#65)
 
                 result = self._runner.run(command=step.command, cwd=workdir, env=env)
-                self._chunks.record_hub_artifact(
+                self._artifacts.record_hub_artifact(
                     chunk.chunk_id,
                     node_id=node.node_id,
                     node_name=node.name,
@@ -417,7 +429,7 @@ class HubNodeExecutor:
                     return self._record_pending(chunk, node, epoch=epoch)
                 _CP_HUBNODE_AFTER_STEP_BEFORE_MARKER.reached()
                 if step.produces:
-                    self._chunks.record_hub_artifact(
+                    self._artifacts.record_hub_artifact(
                         chunk.chunk_id,
                         node_id=node.node_id,
                         node_name=node.name,
@@ -445,7 +457,7 @@ class HubNodeExecutor:
         released immediately after this returns. Consumes no retry and no bounce budget:
         pending is the node waiting on external state, not contention or failure."""
         now = self._clock.now()
-        self._chunks.record_hub_node_poll(chunk.chunk_id, node_id=node.node_id, epoch=epoch, at=now)
+        self._hub_exec.record_hub_node_poll(chunk.chunk_id, node_id=node.node_id, epoch=epoch, at=now)
         _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE.reached()
         next_poll_at = now + PollPolicy.of(node).interval
         return HubRunResult(
@@ -465,14 +477,14 @@ class HubNodeExecutor:
         cause = "poll-timeout"
         detail = f"hub node `{node.name}` exceeded its poll_timeout awaiting `{HUB_PENDING_CHOICE}`"
         envelope_payload = json.dumps({"cause": cause, "detail": detail})
-        self._chunks.record_bounce(chunk.chunk_id, epoch=hub_epoch, cause=cause, envelope=envelope_payload, at=now)
+        self._escalations.record_bounce(chunk.chunk_id, epoch=hub_epoch, cause=cause, envelope=envelope_payload, at=now)
 
-        facts = self._chunks.load_facts(chunk.chunk_id)
+        facts = self._facts.load_facts(chunk.chunk_id)
         cap = node.bounce_cap if node.bounce_cap is not None else DEFAULT_BOUNCE_CAP
         if facts is not None and facts.bounces_over_cap(cap):
             # Hub-authored escalation, no runner runtime dir to compose a wrapped
             # takeover command from — leaves wrapped_takeover_command at its store default.
-            self._chunks.record_bounce_escalation(
+            self._escalations.record_bounce_escalation(
                 chunk.chunk_id, epoch=hub_epoch, runner_id=_HUB_RUNNER_ID, takeover_command="", at=now
             )
             return HubRunResult(
@@ -518,7 +530,7 @@ class HubNodeExecutor:
             now = self._clock.now()
             detail = f"no authored edge for choice `{choice}` on hub node `{node.name}`"
             authored = sorted(c.name for c in node.choices)
-            announced = self._chunks.record_hub_artifact(
+            announced = self._artifacts.record_hub_artifact(
                 chunk.chunk_id,
                 node_id=node.node_id,
                 node_name=node.name,
@@ -533,7 +545,7 @@ class HubNodeExecutor:
                 at=now,
             )
             if announced:
-                self._chunks.record_event(
+                self._events.record_event(
                     # Never a fourth severity — the feed ranks only these three (#125).
                     severity="critical",
                     kind=_EVENT_UNROUTABLE_OUTCOME,
@@ -569,20 +581,20 @@ class HubNodeExecutor:
         # the choice name — no outcome name is privileged (#67).
         if commits and to_node_id != RESERVED_TERMINAL:
             pending_repos = {c["repo"] for c in commits}
-            landed_now = LandedRepos.of(self._chunks.load_artifacts(chunk.chunk_id)).names
+            landed_now = LandedRepos.of(self._artifacts.load_artifacts(chunk.chunk_id)).names
             if not pending_repos.issubset(landed_now):
                 now = self._clock.now()
                 detail = f"hub node `{node.name}` routed `{choice}` to `{edge.to_node_name}` — delivery incomplete"
                 envelope_payload = json.dumps({"cause": choice, "detail": detail})
-                self._chunks.record_bounce(
+                self._escalations.record_bounce(
                     chunk.chunk_id, epoch=hub_epoch, cause=choice, envelope=envelope_payload, at=now
                 )
-                facts = self._chunks.load_facts(chunk.chunk_id)
+                facts = self._facts.load_facts(chunk.chunk_id)
                 cap = node.bounce_cap if node.bounce_cap is not None else DEFAULT_BOUNCE_CAP
                 if facts is not None and facts.bounces_over_cap(cap):
                     # Hub-authored escalation, no runner runtime dir to compose a wrapped
                     # takeover command from — leaves wrapped_takeover_command at its store default.
-                    self._chunks.record_bounce_escalation(
+                    self._escalations.record_bounce_escalation(
                         chunk.chunk_id, epoch=hub_epoch, runner_id=_HUB_RUNNER_ID, takeover_command="", at=now
                     )
                     return HubRunResult(
@@ -606,7 +618,7 @@ class HubNodeExecutor:
                 extra_artifacts = [*(extra_artifacts or []), envelope_artifact]
 
         fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
-        wrote = self._chunks.record_hub_step_transition(
+        wrote = self._hub_exec.record_hub_step_transition(
             chunk.chunk_id,
             from_node_id=node.node_id,
             to_node_id=to_node_id,

@@ -8,7 +8,8 @@ written. No hub-side state, so a mid-sweep crash self-heals (``tests/test_forge_
 from __future__ import annotations
 
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.work import IReadChunkRepository, WorkRef
+from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
@@ -18,8 +19,8 @@ _log = get_logger("blizzard.hub.forge_status")
 class AnnotationReconciler:
     """Per opted-in work source: desired-vs-actual marker diff, writes only the gap."""
 
-    def __init__(self, *, chunks: IReadChunkRepository, work_sources: IWorkSourceRegistry) -> None:
-        self._chunks = chunks
+    def __init__(self, *, work_refs: IReadChunkWorkRefsRepository, work_sources: IWorkSourceRegistry) -> None:
+        self._work_refs = work_refs
         self._work_sources = work_sources
 
     def sweep(self) -> None:
@@ -28,7 +29,7 @@ class AnnotationReconciler:
         Desired state is computed once, then filtered per source; a source with no live
         refs still gets its ``marked_refs()`` diffed against an empty desired set,
         clearing anything stale. A per-item or per-source failure is counted, not raised."""
-        desired = self._chunks.live_work_refs()
+        desired = self._work_refs.live_work_refs()
         written = cleared = failed = 0
         considered = 0
         sources_skipped: list[str] = []

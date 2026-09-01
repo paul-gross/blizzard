@@ -16,7 +16,12 @@ from enum import Enum
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.work import Chunk, ChunkFacts, IWriteChunkRepository
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
+from blizzard.hub.domain.work import Chunk, ChunkFacts
 
 _log = get_logger("blizzard.hub.queue")
 
@@ -59,14 +64,15 @@ class QueueService:
     """Reorder the ``ready`` queue and the ``not_ready`` list, each as its own explicit
     hub-side property, ranked independently (``bzh:ranking-is-per-list``)."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
-        self._chunks = chunks
+    def __init__(self, *, queue: IWriteChunkQueueRepository, record: IReadChunkRecordRepository, clock: IClock) -> None:
+        self._queue = queue
+        self._record = record
         self._clock = clock
 
     def ordered(self, list_: QueueList) -> list[Chunk]:
         """``list_``'s chunks in order — ascending by effective position."""
-        positions = self._chunks.queue_positions()
-        promoted_ats = self._chunks.promoted_ats()
+        positions = self._queue.queue_positions()
+        promoted_ats = self._queue.promoted_ats()
         candidates = self._candidates(list_)
         return sorted(candidates, key=lambda c: self._effective_position(c, positions, promoted_ats))
 
@@ -97,8 +103,8 @@ class QueueService:
         bisection eventually exhausts the representable doubles between two neighbours;
         that case renormalizes via :meth:`replace_order` and recomputes the midpoint."""
         write = self._write_fn(list_)
-        positions = self._chunks.queue_positions()
-        promoted_ats = self._chunks.promoted_ats()
+        positions = self._queue.queue_positions()
+        promoted_ats = self._queue.promoted_ats()
         candidates = [c for c in self._candidates(list_) if c.chunk_id != chunk.chunk_id]
         ordered = sorted(candidates, key=lambda c: self._effective_position(c, positions, promoted_ats))
 
@@ -115,8 +121,8 @@ class QueueService:
                 if math.nextafter(after_pos, next_pos) >= next_pos:
                     renormalized = [*ordered[: after_index + 1], chunk, *ordered[after_index + 1 :]]
                     self.replace_order(list_, renormalized)
-                    positions = self._chunks.queue_positions()
-                    promoted_ats = self._chunks.promoted_ats()
+                    positions = self._queue.queue_positions()
+                    promoted_ats = self._queue.promoted_ats()
                     after_pos = self._effective_position(after, positions, promoted_ats)
                     next_pos = self._effective_position(next_chunk, positions, promoted_ats)
                 new_position = (after_pos + next_pos) / 2
@@ -133,17 +139,17 @@ class QueueService:
     def _write_fn(self, list_: QueueList) -> Callable[..., None]:
         """The one place :meth:`replace_order`/:meth:`reposition` pick which store write
         routes a position — ``not_ready`` through the promoted-guarded
-        :meth:`~blizzard.hub.domain.work.IWriteChunkRepository.record_backlog_position`,
-        ``ready`` through :meth:`~blizzard.hub.domain.work.IWriteChunkRepository.record_queue_position`."""
+        :meth:`~blizzard.hub.domain.chunks.queue.IWriteChunkQueueRepository.record_backlog_position`,
+        ``ready`` through :meth:`~blizzard.hub.domain.chunks.queue.IWriteChunkQueueRepository.record_queue_position`."""
         if list_ is QueueList.NOT_READY:
-            return self._chunks.record_backlog_position
-        return self._chunks.record_queue_position
+            return self._queue.record_backlog_position
+        return self._queue.record_queue_position
 
     def _candidates(self, list_: QueueList) -> list[Chunk]:
         """``list_``'s repository read — the one place :meth:`ordered`/:meth:`reposition`
         pick which of the two independently-ranked lists (``bzh:ranking-is-per-list``)
         they read candidates from."""
-        return self._chunks.list_ready() if list_ is QueueList.READY else self._chunks.list_not_ready()
+        return self._record.list_ready() if list_ is QueueList.READY else self._record.list_not_ready()
 
     @staticmethod
     def _effective_position(chunk: Chunk, positions: dict[str, float], promoted_ats: dict[str, datetime]) -> float:
@@ -175,8 +181,17 @@ class GroupResult:
 class GroupService:
     """Merge unacquired chunks — ``not_ready`` or ``ready`` — into one surviving chunk."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
-        self._chunks = chunks
+    def __init__(
+        self,
+        *,
+        work_refs: IWriteChunkWorkRefsRepository,
+        lifecycle: IWriteChunkLifecycleRepository,
+        facts: IReadChunkFactsRepository,
+        clock: IClock,
+    ) -> None:
+        self._work_refs = work_refs
+        self._lifecycle = lifecycle
+        self._facts = facts
         self._clock = clock
 
     def group(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
@@ -191,8 +206,8 @@ class GroupService:
         now = self._clock.now()
         grouped_id: int | None = None
         for target in targets:
-            self._chunks.add_work_refs(survivor_id, target.work_refs, at=now)
-            grouped_id = self._chunks.record_grouped(target.chunk_id, grouped_into=survivor_id, at=now)
+            self._work_refs.add_work_refs(survivor_id, target.work_refs, at=now)
+            grouped_id = self._lifecycle.record_grouped(target.chunk_id, grouped_into=survivor_id, at=now)
         _log.info(
             "chunks grouped",
             survivor=survivor_id,
@@ -200,7 +215,7 @@ class GroupService:
             merged=[t.chunk_id for t in targets],
             count=len(targets),
         )
-        merged = self._chunks.get(survivor_id)
+        merged = self._lifecycle.get(survivor_id)
         return GroupResult(
             survivor=merged if merged is not None else survivor, status=survivor_status, grouped_id=grouped_id
         )
@@ -216,8 +231,8 @@ class GroupService:
         return targets
 
     def _require_unacquired_chunk(self, chunk_id: str) -> tuple[Chunk, ChunkStatus]:
-        chunk = self._chunks.get(chunk_id)
-        facts = self._chunks.load_facts(chunk_id)
+        chunk = self._lifecycle.get(chunk_id)
+        facts = self._facts.load_facts(chunk_id)
         if chunk is None or facts is None:
             raise ChunkNotFound(chunk_id)
         status = (facts if facts is not None else ChunkFacts(minted=True)).status()

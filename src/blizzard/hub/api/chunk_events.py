@@ -24,7 +24,7 @@ class ChunkChanged:
     @classmethod
     def before(cls, services: HubServices, chunk_id: str) -> ChunkChanged:
         """The chunk's status right now; ``None`` when the chunk does not yet exist."""
-        facts = services.chunks.load_facts(chunk_id)
+        facts = services.chunks.facts.load_facts(chunk_id)
         return cls(services, chunk_id, None if facts is None else facts.status().value)
 
     @classmethod
@@ -45,9 +45,9 @@ class ChunkChanged:
         durable fact just written, :class:`~blizzard.hub.domain.work.ActivityRow`'s key format, or
         ``None``. ``by`` (issue #364, delete-route-only) still degrades to a bare ``{chunk_id, status}``
         frame carrying ``cause``/``prev_status``/``by`` rather than raising, since the chunk is gone."""
-        facts = self.services.chunks.load_facts(self.chunk_id) or ChunkFacts(minted=True)
+        facts = self.services.chunks.facts.load_facts(self.chunk_id) or ChunkFacts(minted=True)
         resolved_status = status if status is not None else facts.status().value
-        chunk = self.services.chunks.get(self.chunk_id)
+        chunk = self.services.chunks.record.get(self.chunk_id)
         graph = self.services.graphs.get(chunk.graph_id) if chunk is not None else None
         if chunk is None or graph is None:
             self.services.events.publish_chunk_changed(
@@ -60,7 +60,7 @@ class ChunkChanged:
         if transition is not None and transition.graph_id is not None and transition.graph_id != graph.graph_id:
             from_graph = self.services.graphs.get(transition.graph_id)
 
-        route = self.services.chunks.route_of(self.chunk_id)
+        route = self.services.chunks.route.route_of(self.chunk_id)
         runner_id = route.runner_id if route is not None else None
 
         change = ChunkChange.of(

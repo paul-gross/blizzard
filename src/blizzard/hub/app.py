@@ -116,7 +116,7 @@ class Sweep:
             return
         interval = app.state.config.annotation_interval_seconds
         if services.work_sources.annotating_names():
-            annotator = AnnotationReconciler(chunks=services.chunks, work_sources=services.work_sources)
+            annotator = AnnotationReconciler(work_refs=services.chunks.work_refs, work_sources=services.work_sources)
             yield cls(annotator, interval, app.state.shutdown, "blizzard.hub.forge_status")
         yield cls(
             services.event_derivation,
@@ -247,7 +247,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     claim_lock = threading.Lock()
     work_item_store = WorkItemStore(store_connections)
     delete_service = DeleteService(
-        chunks=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
+        facts=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
     )
     # Own instances, ahead of `build_services` below — mirrors `work_item_store`'s own
     # early construction (blizzard#394 Phase 3): the built-in hub closer needs this seam

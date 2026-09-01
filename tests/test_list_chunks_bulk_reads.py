@@ -83,7 +83,7 @@ def test_list_chunks_calls_bulk_reads_and_never_load_facts_or_route_of(tmp_path:
 
     counting = _CountingChunkStore(hub_store_connections(hub.engine), hub.clock)
     assert hub.app is not None
-    hub.app.state.services = replace(hub.services, chunks=counting)
+    hub.app.state.services = replace(hub.services, chunks=replace(hub.services.chunks, facts=counting, route=counting))
 
     resp = hub.client.get("/api/chunks")
 

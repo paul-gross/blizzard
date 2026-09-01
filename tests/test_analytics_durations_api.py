@@ -15,7 +15,8 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.work import IWriteChunkRepository, MigrationSource
+from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.work import MigrationSource
 from tests.support import (
     FakeHubCommandRunner,
     FakeHubWorkdir,
@@ -194,9 +195,9 @@ def _complete(hub, chunk_id: str, *, epoch: int, from_node_id: str, choice: str)
     assert resp.status_code == 200, resp.text
 
 
-def _writable(hub: HubHarness) -> IWriteChunkRepository:
+def _writable(hub: HubHarness) -> IWriteChunkMovementRepository:
     """A test-only cast: mirrors `tests/test_analytics_outcomes_api.py`'s own helper."""
-    return cast(IWriteChunkRepository, hub.services.chunks)
+    return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
 
 
 # --- auth triad: 401 / 403 / 200, plus the runner-principal refusal ---------------

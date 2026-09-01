@@ -15,7 +15,9 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.delivery.command_runner import CommandResult
-from blizzard.hub.domain.work import IWriteChunkRepository, MigrationSource
+from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.work import MigrationSource
 from blizzard.hub.graphs.scripts import land_pr_ci
 from tests.support import (
     FakeHubCommandRunner,
@@ -92,11 +94,16 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _writable(hub: HubHarness) -> IWriteChunkRepository:
+def _writable_movement(hub: HubHarness) -> IWriteChunkMovementRepository:
     """A test-only cast: ``HubHarness.services.chunks`` is read-typed
     (``bzh:controller-read-only``), but the live object is always the write-capable
     ``ChunkStore`` — mirrors ``tests/test_delivery_conflict_routing.py``'s own helper."""
-    return cast(IWriteChunkRepository, hub.services.chunks)
+    return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
+
+
+def _writable_escalations(hub: HubHarness) -> IWriteChunkEscalationsRepository:
+    """Same as :func:`_writable_movement`, for the chunk-escalations seam."""
+    return cast(IWriteChunkEscalationsRepository, hub.services.chunks.escalations)
 
 
 def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | None = None):  # type: ignore[no-untyped-def]
@@ -199,7 +206,7 @@ def test_a_bounce_counts_as_neither(tmp_path: Path) -> None:
     hub, token, _graph_id, _nodes, _og, _on = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    _writable(hub).record_bounce(chunk_id, epoch=1, cause="conflict", envelope="{}", at=hub.clock.now())
+    _writable_escalations(hub).record_bounce(chunk_id, epoch=1, cause="conflict", envelope="{}", at=hub.clock.now())
     report_lease(hub, chunk_id, epoch=2, seq=2)  # supersedes epoch 1, proving it's over
 
     resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
@@ -276,7 +283,7 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
     hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    _writable(hub).record_migration(
+    _writable_movement(hub).record_migration(
         chunk_id,
         from_node_id=nodes["build"],
         from_graph_id=graph_id,
@@ -307,7 +314,7 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
     hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    _writable(hub).record_migration(
+    _writable_movement(hub).record_migration(
         chunk_id,
         from_node_id=nodes["build"],
         from_graph_id=graph_id,
@@ -339,7 +346,7 @@ def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tm
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)  # crashed on graph A, no transition of its own
     report_lease(hub, chunk_id, epoch=2, seq=2)
-    _writable(hub).record_migration(
+    _writable_movement(hub).record_migration(
         chunk_id,
         from_node_id=nodes["build"],
         from_graph_id=graph_id,
