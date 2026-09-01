@@ -1,0 +1,27 @@
+@if (open()) {
+  <!-- The scrim's click-to-dismiss is a pointer-only convenience, not a keyboard gap:
+       Escape (bound below) is the keyboard-equivalent dismissal, and the scrim itself
+       holds no content a keyboard user needs to reach — cdkTrapFocusAutoCapture moves
+       focus straight into the panel. -->
+  <!-- eslint-disable-next-line @angular-eslint/template/interactive-supports-focus -->
+  <div class="scrim" (click)="onBackdropClick()" (keydown.escape)="onEscape()">
+    <!-- The panel's own click only stops propagation so a click inside it never
+         bubbles to the scrim's dismiss handler above — not a user-facing action of
+         its own, so it has no keyboard equivalent to pair it with. -->
+    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+    <div
+      class="panel"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="ariaLabel()"
+      [attr.data-testid]="testid()"
+      cdkTrapFocus
+      cdkTrapFocusAutoCapture
+      (click)="onPanelClick($event)"
+    >
+      <div class="hdr"><ng-content select="[fleetKitDialogHeader]" /></div>
+      <div class="body"><ng-content /></div>
+      <div class="ftr"><ng-content select="[fleetKitDialogFooter]" /></div>
+    </div>
+  </div>
+}

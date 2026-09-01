@@ -4,6 +4,7 @@
  */
 
 export { KitAccordionSection } from './kit-accordion-section';
+export { KitDialog } from './kit-dialog';
 export { KitPanel, KitPanelHeader } from './kit-panel';
 export { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';
 export { KitAvatar } from './kit-avatar';

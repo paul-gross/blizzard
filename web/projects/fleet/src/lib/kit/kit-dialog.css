@@ -1,0 +1,53 @@
+/* The dialog stacks above every other fixed/positioned surface in the app — no
+   existing element in this workspace declares a z-index above 1, so 1000 is a
+   floor with generous headroom, not a value tuned against a specific rival. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--overlay-90);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: 90vh;
+  min-height: 0;
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
+  border: 1px solid var(--bezel);
+  box-shadow: 0 16px 48px var(--overlay-40);
+}
+
+.hdr {
+  flex: none;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hdr:empty {
+  display: none;
+}
+
+/* The panel's own scroll container — the viewport-level page never scrolls to
+   reach dialog content that overflows `max-height`. */
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.ftr {
+  flex: none;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.ftr:empty {
+  display: none;
+}
