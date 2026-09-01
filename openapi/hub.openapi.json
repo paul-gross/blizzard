@@ -2958,6 +2958,45 @@
         "title": "GardenProposalView",
         "type": "object"
       },
+      "GardenSweepsView": {
+        "properties": {
+          "last_swept": {
+            "items": {
+              "$ref": "#/components/schemas/ScopeSweepView"
+            },
+            "title": "Last Swept",
+            "type": "array"
+          },
+          "measurements": {
+            "items": {
+              "$ref": "#/components/schemas/MeasurementReadingView"
+            },
+            "title": "Measurements",
+            "type": "array"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "routine_name",
+          "since",
+          "until",
+          "last_swept",
+          "measurements"
+        ],
+        "title": "GardenSweepsView",
+        "type": "object"
+      },
       "GraphArtifact": {
         "description": "One graph-scoped artifact baked into the mint \u2014 the loader-inlined content of\na graph's ``artifacts:`` entry, carried alongside every envelope for that graph.",
         "properties": {
@@ -3760,6 +3799,29 @@
           "permissions"
         ],
         "title": "MeResponse",
+        "type": "object"
+      },
+      "MeasurementReadingView": {
+        "properties": {
+          "measurement": {
+            "title": "Measurement",
+            "type": "string"
+          },
+          "produced_at": {
+            "title": "Produced At",
+            "type": "string"
+          },
+          "scope_slug": {
+            "title": "Scope Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope_slug",
+          "produced_at",
+          "measurement"
+        ],
+        "title": "MeasurementReadingView",
         "type": "object"
       },
       "MigrationMode": {
@@ -5479,6 +5541,51 @@
           }
         },
         "title": "ScopeLifecycleRequest",
+        "type": "object"
+      },
+      "ScopeSweepView": {
+        "properties": {
+          "finding_set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Set Id"
+          },
+          "produced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Produced At"
+          },
+          "revisions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Revisions",
+            "type": "object"
+          },
+          "scope_slug": {
+            "title": "Scope Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope_slug",
+          "finding_set_id",
+          "produced_at",
+          "revisions"
+        ],
+        "title": "ScopeSweepView",
         "type": "object"
       },
       "ScopeView": {
@@ -13221,6 +13328,67 @@
           }
         },
         "summary": "Run Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/routines/{routine_id}/sweeps": {
+      "get": {
+        "description": "``routine_id``'s per-scope last-swept table (D2, D3, D4) \u2014 every non-retired\nscope, plus any retired scope this routine has swept \u2014 and its measurement series\n(D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a malformed instant\nor a non-positive span.",
+        "operationId": "routine_sweeps_api_routines__routine_id__sweeps_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": true,
+            "schema": {
+              "title": "Until",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenSweepsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Routine Sweeps",
         "tags": [
           "routines"
         ]
