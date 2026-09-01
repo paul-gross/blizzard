@@ -224,8 +224,7 @@ export class GardeningRoutinesPage {
     asyncState(this.scopesQuery, this.scopeRows().length === 0),
   );
 
-  /** Set on a failed edit/retire/enable (issue #42's report-don't-swallow pattern);
-   * cleared at the start of the next attempt. */
+  /** Set on a failed edit/retire/enable; cleared at the start of the next attempt. */
   protected readonly scopeActionError = signal<string | null>(null);
 
   protected onEditScopeDescription(event: ScopeDescriptionEditEvent): void {
