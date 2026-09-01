@@ -4,8 +4,9 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import { type RoutineRunResponse, runRoutineApiRoutinesRoutineIdRunPost } from '../api/hub';
 import { hubRoutinesKey } from '../query-keys';
 
-/** Kick off a routine run — the gardening run dialog's own submission (D3's create-then
- * -run ordering runs this second, once any new scope's create has already succeeded). */
+/** Kick off a routine run — the gardening run dialog's own submission. The
+ * create-then-run ordering (D3) is `GardeningRunDialog.onSubmit`'s own fact, not
+ * restated here. */
 export interface RoutineRunVars {
   readonly routineId: string;
   readonly scopeSlug: string;
@@ -16,12 +17,11 @@ export interface RoutineRunVars {
 /**
  * `POST /api/routines/{routine_id}/run` through the generated client
  * (bzh:generated-client) — mints, ingests, and promotes a hub work item from the
- * routine in one act. A requested `delta` with no recorded baseline downgrades to
- * `full` on the response rather than refusing (`RoutineRunResponse.downgraded`); the
- * dialog itself never submits `delta` for a never-swept pair (the baselines read
- * steers it to `full` first), so a downgrade here would be racing another writer. On
- * success, invalidates the routine list — a run leaves no field on the routine record
- * unchanged apart from usage the fleet views re-read on their own.
+ * routine in one act. Submits exactly the mode it is given and resolves no baseline
+ * itself; a requested `delta` with no recorded baseline downgrades to `full` on the
+ * response rather than refusing (`RoutineRunResponse.downgraded`). On success,
+ * invalidates the routine list — a run leaves no field on the routine record unchanged
+ * apart from usage the fleet views re-read on their own.
  */
 export function injectRunRoutineMutation() {
   const queryClient = inject(QueryClient);

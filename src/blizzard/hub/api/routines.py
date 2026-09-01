@@ -229,9 +229,9 @@ def _baseline_view(baseline: RoutineBaseline) -> RoutineBaselineView:
 def routine_baselines(
     routine_id: str, services: Annotated[HubServices, Depends(get_services)]
 ) -> list[RoutineBaselineView]:
-    """Every scope `routine_id` has swept (D5) — the picker's ordering, the delta
-    baseline display, and the delta-steering rule all read this one route. Absence from
-    the response *is* "never swept"; 404 on an unknown routine id."""
+    """Every scope `routine_id` has swept (D5) — see
+    `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.
+    404 on an unknown routine id."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")

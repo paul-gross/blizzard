@@ -26,6 +26,17 @@ import { CdkTrapFocus } from '@angular/cdk/a11y';
  * `open` gates rendering outright (`@if`) rather than a `hidden`/`display:none` toggle,
  * so a closed dialog contributes no element — and no trapped focus — to the page at
  * all, and every open re-mounts a fresh focus-trap capture.
+ *
+ * The panel's header/body/footer rows are named `.p-hdr`/`.p-body`/`.p-ftr`
+ * (blizzard#399 F15) — {@link KitPanel}'s own slot-naming convention, not a second
+ * scheme invented alongside it, even though this dialog does not compose
+ * `<fleet-kit-panel>` directly: `KitPanel` models one header over one
+ * continuously-scrolling body, and this dialog needs a third, always-visible,
+ * non-scrolling region for its footer actions that model has no slot for. The frame
+ * (gradient background, border — `kit-dialog.css`'s `.panel`) still mirrors
+ * `KitPanel`'s `:host` rule byte-for-byte, but through the same `--kit-panel-bg`
+ * override custom property `KitPanel` exposes rather than an independent hardcoded
+ * default, so retuning that token retunes both chrome families together.
  */
 @Component({
   selector: 'fleet-kit-dialog',

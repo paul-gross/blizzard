@@ -23,6 +23,19 @@ const BASELINES = [
   },
 ];
 
+/** Like `settle`, but never calls `whenStable()` — a pending mutation registers itself
+ * as an Angular `PendingTasks` entry (`@tanstack/angular-query-experimental`'s own
+ * integration), so `whenStable()` would block until it resolves. Only the submit-
+ * dismissal-guard test below needs a mutation to stay genuinely pending mid-test; every
+ * other test can use `settle`. */
+async function pump(fixture: { detectChanges(): void }, ticks = 5): Promise<void> {
+  for (let i = 0; i < ticks; i += 1) {
+    fixture.detectChanges();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  fixture.detectChanges();
+}
+
 async function mount(route: (method: string, path: string) => unknown) {
   const stub = stubRequestClient(hubClient, route);
   await TestBed.configureTestingModule({
@@ -34,7 +47,6 @@ async function mount(route: (method: string, path: string) => unknown) {
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(GardeningRunDialog);
-  fixture.componentRef.setInput('open', true);
   fixture.componentRef.setInput('routineId', 'rtn_1');
   fixture.componentRef.setInput('routineName', 'gardening');
   await settle(fixture);
@@ -313,5 +325,112 @@ describe('GardeningRunDialog', () => {
 
     expect(el.querySelector('[data-testid="run-submit-error"]')?.textContent).toContain('malformed slug');
     expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')).toHaveLength(0);
+  });
+
+  it('keeps a submitting run mounted through Escape, a backdrop click, and a disabled Cancel', async () => {
+    const mounted = await mount(defaultRoute);
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+
+    let resolveRun!: (response: Response) => void;
+    const pendingRun = new Promise<Response>((resolve) => {
+      resolveRun = resolve;
+    });
+    // Overrides the mount's own stub so the run POST hangs until resolved below —
+    // `stubRequestClient`'s `route` callback is read synchronously (never awaited), so
+    // it cannot itself model a request that stays in flight.
+    hubClient.setConfig({
+      baseUrl: 'http://localhost',
+      fetch: (async (input: Request) => {
+        const url = new URL(input.url);
+        if (input.method.toUpperCase() === 'POST' && url.pathname === '/api/routines/rtn_1/run') {
+          return pendingRun;
+        }
+        return new Response(JSON.stringify(defaultRoute(input.method.toUpperCase(), url.pathname)), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof fetch,
+    });
+
+    el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.click();
+    await pump(fixture);
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-cancel"]')!.disabled).toBe(true);
+
+    el.querySelector<HTMLElement>('.scrim')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    el.querySelector<HTMLElement>('.scrim')!.click();
+    await pump(fixture);
+
+    expect(el.querySelector('[data-testid="gardening-run-dialog"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="run-confirmation"]')).toBeNull();
+
+    resolveRun(
+      new Response(
+        JSON.stringify({
+          chunk_id: 'ch_new',
+          source: 'hub',
+          ref: '1',
+          title: 'gardening run (full)',
+          body: 'Routine: gardening',
+          routine_name: 'gardening',
+          scope_slug: 'web',
+          effective_mode: 'full',
+          downgraded: false,
+          baseline_finding_set_id: null,
+          baseline_revisions: null,
+          created_at: '2026-03-01T00:00:00Z',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="run-confirmation"]')).not.toBeNull();
+  });
+
+  it('trims a newly minted slug and description before they reach POST /api/scopes', async () => {
+    const mounted = await mount(defaultRoute);
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+
+    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-new"]')!.click();
+    await settle(fixture);
+    const slugInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-slug"]')!;
+    slugInput.value = '  fresh-scope  ';
+    slugInput.dispatchEvent(new Event('input'));
+    await settle(fixture);
+    const descInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-description"]')!;
+    descInput.value = '  a fresh weed patch  ';
+    descInput.dispatchEvent(new Event('input'));
+    await settle(fixture);
+
+    el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    const createCalls = stub.forRoute('/api/scopes', 'POST');
+    expect(createCalls).toHaveLength(1);
+    expect(createCalls[0].body).toEqual({ slug: 'fresh-scope', description: 'a fresh weed patch' });
+  });
+
+  it('still offers the mint escape hatch when GET /api/scopes returns zero rows', async () => {
+    const mounted = await mount((method, path) => {
+      if (method === 'GET' && path === '/api/scopes') return [];
+      if (method === 'GET' && path === '/api/routines/rtn_1/baselines') return [];
+      return defaultRoute(method, path);
+    });
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+
+    expect(el.querySelector('[data-testid="run-dialog-empty"]')?.textContent).toContain('No scopes declared yet.');
+
+    const mintOption = el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-new"]')!;
+    expect(mintOption).not.toBeNull();
+    mintOption.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="run-new-scope-slug"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="run-new-scope-description"]')).not.toBeNull();
   });
 });

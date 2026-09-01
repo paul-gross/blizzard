@@ -1280,7 +1280,7 @@
   "blizzard/hub/composition.py": {
    "comments": 76,
    "docstrings": 14,
-   "total": 533
+   "total": 534
   },
   "blizzard/hub/config.py": {
    "comments": 45,
@@ -1298,9 +1298,9 @@
    "total": 28
   },
   "blizzard/hub/delivery/hub_node.py": {
-   "comments": 45,
+   "comments": 48,
    "docstrings": 57,
-   "total": 666
+   "total": 677
   },
   "blizzard/hub/delivery/internal/__init__.py": {
    "comments": 0,
@@ -1634,8 +1634,8 @@
   },
   "blizzard/hub/domain/routine_baselines.py": {
    "comments": 0,
-   "docstrings": 20,
-   "total": 83
+   "docstrings": 17,
+   "total": 80
   },
   "blizzard/hub/domain/routine_run.py": {
    "comments": 0,
@@ -3796,8 +3796,8 @@
   },
   "e2e/test_gardening_run_dialog_browser_e2e.py": {
    "comments": 9,
-   "docstrings": 15,
-   "total": 136
+   "docstrings": 10,
+   "total": 131
   },
   "e2e/test_gate_decision_e2e.py": {
    "comments": 14,
@@ -3966,8 +3966,8 @@
   },
   "service/test_routine_baselines_service.py": {
    "comments": 0,
-   "docstrings": 6,
-   "total": 51
+   "docstrings": 11,
+   "total": 74
   },
   "service/test_runner_auth_service.py": {
    "comments": 6,
@@ -4845,9 +4845,9 @@
    "total": 153
   },
   "test_hub_command_node.py": {
-   "comments": 57,
-   "docstrings": 80,
-   "total": 1399
+   "comments": 59,
+   "docstrings": 83,
+   "total": 1451
   },
   "test_hub_command_runner.py": {
    "comments": 0,

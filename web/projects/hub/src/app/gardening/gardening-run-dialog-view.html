@@ -1,5 +1,5 @@
 <fleet-kit-dialog
-  [open]="open()"
+  [open]="true"
   [ariaLabel]="'Run ' + routineName()"
   testid="gardening-run-dialog"
   (closed)="onClosed()"
@@ -31,7 +31,7 @@
       errorTestid="run-dialog-error"
       loadingTestid="run-dialog-loading"
     />
-    @if (state() === 'ready') {
+    @if (state() === 'ready' || state() === 'empty') {
       <app-gardening-run-scope-field
         [scopes]="scopes()"
         [sweptSlugs]="sweptSlugs()"
@@ -84,14 +84,14 @@
 
       <fleet-kit-panel class="note-field" data-testid="run-note-field" aria-label="Charge note" label="Charge note">
         <div class="body">
-          <textarea
-            #noteInput
-            rows="3"
+          <fleet-kit-text-input
+            multiline
+            [rows]="3"
             placeholder="optional — folded into the run's own charge"
             [value]="note()"
-            (input)="note.set(noteInput.value)"
-            data-testid="run-note-input"
-          ></textarea>
+            (valueChange)="note.set($event)"
+            testid="run-note-input"
+          />
         </div>
       </fleet-kit-panel>
 

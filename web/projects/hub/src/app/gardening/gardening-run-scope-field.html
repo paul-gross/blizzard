@@ -36,25 +36,22 @@
 
     @if (selection().isNew) {
       <div class="new-scope">
-        <input
-          #newSlugInput
-          type="text"
+        <fleet-kit-text-input
           placeholder="slug"
           [value]="selection().slug"
-          (input)="onNewSlugInput(newSlugInput.value)"
-          data-testid="run-new-scope-slug"
+          (valueChange)="onNewSlugInput($event)"
+          testid="run-new-scope-slug"
         />
-        <input
-          #newDescriptionInput
-          type="text"
+        <fleet-kit-text-input
           placeholder="description (required)"
           [value]="selection().newDescription"
-          (input)="onNewDescriptionInput(newDescriptionInput.value)"
-          data-testid="run-new-scope-description"
+          (valueChange)="onNewDescriptionInput($event)"
+          testid="run-new-scope-description"
         />
         @if (nearMatches().length > 0) {
           <p class="near-match-warning" data-testid="run-scope-near-match-warning">
-            Close to an existing scope: {{ nearMatches().join(', ') }} — minting anyway will not touch it.
+            Close to an existing scope: {{ nearMatches().join(', ') }} — an exact match will reuse that scope instead
+            of creating a new one.
           </p>
         }
       </div>

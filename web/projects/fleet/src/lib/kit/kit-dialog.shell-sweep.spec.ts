@@ -71,7 +71,7 @@ describe('KitDialog shell sweep (web:shell-sweep, blizzard#399 D6)', () => {
       expect(Math.abs(leftGap - rightGap), `left gap ${leftGap} vs right gap ${rightGap}`).toBeLessThan(2);
 
       // The panel's own body scrolls a tall projection; the page behind it does not.
-      const body = root.querySelector<HTMLElement>('.body')!;
+      const body = root.querySelector<HTMLElement>('.p-body')!;
       expect(body.scrollHeight, 'body content must actually overflow to prove the scroll claim').toBeGreaterThan(
         body.clientHeight,
       );

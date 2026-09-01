@@ -8,6 +8,7 @@ import {
   KitDialog,
   KitOption,
   KitPanel,
+  KitTextInput,
   type KitAsyncStateValue,
   type RoutineBaselineView,
   type RoutineRunResponse,
@@ -35,18 +36,28 @@ export interface RunSubmission {
  *
  * Owns every field's live value as local signals — `scopeSelection`/`mode`/`note` —
  * since the host page renders this component (and its container) with `@if`, tearing
- * it down between runs (Phase 5's trigger), so a stale value never survives to a later
- * open the way a container-held signal would need an explicit reset to avoid.
+ * it down between runs (the routine panel's own `run` output), so a stale value never
+ * survives to a later open the way a container-held signal would need an explicit
+ * reset to avoid.
  */
 @Component({
   selector: 'app-gardening-run-dialog-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, GardeningRunScopeField, KitAsyncState, KitButton, KitDialog, KitOption, KitPanel, RouterLink],
+  imports: [
+    FleetWhen,
+    GardeningRunScopeField,
+    KitAsyncState,
+    KitButton,
+    KitDialog,
+    KitOption,
+    KitPanel,
+    KitTextInput,
+    RouterLink,
+  ],
   templateUrl: './gardening-run-dialog-view.html',
   styleUrl: './gardening-run-dialog-view.css',
 })
 export class GardeningRunDialogView {
-  readonly open = input.required<boolean>();
   readonly routineName = input.required<string>();
 
   /** Every non-retired scope, previously-swept-by-this-routine first (D5) — the
@@ -55,9 +66,8 @@ export class GardeningRunDialogView {
 
   readonly sweptSlugs = input.required<ReadonlySet<string>>();
 
-  /** Every scope's slug, retired included — forwarded to the scope field's own
-   * near-match check, which must warn on a retired slug's exact spelling even though
-   * the picker itself never offers it as a selectable row. */
+  /** Every scope's slug, retired included — see `GardeningRunScopeField.existingSlugs`
+   * for why. */
   readonly existingSlugs = input.required<ReadonlySet<string>>();
 
   /** Every scope this routine has swept, D5's own read — looked up by the currently

@@ -4,9 +4,8 @@ finding set's id, its recorded instant, and per repo the recorded revision with 
 much has landed since (D1).
 
 The instant is decoded from the finding-set id, never stored (D2) — the same idiom
-`foundation/ids.py`'s own docstring names for an entity that stores no timestamp
-column. Absence from the returned list *is* "never swept" (D5); this composes no
-opinion of its own about the scopes a routine has never touched."""
+`foundation/ids.py`'s own docstring names. See
+`IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means."""
 
 from __future__ import annotations
 
@@ -57,9 +56,7 @@ class RoutineBaselineService:
 
     def baselines_for(self, routine: Routine) -> list[RoutineBaseline]:
         """Newest-swept-first (`finding_set_id` descending) — the picker's own ordering
-        cue (D5). Takes the already-resolved routine (`bzh:domain-takes-objects`), the
-        same shape `RunService.run` takes: the caller resolves `routine_id` to its
-        `Routine` first."""
+        cue (D5). Takes the already-resolved routine (`bzh:domain-takes-objects`)."""
         sets = self._finding_sets.newest_by_scope_for_routine(routine.name)
         baselines = [self._baseline_of(finding_set) for finding_set in sets]
         return sorted(baselines, key=lambda b: b.finding_set_id, reverse=True)

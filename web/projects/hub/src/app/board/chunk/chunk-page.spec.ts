@@ -478,7 +478,10 @@ describe('Mobile chunk drill-down', () => {
 
     // Driven through the mounted ChunkAwaitingHuman's own controls, not the handler
     // directly — the wiring from that reused component up to this page is the point.
-    el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!.value = 'graphql';
+    const input = el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!;
+    input.value = 'graphql';
+    input.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
     el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
     await settle(harness.fixture);
     return el;

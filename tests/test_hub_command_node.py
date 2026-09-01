@@ -15,6 +15,7 @@ from typing import cast
 
 import pytest
 import yaml
+from sqlalchemy import select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
@@ -43,6 +44,7 @@ from blizzard.hub.domain.work import (
     HubNodePollFact,
     TransitionFact,
 )
+from blizzard.hub.store import schema as s
 from tests.support import (
     FakeHubCommandRunner,
     FakeHubWorkdir,
@@ -964,6 +966,56 @@ def test_mid_run_marker_callback_records_a_marker(tmp_path: Path) -> None:
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert any(a["name"] == "merged/acme-widget" for a in detail["artifacts"])
+
+
+@pytest.mark.component
+def test_a_fresh_merged_marker_records_the_delivery_landed_fact(tmp_path: Path) -> None:
+    """blizzard#399 D1: a `merged/<repo>` marker is the sole production choke point for
+    `count_landed_since` — a fresh write records it, a replay never double-counts, and a
+    non-`merged/` marker never touches it at all."""
+    hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _HUB_CMD_GRAPH_YAML}).status_code == 201
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]})
+    chunk_id = resp.json()["chunk_id"]
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+    graph = hub.services.graphs.get(chunk.graph_id)
+    assert graph is not None
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+
+    since = hub.clock.now() - timedelta(seconds=1)
+
+    other_marker = hub.client.post(
+        f"/api/chunks/{chunk_id}/hub-markers?node_id={merge_node.node_id}&epoch=1",
+        json={"name": "hub-log.land", "content": "irrelevant"},
+    )
+    assert other_marker.status_code == 200, other_marker.text
+    assert hub.services.chunks.delivery.count_landed_since("acme-widget", since) == 0
+
+    marker = hub.client.post(
+        f"/api/chunks/{chunk_id}/hub-markers?node_id={merge_node.node_id}&epoch=1",
+        json={"name": "merged/acme-widget", "content": "sha:abc123"},
+    )
+    assert marker.status_code == 200, marker.text
+    assert marker.json()["recorded"] is True
+    assert hub.services.chunks.delivery.count_landed_since("acme-widget", since) == 1
+    with hub.engine.begin() as conn:
+        row = conn.execute(
+            select(s.delivery_repo_landed.c.repo, s.delivery_repo_landed.c.commit_hash, s.delivery_repo_landed.c.landed_at)
+        ).one()
+        assert row.repo == "acme-widget"
+        assert row.commit_hash == "sha:abc123"
+        assert row.landed_at == hub.clock.now()
+
+    # Idempotent per (chunk, node, name, epoch) — a replay's `record_hub_artifact` returns
+    # False, so the delivery-landed count must not move (crash-recovery double-count).
+    replay = hub.client.post(
+        f"/api/chunks/{chunk_id}/hub-markers?node_id={merge_node.node_id}&epoch=1",
+        json={"name": "merged/acme-widget", "content": "sha:abc123"},
+    )
+    assert replay.json()["recorded"] is False
+    assert hub.services.chunks.delivery.count_landed_since("acme-widget", since) == 1
 
 
 @pytest.mark.component

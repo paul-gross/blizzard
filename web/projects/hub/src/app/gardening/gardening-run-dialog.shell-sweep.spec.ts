@@ -51,7 +51,6 @@ async function mount(width: number) {
     providers: [provideZonelessChangeDetection(), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(GardeningRunDialogView);
-  fixture.componentRef.setInput('open', true);
   fixture.componentRef.setInput('routineName', 'gardening');
   fixture.componentRef.setInput('scopes', SCOPES);
   fixture.componentRef.setInput('sweptSlugs', new Set(['web']));

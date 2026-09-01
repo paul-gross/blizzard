@@ -318,6 +318,7 @@ def build_services(
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
         artifacts=chunk_artifacts,
+        delivery=chunk_delivery,
         hub_exec=chunk_hub_exec,
         escalations=chunk_escalations,
         events=chunk_events,

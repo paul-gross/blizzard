@@ -108,14 +108,4 @@
 .answer-input {
   flex: 1;
   min-width: 0;
-  font-family: inherit;
-  font-size: var(--fs-sm);
-  background: var(--overlay-35);
-  border: 1px solid var(--line);
-  color: var(--text);
-  padding: 3px 6px;
-}
-.answer-input:focus-visible {
-  outline: 1px solid var(--cyan);
-  outline-offset: 0;
 }

@@ -63,8 +63,8 @@ class RoutineBaselineRepoView(BaseModel):
 
 
 class RoutineBaselineView(BaseModel):
-    """One scope a routine has swept (D5) — absence from the list this route serves
-    means the routine has never swept that scope."""
+    """One scope a routine has swept (D5) — see
+    `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means."""
 
     scope_slug: str
     finding_set_id: str

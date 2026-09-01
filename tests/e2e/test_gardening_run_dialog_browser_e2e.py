@@ -1,13 +1,8 @@
-"""The gardening run dialog, in a real browser — the `test_gardening_run_dialog_browser_e2e`
-scenario of the standing e2e smoke (blizzard#399 D6).
-
-A real Chromium (Playwright) over the served board opens the dialog from the selected
-routine's own panel (blizzard#397's routine-record panel, the reachability surface D7's
-provisional trigger was superseded by), proving the create-then-run submission (D3) and
-the never-swept delta-steering (D5) round-trip against a live hub — no unit test reaches
-the real dialog chrome (`KitDialog`'s own focus trap) or a real `POST`/`POST` pair
-landing a chunk. No runner or forge traffic: the routine's run mints a queued chunk,
-never executed here. Needs the built bundle (``mise run web-build``)."""
+"""The gardening run dialog, in a real browser (blizzard#399 D6): a real Chromium
+(Playwright) opens it from the selected routine's own panel, proving the
+create-then-run submission (D3) and the never-swept delta-steering (D5) round-trip
+against a live hub. No runner or forge traffic: the routine's run mints a queued
+chunk, never executed here. Needs the built bundle (``mise run web-build``)."""
 
 from __future__ import annotations
 

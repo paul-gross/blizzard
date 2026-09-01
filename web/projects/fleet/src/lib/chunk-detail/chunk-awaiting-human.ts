@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import type { ChunkDetail, ChunkStatus, DecisionView, QuestionView } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
+import { KitTextInput } from '../kit/kit-text-input';
 import { ChunkEscalation } from './chunk-escalation';
 import { ChunkGateDocket } from './chunk-gate-docket';
 
@@ -48,7 +49,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
 @Component({
   selector: 'fleet-chunk-detail-awaiting-human',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkEscalation, ChunkGateDocket, KitButton],
+  imports: [ChunkEscalation, ChunkGateDocket, KitButton, KitTextInput],
   templateUrl: './chunk-awaiting-human.html',
   styleUrl: './chunk-awaiting-human.css',
 })
@@ -76,6 +77,13 @@ export class ChunkAwaitingHuman {
   /** The docket's toggled ids, carried up via its `struckChange` output — read at
    * resolve time rather than reaching back into the docket's own state. */
   private readonly struckIds = signal<readonly string[]>([]);
+
+  /** Each open question's in-progress answer, keyed by `question_id` — `KitTextInput`
+   * is a controlled control (`bzh:frontend-kit-floor`'s shared chrome extraction), so
+   * this dock now holds the live draft itself rather than reading a template-ref'd
+   * `<input>`'s `.value` at submit time, one draft per question since several can be
+   * open at once. */
+  private readonly answerDrafts = signal<Readonly<Partial<Record<string, string>>>>({});
 
   /** The chunk's open (unanswered) questions — the ask a parked chunk waits on. */
   protected readonly openQuestions = computed<readonly QuestionView[]>(() =>
@@ -131,11 +139,29 @@ export class ChunkAwaitingHuman {
     return decision && !decision.transitioned ? decision : null;
   });
 
-  /** Emit an answer for a question — no-op on an empty answer. */
+  /** The live draft for one question's answer field — `''` for a question the
+   * operator has not typed into yet. */
+  protected answerDraft(questionId: string): string {
+    return this.answerDrafts()[questionId] ?? '';
+  }
+
+  /** Records a question's answer field as the operator types — carried up from
+   * `KitTextInput`'s `valueChange`. */
+  protected onAnswerInput(questionId: string, value: string): void {
+    this.answerDrafts.update((drafts) => ({ ...drafts, [questionId]: value }));
+  }
+
+  /** Emit an answer for a question — no-op on an empty answer — and clear its draft,
+   * the same reset the old uncontrolled `<input>` did by blanking its own `.value`. */
   protected submitAnswer(questionId: string, answer: string): void {
     const trimmed = answer.trim();
     if (!trimmed) return;
     this.answerQuestion.emit({ questionId, answer: trimmed, chunkId: this.detail().chunk_id });
+    this.answerDrafts.update((drafts) => {
+      const next = { ...drafts };
+      delete next[questionId];
+      return next;
+    });
   }
 
   /** Emit a resolution for the open gate decision, carrying whatever the docket's

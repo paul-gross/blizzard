@@ -35,20 +35,6 @@
   margin: 6px 0 2px 24px;
 }
 
-.new-scope input {
-  font-family: inherit;
-  font-size: var(--fs-sm);
-  background: var(--overlay-35);
-  border: 1px solid var(--line);
-  color: var(--text);
-  padding: 4px 6px;
-}
-
-.new-scope input:focus-visible {
-  outline: 1px solid var(--cyan);
-  outline-offset: 0;
-}
-
 .near-match-warning {
   margin: 4px 0 0;
   font-size: var(--fs-xs);

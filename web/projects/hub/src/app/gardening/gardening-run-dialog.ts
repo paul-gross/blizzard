@@ -24,9 +24,10 @@ import { GardeningRunDialogView, type RunSubmission } from './gardening-run-dial
  * data into the scope ordering D5 names and delegates every field and the submission
  * flow to {@link GardeningRunDialogView} (`bzh:frontend-container-presentational`).
  *
- * The host page mounts this with `@if` around the selected routine (Phase 5's
- * trigger), so a fresh instance — and a fresh view, with its own fresh form signals —
- * exists for every open; nothing here needs to reset a stale field on close.
+ * The host page mounts this with `@if` around the selected routine (the routine
+ * panel's own `run` output), so a fresh instance — and a fresh view, with its own
+ * fresh form signals — exists for every open; nothing here needs to reset a stale
+ * field on close.
  */
 @Component({
   selector: 'app-gardening-run-dialog',
@@ -35,7 +36,6 @@ import { GardeningRunDialogView, type RunSubmission } from './gardening-run-dial
   templateUrl: './gardening-run-dialog.html',
 })
 export class GardeningRunDialog {
-  readonly open = input.required<boolean>();
   readonly routineId = input.required<string>();
   readonly routineName = input.required<string>();
 
@@ -56,10 +56,8 @@ export class GardeningRunDialog {
     () => new Set((this.baselinesQuery.data() ?? []).map((b) => b.scope_slug)),
   );
 
-  /** Every scope's slug, retired included — the picker itself still only ever
-   * offers a live one, but the near-match warning must still fire on a retired slug's
-   * exact spelling: without this, minting a name identical to a retired scope gets no
-   * warning at all, and the run that follows refuses the retired scope outright. */
+  /** Every scope's slug, retired included — see `GardeningRunScopeField.existingSlugs`
+   * for why. */
   protected readonly existingSlugs = computed<ReadonlySet<string>>(
     () => new Set((this.scopesQuery.data() ?? []).map((s) => s.slug)),
   );
@@ -77,10 +75,10 @@ export class GardeningRunDialog {
     return [...sweptOrdered, ...rest];
   });
 
-  /** `isEmpty` reads the scopes read's own literal count — never hardcoded — so the
-   * "No scopes declared yet" branch stays reachable rather than dead code, even
-   * though a routine's own auto-minted default scope means it practically never
-   * fires once any routine exists. */
+  /** `isEmpty` reads the scopes read's own literal count — never hardcoded. A zero
+   * count still renders the rest of the form: the mint escape hatch is the only way a
+   * zero-scope routine ever gets its first scope, so `'empty'` can't gate it away the
+   * way it gates away the (nonexistent) list of existing scopes. */
   protected readonly state = computed(() =>
     asyncStateOf([this.scopesQuery, this.baselinesQuery], (this.scopesQuery.data() ?? []).length === 0),
   );

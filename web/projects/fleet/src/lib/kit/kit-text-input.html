@@ -1,0 +1,21 @@
+@if (multiline()) {
+  <textarea
+    class="ctl"
+    [rows]="rows()"
+    [placeholder]="placeholder()"
+    [attr.aria-label]="ariaLabel()"
+    [attr.data-testid]="testid()"
+    [value]="value()"
+    (input)="onInput($event)"
+  ></textarea>
+} @else {
+  <input
+    class="ctl"
+    type="text"
+    [placeholder]="placeholder()"
+    [attr.aria-label]="ariaLabel()"
+    [attr.data-testid]="testid()"
+    [value]="value()"
+    (input)="onInput($event)"
+  />
+}

@@ -36,23 +36,6 @@ h2 {
   margin: 0 0 12px;
 }
 
-.note-field textarea {
-  width: 100%;
-  font-family: inherit;
-  font-size: var(--fs-sm);
-  background: var(--overlay-35);
-  border: 1px solid var(--line);
-  color: var(--text);
-  padding: 6px;
-  resize: vertical;
-  box-sizing: border-box;
-}
-
-.note-field textarea:focus-visible {
-  outline: 1px solid var(--cyan);
-  outline-offset: 0;
-}
-
 .cli-verb {
   font-family: var(--mono);
   font-size: var(--fs-xs);

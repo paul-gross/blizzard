@@ -20,18 +20,18 @@
             </div>
           }
           <div class="answer-row">
-            <input
-              #answerInput
+            <fleet-kit-text-input
               class="answer-input"
-              type="text"
-              data-testid="answer-input"
+              testid="answer-input"
               placeholder="Type an answer…"
-              [attr.aria-label]="'Answer question ' + q.question_id"
+              [ariaLabel]="'Answer question ' + q.question_id"
+              [value]="answerDraft(q.question_id)"
+              (valueChange)="onAnswerInput(q.question_id, $event)"
             />
             <fleet-kit-button
               variant="primary"
               testid="answer-submit"
-              (click)="submitAnswer(q.question_id, answerInput.value); answerInput.value = ''"
+              (click)="submitAnswer(q.question_id, answerDraft(q.question_id))"
             >
               Answer
             </fleet-kit-button>

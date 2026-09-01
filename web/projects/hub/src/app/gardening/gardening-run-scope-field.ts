@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { KitOption, KitPanel, type ScopeView } from 'fleet';
+import { KitOption, KitPanel, KitTextInput, type ScopeView } from 'fleet';
 
 /** The run dialog's own scope-field state — an existing slug, or a new one the
  * operator is minting alongside its description (D3, D4). */
@@ -68,7 +68,7 @@ function isNearMatch(typed: string, existing: string): boolean {
 @Component({
   selector: 'app-gardening-run-scope-field',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitOption, KitPanel],
+  imports: [KitOption, KitPanel, KitTextInput],
   templateUrl: './gardening-run-scope-field.html',
   styleUrl: './gardening-run-scope-field.css',
 })

@@ -5,8 +5,7 @@ import { hubRoutineBaselinesKey } from '../query-keys';
 
 /**
  * Hub `GET /api/routines/{routine_id}/baselines` read — every scope a routine has
- * swept (D5): absence of a scope from the list means it has never been swept, not an
- * error. Feeds the gardening run dialog's delta-mode baseline display.
+ * swept (D5); absence means never swept.
  *
  * Reactive over the selected routine id, exactly like {@link injectHubChunkDetailQuery}:
  * pass an accessor — the query re-keys as the selection changes and disables itself

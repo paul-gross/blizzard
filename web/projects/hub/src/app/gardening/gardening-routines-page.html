@@ -11,7 +11,6 @@
 
 @if (runningRoutine(); as routine) {
   <app-gardening-run-dialog
-    [open]="true"
     [routineId]="routine.routine_id"
     [routineName]="routine.name"
     (closed)="closeDialog()"
