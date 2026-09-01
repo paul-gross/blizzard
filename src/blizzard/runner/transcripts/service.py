@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.runner.domain.leases import IReadLeaseRepository, LeaseRecord
+from blizzard.runner.domain.leases import IReadLeaseRecordRepository, LeaseRecord
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
@@ -47,7 +47,7 @@ class TranscriptService:
 
     def __init__(
         self,
-        leases: IReadLeaseRepository,
+        leases: IReadLeaseRecordRepository,
         transcript_ledger: IReadTranscriptLedgerRepository,
         environments: IReadEnvironmentRepository,
         transcripts: IReadTranscriptRepository,

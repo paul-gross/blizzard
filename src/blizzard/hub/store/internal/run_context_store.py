@@ -17,7 +17,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 
 def insert_run_context_row(conn: Connection, work_item_id: str, context: RunContext) -> None:
     """Insert one ``work_item_runs`` row on a caller-supplied ``conn`` — mirrors
-    :func:`~blizzard.hub.store.internal.chunk_store.insert_chunk_rows`'s shared-connection
+    :func:`~blizzard.hub.store.internal.chunk_rows.insert_chunk_rows`'s shared-connection
     shape, so a routine run's own composite write folds this into its own transaction
     (blizzard#392/#393)."""
     conn.execute(

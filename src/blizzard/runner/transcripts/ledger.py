@@ -188,14 +188,14 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
     ) -> str:
         """Stamp a segment boundary outside a spawn and return its id (blizzard#250), cursor
         unset so the pump reads the session from the start. Every boundary the *live* lane
-        stamps stays :meth:`~blizzard.runner.domain.leases.IWriteLeaseRepository.record_spawn`'s;
+        stamps stays :meth:`~blizzard.runner.domain.leases.IWriteLeaseLivenessRepository.record_spawn`'s;
         this one is the backfill's alone. ``supersedes`` is the re-ship's own pointer at the
         segment this one replaces on the hub."""
         ...
 
     def finalize_transcript_segment(self, segment_id: str, *, finalized_at: datetime) -> bool:
         """Close one segment out on its own, enqueuing its single final marker in the same
-        transaction — :meth:`~blizzard.runner.domain.leases.IWriteLeaseRepository.record_closure`'s
+        transaction — :meth:`~blizzard.runner.domain.leases.IWriteLeaseRecordRepository.record_closure`'s
         per-segment half, for a segment whose lease closed long before it existed. ``False``
         when it was already finalized."""
         ...

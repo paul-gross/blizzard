@@ -1,7 +1,7 @@
 """The write-protocol census (D5, blizzard#317 Phase 3) — every write-only member
 :class:`~blizzard.runner.stores.IWriteRunnerStore` requires, whether declared on
 its own class body or on a concept Protocol it inherits (e.g.
-:class:`~blizzard.runner.domain.leases.IWriteLeaseRepository`, blizzard#410), mapped to
+:class:`~blizzard.runner.domain.leases.IWriteLeaseRecordRepository`, blizzard#410), mapped to
 either the event kind its mutation publishes (:class:`Published`) or a stated reason it
 publishes nothing (:class:`Silent`). Exhaustiveness is carried by
 ``tests/test_runner_write_protocol_census.py``, this module's only reader — which is also

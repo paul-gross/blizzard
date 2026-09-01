@@ -68,7 +68,7 @@ class ChunkView:
         return cls(
             services=services,
             chunk=chunk,
-            facts=services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True),
+            facts=services.chunks.facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True),
             names=names or GraphNames(services.graphs.get),
         )
 
@@ -83,10 +83,10 @@ class ChunkView:
 
     def _resolved_route(self) -> Route | None:
         """The chunk's route: the injected value if one was given, otherwise fetched lazily
-        via :meth:`~blizzard.hub.domain.work.IReadChunkRepository.route_of`."""
+        via :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.route_of`."""
         if self.route is not _ROUTE_NOT_INJECTED:
             return self.route
-        return self.services.chunks.route_of(self.chunk.chunk_id)
+        return self.services.chunks.route.route_of(self.chunk.chunk_id)
 
     def summary(self) -> ChunkSummary:
         """The derived fleet-list row (issue #104) — rendered both by the list read and by
@@ -100,7 +100,7 @@ class ChunkView:
         elif self.route is not _ROUTE_NOT_INJECTED:
             route = self.route
         else:
-            route = self.services.chunks.route_of(self.chunk.chunk_id)
+            route = self.services.chunks.route.route_of(self.chunk.chunk_id)
         completed_at = self.facts.completed_at()
         return ChunkSummary(
             chunk_id=self.chunk.chunk_id,
@@ -158,7 +158,7 @@ class ChunkView:
     def detail(self) -> ChunkDetail:
         node_id, node_name = self.current_node()
         graph = self.names.graph(self.chunk.graph_id)
-        artifacts = self.services.chunks.load_artifacts(self.chunk.chunk_id)
+        artifacts = self.services.chunks.artifacts.load_artifacts(self.chunk.chunk_id)
         history = ChunkHistoryView(self.facts, self.names)
         return ChunkDetail(
             chunk_id=self.chunk.chunk_id,
@@ -181,7 +181,7 @@ class ChunkView:
             migrations=history.migrations(),
             restarts=history.restarts(),
             artifacts=self._artifacts(artifacts),
-            questions=[question_view(q) for q in self.services.chunks.load_questions(self.chunk.chunk_id)],
+            questions=[question_view(q) for q in self.services.chunks.questions.load_questions(self.chunk.chunk_id)],
             awaiting_external_merge=self.facts.awaiting_external_merge(),
             open_prs=[PrView(repo=pr.repo, number=pr.number, url=pr.url) for pr in self.facts.pr_opened],
             cost=self.usage_total(),
@@ -214,7 +214,7 @@ class ChunkView:
         return PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None
 
     def _decision(self) -> DecisionView | None:
-        decision = self.services.chunks.decision_for_chunk(self.chunk.chunk_id)
+        decision = self.services.chunks.decisions.decision_for_chunk(self.chunk.chunk_id)
         return to_decision_view(decision) if decision is not None else None
 
     def _pending(self) -> PendingView | None:

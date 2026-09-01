@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
-from blizzard.runner.domain.leases import IReadLeaseRepository
+from blizzard.runner.domain.leases import IReadLeaseRecordRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment, IWorkspaceProvider
 from blizzard.runner.environments.repository import IWriteEnvironmentRepository
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -18,7 +18,7 @@ class EnvironmentRelease:
     when a just-recorded binding's claim never landed."""
 
     environments: IWriteEnvironmentRepository
-    leases: IReadLeaseRepository
+    leases: IReadLeaseRecordRepository
     clock: IClock
     provider: IWorkspaceProvider
     worker_files: WorkerStdoutFiles

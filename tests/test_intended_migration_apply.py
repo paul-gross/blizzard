@@ -274,7 +274,7 @@ def test_auto_name_match_migrates(tmp_path: Path) -> None:
     assert detail["current_node_name"] == "deliver"  # name-match landing on the destination
     assert detail["intended_migration"] is None  # cleared
     assert any(a["name"] == "notes" for a in detail["artifacts"])  # the step's artifacts carried
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert len(facts.migrations) == 1
     assert len(facts.transitions) == 0  # a migration, never a transitions row
@@ -295,7 +295,7 @@ def test_auto_no_match_leaves_intent_set_across_two_transitions(tmp_path: Path) 
     assert detail["graph_id"] != nomatch_id  # never migrated
     assert detail["current_node_name"] == "deliver"  # ordinary transition landed here
     assert detail["intended_migration"] is not None  # still set
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert len(facts.migrations) == 0
     assert len(facts.transitions) == 1
@@ -309,7 +309,7 @@ def test_auto_no_match_leaves_intent_set_across_two_transitions(tmp_path: Path) 
     assert detail["graph_id"] == nomatch_id
     assert detail["current_node_name"] == "ship"
     assert detail["intended_migration"] is None
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert len(facts.migrations) == 1
     assert len(facts.transitions) == 1  # still just the one ordinary transition from before
@@ -390,7 +390,7 @@ def test_no_epoch_bump_at_migration_time_and_the_submitting_attempt_completes(tm
     # no fresh epoch minted as part of the migration itself.
     assert resp.status_code == 200, resp.text
     assert resp.json()["outcome"] == "migrated"
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert len(facts.migrations) == 1
     assert facts.migrations[0].epoch == 1  # the submitting epoch, not a bumped one
@@ -414,7 +414,7 @@ def test_forced_target_retired_at_consult_is_skipped(tmp_path: Path) -> None:
     assert detail["current_node_name"] == "deliver"  # the transition's own destination
     assert detail["intended_migration"] is not None  # left set — the operator can cancel/re-aim
     assert detail["intended_migration"]["node_name"] == "ship"
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert len(facts.migrations) == 0
 
@@ -464,7 +464,7 @@ def test_gate_resolution_site_consults_the_intent_and_closes_the_decision(tmp_pa
     # The gate's decision is closed — a migration writes no transitions row, so without
     # threading decision_id through this would stay a live phantom decision.
     assert detail["decision"] is None
-    closed = hub.services.chunks.get_decision(decision_id)
+    closed = hub.services.chunks.decisions.get_decision(decision_id)
     assert closed is not None and closed.transitioned is True
 
 
@@ -482,7 +482,7 @@ def test_a_replayed_intended_migration_completion_rederives_its_outcome(tmp_path
     assert second.status_code == 200, second.text
     assert second.json()["outcome"] == "migrated"
 
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert len(facts.migrations) == 1  # idempotent — the natural key guards a double submit
 
@@ -500,6 +500,6 @@ def test_a_replayed_hub_landing_intended_migration_returns_hub_node_taken(tmp_pa
     assert second.status_code == 200, second.text
     assert second.json()["outcome"] == "hub_node_taken"  # never "migrated" on replay (#111)
 
-    facts = hub.services.chunks.load_facts(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert len(facts.migrations) == 1

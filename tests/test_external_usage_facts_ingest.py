@@ -17,10 +17,9 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.facts import FactIngestService
 from blizzard.hub.domain.registry import FleetService
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.wire.facts import EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED, RunnerFact, RunnerFactBatch
-from tests.support import build_hub, emitted_events, hub_store_connections, migrate_to
+from tests.support import build_hub, chunk_stores, emitted_events, hub_store_connections, migrate_to
 
 pytestmark = pytest.mark.component
 
@@ -43,9 +42,18 @@ def _payload(*, sampled_at: datetime, utilization_pct: float) -> dict:
 
 def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
     store = hub_store_connections(engine)
-    chunks = ChunkStore(store, clock)
+    chunks = chunk_stores(engine, clock)
     fleet = FleetService(registry=RunnerRegistryStore(store), clock=clock)
-    return FactIngestService(chunks=chunks, fleet=fleet, clock=clock)
+    return FactIngestService(
+        facts=chunks.facts,
+        route=chunks.route,
+        escalations=chunks.escalations,
+        questions=chunks.questions,
+        usage=chunks.usage,
+        events=chunks.events,
+        fleet=fleet,
+        clock=clock,
+    )
 
 
 def _row(engine: sa.Engine, runner_id: str):  # type: ignore[no-untyped-def]

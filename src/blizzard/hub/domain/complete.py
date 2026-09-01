@@ -9,14 +9,19 @@ from __future__ import annotations
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.work import Chunk, ChunkFacts, IWriteChunkRepository
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.work import Chunk, ChunkFacts
 
 
 class CompleteService:
     """Manually complete a chunk, from any non-``done`` status — ``blizzard hub chunk done``."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
-        self._chunks = chunks
+    def __init__(
+        self, *, facts: IReadChunkFactsRepository, lifecycle: IWriteChunkLifecycleRepository, clock: IClock
+    ) -> None:
+        self._facts = facts
+        self._lifecycle = lifecycle
         self._clock = clock
 
     def complete(self, chunk: Chunk, *, by: str) -> int | None:
@@ -24,7 +29,7 @@ class CompleteService:
         hub-exec slot), atomically. A complete no-op on an already-``done`` chunk — returns
         ``None`` rather than writing a second fact. Otherwise returns the fresh
         ``chunk_completed.id`` (issue #213's activity-feed key)."""
-        facts = self._chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
+        facts = self._facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
         if facts.status() is ChunkStatus.DONE:
             return None
-        return self._chunks.record_completion(chunk.chunk_id, by=by, at=self._clock.now())
+        return self._lifecycle.record_completion(chunk.chunk_id, by=by, at=self._clock.now())

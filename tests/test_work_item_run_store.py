@@ -14,27 +14,27 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkRef, mint_chunk
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
-from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import hub_store_connections, seed_chunk, seed_graph
+from tests.support import chunk_stores, hub_store_connections, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _stores(tmp_path: Path) -> tuple[WorkItemStore, ChunkStore, RunContextStore, Engine]:
+def _stores(tmp_path: Path) -> tuple[WorkItemStore, ChunkStores, RunContextStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
     conns = hub_store_connections(engine)
-    return WorkItemStore(conns), ChunkStore(conns, FixedClock(_NOW)), RunContextStore(conns), engine
+    return WorkItemStore(conns), chunk_stores(engine, FixedClock(_NOW)), RunContextStore(conns), engine
 
 
 def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> None:
@@ -88,14 +88,14 @@ def test_chunk_lands_ready_carrying_the_routines_defaults(tmp_path: Path) -> Non
         position=0.0,
     )
 
-    minted = chunks.get(chunk.chunk_id)
+    minted = chunks.record.get(chunk.chunk_id)
     assert minted is not None
     assert minted.default_model == ["opus"]
     assert minted.default_effort == "high"
-    facts = chunks.load_facts(chunk.chunk_id)
+    facts = chunks.facts.load_facts(chunk.chunk_id)
     assert facts is not None
     assert facts.status() == ChunkStatus.READY
-    assert chunks.queue_positions()[chunk.chunk_id] == 0.0
+    assert chunks.queue.queue_positions()[chunk.chunk_id] == 0.0
 
 
 def test_tail_position_is_whatever_the_caller_computed(tmp_path: Path) -> None:
@@ -118,7 +118,7 @@ def test_tail_position_is_whatever_the_caller_computed(tmp_path: Path) -> None:
         position=7.5,
     )
 
-    assert chunks.queue_positions()[chunk.chunk_id] == 7.5
+    assert chunks.queue.queue_positions()[chunk.chunk_id] == 7.5
 
 
 def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
@@ -146,6 +146,6 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
         )
 
     assert items.get("hub", pointer.ref) is None
-    assert chunks.load_facts("ch_collide") is not None
-    assert not chunks.load_facts("ch_collide").promoted  # type: ignore[union-attr]
+    assert chunks.facts.load_facts("ch_collide") is not None
+    assert not chunks.facts.load_facts("ch_collide").promoted  # type: ignore[union-attr]
     assert run_context.for_chunk(colliding_chunk) is None

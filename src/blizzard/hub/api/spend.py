@@ -57,7 +57,7 @@ def fleet_spend(
     over every usage fact recorded at or after it, across every chunk. An optional
     ``until`` bounds the window's other edge, exclusive."""
     window = SpendWindow.of(since, until)
-    usage = UsageTotal.of(services.chunks.usage_since(window.since, until=window.until))
+    usage = UsageTotal.of(services.chunks.usage.usage_since(window.since, until=window.until))
     return FleetSpendView(
         since=since,
         until=until,

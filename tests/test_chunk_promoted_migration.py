@@ -19,8 +19,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store import ChunkStore
-from tests.support import hub_store_connections
+from tests.support import chunk_stores
 
 pytestmark = pytest.mark.component
 
@@ -44,8 +43,8 @@ def test_backfill_keeps_preexisting_chunks_ready(tmp_path: Path) -> None:
     # Upgrade to head — the chunk-promoted migration adds the table and back-fills the pre-existing chunk.
     runner.upgrade("head")
 
-    store = ChunkStore(hub_store_connections(engine), FixedClock(_T0))
-    facts = store.load_facts("ch_legacy")
+    store = chunk_stores(engine, FixedClock(_T0))
+    facts = store.facts.load_facts("ch_legacy")
     assert facts is not None and facts.promoted is True
     assert facts.status() is ChunkStatus.READY  # unaffected — still claimable
-    assert [c.chunk_id for c in store.list_ready()] == ["ch_legacy"]
+    assert [c.chunk_id for c in store.record.list_ready()] == ["ch_legacy"]

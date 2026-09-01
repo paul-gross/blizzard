@@ -2,8 +2,9 @@
 
 One place the store-backed collaborators are constructed and injected. Controllers read
 the stores through their **read** Protocols and mutate only through the services
-(``bzh:controller-read-only``); both variants are the one
-:class:`~blizzard.hub.store.internal.chunk_store.ChunkStore` instance."""
+(``bzh:controller-read-only``); every chunk seam below — ``HubServices.chunks``'s bundle and
+every domain service's own narrow parameter alike — is the same one of the 15
+``hub/store/internal/chunk_<seam>_store.py`` instances built here."""
 
 from __future__ import annotations
 
@@ -47,6 +48,7 @@ from blizzard.hub.domain.analytics.derivation import EventDerivationReconciler, 
 from blizzard.hub.domain.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.apply import ApplyService
+from blizzard.hub.domain.chunks.stores import ChunkReadStores
 from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.complete import CompleteService
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
@@ -80,7 +82,6 @@ from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptCaps, TranscriptIngestService
-from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.domain.work_closure import CloseIntentDrainer
 from blizzard.hub.domain.work_item_materialization import WorkItemMaterializationReconciler
 from blizzard.hub.domain.work_items import WorkItemEditService
@@ -90,7 +91,7 @@ from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
-from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
@@ -113,7 +114,11 @@ from blizzard.hub.work_sources.source import IWorkSourceRegistry
 class HubServices:
     """The wired fleet collaborators, stashed on ``app.state.services``."""
 
-    chunks: IReadChunkRepository
+    #: The controller-facing chunk-seam bundle — every field typed to its
+    #: concept's read Protocol only (``bzh:controller-read-only``), so a route handler
+    #: mutating through it fails type-check; the domain services below hold their own
+    #: narrower, write-capable seams directly.
+    chunks: ChunkReadStores
     graphs: IReadGraphRepository
     ingest: IngestService
     promote: PromoteService
@@ -274,18 +279,40 @@ def build_services(
     # The hub-store seam (issue #413) — one collaborator shared by every
     # ``hub/store/internal/`` adapter, replacing the bare engine (D2).
     store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
-    chunk_store = ChunkStore(store_connections, clock)
+    # The 15 chunk-seam adapters, in the one place their construction order is expressed.
+    chunk_stores = build_chunk_stores(store_connections, clock)
+    chunk_facts = chunk_stores.facts
+    chunk_record = chunk_stores.record
+    chunk_lifecycle = chunk_stores.lifecycle
+    chunk_work_refs = chunk_stores.work_refs
+    chunk_queue = chunk_stores.queue
+    chunk_route = chunk_stores.route
+    chunk_movement = chunk_stores.movement
+    chunk_artifacts = chunk_stores.artifacts
+    chunk_questions = chunk_stores.questions
+    chunk_decisions = chunk_stores.decisions
+    chunk_escalations = chunk_stores.escalations
+    chunk_events = chunk_stores.events
+    chunk_usage = chunk_stores.usage
+    chunk_delivery = chunk_stores.delivery
+    chunk_hub_exec = chunk_stores.hub_exec
     graph_store = GraphStore(store_connections)
     registry_store = RunnerRegistryStore(store_connections)
     transcript_store = TranscriptSegmentStore(store_connections)
     event_store = TranscriptEventStore(store_connections)
-    event_derivation_service = EventDerivationService(events=event_store, chunks=chunk_store, clock=clock)
+    event_derivation_service = EventDerivationService(
+        events=event_store, facts=chunk_facts, record=chunk_record, clock=clock
+    )
     event_derivation = EventDerivationReconciler(service=event_derivation_service, events=event_store)
     analytics_event_queries = AnalyticsEventQueryStore(store_connections)
     operational_analytics = AnalyticsOperationalStore(store_connections)
     marker_authority = MarkerAuthority()
     hub_node = HubNodeExecutor(
-        chunks=chunk_store,
+        facts=chunk_facts,
+        artifacts=chunk_artifacts,
+        hub_exec=chunk_hub_exec,
+        escalations=chunk_escalations,
+        events=chunk_events,
         runner=hub_command_runner or SubprocessHubCommandRunner(),
         workdir=hub_workdir
         or FilesystemHubWorkdir(hub_workdir_root or Path(tempfile.gettempdir()) / "blizzard-hub-workdirs"),
@@ -329,7 +356,14 @@ def build_services(
     # directory is passed; `None` otherwise.
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)
-    materialization_edits = WorkItemEditService(items=work_item_store, chunks=chunk_store, clock=clock, delete=delete)
+    materialization_edits = WorkItemEditService(
+        items=work_item_store,
+        work_refs=chunk_work_refs,
+        record=chunk_record,
+        facts=chunk_facts,
+        clock=clock,
+        delete=delete,
+    )
     graph_mint = GraphMintService(graphs=graph_store, clock=clock)
     scope_store = ScopeStore(store_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
@@ -346,31 +380,76 @@ def build_services(
         httpx.Client(timeout=10.0), forge_url=forge_url, forge_token=forge_token, forge_owner=forge_owner
     ).resolve
     return HubServices(
-        chunks=chunk_store,
-        graphs=graph_store,
-        ingest=IngestService(chunks=chunk_store, clock=clock),
-        promote=PromoteService(chunks=chunk_store, clock=clock),
-        claim=ClaimService(
-            chunks=chunk_store, graphs=graph_store, registry=registry_store, clock=clock, claim_lock=claim_lock
+        chunks=ChunkReadStores(
+            facts=chunk_facts,
+            record=chunk_record,
+            lifecycle=chunk_lifecycle,
+            work_refs=chunk_work_refs,
+            queue=chunk_queue,
+            route=chunk_route,
+            movement=chunk_movement,
+            artifacts=chunk_artifacts,
+            questions=chunk_questions,
+            decisions=chunk_decisions,
+            escalations=chunk_escalations,
+            events=chunk_events,
+            usage=chunk_usage,
+            delivery=chunk_delivery,
+            hub_exec=chunk_hub_exec,
         ),
-        apply=ApplyService(chunks=chunk_store, clock=clock, hub_node_executor=hub_node),
-        decisions=DecisionService(chunks=chunk_store, clock=clock),
-        requeue=RequeueService(chunks=chunk_store, clock=clock),
-        restart=RestartService(chunks=chunk_store, graphs=graph_store, clock=clock, claim_lock=claim_lock),
-        detach=DetachService(chunks=chunk_store, clock=clock),
-        pause=PauseService(chunks=chunk_store, clock=clock),
-        stop=StopService(chunks=chunk_store, clock=clock),
-        complete=CompleteService(chunks=chunk_store, clock=clock),
-        edit=EditService(chunks=chunk_store, graphs=graph_store, claim_lock=claim_lock),
+        graphs=graph_store,
+        ingest=IngestService(record=chunk_record, work_refs=chunk_work_refs, clock=clock),
+        promote=PromoteService(facts=chunk_facts, record=chunk_record, queue=chunk_queue, clock=clock),
+        claim=ClaimService(
+            route=chunk_route,
+            record=chunk_record,
+            facts=chunk_facts,
+            artifacts=chunk_artifacts,
+            graphs=graph_store,
+            registry=registry_store,
+            clock=clock,
+            claim_lock=claim_lock,
+        ),
+        apply=ApplyService(
+            facts=chunk_facts,
+            movement=chunk_movement,
+            decisions=chunk_decisions,
+            escalations=chunk_escalations,
+            route=chunk_route,
+            artifacts=chunk_artifacts,
+            clock=clock,
+            hub_node_executor=hub_node,
+        ),
+        decisions=DecisionService(facts=chunk_facts, route=chunk_route, decisions=chunk_decisions, clock=clock),
+        requeue=RequeueService(facts=chunk_facts, movement=chunk_movement, route=chunk_route, clock=clock),
+        restart=RestartService(
+            facts=chunk_facts, movement=chunk_movement, graphs=graph_store, clock=clock, claim_lock=claim_lock
+        ),
+        detach=DetachService(route=chunk_route, clock=clock),
+        pause=PauseService(facts=chunk_facts, lifecycle=chunk_lifecycle, clock=clock),
+        stop=StopService(facts=chunk_facts, lifecycle=chunk_lifecycle, clock=clock),
+        complete=CompleteService(facts=chunk_facts, lifecycle=chunk_lifecycle, clock=clock),
+        edit=EditService(facts=chunk_facts, record=chunk_record, graphs=graph_store, claim_lock=claim_lock),
         delete=delete,
-        facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
+        facts=FactIngestService(
+            facts=chunk_facts,
+            route=chunk_route,
+            escalations=chunk_escalations,
+            questions=chunk_questions,
+            usage=chunk_usage,
+            events=chunk_events,
+            fleet=fleet,
+            clock=clock,
+        ),
         transcript_ingest=TranscriptIngestService(store=transcript_store, clock=clock, caps=transcript_caps),
         graph_mint=graph_mint,
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
-        runner_facts=RunnerFactsService(chunks=chunk_store, clock=clock),
-        questions=QuestionService(chunks=chunk_store, clock=clock),
-        queue=QueueService(chunks=chunk_store, clock=clock),
-        group=GroupService(chunks=chunk_store, clock=clock),
+        runner_facts=RunnerFactsService(route=chunk_route, escalations=chunk_escalations, clock=clock),
+        questions=QuestionService(questions=chunk_questions, clock=clock),
+        queue=QueueService(queue=chunk_queue, record=chunk_record, clock=clock),
+        group=GroupService(
+            work_refs=chunk_work_refs, lifecycle=chunk_lifecycle, record=chunk_record, facts=chunk_facts, clock=clock
+        ),
         fleet=fleet,
         enrollment=enrollment,
         registry=registry_store,
@@ -382,9 +461,11 @@ def build_services(
         default_graph_yaml=PACKAGED.default.text,
         system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
         work_sources=work_sources,
-        close_drain=CloseIntentDrainer(chunks=chunk_store, work_sources=work_sources, clock=clock),
+        close_drain=CloseIntentDrainer(
+            delivery=chunk_delivery, events=chunk_events, work_sources=work_sources, clock=clock
+        ),
         work_item_materialization=WorkItemMaterializationReconciler(
-            chunks=chunk_store,
+            delivery=chunk_delivery,
             items=work_item_store,
             edits=materialization_edits,
             work_sources=work_sources,
@@ -420,7 +501,9 @@ def build_services(
             graphs=graph_store,
             finding_sets=finding_set_store,
             items=work_item_store,
-            chunks=chunk_store,
+            work_refs=chunk_work_refs,
+            record=chunk_record,
+            queue=chunk_queue,
             clock=clock,
         ),
         findings=finding_store,

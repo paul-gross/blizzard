@@ -9,7 +9,9 @@ from __future__ import annotations
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.work import IWriteChunkRepository, WorkItemCloseOutcome
+from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.work import WorkItemCloseOutcome
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
@@ -32,8 +34,16 @@ class CloseIntentDrainer:
     """Per pending close intent: retire it through its ref's own source binding,
     recording the attempt's outcome."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, work_sources: IWorkSourceRegistry, clock: IClock) -> None:
-        self._chunks = chunks
+    def __init__(
+        self,
+        *,
+        delivery: IWriteChunkDeliveryRepository,
+        events: IWriteChunkEventsRepository,
+        work_sources: IWorkSourceRegistry,
+        clock: IClock,
+    ) -> None:
+        self._delivery = delivery
+        self._events = events
         self._work_sources = work_sources
         self._clock = clock
 
@@ -42,7 +52,7 @@ class CloseIntentDrainer:
         and counted rather than raised — a ``gone`` or ``failed`` outcome is itself an
         informative result. One aggregate INFO summary per pass (``bzh:structlog-logging``)."""
         closed = gone = failed = skipped = 0
-        for intent in self._chunks.pending_close_intents():
+        for intent in self._delivery.pending_close_intents():
             closer = self._work_sources.closer(intent.ref.source)
             if closer is None:
                 skipped += 1
@@ -62,13 +72,13 @@ class CloseIntentDrainer:
             else:
                 failed += 1
             _CP_CLOSE_AFTER_CLOSE_BEFORE_RECORD.reached()
-            wrote = self._chunks.record_work_item_closure(
+            wrote = self._delivery.record_work_item_closure(
                 intent.chunk_id, pointer=intent.ref, outcome=outcome, reason=reason, at=at
             )  # retires the intent too, in the same transaction, when the outcome is terminal
             if not wrote:
                 continue  # a redelivered sweep already recorded this outcome
             if outcome is WorkItemCloseOutcome.CLOSED:
-                self._chunks.record_event(
+                self._events.record_event(
                     severity="info",
                     kind=_EVENT_CLOSED,
                     runner_id=_HUB_RUNNER_ID,
@@ -80,7 +90,7 @@ class CloseIntentDrainer:
                     at=at,
                 )
             else:
-                self._chunks.record_event(
+                self._events.record_event(
                     severity="warning",
                     kind=_EVENT_CLOSE_FAILED,
                     runner_id=_HUB_RUNNER_ID,

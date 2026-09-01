@@ -165,7 +165,7 @@ class InterruptedClaims:
     def reconcile(self) -> None:
         requeue_pending = self.ctx.stores.requeue.pending_requeue_chunk_ids()  # one read per FILL, not per chunk
         for chunk_id in self.ctx.stores.environments.live_tenure_chunk_ids():
-            if self.ctx.stores.leases.active_lease_for_chunk(chunk_id) is None:
+            if self.ctx.stores.lease_record.active_lease_for_chunk(chunk_id) is None:
                 self._reconcile_one(chunk_id, requeued=chunk_id in requeue_pending)
             # else a live worker holds it — REAP/ADVANCE own it
 

@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.delete import ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.queue import ChunkNotFound
@@ -25,9 +26,16 @@ from blizzard.hub.domain.work import (
     WorkItemClosure,
     WorkRef,
 )
-from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import build_hub, hub_store_connections, migrate_to, pointer_token, seed_graph, seed_work_item
+from tests.support import (
+    build_hub,
+    chunk_stores,
+    hub_store_connections,
+    migrate_to,
+    pointer_token,
+    seed_graph,
+    seed_work_item,
+)
 
 pytestmark = pytest.mark.component
 
@@ -38,21 +46,21 @@ def _at(seconds: int) -> datetime:
     return _T0 + timedelta(seconds=seconds)
 
 
-def _stores(tmp_path: Path) -> tuple[ChunkStore, WorkItemStore, DeleteService, Engine]:
+def _stores(tmp_path: Path) -> tuple[ChunkStores, WorkItemStore, DeleteService, Engine]:
     _, engine = migrate_to(tmp_path, "head")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
     clock = FixedClock(_T0)
     store = hub_store_connections(engine)
-    chunks = ChunkStore(store, clock)
+    chunks = chunk_stores(engine, clock)
     items = WorkItemStore(store)
-    delete = DeleteService(chunks=chunks, items=items, clock=clock, claim_lock=threading.Lock())
+    delete = DeleteService(facts=chunks.facts, items=items, clock=clock, claim_lock=threading.Lock())
     return chunks, items, delete, engine
 
 
-def _mint(chunks: ChunkStore, chunk_id: str, *, work_refs: list[WorkRef] | None = None) -> Chunk:
+def _mint(chunks: ChunkStores, chunk_id: str, *, work_refs: list[WorkRef] | None = None) -> Chunk:
     chunk = Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=work_refs or [], minted_at=_T0)
-    chunks.mint(chunk)
+    chunks.record.mint(chunk)
     return chunk
 
 
@@ -63,45 +71,45 @@ def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
     chunks, _, delete, _ = _stores(tmp_path)
     pointer = WorkRef(source="default", ref="1")
     chunk = _mint(chunks, "ch_1", work_refs=[pointer])
-    chunks.record_hub_artifact(
+    chunks.artifacts.record_hub_artifact(
         "ch_1", node_id="nd_deliver", node_name="deliver", epoch=1, name="merged/widget", content="sha", at=_T0
     )
     # Sanity: landed and carrying a pending intent *before* the delete — proves the
     # post-delete emptiness below is the ephemeral exclusion at work, not a
     # vacuously-empty read.
-    assert chunks.pending_close_intents() == [PendingCloseIntent(chunk_id="ch_1", ref=pointer)]
+    assert chunks.delivery.pending_close_intents() == [PendingCloseIntent(chunk_id="ch_1", ref=pointer)]
 
     delete.delete(chunk, by="operator")
 
-    assert chunks.get("ch_1") is None
-    assert chunks.load_facts("ch_1") is None
-    assert chunks.list_all() == []
-    assert chunks.find_live_holder(pointer) is None
-    assert chunks.live_work_refs() == {}
-    assert chunks.pending_close_intents() == []
+    assert chunks.record.get("ch_1") is None
+    assert chunks.facts.load_facts("ch_1") is None
+    assert chunks.record.list_all() == []
+    assert chunks.work_refs.find_live_holder(pointer) is None
+    assert chunks.work_refs.live_work_refs() == {}
+    assert chunks.delivery.pending_close_intents() == []
 
 
 # --- refusal at every status outside GROUPABLE_STATUSES, success at both members ---
 
 
-def _make_running(chunks: ChunkStore, chunk_id: str) -> None:
-    chunks.record_route(
+def _make_running(chunks: ChunkStores, chunk_id: str) -> None:
+    chunks.route.record_route(
         Route(chunk_id=chunk_id, runner_id="r1", workspace_id="w1", environment_ids=[], created_at=_T0),
         token_hash="deadbeef",
         at=_T0,
     )
 
 
-def _make_paused(chunks: ChunkStore, chunk_id: str) -> None:
-    chunks.record_pause(chunk_id, paused=True, by="alice", at=_T0)
+def _make_paused(chunks: ChunkStores, chunk_id: str) -> None:
+    chunks.lifecycle.record_pause(chunk_id, paused=True, by="alice", at=_T0)
 
 
-def _make_needs_human(chunks: ChunkStore, chunk_id: str) -> None:
-    chunks.record_escalation(chunk_id, epoch=1, takeover_command="cd x && resume", at=_T0)
+def _make_needs_human(chunks: ChunkStores, chunk_id: str) -> None:
+    chunks.escalations.record_escalation(chunk_id, epoch=1, takeover_command="cd x && resume", at=_T0)
 
 
-def _make_waiting_on_human(chunks: ChunkStore, chunk_id: str) -> None:
-    chunks.record_question(
+def _make_waiting_on_human(chunks: ChunkStores, chunk_id: str) -> None:
+    chunks.questions.record_question(
         question_id="qn_1",
         chunk_id=chunk_id,
         node_id="nd_a",
@@ -114,12 +122,12 @@ def _make_waiting_on_human(chunks: ChunkStore, chunk_id: str) -> None:
     )
 
 
-def _make_stopped(chunks: ChunkStore, chunk_id: str) -> None:
-    chunks.record_stop(chunk_id, by="alice", at=_T0)
+def _make_stopped(chunks: ChunkStores, chunk_id: str) -> None:
+    chunks.lifecycle.record_stop(chunk_id, by="alice", at=_T0)
 
 
-def _make_done(chunks: ChunkStore, chunk_id: str) -> None:
-    chunks.record_completion(chunk_id, by="alice", at=_T0)
+def _make_done(chunks: ChunkStores, chunk_id: str) -> None:
+    chunks.lifecycle.record_completion(chunk_id, by="alice", at=_T0)
 
 
 @pytest.mark.parametrize(
@@ -146,20 +154,20 @@ def test_delete_refuses_every_status_outside_groupable(tmp_path: Path, driver, e
     detail = str(excinfo.value)
     assert "ch_1" in detail
     assert expected_status in detail
-    assert chunks.get("ch_1") is not None  # refused — nothing written, the chunk stands
+    assert chunks.record.get("ch_1") is not None  # refused — nothing written, the chunk stands
 
 
 def test_delete_succeeds_at_not_ready_and_ready(tmp_path: Path) -> None:
     chunks, _, delete, _ = _stores(tmp_path)
     not_ready = _mint(chunks, "ch_1")
     ready = _mint(chunks, "ch_2")
-    chunks.record_promote("ch_2", at=_T0)
+    chunks.queue.record_promote("ch_2", at=_T0)
 
     delete.delete(not_ready, by="operator")
     delete.delete(ready, by="operator")
 
-    assert chunks.get("ch_1") is None
-    assert chunks.get("ch_2") is None
+    assert chunks.record.get("ch_1") is None
+    assert chunks.record.get("ch_2") is None
 
 
 # --- the activity feed: the deletion row, its actor, and nothing else for that chunk
@@ -168,11 +176,11 @@ def test_delete_succeeds_at_not_ready_and_ready(tmp_path: Path) -> None:
 def test_activity_feed_shows_the_deletion_with_its_actor_and_no_other_row(tmp_path: Path) -> None:
     chunks, _, delete, _ = _stores(tmp_path)
     chunk = _mint(chunks, "ch_1")
-    chunks.record_promote("ch_1", at=_at(1))  # a row that would otherwise show for ch_1
+    chunks.queue.record_promote("ch_1", at=_at(1))  # a row that would otherwise show for ch_1
 
     delete.delete(chunk, by="paul")
 
-    rows = [r for r in chunks.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"]
+    rows = [r for r in chunks.events.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"]
     assert len(rows) == 1
     row = rows[0]
     assert row.type == "chunk-changed"
@@ -187,9 +195,9 @@ def test_activity_feed_leaves_a_grouped_chunks_history_showing(tmp_path: Path) -
     chunks, _, _, _ = _stores(tmp_path)
     _mint(chunks, "ch_1")
     _mint(chunks, "ch_2")
-    chunks.record_grouped("ch_2", grouped_into="ch_1", at=_at(1))
+    chunks.lifecycle.record_grouped("ch_2", grouped_into="ch_1", at=_at(1))
 
-    rows = [r for r in chunks.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_2"]
+    rows = [r for r in chunks.events.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_2"]
     causes = {r.cause for r in rows}
     assert "minted" in causes
     assert "grouped" in causes
@@ -203,8 +211,8 @@ def test_delete_withdraws_only_open_hub_pointers_leaving_a_forge_pointer_untouch
     item = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
     chunk_id = f"ch_{item.ref}"
     forge_pointer = WorkRef(source="forge", ref="99")
-    chunks.add_work_refs(chunk_id, [forge_pointer], at=_T0)
-    mixed = chunks.get(chunk_id)
+    chunks.work_refs.add_work_refs(chunk_id, [forge_pointer], at=_T0)
+    mixed = chunks.record.get(chunk_id)
     assert mixed is not None
     assert {r.source for r in mixed.work_refs} == {"hub", "forge"}
 
@@ -213,7 +221,7 @@ def test_delete_withdraws_only_open_hub_pointers_leaving_a_forge_pointer_untouch
     closed = items.get("hub", item.ref)
     assert closed is not None and closed.closure == WorkItemClosure.WITHDRAWN
     assert items.get("forge", "99") is None  # never a work_items row — untouched, not erroneously closed
-    assert chunks.get(chunk_id) is None
+    assert chunks.record.get(chunk_id) is None
 
 
 # --- idempotent-by-guard: a repeated direct delete writes nothing a second time ----
@@ -227,7 +235,9 @@ def test_repeated_delete_writes_nothing_a_second_time(tmp_path: Path) -> None:
     with pytest.raises(ChunkNotFound):
         delete.delete(chunk, by="operator")
 
-    rows = [r for r in chunks.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1" and r.cause == "deleted"]
+    rows = [
+        r for r in chunks.events.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1" and r.cause == "deleted"
+    ]
     assert len(rows) == 1
     assert rows[0].key == f"chunk_deleted:{first_id}"
 
@@ -240,10 +250,10 @@ def test_reingest_after_delete_a_forge_pointer_mints_a_fresh_chunk_reading_norma
     pointer = {"source": "default", "ref": "1"}
     first = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()
     hub_store = hub_store_connections(hub.engine)
-    chunks = ChunkStore(hub_store, hub.clock)
+    chunks = chunk_stores(hub.engine, hub.clock)
     items = WorkItemStore(hub_store)
-    delete = DeleteService(chunks=chunks, items=items, clock=hub.clock, claim_lock=threading.Lock())
-    chunk = chunks.get(first["chunk_id"])
+    delete = DeleteService(facts=chunks.facts, items=items, clock=hub.clock, claim_lock=threading.Lock())
+    chunk = chunks.record.get(first["chunk_id"])
     assert chunk is not None
     delete.delete(chunk, by="operator")
 

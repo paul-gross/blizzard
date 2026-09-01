@@ -12,7 +12,7 @@ from typing import cast
 
 import pytest
 
-from blizzard.hub.domain.work import IWriteChunkRepository
+from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
 from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, ingest, report_lease
 
 pytestmark = pytest.mark.component
@@ -20,9 +20,9 @@ pytestmark = pytest.mark.component
 _POINTER = {"source": "default", "ref": "12"}
 
 
-def _writable(hub) -> IWriteChunkRepository:  # type: ignore[no-untyped-def]
+def _writable(hub) -> IWriteChunkHubExecRepository:  # type: ignore[no-untyped-def]
     """A test-only cast — see ``test_hub_command_node.py``'s helper of the same name."""
-    return cast(IWriteChunkRepository, hub.services.chunks)
+    return cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec)
 
 
 _MERGE_YAML = """

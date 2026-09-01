@@ -15,8 +15,10 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.queue import QueueList, QueueService
-from blizzard.hub.domain.work import Chunk, IWriteChunkRepository
+from blizzard.hub.domain.work import Chunk
 
 pytestmark = pytest.mark.unit
 
@@ -108,9 +110,13 @@ class _FakeChunkRepo:
         raise NotImplementedError(f"QueueService.reposition should not touch {name!r}")
 
 
-def _as_write_repo(repo: _FakeChunkRepo) -> IWriteChunkRepository:
+def _as_queue(repo: _FakeChunkRepo) -> IWriteChunkQueueRepository:
     """Assert the fake satisfies the Protocol QueueService depends on (see module docstring)."""
-    return cast(IWriteChunkRepository, repo)
+    return cast(IWriteChunkQueueRepository, repo)
+
+
+def _as_record(repo: _FakeChunkRepo) -> IReadChunkRecordRepository:
+    return cast(IReadChunkRecordRepository, repo)
 
 
 def test_ordered_not_ready_sorts_by_newest_explicit_position_else_mint_instant() -> None:
@@ -120,7 +126,7 @@ def test_ordered_not_ready_sorts_by_newest_explicit_position_else_mint_instant()
     b = _chunk("chk_b", minted_at=datetime(2025, 1, 1, tzinfo=UTC))  # minted first, unordered
     c = _chunk("chk_c", minted_at=datetime(2025, 9, 1, tzinfo=UTC))
     repo = _FakeChunkRepo(not_ready=[a, b, c], positions={"chk_c": -1.0})  # c explicitly pinned to the top
-    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
     ordered = service.ordered_not_ready()
 
@@ -131,7 +137,7 @@ def test_ordered_not_ready_sorts_by_newest_explicit_position_else_mint_instant()
 def test_ordered_not_ready_never_reads_the_ready_candidate_set() -> None:
     ready_only = _chunk("chk_ready")
     repo = _FakeChunkRepo(ready=[ready_only], not_ready=[])
-    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
     assert service.ordered_not_ready() == []
     assert service.ordered_ready() == [ready_only]
@@ -140,7 +146,7 @@ def test_ordered_not_ready_never_reads_the_ready_candidate_set() -> None:
 def test_reposition_between_two_neighbours_lands_on_their_midpoint() -> None:
     a, b, c, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_c"), _chunk("chk_m")
     repo = _FakeChunkRepo(ready=[a, b, c, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_c": 2.0, "chk_m": 5.0})
-    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
     service.reposition(QueueList.READY, m, after=a)
 
@@ -150,7 +156,7 @@ def test_reposition_between_two_neighbours_lands_on_their_midpoint() -> None:
 def test_reposition_to_the_top_lands_below_the_current_lowest() -> None:
     a, b, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_m")
     repo = _FakeChunkRepo(ready=[a, b, m], positions={"chk_a": 1.0, "chk_b": 2.0, "chk_m": 5.0})
-    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
     service.reposition(QueueList.READY, m, after=None)
 
@@ -160,7 +166,7 @@ def test_reposition_to_the_top_lands_below_the_current_lowest() -> None:
 def test_reposition_to_the_top_of_an_otherwise_empty_ready_set_is_zero() -> None:
     m = _chunk("chk_m")
     repo = _FakeChunkRepo(ready=[m], positions={"chk_m": 5.0})
-    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
     service.reposition(QueueList.READY, m, after=None)
 
@@ -170,7 +176,7 @@ def test_reposition_to_the_top_of_an_otherwise_empty_ready_set_is_zero() -> None
 def test_reposition_after_the_last_chunk_lands_one_past_it() -> None:
     a, b, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_m")
     repo = _FakeChunkRepo(ready=[a, b, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_m": 5.0})
-    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
     service.reposition(QueueList.READY, m, after=b)
 
@@ -186,7 +192,7 @@ def test_reposition_between_adjacent_doubles_renormalizes_then_succeeds() -> Non
 
     a, b, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_m")
     repo = _FakeChunkRepo(ready=[a, b], positions={"chk_a": a_pos, "chk_b": b_pos})
-    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
     service.reposition(QueueList.READY, m, after=a)
 
@@ -201,7 +207,7 @@ def test_reposition_between_adjacent_doubles_renormalizes_then_succeeds() -> Non
 def test_reposition_between_two_backlog_neighbours_lands_on_their_midpoint() -> None:
     a, b, c, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_c"), _chunk("chk_m")
     repo = _FakeChunkRepo(not_ready=[a, b, c, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_c": 2.0, "chk_m": 5.0})
-    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
     service.reposition(QueueList.NOT_READY, m, after=a)
 
@@ -215,7 +221,7 @@ def test_reposition_between_adjacent_backlog_doubles_renormalizes_then_succeeds(
 
     a, b, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_m")
     repo = _FakeChunkRepo(not_ready=[a, b], positions={"chk_a": a_pos, "chk_b": b_pos})
-    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
     service.reposition(QueueList.NOT_READY, m, after=a)
 

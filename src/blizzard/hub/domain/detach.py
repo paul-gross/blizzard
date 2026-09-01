@@ -8,7 +8,8 @@ tests/test_chunk_status_derivation.py::test_detached_route_with_an_open_escalati
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.work import Chunk, IWriteChunkRepository
+from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.work import Chunk
 
 
 class NotRouted(Exception):
@@ -18,8 +19,8 @@ class NotRouted(Exception):
 class DetachService:
     """Release a chunk from its runner without touching any escalation — ``blizzard hub detach``."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
-        self._chunks = chunks
+    def __init__(self, *, route: IWriteChunkRouteRepository, clock: IClock) -> None:
+        self._route = route
         self._clock = clock
 
     def detach(self, chunk: Chunk) -> int:
@@ -28,6 +29,6 @@ class DetachService:
         Raises :class:`NotRouted` if the chunk has no live route — there is nothing to
         release. Returns the freshly-written ``route_released.id`` (issue #213's
         activity-feed key)."""
-        if self._chunks.route_of(chunk.chunk_id) is None:
+        if self._route.route_of(chunk.chunk_id) is None:
             raise NotRouted(f"chunk {chunk.chunk_id} has no live route")
-        return self._chunks.record_route_released(chunk.chunk_id, at=self._clock.now())
+        return self._route.record_route_released(chunk.chunk_id, at=self._clock.now())

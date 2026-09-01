@@ -2,7 +2,7 @@
 
 A fake stands in for the store — only ``load_facts``/``record_stop`` are meaningfully
 implemented; every other seam raises loudly if called. The route release lives in
-``ChunkStore.record_stop``'s own transaction, not in :class:`StopService` (must-fix 2).
+``ChunkLifecycleStore.record_stop``'s own transaction, not in :class:`StopService` (must-fix 2).
 """
 
 from __future__ import annotations
@@ -16,13 +16,14 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.stop import ChunkNotStoppable, StopService
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     EscalationFact,
-    IWriteChunkRepository,
     QuestionFact,
     RouteCreatedFact,
     TransitionFact,
@@ -53,9 +54,13 @@ class _FakeChunkRepo:
         raise NotImplementedError(f"StopService should not touch {name!r}")
 
 
-def _as_write_repo(repo: _FakeChunkRepo) -> IWriteChunkRepository:
+def _as_facts(repo: _FakeChunkRepo) -> IReadChunkFactsRepository:
     """Assert the fake satisfies the Protocol StopService depends on (see module docstring)."""
-    return cast(IWriteChunkRepository, repo)
+    return cast(IReadChunkFactsRepository, repo)
+
+
+def _as_lifecycle(repo: _FakeChunkRepo) -> IWriteChunkLifecycleRepository:
+    return cast(IWriteChunkLifecycleRepository, repo)
 
 
 def _not_ready_facts() -> ChunkFacts:
@@ -118,7 +123,7 @@ def _done_facts() -> ChunkFacts:
 def test_stop_refuses_done_and_stopped(facts_factory: object) -> None:
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
-    service = StopService(chunks=_as_write_repo(repo), clock=clock)
+    service = StopService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
 
     with pytest.raises(ChunkNotStoppable):
         service.stop(_CHUNK, by="operator")
@@ -134,7 +139,7 @@ def test_stop_refuses_done_and_stopped(facts_factory: object) -> None:
 def test_stop_allows_every_non_terminal_status(facts_factory: object) -> None:
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
-    service = StopService(chunks=_as_write_repo(repo), clock=clock)
+    service = StopService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
 
     service.stop(_CHUNK, by="operator")
 
@@ -144,7 +149,7 @@ def test_stop_allows_every_non_terminal_status(facts_factory: object) -> None:
 def test_stop_refusal_carries_the_offending_status_on_the_exception() -> None:
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=_done_facts())
-    service = StopService(chunks=_as_write_repo(repo), clock=clock)
+    service = StopService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
 
     with pytest.raises(ChunkNotStoppable) as excinfo:
         service.stop(_CHUNK, by="operator")
@@ -158,7 +163,7 @@ def test_stop_refusal_carries_the_offending_status_on_the_exception() -> None:
 def test_stop_records_who_stopped_it() -> None:
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=_not_ready_facts())
-    service = StopService(chunks=_as_write_repo(repo), clock=clock)
+    service = StopService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
 
     service.stop(_CHUNK, by="paul")
 
@@ -169,7 +174,7 @@ def test_stop_uses_the_injected_clock_not_the_wall_clock() -> None:
     later = datetime(2026, 6, 1, tzinfo=UTC)
     clock = FixedClock(instant=later)
     repo = _FakeChunkRepo(facts=_not_ready_facts())
-    service = StopService(chunks=_as_write_repo(repo), clock=clock)
+    service = StopService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
 
     service.stop(_CHUNK, by="operator")
 

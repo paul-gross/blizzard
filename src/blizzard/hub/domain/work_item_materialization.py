@@ -13,12 +13,12 @@ import json
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.graph import GraphDoc
 from blizzard.hub.domain.graph_authoring import GraphMintService
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import (
-    IWriteChunkRepository,
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemMaterializationOutcome,
@@ -41,7 +41,7 @@ class WorkItemMaterializationReconciler:
     def __init__(
         self,
         *,
-        chunks: IWriteChunkRepository,
+        delivery: IWriteChunkDeliveryRepository,
         items: IWriteWorkItemRepository,
         edits: WorkItemEditService,
         work_sources: IWorkSourceRegistry,
@@ -50,7 +50,7 @@ class WorkItemMaterializationReconciler:
         default_graph_yaml: str,
         clock: IClock,
     ) -> None:
-        self._chunks = chunks
+        self._delivery = delivery
         self._items = items
         self._edits = edits
         self._work_sources = work_sources
@@ -67,7 +67,7 @@ class WorkItemMaterializationReconciler:
         delivery-materialization sweep). One aggregate INFO summary per pass
         (``bzh:structlog-logging``)."""
         created = updated = unresolved = deferred = 0
-        for row in self._chunks.unmaterialized_proposals():
+        for row in self._delivery.unmaterialized_proposals():
             outcome = self._materialize_one(row)
             if outcome is WorkItemMaterializationOutcome.CREATED:
                 created += 1
@@ -148,7 +148,7 @@ class WorkItemMaterializationReconciler:
     def _record_unresolved(
         self, proposal_id: str, *, pointer: WorkRef | None, reason: str
     ) -> WorkItemMaterializationOutcome:
-        self._chunks.record_work_item_materialization(
+        self._delivery.record_work_item_materialization(
             proposal_id,
             outcome=WorkItemMaterializationOutcome.UNRESOLVED,
             pointer=pointer,

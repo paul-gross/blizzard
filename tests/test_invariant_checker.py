@@ -833,7 +833,7 @@ def test_a_non_landed_refs_missing_intent_is_not_a_violation(tmp_path: Path) -> 
 
 def test_a_landed_ref_with_no_close_intent_and_no_terminal_outcome_is_a_violation(tmp_path: Path) -> None:
     """The exact bug this check exists to catch: a landing fact written directly to the
-    store, bypassing ``ChunkStore._enqueue_close_intents`` — simulating a future landing-fact
+    store, bypassing ``chunk_rows.enqueue_close_intents`` — simulating a future landing-fact
     writer that forgot the call (blizzard#383, F3)."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:

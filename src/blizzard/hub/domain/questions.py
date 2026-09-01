@@ -12,7 +12,8 @@ from datetime import datetime
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
-from blizzard.hub.domain.work import AnswerOutcome, IWriteChunkRepository
+from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
+from blizzard.hub.domain.work import AnswerOutcome
 from blizzard.wire.question import QuestionAsked
 
 _log = get_logger("blizzard.hub.questions")
@@ -21,13 +22,13 @@ _log = get_logger("blizzard.hub.questions")
 class QuestionService:
     """Land questions and answers at the hub."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
-        self._chunks = chunks
+    def __init__(self, *, questions: IWriteChunkQuestionsRepository, clock: IClock) -> None:
+        self._questions = questions
         self._clock = clock
 
     def record_asked(self, fact: QuestionAsked) -> None:
         """Land a ``question.asked`` row — the chunk derives ``waiting_on_human``."""
-        self._chunks.record_question(
+        self._questions.record_question(
             question_id=fact.question_id,
             chunk_id=fact.chunk_id,
             node_id=fact.node_id,
@@ -52,7 +53,7 @@ class QuestionService:
 
     def answer(self, question_id: str, *, answer: str, answered_by: str) -> AnswerOutcome:
         """Apply the answer first-write-wins; the CAS lives in the store."""
-        outcome = self._chunks.answer_question(
+        outcome = self._questions.answer_question(
             question_id, answer=answer, answered_by=answered_by, at=self._clock.now()
         )
         _log.info("answer applied", question_id=question_id, won=outcome.won, answered_by=outcome.answered_by)
@@ -60,4 +61,4 @@ class QuestionService:
 
     def record_delivered(self, *, question_id: str, chunk_id: str) -> None:
         """Record an ``answer.delivered`` fact — the resume-with-answer ran (board detail)."""
-        self._chunks.record_answer_delivered(question_id=question_id, chunk_id=chunk_id, at=self._clock.now())
+        self._questions.record_answer_delivered(question_id=question_id, chunk_id=chunk_id, at=self._clock.now())

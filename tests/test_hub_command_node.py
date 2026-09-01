@@ -32,6 +32,8 @@ from blizzard.hub.delivery.hub_node import (
     UnconvergedDeliveryError,
 )
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph import HUB_PENDING_CHOICE, GraphDoc
 from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.domain.graph_validation import Validator
@@ -39,28 +41,16 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     HubNodePollFact,
-    IWriteChunkRepository,
     TransitionFact,
 )
 from tests.support import (
     FakeHubCommandRunner,
     FakeHubWorkdir,
     FakeWorkSource,
-    HubHarness,
     build_hub,
     pointer_token,
     report_lease,
 )
-
-
-def _writable(hub: HubHarness) -> IWriteChunkRepository:
-    """A test-only cast: ``HubHarness.services.chunks`` is read-typed
-    (``bzh:controller-read-only`` — a controller depends on the read variant), but the
-    live object is always the write-capable :class:`~blizzard.hub.store.internal.chunk_store.ChunkStore`.
-    These component tests poke facts directly to set up a scenario the HTTP surface
-    cannot reach on its own (parking a chunk mid-node without running it)."""
-    return cast(IWriteChunkRepository, hub.services.chunks)
-
 
 pytestmark = pytest.mark.unit
 
@@ -593,7 +583,7 @@ def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML)
     assert claim.status_code == 201, claim.text
     build_node_id = claim.json()["envelope"]["node"]["node_id"]
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    chunk = hub.services.chunks.get(chunk_id)
+    chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     graph = hub.services.graphs.get(chunk.graph_id)
     assert graph is not None
@@ -624,7 +614,7 @@ def test_produces_marker_skips_an_already_run_step(tmp_path: Path) -> None:
     assert merge_node is not None
 
     # Pre-record the step's marker, as if a prior (crashed) run already completed it.
-    _writable(hub).record_hub_artifact(
+    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id=merge_node.node_id,
         node_name="merge",
@@ -772,7 +762,11 @@ def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> No
             for a in hub.client.get(f"/api/chunks/{chunk_id}").json()["artifacts"]
             if a["name"] == "hub-unroutable-outcome"
         ]
-        ev = [e for e in hub.services.chunks.list_events(chunk_id=chunk_id) if e.kind == "hub-node-unroutable-outcome"]
+        ev = [
+            e
+            for e in hub.services.chunks.events.list_events(chunk_id=chunk_id)
+            if e.kind == "hub-node-unroutable-outcome"
+        ]
         return art, ev
 
     artifacts, events = _announcements()
@@ -780,7 +774,7 @@ def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> No
     assert len(events) == 1, "and once in the operational event feed"
     # In-vocabulary, so the severity filter reaches it (test_event_log.py::…_sinks_below_info).
     assert events[0].severity == "critical"
-    assert [e.kind for e in hub.services.chunks.list_events(chunk_id=chunk_id, severity="critical")] == [
+    assert [e.kind for e in hub.services.chunks.events.list_events(chunk_id=chunk_id, severity="critical")] == [
         "hub-node-unroutable-outcome"
     ]
     assert "no authored edge for choice `failure`" in events[0].message
@@ -908,7 +902,7 @@ nodes:
     assert merge_node is not None
     # The repo already landed — pre-record the marker as if the mid-run callback
     # wrote it ahead of this node's own run.
-    _writable(hub).record_hub_artifact(
+    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id=merge_node.node_id,
         node_name="merge",
@@ -947,7 +941,7 @@ def test_mid_run_marker_callback_records_a_marker(tmp_path: Path) -> None:
     assert hub.client.post("/api/graphs", json={"definition_yaml": _HUB_CMD_GRAPH_YAML}).status_code == 201
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]})
     chunk_id = resp.json()["chunk_id"]
-    chunk = hub.services.chunks.get(chunk_id)
+    chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     graph = hub.services.graphs.get(chunk.graph_id)
     assert graph is not None
@@ -1007,7 +1001,7 @@ def test_serialization_barrier_two_chunks_never_run_hub_commands_concurrently(tm
         )
         build_node_id = claim.json()["envelope"]["node"]["node_id"]
         report_lease(hub, chunk_id, epoch=1, seq=1)
-        chunk = hub.services.chunks.get(chunk_id)
+        chunk = hub.services.chunks.record.get(chunk_id)
         assert chunk is not None
         graph = hub.services.graphs.get(chunk.graph_id)
         assert graph is not None
@@ -1017,7 +1011,7 @@ def test_serialization_barrier_two_chunks_never_run_hub_commands_concurrently(tm
         assert build_node is not None
         # Park directly at `merge`, bypassing the executor's own auto-run on
         # transition — the shape "two held chunks both poll hub-advance" needs.
-        _writable(hub).record_transition(
+        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
             transition_id=f"tr_test_{pointer_ref}",
             chunk_id=chunk_id,
             from_node_id=build_node.node_id,
@@ -1130,7 +1124,7 @@ def _to_poll_merge_node(hub, pointer):  # type: ignore[no-untyped-def]
     assert claim.status_code == 201, claim.text
     build_node_id = claim.json()["envelope"]["node"]["node_id"]
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    chunk = hub.services.chunks.get(chunk_id)
+    chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     graph = hub.services.graphs.get(chunk.graph_id)
     assert graph is not None
@@ -1156,7 +1150,7 @@ def test_pending_records_no_transition_and_releases_the_slot(tmp_path: Path) -> 
     assert detail["pending"]["node_name"] == "merge"
     # No bounce recorded — pending itself is not contention (#64's kick-back path).
     assert detail["bounces"] == []
-    assert _writable(hub).count_live_hub_exec_slots() == 0
+    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 0
 
 
 @pytest.mark.component
@@ -1253,7 +1247,7 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
     assert detail["pending"] is None
     assert len(detail["bounces"]) == 1
     assert detail["bounces"][0]["cause"] == "poll-timeout"
-    assert _writable(hub).count_live_hub_exec_slots() == 0
+    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 0
 
 
 @pytest.mark.component

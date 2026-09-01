@@ -11,12 +11,15 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.chunks.queue import IReadChunkQueueRepository
+from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.graph import IReadGraphRepository
 from blizzard.hub.domain.promote import tail_position
 from blizzard.hub.domain.routines import Routine, RoutineGraphUnresolvedError, RunMode
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeRegistry, ScopeSlug
-from blizzard.hub.domain.work import IReadChunkRepository, IWriteWorkItemRepository, WorkItemAuthor, WorkItemRecord
+from blizzard.hub.domain.work import IWriteWorkItemRepository, WorkItemAuthor, WorkItemRecord
 from blizzard.hub.domain.work_items import prepare_mint
 
 
@@ -84,7 +87,9 @@ class RunService:
         graphs: IReadGraphRepository,
         finding_sets: IReadFindingSetRepository,
         items: IWriteWorkItemRepository,
-        chunks: IReadChunkRepository,
+        work_refs: IReadChunkWorkRefsRepository,
+        record: IReadChunkRecordRepository,
+        queue: IReadChunkQueueRepository,
         clock: IClock,
     ) -> None:
         self._scopes = scopes
@@ -92,7 +97,9 @@ class RunService:
         self._graphs = graphs
         self._finding_sets = finding_sets
         self._items = items
-        self._chunks = chunks
+        self._work_refs = work_refs
+        self._record = record
+        self._queue = queue
         self._clock = clock
 
     def run(
@@ -132,14 +139,14 @@ class RunService:
 
         pointer, chunk, pointer_at = prepare_mint(
             self._items,
-            self._chunks,
+            self._work_refs,
             self._clock,
             RESERVED_HUB_SOURCE_NAME,
             graph=graph,
             default_model=routine.default_model,
             default_effort=routine.default_effort,
         )
-        position = tail_position(self._chunks)
+        position = tail_position(self._record, self._queue)
         item, promoted_id = self._items.create_with_chunk_and_promote(
             pointer=pointer,
             title=title,

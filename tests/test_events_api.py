@@ -13,8 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.store.internal.chunk_store import ChunkStore
-from tests.support import build_hub, hub_store_connections, seed_chunk, seed_graph
+from tests.support import build_hub, chunk_stores, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -27,7 +26,7 @@ def _events(hub, **params) -> list[dict]:  # type: ignore[no-untyped-def]
 
 def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    store = ChunkStore(hub_store_connections(hub.engine), hub.clock)
+    store = chunk_stores(hub.engine, hub.clock)
     t0 = hub.clock.now()
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=t0)
@@ -38,7 +37,7 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
         return t0 + timedelta(seconds=sec)
 
     # event_log rows across two runners and two chunks.
-    store.record_event(
+    store.events.record_event(
         severity="info",
         kind="attempt-abandoned",
         runner_id="r1",
@@ -49,7 +48,7 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
         detail=None,
         at=at(1),
     )
-    store.record_event(
+    store.events.record_event(
         severity="warning",
         kind="attempt-failed",
         runner_id="r1",
@@ -60,7 +59,7 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
         detail={"via": "advance"},
         at=at(2),
     )
-    store.record_event(
+    store.events.record_event(
         severity="critical",
         kind="worker-lost",
         runner_id="r2",
@@ -73,10 +72,10 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     )
 
     # ch_c: an OPEN escalation (projects into the feed as needs-human/critical).
-    store.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=at(4))
+    store.escalations.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=at(4))
     # ch_a: an escalation SUPERSEDED by a later lease mint -> excluded from the feed.
-    store.record_escalation("ch_a", epoch=1, takeover_command="cd a && resume", at=at(1))
-    store.record_lease("ch_a", epoch=2, runner_id="r1", at=at(5))
+    store.escalations.record_escalation("ch_a", epoch=1, takeover_command="cd a && resume", at=at(1))
+    store.route.record_lease("ch_a", epoch=2, runner_id="r1", at=at(5))
 
     feed = _events(hub)
     # Severity-then-recency: critical band first (worker-lost t3 vs needs-human t4 -> needs-human
@@ -117,12 +116,12 @@ def test_naive_since_with_open_escalation_does_not_500(tmp_path: Path) -> None:
     # A well-formed but tz-NAIVE `since` (an ordinary date-picker input) must not 500
     # when the feed projects an open escalation, whose `recorded_at` is tz-aware.
     hub = build_hub(tmp_path)
-    store = ChunkStore(hub_store_connections(hub.engine), hub.clock)
+    store = chunk_stores(hub.engine, hub.clock)
     t0 = hub.clock.now()
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=t0)
         seed_chunk(conn, "ch_c", graph_id="gr_1", at=t0)
-    store.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=t0)
+    store.escalations.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=t0)
     # `2020-01-01T00:00:00` — valid ISO-8601, no timezone offset, well before the escalation.
     feed = _events(hub, since="2020-01-01T00:00:00")
     assert [e["kind"] for e in feed] == ["needs-human"]

@@ -18,7 +18,6 @@ from sqlalchemy import select
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import (
-    IWriteChunkRepository,
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemClosure,
@@ -27,11 +26,11 @@ from blizzard.hub.domain.work import (
     mint_chunk,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
     HubHarness,
     build_hub,
+    chunk_stores,
     hub_store_connections,
     migrate_to,
     seed_chunk,
@@ -184,10 +183,6 @@ def _stored_runner_ids(hub: HubHarness, chunk_id: str) -> list[str | None]:
     return [r.runner_id for r in rows]
 
 
-def _writable_chunks(hub: HubHarness) -> IWriteChunkRepository:
-    return cast(IWriteChunkRepository, hub.services.chunks)
-
-
 def _proposal_row(chunk_id: str, proposal_id: str, *, node_id: str = "nd_1") -> WorkItemProposalRow:
     return WorkItemProposalRow(
         proposal_id=proposal_id,
@@ -269,16 +264,16 @@ def test_runner_id_is_stamped_on_a_cross_graph_migration(tmp_path: Path) -> None
     assert _stored_runner_ids(hub, chunk_id) == ["r-submit"]
 
 
-# --- IReadChunkRepository.unmaterialized_proposals() — the D2 candidate read --
+# --- IReadChunkDeliveryRepository.unmaterialized_proposals() — the D2 candidate read --
 
 
 def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunks = _writable_chunks(hub)
+    chunks = chunk_stores(hub.engine, hub.clock)
 
     def _mint() -> str:
         chunk = mint_chunk([], graph_id="gr_x", at=_T0)
-        chunks.mint(chunk)
+        chunks.record.mint(chunk)
         return chunk.chunk_id
 
     runner_terminal = _mint()
@@ -289,7 +284,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
     grouped_after_delivery = _mint()
 
     # A runner node routing straight to `done` via the ordinary `record_transition`.
-    chunks.record_transition(
+    chunks.movement.record_transition(
         transition_id="tr_runner",
         chunk_id=runner_terminal,
         from_node_id="nd_1",
@@ -303,7 +298,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
     )
 
     # A hub node routing to `done` via `record_hub_step_transition`.
-    chunks.record_transition(
+    chunks.movement.record_transition(
         transition_id="tr_hub_pre",
         chunk_id=hub_terminal,
         from_node_id="nd_1",
@@ -315,7 +310,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         artifacts=[],
         proposals=[_proposal_row(hub_terminal, "wip_hub")],
     )
-    chunks.record_hub_step_transition(
+    chunks.hub_exec.record_hub_step_transition(
         hub_terminal,
         from_node_id="nd_2",
         to_node_id="done",
@@ -329,7 +324,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
     )
 
     # Delivered, then later stopped — still counts as delivered (D2's did-it-deliver reading).
-    chunks.record_transition(
+    chunks.movement.record_transition(
         transition_id="tr_stopped_after",
         chunk_id=stopped_after_delivery,
         from_node_id="nd_1",
@@ -341,10 +336,10 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         artifacts=[],
         proposals=[_proposal_row(stopped_after_delivery, "wip_stopped_after")],
     )
-    chunks.record_stop(stopped_after_delivery, by="operator", at=_T0)
+    chunks.lifecycle.record_stop(stopped_after_delivery, by="operator", at=_T0)
 
     # Never delivered — parked mid-graph, no terminal transition.
-    chunks.record_transition(
+    chunks.movement.record_transition(
         transition_id="tr_never",
         chunk_id=never_delivered,
         from_node_id="nd_1",
@@ -358,7 +353,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
     )
 
     # Hand-completed by an operator — `chunk_completed`, no transition at all.
-    chunks.record_transition(
+    chunks.movement.record_transition(
         transition_id="tr_hand",
         chunk_id=hand_completed,
         from_node_id="nd_1",
@@ -370,10 +365,10 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         artifacts=[],
         proposals=[_proposal_row(hand_completed, "wip_hand")],
     )
-    chunks.record_completion(hand_completed, by="operator", at=_T0)
+    chunks.lifecycle.record_completion(hand_completed, by="operator", at=_T0)
 
     # Delivered, then grouped away — ephemeral now, excluded like a deleted chunk.
-    chunks.record_transition(
+    chunks.movement.record_transition(
         transition_id="tr_grouped",
         chunk_id=grouped_after_delivery,
         from_node_id="nd_1",
@@ -385,19 +380,19 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         artifacts=[],
         proposals=[_proposal_row(grouped_after_delivery, "wip_grouped")],
     )
-    chunks.record_grouped(grouped_after_delivery, grouped_into=runner_terminal, at=_T0)
+    chunks.lifecycle.record_grouped(grouped_after_delivery, grouped_into=runner_terminal, at=_T0)
 
-    candidates = {row.proposal_id for row in chunks.unmaterialized_proposals()}
+    candidates = {row.proposal_id for row in chunks.delivery.unmaterialized_proposals()}
 
     assert candidates == {"wip_runner", "wip_hub", "wip_stopped_after"}
 
 
 def test_candidate_read_excludes_an_already_judged_proposal(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunks = _writable_chunks(hub)
+    chunks = chunk_stores(hub.engine, hub.clock)
     chunk = mint_chunk([], graph_id="gr_x", at=_T0)
-    chunks.mint(chunk)
-    chunks.record_transition(
+    chunks.record.mint(chunk)
+    chunks.movement.record_transition(
         transition_id="tr_1",
         chunk_id=chunk.chunk_id,
         from_node_id="nd_1",
@@ -410,13 +405,13 @@ def test_candidate_read_excludes_an_already_judged_proposal(tmp_path: Path) -> N
         proposals=[_proposal_row(chunk.chunk_id, "wip_judged")],
     )
 
-    assert len(chunks.unmaterialized_proposals()) == 1
+    assert len(chunks.delivery.unmaterialized_proposals()) == 1
 
-    chunks.record_work_item_materialization(
+    chunks.delivery.record_work_item_materialization(
         "wip_judged", outcome=WorkItemMaterializationOutcome.UNRESOLVED, pointer=None, reason="no proposer", at=_T0
     )
 
-    assert chunks.unmaterialized_proposals() == []
+    assert chunks.delivery.unmaterialized_proposals() == []
 
 
 # --- D8's two composite writes: all-or-nothing, idempotent per proposal_id ----
@@ -424,12 +419,12 @@ def test_candidate_read_excludes_an_already_judged_proposal(tmp_path: Path) -> N
 
 def test_record_work_item_materialization_returns_false_on_a_second_call(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunks = _writable_chunks(hub)
+    chunks = chunk_stores(hub.engine, hub.clock)
 
-    first = chunks.record_work_item_materialization(
+    first = chunks.delivery.record_work_item_materialization(
         "wip_1", outcome=WorkItemMaterializationOutcome.UNRESOLVED, pointer=None, reason="no proposer", at=_T0
     )
-    second = chunks.record_work_item_materialization(
+    second = chunks.delivery.record_work_item_materialization(
         "wip_1", outcome=WorkItemMaterializationOutcome.UNRESOLVED, pointer=None, reason="no proposer", at=_T0
     )
 
@@ -467,7 +462,7 @@ def test_materialize_create_mints_the_item_chunk_and_outcome_atomically_and_is_i
     )
     assert first is True
     assert items.get("hub", pointer.ref) is not None
-    assert ChunkStore(store, FixedClock(_T0)).get(chunk.chunk_id) is not None
+    assert chunk_stores(engine, FixedClock(_T0)).record.get(chunk.chunk_id) is not None
 
     second = items.materialize_create(
         proposal_id="wip_create_1",

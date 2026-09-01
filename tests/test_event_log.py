@@ -11,15 +11,15 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import insert, select
+from sqlalchemy import Engine, insert, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import EscalationOpen, EventFeed, EventRow
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store import ChunkStore
-from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph
+from tests.support import chunk_stores, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
 
@@ -31,18 +31,18 @@ def _at(seconds: int) -> datetime:
     return _T0 + timedelta(seconds=seconds)
 
 
-def _store(tmp_path: Path) -> ChunkStore:
+def _store(tmp_path: Path) -> tuple[ChunkStores, Engine]:
     _, engine = migrate_to(tmp_path, "head")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
         seed_chunk(conn, "ch_a", graph_id="gr_1", at=_T0)
         seed_chunk(conn, "ch_b", graph_id="gr_1", at=_T0)
-    return ChunkStore(hub_store_connections(engine), FixedClock(_T0))
+    return chunk_stores(engine, FixedClock(_T0)), engine
 
 
 def test_record_event_roundtrips_columns_and_json_detail(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    store.record_event(
+    store, _ = _store(tmp_path)
+    store.events.record_event(
         severity="critical",
         kind="worker-lost",
         runner_id="runner-1",
@@ -53,7 +53,7 @@ def test_record_event_roundtrips_columns_and_json_detail(tmp_path: Path) -> None
         detail={"via": "advance", "reason": "failed", "stderr_tail": "boom"},
         at=_at(10),
     )
-    (row,) = store.list_events()
+    (row,) = store.events.list_events()
     assert row.severity == "critical"
     assert row.kind == "worker-lost"
     assert row.runner_id == "runner-1"
@@ -67,8 +67,8 @@ def test_record_event_roundtrips_columns_and_json_detail(tmp_path: Path) -> None
 
 
 def test_runner_scoped_event_carries_no_chunk(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    store.record_event(
+    store, _ = _store(tmp_path)
+    store.events.record_event(
         severity="warning",
         kind="command-failed",
         runner_id="runner-1",
@@ -79,15 +79,15 @@ def test_runner_scoped_event_carries_no_chunk(tmp_path: Path) -> None:
         detail=None,
         at=_at(5),
     )
-    (row,) = store.list_events()
+    (row,) = store.events.list_events()
     assert row.chunk_id is None
     assert row.lease_id is None
     assert row.detail is None
 
 
 def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    store.record_event(
+    store, _ = _store(tmp_path)
+    store.events.record_event(
         severity="info",
         kind="attempt-abandoned",
         runner_id="r1",
@@ -98,7 +98,7 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
         detail=None,
         at=_at(1),
     )
-    store.record_event(
+    store.events.record_event(
         severity="warning",
         kind="attempt-failed",
         runner_id="r1",
@@ -109,7 +109,7 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
         detail=None,
         at=_at(2),
     )
-    store.record_event(
+    store.events.record_event(
         severity="critical",
         kind="worker-lost",
         runner_id="r2",
@@ -122,43 +122,43 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
     )
 
     # Newest-first over recorded_at.
-    assert [e.message for e in store.list_events()] == ["c", "b", "a"]
+    assert [e.message for e in store.events.list_events()] == ["c", "b", "a"]
     # Filters.
-    assert [e.message for e in store.list_events(severity="warning")] == ["b"]
-    assert [e.message for e in store.list_events(runner_id="r2")] == ["c"]
-    assert [e.message for e in store.list_events(chunk_id="ch_a")] == ["b", "a"]
-    assert [e.message for e in store.list_events(since=_at(2))] == ["c", "b"]
+    assert [e.message for e in store.events.list_events(severity="warning")] == ["b"]
+    assert [e.message for e in store.events.list_events(runner_id="r2")] == ["c"]
+    assert [e.message for e in store.events.list_events(chunk_id="ch_a")] == ["b", "a"]
+    assert [e.message for e in store.events.list_events(since=_at(2))] == ["c", "b"]
     # Bounded.
-    assert [e.message for e in store.list_events(limit=1)] == ["c"]
+    assert [e.message for e in store.events.list_events(limit=1)] == ["c"]
 
 
 def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    with store._store.write("test_seed_chunks") as conn:  # seed the requeue and stop cases' chunks
+    store, engine = _store(tmp_path)
+    with engine.begin() as conn:  # seed the requeue and stop cases' chunks
         seed_chunk(conn, "ch_c", graph_id="gr_1", at=_T0)
         seed_chunk(conn, "ch_d", graph_id="gr_1", at=_T0)
         seed_chunk(conn, "ch_e", graph_id="gr_1", at=_T0)
         seed_chunk(conn, "ch_f", graph_id="gr_1", at=_T0)
 
     # ch_a: escalation, nothing after it -> OPEN.
-    store.record_escalation("ch_a", epoch=1, takeover_command="cd a && resume", at=_at(10))
+    store.escalations.record_escalation("ch_a", epoch=1, takeover_command="cd a && resume", at=_at(10))
     # ch_b: escalation then a LATER lease mint -> superseded (closed).
-    store.record_escalation("ch_b", epoch=1, takeover_command="cd b && resume", at=_at(10))
-    store.record_lease("ch_b", epoch=2, runner_id="r1", at=_at(20))
+    store.escalations.record_escalation("ch_b", epoch=1, takeover_command="cd b && resume", at=_at(10))
+    store.route.record_lease("ch_b", epoch=2, runner_id="r1", at=_at(20))
     # ch_c: escalation then a LATER requeue -> superseded (closed).
-    store.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=_at(10))
-    store.record_requeue("ch_c", at=_at(20))
+    store.escalations.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=_at(10))
+    store.movement.record_requeue("ch_c", at=_at(20))
     # ch_d: escalation then a LATER stop -> superseded (#292). This read feeds the critical
     # `needs-human` row in `GET /api/events`, so a stopped chunk must leave it.
-    store.record_escalation("ch_d", epoch=1, takeover_command="cd d && resume", at=_at(10))
-    store.record_stop("ch_d", by="operator", at=_at(20))
+    store.escalations.record_escalation("ch_d", epoch=1, takeover_command="cd d && resume", at=_at(10))
+    store.lifecycle.record_stop("ch_d", by="operator", at=_at(20))
     # ch_e: stop then a LATER escalation -> still OPEN; supersession is ordered, not a flag.
-    store.record_stop("ch_e", by="operator", at=_at(10))
-    store.record_escalation("ch_e", epoch=1, takeover_command="cd e && resume", at=_at(20))
+    store.lifecycle.record_stop("ch_e", by="operator", at=_at(10))
+    store.escalations.record_escalation("ch_e", epoch=1, takeover_command="cd e && resume", at=_at(20))
     # ch_f: escalation then the chunk REACHES DONE elsewhere -> superseded (#293). No later
     # lease is minted here, so completion is the only arm that can close it.
-    store.record_escalation("ch_f", epoch=1, takeover_command="cd f && resume", at=_at(10))
-    store.record_transition(
+    store.escalations.record_escalation("ch_f", epoch=1, takeover_command="cd f && resume", at=_at(10))
+    store.movement.record_transition(
         transition_id="tr_f1",
         chunk_id="ch_f",
         from_node_id=None,
@@ -172,10 +172,10 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
     )
 
     # ch_f drops because it DERIVES done, not incidentally — pin the mechanism, not the count.
-    ch_f_facts = store.load_facts("ch_f")
+    ch_f_facts = store.facts.load_facts("ch_f")
     assert ch_f_facts is not None and ch_f_facts.status() is ChunkStatus.DONE
 
-    opens = store.list_open_escalations()
+    opens = store.escalations.list_open_escalations()
     assert sorted(e.chunk_id for e in opens) == ["ch_a", "ch_e"]
     assert next(e.takeover_command for e in opens if e.chunk_id == "ch_a") == "cd a && resume"
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.domain.leases import (
-    IReadLeaseRepository,
+    IReadLeaseSessionRepository,
     LeaseRecord,
     PoolHead,
 )
@@ -31,7 +31,7 @@ class ResumedSession:
 class SessionResolver:
     """Resolves a spawn's session identity against the store's own session history."""
 
-    leases: IReadLeaseRepository
+    leases: IReadLeaseSessionRepository
     harness: IHarnessAdapter
     transcripts: IHarnessTranscriptSource | None = None
 

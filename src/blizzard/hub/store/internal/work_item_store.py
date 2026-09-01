@@ -27,7 +27,7 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_store import (
+from blizzard.hub.store.internal.chunk_rows import (
     insert_chunk_rows,
     insert_materialization_row,
     insert_promote_rows,
@@ -118,7 +118,7 @@ class WorkItemStore:
         position: float,
     ) -> tuple[WorkItemRecord, int | None]:
         """:meth:`create_with_chunk` plus the promote-then-tail-stamp pair
-        (:func:`~blizzard.hub.store.internal.chunk_store.insert_promote_rows`) plus the
+        (:func:`~blizzard.hub.store.internal.chunk_rows.insert_promote_rows`) plus the
         run's own identity row (:func:`~blizzard.hub.store.internal.run_context_store.insert_run_context_row`,
         blizzard#393), on one ``engine.begin()`` connection — a routine run's own one-act
         mint (blizzard#392)."""

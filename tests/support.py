@@ -23,7 +23,7 @@ from sqlalchemy import Engine, event
 from sqlalchemy import insert as sa_insert
 
 from blizzard.auth_core import Role
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import USER_PREFIX, Id
 from blizzard.foundation.logging import get_logger
@@ -48,6 +48,7 @@ from blizzard.hub.config import (
 )
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
+from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
@@ -64,7 +65,8 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -82,9 +84,18 @@ _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 def hub_store_connections(engine: Engine) -> HubStoreConnections:
     """The ``hub/store/internal/`` seam (issue #413) every adapter test wires over its
-    own migrated engine — one helper so the 13 adapters' test files construct it
+    own migrated engine — one helper so the 27 adapters' test files construct it
     identically."""
     return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
+
+
+def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
+    """All 15 chunk-seam adapters over one engine/clock, bundled the same shape
+    ``hub/composition.py`` wires in production (:func:`build_chunk_stores`) — the
+    store-level test's own single-object fixture-setup convenience a 15-way physical
+    split would otherwise take from it. A test calls ``stores.<seam>.<method>(...)`` in
+    place of the old single ``ChunkStore``'s bare method call."""
+    return build_chunk_stores(hub_store_connections(engine), clock)
 
 
 def make_graph(
@@ -478,7 +489,7 @@ def github_double(
         return JSONResponse(status_code=200, content=items, headers=headers)
 
     client = TestClient(app)
-    client.forge_state = state  # type: ignore[attr-defined]  # tests flip PR fate (e.g. close-without-merge)
+    client.forge_state = state  # type: ignore[attr-defined] # tests flip PR fate (e.g. close-without-merge)
     return client
 
 
@@ -557,7 +568,7 @@ def build_hub(
     store_connections = hub_store_connections(engine)
     work_item_store = WorkItemStore(store_connections)
     delete_service = DeleteService(
-        chunks=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
+        facts=ChunkFactsStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
     )
     finding_store = FindingStore(store_connections)
     finding_exit = FindingExitService(repo=finding_store, clock=clock)

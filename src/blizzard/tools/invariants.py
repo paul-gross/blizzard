@@ -17,11 +17,15 @@ from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import ChunkFacts, MigrationSource, RouteHistory
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_store import DEFAULT_MODEL, ChunkStore
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
+from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
 from blizzard.runner.store import schema as runner
 
 
@@ -54,12 +58,13 @@ class QueryCheck(Check):
 class FactsCheck(Check):
     """An invariant answerable only per chunk, over its loaded facts."""
 
-    store: ChunkStore
+    facts: IReadChunkFactsRepository
+    record: IReadChunkRecordRepository
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
-        for chunk in self.store.list_all():
-            violations.extend(self.for_chunk(chunk.chunk_id, self.store.load_facts(chunk.chunk_id)))
+        for chunk in self.record.list_all():
+            violations.extend(self.for_chunk(chunk.chunk_id, self.facts.load_facts(chunk.chunk_id)))
         return violations
 
     def for_chunk(self, chunk_id: str, facts: ChunkFacts | None) -> list[Violation]:
@@ -760,8 +765,12 @@ class HubInvariants:
         with self.engine.connect() as conn:
             violations.extend(MigrationsAtomic(conn).run())
         store_connections = HubStoreConnections(self.engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
-        store = ChunkStore(store_connections, self.clock)
-        for facts_check in (DerivationAndDelivery(store), LiveRouteHasToken(store)):
+        facts_store = ChunkFactsStore(store_connections, self.clock)
+        record_store = ChunkRecordStore(store_connections, self.clock, facts=facts_store)
+        for facts_check in (
+            DerivationAndDelivery(facts_store, record_store),
+            LiveRouteHasToken(facts_store, record_store),
+        ):
             violations.extend(facts_check.run())
         return violations
 

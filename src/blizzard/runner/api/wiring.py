@@ -57,7 +57,7 @@ class RunnerWiring:
         is a second, independent source of worker-verb authorization, not a re-mint: the
         resolved record's id, node and epoch are unchanged from whatever they already were."""
         stores = self.stores()
-        lease = stores.leases.active_lease(lease_id) or stores.takeover.lease_for_open_takeover(lease_id)
+        lease = stores.lease_record.active_lease(lease_id) or stores.takeover.lease_for_open_takeover(lease_id)
         if lease is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

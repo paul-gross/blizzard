@@ -117,7 +117,7 @@ class IngestBroadcast:
         if fact.kind == LEASE_MINTED:
             # This site writes a `lease_facts` row, but its `claimed` cause maps to `route_created`
             # (issue #213), so a lost-ack replay dedupes against the live route.
-            route = self.services.chunks.route_of(chunk_id)
+            route = self.services.chunks.route.route_of(chunk_id)
             if route is not None and route.route_id is not None:
                 return f"route_created:{route.route_id}"
         return None

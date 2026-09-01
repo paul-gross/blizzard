@@ -25,7 +25,16 @@ from blizzard.runner.domain.git_commit_declaration import (
     IReadGitCommitDeclarationRepository,
     IWriteGitCommitDeclarationRepository,
 )
-from blizzard.runner.domain.leases import IReadLeaseRepository, IWriteLeaseRepository
+from blizzard.runner.domain.leases import (
+    IReadLeaseLivenessRepository,
+    IReadLeaseRecordRepository,
+    IReadLeaseResumeIntentRepository,
+    IReadLeaseSessionRepository,
+    IWriteLeaseLivenessRepository,
+    IWriteLeaseRecordRepository,
+    IWriteLeaseResumeIntentRepository,
+    IWriteLeaseSessionRepository,
+)
 from blizzard.runner.domain.outbound import IReadOutboundRepository, IWriteOutboundRepository
 from blizzard.runner.domain.pause import IReadPauseRepository, IWritePauseRepository
 from blizzard.runner.domain.requeue import IReadRequeueRepository, IWriteRequeueRepository
@@ -39,7 +48,10 @@ __all__ = ["IReadRunnerStore", "IWriteRunnerStore", "RunnerStores"]
 
 
 class IReadRunnerStore(
-    IReadLeaseRepository,
+    IReadLeaseRecordRepository,
+    IReadLeaseSessionRepository,
+    IReadLeaseLivenessRepository,
+    IReadLeaseResumeIntentRepository,
     IReadEnvironmentRepository,
     IReadTranscriptLedgerRepository,
     IReadTokenRepository,
@@ -64,7 +76,10 @@ class IReadRunnerStore(
 
 
 class IWriteRunnerStore(
-    IWriteLeaseRepository,
+    IWriteLeaseRecordRepository,
+    IWriteLeaseSessionRepository,
+    IWriteLeaseLivenessRepository,
+    IWriteLeaseResumeIntentRepository,
     IWriteEnvironmentRepository,
     IWriteTranscriptLedgerRepository,
     IWriteTokenRepository,
@@ -93,7 +108,10 @@ class RunnerStores:
     """The wired concept-store collaborators, built by
     :func:`~blizzard.runner.composition.build_stores`."""
 
-    leases: IWriteLeaseRepository
+    lease_record: IWriteLeaseRecordRepository
+    session: IWriteLeaseSessionRepository
+    liveness: IWriteLeaseLivenessRepository
+    resume_intent: IWriteLeaseResumeIntentRepository
     environments: IWriteEnvironmentRepository
     transcript_ledger: IWriteTranscriptLedgerRepository
     tokens: IWriteTokenRepository

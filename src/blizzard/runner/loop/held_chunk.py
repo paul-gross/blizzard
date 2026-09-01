@@ -69,7 +69,7 @@ class HeldChunk:
         if (
             detail.status == ChunkStatus.RUNNING
             and hub_epoch is not None
-            and hub_epoch > self.ctx.stores.leases.latest_epoch(self.chunk_id)
+            and hub_epoch > self.ctx.stores.lease_record.latest_epoch(self.chunk_id)
         ):
             # The strictly-higher epoch is load-bearing: a just-escalated chunk still derives
             # `running` at the SAME epoch until its fact flushes, and would re-spawn forever (#63).

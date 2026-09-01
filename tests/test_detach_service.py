@@ -13,9 +13,10 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.detach import DetachService, NotRouted
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import Chunk, IWriteChunkRepository
+from blizzard.hub.domain.work import Chunk
 
 pytestmark = pytest.mark.unit
 
@@ -42,9 +43,9 @@ class _FakeChunkRepo:
         raise NotImplementedError(f"DetachService should not touch {name!r}")
 
 
-def _as_write_repo(repo: _FakeChunkRepo) -> IWriteChunkRepository:
+def _as_route(repo: _FakeChunkRepo) -> IWriteChunkRouteRepository:
     """Assert the fake satisfies the Protocol DetachService depends on (see module docstring)."""
-    return cast(IWriteChunkRepository, repo)
+    return cast(IWriteChunkRouteRepository, repo)
 
 
 def _route(chunk_id: str = "chk_1") -> Route:
@@ -54,7 +55,7 @@ def _route(chunk_id: str = "chk_1") -> Route:
 def test_detach_releases_the_live_route_with_the_injected_clocks_now() -> None:
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(route=_route())
-    service = DetachService(chunks=_as_write_repo(repo), clock=clock)
+    service = DetachService(route=_as_route(repo), clock=clock)
 
     service.detach(_CHUNK)
 
@@ -64,7 +65,7 @@ def test_detach_releases_the_live_route_with_the_injected_clocks_now() -> None:
 def test_detach_raises_not_routed_and_writes_nothing_when_there_is_no_live_route() -> None:
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(route=None)
-    service = DetachService(chunks=_as_write_repo(repo), clock=clock)
+    service = DetachService(route=_as_route(repo), clock=clock)
 
     with pytest.raises(NotRouted):
         service.detach(_CHUNK)
@@ -76,7 +77,7 @@ def test_detach_uses_the_injected_clock_not_the_wall_clock() -> None:
     later = datetime(2026, 6, 1, tzinfo=UTC)
     clock = FixedClock(instant=later)
     repo = _FakeChunkRepo(route=_route())
-    service = DetachService(chunks=_as_write_repo(repo), clock=clock)
+    service = DetachService(route=_as_route(repo), clock=clock)
 
     service.detach(_CHUNK)
 

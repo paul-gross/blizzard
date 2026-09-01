@@ -49,7 +49,7 @@ def question_view(row: QuestionRow) -> QuestionView:
 @router.post("/questions", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require(QUESTION_ANSWER))])
 def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
     """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``."""
-    if services.chunks.get(fact.chunk_id) is None:
+    if services.chunks.record.get(fact.chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {fact.chunk_id}")
     change = chunk_events.ChunkChanged.before(services, fact.chunk_id)
     services.questions.record_asked(fact)
@@ -75,7 +75,7 @@ def answer_question(
 
     ``answered_by`` is taken from the authenticated session identity, never the request
     body's ``answered_by`` field — a spoofed value there is silently ignored (issue #91)."""
-    pre_answer = services.chunks.get_question(question_id)
+    pre_answer = services.chunks.questions.get_question(question_id)
     if pre_answer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
     change = chunk_events.ChunkChanged.before(services, pre_answer.chunk_id)
@@ -92,7 +92,7 @@ def answer_question(
         # first-write-wins pattern as a gate decision).
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=result.model_dump())
     # The winning answer row alone flips the chunk out of waiting_on_human.
-    winner = services.chunks.get_question(question_id)
+    winner = services.chunks.questions.get_question(question_id)
     if winner is not None:
         key = f"question_answers:{question_id}"
         services.events.publish_question_answered(winner.chunk_id, question_id, key=key)
@@ -105,4 +105,4 @@ def answer_question(
 @router.get("/questions", response_model=list[QuestionView], dependencies=[Depends(require(FLEET_VIEW))])
 def list_open_questions(services: Annotated[HubServices, Depends(get_services)]) -> list[QuestionView]:
     """Every open (unanswered) question across the fleet — the ``hub status`` surface."""
-    return [question_view(row) for row in services.chunks.list_open_questions()]
+    return [question_view(row) for row in services.chunks.questions.list_open_questions()]

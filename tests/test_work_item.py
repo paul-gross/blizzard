@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.work import WorkItemAuthor, WorkRef
-from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.source import WorkItem
 from tests.support import FakeWorkSource, build_hub, hub_store_connections, pointer_token, seed_work_item
@@ -113,7 +114,7 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     )
     hub_store = hub_store_connections(hub.engine)
     items = WorkItemStore(hub_store)
-    chunks = ChunkStore(hub_store, hub.clock)
+    work_refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))
     author = WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_proposer", node_name="triage")
     hub_item = seed_work_item(
         items,
@@ -126,9 +127,9 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     )
     # `seed_work_item` mints its own resting chunk holding the hub pointer alone
     # (blizzard#359) — grow *that* chunk with the forge pointer to avoid re-holding it.
-    chunk_id = chunks.find_live_holder(WorkRef(source="hub", ref=hub_item.ref))
+    chunk_id = work_refs.find_live_holder(WorkRef(source="hub", ref=hub_item.ref))
     assert chunk_id is not None
-    chunks.add_work_refs(chunk_id, [WorkRef(source="widget", ref="42")], at=hub.clock.now())
+    work_refs.add_work_refs(chunk_id, [WorkRef(source="widget", ref="42")], at=hub.clock.now())
 
     entries = {e["source"]: e for e in hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]}
 
@@ -180,8 +181,9 @@ def test_work_items_an_unresolvable_hub_pointer_still_carries_an_in_app_web_url(
     other pointer (blizzard#362)."""
     hub = build_hub(tmp_path, work_sources={"widget": FakeWorkSource(name="widget")})
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
-    chunks = ChunkStore(hub_store_connections(hub.engine), hub.clock)
-    chunks.add_work_refs(chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now())
+    hub_store = hub_store_connections(hub.engine)
+    work_refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))
+    work_refs.add_work_refs(chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now())
 
     entries = {e["source"]: e for e in hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]}
 

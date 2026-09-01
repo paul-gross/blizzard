@@ -11,8 +11,9 @@ import threading
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.queue import GROUPABLE_STATUSES, ChunkNotFound
-from blizzard.hub.domain.work import Chunk, IReadChunkRepository, IWriteWorkItemRepository
+from blizzard.hub.domain.work import Chunk, IWriteWorkItemRepository
 
 
 class ChunkNotDeletable(ValueError):
@@ -36,12 +37,12 @@ class DeleteService:
     def __init__(
         self,
         *,
-        chunks: IReadChunkRepository,
+        facts: IReadChunkFactsRepository,
         items: IWriteWorkItemRepository,
         clock: IClock,
         claim_lock: threading.Lock,
     ) -> None:
-        self._chunks = chunks
+        self._facts = facts
         self._items = items
         self._clock = clock
         # Shared with ClaimService/EditService/RestartService (issue #120), so a claim
@@ -55,7 +56,7 @@ class DeleteService:
         holds, or one terminal. Derives the guard's status fresh under the lock from a
         single ``load_facts`` call, exactly as ``EditService.edit`` does."""
         with self._claim_lock:
-            facts = self._chunks.load_facts(chunk.chunk_id)
+            facts = self._facts.load_facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             status = facts.status()

@@ -16,6 +16,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.delete import ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.queue import ChunkNotFound
@@ -23,7 +24,6 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     EscalationFact,
-    IReadChunkRepository,
     IWriteWorkItemRepository,
     PauseFact,
     QuestionFact,
@@ -76,9 +76,9 @@ def _service(
     chunk: Chunk | None, facts: ChunkFacts | None, *, clock: FixedClock | None = None
 ) -> tuple[DeleteService, _FakeItemsRepo]:
     items = _FakeItemsRepo()
-    chunks = cast(IReadChunkRepository, _FakeChunkRepo(chunk=chunk, facts=facts))
+    facts_repo = cast(IReadChunkFactsRepository, _FakeChunkRepo(chunk=chunk, facts=facts))
     service = DeleteService(
-        chunks=chunks,
+        facts=facts_repo,
         items=cast(IWriteWorkItemRepository, items),
         clock=clock or FixedClock(instant=_T0),
         claim_lock=threading.Lock(),

@@ -1,4 +1,4 @@
-"""The close-intent outbox's drain (blizzard#383). ``ChunkStore.pending_close_intents()``/
+"""The close-intent outbox's drain (blizzard#383). ``ChunkDeliveryStore.pending_close_intents()``/
 ``record_work_item_closure()`` are exercised against a real, migrated store. The enqueue side
 (landing/completion, D1) is covered by ``tests/test_close_intents_enqueue.py``; this file
 covers the drain that retires what the enqueue queued."""
@@ -13,8 +13,10 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
 from blizzard.hub.domain.work import (
-    IWriteChunkRepository,
     PendingCloseIntent,
     WorkItemCloseOutcome,
     WorkItemClosure,
@@ -28,19 +30,12 @@ from tests.support import FakeCloser, HubHarness, build_hub, hub_store_connectio
 pytestmark = pytest.mark.unit
 
 
-def _writable(hub: HubHarness) -> IWriteChunkRepository:
-    """A test-only cast, mirroring ``tests/test_hub_command_node.py``'s own helper:
-    ``HubHarness.services.chunks`` is read-typed, but the live object is always the
-    write-capable ``ChunkStore``."""
-    return cast(IWriteChunkRepository, hub.services.chunks)
-
-
 def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     """Simulate a generic hub command node's mid-run ``merged/<repo>`` marker —
     the current landing truth :func:`~blizzard.hub.domain.work.has_landed_repos` reads
     (issue #67), independent of any real graph/node machinery. Enqueues a pending close
     intent (D1) as a side effect of the same write."""
-    _writable(hub).record_hub_artifact(
+    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id="nd_deliver",
         node_name="deliver",
@@ -51,7 +46,7 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     )
 
 
-# ChunkStore.record_work_item_closure() — retires its matching intent in the same
+# ChunkDeliveryStore.record_work_item_closure() — retires its matching intent in the same
 # transaction (blizzard#383, F8/F9) whenever the outcome is closed/gone.
 
 
@@ -61,7 +56,7 @@ def test_record_work_item_closure_retires_the_matching_pending_intent(tmp_path: 
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
 
-    wrote = _writable(hub).record_work_item_closure(
+    wrote = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         chunk_id,
         pointer=WorkRef(source="default", ref="1"),
         outcome=WorkItemCloseOutcome.CLOSED,
@@ -70,7 +65,7 @@ def test_record_work_item_closure_retires_the_matching_pending_intent(tmp_path: 
     )
 
     assert wrote is True
-    assert hub.services.chunks.pending_close_intents() == []
+    assert hub.services.chunks.delivery.pending_close_intents() == []
 
 
 @pytest.mark.component
@@ -82,23 +77,23 @@ def test_record_work_item_closure_replay_still_retires_an_interrupted_intent(tmp
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
     pointer = WorkRef(source="default", ref="1")
-    _writable(hub).record_work_item_closure(
+    cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
     )
 
-    wrote = _writable(hub).record_work_item_closure(
+    wrote = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.CLOSED, reason=None, at=hub.clock.now()
     )
 
     assert wrote is False  # no fresh outcome row — this is a replay
-    assert hub.services.chunks.pending_close_intents() == []  # retirement still finished
+    assert hub.services.chunks.delivery.pending_close_intents() == []  # retirement still finished
 
 
 @pytest.mark.component
 def test_record_work_item_closure_against_a_never_enqueued_ref_writes_no_intent_row(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 
-    wrote = _writable(hub).record_work_item_closure(
+    wrote = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         "ch_nonexistent",
         pointer=WorkRef(source="default", ref="1"),
         outcome=WorkItemCloseOutcome.CLOSED,
@@ -107,7 +102,7 @@ def test_record_work_item_closure_against_a_never_enqueued_ref_writes_no_intent_
     )
 
     assert wrote is True  # the outcome fact itself is unconditional
-    assert hub.services.chunks.pending_close_intents() == []
+    assert hub.services.chunks.delivery.pending_close_intents() == []
 
 
 @pytest.mark.component
@@ -117,11 +112,11 @@ def test_record_work_item_closure_failed_outcome_leaves_the_intent_pending(tmp_p
     _land(hub, chunk_id)
     pointer = WorkRef(source="default", ref="1")
 
-    _writable(hub).record_work_item_closure(
+    cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.FAILED, reason="boom", at=hub.clock.now()
     )
 
-    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.pending_close_intents()
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
 
 
 # CloseIntentDrainer.sweep() — fakes (unit tier)
@@ -137,9 +132,10 @@ class _RecordedEvent:
 
 
 class _FakeCloseChunks:
-    """The minimal slice of :class:`IWriteChunkRepository` :class:`CloseIntentDrainer` calls.
-    ``record_work_item_closure`` also retires the matching intent — recorded rather than
-    persisted, matching the real store's own folded transaction."""
+    """The minimal slice of :class:`IWriteChunkDeliveryRepository`/:class:`IWriteChunkEventsRepository`
+    :class:`CloseIntentDrainer` calls. ``record_work_item_closure`` also retires the
+    matching intent — recorded rather than persisted, matching the real store's own
+    folded transaction."""
 
     def __init__(self, candidates: list[PendingCloseIntent]) -> None:
         self._candidates = candidates
@@ -182,10 +178,20 @@ class _FakeCloseChunks:
         return len(self.events)
 
 
+def _as_delivery(chunks: _FakeCloseChunks) -> IWriteChunkDeliveryRepository:
+    return cast(IWriteChunkDeliveryRepository, chunks)
+
+
+def _as_events(chunks: _FakeCloseChunks) -> IWriteChunkEventsRepository:
+    return cast(IWriteChunkEventsRepository, chunks)
+
+
 def _drainer(chunks: _FakeCloseChunks, closers: dict[str, FakeCloser]) -> CloseIntentDrainer:
     registry = WorkSourceRegistry({}, closers=closers)  # type: ignore[arg-type]
     clock = FixedClock(datetime(2026, 8, 1, tzinfo=UTC))
-    return CloseIntentDrainer(chunks=cast(IWriteChunkRepository, chunks), work_sources=registry, clock=clock)
+    return CloseIntentDrainer(
+        delivery=_as_delivery(chunks), events=_as_events(chunks), work_sources=registry, clock=clock
+    )
 
 
 def test_sweep_closes_a_pending_intents_pointer_and_records_an_info_event() -> None:
@@ -293,13 +299,18 @@ def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Pat
     _land(hub, chunk_id)
     closer = FakeCloser()
     registry = WorkSourceRegistry({}, closers={"default": closer})
-    drainer = CloseIntentDrainer(chunks=_writable(hub), work_sources=registry, clock=hub.clock)
+    drainer = CloseIntentDrainer(
+        delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+        events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
+        work_sources=registry,
+        clock=hub.clock,
+    )
 
     drainer.sweep()
     drainer.sweep()
 
     assert closer.closed == [WorkRef(source="default", ref="1")]  # only the first pass actually closed it
-    assert hub.services.chunks.pending_close_intents() == []
+    assert hub.services.chunks.delivery.pending_close_intents() == []
 
 
 @pytest.mark.component
@@ -310,15 +321,22 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
     pointer = WorkRef(source="default", ref="1")
     closer = FakeCloser(fail_refs={"1"})
     registry = WorkSourceRegistry({}, closers={"default": closer})
-    drainer = CloseIntentDrainer(chunks=_writable(hub), work_sources=registry, clock=hub.clock)
+    drainer = CloseIntentDrainer(
+        delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+        events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
+        work_sources=registry,
+        clock=hub.clock,
+    )
 
     drainer.sweep()
-    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.pending_close_intents()
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
 
     closer.fail_refs.clear()  # simulate the transient failure clearing before the next sweep
     drainer.sweep()
 
-    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.pending_close_intents()
+    assert (
+        PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.delivery.pending_close_intents()
+    )
     assert closer.closed == [pointer]
 
 
@@ -330,12 +348,17 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_p
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
     registry = WorkSourceRegistry({}, closers={})  # no closer seated for any source
-    drainer = CloseIntentDrainer(chunks=_writable(hub), work_sources=registry, clock=hub.clock)
+    drainer = CloseIntentDrainer(
+        delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+        events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
+        work_sources=registry,
+        clock=hub.clock,
+    )
 
     drainer.sweep()
 
     pointer = WorkRef(source="default", ref="1")
-    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.pending_close_intents()
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
 
 
 # CloseIntentDrainer.sweep() against the built-in `hub` source (issue #360) — always
@@ -357,7 +380,9 @@ def test_sweep_closes_a_landed_hub_born_chunks_item(tmp_path: Path) -> None:
     row = WorkItemStore(hub_store_connections(hub.engine)).get("hub", created["ref"])
     assert row is not None
     assert row.closure is WorkItemClosure.DELIVERED
-    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.pending_close_intents()
+    assert (
+        PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.delivery.pending_close_intents()
+    )
 
 
 @pytest.mark.component
@@ -373,4 +398,6 @@ def test_sweep_replayed_over_an_already_delivered_hub_item_is_a_clean_no_op(tmp_
     hub.services.close_drain.sweep()
 
     pointer = WorkRef(source="hub", ref=created["ref"])
-    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.pending_close_intents()
+    assert (
+        PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.delivery.pending_close_intents()
+    )

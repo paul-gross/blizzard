@@ -90,12 +90,12 @@ def list_events(
     the open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the
     projection's aware ``recorded_at`` comparison below never raises against it."""
     since_utc = as_utc(since) if since is not None else None
-    events = services.chunks.list_events(
+    events = services.chunks.events.list_events(
         severity=severity, runner_id=runner_id, chunk_id=chunk_id, since=since_utc, limit=limit
     )
     # The same predicates over the escalation projection: it is always `critical` and names no runner,
     # so a `severity`/`runner_id` filter excludes it wholesale; `chunk_id`/`since` narrow per row.
-    escalations = services.chunks.list_open_escalations()
+    escalations = services.chunks.escalations.list_open_escalations()
     if severity is not None and severity != "critical":
         escalations = []
     if runner_id is not None:
@@ -150,7 +150,7 @@ def list_activity(
     ``since`` defaults to 24h before the server's current time. A tz-naive ``since`` is coerced to
     UTC so it never raises against the store's aware timestamps."""
     since_utc = as_utc(since) if since is not None else services.clock.now() - timedelta(hours=24)
-    chunk_changed = services.chunks.activity_facts_since(since_utc, limit=limit)
-    events = services.chunks.list_events(since=since_utc, limit=limit)
+    chunk_changed = services.chunks.events.activity_facts_since(since_utc, limit=limit)
+    events = services.chunks.events.list_events(since=since_utc, limit=limit)
     runner_changed = services.registry.list_pause_facts_since(since_utc, limit=limit)
     return Activity(ActivityFeed.of(chunk_changed, events, runner_changed, limit=limit).rows).response()

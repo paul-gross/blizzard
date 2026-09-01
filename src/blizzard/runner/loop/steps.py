@@ -153,7 +153,7 @@ class Reap(Step):
         parked = ctx.stores.asks.parked_lease_ids()
         taken_over = ctx.stores.takeover.open_takeover_chunk_ids()
         deferred = 0
-        for lease in ctx.stores.leases.list_active_leases():
+        for lease in ctx.stores.lease_record.list_active_leases():
             if lease.chunk_id in taken_over:
                 continue  # the human holds this session — no loop step touches it
             if lease.lease_id in parked:
@@ -166,7 +166,7 @@ class Reap(Step):
                 continue
             if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
                 continue  # exited — ADVANCE's (exit-is-done)
-            if Liveness.of(ctx.stores.leases, lease).stale(now):
+            if Liveness.of(ctx.stores.liveness, lease).stale(now):
                 if local_paused:
                     # Do not kill a live worker while the brake is on — a pause is not a
                     # drain. The first tick after it clears reaps this lease as it would now.
@@ -203,7 +203,7 @@ class ResumeIntents:
 
         Staleness is measured against :meth:`last_daemon_liveness`, not the clock at recovery,
         which at startup is ``downtime + idle-at-crash``."""
-        ended = self.stores.leases.session_ended_lease_ids()
+        ended = self.stores.session.session_ended_lease_ids()
         # as_utc: this instant is about to be subtracted from, and a naive one compares wrong.
         last_alive = self.stores.pause.last_daemon_liveness()
         crashed_at = as_utc(last_alive) if last_alive is not None else now
@@ -224,7 +224,7 @@ class ResumeIntents:
         parked = self.stores.asks.parked_lease_ids()
         pending = self.stores.outbound.pending_submission_lease_ids()
         eliciting = self.stores.elicitations.in_flight_elicitation_lease_ids()
-        for lease in self.stores.leases.list_active_leases():
+        for lease in self.stores.lease_record.list_active_leases():
             if lease.pid is None or lease.session_id is None:
                 continue
             if lease.lease_id in parked or lease.lease_id in pending or lease.lease_id in eliciting:
@@ -239,7 +239,7 @@ class ResumeIntents:
                 continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done)
             if lease.pid is not None and process.is_alive(lease.pid, lease.process_start_time or ""):
                 continue  # orphaned-but-alive — REAP re-adopts it, or expires it if the beat went stale
-            if Liveness.of(self.stores.leases, lease).stale(crashed_at):
+            if Liveness.of(self.stores.liveness, lease).stale(crashed_at):
                 # Its process is already gone (the test above), so REAP passes it over and ADVANCE
                 # claims it: a verdict elicited from the dead session, a retry consumed only if none is.
                 continue
@@ -248,7 +248,7 @@ class ResumeIntents:
     def _mark(self, leases: Iterator[LeaseRecord], *, now: datetime) -> int:
         marked = 0
         for lease in leases:
-            self.stores.leases.record_resume_intent(lease_id=lease.lease_id, marked_at=now)
+            self.stores.resume_intent.record_resume_intent(lease_id=lease.lease_id, marked_at=now)
             marked += 1
         return marked
 
@@ -261,15 +261,15 @@ class Resume(Step):
         ``session_id``, no retry consumed — or abandoned with no epoch bump. Runs before ADVANCE so a
         resumed lease reads live again by the time ADVANCE iterates."""
         ctx = self.ctx
-        intents = ctx.stores.leases.resume_intent_lease_ids()
+        intents = ctx.stores.resume_intent.resume_intent_lease_ids()
         if not intents:
             return
         _CP_RESUME_BEFORE.reached()  # marked intents present; a crash here re-runs RESUME unchanged
-        active = {lease.lease_id: lease for lease in ctx.stores.leases.list_active_leases()}
+        active = {lease.lease_id: lease for lease in ctx.stores.lease_record.list_active_leases()}
         for lease_id in intents:
             lease = active.get(lease_id)
             if lease is None:
-                ctx.stores.leases.record_resume_clear(lease_id=lease_id, cleared_at=ctx.clock.now())
+                ctx.stores.resume_intent.record_resume_clear(lease_id=lease_id, cleared_at=ctx.clock.now())
                 continue
             DormantSession(ctx, lease).restart_or_release()
 
@@ -337,7 +337,7 @@ class Pull(Step):
         ctx = self.ctx
         pause_parked = ctx.stores.pause.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
         fenced = Fenced(ctx.stores.takeover.open_takeover_chunk_ids())
-        for lease in ctx.stores.leases.list_active_leases():
+        for lease in ctx.stores.lease_record.list_active_leases():
             try:
                 detail = ctx.hub.get_chunk(lease.chunk_id)
             except ChunkNotFoundError:
@@ -429,7 +429,7 @@ class Fill(Step):
                 local_paused=local_paused,
             )
             return
-        slots = ctx.config.max_agents - len(ctx.stores.leases.list_active_leases())
+        slots = ctx.config.max_agents - len(ctx.stores.lease_record.list_active_leases())
         queue = ReadyQueue(ctx)
         for _ in range(max(slots, 0)):
             if not queue.claim_one():
@@ -447,9 +447,9 @@ class Advance(Step):
         pending = ctx.stores.outbound.pending_submission_lease_ids()
         ask_parked = ctx.stores.asks.ask_parked_lease_ids()
         pause_parked = ctx.stores.pause.pause_parked_lease_ids()
-        resume_intents = ctx.stores.leases.resume_intent_lease_ids()
+        resume_intents = ctx.stores.resume_intent.resume_intent_lease_ids()
         taken_over = ctx.stores.takeover.open_takeover_chunk_ids()
-        for lease in ctx.stores.leases.list_active_leases():
+        for lease in ctx.stores.lease_record.list_active_leases():
             if lease.chunk_id in taken_over:
                 continue  # the human holds this session — no loop step touches it
             if lease.pid is None or lease.session_id is None:
@@ -471,7 +471,7 @@ class Advance(Step):
         for chunk_id in ctx.stores.environments.live_tenure_chunk_ids():
             if chunk_id in taken_over:
                 continue  # the human holds this chunk — no gate/hub-node poll while they do
-            if ctx.stores.leases.active_lease_for_chunk(chunk_id) is None:
+            if ctx.stores.lease_record.active_lease_for_chunk(chunk_id) is None:
                 HeldChunk(ctx, chunk_id).drive()
 
     def _advance_exited_worker(self, lease: LeaseRecord) -> None:
@@ -522,7 +522,7 @@ class ContextSample(Step):
         if warn_tokens is None or ctx.transcripts is None:
             return
         try:
-            leases = ctx.stores.leases.list_active_leases()
+            leases = ctx.stores.lease_record.list_active_leases()
         except Exception as exc:  # this step is not last in the tick — see ExternalUsageSample
             _log.warning("context sample step failed", detail=str(exc))
             return

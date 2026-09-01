@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
-from blizzard.runner.domain.leases import IReadLeaseRepository, LeaseRecord
+from blizzard.runner.domain.leases import IReadLeaseLivenessRepository, LeaseRecord
 from blizzard.runner.domain.usage import IWriteUsageRepository
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -22,7 +22,7 @@ class UsageRecorder:
     """Records a lease's usage facts, keyed ``(lease, generation, kind)`` so they are
     idempotent across a re-run and a crash finds each durable or absent."""
 
-    leases: IReadLeaseRepository
+    leases: IReadLeaseLivenessRepository
     usage: IWriteUsageRepository
     clock: IClock
     harness: IHarnessAdapter

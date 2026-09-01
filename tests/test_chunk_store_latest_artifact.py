@@ -1,4 +1,4 @@
-"""``ChunkStore.latest_artifact``'s ordering: a total order over ``(epoch, produced_at,
+"""``ChunkArtifactsStore.latest_artifact``'s ordering: a total order over ``(epoch, produced_at,
 artifact_id)`` (``bzh:sql-portable``), so an exact tie — a designed-for state from a
 crash-replay re-run — resolves deterministically, not on backend-dependent row order."""
 
@@ -10,15 +10,15 @@ from typing import cast
 import pytest
 import sqlalchemy as sa
 
-from blizzard.hub.domain.work import IWriteChunkRepository
+from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.store.schema import artifacts
 from tests.support import HubHarness, build_hub, ingest
 
 pytestmark = pytest.mark.component
 
 
-def _writable(hub: HubHarness) -> IWriteChunkRepository:
-    return cast(IWriteChunkRepository, hub.services.chunks)
+def _writable(hub: HubHarness) -> IWriteChunkArtifactsRepository:
+    return cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
 
 
 def test_an_exact_epoch_and_produced_at_tie_resolves_to_the_same_artifact_every_time(tmp_path: Path) -> None:
@@ -35,11 +35,11 @@ def test_an_exact_epoch_and_produced_at_tie_resolves_to_the_same_artifact_every_
         chunk_id, node_id="nd_b", node_name="survey", epoch=1, name="tied", content="two", at=at
     )
 
-    winner = hub.services.chunks.latest_artifact(chunk_id, "tied")
+    winner = hub.services.chunks.artifacts.latest_artifact(chunk_id, "tied")
     assert winner is not None
     # Deterministic across repeated calls — not just "some" row each time.
     for _ in range(5):
-        repeat = hub.services.chunks.latest_artifact(chunk_id, "tied")
+        repeat = hub.services.chunks.artifacts.latest_artifact(chunk_id, "tied")
         assert repeat is not None
         assert repeat.artifact_id == winner.artifact_id
 
@@ -73,7 +73,7 @@ def test_an_exact_tie_resolves_to_the_highest_artifact_id_not_to_insertion_order
                 )
             )
 
-    winner = hub.services.chunks.latest_artifact(chunk_id, "seeded-tie")
+    winner = hub.services.chunks.artifacts.latest_artifact(chunk_id, "seeded-tie")
 
     assert winner is not None
     assert winner.artifact_id == "art_zzzzzzzzzzzzzzzzzzzzzzzzzz"

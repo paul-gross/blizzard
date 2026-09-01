@@ -11,9 +11,11 @@ import threading
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.edit import MigrationTargetIsCurrentPin, TargetGraphRetired
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository, Node
-from blizzard.hub.domain.work import Chunk, ChunkFacts, IWriteChunkRepository
+from blizzard.hub.domain.work import Chunk, ChunkFacts
 
 #: The answer an open ask is consumed with. Fixed and toneless: the person who moved the
 #: chunk did not answer the question, they made it moot.
@@ -59,12 +61,14 @@ class RestartService:
     def __init__(
         self,
         *,
-        chunks: IWriteChunkRepository,
+        facts: IReadChunkFactsRepository,
+        movement: IWriteChunkMovementRepository,
         graphs: IReadGraphRepository,
         clock: IClock,
         claim_lock: threading.Lock,
     ) -> None:
-        self._chunks = chunks
+        self._facts = facts
+        self._movement = movement
         # Read for one thing only — whether a cross-graph target is retired (issue #101). The
         # graphs themselves arrive resolved (``bzh:domain-takes-objects``).
         self._graphs = graphs
@@ -87,7 +91,7 @@ class RestartService:
     def _restart_locked(
         self, chunk: Chunk, graph: Graph, *, node_name: str | None, by: str, to_graph: Graph | None
     ) -> int:
-        facts = self._chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
+        facts = self._facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
         status = facts.status()
         if status in TERMINAL_STATUSES:
             raise ChunkNotRestartable(chunk.chunk_id, status)
@@ -98,7 +102,7 @@ class RestartService:
         decision = facts.open_decision()
         # `record_restart` derives the fence epoch inside its own transaction — one above every
         # prior attempt, so the displaced worker's completion is rejected (`bzh:epoch-fencing`).
-        return self._chunks.record_restart(
+        return self._movement.record_restart(
             chunk.chunk_id,
             from_node_id=from_node_id,
             to_node_id=target.node_id,

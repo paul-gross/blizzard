@@ -132,7 +132,7 @@ def list_transcript_segments(
     chunk_id: str, services: Annotated[HubServices, Depends(get_services)]
 ) -> TranscriptSegmentIndexView:
     """The chunk's segment index (D12) — metadata and byte counts only, never turns."""
-    if services.chunks.get(chunk_id) is None:
+    if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     rows = services.transcripts.segments_for_chunk(chunk_id)
     return TranscriptSegmentIndexView(chunk_id=chunk_id, segments=[_index_entry(row) for row in rows])
@@ -148,7 +148,7 @@ def get_transcript_segment(
 ) -> TranscriptSegmentContentView:
     """One segment's decompressed turns, concatenated across its stored records in
     turn-range order — the lazy per-segment content read (D12)."""
-    if services.chunks.get(chunk_id) is None:
+    if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     records = services.transcripts.records_for_segment(chunk_id, segment_id)
     if not records:

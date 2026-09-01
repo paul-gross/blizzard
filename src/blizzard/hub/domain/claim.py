@@ -15,11 +15,15 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.tokens import TokenHash
+from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.envelope import Envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.registry import IReadRunnerRegistry
-from blizzard.hub.domain.work import Chunk, IWriteChunkRepository
+from blizzard.hub.domain.work import Chunk
 from blizzard.wire.envelope import NodeEnvelope
 
 #: `secrets.token_urlsafe` byte count for the route capability token (43 URL-safe chars).
@@ -83,13 +87,19 @@ class ClaimService:
     def __init__(
         self,
         *,
-        chunks: IWriteChunkRepository,
+        route: IWriteChunkRouteRepository,
+        record: IReadChunkRecordRepository,
+        facts: IReadChunkFactsRepository,
+        artifacts: IReadChunkArtifactsRepository,
         graphs: IReadGraphRepository,
         registry: IReadRunnerRegistry,
         clock: IClock,
         claim_lock: threading.Lock,
     ) -> None:
-        self._chunks = chunks
+        self._route = route
+        self._record = record
+        self._facts = facts
+        self._artifacts = artifacts
         # Re-resolves the chunk's graph fresh under the lock — see `_claim_locked`.
         self._graphs = graphs
         self._registry = registry
@@ -126,13 +136,13 @@ class ClaimService:
         workspace_id: str,
         environment_ids: list[str],
     ) -> ClaimResult:
-        existing = self._chunks.route_of(chunk.chunk_id)
+        existing = self._route.route_of(chunk.chunk_id)
         if existing is not None:
             raise ClaimConflict(held_by_runner_id=existing.runner_id)
 
         # Re-read the chunk under the lock: an edit that landed first (issue #120) may have
         # moved `graph_id`/`model` since the edge resolved the handed-in objects.
-        current = self._chunks.get(chunk.chunk_id)
+        current = self._record.get(chunk.chunk_id)
         if current is None:  # pragma: no cover - the chunk cannot vanish mid-claim
             raise ClaimConflict(held_by_runner_id=runner_id)
         if current.graph_id != chunk.graph_id:
@@ -142,7 +152,7 @@ class ClaimService:
             graph = fresh_graph
         chunk = current
 
-        facts = self._chunks.load_facts(chunk.chunk_id)
+        facts = self._facts.load_facts(chunk.chunk_id)
         # Re-derive status fresh under the claim lock: a stop landing between this
         # runner's peek and its claim POST is invisible to the peek (issue #118).
         status = facts.status() if facts is not None else ChunkStatus.NOT_READY
@@ -164,7 +174,7 @@ class ClaimService:
         # Minted fresh per acquisition (issue #84a): the plaintext is returned once and
         # never stored — only its sha256 hash lands, in the same write as record_route.
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
-        route_id = self._chunks.record_route(route, token_hash=TokenHash(route_token).hex, at=now)
+        route_id = self._route.record_route(route, token_hash=TokenHash(route_token).hex, at=now)
         _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE.reached()
 
         node_id = (facts.current_node_id() if facts is not None else None) or graph.entry_node_id
@@ -175,7 +185,7 @@ class ClaimService:
             chunk=chunk,
             graph=graph,
             node=node,
-            artifacts=self._chunks.load_artifacts(chunk.chunk_id),
+            artifacts=self._artifacts.load_artifacts(chunk.chunk_id),
             epoch=epoch,
             entered_by_restart=facts is not None and facts.entered_by_restart(),
         ).wire
@@ -188,5 +198,5 @@ class ClaimService:
         the prior one (``bzh:facts-not-status``); newest-fact-wins supersedes the old
         token, re-run idempotent. Takes an already-resolved route (``bzh:domain-takes-objects``)."""
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
-        self._chunks.record_route_token(route.chunk_id, token_hash=TokenHash(route_token).hex, at=self._clock.now())
+        self._route.record_route_token(route.chunk_id, token_hash=TokenHash(route_token).hex, at=self._clock.now())
         return route_token

@@ -12,6 +12,9 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.queue import IReadChunkQueueRepository
+from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.ingest import IngestConflict
@@ -20,7 +23,6 @@ from blizzard.hub.domain.routines import Routine, RoutineGraphUnresolvedError, R
 from blizzard.hub.domain.scopes import IReadScopeRepository, IWriteScopeRepository, Scope, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.work import (
     Chunk,
-    IReadChunkRepository,
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemRecord,
@@ -169,7 +171,9 @@ def _service(
         graphs=cast(IReadGraphRepository, graphs),
         finding_sets=cast(IReadFindingSetRepository, finding_sets),
         items=cast(IWriteWorkItemRepository, items),
-        chunks=cast(IReadChunkRepository, chunks),
+        work_refs=cast(IReadChunkWorkRefsRepository, chunks),
+        record=cast(IReadChunkRecordRepository, chunks),
+        queue=cast(IReadChunkQueueRepository, chunks),
         clock=clock,
     )
     return service, items, scopes, chunks
