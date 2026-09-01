@@ -183,3 +183,58 @@ def test_newest_for_routine_scope_ignores_a_different_routine_or_scope(tmp_path:
     )
 
     assert store.newest_for_routine_scope("other-routine", "blizzard") is None
+
+
+def test_newest_by_scope_for_routine_returns_one_entry_per_scope(tmp_path: Path) -> None:
+    """The routine-baselines batched read (blizzard#392 D5) — one row per scope, the
+    newest by `finding_set_id`."""
+    store, engine = _store(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(s.scopes).values(slug="web", description="", created_at=_NOW))
+        _seed_artifact(conn, "art_4", chunk_id="ch_1", name="findings-web-2")
+    store.create(
+        "fins_01A",
+        artifact_id="art_1",
+        chunk_id="ch_1",
+        scope_slug="blizzard",
+        routine_name="gardening",
+        revisions={"blizzard": "old"},
+        measurement=None,
+    )
+    store.create(
+        "fins_02B",
+        artifact_id="art_2",
+        chunk_id="ch_1",
+        scope_slug="blizzard",
+        routine_name="gardening",
+        revisions={"blizzard": "new"},
+        measurement=None,
+    )
+    store.create(
+        "fins_03C",
+        artifact_id="art_4",
+        chunk_id="ch_1",
+        scope_slug="web",
+        routine_name="gardening",
+        revisions={"web": "abc"},
+        measurement=None,
+    )
+
+    sets = store.newest_by_scope_for_routine("gardening")
+
+    assert {fs.scope_slug: fs.finding_set_id for fs in sets} == {"blizzard": "fins_02B", "web": "fins_03C"}
+
+
+def test_newest_by_scope_for_routine_ignores_a_different_routine(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.create(
+        "fins_1",
+        artifact_id="art_1",
+        chunk_id="ch_1",
+        scope_slug="blizzard",
+        routine_name="gardening",
+        revisions={},
+        measurement=None,
+    )
+
+    assert store.newest_by_scope_for_routine("other-routine") == []

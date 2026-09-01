@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
@@ -46,6 +46,14 @@ class ChunkDeliveryStore:
                     select(s.delivery_repo_landed.c.repo).where(s.delivery_repo_landed.c.chunk_id == chunk_id)
                 ).all()
             }
+
+    def count_landed_since(self, repo: str, since: datetime) -> int:
+        with self._store.read("count_landed_since") as conn:
+            return conn.execute(
+                select(func.count())
+                .select_from(s.delivery_repo_landed)
+                .where(s.delivery_repo_landed.c.repo == repo, s.delivery_repo_landed.c.landed_at > since)
+            ).scalar_one()
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         with self._store.read("pending_close_intents") as conn:

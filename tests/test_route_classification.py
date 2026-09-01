@@ -82,6 +82,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     # Mint, ingest, and promote a run in one act (blizzard#392) — the same CHUNK_CONTROL
     # the acts it composes (ingest, promote) already require.
     ("POST", "/api/routines/{routine_id}/run"): CHUNK_CONTROL,
+    # The per-scope delta baseline a routine has swept (blizzard#392 D5) — a read, FLEET_VIEW.
+    ("GET", "/api/routines/{routine_id}/baselines"): FLEET_VIEW,
     # Findings and garden proposals (blizzard#390) — read-only routes, both FLEET_VIEW (D8).
     ("GET", "/api/findings"): FLEET_VIEW,
     ("GET", "/api/findings/{finding_id}"): FLEET_VIEW,

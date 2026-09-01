@@ -51,7 +51,23 @@ def _seed_fixture(hub: HubHarness) -> dict[str, str]:
     chunk = hub.client.post("/api/chunks", json={"tokens": ["default:210"]}, headers=_cookie(admin_token))
     assert chunk.status_code == 201, chunk.text
     hub.services.fleet.register("runner-a", "workspace-1")
-    return {"graph_id": graph.json()["graph_id"], "chunk_id": chunk.json()["chunk_id"]}
+    routine = hub.client.post(
+        "/api/routines",
+        json={
+            "name": "matrix-routine",
+            "graph_name": "default-delivery",
+            "default_scope_slug": "matrix",
+            "default_model": [],
+            "default_effort": None,
+        },
+        headers=_cookie(admin_token),
+    )
+    assert routine.status_code == 201, routine.text
+    return {
+        "graph_id": graph.json()["graph_id"],
+        "chunk_id": chunk.json()["chunk_id"],
+        "routine_id": routine.json()["routine_id"],
+    }
 
 
 def _reads(ids: dict[str, str]) -> list[tuple[str, str]]:
@@ -71,6 +87,7 @@ def _reads(ids: dict[str, str]) -> list[tuple[str, str]]:
         ("GET", "/api/events"),
         ("GET", "/api/activity"),
         ("GET", "/api/work-sources"),
+        ("GET", f"/api/routines/{ids['routine_id']}/baselines"),
     ]
 
 

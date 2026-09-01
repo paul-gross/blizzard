@@ -17,6 +17,12 @@ class IReadChunkDeliveryRepository(Protocol):
         """The repos already landed for a chunk — the delivery reconciliation skip-set."""
         ...
 
+    def count_landed_since(self, repo: str, since: datetime) -> int:
+        """How many `delivery_repo_landed` rows `repo` has recorded strictly after
+        `since` — a routine-baseline's own "landed since" count (D1); "landed" is this
+        table's own fact, never a commit count the hub has no seam to produce."""
+        ...
+
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         """Every ``(chunk_id, ref)`` pair still carrying a pending ``close_intents`` row
         (blizzard#383) — the enqueue side (D1) is the sole gate, so this reads what a
