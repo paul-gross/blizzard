@@ -19,8 +19,13 @@ from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.config import WorkSourceConfig
 from blizzard.hub.domain.delete import DeleteService
+from blizzard.hub.domain.findings import FindingExitService
+from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
+from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
@@ -59,6 +64,18 @@ def _work_deps(engine):  # type: ignore[no-untyped-def]
         chunks=ChunkStore(store, _clock()), items=work_item_store, clock=_clock(), claim_lock=threading.Lock()
     )
     return work_item_store, delete
+
+
+def _resolution(engine):  # type: ignore[no-untyped-def]
+    """The garden-proposal delivery-resolution seam every ``WorkSourceEntry.registry``
+    call needs to seat the built-in ``hub`` source's closer (blizzard#394 Phase 3)."""
+    store = hub_store_connections(engine)
+    return GardenProposalDeliveryResolution(
+        closures=GardenProposalClosureStore(store),
+        proposals=GardenProposalStore(store),
+        findings=FindingStore(store),
+        exits=FindingExitService(repo=FindingStore(store), clock=_clock()),
+    )
 
 
 def test_fetch_reads_issue_body_and_comments() -> None:
@@ -178,6 +195,7 @@ def test_factory_derives_web_base_by_stripping_the_api_host_prefix(
         users=_users(engine),
         work_item_store=work_item_store,
         delete=delete,
+        resolution=_resolution(engine),
     )
     source = registry.get("blizzard")
     assert source is not None
@@ -207,6 +225,7 @@ def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(
         users=_users(engine),
         work_item_store=work_item_store,
         delete=delete,
+        resolution=_resolution(engine),
     )
     source = registry.get("internal")
     assert source is not None
@@ -232,6 +251,7 @@ def test_factory_gives_each_source_its_own_credentialed_client(monkeypatch: pyte
         users=_users(engine),
         work_item_store=work_item_store,
         delete=delete,
+        resolution=_resolution(engine),
     )
     assert sorted(registry.names()) == ["hub", "one", "two"]
     source_one = registry.get("one")
@@ -257,6 +277,7 @@ def test_factory_fails_at_boot_naming_the_unset_token_variable(tmp_path: Path) -
             users=_users(engine),
             work_item_store=work_item_store,
             delete=delete,
+            resolution=_resolution(engine),
         )
 
 
@@ -272,6 +293,7 @@ def test_factory_over_an_empty_source_list_still_seats_the_built_in_hub_source(t
         users=_users(engine),
         work_item_store=work_item_store,
         delete=delete,
+        resolution=_resolution(engine),
     )
     assert registry.names() == ["hub"]
     assert registry.get("anything") is None
@@ -532,6 +554,7 @@ def test_factory_builds_no_annotator_for_a_non_opted_in_source(monkeypatch: pyte
         users=_users(engine),
         work_item_store=work_item_store,
         delete=delete,
+        resolution=_resolution(engine),
     )
     assert registry.get("widget") is not None
     assert registry.annotator("widget") is None
@@ -553,6 +576,7 @@ def test_factory_builds_an_annotator_for_an_opted_in_source(monkeypatch: pytest.
         users=_users(engine),
         work_item_store=work_item_store,
         delete=delete,
+        resolution=_resolution(engine),
     )
     annotator = registry.annotator("widget")
     assert annotator is not None
@@ -638,6 +662,7 @@ def test_factory_builds_a_closer_for_every_configured_source(monkeypatch: pytest
         users=_users(engine),
         work_item_store=work_item_store,
         delete=delete,
+        resolution=_resolution(engine),
     )
     closer = registry.closer("widget")
     assert closer is not None
@@ -656,6 +681,7 @@ def test_factory_seats_the_hub_closer_with_zero_configured_sources(tmp_path: Pat
         users=_users(engine),
         work_item_store=work_item_store,
         delete=delete,
+        resolution=_resolution(engine),
     )
 
     closer = registry.closer("hub")
@@ -681,6 +707,7 @@ def test_factory_seats_no_configured_closer_when_forge_writes_are_disabled(
         users=_users(engine),
         work_item_store=work_item_store,
         delete=delete,
+        resolution=_resolution(engine),
         close_forge_writes_enabled=False,
     )
 
@@ -698,6 +725,7 @@ def test_factory_seats_the_hub_closer_even_when_forge_writes_are_disabled(tmp_pa
         users=_users(engine),
         work_item_store=work_item_store,
         delete=delete,
+        resolution=_resolution(engine),
         close_forge_writes_enabled=False,
     )
 

@@ -5,9 +5,12 @@ network call, and never a raise, whatever the transport does."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import httpx
 import pytest
 
+from blizzard.hub.domain.garden_delivery import CommitResolution
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
 
 pytestmark = pytest.mark.unit
@@ -31,9 +34,26 @@ def test_a_200_resolves_true() -> None:
 
     resolver = GitHubCommitResolver(_client(handler), forge_url=_FORGE_URL, forge_token=_TOKEN, forge_owner=_OWNER)
 
-    assert resolver.resolve("widget", _SHA) is True
+    assert resolver.resolve("widget", _SHA) == CommitResolution(exists=True, authored_at=None)
     assert seen[0].url == f"{_FORGE_URL}/repos/{_OWNER}/widget/commits/{_SHA}"
     assert seen[0].headers["authorization"] == f"token {_TOKEN}"
+
+
+def test_a_200_with_a_commit_body_resolves_the_authored_instant() -> None:
+    resolver = GitHubCommitResolver(
+        _client(
+            lambda request: httpx.Response(
+                200, json={"sha": _SHA, "commit": {"author": {"date": "2026-01-02T03:04:05Z"}}}
+            )
+        ),
+        forge_url=_FORGE_URL,
+        forge_token=_TOKEN,
+        forge_owner=_OWNER,
+    )
+
+    assert resolver.resolve("widget", _SHA) == CommitResolution(
+        exists=True, authored_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+    )
 
 
 def test_a_404_resolves_false() -> None:
@@ -41,7 +61,7 @@ def test_a_404_resolves_false() -> None:
         _client(lambda request: httpx.Response(404)), forge_url=_FORGE_URL, forge_token=_TOKEN, forge_owner=_OWNER
     )
 
-    assert resolver.resolve("widget", _SHA) is False
+    assert resolver.resolve("widget", _SHA) == CommitResolution(exists=False)
 
 
 @pytest.mark.parametrize("status_code", [401, 403, 500, 503])

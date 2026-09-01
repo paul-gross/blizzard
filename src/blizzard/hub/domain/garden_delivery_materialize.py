@@ -14,7 +14,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
-from blizzard.hub.domain.garden_delivery import ValidatedDelivery
+from blizzard.hub.domain.garden_delivery import ValidatedDelivery, single_repo_of
 from blizzard.hub.domain.graph import Node
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import Chunk
@@ -42,6 +42,9 @@ class NewFinding:
     locus: str
     summary: str
     introduced: str | None
+    #: `introduced`'s own authored instant, already resolved by validation (blizzard#394
+    #: D5) — never re-resolved here, so a delivery spends the forge slot at most once.
+    introduced_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -122,6 +125,13 @@ class IWriteGardenDeliveryRepository(Protocol):
 
     def deliver(self, plan: DeliveryPlan) -> DeliveryOutcome: ...
 
+    def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
+        """Whether the ``(chunk_id, node_id, epoch)`` marker already exists — the same
+        check :meth:`deliver` makes internally, exposed so a caller can short-circuit
+        before re-validating a retry's content against state that may have drifted since
+        the original, successful attempt (blizzard#394 D3)."""
+        ...
+
 
 class GardenDelivery:
     """Turns a Phase-2 :class:`ValidatedDelivery` into a :class:`DeliveryPlan` and hands
@@ -131,6 +141,9 @@ class GardenDelivery:
     def __init__(self, *, delivery: IWriteGardenDeliveryRepository, clock: IClock) -> None:
         self._delivery = delivery
         self._clock = clock
+
+    def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
+        return self._delivery.already_delivered(chunk_id=chunk_id, node_id=node_id, epoch=epoch)
 
     def deliver(
         self,
@@ -156,9 +169,15 @@ class GardenDelivery:
         for delta, artifact_id in zip(validated.deltas, delta_artifact_ids, strict=True):
             new_findings: list[NewFinding] = []
             facts: list[FindingFactRecord] = []
+            single_repo = single_repo_of(delta)
             for op in delta.findings:
                 if isinstance(op, AddFindingOp):
                     finding_id = Id.mint(FINDING_PREFIX, self._clock).value
+                    introduced_at = (
+                        validated.introduced_at.get((single_repo, op.introduced))
+                        if op.introduced is not None and single_repo is not None
+                        else None
+                    )
                     new_findings.append(
                         NewFinding(
                             finding_id=finding_id,
@@ -168,6 +187,7 @@ class GardenDelivery:
                             locus=op.locus,
                             summary=op.summary,
                             introduced=op.introduced,
+                            introduced_at=introduced_at,
                         )
                     )
                     facts.append(FindingFactRecord(finding_id=finding_id, kind="add", note=None))

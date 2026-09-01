@@ -6,12 +6,14 @@ no-stored-column contract this reads over is `schema.py`'s own (D2-D4)."""
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import desc, func, insert, select
 
 from blizzard.hub.domain.findings import (
     FACT_KINDS,
+    FactEntry,
     Finding,
     FindingFact,
     FindingSet,
@@ -63,16 +65,63 @@ class FindingStore:
             locus=locus,
             summary=summary,
             introduced=introduced,
+            introduced_at=None,
             live=True,
+            state="live",
+            note=None,
             last_seen_at=at,
             observed_count=0,
         )
 
-    def record_fact(self, finding_id: str, *, kind: str, at: datetime, note: str | None = None) -> None:
-        if kind not in FACT_KINDS:
-            raise UnknownFactKindError(kind)
-        with self._store.write("record_fact") as conn:
-            conn.execute(insert(finding_facts).values(finding_id=finding_id, kind=kind, recorded_at=at, note=note))
+    def record_fact(
+        self,
+        finding_id: str,
+        *,
+        kind: str,
+        at: datetime,
+        note: str | None = None,
+        actor: str | None = None,
+        proposal_id: str | None = None,
+        superseded_by: str | None = None,
+    ) -> None:
+        self.record_facts(
+            [
+                FactEntry(
+                    finding_id=finding_id,
+                    kind=kind,
+                    at=at,
+                    note=note,
+                    actor=actor,
+                    proposal_id=proposal_id,
+                    superseded_by=superseded_by,
+                )
+            ]
+        )
+
+    def record_facts(self, entries: Sequence[FactEntry]) -> None:
+        """All-or-nothing (D7) — pinned by
+        `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`."""
+        for entry in entries:
+            if entry.kind not in FACT_KINDS:
+                raise UnknownFactKindError(entry.kind)
+        if not entries:
+            return
+        with self._store.write("record_facts") as conn:
+            conn.execute(
+                insert(finding_facts),
+                [
+                    {
+                        "finding_id": entry.finding_id,
+                        "kind": entry.kind,
+                        "recorded_at": entry.at,
+                        "note": entry.note,
+                        "actor": entry.actor,
+                        "proposal_id": entry.proposal_id,
+                        "superseded_by": entry.superseded_by,
+                    }
+                    for entry in entries
+                ],
+            )
 
     def get(self, finding_id: str) -> Finding | None:
         with self._store.read("get") as conn:
@@ -81,6 +130,17 @@ class FindingStore:
                 return None
             facts = self._facts(conn, finding_id)
         return self._of(row, facts)
+
+    def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
+        """`get`'s batched sibling — one row query plus one `_facts_for_many` query for
+        every id in `finding_ids`, so a bulk exit verb's read side never issues one query
+        pair per row (blizzard#394)."""
+        if not finding_ids:
+            return {}
+        with self._store.read("get_many") as conn:
+            rows = conn.execute(select(findings).where(findings.c.finding_id.in_(finding_ids))).all()
+            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
+            return {row.finding_id: self._of(row, facts_by_id[row.finding_id]) for row in rows}
 
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """The pass's own bucket read (D3) — filtered on `ix_findings_routine_scope`,
@@ -116,11 +176,20 @@ class FindingStore:
                 .where(findings.c.routine_name == routine_name, findings.c.class_ == class_)
             ).scalar_one()
 
+    def has_resolution_for_proposal(self, proposal_id: str) -> bool:
+        with self._store.read("has_resolution_for_proposal") as conn:
+            row = conn.execute(
+                select(finding_facts.c.id)
+                .where(finding_facts.c.proposal_id == proposal_id, finding_facts.c.kind == "resolved")
+                .limit(1)
+            ).first()
+        return row is not None
+
     def _facts(self, conn, finding_id: str) -> list[FindingFact]:  # type: ignore[no-untyped-def]
         rows = conn.execute(
             select(finding_facts).where(finding_facts.c.finding_id == finding_id).order_by(finding_facts.c.id.asc())
         ).all()
-        return [FindingFact(kind=r.kind, recorded_at=r.recorded_at, note=r.note) for r in rows]
+        return [self._fact_of(r) for r in rows]
 
     def _facts_for_many(self, conn, finding_ids: list[str]) -> dict[str, list[FindingFact]]:  # type: ignore[no-untyped-def]
         """One query for every id in `finding_ids` (index-backed on
@@ -135,8 +204,19 @@ class FindingStore:
             .order_by(finding_facts.c.finding_id, finding_facts.c.id.asc())
         ).all()
         for r in rows:
-            grouped[r.finding_id].append(FindingFact(kind=r.kind, recorded_at=r.recorded_at, note=r.note))
+            grouped[r.finding_id].append(self._fact_of(r))
         return grouped
+
+    @staticmethod
+    def _fact_of(row) -> FindingFact:  # type: ignore[no-untyped-def]
+        return FindingFact(
+            kind=row.kind,
+            recorded_at=row.recorded_at,
+            note=row.note,
+            actor=row.actor,
+            proposal_id=row.proposal_id,
+            superseded_by=row.superseded_by,
+        )
 
     @staticmethod
     def _of(row, facts: list[FindingFact]) -> Finding:  # type: ignore[no-untyped-def]
@@ -149,7 +229,10 @@ class FindingStore:
             locus=row.locus,
             summary=row.summary,
             introduced=row.introduced,
+            introduced_at=row.introduced_at,
             live=state.live,
+            state=state.state,
+            note=state.note,
             last_seen_at=state.last_seen_at,
             observed_count=state.observed_count,
         )

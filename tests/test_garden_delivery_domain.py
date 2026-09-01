@@ -15,6 +15,7 @@ import pytest
 from blizzard.foundation.ids import FINDING_PREFIX, Id
 from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_delivery import (
+    CommitResolution,
     CommitResolver,
     GardenDeliveryRejected,
     check_delta,
@@ -51,7 +52,10 @@ def _live(*, in_scope: bool = True) -> dict[str, str]:
     return {_FIN1: scope, _FIN2: scope, _FIN3: scope}
 
 
-def _finding(finding_id: str, *, scope_slug: str = _RUN.scope_slug, live: bool = True) -> Finding:
+def _finding(
+    finding_id: str, *, scope_slug: str = _RUN.scope_slug, live: bool = True, state: str | None = None
+) -> Finding:
+    resolved_state = state if state is not None else ("live" if live else "gone")
     return Finding(
         finding_id=finding_id,
         routine_name=_RUN.routine_name,
@@ -60,14 +64,18 @@ def _finding(finding_id: str, *, scope_slug: str = _RUN.scope_slug, live: bool =
         locus="a.py:1",
         summary="s",
         introduced=None,
+        introduced_at=None,
         live=live,
+        state=resolved_state,
+        note=None,
         last_seen_at=_T0,
         observed_count=1,
     )
 
 
 def _resolver(result: bool | None) -> CommitResolver:
-    return lambda repo, sha: result
+    resolution = None if result is None else CommitResolution(exists=result)
+    return lambda repo, sha: resolution
 
 
 def _add(*, locus: str = "a.py:1", summary: str = "s", introduced: str | None = None) -> AddFindingOp:
@@ -239,9 +247,9 @@ def test_check_delta_resolves_an_add_ops_introduced_commit_against_the_sole_repo
     other_commit = "b" * 40
     calls: list[tuple[str, str]] = []
 
-    def _stub(repo: str, sha: str) -> bool:
+    def _stub(repo: str, sha: str) -> CommitResolution:
         calls.append((repo, sha))
-        return sha != other_commit
+        return CommitResolution(exists=sha != other_commit)
 
     delta = FindingDelta(
         scope="runner",
@@ -253,6 +261,31 @@ def test_check_delta_resolves_an_add_ops_introduced_commit_against_the_sole_repo
         check_delta(delta, run=_RUN, live_findings=_live(), resolve_commit=_stub)
 
     assert ("blizzard", other_commit) in calls
+
+
+def test_check_delta_returns_the_resolved_introduced_at_for_a_sole_repo() -> None:
+    commit_at = datetime(2025, 12, 25, tzinfo=UTC)
+
+    def _stub(repo: str, sha: str) -> CommitResolution:
+        return CommitResolution(exists=True, authored_at=commit_at)
+
+    delta = FindingDelta(scope="runner", revisions={"blizzard": _GOOD_COMMIT}, findings=[_add(introduced=_GOOD_COMMIT)])
+
+    introduced_at = check_delta(delta, run=_RUN, live_findings=_live(), resolve_commit=_stub)
+
+    assert introduced_at == {("blizzard", _GOOD_COMMIT): commit_at}
+
+
+def test_check_delta_returns_no_introduced_at_when_the_repo_count_is_ambiguous() -> None:
+    delta = FindingDelta(
+        scope="runner",
+        revisions={"blizzard": _GOOD_COMMIT, "blizzard-context": "c" * 40},
+        findings=[_add(introduced=_GOOD_COMMIT)],
+    )
+
+    introduced_at = check_delta(delta, run=_RUN, live_findings=_live(), resolve_commit=_resolver(True))
+
+    assert introduced_at == {}
 
 
 # --- gone / observed fact shape -----------------------------------------------------
@@ -400,14 +433,28 @@ def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> N
     assert result.deltas == [delta]
 
 
+def test_validate_delivery_rejects_an_op_naming_an_exited_finding() -> None:
+    """A human-exited finding is dropped from `live_findings` (blizzard#394 D3) — unlike
+    `gone`, an exit is not addressable by a later run's delta op."""
+    delta = FindingDelta(scope="runner", findings=[ObservedFindingOp(id=_FIN1)])
+
+    with pytest.raises(GardenDeliveryRejected, match="has been exited"):
+        validate_delivery(
+            run=_RUN,
+            delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
+            proposal_artifacts={},
+            known_findings=[_finding(_FIN1, live=False, state="resolved")],
+        )
+
+
 def test_validate_delivery_resolves_each_distinct_commit_at_most_once() -> None:
     """The resolver is a network call holding the fleet-wide hub-exec slot, so a delta
     citing one commit across many findings must spend exactly one call on it."""
     calls: list[tuple[str, str]] = []
 
-    def _stub(repo: str, sha: str) -> bool:
+    def _stub(repo: str, sha: str) -> CommitResolution:
         calls.append((repo, sha))
-        return True
+        return CommitResolution(exists=True)
 
     shared = "c" * 40
     delta = FindingDelta(

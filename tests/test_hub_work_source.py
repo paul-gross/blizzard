@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, insert, select
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
@@ -20,7 +20,9 @@ from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import User
 from blizzard.hub.domain.delete import DeleteService
+from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.fleet import Route
+from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import WorkItemAuthor, WorkItemClosure, WorkItemPriority, WorkRef
 from blizzard.hub.domain.work_items import (
@@ -29,7 +31,11 @@ from blizzard.hub.domain.work_items import (
     WorkItemHeldByLiveChunk,
     WorkItemNotEditable,
 )
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
+from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
@@ -51,7 +57,13 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStore, U
     delete = DeleteService(chunks=chunks, items=items, clock=clock, claim_lock=threading.Lock())
     edits = WorkItemEditService(items=items, chunks=chunks, clock=clock, delete=delete)
     users = UserRepository(engine, RepoErrorFactory(get_logger("tests.test_hub_work_source")))
-    return HubWorkSource(items, chunks, edits, users), items, chunks, users, engine, clock
+    resolution = GardenProposalDeliveryResolution(
+        closures=GardenProposalClosureStore(store),
+        proposals=GardenProposalStore(store),
+        findings=FindingStore(store),
+        exits=FindingExitService(repo=FindingStore(store), clock=clock),
+    )
+    return HubWorkSource(items, chunks, edits, users, resolution), items, chunks, users, engine, clock
 
 
 def _user(users: UserRepository, *, username: str) -> User:
@@ -529,3 +541,129 @@ def test_close_leaves_a_withdrawn_item_withdrawn(tmp_path: Path) -> None:
     row = items.get("hub", created.ref)
     assert row is not None
     assert row.closure is WorkItemClosure.WITHDRAWN
+
+
+# --------------------------------------------------------------------------- #
+# close()'s garden-proposal delivery resolution (blizzard#394 Phase 3)
+
+
+def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str = "fin_1") -> str:
+    """A finding, a proposal naming it, and the accepted-minted closure pointing at
+    `pointer` — the shape `close()` must resolve through. Returns the proposal id."""
+    store = hub_store_connections(engine)
+    with engine.begin() as conn:
+        conn.execute(insert(s.scopes).values(slug="blizzard", description="", created_at=_T0))
+    FindingStore(store).add(
+        finding_id,
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s",
+        introduced=None,
+        at=_T0,
+    )
+    proposal_id = "gprop_1"
+    GardenProposalStore(store).create(
+        proposal_id,
+        routine_name="nightly",
+        class_="fix-the-source",
+        title="t",
+        body="b",
+        findings=[finding_id],
+        at=_T0,
+    )
+    with engine.begin() as conn:
+        conn.execute(
+            insert(s.garden_proposal_closures).values(
+                proposal_id=proposal_id,
+                closure="accepted",
+                reason=None,
+                closed_by="u_1",
+                closed_at=_T0,
+                item_outcome="minted",
+                source=pointer.source,
+                ref=pointer.ref,
+            )
+        )
+    return proposal_id
+
+
+def test_close_resolves_the_accepted_proposals_live_finding_attributed_to_it(tmp_path: Path) -> None:
+    source, items, _, _, engine, _ = _source(tmp_path)
+    graph = _graph(engine)
+    created = seed_work_item(
+        items,
+        graph_id=graph.graph_id,
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        at=_T0,
+    )
+    pointer = WorkRef(source="hub", ref=created.ref)
+    proposal_id = _seed_accepted_proposal(engine, pointer=pointer)
+
+    source.close(pointer)
+
+    finding = FindingStore(hub_store_connections(engine)).get("fin_1")
+    assert finding is not None
+    assert finding.state == "resolved"
+    with engine.connect() as conn:
+        fact = conn.execute(
+            select(s.finding_facts).where(s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "resolved")
+        ).one()
+    assert fact.proposal_id == proposal_id
+    assert fact.actor == "u_1"
+
+
+def test_close_run_twice_appends_only_one_resolution(tmp_path: Path) -> None:
+    """`close()` is safe to repeat — a redelivered close-intent drain sweep, or any
+    other retry, must not append a second `resolved` fact (blizzard#394 Phase 3)."""
+    source, items, _, _, engine, _ = _source(tmp_path)
+    graph = _graph(engine)
+    created = seed_work_item(
+        items,
+        graph_id=graph.graph_id,
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        at=_T0,
+    )
+    pointer = WorkRef(source="hub", ref=created.ref)
+    _seed_accepted_proposal(engine, pointer=pointer)
+
+    source.close(pointer)
+    source.close(pointer)
+
+    with engine.connect() as conn:
+        count = conn.execute(
+            select(s.finding_facts).where(s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "resolved")
+        ).all()
+    assert len(count) == 1
+
+
+def test_close_with_no_garden_proposal_behind_it_leaves_findings_untouched(tmp_path: Path) -> None:
+    source, items, _, _, engine, _ = _source(tmp_path)
+    graph = _graph(engine)
+    created = seed_work_item(
+        items,
+        graph_id=graph.graph_id,
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        at=_T0,
+    )
+    pointer = WorkRef(source="hub", ref=created.ref)
+    # A finding exists, but no proposal or closure names this item at all.
+    with engine.begin() as conn:
+        conn.execute(insert(s.scopes).values(slug="blizzard", description="", created_at=_T0))
+    FindingStore(hub_store_connections(engine)).add(
+        "fin_1",
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s",
+        introduced=None,
+        at=_T0,
+    )
+
+    source.close(pointer)  # must not raise
+
+    finding = FindingStore(hub_store_connections(engine)).get("fin_1")
+    assert finding is not None
+    assert finding.state == "live"

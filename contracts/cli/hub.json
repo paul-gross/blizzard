@@ -1357,8 +1357,59 @@
     },
     "finding": {
       "commands": {
+        "confirm-gone": {
+          "help": "Confirm by hand that FINDING_IDS no longer reproduce.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "finding_ids",
+              "opts": [
+                "finding_ids"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "note",
+              "opts": [
+                "--note"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub finding confirm-gone",
+          "short_help": "Confirm by hand that FINDING_IDS no longer reproduce."
+        },
         "list": {
-          "help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone.\n\nThis is the read a running pass calls to cross-reference its own bucket\n(blizzard-context:/domain/findings-and-proposals.md).",
+          "help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone, which\nalso surfaces every exited finding, not just a merely `gone` one.\n\nThis is the read a running pass calls to cross-reference its own bucket\n(blizzard-context:/domain/findings-and-proposals.md).",
           "params": [
             {
               "hidden": false,
@@ -1417,7 +1468,160 @@
             }
           ],
           "path": "hub finding list",
-          "short_help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone."
+          "short_help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone, which also surfaces every exited finding, not just a merely `gone` one."
+        },
+        "not-a-finding": {
+          "help": "Withdraw FINDING_IDS as not findings.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "finding_ids",
+              "opts": [
+                "finding_ids"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "note",
+              "opts": [
+                "--note"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub finding not-a-finding",
+          "short_help": "Withdraw FINDING_IDS as not findings."
+        },
+        "reopen": {
+          "help": "Reopen FINDING_IDS, undoing whichever exit or gone fact was newest.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "finding_ids",
+              "opts": [
+                "finding_ids"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "note",
+              "opts": [
+                "--note"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub finding reopen",
+          "short_help": "Reopen FINDING_IDS, undoing whichever exit or gone fact was newest."
+        },
+        "resolve": {
+          "help": "Resolve FINDING_IDS: the work that answers them has landed.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "finding_ids",
+              "opts": [
+                "finding_ids"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "note",
+              "opts": [
+                "--note"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub finding resolve",
+          "short_help": "Resolve FINDING_IDS: the work that answers them has landed."
         },
         "show": {
           "help": "One finding's whole record.",
@@ -1458,12 +1662,125 @@
           ],
           "path": "hub finding show",
           "short_help": "One finding's whole record."
+        },
+        "supersede": {
+          "help": "Withdraw FINDING_IDS as superseded by --by.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "finding_ids",
+              "opts": [
+                "finding_ids"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "superseded_by",
+              "opts": [
+                "--by"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "note",
+              "opts": [
+                "--note"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub finding supersede",
+          "short_help": "Withdraw FINDING_IDS as superseded by --by."
+        },
+        "wont-fix": {
+          "help": "Withdraw FINDING_IDS as won't-fix \u2014 the ground hasn't moved, they don't merit standing.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "finding_ids",
+              "opts": [
+                "finding_ids"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "note",
+              "opts": [
+                "--note"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub finding wont-fix",
+          "short_help": "Withdraw FINDING_IDS as won't-fix \u2014 the ground hasn't moved, they don't merit standing."
         }
       },
-      "help": "Read verbs over findings: a routine's bucket under one scope, or one by id.",
+      "help": "List or inspect findings, or exit/reopen one or many.",
       "params": [],
       "path": "hub finding",
-      "short_help": "Read verbs over findings: a routine's bucket under one scope, or one by id."
+      "short_help": "List or inspect findings, or exit/reopen one or many."
     },
     "garden-proposal": {
       "commands": {
@@ -2955,6 +3272,90 @@
           ],
           "path": "hub routine show",
           "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults."
+        },
+        "trend": {
+          "help": "NAME's finding inflow-against-outflow over --since/--until: per-period created and\nper-kind exit counts, the outflow/withdrawn roll-ups, and the introduced-age cut\nagainst --introduced-boundary.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "since",
+              "opts": [
+                "--since"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "until",
+              "opts": [
+                "--until"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "introduced_boundary",
+              "opts": [
+                "--introduced-boundary"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "period_days",
+              "opts": [
+                "--period-days"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub routine trend",
+          "short_help": "NAME's finding inflow-against-outflow over --since/--until: per-period created and per-kind exit counts, the outflow/withdrawn roll-ups, and the introduced-age cut against --introduced-boundary."
         }
       },
       "help": "Operator verbs over routines: create, list, inspect, edit.",

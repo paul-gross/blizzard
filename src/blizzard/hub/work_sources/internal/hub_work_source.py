@@ -10,6 +10,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.delete import DeleteService
+from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
     IReadChunkRepository,
@@ -41,11 +42,13 @@ class HubWorkSource:
         chunks: IReadChunkRepository,
         edits: WorkItemEditService,
         users: IReadUserRepository,
+        resolution: GardenProposalDeliveryResolution,
     ) -> None:
         self._items = items
         self._chunks = chunks
         self._edits = edits
         self._users = users
+        self._resolution = resolution
 
     def parse(self, token: str) -> WorkRef | None:
         """``hub:<n>`` only — the reserved name admits no ``#`` form and no URL form,
@@ -89,13 +92,15 @@ class HubWorkSource:
 
     def close(self, pointer: WorkRef) -> None:
         """Mark the item ``delivered`` via ``edits.deliver`` — the only failure this
-        raises is :class:`WorkItemGoneError`, for a ref with no item row. Idempotency
-        and the withdrawn-item guard both live in the store's own ``closed_at IS NULL``
-        update, reached through :meth:`WorkItemEditService.deliver`."""
+        raises is :class:`WorkItemGoneError`, for a ref with no item row. Then resolves
+        whichever garden-proposal findings `pointer` answers, if any (blizzard#394 Phase
+        3), safe to repeat: :meth:`GardenProposalDeliveryResolution.resolve_for_item`
+        gates on its own durable marker, not the item write's idempotency."""
         item = self._items.get(pointer.source, pointer.ref)
         if item is None:
             raise WorkItemGoneError(f"no {RESERVED_HUB_SOURCE_NAME}:{pointer.ref} work item exists")
         self._edits.deliver(item)
+        self._resolution.resolve_for_item(pointer)
 
     # -- IWorkEditor -------------------------------------------------------------
 
@@ -142,15 +147,16 @@ def seat_hub_work_source(
     users: IReadUserRepository,
     items: IWriteWorkItemRepository,
     delete: DeleteService,
+    resolution: GardenProposalDeliveryResolution,
 ) -> None:
     """Seats the built-in ``hub`` binding in place — reached from both
     :meth:`~blizzard.hub.work_sources.internal.factory.WorkSourceEntry.registry` and
     ``tests/support.py::build_hub``: never absent, never configured. ``users``/``items``/
-    ``delete`` are the composition root's own instances (#362, #364), so the same
-    claim-locked ``DeleteService`` backs every write path regardless of the door reaching it."""
+    ``delete``/``resolution`` are the composition root's own instances (#362, #364,
+    blizzard#394), so every write path shares the same claim-locked instances."""
     chunks = ChunkStore(store, clock)
     edits = WorkItemEditService(items=items, chunks=chunks, clock=clock, delete=delete)
-    hub_source = HubWorkSource(items, chunks, edits, users)
+    hub_source = HubWorkSource(items, chunks, edits, users, resolution)
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source

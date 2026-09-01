@@ -1,25 +1,28 @@
-"""Routine routes — create, list, read, edit, and run a routine (issue #389, blizzard#392).
+"""Routine routes — create, list, read, edit, run, and trend a routine (issue #389, blizzard#392).
 
 The controller stays read-only over the store (``bzh:controller-read-only``), resolving
 a ``routine_id`` into an object before delegating to the domain
-(``bzh:domain-takes-objects``). ``reject_runner_principal`` confines a runner's bearer
-token to the fleet router."""
+(``bzh:domain-takes-objects``). ``GET /routines/trend`` is declared ahead of
+``GET /routines/{routine_id}`` so the literal path wins the match."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW, GRAPH_EDIT
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.garden_trend import Trend
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.routine_run import RunResult, ScopeRetiredError
 from blizzard.hub.domain.routines import (
@@ -32,6 +35,7 @@ from blizzard.hub.domain.routines import (
 from blizzard.hub.domain.scopes import ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.wire.chunk import ChunkIngestConflict
+from blizzard.wire.garden_trend import TrendAgeView, TrendPeriodView, TrendView
 from blizzard.wire.routine import (
     RoutineCreateRequest,
     RoutineEditRequest,
@@ -84,6 +88,108 @@ def create_routine(
 def list_routines(services: Annotated[HubServices, Depends(get_services)]) -> list[RoutineView]:
     """Every routine, newest first."""
     return [_routine_view(r) for r in services.routines.list_all()]
+
+
+@dataclass(frozen=True)
+class _TrendWindow:
+    """One ``GET /routines/trend`` request's parsed window (blizzard#394 Phase 4,
+    `SpendWindow`'s own shape, `src/blizzard/hub/api/spend.py`) — a malformed edge or a
+    non-positive ``period_days`` is the 422 it names."""
+
+    since: datetime
+    until: datetime
+    introduced_boundary: datetime
+    period_days: int
+
+    #: The span/`period_days` bucket cap — otherwise unbounded (blizzard#394).
+    _MAX_PERIODS = 366
+
+    @classmethod
+    def of(cls, *, since: str, until: str, introduced_boundary: str, period_days: int) -> _TrendWindow:
+        if period_days < 1:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="period_days must be at least 1"
+            )
+        parsed_since = cls._instant(since, field="since")
+        parsed_until = cls._instant(until, field="until")
+        if parsed_until <= parsed_since:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="until must be after since")
+        span_days = (parsed_until - parsed_since).total_seconds() / 86400
+        if span_days / period_days > cls._MAX_PERIODS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"since/until/period_days would bucket more than {cls._MAX_PERIODS} periods",
+            )
+        return cls(
+            since=parsed_since,
+            until=parsed_until,
+            introduced_boundary=cls._instant(introduced_boundary, field="introduced_boundary"),
+            period_days=period_days,
+        )
+
+    @staticmethod
+    def _instant(value: str, *, field: str) -> datetime:
+        try:
+            return as_utc(datetime.fromisoformat(value))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{field} {value!r} is not a valid ISO-8601 instant",
+            ) from exc
+
+
+def _trend_view(trend: Trend) -> TrendView:
+    return TrendView(
+        routine_name=trend.routine_name,
+        since=iso_utc(trend.since),
+        until=iso_utc(trend.until),
+        period_days=trend.period_days,
+        periods=[
+            TrendPeriodView(
+                period_start=iso_utc(p.period_start),
+                period_end=iso_utc(p.period_end),
+                created=p.created,
+                exits=p.exits,
+                outflow=p.outflow,
+                withdrawn=p.withdrawn,
+                reopened=p.reopened,
+            )
+            for p in trend.periods
+        ],
+        age=TrendAgeView(
+            boundary=iso_utc(trend.age.boundary),
+            recent=trend.age.recent,
+            older=trend.age.older,
+            unattributed=trend.age.unattributed,
+        ),
+    )
+
+
+@router.get("/routines/trend", response_model=TrendView, dependencies=[Depends(require(FLEET_VIEW))])
+def routine_trend(
+    services: Annotated[HubServices, Depends(get_services)],
+    routine: Annotated[str, Query()],
+    since: Annotated[str, Query()],
+    until: Annotated[str, Query()],
+    introduced_boundary: Annotated[str, Query()],
+    period_days: Annotated[int, Query()] = 7,
+) -> TrendView:
+    """`routine`'s finding inflow-against-outflow over `[since, until)`: per
+    `period_days`-wide period, findings created and per-kind exit counts, the outflow/
+    withdrawn roll-ups (D2), and the D5 age cut against `introduced_boundary`. 404 on an
+    unknown routine name; 422 on a malformed instant, a non-positive `period_days`, a
+    non-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`."""
+    if services.routines.get_by_name(routine) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
+    window = _TrendWindow.of(since=since, until=until, introduced_boundary=introduced_boundary, period_days=period_days)
+    trend = services.garden_trend.trend(
+        routine,
+        since=window.since,
+        until=window.until,
+        period_days=window.period_days,
+        introduced_boundary=window.introduced_boundary,
+    )
+    return _trend_view(trend)
 
 
 @router.get("/routines/{routine_id}", response_model=RoutineView, dependencies=[Depends(require(FLEET_VIEW))])

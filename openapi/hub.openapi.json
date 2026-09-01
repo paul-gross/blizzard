@@ -2423,8 +2423,61 @@
         "title": "ExternalSubscriptionUsageWindowView",
         "type": "object"
       },
+      "FindingExitRequest": {
+        "additionalProperties": false,
+        "description": "`POST /api/findings/{verb}` \u2014 the shared shape for every human-driven exit and\n`reopen` except `supersede` (blizzard#394 Phase 2): every finding named exits (or\nreopens) together, one call, carrying the same required note (D7).",
+        "properties": {
+          "finding_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Finding Ids",
+            "type": "array"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_ids",
+          "note"
+        ],
+        "title": "FindingExitRequest",
+        "type": "object"
+      },
+      "FindingSupersedeRequest": {
+        "additionalProperties": false,
+        "description": "`POST /api/findings/supersede` \u2014 `FindingExitRequest` plus the absorbing finding\n(D4).",
+        "properties": {
+          "finding_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Finding Ids",
+            "type": "array"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "superseded_by": {
+            "title": "Superseded By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_ids",
+          "note",
+          "superseded_by"
+        ],
+        "title": "FindingSupersedeRequest",
+        "type": "object"
+      },
       "FindingView": {
-        "description": "A finding.",
+        "description": "A finding. `state` is the newest fact's own kind, folded to `\"live\"` for\n`add`/`observed`/`reopened` (blizzard#394) \u2014 `live` is kept alongside it as the\n`state == \"live\"` shorthand existing consumers already read. `note` is the newest\nfact's own note, whatever kind it is \u2014 `None` for a kind that carries none.",
         "properties": {
           "class": {
             "title": "Class",
@@ -2464,6 +2517,17 @@
             "title": "Locus",
             "type": "string"
           },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
           "observed_count": {
             "title": "Observed Count",
             "type": "integer"
@@ -2474,6 +2538,10 @@
           },
           "scope_slug": {
             "title": "Scope Slug",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
             "type": "string"
           },
           "summary": {
@@ -2489,6 +2557,7 @@
           "locus",
           "summary",
           "live",
+          "state",
           "last_seen_at",
           "observed_count"
         ],
@@ -6117,6 +6186,120 @@
           "recorded_at"
         ],
         "title": "TransitionView",
+        "type": "object"
+      },
+      "TrendAgeView": {
+        "properties": {
+          "boundary": {
+            "title": "Boundary",
+            "type": "string"
+          },
+          "older": {
+            "title": "Older",
+            "type": "integer"
+          },
+          "recent": {
+            "title": "Recent",
+            "type": "integer"
+          },
+          "unattributed": {
+            "title": "Unattributed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "boundary",
+          "recent",
+          "older",
+          "unattributed"
+        ],
+        "title": "TrendAgeView",
+        "type": "object"
+      },
+      "TrendPeriodView": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "exits": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Exits",
+            "type": "object"
+          },
+          "outflow": {
+            "title": "Outflow",
+            "type": "integer"
+          },
+          "period_end": {
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "title": "Period Start",
+            "type": "string"
+          },
+          "reopened": {
+            "title": "Reopened",
+            "type": "integer"
+          },
+          "withdrawn": {
+            "title": "Withdrawn",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "period_start",
+          "period_end",
+          "created",
+          "exits",
+          "outflow",
+          "withdrawn",
+          "reopened"
+        ],
+        "title": "TrendPeriodView",
+        "type": "object"
+      },
+      "TrendView": {
+        "properties": {
+          "age": {
+            "$ref": "#/components/schemas/TrendAgeView"
+          },
+          "period_days": {
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "periods": {
+            "items": {
+              "$ref": "#/components/schemas/TrendPeriodView"
+            },
+            "title": "Periods",
+            "type": "array"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "routine_name",
+          "since",
+          "until",
+          "period_days",
+          "periods",
+          "age"
+        ],
+        "title": "TrendView",
         "type": "object"
       },
       "TurnSegmentView-Input": {
@@ -10578,7 +10761,7 @@
     },
     "/api/findings": {
       "get": {
-        "description": "A routine's findings under one scope \u2014 live only, unless `include_gone` (D3);\nthe read a running pass calls to cross-reference its own bucket.",
+        "description": "A routine's findings under one scope \u2014 live only, unless `include_gone` (D3),\nwhich also surfaces every exited finding, not just a merely `gone` one; the read a\nrunning pass calls to cross-reference its own bucket.",
         "operationId": "list_findings_api_findings_get",
         "parameters": [
           {
@@ -10637,6 +10820,282 @@
           }
         },
         "summary": "List Findings",
+        "tags": [
+          "findings"
+        ]
+      }
+    },
+    "/api/findings/confirm-gone": {
+      "post": {
+        "description": "Confirm by hand that every finding in `finding_ids` no longer reproduces,\nrecording NOTE. 404 for an unknown id, 422 for a blank note.",
+        "operationId": "confirm_gone_findings_api_findings_confirm_gone_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingExitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingView"
+                  },
+                  "title": "Response Confirm Gone Findings Api Findings Confirm Gone Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Gone Findings",
+        "tags": [
+          "findings"
+        ]
+      }
+    },
+    "/api/findings/not-a-finding": {
+      "post": {
+        "description": "Withdraw every finding in `finding_ids` as not a finding, recording NOTE. 404 for\nan unknown id, 422 for a blank note.",
+        "operationId": "not_a_finding_findings_api_findings_not_a_finding_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingExitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingView"
+                  },
+                  "title": "Response Not A Finding Findings Api Findings Not A Finding Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Not A Finding Findings",
+        "tags": [
+          "findings"
+        ]
+      }
+    },
+    "/api/findings/reopen": {
+      "post": {
+        "description": "Reopen every finding in `finding_ids`, undoing whichever exit or `gone` fact was\nnewest, recording NOTE. 404 for an unknown id, 422 for a blank note.",
+        "operationId": "reopen_findings_api_findings_reopen_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingExitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingView"
+                  },
+                  "title": "Response Reopen Findings Api Findings Reopen Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reopen Findings",
+        "tags": [
+          "findings"
+        ]
+      }
+    },
+    "/api/findings/resolve": {
+      "post": {
+        "description": "Resolve every finding in `finding_ids`, recording NOTE: the work that answers a\nfinding landed. 404 for an unknown id, 422 for a blank note. A hand resolution names\nno garden proposal \u2014 that attribution is Phase 3's own, delivery-triggered.",
+        "operationId": "resolve_findings_api_findings_resolve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingExitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingView"
+                  },
+                  "title": "Response Resolve Findings Api Findings Resolve Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Findings",
+        "tags": [
+          "findings"
+        ]
+      }
+    },
+    "/api/findings/supersede": {
+      "post": {
+        "description": "Withdraw every finding in `finding_ids` as superseded by `superseded_by`,\nrecording NOTE. 404 for an unknown id in either `finding_ids` or `superseded_by`, 422\nfor a blank note, a self-superseding id, or a `superseded_by` that isn't itself live.",
+        "operationId": "supersede_findings_api_findings_supersede_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingSupersedeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingView"
+                  },
+                  "title": "Response Supersede Findings Api Findings Supersede Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Supersede Findings",
+        "tags": [
+          "findings"
+        ]
+      }
+    },
+    "/api/findings/wont-fix": {
+      "post": {
+        "description": "Withdraw every finding in `finding_ids` as won't-fix, recording NOTE: the ground\nhasn't moved, a person has decided it doesn't merit standing regardless. 404 for an\nunknown id, 422 for a blank note.",
+        "operationId": "wont_fix_findings_api_findings_wont_fix_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingExitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingView"
+                  },
+                  "title": "Response Wont Fix Findings Api Findings Wont Fix Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Wont Fix Findings",
         "tags": [
           "findings"
         ]
@@ -12535,6 +12994,86 @@
           }
         },
         "summary": "Create Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/routines/trend": {
+      "get": {
+        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups (D2), and the D5 age cut against `introduced_boundary`. 404 on an\nunknown routine name; 422 on a malformed instant, a non-positive `period_days`, a\nnon-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`.",
+        "operationId": "routine_trend_api_routines_trend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "routine",
+            "required": true,
+            "schema": {
+              "title": "Routine",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": true,
+            "schema": {
+              "title": "Until",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "introduced_boundary",
+            "required": true,
+            "schema": {
+              "title": "Introduced Boundary",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "period_days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "title": "Period Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrendView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Routine Trend",
         "tags": [
           "routines"
         ]

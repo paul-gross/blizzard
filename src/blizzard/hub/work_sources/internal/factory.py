@@ -18,6 +18,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import ConfigError, WorkSourceConfig
 from blizzard.hub.domain.delete import DeleteService
+from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.work import IWriteWorkItemRepository
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
@@ -53,6 +54,7 @@ class WorkSourceEntry:
         users: IReadUserRepository,
         work_item_store: IWriteWorkItemRepository,
         delete: DeleteService,
+        resolution: GardenProposalDeliveryResolution,
         close_forge_writes_enabled: bool = True,
     ) -> WorkSourceRegistry:
         """One credentialed client + binding per configured source, plus the built-in
@@ -72,7 +74,15 @@ class WorkSourceEntry:
             if close_forge_writes_enabled:
                 closers[config.name] = cast(IWorkCloser, adapter)
         seat_hub_work_source(
-            built, editors, closers, store=store, clock=clock, users=users, items=work_item_store, delete=delete
+            built,
+            editors,
+            closers,
+            store=store,
+            clock=clock,
+            users=users,
+            items=work_item_store,
+            delete=delete,
+            resolution=resolution,
         )
         return WorkSourceRegistry(built, annotators, closers, editors)
 

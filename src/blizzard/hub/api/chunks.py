@@ -268,6 +268,16 @@ def record_garden_delivery(
             proposal_artifacts[name] = artifact.data
             proposal_artifact_id_by_name[name] = artifact.artifact_id
 
+    # A crash-retry of an already-fully-materialized delivery must stay a no-op replay
+    # (machinery.md §Delivery: "a replay finds it and returns `recorded`") even when a
+    # finding this same delivery named has been exited by a person since the original,
+    # successful attempt (blizzard#394 D3) — re-validating today's live state against
+    # yesterday's already-recorded content would turn that replay into a spurious
+    # failure. Checked before validation, not after, so no such retry re-derives
+    # `live_findings` from current state at all.
+    if services.garden_delivery.already_delivered(chunk_id=chunk_id, node_id=node_id, epoch=epoch):
+        return GardenDeliveryResponse(outcome="recorded", detail="")
+
     known_findings = services.findings.list_for_routine(run.routine_name, include_gone=True)
 
     try:

@@ -73,7 +73,10 @@ class FindingDelta(BaseModel):
 
 
 class FindingView(BaseModel):
-    """A finding."""
+    """A finding. `state` is the newest fact's own kind, folded to `"live"` for
+    `add`/`observed`/`reopened` (blizzard#394) — `live` is kept alongside it as the
+    `state == "live"` shorthand existing consumers already read. `note` is the newest
+    fact's own note, whatever kind it is — `None` for a kind that carries none."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -85,5 +88,25 @@ class FindingView(BaseModel):
     summary: str
     introduced: str | None = None
     live: bool
+    state: str
+    note: str | None = None
     last_seen_at: str | None
     observed_count: int
+
+
+class FindingExitRequest(BaseModel):
+    """`POST /api/findings/{verb}` — the shared shape for every human-driven exit and
+    `reopen` except `supersede` (blizzard#394 Phase 2): every finding named exits (or
+    reopens) together, one call, carrying the same required note (D7)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    finding_ids: list[str] = Field(min_length=1)
+    note: str
+
+
+class FindingSupersedeRequest(FindingExitRequest):
+    """`POST /api/findings/supersede` — `FindingExitRequest` plus the absorbing finding
+    (D4)."""
+
+    superseded_by: str

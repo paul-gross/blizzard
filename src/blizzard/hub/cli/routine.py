@@ -1,14 +1,17 @@
-"""``blizzard hub routine`` — issue #389: operator verbs over routines."""
+"""``blizzard hub routine`` — issue #389: operator verbs over routines; blizzard#394
+Phase 4 adds ``trend``."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import click
 import httpx
 
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -170,3 +173,70 @@ def routine_run(cli: CliContext, name: str, scope_slug: str | None, mode: str, n
     if body["downgraded"]:
         lines.append("note: requested delta downgraded to full — the routine/scope pair has recorded no baseline yet")
     cli.show_lines(body, *lines)
+
+
+@dataclass(frozen=True)
+class TrendDetail:
+    """`routine trend`'s own render (blizzard#394 Phase 4) — per-period counts, then the
+    D5 age cut."""
+
+    body: dict[str, Any]
+
+    def lines(self) -> Iterator[str]:
+        body = self.body
+        yield (f"{body['routine_name']}  {body['since']} .. {body['until']}  period_days={body['period_days']}")
+        for period in body["periods"]:
+            exits = ", ".join(f"{kind}={count}" for kind, count in period["exits"].items())
+            yield (
+                f"  {period['period_start']} .. {period['period_end']}  created={period['created']}  "
+                f"outflow={period['outflow']}  withdrawn={period['withdrawn']}  reopened={period['reopened']}  "
+                f"({exits})"
+            )
+        age = body["age"]
+        yield (
+            f"  age boundary={age['boundary']}  recent={age['recent']}  older={age['older']}  "
+            f"unattributed={age['unattributed']}"
+        )
+
+
+def _utc_query_value(value: datetime) -> str:
+    """A bare ``--since``/``--until``/``--introduced-boundary`` is read as the operator's
+    own local wall clock, not UTC — converted (not merely relabeled) before it crosses the
+    wire (`src/blizzard/hub/cli/analytics.py`'s own D6 rule)."""
+    return iso_utc(value.astimezone(UTC))
+
+
+@routine_group.command("trend", cls=FleetCommand)
+@click.argument("name")
+@click.option("--since", required=True, type=click.DateTime(), help="The window's start, in local time.")
+@click.option("--until", required=True, type=click.DateTime(), help="The window's end, in local time (exclusive).")
+@click.option(
+    "--introduced-boundary",
+    "introduced_boundary",
+    required=True,
+    type=click.DateTime(),
+    help="The D5 recent/older cut, in local time — a created finding's own introduced instant, not this window's.",
+)
+@click.option("--period-days", "period_days", default=7, type=int, help="Each period's width, in days (default 7).")
+def routine_trend(
+    cli: CliContext, name: str, since: datetime, until: datetime, introduced_boundary: datetime, period_days: int
+) -> None:
+    """NAME's finding inflow-against-outflow over --since/--until: per-period created and
+    per-kind exit counts, the outflow/withdrawn roll-ups, and the introduced-age cut
+    against --introduced-boundary."""
+    resp = cli.send(
+        "get",
+        "/api/routines/trend",
+        params={
+            "routine": name,
+            "since": _utc_query_value(since),
+            "until": _utc_query_value(until),
+            "introduced_boundary": _utc_query_value(introduced_boundary),
+            "period_days": str(period_days),
+        },
+    )
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        raise click.ClickException(f"trend rejected: {cli.detail(resp, 'validation failed')}")
+    cli.check(resp, "GET /routines/trend")
+    body = resp.json()
+    cli.show(body, TrendDetail(body))

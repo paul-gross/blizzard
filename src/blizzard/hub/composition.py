@@ -55,7 +55,7 @@ from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
-from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSetRepository
+from blizzard.hub.domain.findings import FindingExitService, IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.garden_delivery import CommitResolver
 from blizzard.hub.domain.garden_delivery_materialize import GardenDelivery
 from blizzard.hub.domain.garden_proposal_closure import (
@@ -63,6 +63,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
     IReadGardenProposalClosureRepository,
 )
 from blizzard.hub.domain.garden_proposals import GardenProposalAuthoring, IReadGardenProposalRepository
+from blizzard.hub.domain.garden_trend import GardenTrendService
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
 from blizzard.hub.domain.graph_lifecycle import GraphLifecycleService
@@ -94,6 +95,7 @@ from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingSt
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
+from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
@@ -210,6 +212,9 @@ class HubServices:
     routine_run: RunService
     #: The finding read Protocol (blizzard#390).
     findings: IReadFindingRepository
+    #: The human-driven exit verbs over findings — resolve/confirm-gone/wont-fix/
+    #: not-a-finding/supersede/reopen (blizzard#394 Phase 1).
+    finding_exit: FindingExitService
     #: The finding-set read Protocol (blizzard#390) — one set per delivered artifact list.
     finding_sets: IReadFindingSetRepository
     #: The garden-proposal read Protocol (blizzard#390).
@@ -227,6 +232,8 @@ class HubServices:
     garden_delivery: GardenDelivery
     #: Resolves a cited commit against the configured forge (blizzard#393 D2).
     commit_resolver: CommitResolver
+    #: A routine's finding inflow-against-outflow over a window (blizzard#394 Phase 4).
+    garden_trend: GardenTrendService
 
 
 def build_services(
@@ -237,6 +244,8 @@ def build_services(
     claim_lock: threading.Lock,
     work_item_store: WorkItemStore,
     delete: DeleteService,
+    finding_store: FindingStore,
+    finding_exit: FindingExitService,
     clock: IClock | None = None,
     users: IWriteUserRepository | None = None,
     base_branch: str = "main",
@@ -258,8 +267,9 @@ def build_services(
     """Construct and wire every fleet service over a migrated store engine.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
     (#65), left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``. ``claim_lock``/``work_item_store``/``delete`` are required, not
-    built here, so the built-in hub binding shares the same three (issue #364)."""
+    ``oauth_providers``. ``claim_lock``/``work_item_store``/``delete``/``finding_store``/
+    ``finding_exit`` are required, not built here, so the built-in hub binding shares the
+    same five (issue #364, blizzard#394)."""
     clock = clock or SystemClock()
     # The hub-store seam (issue #413) — one collaborator shared by every
     # ``hub/store/internal/`` adapter, replacing the bare engine (D2).
@@ -324,12 +334,12 @@ def build_services(
     scope_store = ScopeStore(store_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = RoutineStore(store_connections)
-    finding_store = FindingStore(store_connections)
     finding_set_store = FindingSetStore(store_connections)
     garden_proposal_store = GardenProposalStore(store_connections)
     garden_proposal_closure_store = GardenProposalClosureStore(store_connections)
     run_context_store = RunContextStore(store_connections)
     garden_delivery_store = GardenDeliveryStore(store_connections)
+    garden_trend_store = GardenTrendStore(store_connections)
     # Bound as `.resolve` (a plain `garden_delivery.CommitResolver` callable), not the bare
     # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
     commit_resolver = GitHubCommitResolver(
@@ -414,6 +424,7 @@ def build_services(
             clock=clock,
         ),
         findings=finding_store,
+        finding_exit=finding_exit,
         finding_sets=finding_set_store,
         garden_proposals=garden_proposal_store,
         garden_proposal_authoring=GardenProposalAuthoring(proposals=garden_proposal_store, clock=clock),
@@ -424,4 +435,5 @@ def build_services(
         run_context=run_context_store,
         garden_delivery=GardenDelivery(delivery=garden_delivery_store, clock=clock),
         commit_resolver=commit_resolver,
+        garden_trend=GardenTrendService(repo=garden_trend_store),
     )

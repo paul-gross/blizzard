@@ -35,7 +35,10 @@ def _finding(finding_id: str) -> Finding:
         locus="src/a.py:1",
         summary="s",
         introduced=None,
+        introduced_at=None,
         live=True,
+        state="live",
+        note=None,
         last_seen_at=_T0,
         observed_count=0,
     )

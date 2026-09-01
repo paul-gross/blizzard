@@ -1,14 +1,34 @@
-"""``blizzard hub routine create|list|show|edit`` (unit tier) — pure clients of the
-routine routes, driven here with ``httpx`` stubbed (blizzard#389), the
-``tests/test_hub_cli_graph.py`` shape."""
+"""``blizzard hub routine create|list|show|edit|trend`` (unit tier) — pure clients of the
+routine routes, driven here with ``httpx`` stubbed (blizzard#389; ``trend`` is
+blizzard#394 Phase 4), the ``tests/test_hub_cli_graph.py`` shape."""
 
 from __future__ import annotations
+
+import contextlib
+import os
+import time
+from collections.abc import Iterator
 
 import httpx
 import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+
+
+@contextlib.contextmanager
+def _local_timezone(tz: str) -> Iterator[None]:
+    original = os.environ.get("TZ")
+    os.environ["TZ"] = tz
+    time.tzset()
+    try:
+        yield
+    finally:
+        if original is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = original
+        time.tzset()
 
 
 class _FakeResponse:
@@ -383,3 +403,142 @@ def test_routine_run_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyP
 
     assert result.exit_code != 0
     assert "Not A Slug" in result.output
+
+
+_TREND_BODY = {
+    "routine_name": "nightly",
+    "since": "2026-01-01T00:00:00+00:00",
+    "until": "2026-01-15T00:00:00+00:00",
+    "period_days": 7,
+    "periods": [
+        {
+            "period_start": "2026-01-01T00:00:00+00:00",
+            "period_end": "2026-01-08T00:00:00+00:00",
+            "created": 2,
+            "exits": {"resolved": 1},
+            "outflow": 1,
+            "withdrawn": 0,
+            "reopened": 0,
+        }
+    ],
+    "age": {"boundary": "2026-01-01T00:00:00+00:00", "recent": 1, "older": 0, "unattributed": 1},
+}
+
+
+@pytest.mark.unit
+def test_routine_trend_converts_local_since_until_and_boundary_to_utc(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, str]] = []
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(200, _TREND_BODY)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    with _local_timezone("America/New_York"):  # UTC-5 in January, no DST
+        result = CliRunner().invoke(
+            hub_group,
+            [
+                "routine",
+                "trend",
+                "nightly",
+                "--since",
+                "2026-01-01T10:00:00",
+                "--until",
+                "2026-01-15T10:00:00",
+                "--introduced-boundary",
+                "2026-01-01T10:00:00",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        {
+            "routine": "nightly",
+            "since": "2026-01-01T15:00:00+00:00",
+            "until": "2026-01-15T15:00:00+00:00",
+            "introduced_boundary": "2026-01-01T15:00:00+00:00",
+            "period_days": "7",
+        }
+    ]
+
+
+@pytest.mark.unit
+def test_routine_trend_period_days_defaults_to_seven(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, str]] = []
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(200, _TREND_BODY)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(
+        hub_group,
+        [
+            "routine",
+            "trend",
+            "nightly",
+            "--since",
+            "2026-01-01T00:00:00",
+            "--until",
+            "2026-01-15T00:00:00",
+            "--introduced-boundary",
+            "2026-01-01T00:00:00",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls[0]["period_days"] == "7"
+
+
+@pytest.mark.unit
+def test_routine_trend_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(422, {"detail": "since 'garbage' is not a valid ISO-8601 instant"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(
+        hub_group,
+        [
+            "routine",
+            "trend",
+            "nightly",
+            "--since",
+            "2026-01-01T00:00:00",
+            "--until",
+            "2026-01-15T00:00:00",
+            "--introduced-boundary",
+            "2026-01-01T00:00:00",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "garbage" in result.output
+
+
+@pytest.mark.unit
+def test_routine_trend_renders_periods_and_age(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, _TREND_BODY)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(
+        hub_group,
+        [
+            "routine",
+            "trend",
+            "nightly",
+            "--since",
+            "2026-01-01T00:00:00",
+            "--until",
+            "2026-01-15T00:00:00",
+            "--introduced-boundary",
+            "2026-01-01T00:00:00",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "created=2" in result.output
+    assert "outflow=1" in result.output
+    assert "recent=1" in result.output
+    assert "unattributed=1" in result.output

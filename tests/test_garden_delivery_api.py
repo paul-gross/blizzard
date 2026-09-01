@@ -377,6 +377,35 @@ def test_a_replayed_delivery_still_reports_recorded_and_mints_nothing_new(tmp_pa
     assert _finding_count(hub) == 1  # nothing new minted on replay
 
 
+def test_a_replayed_delivery_stays_recorded_even_after_one_of_its_findings_exits(tmp_path: Path) -> None:
+    """blizzard#394 review F3: a replay of an already-fully-materialized delivery must
+    stay a no-op `recorded` (machinery.md §Delivery) even when a person exits a finding
+    that delivery's own op named in the meantime — re-validating today's live state
+    against yesterday's already-recorded content would otherwise turn the replay into a
+    spurious `invalid`."""
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    _seed_finding(hub, finding_id, at=hub.clock.now())
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(finding_id)]))
+
+    first = _post(hub, chunk_id, delta=["delta"])
+    assert first.status_code == 200 and first.json()["outcome"] == "recorded"
+
+    findings = FindingStore(hub_store_connections(hub.engine))
+    finding = findings.get(finding_id)
+    assert finding is not None
+    hub.services.finding_exit.resolve([finding], note="landed", actor="u_1")
+    resolved = findings.get(finding_id)
+    assert resolved is not None and resolved.state == "resolved"
+
+    second = _post(hub, chunk_id, delta=["delta"])
+
+    assert second.status_code == 200, second.text
+    assert second.json()["outcome"] == "recorded"
+
+
 def test_a_later_delivery_adding_a_second_delta_still_lands_the_new_ones_findings(tmp_path: Path) -> None:
     """`--delta a`, then `--delta a --delta b` at a fresh epoch: `b`'s findings land
     beside `a`'s, which are not minted twice — an already-materialized artifact in the

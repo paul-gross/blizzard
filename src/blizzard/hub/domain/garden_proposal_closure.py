@@ -89,6 +89,12 @@ class IReadGardenProposalClosureRepository(Protocol):
         no closure is simply absent. One batch read, for a list view's fan-out."""
         ...
 
+    def find_by_item(self, source: str, ref: str) -> GardenProposalClosure | None:
+        """The accepted closure that minted `(source, ref)`'s item, or `None` when no
+        closure names that pointer — a pass or a declined accept, or simply no closure at
+        all (blizzard#394 Phase 3: reaching the proposal a delivered item answers)."""
+        ...
+
 
 class IWriteGardenProposalClosureRepository(IReadGardenProposalClosureRepository, Protocol):
     """Read-write garden-proposal-closure access — the pass and accept-declining-to-mint
