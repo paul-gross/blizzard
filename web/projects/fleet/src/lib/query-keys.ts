@@ -41,11 +41,9 @@ export const hubGardenProposalsKey = ['hub', 'garden-proposals'] as const;
 /** The gardening tab's routine list — `GET /api/routines`. Routines change rarely and
  * carry no SSE event of their own, the same standing `hubGraphsKey` has. */
 export const hubRoutinesKey = ['hub', 'routines'] as const;
-/** The gardening run dialog's scope picker read — `GET /api/scopes`. */
-export const hubScopesKey = ['hub', 'scopes'] as const;
-
-/** The routines panel's scope list — `GET /api/scopes`. Scopes change rarely and
- * carry no SSE event of their own, `hubRoutinesKey`'s own standing. */
+/** The scope list — `GET /api/scopes`. Feeds both the gardening run dialog's scope
+ * picker and the routines panel's scope list. Scopes change rarely and carry no SSE
+ * event of their own, `hubRoutinesKey`'s own standing. */
 export const hubScopesKey = ['hub', 'scopes'] as const;
 
 /** One routine's inflow-against-outflow trend over a window — `GET /api/routines/trend`.
