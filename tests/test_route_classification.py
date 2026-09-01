@@ -78,7 +78,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/routines/{routine_id}"): FLEET_VIEW,
     ("PATCH", "/api/routines/{routine_id}"): GRAPH_EDIT,
     ("GET", "/api/routines/trend"): FLEET_VIEW,  # blizzard#394 Phase 4
-    ("GET", "/api/routines/{routine_id}/sweeps"): FLEET_VIEW,  # gardening routine panel
+    ("GET", "/api/routines/{routine_id}/sweeps"): FLEET_VIEW,
     # Mint, ingest, and promote a run in one act (blizzard#392) — the same CHUNK_CONTROL
     # the acts it composes (ingest, promote) already require.
     ("POST", "/api/routines/{routine_id}/run"): CHUNK_CONTROL,
