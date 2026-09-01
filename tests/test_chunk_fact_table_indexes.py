@@ -1,7 +1,7 @@
 """Fact-table ``chunk_id`` indexes (blizzard#421, component tier).
 
 Migrated-to-head sqlite-on-disk. Proves every per-chunk fact-table read
-``ChunkStore.load_facts``/``_route_of_conn`` issue plans as an index search against its own
+``ChunkFactsStore.load_facts``/``_route_of_conn`` issue plans as an index search against its own
 ``ix_<table>_chunk_id`` rather than a full table scan — the ``tests/test_finding_store.py``
 shape, over the table set the ``20260829_1930_fact_tables_chunk_id_index`` revision indexes."""
 

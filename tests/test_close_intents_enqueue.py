@@ -1,6 +1,6 @@
-"""The close-intent outbox's enqueue side (D1, blizzard#383): every ``ChunkStore``
+"""The close-intent outbox's enqueue side (D1, blizzard#383): every chunk-seam adapter
 transaction that lands or completes a chunk folds an intent per still-open work ref into
-that same transaction — real ``ChunkStore``, real migrations."""
+that same transaction — real adapters, real migrations."""
 
 from __future__ import annotations
 

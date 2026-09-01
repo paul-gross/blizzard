@@ -1,4 +1,4 @@
-"""``ChunkStore.latest_artifact``'s ordering: a total order over ``(epoch, produced_at,
+"""``ChunkArtifactsStore.latest_artifact``'s ordering: a total order over ``(epoch, produced_at,
 artifact_id)`` (``bzh:sql-portable``), so an exact tie — a designed-for state from a
 crash-replay re-run — resolves deterministically, not on backend-dependent row order."""
 

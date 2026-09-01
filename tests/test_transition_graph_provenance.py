@@ -2,7 +2,7 @@
 
 Unit tier: :meth:`ChunkHistoryView.transitions` resolves each transition's node names
 against *its own* graph, so a two-graph history never degrades an old-graph step to raw ``nd_`` ids.
-Component tier: :meth:`ChunkStore.load_facts` resolves ``to_node_executor`` the same way.
+Component tier: :meth:`ChunkFactsStore.load_facts` resolves ``to_node_executor`` the same way.
 """
 
 from __future__ import annotations

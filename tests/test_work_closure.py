@@ -1,4 +1,4 @@
-"""The close-intent outbox's drain (blizzard#383). ``ChunkStore.pending_close_intents()``/
+"""The close-intent outbox's drain (blizzard#383). ``ChunkDeliveryStore.pending_close_intents()``/
 ``record_work_item_closure()`` are exercised against a real, migrated store. The enqueue side
 (landing/completion, D1) is covered by ``tests/test_close_intents_enqueue.py``; this file
 covers the drain that retires what the enqueue queued."""
@@ -46,7 +46,7 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     )
 
 
-# ChunkStore.record_work_item_closure() — retires its matching intent in the same
+# ChunkDeliveryStore.record_work_item_closure() — retires its matching intent in the same
 # transaction (blizzard#383, F8/F9) whenever the outcome is closed/gone.
 
 

@@ -97,7 +97,7 @@ def _bearer(token: str) -> dict[str, str]:
 def _writable_movement(hub: HubHarness) -> IWriteChunkMovementRepository:
     """A test-only cast: ``HubHarness.services.chunks`` is read-typed
     (``bzh:controller-read-only``), but the live object is always the write-capable
-    ``ChunkStore`` — mirrors ``tests/test_delivery_conflict_routing.py``'s own helper."""
+    seam adapter — mirrors ``tests/test_delivery_conflict_routing.py``'s own helper."""
     return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
 
 

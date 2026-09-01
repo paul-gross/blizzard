@@ -2,7 +2,7 @@
 
 A fake stands in for the store — only ``load_facts``/``record_stop`` are meaningfully
 implemented; every other seam raises loudly if called. The route release lives in
-``ChunkStore.record_stop``'s own transaction, not in :class:`StopService` (must-fix 2).
+``ChunkLifecycleStore.record_stop``'s own transaction, not in :class:`StopService` (must-fix 2).
 """
 
 from __future__ import annotations

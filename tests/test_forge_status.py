@@ -1,8 +1,8 @@
 """The forge-status projection (issue #179) — derivation and the reconciler.
 
 ``WorkStatusMarker.of`` is a pure, exhaustive derivation (unit tier); ``live_work_refs()`` and
-``AnnotationReconciler.sweep()`` are exercised against a real, migrated
-:class:`ChunkStore` with a :class:`FakeAnnotator` standing in for the forge (component
+``AnnotationReconciler.sweep()`` are exercised against a real, migrated chunk store with a
+:class:`FakeAnnotator` standing in for the forge (component
 tier), not the HTTP shaping ``tests/test_work_source.py`` already covers."""
 
 from __future__ import annotations
