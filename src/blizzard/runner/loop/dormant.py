@@ -206,7 +206,7 @@ class DormantSession:
             Attempt(self.ctx, lease).abandon(killed=True, via="resume")
             return
         pid, _ = self._wake(_RESTART_MESSAGE, bindings, at=now)
-        self.ctx.stores.leases.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         _CP_RESUME_AFTER.reached()  # pid recorded, intent cleared — a crash here re-runs as a no-op
         _log.info(
             "resumed in-flight session after restart",
@@ -240,7 +240,7 @@ class DormantSession:
             compaction_window=lease.resolved_compaction_window,
         )
         stamped = at if at is not None else self.ctx.clock.now()
-        self.ctx.stores.leases.record_spawn(
+        self.ctx.stores.liveness.record_spawn(
             lease.lease_id,
             pid=pid,
             process_start_time=self.ctx.process.start_time(pid) or "",

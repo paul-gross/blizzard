@@ -19,7 +19,10 @@ from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
 from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
-from blizzard.runner.store.internal.lease_store import LeaseStore
+from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
+from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
+from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
+from blizzard.runner.store.internal.lease_session_store import LeaseSessionStore
 from blizzard.runner.store.internal.outbound_store import OutboundStore
 from blizzard.runner.store.internal.pause_store import PauseStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
@@ -35,7 +38,10 @@ def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerSt
     """Construct and wire every extracted concept-store adapter over a migrated engine."""
     connections = RunnerStoreConnections(engine, errors)
     return RunnerStores(
-        leases=LeaseStore(connections),
+        lease_record=LeaseRecordStore(connections),
+        session=LeaseSessionStore(connections),
+        liveness=LeaseLivenessStore(connections),
+        resume_intent=LeaseResumeIntentStore(connections),
         environments=EnvironmentStore(connections),
         transcript_ledger=TranscriptLedgerStore(connections),
         tokens=TokenStore(connections),

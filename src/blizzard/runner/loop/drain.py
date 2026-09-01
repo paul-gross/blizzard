@@ -85,7 +85,7 @@ class OutboundDrain:
         _CP_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay
         self._ack(fact)
         _CP_AFTER_ACK.reached()
-        lease = self.ctx.stores.leases.active_lease(fact.lease_id or "")
+        lease = self.ctx.stores.lease_record.active_lease(fact.lease_id or "")
         if lease is None:
             return True  # already advanced on an earlier flush whose ack was lost
         self._consume(lease, response)
@@ -103,7 +103,7 @@ class OutboundDrain:
         except HubClientError:
             return False  # decision stays durable in the buffer; retried next tick
         self._ack(fact)
-        lease = self.ctx.stores.leases.active_lease(fact.lease_id or "")
+        lease = self.ctx.stores.lease_record.active_lease(fact.lease_id or "")
         if lease is None:
             return True  # already parked on an earlier flush whose ack was lost
         if response.outcome == ApplyOutcome.FAILURE:

@@ -129,7 +129,7 @@ class Spawner:
                 stderr_tail=str(exc),
             )
             raise
-        self.ctx.stores.leases.record_spawn(
+        self.ctx.stores.liveness.record_spawn(
             lease.lease_id,
             pid=handle.pid,
             process_start_time=handle.process_start_time,
@@ -145,7 +145,7 @@ class Spawner:
             )
         # Keyed on the HANDLE's session id — the authoritative continuation id (issue #149).
         # Written after the spawn, so a durable fingerprint always implies the prose was sent.
-        self.ctx.stores.leases.record_session_preamble(handle.session_id, fingerprint=rendered.fingerprint, at=now)
+        self.ctx.stores.session.record_session_preamble(handle.session_id, fingerprint=rendered.fingerprint, at=now)
         _CP_AFTER_SPAWN.reached()
 
     def enter_node(
@@ -162,7 +162,7 @@ class Spawner:
     def generation(self, lease_id: str) -> int:
         """The spawn generation this lease's next start is about to mint — one past the
         durably-recorded count, read *before* that start's own ``record_spawn`` lands."""
-        return self.ctx.stores.leases.lease_generation(lease_id) + 1
+        return self.ctx.stores.liveness.lease_generation(lease_id) + 1
 
     def stdout_path(self, lease_id: str) -> str:
         return self.ctx.worker_files.stdout_path(lease_id, self.generation(lease_id))
@@ -193,7 +193,7 @@ class Spawner:
         hash, and buffer the hub's fact."""
         # Mint above the max of both floors (bzh:epoch-fencing, #112): the local fence alone is 0
         # for a chunk this runner never drove, so a migrated chunk would mint below hub truth.
-        epoch = max(self.ctx.stores.leases.latest_epoch(chunk_id), envelope.epoch) + 1
+        epoch = max(self.ctx.stores.lease_record.latest_epoch(chunk_id), envelope.epoch) + 1
         lease_id = Id.mint(LEASE_PREFIX, self.ctx.clock).value
         node = envelope.node
         retries_max = node.retries_max if node.retries_max is not None else self.ctx.config.default_retries_max
@@ -208,7 +208,7 @@ class Spawner:
             ],
             recorded_at=at,
         )
-        self.ctx.stores.leases.record_lease(
+        self.ctx.stores.lease_record.record_lease(
             NewLease(
                 lease_id=lease_id,
                 chunk_id=chunk_id,
@@ -257,7 +257,7 @@ class Spawner:
             lease_id=lease_id,
             runner_id=self.ctx.config.runner_id,
             chunk_id=chunk_id,
-            prior=self.ctx.stores.leases.session_preamble_fingerprint(resume.session_id) if resume else None,
+            prior=self.ctx.stores.session.session_preamble_fingerprint(resume.session_id) if resume else None,
             node=node_name,
             prior_node=resume.lease.node_name if resume and resume.lease else None,
         )

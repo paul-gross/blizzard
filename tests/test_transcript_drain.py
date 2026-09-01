@@ -65,7 +65,7 @@ def _ctx(hub: FakeHub, *, clock: FixedClock | None = None):  # type: ignore[no-u
 
 def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    ctx.stores.leases.record_lease(
+    ctx.stores.lease_record.record_lease(
         NewLease(
             lease_id="lease_1",
             chunk_id="ch_1",
@@ -78,7 +78,7 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    ctx.stores.leases.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
     return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
 
@@ -205,7 +205,7 @@ def test_drain_renders_a_final_marker_from_the_ledger_row_not_a_hand_built_paylo
         payloads=[content_payload],
         created_at=_NOW,
     )
-    ctx.stores.leases.record_closure(
+    ctx.stores.lease_record.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
 
@@ -232,7 +232,7 @@ def test_drain_renders_a_final_marker_as_truncated_when_the_segment_carries_a_re
     ctx = _ctx(hub)
     segment_id = _spawn_one_segment(ctx)
     ctx.stores.transcript_ledger.stop_transcript_segment_shipping(segment_id, reason="chunk_budget_exceeded")
-    ctx.stores.leases.record_closure(
+    ctx.stores.lease_record.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
 
@@ -251,7 +251,7 @@ def test_drain_renders_a_final_marker_as_truncated_from_a_record_truncation_alon
     ctx = _ctx(hub)
     segment_id = _spawn_one_segment(ctx)
     ctx.stores.transcript_ledger.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded", severity=1)
-    ctx.stores.leases.record_closure(
+    ctx.stores.lease_record.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
 
@@ -272,7 +272,7 @@ def test_drain_renders_a_final_marker_on_the_sentinel_version_when_no_pump_ever_
     hub = FakeHub()
     ctx = _ctx(hub)
     _spawn_one_segment(ctx)
-    ctx.stores.leases.record_closure(
+    ctx.stores.lease_record.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
 

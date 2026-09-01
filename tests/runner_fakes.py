@@ -50,7 +50,10 @@ from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
 from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
-from blizzard.runner.store.internal.lease_store import LeaseStore
+from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
+from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
+from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
+from blizzard.runner.store.internal.lease_session_store import LeaseSessionStore
 from blizzard.runner.store.internal.outbound_store import OutboundStore
 from blizzard.runner.store.internal.pause_store import PauseStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
@@ -88,7 +91,10 @@ from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSeg
 
 
 class SqlAlchemyRunnerStore(
-    LeaseStore,
+    LeaseRecordStore,
+    LeaseSessionStore,
+    LeaseLivenessStore,
+    LeaseResumeIntentStore,
     EnvironmentStore,
     TranscriptLedgerStore,
     TokenStore,
@@ -114,7 +120,10 @@ class SqlAlchemyRunnerStore(
 
     def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
         store = RunnerStoreConnections(engine, errors)
-        LeaseStore.__init__(self, store)
+        LeaseRecordStore.__init__(self, store)
+        LeaseSessionStore.__init__(self, store)
+        LeaseLivenessStore.__init__(self, store)
+        LeaseResumeIntentStore.__init__(self, store)
         EnvironmentStore.__init__(self, store)
         TranscriptLedgerStore.__init__(self, store)
         TokenStore.__init__(self, store)
@@ -152,7 +161,10 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
     """The :class:`RunnerStores` bundle over one flat store — every field the same object,
     since :class:`SqlAlchemyRunnerStore` structurally satisfies every concept Protocol."""
     return RunnerStores(
-        leases=store,
+        lease_record=store,
+        session=store,
+        liveness=store,
+        resume_intent=store,
         environments=store,
         transcript_ledger=store,
         tokens=store,

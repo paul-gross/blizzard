@@ -153,7 +153,7 @@ class RunnerStatusService:
     def summary(self) -> RunnerStatusSummary:
         local_paused = self._stores.pause.local_paused(self._runner_id)
         hub_paused = self._stores.pause.hub_paused(self._runner_id)
-        used = len(self._stores.leases.list_active_leases())
+        used = len(self._stores.lease_record.list_active_leases())
         contact_at = self._stores.pause.hub_contact_at(self._runner_id)
         reachable = contact_at is not None and (self._clock.now() - contact_at) <= self._contact_staleness
         return RunnerStatusSummary(

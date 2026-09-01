@@ -89,7 +89,7 @@ def _ctx(*, sessions: dict[str, list[NormalizedTurn]], on_disk: set[str] | None 
 
 def _historical_lease(ctx, *, lease_id: str, session_id: str, epoch: int, node_id: str = "nd_build", at=_NOW) -> None:  # type: ignore[no-untyped-def]
     """A closed lease that ran ``session_id`` and left no segment — the pre-lane shape."""
-    ctx.stores.leases.record_lease(
+    ctx.stores.lease_record.record_lease(
         NewLease(
             lease_id=lease_id,
             chunk_id="ch_1",
@@ -102,8 +102,8 @@ def _historical_lease(ctx, *, lease_id: str, session_id: str, epoch: int, node_i
             created_at=at,
         )
     )
-    ctx.stores.leases.record_spawn(lease_id, pid=1, process_start_time="1", session_id=session_id, spawned_at=at)
-    ctx.stores.leases.record_closure(
+    ctx.stores.liveness.record_spawn(lease_id, pid=1, process_start_time="1", session_id=session_id, spawned_at=at)
+    ctx.stores.lease_record.record_closure(
         lease_id=lease_id, chunk_id="ch_1", node_id=node_id, reason="transitioned", closed_at=at
     )
 
@@ -268,7 +268,7 @@ def test_a_live_leases_open_segment_is_left_to_the_tick() -> None:
     """The pump owns a running worker's segment; a backfill that finalized one would close
     a conversation still being written."""
     ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "in flight")]})
-    ctx.stores.leases.record_lease(
+    ctx.stores.lease_record.record_lease(
         NewLease(
             lease_id="lease_live",
             chunk_id="ch_1",
@@ -281,7 +281,7 @@ def test_a_live_leases_open_segment_is_left_to_the_tick() -> None:
             created_at=_NOW,
         )
     )
-    ctx.stores.leases.record_spawn("lease_live", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn("lease_live", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
 
     report = TranscriptBackfill(ctx).run()
 
@@ -551,7 +551,7 @@ def test_reship_refuses_a_segment_whose_lease_is_still_active() -> None:
     races it, leaving two segments reading the same session from different offsets."""
     ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
     first = _import_one(ctx)
-    ctx.stores.leases.record_lease(
+    ctx.stores.lease_record.record_lease(
         NewLease(
             lease_id="lease_live",
             chunk_id="ch_1",
@@ -564,7 +564,9 @@ def test_reship_refuses_a_segment_whose_lease_is_still_active() -> None:
             created_at=_NOW,
         )
     )
-    ctx.stores.leases.record_spawn("lease_live", pid=2, process_start_time="2", session_id="sess-live", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn(
+        "lease_live", pid=2, process_start_time="2", session_id="sess-live", spawned_at=_NOW
+    )
     live = next(s for s in ctx.stores.transcript_ledger.open_transcript_segments() if s.lease_id == "lease_live")
 
     with pytest.raises(TranscriptReshipError, match="still active"):

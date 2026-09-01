@@ -6,7 +6,7 @@ import contextlib
 import os
 from dataclasses import dataclass
 
-from blizzard.runner.domain.leases import IReadLeaseRepository, LeaseRecord
+from blizzard.runner.domain.leases import IReadLeaseLivenessRepository, LeaseRecord
 
 
 @dataclass(frozen=True)
@@ -14,7 +14,7 @@ class WorkerStdoutFiles:
     """One runner's worker-output file layout, rooted at ``root`` (``""`` disables it)."""
 
     root: str
-    leases: IReadLeaseRepository
+    leases: IReadLeaseLivenessRepository
 
     def stdout_path(self, lease_id: str, generation: int) -> str:
         """This lease's per-generation stdout redirect target, or ``""`` for no redirect.

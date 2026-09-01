@@ -291,7 +291,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     archived_transcript_client = httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
     archived_transcripts = HttpArchivedTranscriptRepository(archived_transcript_client)
     transcripts = TranscriptService(
-        leases=runner_stores.leases,
+        leases=runner_stores.lease_record,
         transcript_ledger=runner_stores.transcript_ledger,
         environments=runner_stores.environments,
         transcripts=transcript_repository,

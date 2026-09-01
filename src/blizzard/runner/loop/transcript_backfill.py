@@ -147,7 +147,7 @@ class TranscriptBackfill:
         if self.ctx.transcripts is None or not self.ctx.config.transcripts_ship:
             # The same gate `run` holds — the CLI's refusal is the message, not the enforcement.
             raise TranscriptReshipError("[transcripts] ship is false — the lane is off")
-        if self.ctx.stores.leases.active_lease(source.lease_id) is not None:
+        if self.ctx.stores.lease_record.active_lease(source.lease_id) is not None:
             # `run`'s own rule, for the same reason: a live lease's segment belongs to the
             # tick's pump. Re-shipping one races it, leaving two segments over one session.
             raise TranscriptReshipError(
@@ -251,7 +251,7 @@ class TranscriptBackfill:
         return [
             segment
             for segment in self.ctx.stores.transcript_ledger.open_transcript_segments()
-            if self.ctx.stores.leases.active_lease(segment.lease_id) is None
+            if self.ctx.stores.lease_record.active_lease(segment.lease_id) is None
         ]
 
     def _spawn_cwd(self, chunk_id: str) -> str | None:

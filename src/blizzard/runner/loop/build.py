@@ -127,7 +127,7 @@ class LoopWiring:
             transcript_record_max_bytes=config.transcript_record_max_bytes,
             transcript_chunk_max_bytes=config.transcript_chunk_max_bytes,
         )
-        _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), stores.leases)
+        _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), stores.liveness)
         _elicitation_files = ElicitationFiles(str(elicitation_output_dir))
         _clock = SystemClock()
         return LoopContext(
@@ -144,7 +144,7 @@ class LoopWiring:
             worker_files=_worker_files,
             elicitation_files=_elicitation_files,
             usage=UsageRecorder(
-                leases=stores.leases,
+                leases=stores.liveness,
                 usage=stores.usage,
                 clock=_clock,
                 harness=harness,
@@ -153,10 +153,10 @@ class LoopWiring:
                 transcripts=harness_transcript_source,
                 events=self.events,
             ),
-            sessions=SessionResolver(leases=stores.leases, harness=harness, transcripts=harness_transcript_source),
+            sessions=SessionResolver(leases=stores.session, harness=harness, transcripts=harness_transcript_source),
             env_release=EnvironmentRelease(
                 environments=stores.environments,
-                leases=stores.leases,
+                leases=stores.lease_record,
                 clock=_clock,
                 provider=provider,
                 worker_files=_worker_files,

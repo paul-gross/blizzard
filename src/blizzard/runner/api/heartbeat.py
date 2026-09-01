@@ -31,6 +31,6 @@ class HeartbeatResponse(BaseModel):
 def heartbeat(request_body: HeartbeatRequest, request: Request) -> HeartbeatResponse:
     """Record a lease heartbeat, stamped with the injected clock."""
     wiring = RunnerWiring.of(request)
-    leases, clock = wiring.stores().leases, wiring.clock()
-    leases.record_heartbeat(lease_id=request_body.lease_id, beat_at=clock.now())
+    liveness, clock = wiring.stores().liveness, wiring.clock()
+    liveness.record_heartbeat(lease_id=request_body.lease_id, beat_at=clock.now())
     return HeartbeatResponse(recorded=True, lease_id=request_body.lease_id)

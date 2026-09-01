@@ -279,7 +279,7 @@ def _ctx(  # type: ignore[no-untyped-def]
 
 def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    ctx.stores.leases.record_lease(
+    ctx.stores.lease_record.record_lease(
         NewLease(
             lease_id="lease_1",
             chunk_id="ch_1",
@@ -292,7 +292,7 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    ctx.stores.leases.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
     return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
 
@@ -892,7 +892,7 @@ def test_pump_stops_shipping_past_the_chunk_budget_and_a_later_closure_still_fin
     assert segment.truncated_reason is None  # the two reasons are independent fields (F1)
     assert source.turns_since_calls == []  # never even read — the budget check comes first
 
-    ctx.stores.leases.record_closure(
+    ctx.stores.lease_record.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
     finalized = ctx.stores.transcript_ledger.transcript_segment(segment_id)
@@ -975,7 +975,7 @@ def test_pump_never_double_ships_after_a_same_session_resume() -> None:
     assert first_pending == 1
 
     # A resume under a NEW lease generation, same session — record_spawn closes gen 1 out.
-    ctx.stores.leases.record_spawn("lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn("lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW)
     open_segments = ctx.stores.transcript_ledger.open_transcript_segments()
     assert len(open_segments) == 1  # exactly one open segment ever reads "sess-a"
     assert open_segments[0].cursor == "pos-1"  # carried forward, not re-read from the start
@@ -999,7 +999,7 @@ def test_lease_close_pumps_the_open_segment_before_finalizing_it() -> None:
         ship=True, batches={"sess-a": _batch([_turn(0, "last output before failure")], next_token="pos-1")}
     )
     segment_id = _spawn_one_segment(ctx)
-    lease = ctx.stores.leases.active_lease("lease_1")
+    lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
     Attempt(ctx, lease).close(FAILED, _NOW)
@@ -1022,7 +1022,7 @@ def test_pump_lease_yields_to_its_own_deadline() -> None:
     transcript-source read can never delay the closure it precedes past a few seconds."""
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
     _spawn_one_segment(ctx)
-    lease = ctx.stores.leases.active_lease("lease_1")
+    lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
     TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=ctx.clock.now())
@@ -1050,7 +1050,7 @@ def test_lease_close_bounds_the_pump_it_runs_before_closing() -> None:
     ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
     ctx = replace(ctx, clock=_AdvancingClock(instant=_NOW))
     _spawn_one_segment(ctx)
-    lease = ctx.stores.leases.active_lease("lease_1")
+    lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
     Attempt(ctx, lease).close(FAILED, _NOW)
@@ -1097,7 +1097,7 @@ def test_lease_close_survives_a_raising_transcript_source() -> None:
         config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
     )
     segment_id = _spawn_one_segment(ctx)
-    lease = ctx.stores.leases.active_lease("lease_1")
+    lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
     Attempt(ctx, lease).close(FAILED, _NOW)  # must not raise
@@ -1117,7 +1117,7 @@ def test_run_yields_to_its_own_deadline_across_many_open_segments() -> None:
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
     _spawn_one_segment(ctx)
     ctx.stores.environments.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
-    ctx.stores.leases.record_lease(
+    ctx.stores.lease_record.record_lease(
         NewLease(
             lease_id="lease_2",
             chunk_id="ch_2",
@@ -1130,7 +1130,7 @@ def test_run_yields_to_its_own_deadline_across_many_open_segments() -> None:
             created_at=_NOW,
         )
     )
-    ctx.stores.leases.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW)
 
     TranscriptPump(ctx).run(deadline=_NOW)  # already past by the time the loop checks it
 
@@ -1185,7 +1185,7 @@ def test_run_isolates_one_segments_pump_failure_from_the_rest() -> None:
         config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
     )
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    ctx.stores.leases.record_lease(
+    ctx.stores.lease_record.record_lease(
         NewLease(
             lease_id="lease_1",
             chunk_id="ch_1",
@@ -1198,9 +1198,9 @@ def test_run_isolates_one_segments_pump_failure_from_the_rest() -> None:
             created_at=_NOW,
         )
     )
-    ctx.stores.leases.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-bad", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-bad", spawned_at=_NOW)
     ctx.stores.environments.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
-    ctx.stores.leases.record_lease(
+    ctx.stores.lease_record.record_lease(
         NewLease(
             lease_id="lease_2",
             chunk_id="ch_2",
@@ -1213,7 +1213,7 @@ def test_run_isolates_one_segments_pump_failure_from_the_rest() -> None:
             created_at=_NOW,
         )
     )
-    ctx.stores.leases.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-good", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-good", spawned_at=_NOW)
 
     TranscriptPump(ctx).run()  # must not raise despite "sess-bad"'s own failure
 
@@ -1477,7 +1477,7 @@ def test_pump_lease_drains_a_segment_across_several_incomplete_reads() -> None:
         config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
     )
     segment_id = _spawn_one_segment(ctx)
-    lease = ctx.stores.leases.active_lease("lease_1")
+    lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
     TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=_NOW + timedelta(seconds=PUMP_LEASE_MAX_SECONDS))
@@ -1547,7 +1547,7 @@ def test_pump_lease_marks_incomplete_when_its_deadline_expires_mid_drain() -> No
         clock=clock,
     )
     segment_id = _spawn_one_segment(ctx)
-    lease = ctx.stores.leases.active_lease("lease_1")
+    lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
     deadline = clock.now() + timedelta(seconds=5)
 
@@ -1636,10 +1636,10 @@ def test_pump_lease_marks_a_second_segment_truncated_when_never_even_attempted()
     segment_a_id = _spawn_one_segment(ctx)
     # A same-lease resume under a DIFFERENT session id leaves segment sess-a open too —
     # only a same-session resume finalizes it — so the lease now has two open segments.
-    ctx.stores.leases.record_spawn(
+    ctx.stores.liveness.record_spawn(
         "lease_1", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW + timedelta(seconds=1)
     )
-    lease = ctx.stores.leases.active_lease("lease_1")
+    lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
     open_segments = {
         s.session_id: s.segment_id
@@ -1807,7 +1807,7 @@ def test_pump_lease_marks_incomplete_when_backpressure_gates_the_close_time_read
     with its content never even attempted, no truncated_reason, no fact-lane warning."""
     ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
-    lease = ctx.stores.leases.active_lease("lease_1")
+    lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
     gated_ctx = replace(
         ctx,
@@ -1833,7 +1833,7 @@ def test_pump_lease_marks_incomplete_when_the_source_is_unavailable_at_closure()
     ``_pump_one``'s ``not batch.available`` branch used to read as caught-up."""
     ctx, source = _ctx(ship=True, batches={})  # "sess-a" unscripted — reads not_found
     segment_id = _spawn_one_segment(ctx)
-    lease = ctx.stores.leases.active_lease("lease_1")
+    lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
     TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=_NOW + timedelta(seconds=PUMP_LEASE_MAX_SECONDS))
@@ -1865,7 +1865,7 @@ def test_pump_lease_marks_incomplete_when_the_source_raises_at_closure() -> None
         config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
     )
     segment_id = _spawn_one_segment(ctx)
-    lease = ctx.stores.leases.active_lease("lease_1")
+    lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
     TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=_NOW + timedelta(seconds=PUMP_LEASE_MAX_SECONDS))
@@ -1898,7 +1898,7 @@ def test_pump_lease_marks_incomplete_when_the_cursor_is_stuck_at_closure() -> No
         normalizer_version="fake/1",
         harness_version=None,
     )
-    lease = ctx.stores.leases.active_lease("lease_1")
+    lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
     with capture_logs() as logs:

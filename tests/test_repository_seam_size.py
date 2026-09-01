@@ -22,10 +22,8 @@ _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
 _SEAM_NAME = re.compile(r"^I(Read|Write).*Repository$")
 _SEAM_SIZE_LIMIT = 12
 
-# blizzard#411: Phase 2 emptied the chunk-repository entries; Phase 4 empties this one.
-_ACCEPTED_VIOLATIONS = {
-    "IReadLeaseRepository",
-}
+# blizzard#411: Phase 2 emptied the chunk-repository entries; Phase 4 emptied the lease one.
+_ACCEPTED_VIOLATIONS: set[str] = set()
 
 
 def _own_method_count(node: ast.ClassDef) -> int:

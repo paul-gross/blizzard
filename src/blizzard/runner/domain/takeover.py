@@ -67,7 +67,7 @@ class IReadTakeoverRepository(Protocol):
     def lease_for_open_takeover(self, lease_id: str) -> LeaseRecord | None:
         """The lease by id iff an open takeover names it (issue #291), regardless of the
         lease's own closure — the worker-authorization resolver's second half, alongside
-        :meth:`~blizzard.runner.domain.leases.IReadLeaseRepository.active_lease`. The
+        :meth:`~blizzard.runner.domain.leases.IReadLeaseRecordRepository.active_lease`. The
         open-takeover fact is what authorizes a resumed session's worker verbs against the
         reference lease it names, not the lease's own activeness."""
         ...
@@ -206,7 +206,7 @@ class TakeoverService:
             raise ChunkNotTakeable(f"chunk {chunk_id} is not held by this runner — nothing to take over")
         workdir = bindings[0].workdir
 
-        active = self._stores.leases.active_lease_for_chunk(chunk_id)
+        active = self._stores.lease_record.active_lease_for_chunk(chunk_id)
         live = active is not None and active.lease_id not in self._stores.asks.parked_lease_ids()
         if live and not force:
             raise LiveWorkerConflict(f"chunk {chunk_id} has a live worker attempt — pass --force to take it over")
@@ -219,7 +219,7 @@ class TakeoverService:
             raise SubmissionPending(f"chunk {chunk_id}'s attempt already submitted — let it land, then `requeue`")
 
         reference: LeaseRecord | None = (
-            active if active is not None else self._stores.leases.latest_lease_for_chunk(chunk_id)
+            active if active is not None else self._stores.lease_record.latest_lease_for_chunk(chunk_id)
         )
         if reference is None or reference.session_id is None:
             raise ChunkNotTakeable(f"chunk {chunk_id} has no resumable session to take over")
@@ -227,7 +227,7 @@ class TakeoverService:
 
         now = self._clock.now()
         takeover_id = Id.mint(TAKEOVER_PREFIX, self._clock).value
-        fence_epoch = self._stores.leases.latest_epoch(chunk_id) + 1 if live else None
+        fence_epoch = self._stores.lease_record.latest_epoch(chunk_id) + 1 if live else None
 
         # Fact-before-command (bzh:crash-correctness): recorded — and so reachable by
         # every loop step's open-takeover skip — before anything is killed or returned.

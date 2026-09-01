@@ -83,7 +83,7 @@ class Attempt:
         tail = self.ctx.worker_files.stderr_tail(lease)
 
         # attempt_count includes this lease, and a first attempt is not a retry.
-        retried = self.ctx.stores.leases.attempt_count(lease.chunk_id, lease.node_id) - 1
+        retried = self.ctx.stores.lease_record.attempt_count(lease.chunk_id, lease.node_id) - 1
         if retried < lease.retries_max:
             # Retry: enqueued ATOMICALLY with the closure it describes (issue #125).
             self.close(
@@ -195,7 +195,7 @@ class Attempt:
                 lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now
             )
         self.close(RELEASED, now)
-        self.ctx.stores.leases.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         _log.info(
             "abandoned reassigned/detached/unknown chunk", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via
         )
@@ -213,7 +213,7 @@ class Attempt:
         self._kill_in_flight_elicitation()
         _CP_PAUSE_PARK_AFTER_KILL.reached()  # worker dead; the park is not yet durable
         self.ctx.stores.pause.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
-        self.ctx.stores.leases.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         if self.ctx.events is not None:
             # Same "dormant" cause `park_on_ask` publishes (dormant.py) — this write flips the
             # same LeaseActivity.state to "parked", just via the operator-pause path.
@@ -257,7 +257,7 @@ class Attempt:
                 lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now
             )
         self.close(PREEMPTED, now)
-        self.ctx.stores.leases.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         _log.info("preempted by an operator restart", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via)
         self.reenter()
 
@@ -305,7 +305,7 @@ class Attempt:
         closure path funnels through here — the one place to pump this lease's own open
         transcript segment(s) before ``record_closure`` finalizes them (issue #246)."""
         self._pump_lease_before_close()
-        event_seq = self.ctx.stores.leases.record_closure(
+        event_seq = self.ctx.stores.lease_record.record_closure(
             lease_id=self.lease.lease_id,
             chunk_id=self.lease.chunk_id,
             node_id=self.lease.node_id,
