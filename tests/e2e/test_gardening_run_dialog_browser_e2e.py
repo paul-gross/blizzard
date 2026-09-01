@@ -1,12 +1,13 @@
 """The gardening run dialog, in a real browser — the `test_gardening_run_dialog_browser_e2e`
 scenario of the standing e2e smoke (blizzard#399 D6).
 
-A real Chromium (Playwright) over the served board opens the dialog from the routines
-list, proving the create-then-run submission (D3) and the never-swept delta-steering
-(D5) round-trip against a live hub — no unit test reaches the real dialog chrome
-(`KitDialog`'s own focus trap) or a real `POST`/`POST` pair landing a chunk. No runner
-or forge traffic: the routine's run mints a queued chunk, never executed here. Needs
-the built bundle (``mise run web-build``)."""
+A real Chromium (Playwright) over the served board opens the dialog from the selected
+routine's own panel (blizzard#397's routine-record panel, the reachability surface D7's
+provisional trigger was superseded by), proving the create-then-run submission (D3) and
+the never-swept delta-steering (D5) round-trip against a live hub — no unit test reaches
+the real dialog chrome (`KitDialog`'s own focus trap) or a real `POST`/`POST` pair
+landing a chunk. No runner or forge traffic: the routine's run mints a queued chunk,
+never executed here. Needs the built bundle (``mise run web-build``)."""
 
 from __future__ import annotations
 
@@ -45,9 +46,9 @@ def _graph_yaml(name: str) -> str:
 
 
 def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) -> None:
-    """Opens the run dialog from the routines list (the blizzard#399 D7 provisional
-    trigger), mints a new scope before running (D3), and lands on the confirmation
-    naming a real chunk id and linking to the board — against a live hub, no fixtures."""
+    """Opens the run dialog off the selected routine's own panel, mints a new scope
+    before running (D3), and lands on the confirmation naming a real chunk id and
+    linking to the board — against a live hub, no fixtures."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright
@@ -77,13 +78,14 @@ def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) 
             page = browser.new_page()
             expect.set_options(timeout=20_000)
             try:
-                # --- The routines list is the D7 provisional trigger ---------------------
+                # --- The routine list selects, the panel triggers the run ----------------
                 page.goto(f"http://127.0.0.1:{hub_port}/gardening/routines", wait_until="load")
-                row = page.get_by_test_id("gardening-routine-row")
+                row = page.get_by_test_id(f"gardening-routine-row-{routine_id}")
                 expect(row).to_be_visible()
-                expect(row.get_by_test_id("gardening-routine-name")).to_have_text("gardening-e2e-routine")
+                row.click()
+                expect(page.get_by_test_id("gardening-routine-record")).to_contain_text("gardening-e2e-routine")
 
-                page.get_by_test_id(f"gardening-routine-run-{routine_id}").click()
+                page.get_by_test_id("gardening-routine-run").click()
                 dialog = page.get_by_test_id("gardening-run-dialog")
                 expect(dialog).to_be_visible()
                 expect(page.get_by_test_id("run-dialog-title")).to_contain_text("gardening-e2e-routine")

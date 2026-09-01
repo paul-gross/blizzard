@@ -3796,8 +3796,8 @@
   },
   "e2e/test_gardening_run_dialog_browser_e2e.py": {
    "comments": 9,
-   "docstrings": 14,
-   "total": 134
+   "docstrings": 15,
+   "total": 136
   },
   "e2e/test_gate_decision_e2e.py": {
    "comments": 14,
