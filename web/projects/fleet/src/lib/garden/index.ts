@@ -5,6 +5,9 @@ export * from './routine-panel';
 export * from './routine-run.mutations';
 export * from './routine-window';
 export * from './routines.query';
+export * from './scope-edit.mutations';
+export * from './scope-lifecycle.mutations';
+export * from './scope-list';
 export * from './scopes.mutations';
 export * from './scopes.query';
 export type {

@@ -2,10 +2,21 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { hubClient, type MeResponse } from 'fleet';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { vi } from 'vitest';
 
 import { GardeningRoutinesPage } from './gardening-routines-page';
+
+/** A read-only identity — every permission `OPERATOR_ME_RESPONSE` carries except
+ * `graph:edit` — the default for tests unconcerned with the scope list's gated
+ * description-editor/retire/enable controls (blizzard#400). */
+const VIEWER_ME_RESPONSE: MeResponse = {
+  ...OPERATOR_ME_RESPONSE,
+  permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'graph:edit'),
+};
+
+const SCOPE = { slug: 'blizzard', description: 'the blizzard monorepo', retired: false, created_at: '2026-01-01T00:00:00Z' };
 
 const ROUTINE = {
   routine_id: 'rtn_1',
@@ -59,18 +70,31 @@ describe('GardeningRoutinesPage', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  async function render(opts: { routines?: readonly unknown[]; graphs?: readonly unknown[] } = {}) {
+  async function render(
+    opts: {
+      routines?: readonly unknown[];
+      graphs?: readonly unknown[];
+      scopes?: readonly unknown[];
+      me?: MeResponse;
+      routeOverride?: (method: string, path: string) => unknown;
+    } = {},
+  ) {
     const routines = opts.routines ?? [ROUTINE];
     const graphs = opts.graphs ?? [EFFECTIVE_GRAPH_SUMMARY];
+    const scopes = opts.scopes ?? [SCOPE];
+    const me = opts.me ?? VIEWER_ME_RESPONSE;
     stub = stubRequestClient(hubClient, (method, path) => {
+      const overridden = opts.routeOverride?.(method, path);
+      if (overridden !== undefined) return overridden;
       if (method === 'GET' && path === '/api/routines') return routines;
       if (method === 'GET' && path === '/api/graphs') return graphs;
       if (method === 'GET' && path === '/api/graphs/gr_1') return GRAPH_DETAIL;
       if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') return SWEEPS;
       if (method === 'GET' && path === '/api/routines/trend') return TREND;
-      // The gardening run dialog's own reads, fired only once its Run trigger opens it.
-      if (method === 'GET' && path === '/api/scopes') return [];
+      // The gardening run dialog's own baselines read, fired only once its Run trigger opens it.
       if (method === 'GET' && path === '/api/routines/rtn_1/baselines') return [];
+      if (method === 'GET' && path === '/api/scopes') return scopes;
+      if (method === 'GET' && path === '/api/me') return me;
       return {};
     });
     await TestBed.configureTestingModule({
@@ -187,5 +211,74 @@ describe('GardeningRoutinesPage', () => {
       'tending begins when there is growth worth pruning',
     );
     expect(el.querySelector('[data-testid="gardening-routine-panel-empty"]')).not.toBeNull();
+  });
+
+  describe('scopes (blizzard#400)', () => {
+    it('lists every scope with slug, description, and retired state, without an editor for a read-only identity', async () => {
+      const fixture = await render({
+        scopes: [SCOPE, { slug: 'stale-scope', description: 'no longer tended', retired: true, created_at: '2026-01-01T00:00:00Z' }],
+      });
+      const el = fixture.nativeElement as HTMLElement;
+
+      const row = el.querySelector('[data-testid="gardening-scope-row-blizzard"]');
+      expect(row?.textContent).toContain('blizzard');
+      expect(row?.textContent).toContain('the blizzard monorepo');
+      expect(row?.textContent).toContain('enabled');
+      expect(el.querySelector('[data-testid="gardening-scope-row-stale-scope"]')?.textContent).toContain('retired');
+      expect(el.querySelector('[data-testid="gardening-scope-description-input-blizzard"]')).toBeNull();
+      expect(el.querySelector('[data-testid="gardening-scope-retire-blizzard"]')).toBeNull();
+    });
+
+    it('shows the description editor and lifecycle control for an identity with graph:edit', async () => {
+      const fixture = await render({ me: OPERATOR_ME_RESPONSE });
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="gardening-scope-description-input-blizzard"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="gardening-scope-retire-blizzard"]')).toBeTruthy();
+    });
+
+    it('submits an edited description through PATCH /api/scopes/{slug}', async () => {
+      const fixture = await render({ me: OPERATOR_ME_RESPONSE });
+      const el = fixture.nativeElement as HTMLElement;
+
+      const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-description-input-blizzard"]')!;
+      input.value = 'updated description';
+      el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-description-submit-blizzard"]')?.click();
+      await settle(fixture);
+
+      const calls = stub.forRoute('/api/scopes/blizzard', 'PATCH');
+      expect(calls).toHaveLength(1);
+      expect(calls[0].body).toEqual({ description: 'updated description' });
+    });
+
+    it('retires a scope through POST /api/scopes/{slug}/retire once confirmed', async () => {
+      const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+      const fixture = await render({ me: OPERATOR_ME_RESPONSE });
+      const el = fixture.nativeElement as HTMLElement;
+
+      el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-retire-blizzard"]')?.click();
+      await settle(fixture);
+
+      expect(stub.forRoute('/api/scopes/blizzard/retire', 'POST')).toHaveLength(1);
+      confirmSpy.mockRestore();
+    });
+
+    it('reports a failed edit through the action-error line rather than swallowing it', async () => {
+      const fixture = await render({
+        me: OPERATOR_ME_RESPONSE,
+        routeOverride: (method, path) =>
+          method === 'PATCH' && path === '/api/scopes/blizzard'
+            ? stubError(404, { detail: 'unknown scope blizzard' })
+            : undefined,
+      });
+      const el = fixture.nativeElement as HTMLElement;
+
+      const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-description-input-blizzard"]')!;
+      input.value = 'updated description';
+      el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-description-submit-blizzard"]')?.click();
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="gardening-scopes-error"]')?.textContent).toContain('unknown scope blizzard');
+    });
   });
 });

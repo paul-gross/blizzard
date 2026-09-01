@@ -4,11 +4,18 @@ import {
   defaultRoutineWindow,
   FleetRoutineList,
   FleetRoutinePanel,
+  FleetScopeList,
+  hasPermission,
+  injectEditScopeMutation,
   injectHubGraphQuery,
   injectHubGraphsQuery,
   injectHubRoutineSweepsQuery,
   injectHubRoutineTrendQuery,
   injectHubRoutinesQuery,
+  injectHubScopesQuery,
+  injectMeQuery,
+  injectScopeLifecycleMutation,
+  errorMessage,
   type GraphSummaryView,
   type KitAsyncStateValue,
   type LastSweptRowVm,
@@ -16,6 +23,9 @@ import {
   type RoutineListRowVm,
   type RoutinePanelVm,
   type RoutineView,
+  type ScopeDescriptionEditEvent,
+  type ScopeRowVm,
+  type ScopeView,
   type StrategyStepVm,
 } from 'fleet';
 
@@ -33,17 +43,26 @@ import { GardeningRunDialog } from './gardening-run-dialog';
  * `blocked` (D7) off the same effective-graph resolution a run itself refuses on, and
  * forwards plain view models to the presentational {@link FleetRoutineList} and
  * {@link FleetRoutinePanel} — neither of which injects a query of its own.
+ *
+ * Below the routine list/panel, also composes {@link FleetScopeList} (blizzard#400):
+ * every scope, editable in place and retire/enable-able, gated on `graph:edit`
+ * (the same permission `src/blizzard/hub/api/scopes.py` requires) — `graph-detail.ts`'s
+ * own `canEdit`/`actionError` shape, transliterated to scopes.
  */
 @Component({
   selector: 'app-gardening-routines-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRoutineList, FleetRoutinePanel, GardeningRunDialog],
+  imports: [FleetRoutineList, FleetRoutinePanel, FleetScopeList, GardeningRunDialog],
   templateUrl: './gardening-routines-page.html',
   styleUrl: './gardening-routines-page.css',
 })
 export class GardeningRoutinesPage {
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly graphsQuery = injectHubGraphsQuery();
+  private readonly scopesQuery = injectHubScopesQuery();
+  private readonly meQuery = injectMeQuery();
+  private readonly editScopeMutation = injectEditScopeMutation();
+  private readonly scopeLifecycleMutation = injectScopeLifecycleMutation();
 
   /** The panel's fixed reporting window (AC 3, AC 4) — computed once at construction,
    * not re-derived per render; a page reload is what refreshes it. */
@@ -186,5 +205,49 @@ export class GardeningRoutinesPage {
 
   protected closeDialog(): void {
     this.runningRoutine.set(null);
+  }
+
+  /** Whether the current identity may author scopes (`graph:edit`, admin-tier — the
+   * same permission the scope write routes require server-side); `null`/pending
+   * resolves to `false`, `graph-detail.ts`'s own `canEdit`. */
+  protected readonly canEditScopes = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
+
+  protected readonly scopeRows = computed<readonly ScopeRowVm[]>(() =>
+    (this.scopesQuery.data() ?? []).map((s: ScopeView) => ({
+      slug: s.slug,
+      description: s.description,
+      retired: s.retired ?? false,
+    })),
+  );
+
+  protected readonly scopesState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.scopesQuery, this.scopeRows().length === 0),
+  );
+
+  /** Set on a failed edit/retire/enable (issue #42's report-don't-swallow pattern);
+   * cleared at the start of the next attempt. */
+  protected readonly scopeActionError = signal<string | null>(null);
+
+  protected onEditScopeDescription(event: ScopeDescriptionEditEvent): void {
+    this.scopeActionError.set(null);
+    this.editScopeMutation.mutate(event, {
+      onError: (error: unknown) => this.scopeActionError.set(errorMessage(error, 'Set description failed.')),
+    });
+  }
+
+  protected onRetireScope(slug: string): void {
+    this.scopeActionError.set(null);
+    this.scopeLifecycleMutation.mutate(
+      { slug, retired: true },
+      { onError: (error: unknown) => this.scopeActionError.set(errorMessage(error, 'Retire failed.')) },
+    );
+  }
+
+  protected onEnableScope(slug: string): void {
+    this.scopeActionError.set(null);
+    this.scopeLifecycleMutation.mutate(
+      { slug, retired: false },
+      { onError: (error: unknown) => this.scopeActionError.set(errorMessage(error, 'Enable failed.')) },
+    );
   }
 }

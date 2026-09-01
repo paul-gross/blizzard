@@ -44,6 +44,10 @@ export const hubRoutinesKey = ['hub', 'routines'] as const;
 /** The gardening run dialog's scope picker read — `GET /api/scopes`. */
 export const hubScopesKey = ['hub', 'scopes'] as const;
 
+/** The routines panel's scope list — `GET /api/scopes`. Scopes change rarely and
+ * carry no SSE event of their own, `hubRoutinesKey`'s own standing. */
+export const hubScopesKey = ['hub', 'scopes'] as const;
+
 /** One routine's inflow-against-outflow trend over a window — `GET /api/routines/trend`.
  * Every window argument rides the key, `hubFleetSpendKey`'s own reason: a new window is
  * its own cache entry, not a collision with one already read. `routineName` is nullable,

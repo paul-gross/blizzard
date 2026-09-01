@@ -20,7 +20,7 @@ describe('injectHubScopesQuery', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  it('reads the scope picker off GET /api/scopes', async () => {
+  it('reads the scope list off GET /api/scopes', async () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/scopes') {
         return [{ slug: 'blizzard', description: 'the hub itself', created_at: '2026-01-01T00:00:00Z', retired: false }];

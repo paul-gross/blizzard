@@ -1,0 +1,57 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.sc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sc-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.sc-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.sc-state {
+  color: var(--dim);
+}
+.sc-state--retired {
+  color: var(--red);
+}
+.sc-description {
+  margin: 0;
+  color: var(--amber);
+  overflow-wrap: anywhere;
+}
+.sc-edit {
+  display: flex;
+  gap: 4px;
+}
+.edit-input {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  background: var(--overlay-35);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 2px 4px;
+}
+.edit-input:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 0;
+}
+.sc-cli {
+  margin: 0;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}

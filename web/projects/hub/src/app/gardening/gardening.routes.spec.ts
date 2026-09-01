@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { routes } from '../app.routes';
 
@@ -30,6 +30,8 @@ describe('the /gardening route subtree', () => {
       if (method === 'GET' && path === '/api/garden-proposals') return [];
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
+      if (method === 'GET' && path === '/api/scopes') return [];
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       return {};
     });
     await TestBed.configureTestingModule({

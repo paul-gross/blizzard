@@ -16,3 +16,18 @@
     (closed)="closeDialog()"
   />
 }
+
+<section class="gr-scopes">
+  <h3>Scopes</h3>
+  @if (scopeActionError(); as err) {
+    <p class="gr-scopes-error" data-testid="gardening-scopes-error">{{ err }}</p>
+  }
+  <fleet-scope-list
+    [rows]="scopeRows()"
+    [state]="scopesState()"
+    [canEdit]="canEditScopes()"
+    (editDescription)="onEditScopeDescription($event)"
+    (retire)="onRetireScope($event)"
+    (enable)="onEnableScope($event)"
+  />
+</section>
