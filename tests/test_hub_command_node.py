@@ -1002,7 +1002,9 @@ def test_a_fresh_merged_marker_records_the_delivery_landed_fact(tmp_path: Path) 
     assert hub.services.chunks.delivery.count_landed_since("acme-widget", since) == 1
     with hub.engine.begin() as conn:
         row = conn.execute(
-            select(s.delivery_repo_landed.c.repo, s.delivery_repo_landed.c.commit_hash, s.delivery_repo_landed.c.landed_at)
+            select(
+                s.delivery_repo_landed.c.repo, s.delivery_repo_landed.c.commit_hash, s.delivery_repo_landed.c.landed_at
+            )
         ).one()
         assert row.repo == "acme-widget"
         assert row.commit_hash == "sha:abc123"

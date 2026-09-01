@@ -1208,9 +1208,9 @@ export const editRoutineApiRoutinesRoutineIdPatch = <ThrowOnError extends boolea
 /**
  * Routine Baselines
  *
- * Every scope `routine_id` has swept (D5) — the picker's ordering, the delta
- * baseline display, and the delta-steering rule all read this one route. Absence from
- * the response *is* "never swept"; 404 on an unknown routine id.
+ * Every scope `routine_id` has swept (D5) — see
+ * `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.
+ * 404 on an unknown routine id.
  */
 export const routineBaselinesApiRoutinesRoutineIdBaselinesGet = <ThrowOnError extends boolean = false>(options: Options<RoutineBaselinesApiRoutinesRoutineIdBaselinesGetData, ThrowOnError>): RequestResult<RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses, RoutineBaselinesApiRoutinesRoutineIdBaselinesGetErrors, ThrowOnError> => (options.client ?? client).get<RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses, RoutineBaselinesApiRoutinesRoutineIdBaselinesGetErrors, ThrowOnError>({ url: '/api/routines/{routine_id}/baselines', ...options });
 
