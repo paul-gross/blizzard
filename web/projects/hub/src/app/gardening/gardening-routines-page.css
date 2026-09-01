@@ -1,0 +1,15 @@
+.gr-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 12px;
+  min-width: 0;
+}
+@media (max-width: 480px) {
+  .gr-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.gr-list,
+.gr-panel {
+  min-width: 0;
+}

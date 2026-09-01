@@ -65,6 +65,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
     IReadGardenProposalClosureRepository,
 )
 from blizzard.hub.domain.garden_proposals import GardenProposalAuthoring, IReadGardenProposalRepository
+from blizzard.hub.domain.garden_sweeps import GardenSweepsService
 from blizzard.hub.domain.garden_trend import GardenTrendService
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
@@ -96,6 +97,7 @@ from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingSt
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
+from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
@@ -239,6 +241,8 @@ class HubServices:
     commit_resolver: CommitResolver
     #: A routine's finding inflow-against-outflow over a window (blizzard#394 Phase 4).
     garden_trend: GardenTrendService
+    #: A routine's per-scope last-swept table and windowed measurement series.
+    garden_sweeps: GardenSweepsService
 
 
 def build_services(
@@ -374,6 +378,7 @@ def build_services(
     run_context_store = RunContextStore(store_connections)
     garden_delivery_store = GardenDeliveryStore(store_connections)
     garden_trend_store = GardenTrendStore(store_connections)
+    garden_sweeps_store = GardenSweepsStore(store_connections)
     # Bound as `.resolve` (a plain `garden_delivery.CommitResolver` callable), not the bare
     # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
     commit_resolver = GitHubCommitResolver(
@@ -519,4 +524,5 @@ def build_services(
         garden_delivery=GardenDelivery(delivery=garden_delivery_store, clock=clock),
         commit_resolver=commit_resolver,
         garden_trend=GardenTrendService(repo=garden_trend_store),
+        garden_sweeps=GardenSweepsService(repo=garden_sweeps_store, scopes=scope_store),
     )

@@ -32,3 +32,19 @@ list; `--scope` overrides the routine's own default, minting an unseen slug the 
 `--mode` defaults to `full`; a requested `delta` against a routine/scope pair with no recorded baseline downgrades to
 `full` rather than refusing — the CLI names the downgrade in its output, and the item's own charge does too. A retired
 effective scope, or a routine whose graph has lost every enabled mint, refuses the run rather than running it anyway.
+
+## Reading a routine's health
+
+`blizzard hub routine trend <name> --since <time> --until <time> --introduced-boundary <time> [--period-days <n>]`
+reports finding inflow against outflow over the window: per-period created and per-kind exit counts, the outflow/
+withdrawn roll-ups, and the introduced-age cut against `--introduced-boundary`.
+
+`blizzard hub routine sweeps <name> --since <time> --until <time>` reports two things at once: a last-swept table —
+every non-retired scope, plus any retired scope `name` has swept, each with its newest delivered finding set's instant
+and per-repository revisions, or `never` when the pair has recorded none — and a measurement series, the opaque text
+each delivered set records, cut to `--since`/`--until`. Unlike the last-swept table, the measurement series is
+windowed: a scope swept months ago still reads its true last-swept instant, never "never".
+
+The hub board's Gardening tab renders both reads, plus a routine's stored record and its strategy — the effective
+graph's own node preambles — as read-only prose. A routine whose graph has lost every enabled mint shows as blocked
+there instead of offering a run.

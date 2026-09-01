@@ -1945,6 +1945,32 @@ export type GardenProposalView = {
 };
 
 /**
+ * GardenSweepsView
+ */
+export type GardenSweepsView = {
+    /**
+     * Last Swept
+     */
+    last_swept: Array<ScopeSweepView>;
+    /**
+     * Measurements
+     */
+    measurements: Array<MeasurementReadingView>;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+    /**
+     * Since
+     */
+    since: string;
+    /**
+     * Until
+     */
+    until: string;
+};
+
+/**
  * GraphArtifact
  *
  * One graph-scoped artifact baked into the mint — the loader-inlined content of
@@ -2494,6 +2520,24 @@ export type MeResponse = {
      * Username
      */
     username: string;
+};
+
+/**
+ * MeasurementReadingView
+ */
+export type MeasurementReadingView = {
+    /**
+     * Measurement
+     */
+    measurement: string;
+    /**
+     * Produced At
+     */
+    produced_at: string;
+    /**
+     * Scope Slug
+     */
+    scope_slug: string;
 };
 
 /**
@@ -3626,6 +3670,30 @@ export type ScopeLifecycleRequest = {
      * By
      */
     by?: string;
+};
+
+/**
+ * ScopeSweepView
+ */
+export type ScopeSweepView = {
+    /**
+     * Finding Set Id
+     */
+    finding_set_id: string | null;
+    /**
+     * Produced At
+     */
+    produced_at: string | null;
+    /**
+     * Revisions
+     */
+    revisions: {
+        [key: string]: string;
+    };
+    /**
+     * Scope Slug
+     */
+    scope_slug: string;
 };
 
 /**
@@ -8000,6 +8068,45 @@ export type RunRoutineApiRoutinesRoutineIdRunPostResponses = {
 };
 
 export type RunRoutineApiRoutinesRoutineIdRunPostResponse = RunRoutineApiRoutinesRoutineIdRunPostResponses[keyof RunRoutineApiRoutinesRoutineIdRunPostResponses];
+
+export type RoutineSweepsApiRoutinesRoutineIdSweepsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until: string;
+    };
+    url: '/api/routines/{routine_id}/sweeps';
+};
+
+export type RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RoutineSweepsApiRoutinesRoutineIdSweepsGetError = RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors[keyof RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors];
+
+export type RoutineSweepsApiRoutinesRoutineIdSweepsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenSweepsView;
+};
+
+export type RoutineSweepsApiRoutinesRoutineIdSweepsGetResponse = RoutineSweepsApiRoutinesRoutineIdSweepsGetResponses[keyof RoutineSweepsApiRoutinesRoutineIdSweepsGetResponses];
 
 export type ListRunnersApiRunnersGetData = {
     body?: never;

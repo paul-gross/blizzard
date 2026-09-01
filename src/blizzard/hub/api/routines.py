@@ -1,9 +1,8 @@
-"""Routine routes — create, list, read, edit, run, and trend a routine (issue #389, blizzard#392).
+"""Routine routes — create, list, read, edit, run, trend, and sweep (issue #389, blizzard#392).
 
-The controller stays read-only over the store (``bzh:controller-read-only``), resolving
-a ``routine_id`` into an object before delegating to the domain
-(``bzh:domain-takes-objects``). ``GET /routines/trend`` is declared ahead of
-``GET /routines/{routine_id}`` so the literal path wins the match."""
+The controller stays read-only (``bzh:controller-read-only``), resolving a ``routine_id``
+before delegating to the domain. ``GET /routines/trend`` is declared ahead of ``GET
+/routines/{routine_id}`` so the literal path wins; ``sweeps`` nests under a resolved id (D6)."""
 
 from __future__ import annotations
 
@@ -22,6 +21,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.garden_sweeps import GardenSweeps
 from blizzard.hub.domain.garden_trend import Trend
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.routine_run import RunResult, ScopeRetiredError
@@ -35,6 +35,7 @@ from blizzard.hub.domain.routines import (
 from blizzard.hub.domain.scopes import ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.wire.chunk import ChunkIngestConflict
+from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
 from blizzard.wire.garden_trend import TrendAgeView, TrendPeriodView, TrendView
 from blizzard.wire.routine import (
     RoutineCreateRequest,
@@ -90,6 +91,21 @@ def list_routines(services: Annotated[HubServices, Depends(get_services)]) -> li
     return [_routine_view(r) for r in services.routines.list_all()]
 
 
+def _parse_instant(value: str, *, field: str) -> datetime:
+    try:
+        return as_utc(datetime.fromisoformat(value))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field} {value!r} is not a valid ISO-8601 instant",
+        ) from exc
+
+
+def _require_until_after_since(since: datetime, until: datetime) -> None:
+    if until <= since:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="until must be after since")
+
+
 @dataclass(frozen=True)
 class _TrendWindow:
     """One ``GET /routines/trend`` request's parsed window (blizzard#394 Phase 4,
@@ -110,10 +126,9 @@ class _TrendWindow:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="period_days must be at least 1"
             )
-        parsed_since = cls._instant(since, field="since")
-        parsed_until = cls._instant(until, field="until")
-        if parsed_until <= parsed_since:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="until must be after since")
+        parsed_since = _parse_instant(since, field="since")
+        parsed_until = _parse_instant(until, field="until")
+        _require_until_after_since(parsed_since, parsed_until)
         span_days = (parsed_until - parsed_since).total_seconds() / 86400
         if span_days / period_days > cls._MAX_PERIODS:
             raise HTTPException(
@@ -123,19 +138,9 @@ class _TrendWindow:
         return cls(
             since=parsed_since,
             until=parsed_until,
-            introduced_boundary=cls._instant(introduced_boundary, field="introduced_boundary"),
+            introduced_boundary=_parse_instant(introduced_boundary, field="introduced_boundary"),
             period_days=period_days,
         )
-
-    @staticmethod
-    def _instant(value: str, *, field: str) -> datetime:
-        try:
-            return as_utc(datetime.fromisoformat(value))
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"{field} {value!r} is not a valid ISO-8601 instant",
-            ) from exc
 
 
 def _trend_view(trend: Trend) -> TrendView:
@@ -224,6 +229,70 @@ def edit_routine(
     except (ScopeSlugError, RoutineNameImmutableError, RoutineGraphUnresolvedError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _routine_view(edited)
+
+
+@dataclass(frozen=True)
+class _SweepWindow:
+    """One ``GET /routines/{routine_id}/sweeps`` request's parsed window — the
+    measurement series' own ``[since, until)`` (D2); last-swept ignores it. Reuses
+    `_parse_instant`/`_require_until_after_since` so a malformed instant or an
+    inverted span answers the same 422 both routes name."""
+
+    since: datetime
+    until: datetime
+
+    @classmethod
+    def of(cls, *, since: str, until: str) -> _SweepWindow:
+        parsed_since = _parse_instant(since, field="since")
+        parsed_until = _parse_instant(until, field="until")
+        _require_until_after_since(parsed_since, parsed_until)
+        return cls(since=parsed_since, until=parsed_until)
+
+
+def _sweeps_view(sweeps: GardenSweeps) -> GardenSweepsView:
+    return GardenSweepsView(
+        routine_name=sweeps.routine_name,
+        since=iso_utc(sweeps.since),
+        until=iso_utc(sweeps.until),
+        last_swept=[
+            ScopeSweepView(
+                scope_slug=s.scope_slug,
+                finding_set_id=s.finding_set_id,
+                produced_at=iso_utc(s.produced_at) if s.produced_at is not None else None,
+                revisions=s.revisions,
+            )
+            for s in sweeps.last_swept
+        ],
+        measurements=[
+            MeasurementReadingView(
+                scope_slug=m.scope_slug, produced_at=iso_utc(m.produced_at), measurement=m.measurement
+            )
+            for m in sweeps.measurements
+        ],
+    )
+
+
+@router.get(
+    "/routines/{routine_id}/sweeps",
+    response_model=GardenSweepsView,
+    dependencies=[Depends(require(FLEET_VIEW))],
+)
+def routine_sweeps(
+    routine_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    since: Annotated[str, Query()],
+    until: Annotated[str, Query()],
+) -> GardenSweepsView:
+    """``routine_id``'s per-scope last-swept table (D2, D3, D4) — every non-retired
+    scope, plus any retired scope this routine has swept — and its measurement series
+    (D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a malformed instant
+    or a non-positive span."""
+    routine = services.routines.get(routine_id)
+    if routine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    window = _SweepWindow.of(since=since, until=until)
+    sweeps = services.garden_sweeps.sweeps(routine.name, since=window.since, until=window.until)
+    return _sweeps_view(sweeps)
 
 
 def _run_response(result: RunResult) -> RoutineRunResponse:

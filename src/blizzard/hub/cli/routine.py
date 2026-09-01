@@ -1,5 +1,5 @@
 """``blizzard hub routine`` — issue #389: operator verbs over routines; blizzard#394
-Phase 4 adds ``trend``."""
+Phase 4 adds ``trend``, the gardening routine panel adds ``sweeps``."""
 
 from __future__ import annotations
 
@@ -240,3 +240,56 @@ def routine_trend(
     cli.check(resp, "GET /routines/trend")
     body = resp.json()
     cli.show(body, TrendDetail(body))
+
+
+@dataclass(frozen=True)
+class SweepsDetail:
+    """`routine sweeps`'s own render — the last-swept table (unwindowed), then the
+    measurement series, over the same window `trend`'s own ``--since``/``--until``
+    name."""
+
+    body: dict[str, Any]
+
+    def lines(self) -> Iterator[str]:
+        body = self.body
+        yield f"{body['routine_name']}  measurement window {body['since']} .. {body['until']}"
+        yield "  last swept:"
+        for row in body["last_swept"]:
+            if row["finding_set_id"] is None:
+                yield f"    {row['scope_slug']}: never"
+                continue
+            revisions = ", ".join(f"{repo}@{rev}" for repo, rev in sorted(row["revisions"].items()))
+            yield (
+                f"    {row['scope_slug']}: {row['produced_at']}  {row['finding_set_id']}  "
+                f"({revisions or 'no repositories recorded'})"
+            )
+        yield "  measurements:"
+        for reading in body["measurements"]:
+            yield f"    {reading['produced_at']}  {reading['scope_slug']}: {reading['measurement']}"
+
+
+@routine_group.command("sweeps", cls=FleetCommand)
+@click.argument("name")
+@click.option("--since", required=True, type=click.DateTime(), help="The measurement window's start, in local time.")
+@click.option(
+    "--until", required=True, type=click.DateTime(), help="The measurement window's end, in local time (exclusive)."
+)
+def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime) -> None:
+    """NAME's per-scope last-swept table — every non-retired scope, plus any retired
+    scope NAME has swept — and its measurement series over --since/--until.
+
+    NAME is resolved to its routine_id through the routine list (D3)."""
+    rows = cli.get("/api/routines", "GET /routines").json()
+    matched = next((r for r in rows if r["name"] == name), None)
+    if matched is None:
+        raise click.ClickException(f"unknown routine {name!r}")
+    resp = cli.send(
+        "get",
+        f"/api/routines/{matched['routine_id']}/sweeps",
+        params={"since": _utc_query_value(since), "until": _utc_query_value(until)},
+    )
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        raise click.ClickException(f"sweeps rejected: {cli.detail(resp, 'validation failed')}")
+    cli.check(resp, "GET /routines/{id}/sweeps", on_status={404: f"unknown routine {name!r}"})
+    body = resp.json()
+    cli.show(body, SweepsDetail(body))

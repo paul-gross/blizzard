@@ -38,6 +38,31 @@ export const hubUsersKey = ['hub', 'users'] as const;
 /** The gardening tab's docket read (blizzard#397) — `GET /api/garden-proposals`. Not
  * yet in the SSE event vocabulary, so nothing invalidates this key on a live event. */
 export const hubGardenProposalsKey = ['hub', 'garden-proposals'] as const;
+/** The gardening tab's routine list — `GET /api/routines`. Routines change rarely and
+ * carry no SSE event of their own, the same standing `hubGraphsKey` has. */
+export const hubRoutinesKey = ['hub', 'routines'] as const;
+
+/** One routine's inflow-against-outflow trend over a window — `GET /api/routines/trend`.
+ * Every window argument rides the key, `hubFleetSpendKey`'s own reason: a new window is
+ * its own cache entry, not a collision with one already read. `routineName` is nullable,
+ * `hubChunkKey`'s own null-tolerant shape, for the disabled-query rest state. */
+export function hubRoutineTrendKey(
+  routineName: string | null,
+  since: string,
+  until: string,
+  introducedBoundary: string,
+  periodDays: number,
+): readonly unknown[] {
+  return ['hub', 'routine-trend', routineName, since, until, introducedBoundary, periodDays];
+}
+
+/** One routine's last-swept table and measurement series — `GET
+ * /api/routines/{routine_id}/sweeps`, keyed by id since the route itself is (D6).
+ * `routineId` is nullable, `hubChunkKey`'s own null-tolerant shape, for the
+ * disabled-query rest state. */
+export function hubRoutineSweepsKey(routineId: string | null, since: string, until: string): readonly unknown[] {
+  return ['hub', 'routine-sweeps', routineId, since, until];
+}
 
 /** One chunk's full aggregate, keyed by id. */
 export function hubChunkKey(chunkId: string | null): readonly unknown[] {

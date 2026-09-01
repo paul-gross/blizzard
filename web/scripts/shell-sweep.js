@@ -18,7 +18,7 @@
  *
  *   npm run shell-sweep   (from web/)
  *
- * The fourteen specs:
+ * The specs:
  *   - projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts — the hub
  *     board shell (BoardHeader + AppNavMenu), swept over width only (no
  *     username is ever shown there): never lets the profile menu drift
@@ -95,6 +95,16 @@
  *     from under `.body`'s own flex column, and the edges section's per-node
  *     blocks and prompt addendum genuinely stack too — real CSS layout claims
  *     jsdom cannot make.
+ *   - projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts — the
+ *     gardening routine panel (blizzard#397): the record, strategy, trend,
+ *     measurement, and last-swept blocks genuinely stack at 1280/390/320px
+ *     with no horizontal overflow, and the last-swept table's own long
+ *     revision hashes wrap inside their column rather than widening it.
+ *   - projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts —
+ *     the gardening routines container's own list-beside-panel grid
+ *     (blizzard#397): the list and panel sit side by side at 1280px, and
+ *     genuinely collapse into a single stacked column at 390/320px, with no
+ *     horizontal overflow of the layout itself.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -114,6 +124,8 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-control-row.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {
@@ -136,7 +148,7 @@ function main() {
     return;
   }
 
-  console.log('\nshell-sweep: all fourteen specs clean.\n');
+  console.log('\nshell-sweep: all specs clean.\n');
 }
 
 main();

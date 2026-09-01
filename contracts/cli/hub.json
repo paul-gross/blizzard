@@ -3273,6 +3273,68 @@
           "path": "hub routine show",
           "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults."
         },
+        "sweeps": {
+          "help": "NAME's per-scope last-swept table \u2014 every non-retired scope, plus any retired\nscope NAME has swept \u2014 and its measurement series over --since/--until.\n\nNAME is resolved to its routine_id through the routine list (D3).",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "since",
+              "opts": [
+                "--since"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "until",
+              "opts": [
+                "--until"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub routine sweeps",
+          "short_help": "NAME's per-scope last-swept table \u2014 every non-retired scope, plus any retired scope NAME has swept \u2014 and its measurement series over --since/--until."
+        },
         "trend": {
           "help": "NAME's finding inflow-against-outflow over --since/--until: per-period created and\nper-kind exit counts, the outflow/withdrawn roll-ups, and the introduced-age cut\nagainst --introduced-boundary.",
           "params": [

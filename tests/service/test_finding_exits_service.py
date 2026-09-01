@@ -1,9 +1,9 @@
-"""Hub service tier — a finding's human-driven exits, the delta guard they raise, and the
-routine trend, against a real hub daemon (blizzard#394 Phases 2-4). Both edges are real:
-raw HTTP, and the shipped ``blizzard hub`` binary as a subprocess. Findings are minted the
-way a routine mints them — a run, the mock runner submitting its ``delta`` over the wire,
-then the hub's own garden-delivery route — never ad-hoc SQL. Run with
-``BLIZZARD_SERVICE=1``."""
+"""Hub service tier — a finding's human-driven exits, the delta guard they raise, the
+routine trend, and its last-swept table, against a real hub daemon (blizzard#394 Phases
+2-4). Both edges are real: raw HTTP, and the shipped ``blizzard hub`` binary as a
+subprocess. Findings are minted the way a routine mints them — a run, the mock runner
+submitting its ``delta`` over the wire, then the hub's own garden-delivery route — never
+ad-hoc SQL. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
 
@@ -95,17 +95,19 @@ def garden_stack(tmp_path: Path) -> Iterator[Garden]:
         )
 
 
-def deliver(g: Garden, ops: Sequence[dict[str, Any]], *, proposals: Sequence[dict[str, Any]] = ()) -> httpx.Response:
+def deliver(
+    g: Garden, ops: Sequence[dict[str, Any]], *, scope: str = _SCOPE, proposals: Sequence[dict[str, Any]] = ()
+) -> httpx.Response:
     """One routine run's whole delivery: mint the run, claim its entry node as the mock
     runner, submit the run's artifacts over the wire, then post the hub's own
     garden-delivery route. Returns that route's response — ``recorded`` or ``invalid``."""
-    run = g.hub.post(f"/api/routines/{g.routine_id}/run", json={"scope_slug": _SCOPE, "mode": "full", "note": "sweep"})
+    run = g.hub.post(f"/api/routines/{g.routine_id}/run", json={"scope_slug": scope, "mode": "full", "note": "sweep"})
     assert run.status_code == 201, run.text
     chunk_id = run.json()["chunk_id"]
     assert g.runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
 
     delta = {
-        "scope": _SCOPE,
+        "scope": scope,
         "revisions": {REPO_NAME: g.head},
         "measurement": "service sweep",
         "findings": list(ops),
@@ -424,6 +426,72 @@ def test_the_trend_is_served_over_http_and_through_the_real_cli(tmp_path: Path) 
             },
         )
         assert bad.status_code == 422, bad.text
+
+
+# --- Gardening routine panel — the sweeps route, at both edges -------------- #
+
+
+def test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_series(tmp_path: Path) -> None:
+    """Every non-retired scope, including one never swept; a retired scope this routine
+    has swept stays listed; the measurement series is cut to the window while
+    last-swept is not."""
+    with garden_stack(tmp_path) as g:
+        t0, t0_local = datetime.now(UTC), datetime.now()
+        never_swept, retired_swept = "garden-svc-never", "garden-svc-retired"
+        for slug in (never_swept, retired_swept):
+            created = g.hub.post("/api/scopes", json={"slug": slug, "description": ""})
+            assert created.status_code == 201, created.text
+
+        recorded = deliver(g, [add_op("src/app.py:1")])
+        assert recorded.status_code == 200 and recorded.json()["outcome"] == "recorded", recorded.text
+
+        retired_delivery = deliver(g, [add_op("src/app.py:2")], scope=retired_swept)
+        assert retired_delivery.status_code == 200, retired_delivery.text
+        retired = g.hub.post(f"/api/scopes/{retired_swept}/retire", json={"by": "operator"})
+        assert retired.status_code == 202, retired.text
+
+        since, until = t0 - timedelta(days=1), t0 + timedelta(days=1)
+        resp = g.hub.get(
+            f"/api/routines/{g.routine_id}/sweeps", params={"since": since.isoformat(), "until": until.isoformat()}
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["routine_name"] == _ROUTINE
+
+        by_scope = {row["scope_slug"]: row for row in body["last_swept"]}
+        assert by_scope[never_swept]["finding_set_id"] is None
+        assert by_scope[never_swept]["produced_at"] is None
+        assert by_scope[_SCOPE]["finding_set_id"] is not None
+        assert by_scope[retired_swept]["finding_set_id"] is not None
+
+        swept_scopes = {m["scope_slug"] for m in body["measurements"]}
+        assert swept_scopes == {_SCOPE, retired_swept}
+        assert all(m["measurement"] == "service sweep" for m in body["measurements"])
+
+        cli_out = cli(
+            g,
+            "hub",
+            "routine",
+            "sweeps",
+            _ROUTINE,
+            "--since",
+            (t0_local - timedelta(days=1)).isoformat(timespec="seconds"),
+            "--until",
+            (t0_local + timedelta(days=1)).isoformat(timespec="seconds"),
+            "--json",
+        ).stdout
+        from_cli = json.loads(cli_out)
+        assert {row["scope_slug"] for row in from_cli["last_swept"]} == {_SCOPE, never_swept, retired_swept}
+
+
+def test_sweeps_404s_on_an_unknown_routine_id(tmp_path: Path) -> None:
+    with garden_stack(tmp_path) as g:
+        t0 = datetime.now(UTC)
+        resp = g.hub.get(
+            "/api/routines/rtn_ghost/sweeps",
+            params={"since": (t0 - timedelta(days=1)).isoformat(), "until": (t0 + timedelta(days=1)).isoformat()},
+        )
+        assert resp.status_code == 404, resp.text
 
 
 # --- Phase 3 — an accepted proposal's delivered item resolves its findings ---- #
