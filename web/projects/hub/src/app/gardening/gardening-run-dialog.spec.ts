@@ -130,7 +130,9 @@ describe('GardeningRunDialog', () => {
 
     const baseline = el.querySelector('[data-testid="run-mode-baseline"]')!;
     expect(baseline.textContent).toContain('fins_02XYZ');
-    expect(baseline.textContent).toContain('2026-02-01T00:00:00Z');
+    // The shared relative-date component, not a raw ISO string.
+    expect(baseline.textContent).not.toContain('2026-02-01T00:00:00Z');
+    expect(baseline.querySelector('fleet-when')).toBeTruthy();
     expect(baseline.textContent).toContain('blizzard@abc123d');
     expect(baseline.textContent).toContain('5 landed since');
   });
@@ -163,6 +165,21 @@ describe('GardeningRunDialog', () => {
     await settle(fixture);
 
     expect(el.querySelector<HTMLInputElement>('[data-testid="run-mode-full"]')!.checked).toBe(true);
+  });
+
+  it('warns on a retired scope\'s exact slug too, even though it is never a picker row', async () => {
+    const mounted = await mount(defaultRoute);
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+
+    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-new"]')!.click();
+    await settle(fixture);
+    const slugInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-slug"]')!;
+    slugInput.value = 'retired-scope';
+    slugInput.dispatchEvent(new Event('input'));
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="run-scope-near-match-warning"]')?.textContent).toContain('retired-scope');
   });
 
   it('names the CLI verb behind it', async () => {
@@ -211,6 +228,64 @@ describe('GardeningRunDialog', () => {
     const link = el.querySelector('[data-testid="run-confirmation-board-link"]');
     expect(link).not.toBeNull();
     expect(el.querySelector('fleet-board, [data-testid="board"]')).toBeNull();
+  });
+
+  it('surfaces a refused run after its scope create already succeeded, and a resubmit reaches the run', async () => {
+    let runAttempts = 0;
+    const mounted = await mount((method, path) => {
+      if (method === 'POST' && path === '/api/routines/rtn_1/run') {
+        runAttempts += 1;
+        if (runAttempts === 1) return stubError(503, { detail: "scope 'fresh-scope' is retired" });
+        return {
+          chunk_id: 'ch_retry',
+          source: 'hub',
+          ref: '1',
+          title: 'gardening run (full)',
+          body: 'Routine: gardening',
+          routine_name: 'gardening',
+          scope_slug: 'fresh-scope',
+          effective_mode: 'full',
+          downgraded: false,
+          baseline_finding_set_id: null,
+          baseline_revisions: null,
+          created_at: '2026-03-01T00:00:00Z',
+        };
+      }
+      return defaultRoute(method, path);
+    });
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+
+    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-new"]')!.click();
+    await settle(fixture);
+    const slugInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-slug"]')!;
+    slugInput.value = 'fresh-scope';
+    slugInput.dispatchEvent(new Event('input'));
+    await settle(fixture);
+    const descInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-description"]')!;
+    descInput.value = 'a fresh weed patch';
+    descInput.dispatchEvent(new Event('input'));
+    await settle(fixture);
+
+    const btn = el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!;
+    btn.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    // The create already landed even though the run that followed it refused.
+    expect(stub.forRoute('/api/scopes', 'POST')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="run-submit-error"]')?.textContent).toContain('retired');
+    expect(el.querySelector('[data-testid="run-confirmation"]')).toBeNull();
+
+    // A resubmit re-creates the same slug — mint-or-no-op (D4) — and this time the run succeeds.
+    btn.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/scopes', 'POST')).toHaveLength(2);
+    expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')).toHaveLength(2);
+    expect(el.querySelector('[data-testid="run-confirmation-chunk-id"]')?.textContent).toBe('ch_retry');
+    expect(el.querySelector('[data-testid="run-submit-error"]')).toBeNull();
   });
 
   it('surfaces a refused scope create and never reaches the run', async () => {

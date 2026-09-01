@@ -186,7 +186,7 @@ def test_newest_for_routine_scope_ignores_a_different_routine_or_scope(tmp_path:
 
 
 def test_newest_by_scope_for_routine_returns_one_entry_per_scope(tmp_path: Path) -> None:
-    """The routine-baselines batched read (blizzard#392 D5) — one row per scope, the
+    """The routine-baselines batched read (blizzard#399 D5) — one row per scope, the
     newest by `finding_set_id`."""
     store, engine = _store(tmp_path)
     with engine.begin() as conn:

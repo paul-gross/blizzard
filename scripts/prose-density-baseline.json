@@ -1634,8 +1634,8 @@
   },
   "blizzard/hub/domain/routine_baselines.py": {
    "comments": 0,
-   "docstrings": 18,
-   "total": 80
+   "docstrings": 20,
+   "total": 83
   },
   "blizzard/hub/domain/routine_run.py": {
    "comments": 0,
@@ -5262,12 +5262,12 @@
   "test_routine_baselines_domain.py": {
    "comments": 0,
    "docstrings": 2,
-   "total": 149
+   "total": 153
   },
   "test_routine_baselines_store.py": {
    "comments": 1,
    "docstrings": 3,
-   "total": 88
+   "total": 92
   },
   "test_routine_domain.py": {
    "comments": 0,

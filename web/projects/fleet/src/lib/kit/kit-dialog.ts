@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { CdkTrapFocus } from '@angular/cdk/a11y';
 
 /**
- * The modal shell (blizzard#392 D6) — the chrome a dialog needs and no dialog under
+ * The modal shell (blizzard#399 D6) — the chrome a dialog needs and no dialog under
  * `fleet/lib/kit/` had before this one: a viewport-covering scrim, a centred, framed
  * panel with header/body/footer slots, `role="dialog"`/`aria-modal`, Escape and
  * backdrop dismissal, and focus containment. Presentational only, no client or query

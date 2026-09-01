@@ -1,23 +1,9 @@
 .scope-field {
-  border: 1px solid var(--line);
-  padding: 8px;
   margin: 0 0 12px;
 }
 
-.lbl {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-  padding: 0 4px;
-}
-
-.opt {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 4px 2px;
-  cursor: pointer;
+.body {
+  padding: 8px;
 }
 
 .opt-body {

@@ -5,6 +5,7 @@ export * from './routine-panel';
 export * from './routine-run.mutations';
 export * from './routine-window';
 export * from './routines.query';
+export * from './scopes.mutations';
 export * from './scopes.query';
 export type {
   RoutineBaselineRepoView,

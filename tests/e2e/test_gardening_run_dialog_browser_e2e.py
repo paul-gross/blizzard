@@ -1,5 +1,5 @@
 """The gardening run dialog, in a real browser — the `test_gardening_run_dialog_browser_e2e`
-scenario of the standing e2e smoke (blizzard#392 D6).
+scenario of the standing e2e smoke (blizzard#399 D6).
 
 A real Chromium (Playwright) over the served board opens the dialog from the routines
 list, proving the create-then-run submission (D3) and the never-swept delta-steering
@@ -45,7 +45,7 @@ def _graph_yaml(name: str) -> str:
 
 
 def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) -> None:
-    """Opens the run dialog from the routines list (the blizzard#392 D7 provisional
+    """Opens the run dialog from the routines list (the blizzard#399 D7 provisional
     trigger), mints a new scope before running (D3), and lands on the confirmation
     naming a real chunk id and linking to the board — against a live hub, no fixtures."""
     if not chromium_available:

@@ -14,7 +14,7 @@ import {
 import { GardeningRunDialogView, type RunSubmission } from './gardening-run-dialog-view';
 
 /**
- * The gardening run dialog's container (blizzard#392 D6) — kicks off a routine run
+ * The gardening run dialog's container (blizzard#399 D6) — kicks off a routine run
  * from a dialog: scope, mode, and a charge note, with the baseline read
  * (`GET /api/routines/{routine_id}/baselines`, D5) resolving before submission rather
  * than after.
@@ -56,6 +56,14 @@ export class GardeningRunDialog {
     () => new Set((this.baselinesQuery.data() ?? []).map((b) => b.scope_slug)),
   );
 
+  /** Every scope's slug, retired included — the picker itself still only ever
+   * offers a live one, but the near-match warning must still fire on a retired slug's
+   * exact spelling: without this, minting a name identical to a retired scope gets no
+   * warning at all, and the run that follows refuses the retired scope outright. */
+  protected readonly existingSlugs = computed<ReadonlySet<string>>(
+    () => new Set((this.scopesQuery.data() ?? []).map((s) => s.slug)),
+  );
+
   /** Previously-swept scopes first, in D5's own newest-swept-first order; every other
    * live scope after, in the order `GET /api/scopes` served them (D5's own ordering
    * criterion). */
@@ -69,7 +77,13 @@ export class GardeningRunDialog {
     return [...sweptOrdered, ...rest];
   });
 
-  protected readonly state = computed(() => asyncStateOf([this.scopesQuery, this.baselinesQuery], false));
+  /** `isEmpty` reads the scopes read's own literal count — never hardcoded — so the
+   * "No scopes declared yet" branch stays reachable rather than dead code, even
+   * though a routine's own auto-minted default scope means it practically never
+   * fires once any routine exists. */
+  protected readonly state = computed(() =>
+    asyncStateOf([this.scopesQuery, this.baselinesQuery], (this.scopesQuery.data() ?? []).length === 0),
+  );
 
   protected readonly submitting = computed(() => this.createScopeMutation.isPending() || this.runMutation.isPending());
 

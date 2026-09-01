@@ -1,0 +1,11 @@
+<label class="opt" [class.opt--top]="alignTop()">
+  <input
+    type="radio"
+    [name]="name()"
+    [checked]="checked()"
+    [disabled]="disabled()"
+    (change)="changed.emit()"
+    [attr.data-testid]="testid()"
+  />
+  <ng-content />
+</label>

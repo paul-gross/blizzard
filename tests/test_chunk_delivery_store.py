@@ -1,5 +1,5 @@
 """``ChunkDeliveryStore.count_landed_since`` — the routine-baselines read's own
-landings-since count (blizzard#392 D1, D5, component tier). Migrated-to-head
+landings-since count (blizzard#399 D1, D5, component tier). Migrated-to-head
 sqlite-on-disk, the ``test_finding_set_store.py`` shape."""
 
 from __future__ import annotations

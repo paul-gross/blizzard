@@ -1,4 +1,4 @@
-"""``RoutineBaselineService`` over real stores (blizzard#392 D1, D5, component tier):
+"""``RoutineBaselineService`` over real stores (blizzard#399 D1, D5, component tier):
 a delivered garden finding set and a chunk landing after it, joined purely on the repo
 names each side independently holds — the one join D1 rests on."""
 
@@ -13,6 +13,7 @@ from sqlalchemy import insert
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import Id
 from blizzard.hub.domain.routine_baselines import RepoLandings, RoutineBaselineService
+from blizzard.hub.domain.routines import Routine
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
 from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
@@ -20,6 +21,9 @@ from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
+_ROUTINE = Routine(
+    routine_id="rtn_1", name="gardening", graph_name="default", default_scope_slug="blizzard", created_at=_NOW
+)
 
 
 def _seed_artifact(conn, artifact_id: str, *, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
@@ -67,7 +71,7 @@ def test_landed_since_joins_the_finding_sets_repo_names_against_delivery(tmp_pat
     )
 
     service = RoutineBaselineService(finding_sets=FindingSetStore(hub_store_connections(engine)), delivery=delivery)
-    baselines = service.baselines_for("gardening")
+    baselines = service.baselines_for(_ROUTINE)
 
     assert len(baselines) == 1
     baseline = baselines[0]
@@ -85,4 +89,4 @@ def test_a_never_swept_routine_yields_no_baselines(tmp_path: Path) -> None:
     delivery = chunk_stores(engine, FixedClock(instant=_NOW)).delivery
     service = RoutineBaselineService(finding_sets=FindingSetStore(hub_store_connections(engine)), delivery=delivery)
 
-    assert service.baselines_for("gardening") == []
+    assert service.baselines_for(_ROUTINE) == []

@@ -1,4 +1,4 @@
-"""``GET /api/routines/{routine_id}/baselines`` (blizzard#392 D5, service tier) — the
+"""``GET /api/routines/{routine_id}/baselines`` (blizzard#399 D5, service tier) — the
 shape a delivered run's baseline serves against a real hub daemon, and the 404 on an
 unknown routine id. Reuses the garden delivery stack `test_finding_exits_service.py`
 already stands up; FLEET_VIEW enforcement is the component-tier

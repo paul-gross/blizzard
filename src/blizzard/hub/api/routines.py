@@ -235,7 +235,7 @@ def routine_baselines(
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
-    return [_baseline_view(b) for b in services.routine_baselines.baselines_for(routine.name)]
+    return [_baseline_view(b) for b in services.routine_baselines.baselines_for(routine)]
 
 
 @router.patch("/routines/{routine_id}", response_model=RoutineView, dependencies=[Depends(require(GRAPH_EDIT))])

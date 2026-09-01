@@ -7,7 +7,7 @@ import type { RoutineBaselineView, ScopeView } from 'fleet';
 import { GardeningRunDialogView } from './gardening-run-dialog-view';
 
 /**
- * The gardening run dialog's own half of `web:shell-sweep` (blizzard#392 D6) — the
+ * The gardening run dialog's own half of `web:shell-sweep` (blizzard#399 D6) — the
  * three fields' real layout at the widths the dialog is reachable at (a phone-width
  * routines page and the desktop board), which `KitDialog`'s own sweep
  * (`kit-dialog.shell-sweep.spec.ts`) does not cover: the scope field's radio rows
@@ -55,6 +55,7 @@ async function mount(width: number) {
   fixture.componentRef.setInput('routineName', 'gardening');
   fixture.componentRef.setInput('scopes', SCOPES);
   fixture.componentRef.setInput('sweptSlugs', new Set(['web']));
+  fixture.componentRef.setInput('existingSlugs', new Set(SCOPES.map((s) => s.slug)));
   fixture.componentRef.setInput('baselines', BASELINES);
   fixture.componentRef.setInput('state', 'ready');
   await fixture.whenStable();
@@ -65,7 +66,7 @@ async function mount(width: number) {
   return { fixture, root };
 }
 
-describe('GardeningRunDialogView shell sweep (web:shell-sweep, blizzard#392 D6)', () => {
+describe('GardeningRunDialogView shell sweep (web:shell-sweep, blizzard#399 D6)', () => {
   for (const width of [390, 1024]) {
     it(`stacks the scope field's options and the footer's buttons sit side by side at ${width}px`, async () => {
       const { root } = await mount(width);

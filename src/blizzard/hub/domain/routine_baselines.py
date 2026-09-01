@@ -1,5 +1,5 @@
 """Routine baselines — a read-only composition over the finding-set and delivery seams
-(blizzard#XXX, D5): one entry per scope a routine has swept, each carrying the baseline
+(blizzard#399, D5): one entry per scope a routine has swept, each carrying the baseline
 finding set's id, its recorded instant, and per repo the recorded revision with how
 much has landed since (D1).
 
@@ -16,12 +16,13 @@ from datetime import datetime
 from blizzard.foundation.ids import Id
 from blizzard.hub.domain.chunks.delivery import IReadChunkDeliveryRepository
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
+from blizzard.hub.domain.routines import Routine
 
 
 @dataclass(frozen=True)
 class RepoLandings:
-    """One repo's baseline revision and how much has landed against it since (D1) —
-    "landed" is `delivery_repo_landed`'s own fact, never a commit count."""
+    """One repo's baseline revision and how much has landed against it since —
+    `IReadChunkDeliveryRepository.count_landed_since`'s own fact (D1)."""
 
     repo: str
     revision: str
@@ -54,10 +55,12 @@ class RoutineBaselineService:
         self._finding_sets = finding_sets
         self._delivery = delivery
 
-    def baselines_for(self, routine_name: str) -> list[RoutineBaseline]:
+    def baselines_for(self, routine: Routine) -> list[RoutineBaseline]:
         """Newest-swept-first (`finding_set_id` descending) — the picker's own ordering
-        cue (D5)."""
-        sets = self._finding_sets.newest_by_scope_for_routine(routine_name)
+        cue (D5). Takes the already-resolved routine (`bzh:domain-takes-objects`), the
+        same shape `RunService.run` takes: the caller resolves `routine_id` to its
+        `Routine` first."""
+        sets = self._finding_sets.newest_by_scope_for_routine(routine.name)
         baselines = [self._baseline_of(finding_set) for finding_set in sets]
         return sorted(baselines, key=lambda b: b.finding_set_id, reverse=True)
 

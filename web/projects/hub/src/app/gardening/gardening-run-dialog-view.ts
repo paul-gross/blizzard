@@ -2,9 +2,12 @@ import { ChangeDetectionStrategy, Component, computed, effect, input, output, si
 import { RouterLink } from '@angular/router';
 
 import {
+  FleetWhen,
   KitAsyncState,
   KitButton,
   KitDialog,
+  KitOption,
+  KitPanel,
   type KitAsyncStateValue,
   type RoutineBaselineView,
   type RoutineRunResponse,
@@ -22,7 +25,7 @@ export interface RunSubmission {
 }
 
 /**
- * The gardening run dialog's presentational view (blizzard#392 D6) — three fields
+ * The gardening run dialog's presentational view (blizzard#399 D6) — three fields
  * (scope, mode, charge note) and nothing else, the delta baseline display, the
  * create-then-run submission, and the post-run confirmation, all over inputs and
  * outputs only. No query or client dependency: the container injects
@@ -38,7 +41,7 @@ export interface RunSubmission {
 @Component({
   selector: 'app-gardening-run-dialog-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GardeningRunScopeField, KitAsyncState, KitButton, KitDialog, RouterLink],
+  imports: [FleetWhen, GardeningRunScopeField, KitAsyncState, KitButton, KitDialog, KitOption, KitPanel, RouterLink],
   templateUrl: './gardening-run-dialog-view.html',
   styleUrl: './gardening-run-dialog-view.css',
 })
@@ -51,6 +54,11 @@ export class GardeningRunDialogView {
   readonly scopes = input.required<readonly ScopeView[]>();
 
   readonly sweptSlugs = input.required<ReadonlySet<string>>();
+
+  /** Every scope's slug, retired included — forwarded to the scope field's own
+   * near-match check, which must warn on a retired slug's exact spelling even though
+   * the picker itself never offers it as a selectable row. */
+  readonly existingSlugs = input.required<ReadonlySet<string>>();
 
   /** Every scope this routine has swept, D5's own read — looked up by the currently
    * selected scope to resolve the delta baseline display and the delta-steering rule. */
@@ -124,6 +132,25 @@ export class GardeningRunDialogView {
 
   protected onSubmitClick(): void {
     if (!this.canSubmit()) return;
-    this.runSubmitted.emit({ selection: this.scopeSelection(), mode: this.mode(), note: this.note().trim() || null });
+    const sel = this.scopeSelection();
+    // Trim once here, at the one place the container's create-then-run submission
+    // actually reads from — `canSubmit`/`cliVerb` above already trim for their own
+    // display/gating purposes, but the value they compute is never the one the
+    // mutations read, so trimming only there would still let e.g. `" web "` reach
+    // `POST /api/scopes` with its surrounding whitespace intact.
+    const selection: ScopeSelection = sel.isNew
+      ? { ...sel, slug: sel.slug.trim(), newDescription: sel.newDescription.trim() }
+      : sel;
+    this.runSubmitted.emit({ selection, mode: this.mode(), note: this.note().trim() || null });
+  }
+
+  /** Escape, a backdrop click, and Cancel all route through `KitDialog`'s one
+   * `(closed)` output — gating it here, rather than each dismissal path separately,
+   * keeps a run in flight from being torn down before its confirmed chunk id and
+   * board link ever render. The run itself still lands; only the confirmation would
+   * be lost. */
+  protected onClosed(): void {
+    if (this.submitting()) return;
+    this.closed.emit();
   }
 }

@@ -1,4 +1,4 @@
-"""``RoutineBaselineService`` (unit tier, blizzard#392 D5): the per-scope delta
+"""``RoutineBaselineService`` (unit tier, blizzard#399 D5): the per-scope delta
 baseline a routine has swept, composed over doubled seams."""
 
 from __future__ import annotations
@@ -13,10 +13,14 @@ from blizzard.foundation.ids import Id
 from blizzard.hub.domain.chunks.delivery import IReadChunkDeliveryRepository
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.routine_baselines import MalformedFindingSetIdError, RepoLandings, RoutineBaselineService
+from blizzard.hub.domain.routines import Routine
 
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
+_ROUTINE = Routine(
+    routine_id="rtn_1", name="gardening", graph_name="default", default_scope_slug="blizzard", created_at=_T0
+)
 
 
 def _finding_set_id(at: datetime) -> str:
@@ -73,7 +77,7 @@ def test_a_swept_pair_yields_its_baseline_with_the_instant_decoded_from_the_id()
     delivery = _FakeDelivery(counts={("blizzard", _T0): 7})
     service, *_ = _service(finding_sets=_FakeFindingSets(by_routine={"gardening": [finding_set]}), delivery=delivery)
 
-    baselines = service.baselines_for("gardening")
+    baselines = service.baselines_for(_ROUTINE)
 
     assert len(baselines) == 1
     baseline = baselines[0]
@@ -86,7 +90,7 @@ def test_a_swept_pair_yields_its_baseline_with_the_instant_decoded_from_the_id()
 def test_an_unswept_pair_yields_no_entry_at_all() -> None:
     service, *_ = _service()
 
-    assert service.baselines_for("gardening") == []
+    assert service.baselines_for(_ROUTINE) == []
 
 
 def test_landed_since_is_queried_per_repo_against_the_recorded_instant() -> None:
@@ -102,7 +106,7 @@ def test_landed_since_is_queried_per_repo_against_the_recorded_instant() -> None
     )
     service, _fs, delivery = _service(finding_sets=_FakeFindingSets(by_routine={"gardening": [finding_set]}))
 
-    service.baselines_for("gardening")
+    service.baselines_for(_ROUTINE)
 
     assert set(delivery.calls) == {("blizzard", _T0), ("web", _T0)}
 
@@ -128,7 +132,7 @@ def test_baselines_are_ordered_newest_swept_first() -> None:
     )
     service, *_ = _service(finding_sets=_FakeFindingSets(by_routine={"gardening": [older, newer]}))
 
-    baselines = service.baselines_for("gardening")
+    baselines = service.baselines_for(_ROUTINE)
 
     assert [b.scope_slug for b in baselines] == ["web", "blizzard"]
 
@@ -146,4 +150,4 @@ def test_a_malformed_finding_set_id_raises() -> None:
     service, *_ = _service(finding_sets=_FakeFindingSets(by_routine={"gardening": [finding_set]}))
 
     with pytest.raises(MalformedFindingSetIdError):
-        service.baselines_for("gardening")
+        service.baselines_for(_ROUTINE)

@@ -5,26 +5,12 @@ h2 {
 }
 
 .mode-field {
-  border: 1px solid var(--line);
-  padding: 8px;
   margin: 0 0 12px;
 }
 
-.lbl {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
-
-.opt {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 2px;
-  font-size: var(--fs-base);
-  color: var(--text);
-  cursor: pointer;
+.mode-field .body,
+.note-field .body {
+  padding: 8px;
 }
 
 .mode-note {
@@ -47,13 +33,11 @@ h2 {
 }
 
 .note-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   margin: 0 0 12px;
 }
 
 .note-field textarea {
+  width: 100%;
   font-family: inherit;
   font-size: var(--fs-sm);
   background: var(--overlay-35);
@@ -61,6 +45,7 @@ h2 {
   color: var(--text);
   padding: 6px;
   resize: vertical;
+  box-sizing: border-box;
 }
 
 .note-field textarea:focus-visible {

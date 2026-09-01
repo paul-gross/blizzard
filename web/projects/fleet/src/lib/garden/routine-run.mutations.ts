@@ -1,43 +1,8 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import {
-  type RoutineRunResponse,
-  type ScopeView,
-  createScopeApiScopesPost,
-  runRoutineApiRoutinesRoutineIdRunPost,
-} from '../api/hub';
-import { hubRoutinesKey, hubScopesKey } from '../query-keys';
-
-/** Mint a scope through `POST /api/scopes` — a create-or-no-op onto an existing slug
- * (D4), the gardening run dialog's own step before a new-slug run (D3): the scope's
- * description is recorded before the run, never left to the run route's own
- * empty-description mint. */
-export interface ScopeCreateVars {
-  readonly slug: string;
-  readonly description: string;
-}
-
-/**
- * `POST /api/scopes` through the generated client (bzh:generated-client). On success,
- * invalidates the scope picker read so a freshly-minted slug appears without a reload.
- */
-export function injectCreateScopeMutation() {
-  const queryClient = inject(QueryClient);
-  return injectMutation(() => ({
-    mutationFn: async (vars: ScopeCreateVars): Promise<ScopeView> => {
-      const { data, error } = await createScopeApiScopesPost({
-        body: { slug: vars.slug, description: vars.description },
-        throwOnError: false,
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: hubScopesKey });
-    },
-  }));
-}
+import { type RoutineRunResponse, runRoutineApiRoutinesRoutineIdRunPost } from '../api/hub';
+import { hubRoutinesKey } from '../query-keys';
 
 /** Kick off a routine run — the gardening run dialog's own submission (D3's create-then
  * -run ordering runs this second, once any new scope's create has already succeeded). */
