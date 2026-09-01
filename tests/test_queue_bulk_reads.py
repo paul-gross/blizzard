@@ -12,11 +12,11 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.queue import QueueService
 from blizzard.hub.domain.work import ChunkFacts
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from tests.support import build_hub, count_queries, hub_store_connections, ingest
 
 pytestmark = pytest.mark.component
@@ -52,7 +52,7 @@ def test_peek_query_count_is_independent_of_fleet_size(tmp_path: Path, path: str
     assert small_count == large_count
 
 
-class _CountingChunkStore(ChunkStore):
+class _CountingFactsStore(ChunkFactsStore):
     """Counts the bulk and per-chunk facts seams, so a test can pin which shape a peek
     actually reaches."""
 
@@ -76,29 +76,17 @@ def test_peek_reads_facts_in_bulk_and_never_per_chunk(tmp_path: Path, path: str,
     ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
     ingest(hub, [{"source": "default", "ref": "2"}], promote=promote)
 
-    counting = _CountingChunkStore(hub_store_connections(hub.engine), hub.clock)
+    counting = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
+    # `list_ready`/`list_not_ready` route through the record seam's own facts collaborator,
+    # so the record store handed to the queue service must be wired to the same counting
+    # instance for its bulk/per-chunk facts calls to register.
+    record = ChunkRecordStore(hub_store_connections(hub.engine), hub.clock, facts=counting)
     assert hub.app is not None
     # The peek reads through the queue service's own store handle, not `services.chunks`.
     hub.app.state.services = replace(
         hub.services,
-        chunks=ChunkStores(
-            facts=counting,
-            record=counting,
-            lifecycle=counting,
-            work_refs=counting,
-            queue=counting,
-            route=counting,
-            movement=counting,
-            artifacts=counting,
-            questions=counting,
-            decisions=counting,
-            escalations=counting,
-            events=counting,
-            usage=counting,
-            delivery=counting,
-            hub_exec=counting,
-        ),
-        queue=QueueService(queue=counting, record=counting, clock=hub.clock),
+        chunks=replace(hub.services.chunks, facts=counting, record=record),
+        queue=QueueService(queue=hub.services.chunks.queue, record=record, clock=hub.clock),
     )
 
     resp = hub.client.get(path)

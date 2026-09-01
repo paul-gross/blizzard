@@ -19,8 +19,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store import ChunkStore
-from tests.support import hub_store_connections
+from tests.support import chunk_stores
 
 pytestmark = pytest.mark.component
 
@@ -46,13 +45,13 @@ def test_upgrade_creates_chunk_deleted_and_leaves_preexisting_chunks_claimable(t
     # chunk carries no row in it, so it is unaffected.
     runner.upgrade("head")
 
-    store = ChunkStore(hub_store_connections(engine), FixedClock(_T0))
-    assert store.get("ch_legacy") is not None
-    facts = store.load_facts("ch_legacy")
+    store = chunk_stores(engine, FixedClock(_T0))
+    assert store.record.get("ch_legacy") is not None
+    facts = store.facts.load_facts("ch_legacy")
     assert facts is not None and facts.status() is ChunkStatus.READY  # unaffected — still claimable
-    assert [c.chunk_id for c in store.list_ready()] == ["ch_legacy"]
+    assert [c.chunk_id for c in store.record.list_ready()] == ["ch_legacy"]
 
     # The fresh table is honored immediately: a row in it makes the chunk ephemeral.
     with engine.begin() as conn:
         conn.execute(insert(s.chunk_deleted).values(chunk_id="ch_legacy", deleted_at=_T0, deleted_by="operator"))
-    assert store.get("ch_legacy") is None
+    assert store.record.get("ch_legacy") is None

@@ -19,6 +19,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import User
+from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.fleet import Route
@@ -32,7 +33,6 @@ from blizzard.hub.domain.work_items import (
     WorkItemNotEditable,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -41,21 +41,23 @@ from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
-from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph, seed_work_item
+from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStore, UserRepository, Engine, FixedClock]:
+def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, UserRepository, Engine, FixedClock]:
     _, engine = migrate_to(tmp_path, "head")
     store = hub_store_connections(engine)
     items = WorkItemStore(store)
     clock = FixedClock(_T0)
-    chunks = ChunkStore(store, clock)
-    delete = DeleteService(facts=chunks, items=items, clock=clock, claim_lock=threading.Lock())
-    edits = WorkItemEditService(items=items, work_refs=chunks, record=chunks, facts=chunks, clock=clock, delete=delete)
+    chunks = chunk_stores(engine, clock)
+    delete = DeleteService(facts=chunks.facts, items=items, clock=clock, claim_lock=threading.Lock())
+    edits = WorkItemEditService(
+        items=items, work_refs=chunks.work_refs, record=chunks.record, facts=chunks.facts, clock=clock, delete=delete
+    )
     users = UserRepository(engine, RepoErrorFactory(get_logger("tests.test_hub_work_source")))
     resolution = GardenProposalDeliveryResolution(
         closures=GardenProposalClosureStore(store),
@@ -63,7 +65,7 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStore, U
         findings=FindingStore(store),
         exits=FindingExitService(repo=FindingStore(store), clock=clock),
     )
-    return HubWorkSource(items, chunks, edits, users, resolution), items, chunks, users, engine, clock
+    return HubWorkSource(items, chunks.work_refs, edits, users, resolution), items, chunks, users, engine, clock
 
 
 def _user(users: UserRepository, *, username: str) -> User:
@@ -238,7 +240,7 @@ def test_web_url_resolves_to_the_live_holder_s_board_chunk_link(tmp_path: Path) 
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_T0)
-    chunks.add_work_refs("ch_1", [pointer], at=_T0)
+    chunks.work_refs.add_work_refs("ch_1", [pointer], at=_T0)
 
     assert source.web_url(pointer) == "/board/chunk/ch_1"
 
@@ -320,11 +322,11 @@ def test_create_mints_a_not_ready_chunk_pinned_to_the_graph_and_holding_the_ref(
         graph=graph,
     )
 
-    chunk = chunks.get(created.chunk_id)
+    chunk = chunks.record.get(created.chunk_id)
     assert chunk is not None
     assert chunk.graph_id == graph.graph_id
     assert chunk.work_refs == [WorkRef(source="hub", ref=created.item.ref)]
-    facts = chunks.load_facts(created.chunk_id)
+    facts = chunks.facts.load_facts(created.chunk_id)
     assert facts is not None
     assert facts.status().value == "not_ready"
 
@@ -360,7 +362,7 @@ def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
         stated_priority=None,
         graph=_graph(engine),
     )
-    chunks.record_stop(created.chunk_id, by="operator", at=clock.instant)
+    chunks.lifecycle.record_stop(created.chunk_id, by="operator", at=clock.instant)
 
     withdrawn = source.withdraw(WorkRef(source="hub", ref=created.item.ref), by="operator")
 
@@ -379,7 +381,7 @@ def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
         graph=_graph(engine),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
-    chunks.record_stop(created.chunk_id, by="operator", at=clock.instant)
+    chunks.lifecycle.record_stop(created.chunk_id, by="operator", at=clock.instant)
     source.withdraw(pointer, by="operator")
 
     with pytest.raises(WorkItemNotEditable):
@@ -408,7 +410,7 @@ def test_withdraw_deletes_an_unacquired_holder_and_withdraws_the_item(tmp_path: 
     assert withdrawn.deleted_chunk_id == created.chunk_id
     assert withdrawn.deleted_chunk_status == "not_ready"
     assert withdrawn.deleted_chunk_fact_id is not None
-    assert chunks.get(created.chunk_id) is None  # deleted along with the withdrawal
+    assert chunks.record.get(created.chunk_id) is None  # deleted along with the withdrawal
 
 
 def test_withdraw_of_an_item_the_cascade_already_closed_is_refused(tmp_path: Path) -> None:
@@ -442,7 +444,7 @@ def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Pat
         graph=_graph(engine),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
-    chunks.record_route(
+    chunks.route.record_route(
         Route(
             chunk_id=created.chunk_id, runner_id="r1", workspace_id="w1", environment_ids=[], created_at=clock.instant
         ),
@@ -465,7 +467,7 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
         graph=_graph(engine),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
-    chunks.record_stop(created.chunk_id, by="operator", at=clock.instant)
+    chunks.lifecycle.record_stop(created.chunk_id, by="operator", at=clock.instant)
 
     withdrawn = source.withdraw(pointer, by="operator")
 

@@ -23,7 +23,7 @@ from sqlalchemy import Engine, event
 from sqlalchemy import insert as sa_insert
 
 from blizzard.auth_core import Role
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import USER_PREFIX, Id
 from blizzard.foundation.logging import get_logger
@@ -48,6 +48,7 @@ from blizzard.hub.config import (
 )
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
+from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
@@ -64,7 +65,21 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
+from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
+from blizzard.hub.store.internal.chunk_delivery_store import ChunkDeliveryStore
+from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
+from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
+from blizzard.hub.store.internal.chunk_lifecycle_store import ChunkLifecycleStore
+from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
+from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
+from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
+from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
+from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
+from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
+from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -82,9 +97,36 @@ _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 def hub_store_connections(engine: Engine) -> HubStoreConnections:
     """The ``hub/store/internal/`` seam (issue #413) every adapter test wires over its
-    own migrated engine — one helper so the 13 adapters' test files construct it
+    own migrated engine — one helper so the 27 adapters' test files construct it
     identically."""
     return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
+
+
+def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
+    """All 15 chunk-seam adapters (blizzard#411 Phase 3) over one engine/clock, bundled
+    the same shape ``hub/composition.py`` wires in production — the store-level test's
+    own single-object fixture-setup convenience a 15-way physical split would otherwise
+    take from it. A test calls ``stores.<seam>.<method>(...)`` in place of the old
+    single ``ChunkStore``'s bare method call."""
+    store = hub_store_connections(engine)
+    facts = ChunkFactsStore(store, clock)
+    return ChunkStores(
+        facts=facts,
+        record=ChunkRecordStore(store, clock, facts=facts),
+        lifecycle=ChunkLifecycleStore(store, clock),
+        work_refs=ChunkWorkRefsStore(store, clock, facts=facts),
+        queue=ChunkQueueStore(store, clock),
+        route=ChunkRouteStore(store, clock),
+        movement=ChunkMovementStore(store, clock),
+        artifacts=ChunkArtifactsStore(store, clock),
+        questions=ChunkQuestionsStore(store, clock),
+        decisions=ChunkDecisionsStore(store, clock),
+        escalations=ChunkEscalationsStore(store, clock, facts=facts),
+        events=ChunkEventsStore(store, clock),
+        usage=ChunkUsageStore(store, clock),
+        delivery=ChunkDeliveryStore(store, clock),
+        hub_exec=ChunkHubExecStore(store, clock),
+    )
 
 
 def make_graph(
@@ -557,7 +599,7 @@ def build_hub(
     store_connections = hub_store_connections(engine)
     work_item_store = WorkItemStore(store_connections)
     delete_service = DeleteService(
-        facts=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
+        facts=ChunkFactsStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
     )
     finding_store = FindingStore(store_connections)
     finding_exit = FindingExitService(repo=finding_store, clock=clock)

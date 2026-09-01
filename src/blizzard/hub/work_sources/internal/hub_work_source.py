@@ -24,7 +24,9 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.domain.work_items import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit, WorkItemEditService
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
+from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError, resolve_author_view
@@ -154,9 +156,13 @@ def seat_hub_work_source(
     ``tests/support.py::build_hub``: never absent, never configured. ``users``/``items``/
     ``delete``/``resolution`` are the composition root's own instances (#362, #364,
     blizzard#394), so every write path shares the same claim-locked instances."""
-    chunks = ChunkStore(store, clock)
-    edits = WorkItemEditService(items=items, work_refs=chunks, record=chunks, facts=chunks, clock=clock, delete=delete)
-    hub_source = HubWorkSource(items, chunks, edits, users, resolution)
+    facts = ChunkFactsStore(store, clock)
+    record = ChunkRecordStore(store, clock, facts=facts)
+    work_refs = ChunkWorkRefsStore(store, clock, facts=facts)
+    edits = WorkItemEditService(
+        items=items, work_refs=work_refs, record=record, facts=facts, clock=clock, delete=delete
+    )
+    hub_source = HubWorkSource(items, work_refs, edits, users, resolution)
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source

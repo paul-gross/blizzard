@@ -60,7 +60,7 @@ from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -247,7 +247,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     claim_lock = threading.Lock()
     work_item_store = WorkItemStore(store_connections)
     delete_service = DeleteService(
-        facts=ChunkStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
+        facts=ChunkFactsStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
     )
     # Own instances, ahead of `build_services` below — mirrors `work_item_store`'s own
     # early construction (blizzard#394 Phase 3): the built-in hub closer needs this seam

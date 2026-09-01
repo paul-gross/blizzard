@@ -16,13 +16,14 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunks.events import IReadChunkEventsRepository
+from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.work import ActivityRow, DecisionChoice, MigrationSource
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.store.internal.chunk_store import ChunkStore, record_deleted_row
+from blizzard.hub.store.internal.chunk_rows import record_deleted_row
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph
+from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -33,13 +34,13 @@ def _at(seconds: int) -> datetime:
     return _T0 + timedelta(seconds=seconds)
 
 
-def _store(tmp_path: Path) -> tuple[ChunkStore, sa.Engine]:
+def _store(tmp_path: Path) -> tuple[ChunkStores, sa.Engine]:
     _, engine = migrate_to(tmp_path, "head")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
         seed_graph(conn, "gr_2", at=_T0)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_T0)
-    return ChunkStore(hub_store_connections(engine), FixedClock(_T0)), engine
+    return chunk_stores(engine, FixedClock(_T0)), engine
 
 
 def _seed_second_chunk(engine: sa.Engine, chunk_id: str) -> None:
@@ -49,8 +50,8 @@ def _seed_second_chunk(engine: sa.Engine, chunk_id: str) -> None:
         seed_chunk(conn, chunk_id, graph_id="gr_1", at=_T0)
 
 
-def _row_for(store: ChunkStore, cause: str, *, since: datetime = _T0, limit: int = 50) -> ActivityRow:
-    rows = [r for r in store.activity_facts_since(since, limit=limit) if r.cause == cause]
+def _row_for(store: ChunkStores, cause: str, *, since: datetime = _T0, limit: int = 50) -> ActivityRow:
+    rows = [r for r in store.events.activity_facts_since(since, limit=limit) if r.cause == cause]
     assert len(rows) == 1, f"expected exactly one {cause!r} row, got {rows}"
     return rows[0]
 
@@ -70,7 +71,7 @@ def test_minted_reads_off_chunks_minted_at(tmp_path: Path) -> None:
 
 def test_promoted_reads_off_chunk_promoted(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_promote("ch_1", at=_at(1))
+    store.queue.record_promote("ch_1", at=_at(1))
     row = _row_for(store, "promoted")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -81,7 +82,7 @@ def test_promoted_reads_off_chunk_promoted(tmp_path: Path) -> None:
 def test_grouped_reads_off_chunk_grouped(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
     _seed_second_chunk(engine, "ch_2")
-    store.record_grouped("ch_1", grouped_into="ch_2", at=_at(1))
+    store.lifecycle.record_grouped("ch_1", grouped_into="ch_2", at=_at(1))
     row = _row_for(store, "grouped")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -90,7 +91,7 @@ def test_grouped_reads_off_chunk_grouped(tmp_path: Path) -> None:
 
 def test_claimed_reads_off_route_created(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_route(
+    store.route.record_route(
         Route(chunk_id="ch_1", runner_id="runner-a", workspace_id="ws-a", environment_ids=[], created_at=_at(1)),
         token_hash="deadbeef",
         at=_at(1),
@@ -104,7 +105,7 @@ def test_claimed_reads_off_route_created(tmp_path: Path) -> None:
 
 def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_transition(
+    store.movement.record_transition(
         transition_id="tr_1",
         chunk_id="ch_1",
         from_node_id=None,
@@ -125,7 +126,7 @@ def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Pat
 
 def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_transition(
+    store.movement.record_transition(
         transition_id="tr_1",
         chunk_id="ch_1",
         from_node_id=None,
@@ -146,7 +147,7 @@ def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_
 
 def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_migration(
+    store.movement.record_migration(
         "ch_1",
         from_node_id=None,
         from_graph_id="gr_1",
@@ -168,7 +169,7 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
 
 def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_decision(
+    store.decisions.record_decision(
         decision_id="dec_1",
         chunk_id="ch_1",
         node_id="nd_gate",
@@ -187,7 +188,7 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
 
 def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_decision(
+    store.decisions.record_decision(
         decision_id="dec_1",
         chunk_id="ch_1",
         node_id="nd_gate",
@@ -198,7 +199,7 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
         artifacts=[],
         proposals=[],
     )
-    store.record_decision_resolution("dec_1", choice="go", resolved_by="alice", at=_at(2))
+    store.decisions.record_decision_resolution("dec_1", choice="go", resolved_by="alice", at=_at(2))
     row = _row_for(store, "decision-resolved")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -207,7 +208,7 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
 
 def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_question(
+    store.questions.record_question(
         question_id="qn_1",
         chunk_id="ch_1",
         node_id="nd_a",
@@ -227,7 +228,7 @@ def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
 
 def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_question(
+    store.questions.record_question(
         question_id="qn_1",
         chunk_id="ch_1",
         node_id="nd_a",
@@ -238,7 +239,7 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
         options=[],
         asked_at=_at(1),
     )
-    store.answer_question("qn_1", answer="yes", answered_by="alice", at=_at(2))
+    store.questions.answer_question("qn_1", answer="yes", answered_by="alice", at=_at(2))
     row = _row_for(store, "question-answered")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -247,7 +248,7 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
 
 def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_escalation("ch_1", epoch=1, takeover_command="cd x && resume", at=_at(1))
+    store.escalations.record_escalation("ch_1", epoch=1, takeover_command="cd x && resume", at=_at(1))
     row = _row_for(store, "escalated")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -256,7 +257,7 @@ def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
 
 def test_requeued_reads_off_requeues(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_requeue("ch_1", at=_at(1))
+    store.movement.record_requeue("ch_1", at=_at(1))
     row = _row_for(store, "requeued")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -265,7 +266,7 @@ def test_requeued_reads_off_requeues(tmp_path: Path) -> None:
 
 def test_detached_reads_off_route_released(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_route_released("ch_1", at=_at(1))
+    store.route.record_route_released("ch_1", at=_at(1))
     row = _row_for(store, "detached")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -274,7 +275,7 @@ def test_detached_reads_off_route_released(tmp_path: Path) -> None:
 
 def test_paused_reads_off_chunk_pause_facts(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_pause("ch_1", paused=True, by="alice", at=_at(1))
+    store.lifecycle.record_pause("ch_1", paused=True, by="alice", at=_at(1))
     row = _row_for(store, "paused")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -283,8 +284,8 @@ def test_paused_reads_off_chunk_pause_facts(tmp_path: Path) -> None:
 
 def test_resumed_reads_off_chunk_pause_facts(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_pause("ch_1", paused=True, by="alice", at=_at(1))
-    store.record_pause("ch_1", paused=False, by="alice", at=_at(2))
+    store.lifecycle.record_pause("ch_1", paused=True, by="alice", at=_at(1))
+    store.lifecycle.record_pause("ch_1", paused=False, by="alice", at=_at(2))
     row = _row_for(store, "resumed")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -293,7 +294,7 @@ def test_resumed_reads_off_chunk_pause_facts(tmp_path: Path) -> None:
 
 def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_stop("ch_1", by="alice", at=_at(1))
+    store.lifecycle.record_stop("ch_1", by="alice", at=_at(1))
     row = _row_for(store, "stopped")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -302,7 +303,7 @@ def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
 
 def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_completion("ch_1", by="alice", at=_at(1))
+    store.lifecycle.record_completion("ch_1", by="alice", at=_at(1))
     row = _row_for(store, "completed")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -311,7 +312,7 @@ def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
 
 def test_restarted_reads_off_chunk_restarts(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_restart("ch_1", from_node_id=None, to_node_id="nd_build", by="alice", at=_at(1))
+    store.movement.record_restart("ch_1", from_node_id=None, to_node_id="nd_build", by="alice", at=_at(1))
     row = _row_for(store, "restarted")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -333,11 +334,11 @@ def test_deleted_chunk_shows_only_its_own_deletion_row(tmp_path: Path) -> None:
     """D6: ``activity_facts_since`` excludes a deleted chunk's history from every OTHER
     block — only the ``chunk_deleted`` row itself survives the filter."""
     store, engine = _store(tmp_path)
-    store.record_promote("ch_1", at=_at(1))
+    store.queue.record_promote("ch_1", at=_at(1))
     with engine.begin() as conn:
         record_deleted_row(conn, "ch_1", by="alice", at=_at(2))
 
-    causes = {r.cause for r in store.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"}
+    causes = {r.cause for r in store.events.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"}
 
     assert causes == {"deleted"}
 
@@ -347,10 +348,10 @@ def test_grouped_chunks_history_is_unaffected_by_the_deleted_exclusion(tmp_path:
     drops away, a *grouped* one's still shows."""
     store, engine = _store(tmp_path)
     _seed_second_chunk(engine, "ch_2")
-    store.record_promote("ch_1", at=_at(1))
-    store.record_grouped("ch_1", grouped_into="ch_2", at=_at(2))
+    store.queue.record_promote("ch_1", at=_at(1))
+    store.lifecycle.record_grouped("ch_1", grouped_into="ch_2", at=_at(2))
 
-    causes = {r.cause for r in store.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"}
+    causes = {r.cause for r in store.events.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"}
 
     assert causes == {"minted", "promoted", "grouped"}
 
@@ -358,9 +359,9 @@ def test_grouped_chunks_history_is_unaffected_by_the_deleted_exclusion(tmp_path:
 def test_edited_produces_no_activity_row(tmp_path: Path) -> None:
     """No fact table backs ``edited`` — a deliberate exclusion, not a gap."""
     store, _ = _store(tmp_path)
-    store.set_graph("ch_1", graph_id="gr_2")
-    store.set_defaults("ch_1", default_model=["opus"], default_effort="high")
-    rows = store.activity_facts_since(_T0, limit=50)
+    store.record.set_graph("ch_1", graph_id="gr_2")
+    store.record.set_defaults("ch_1", default_model=["opus"], default_effort="high")
+    rows = store.events.activity_facts_since(_T0, limit=50)
     assert all(r.cause != "edited" for r in rows)
 
 
@@ -369,18 +370,18 @@ def test_edited_produces_no_activity_row(tmp_path: Path) -> None:
 
 def test_since_window_excludes_an_older_fact(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.record_promote("ch_1", at=_at(1))
-    excluded = [r for r in store.activity_facts_since(_at(2), limit=50) if r.cause == "promoted"]
+    store.queue.record_promote("ch_1", at=_at(1))
+    excluded = [r for r in store.events.activity_facts_since(_at(2), limit=50) if r.cause == "promoted"]
     assert excluded == []
-    included = [r for r in store.activity_facts_since(_at(1), limit=50) if r.cause == "promoted"]
+    included = [r for r in store.events.activity_facts_since(_at(1), limit=50) if r.cause == "promoted"]
     assert len(included) == 1
 
 
 def test_no_single_source_read_exceeds_the_limit(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     for i in range(10):
-        store.record_pause("ch_1", paused=(i % 2 == 0), by="alice", at=_at(i))
-    rows = store.activity_facts_since(_T0, limit=3)
+        store.lifecycle.record_pause("ch_1", paused=(i % 2 == 0), by="alice", at=_at(i))
+    rows = store.events.activity_facts_since(_T0, limit=3)
     pause_rows = [r for r in rows if r.cause in ("paused", "resumed")]
     assert len(pause_rows) == 3  # chunk_pause_facts' own bounded read, capped at `limit`
 

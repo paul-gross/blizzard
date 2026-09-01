@@ -1,7 +1,7 @@
 """The hub-store error-wrapping seam (blizzard#413) — a driver fault through every one
-of the 13 ``hub/store/internal/`` adapters raises the wrapped ``HubStoreError``, logged
+of the 27 ``hub/store/internal/`` adapters raises the wrapped ``HubStoreError``, logged
 once at the collaborator's single wrap site (D1, D4). One parametrized case drives all
-13 (D6, ``bzh:case-pins-its-own-name``) rather than 13 near-identical copies."""
+27 (D6, ``bzh:case-pins-its-own-name``) rather than 27 near-identical copies."""
 
 from __future__ import annotations
 
@@ -20,11 +20,26 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics.operational import OperationalCriteria
 from blizzard.hub.domain.analytics.queries import EventQueryCriteria
+from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
-from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
+from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
+from blizzard.hub.store.internal.chunk_delivery_store import ChunkDeliveryStore
+from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
+from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
+from blizzard.hub.store.internal.chunk_lifecycle_store import ChunkLifecycleStore
+from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
+from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
+from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
+from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
+from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
+from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
+from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.graph_store import GraphStore
@@ -63,7 +78,96 @@ _ADAPTER_CASES = [
         lambda a: a.durations_by_node(OperationalCriteria()),
         "step_durations",
     ),
-    _AdapterCase("ChunkStore", lambda store: ChunkStore(store, FixedClock(_NOW)), lambda a: a.get("ch_x"), "get"),
+    _AdapterCase(
+        "ChunkFactsStore",
+        lambda store: ChunkFactsStore(store, FixedClock(_NOW)),
+        lambda a: a.load_facts("ch_x"),
+        "load_facts",
+    ),
+    _AdapterCase(
+        "ChunkRecordStore",
+        lambda store: ChunkRecordStore(store, FixedClock(_NOW), facts=ChunkFactsStore(store, FixedClock(_NOW))),
+        lambda a: a.get("ch_x"),
+        "get",
+    ),
+    _AdapterCase(
+        "ChunkLifecycleStore",
+        lambda store: ChunkLifecycleStore(store, FixedClock(_NOW)),
+        lambda a: a.get("ch_x"),
+        "get",
+    ),
+    _AdapterCase(
+        "ChunkWorkRefsStore",
+        lambda store: ChunkWorkRefsStore(store, FixedClock(_NOW), facts=ChunkFactsStore(store, FixedClock(_NOW))),
+        lambda a: a.find_live_holder(WorkRef(source="s", ref="1")),
+        "find_live_holder",
+    ),
+    _AdapterCase(
+        "ChunkQueueStore",
+        lambda store: ChunkQueueStore(store, FixedClock(_NOW)),
+        lambda a: a.queue_positions(),
+        "queue_positions",
+    ),
+    _AdapterCase(
+        "ChunkRouteStore",
+        lambda store: ChunkRouteStore(store, FixedClock(_NOW)),
+        lambda a: a.route_of("ch_x"),
+        "route_of",
+    ),
+    _AdapterCase(
+        "ChunkMovementStore",
+        lambda store: ChunkMovementStore(store, FixedClock(_NOW)),
+        lambda a: a.accepted_transition_target("ch_x", from_node_id="n", epoch=1),
+        "accepted_transition_target",
+    ),
+    _AdapterCase(
+        "ChunkArtifactsStore",
+        lambda store: ChunkArtifactsStore(store, FixedClock(_NOW)),
+        lambda a: a.load_artifacts("ch_x"),
+        "load_artifacts",
+    ),
+    _AdapterCase(
+        "ChunkQuestionsStore",
+        lambda store: ChunkQuestionsStore(store, FixedClock(_NOW)),
+        lambda a: a.get_question("qn_x"),
+        "get_question",
+    ),
+    _AdapterCase(
+        "ChunkDecisionsStore",
+        lambda store: ChunkDecisionsStore(store, FixedClock(_NOW)),
+        lambda a: a.get_decision("dec_x"),
+        "get_decision",
+    ),
+    _AdapterCase(
+        "ChunkEscalationsStore",
+        lambda store: ChunkEscalationsStore(store, FixedClock(_NOW), facts=ChunkFactsStore(store, FixedClock(_NOW))),
+        lambda a: a.list_open_escalations(),
+        "_newest_escalation_per_chunk",
+    ),
+    _AdapterCase(
+        "ChunkEventsStore",
+        lambda store: ChunkEventsStore(store, FixedClock(_NOW)),
+        lambda a: a.list_events(),
+        "list_events",
+    ),
+    _AdapterCase(
+        "ChunkUsageStore",
+        lambda store: ChunkUsageStore(store, FixedClock(_NOW)),
+        lambda a: a.usage_since(_NOW),
+        "usage_since",
+    ),
+    _AdapterCase(
+        "ChunkDeliveryStore",
+        lambda store: ChunkDeliveryStore(store, FixedClock(_NOW)),
+        lambda a: a.landed_repos("ch_x"),
+        "landed_repos",
+    ),
+    _AdapterCase(
+        "ChunkHubExecStore",
+        lambda store: ChunkHubExecStore(store, FixedClock(_NOW)),
+        lambda a: a.count_live_hub_exec_slots(),
+        "count_live_hub_exec_slots",
+    ),
     _AdapterCase("FindingStore", lambda store: FindingStore(store), lambda a: a.get("fin_x"), "get"),
     _AdapterCase("FindingSetStore", lambda store: FindingSetStore(store), lambda a: a.get("fins_x"), "get"),
     _AdapterCase("GardenProposalStore", lambda store: GardenProposalStore(store), lambda a: a.get("gp_x"), "get"),

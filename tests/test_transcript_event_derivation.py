@@ -23,10 +23,9 @@ from blizzard.hub.domain.transcripts import SegmentRecord
 from blizzard.hub.domain.work import Chunk
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
-from tests.support import hub_store_connections
+from tests.support import chunk_stores, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -83,12 +82,12 @@ class _Fixture:
         db_url = f"sqlite:///{tmp_path / 'hub.db'}"
         migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
         self.engine = create_engine_from_url(db_url)
-        self.chunks = ChunkStore(hub_store_connections(self.engine), FixedClock(_NOW))
+        self.chunks = chunk_stores(self.engine, FixedClock(_NOW))
         self.segments = TranscriptSegmentStore(hub_store_connections(self.engine))
         self.events = TranscriptEventStore(hub_store_connections(self.engine))
         self.clock = FixedClock(_NOW)
-        self.chunks.mint(Chunk(chunk_id="ch_1", graph_id="gr_mint", work_refs=[], minted_at=_NOW))
-        self.chunks.record_transition(
+        self.chunks.record.mint(Chunk(chunk_id="ch_1", graph_id="gr_mint", work_refs=[], minted_at=_NOW))
+        self.chunks.movement.record_transition(
             transition_id="tr_1",
             chunk_id="ch_1",
             from_node_id=None,
@@ -101,13 +100,13 @@ class _Fixture:
             proposals=[],
         )
         self.service = EventDerivationService(
-            events=self.events, facts=self.chunks, record=self.chunks, clock=self.clock
+            events=self.events, facts=self.chunks.facts, record=self.chunks.record, clock=self.clock
         )
         self.reconciler = EventDerivationReconciler(service=self.service, events=self.events)
 
     def mint_chunk(self, chunk_id: str, *, node_id: str = "nd_build") -> None:
-        self.chunks.mint(Chunk(chunk_id=chunk_id, graph_id="gr_mint", work_refs=[], minted_at=_NOW))
-        self.chunks.record_transition(
+        self.chunks.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_mint", work_refs=[], minted_at=_NOW))
+        self.chunks.movement.record_transition(
             transition_id=f"tr_{chunk_id}",
             chunk_id=chunk_id,
             from_node_id=None,
@@ -194,8 +193,8 @@ def test_a_version_bump_re_derives_history_leaving_the_prior_version_intact(fixt
 
     bumped_service = EventDerivationService(
         events=fixture.events,
-        facts=fixture.chunks,
-        record=fixture.chunks,
+        facts=fixture.chunks.facts,
+        record=fixture.chunks.record,
         clock=fixture.clock,
         extractor_version=_NEXT_EXTRACTOR_VERSION,
     )
@@ -324,7 +323,11 @@ def test_one_underivable_segment_does_not_cost_the_rest_of_the_tick(fixture: _Fi
         _segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW
     )
     poisoned = _PoisonedService(
-        poison="sg_1", events=fixture.events, facts=fixture.chunks, record=fixture.chunks, clock=fixture.clock
+        poison="sg_1",
+        events=fixture.events,
+        facts=fixture.chunks.facts,
+        record=fixture.chunks.record,
+        clock=fixture.clock,
     )
 
     EventDerivationReconciler(service=poisoned, events=fixture.events).sweep()

@@ -26,11 +26,11 @@ from blizzard.hub.domain.work import (
     mint_chunk,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
     HubHarness,
     build_hub,
+    chunk_stores,
     hub_store_connections,
     migrate_to,
     seed_chunk,
@@ -462,7 +462,7 @@ def test_materialize_create_mints_the_item_chunk_and_outcome_atomically_and_is_i
     )
     assert first is True
     assert items.get("hub", pointer.ref) is not None
-    assert ChunkStore(store, FixedClock(_T0)).get(chunk.chunk_id) is not None
+    assert chunk_stores(engine, FixedClock(_T0)).record.get(chunk.chunk_id) is not None
 
     second = items.materialize_create(
         proposal_id="wip_create_1",
