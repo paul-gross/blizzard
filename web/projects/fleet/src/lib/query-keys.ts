@@ -41,6 +41,25 @@ export const hubGardenProposalsKey = ['hub', 'garden-proposals'] as const;
 /** The gardening tab's routine list — `GET /api/routines`. Routines change rarely and
  * carry no SSE event of their own, the same standing `hubGraphsKey` has. */
 export const hubRoutinesKey = ['hub', 'routines'] as const;
+
+/** One garden proposal's full record, keyed by id — `GET
+ * /api/garden-proposals/{proposal_id}`, `hubGraphKey`'s own null-tolerant shape for
+ * the disabled-query rest state. */
+export function hubGardenProposalKey(proposalId: string | null): readonly unknown[] {
+  return ['hub', 'garden-proposal', proposalId];
+}
+
+/** One finding's full record, keyed by id — `GET /api/findings/{finding_id}`, the
+ * docket detail's own evidence read. `hubGraphKey`'s own null-tolerant shape. */
+export function hubFindingKey(findingId: string | null): readonly unknown[] {
+  return ['hub', 'finding', findingId];
+}
+
+/** One work item read by its source pointer, keyed by the pair — `GET
+ * /api/work-sources/{source}/items/{ref}`. `hubGraphKey`'s own null-tolerant shape. */
+export function hubWorkItemKey(source: string | null, ref: string | null): readonly unknown[] {
+  return ['hub', 'work-item', source, ref];
+}
 /** The scope list — `GET /api/scopes`. Feeds both the gardening run dialog's scope
  * picker and the routines panel's scope list. Scopes change rarely and carry no SSE
  * event of their own, `hubRoutinesKey`'s own standing. */

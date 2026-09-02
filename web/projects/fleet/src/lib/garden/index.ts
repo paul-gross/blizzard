@@ -1,3 +1,5 @@
+export * from './finding.query';
+export * from './garden-proposal.mutations';
 export * from './garden-proposals.query';
 export * from './garden-runs.query';
 export * from './routine-baselines.query';
@@ -13,10 +15,18 @@ export * from './scope-lifecycle.mutations';
 export * from './scope-list';
 export * from './scopes.mutations';
 export * from './scopes.query';
+export * from './work-item.query';
 export type {
+  FindingView,
+  GardenProposalAcceptResponse,
+  GardenProposalClosureKind,
+  GardenProposalClosureView,
+  GardenProposalItemOutcome,
+  GardenProposalView,
   RoutineBaselineRepoView,
   RoutineBaselineView,
   RoutineRunResponse,
   RoutineView,
   ScopeView,
+  WorkItemView,
 } from '../api/hub';
