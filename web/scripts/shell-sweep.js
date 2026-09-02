@@ -131,6 +131,14 @@
  *     (blizzard#403): the list and panel sit side by side at 1280px, and
  *     genuinely collapse into a single stacked column at 390/320px, with no
  *     horizontal overflow of the layout itself.
+ *   - projects/hub/src/app/gardening/gardening-proposal-pass-dialog.shell-sweep.spec.ts —
+ *     the Pass dialog's footer (blizzard#403): Cancel/Pass genuinely sit side by
+ *     side with neither overflowing the panel, at phone and desktop widths.
+ *   - projects/hub/src/app/gardening/gardening-proposal-accept-dialog.shell-sweep.spec.ts —
+ *     the Accept dialog (blizzard#403): the mint/decline radiogroup genuinely
+ *     stacks its two options, the decline reason field genuinely renders below
+ *     them once chosen, and the footer's Cancel/Accept sit side by side with
+ *     neither overflowing the panel, at phone and desktop widths.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -156,6 +164,8 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposals-page.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-accept-dialog.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {

@@ -21,5 +21,25 @@
     [state]="panelState()"
     [evidence]="evidenceRows()"
     [evidenceState]="evidenceState()"
+    [canControl]="canControl()"
+    (pass)="openPass()"
+    (accept)="openAccept()"
   />
 </div>
+
+@if (passingProposal(); as proposal) {
+  <app-gardening-proposal-pass-dialog
+    [proposalId]="proposal.proposal_id"
+    [proposalTitle]="proposal.title"
+    (closed)="closePass()"
+  />
+}
+
+@if (acceptingProposal(); as proposal) {
+  <app-gardening-proposal-accept-dialog
+    [proposalId]="proposal.proposal_id"
+    [proposalTitle]="proposal.title"
+    [proposalBody]="proposal.body"
+    (closed)="closeAccept()"
+  />
+}

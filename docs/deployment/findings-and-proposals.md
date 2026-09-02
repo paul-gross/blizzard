@@ -37,6 +37,13 @@ proposal named that is still live is resolved, attributed to the proposal, the s
 `blizzard hub finding resolve` but requiring no verb of its own. Re-delivering the same item resolves nothing a second
 time. Either closing verb answers 409, naming the proposal's existing closure, when called again — closure is terminal.
 
+**The hub board's Gardening tab renders a docket sheet over the same reads: every proposal, filtered by waiting state
+and by class, each read as prose beside its findings — read live, one finding at a time, never a copy the proposal
+itself carries. Passing and accepting are each a dialog off the selected proposal, the reason and the mint/decline
+choice exposed the same way the CLI takes them; an accepted proposal's linked work item, once one exists, is read
+through the closure's own pointer and shown beside every finding it answers. Neither dialog is offered without
+`chunk:control`.**
+
 ## Trend
 
 `blizzard hub routine trend <name>` reads a routine's finding inflow-against-outflow over a window, taking `--since`,

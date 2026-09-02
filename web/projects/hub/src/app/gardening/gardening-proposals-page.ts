@@ -3,9 +3,11 @@ import {
   asyncState,
   FleetProposalList,
   FleetProposalPanel,
+  hasPermission,
   injectHubFindingsQuery,
   injectHubGardenProposalsQuery,
   injectHubWorkItemQuery,
+  injectMeQuery,
   isGardenProposalWaiting,
   KitChips,
   type FindingView,
@@ -19,6 +21,9 @@ import {
   type ProposalPanelVm,
   type ProposalWorkItemVm,
 } from 'fleet';
+
+import { GardeningProposalAcceptDialog } from './gardening-proposal-accept-dialog';
+import { GardeningProposalPassDialog } from './gardening-proposal-pass-dialog';
 
 /** The docket's waiting filter — a proposal not yet closed, or every proposal
  * regardless of closure. */
@@ -48,16 +53,22 @@ const ALL_CLASSES = 'all';
  * this container fans those out live through `injectHubFindingsQueries` (Decision 3),
  * and, for an accepted-and-minted proposal, resolves the linked work item through its
  * closure's `source`/`ref` pointer (Decision 4) via `injectHubWorkItemQuery`.
+ *
+ * Owns the two closing dialogs' own dialog-open signals (Decision 6: both verbs gate
+ * on `chunk:control`, resolved here through `injectMeQuery` + `hasPermission` and
+ * forwarded to the panel as `canControl`), `gardening-routines-page.ts`'s own
+ * `runningRoutine` shape.
  */
 @Component({
   selector: 'app-gardening-proposals-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetProposalList, FleetProposalPanel, KitChips],
+  imports: [FleetProposalList, FleetProposalPanel, GardeningProposalAcceptDialog, GardeningProposalPassDialog, KitChips],
   templateUrl: './gardening-proposals-page.html',
   styleUrl: './gardening-proposals-page.css',
 })
 export class GardeningProposalsPage {
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
+  private readonly meQuery = injectMeQuery();
 
   private readonly proposals = computed<readonly GardenProposalView[]>(() => this.proposalsQuery.data() ?? []);
 
@@ -213,4 +224,35 @@ export class GardeningProposalsPage {
   protected readonly evidenceState = computed<KitAsyncStateValue>(() =>
     asyncState(this.findingsQuery, this.evidenceFindings().length === 0),
   );
+
+  /** Whether the current identity may pass or accept (`chunk:control` — the same
+   * permission `garden_proposals.py`'s two closing routes require server-side);
+   * `null`/pending resolves to `false`, `gardening-routines-page.ts`'s own
+   * `canEditScopes` shape. */
+  protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
+
+  /** The proposal the Pass dialog is open against — `null` closes it. Only the
+   * panel's own `pass` output ever sets it, so it can only ever name the
+   * already-selected, still-waiting proposal. */
+  protected readonly passingProposal = signal<GardenProposalView | null>(null);
+
+  /** The proposal the Accept dialog is open against — `null` closes it, the same
+   * shape as {@link passingProposal}. */
+  protected readonly acceptingProposal = signal<GardenProposalView | null>(null);
+
+  protected openPass(): void {
+    this.passingProposal.set(this.selectedProposal());
+  }
+
+  protected openAccept(): void {
+    this.acceptingProposal.set(this.selectedProposal());
+  }
+
+  protected closePass(): void {
+    this.passingProposal.set(null);
+  }
+
+  protected closeAccept(): void {
+    this.acceptingProposal.set(null);
+  }
 }

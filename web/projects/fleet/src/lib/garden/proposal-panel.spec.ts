@@ -23,6 +23,7 @@ describe('FleetProposalPanel', () => {
     state?: 'loading' | 'error' | 'empty' | 'ready';
     evidence?: readonly ProposalEvidenceRowVm[];
     evidenceState?: 'loading' | 'error' | 'empty' | 'ready';
+    canControl?: boolean;
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetProposalPanel],
@@ -33,6 +34,7 @@ describe('FleetProposalPanel', () => {
     fixture.componentRef.setInput('state', inputs.state ?? 'ready');
     fixture.componentRef.setInput('evidence', inputs.evidence ?? EVIDENCE);
     fixture.componentRef.setInput('evidenceState', inputs.evidenceState ?? 'ready');
+    fixture.componentRef.setInput('canControl', inputs.canControl ?? false);
     await fixture.whenStable();
     return fixture;
   }
@@ -144,5 +146,48 @@ describe('FleetProposalPanel', () => {
     expect(closureEl?.textContent).toContain("neither promotes an item nor changes any finding's state");
     expect(el.querySelector('[data-testid="gardening-proposal-work-item-link"]')).toBeNull();
     expect(el.querySelector('[data-testid="gardening-proposal-work-item-label"]')).toBeNull();
+  });
+
+  it('offers Pass and Accept for a waiting proposal with chunk:control', async () => {
+    const fixture = await mount({ canControl: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-pass"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-accept"]')).toBeTruthy();
+  });
+
+  it('withholds Pass and Accept without chunk:control', async () => {
+    const fixture = await mount({ canControl: false });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-actions"]')).toBeNull();
+  });
+
+  it('withholds Pass and Accept once a proposal is closed, even with chunk:control', async () => {
+    const closure: ProposalClosureVm = {
+      kind: 'passed',
+      closedBy: 'u_1',
+      closedAt: '2026-01-04T00:00:00Z',
+      reason: 'not worth it yet',
+    };
+    const fixture = await mount({ vm: { ...BASE_VM, closure }, canControl: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-actions"]')).toBeNull();
+  });
+
+  it('emits pass and accept', async () => {
+    const fixture = await mount({ canControl: true });
+    const el = fixture.nativeElement as HTMLElement;
+    let passed = false;
+    let accepted = false;
+    fixture.componentInstance.pass.subscribe(() => (passed = true));
+    fixture.componentInstance.accept.subscribe(() => (accepted = true));
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-proposal-pass"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-proposal-accept"]')?.click();
+
+    expect(passed).toBe(true);
+    expect(accepted).toBe(true);
   });
 });

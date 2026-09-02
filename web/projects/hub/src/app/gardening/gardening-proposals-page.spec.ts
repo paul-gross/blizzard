@@ -1,10 +1,17 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { hubClient, type MeResponse } from 'fleet';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { GardeningProposalsPage } from './gardening-proposals-page';
+
+/** A read-only identity — every permission `OPERATOR_ME_RESPONSE` carries except
+ * `chunk:control` — the default for tests unconcerned with the Pass/Accept gate. */
+const VIEWER_ME_RESPONSE: MeResponse = {
+  ...OPERATOR_ME_RESPONSE,
+  permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'chunk:control'),
+};
 
 const WAITING_A = {
   proposal_id: 'gp_1',
@@ -81,9 +88,13 @@ function findingFixture(findingId: string) {
   };
 }
 
-async function render(proposals: readonly unknown[] = [WAITING_A, WAITING_B, PASSED]) {
+async function render(
+  proposals: readonly unknown[] = [WAITING_A, WAITING_B, PASSED],
+  me: MeResponse = VIEWER_ME_RESPONSE,
+) {
   const stub = stubRequestClient(hubClient, (method, path) => {
     if (method === 'GET' && path === '/api/garden-proposals') return proposals;
+    if (method === 'GET' && path === '/api/me') return me;
     if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
     if (method === 'GET' && path === '/api/work-sources/hub/items/42') {
       return { source: 'hub', ref: '42', label: 'hub#42', web_url: '/board/chunk/ch_1', title: 't', body: 'b', author: { kind: 'user' }, closure: null, closed_at: null, created_at: '2026-01-01T00:00:00Z', edited_at: '2026-01-01T00:00:00Z', stated_priority: null };
@@ -204,5 +215,57 @@ describe('GardeningProposalsPage', () => {
 
     const findingLink = el.querySelector('[data-testid="gardening-proposal-finding-work-item-link-fin_5"]');
     expect(findingLink?.textContent).toBe('hub#42');
+  });
+
+  it('withholds Pass and Accept without chunk:control', async () => {
+    const rendered = await render([WAITING_A], VIEWER_ME_RESPONSE);
+    stub = rendered.stub;
+    const { el } = rendered;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-actions"]')).toBeNull();
+  });
+
+  it('offers Pass and Accept for a waiting proposal with chunk:control', async () => {
+    const rendered = await render([WAITING_A], OPERATOR_ME_RESPONSE);
+    stub = rendered.stub;
+    const { el } = rendered;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-pass"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-accept"]')).toBeTruthy();
+  });
+
+  it('opens the pass dialog off the panel Pass trigger, and closing it tears the dialog down', async () => {
+    const rendered = await render([WAITING_A], OPERATOR_ME_RESPONSE);
+    stub = rendered.stub;
+    const { fixture, el } = rendered;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-pass-dialog"]')).toBeNull();
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-proposal-pass"]')!.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="proposal-pass-dialog-title"]')?.textContent).toContain(
+      'Author a docstring standard',
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="proposal-pass-dialog-cancel"]')!.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="gardening-proposal-pass-dialog"]')).toBeNull();
+  });
+
+  it('opens the accept dialog off the panel Accept trigger, prefilled with the proposal body', async () => {
+    const rendered = await render([WAITING_A], OPERATOR_ME_RESPONSE);
+    stub = rendered.stub;
+    const { fixture, el } = rendered;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-proposal-accept"]')!.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="proposal-accept-dialog-title"]')?.textContent).toContain(
+      'Author a docstring standard',
+    );
+    expect(el.querySelector<HTMLTextAreaElement>('[data-testid="proposal-accept-body-input"]')?.value).toBe(
+      WAITING_A.body,
+    );
   });
 });

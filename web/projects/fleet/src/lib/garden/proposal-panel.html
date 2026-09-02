@@ -16,6 +16,17 @@
         <p class="pp-cli">read with: <code>hub garden-proposal show {{ panel.proposalId }}</code></p>
       </header>
 
+      @if (panel.closure === null && canControl()) {
+        <p class="pp-actions" data-testid="gardening-proposal-actions">
+          <fleet-kit-button (click)="pass.emit()" testid="gardening-proposal-pass">Pass</fleet-kit-button>
+          <fleet-kit-button variant="primary" (click)="accept.emit()" testid="gardening-proposal-accept">
+            Accept
+          </fleet-kit-button>
+          pass with: <code>hub garden-proposal pass {{ panel.proposalId }}</code>, accept with:
+          <code>hub garden-proposal accept {{ panel.proposalId }}</code>
+        </p>
+      }
+
       @if (panel.closure; as closure) {
         @if (closure.kind === 'passed') {
           <section class="pp-closure" data-testid="gardening-proposal-closure-passed">

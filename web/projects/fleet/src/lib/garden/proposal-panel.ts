@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitButton } from '../kit/kit-button';
 import { FleetWhen } from '../when-display';
 
 /** A linked hub work item, legible for display — `label`/`webUrl` come straight off
@@ -60,11 +61,16 @@ export interface ProposalPanelVm {
  * Copy states plainly that acceptance neither promotes the minted item nor changes
  * any finding's state — the surface's own answer to the two things acceptance does
  * not do.
+ *
+ * A still-waiting proposal (`vm.closure === null`) offers Pass and Accept, each
+ * naming the CLI verb behind it — withheld without `chunk:control` (Decision 6), the
+ * same permission the closing routes themselves require, via the `canControl` input
+ * a viewer identity resolves to `false`.
  */
 @Component({
   selector: 'fleet-proposal-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen],
+  imports: [KitAsyncState, FleetWhen, KitButton],
   templateUrl: './proposal-panel.html',
   styleUrl: './proposal-panel.css',
 })
@@ -74,4 +80,11 @@ export class FleetProposalPanel {
 
   readonly evidence = input<readonly ProposalEvidenceRowVm[]>([]);
   readonly evidenceState = input<KitAsyncStateValue>('empty');
+
+  /** Whether the current identity may pass or accept (`chunk:control`) — `false`
+   * withholds both triggers outright rather than offering a button that 403s. */
+  readonly canControl = input(false);
+
+  readonly pass = output<void>();
+  readonly accept = output<void>();
 }
