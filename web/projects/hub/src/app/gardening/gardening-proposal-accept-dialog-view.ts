@@ -16,11 +16,16 @@ export interface AcceptSubmission {
 type AcceptMode = 'mint' | 'decline';
 
 /**
- * The Accept dialog's presentational view (blizzard#403 Decision 5) —
+ * The Accept dialog's presentational view (Decision 5) —
  * `gardening-run-dialog-view.ts`'s own scaffold: the mint/decline choice, the
  * prefilled editable body (mint only), and an optional reason either way. No query
  * or client dependency: the container injects the mutation and maps its async state
  * into `submitting()`/`submitError()` (`bzh:frontend-container-presentational`).
+ *
+ * One `reason` signal backs both modes' text field — mint's optional reason and
+ * decline's required one are the same conceptual field, never two, so gating and the
+ * CLI-verb preview each branch on {@link mode} alone rather than on which signal
+ * carries the text.
  *
  * Copy states that acceptance neither promotes the minted item nor changes any
  * finding's state — the surface's own answer to the two things acceptance does not
@@ -47,7 +52,6 @@ export class GardeningProposalAcceptDialogView {
   protected readonly mode = signal<AcceptMode>('mint');
   protected readonly body = signal('');
   protected readonly reason = signal('');
-  protected readonly declineReason = signal('');
 
   constructor() {
     // Prefills the editable body with the proposal's own — the container passes an
@@ -59,25 +63,26 @@ export class GardeningProposalAcceptDialogView {
 
   protected readonly canSubmit = computed(() => {
     if (this.submitting()) return false;
-    return this.mode() === 'mint' || this.declineReason().trim().length > 0;
+    return this.mode() === 'mint' || this.reason().trim().length > 0;
   });
 
   protected readonly cliVerb = computed(() => {
     const parts = [`blizzard hub garden-proposal accept ${this.proposalId()}`];
     if (this.mode() === 'decline') parts.push('--no-work-item');
-    const reason = this.mode() === 'decline' ? this.declineReason() : this.reason();
-    if (reason.trim()) parts.push(`--reason "${reason.trim()}"`);
+    const reason = this.reason().trim();
+    if (reason) parts.push(`--reason "${reason}"`);
     return parts.join(' ');
   });
 
   protected onSubmitClick(): void {
     if (!this.canSubmit()) return;
+    const reason = this.reason().trim();
     if (this.mode() === 'decline') {
-      this.submitted.emit({ mintWorkItem: false, reason: this.declineReason().trim() });
+      this.submitted.emit({ mintWorkItem: false, reason });
       return;
     }
-    const reason = this.reason().trim();
-    this.submitted.emit({ mintWorkItem: true, body: this.body().trim(), ...(reason ? { reason } : {}) });
+    const body = this.body().trim();
+    this.submitted.emit({ mintWorkItem: true, ...(body ? { body } : {}), ...(reason ? { reason } : {}) });
   }
 
   /** Escape, a backdrop click, and Cancel all route through `KitDialog`'s one

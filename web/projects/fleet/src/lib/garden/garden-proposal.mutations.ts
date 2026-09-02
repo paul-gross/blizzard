@@ -18,10 +18,10 @@ export interface GardenProposalPassVars {
 
 /**
  * Records that a proposal was considered and declined — the note that stops a later
- * run raising the same response as though it were new (blizzard#403). Garden
- * proposals carry no SSE event of their own (`hubGardenProposalsKey`'s own doc
- * comment), so a successful pass invalidates the docket list and this proposal's own
- * detail read directly, `scope-edit.mutations.ts`'s own shape.
+ * run raising the same response as though it were new. Garden proposals carry no SSE
+ * event of their own (`hubGardenProposalsKey`'s own doc comment), so a successful
+ * pass invalidates the docket list and this proposal's own detail read directly,
+ * `scope-edit.mutations.ts`'s own shape.
  */
 export function injectPassGardenProposalMutation() {
   const queryClient = inject(QueryClient);
@@ -55,8 +55,8 @@ export interface GardenProposalAcceptVars {
 /**
  * Records agreement with a proposal — minting a linked hub work item by default, or
  * declining to mint when `mintWorkItem` is `false`, itself recorded rather than left
- * to read as an absent link (blizzard#403). Neither promotes the minted item nor
- * changes any finding's state — the closing route itself owns that guarantee. Same
+ * to read as an absent link. Neither promotes the minted item nor changes any
+ * finding's state — the closing route itself owns that guarantee. Same
  * direct-invalidation shape as {@link injectPassGardenProposalMutation}.
  */
 export function injectAcceptGardenProposalMutation() {

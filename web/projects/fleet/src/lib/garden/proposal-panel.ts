@@ -24,7 +24,7 @@ export interface ProposalEvidenceRowVm {
   readonly workItem: ProposalWorkItemVm | null;
 }
 
-/** How a proposal closed, rendered as the record it is (blizzard#403's two closing
+/** How a proposal closed, rendered as the record it is (the docket's two closing
  * verbs) — `'accepted'` with a `null` `workItem` is the acceptance that says on the
  * record it minted nothing (Decision 5), never an empty space where the item would
  * be. */

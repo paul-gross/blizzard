@@ -5,7 +5,7 @@ import { page, userEvent } from 'vitest/browser';
 import { GardeningProposalPassDialogView } from './gardening-proposal-pass-dialog-view';
 
 /**
- * The Pass dialog's own half of `web:shell-sweep` (blizzard#403) — the footer's
+ * The Pass dialog's own half of `web:shell-sweep` — the footer's
  * Cancel/Pass buttons genuinely sit side by side, neither overflowing the panel, at
  * the phone and desktop widths the dialog is reachable at — a real CSS layout claim
  * jsdom cannot make.
@@ -34,7 +34,7 @@ async function mount(width: number) {
   return { fixture, root };
 }
 
-describe('GardeningProposalPassDialogView shell sweep (web:shell-sweep, blizzard#403)', () => {
+describe('GardeningProposalPassDialogView shell sweep (web:shell-sweep)', () => {
   for (const width of [390, 1024]) {
     it(`sits Cancel and Pass side by side with neither overflowing the panel at ${width}px`, async () => {
       const { root, fixture } = await mount(width);

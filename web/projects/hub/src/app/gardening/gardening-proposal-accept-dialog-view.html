@@ -69,8 +69,8 @@
           multiline
           [rows]="3"
           placeholder="Why no work item is minted — required"
-          [value]="declineReason()"
-          (valueChange)="declineReason.set($event)"
+          [value]="reason()"
+          (valueChange)="reason.set($event)"
           testid="proposal-accept-decline-reason-input"
         />
       </div>

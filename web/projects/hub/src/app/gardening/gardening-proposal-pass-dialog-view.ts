@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { KitButton, KitDialog, KitTextInput } from 'fleet';
 
 /**
- * The Pass dialog's presentational view (blizzard#403 Decision 5) — one required
+ * The Pass dialog's presentational view (Decision 5) — one required
  * reason field and nothing else, `gardening-run-dialog-view.ts`'s own scaffold. No
  * query or client dependency: the container injects the mutation and maps its async
  * state into `submitting()`/`submitError()` (`bzh:frontend-container-presentational`).
@@ -32,9 +32,12 @@ export class GardeningProposalPassDialogView {
 
   protected readonly canSubmit = computed(() => this.reason().trim().length > 0 && !this.submitting());
 
-  protected readonly cliVerb = computed(
-    () => `blizzard hub garden-proposal pass ${this.proposalId()} --reason "..."`,
-  );
+  protected readonly cliVerb = computed(() => {
+    const parts = [`blizzard hub garden-proposal pass ${this.proposalId()}`];
+    const reason = this.reason().trim();
+    if (reason) parts.push(`--reason "${reason}"`);
+    return parts.join(' ');
+  });
 
   protected onSubmitClick(): void {
     if (!this.canSubmit()) return;

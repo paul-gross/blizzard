@@ -42,6 +42,9 @@ describe('GardeningProposalPassDialog', () => {
     await settle(fixture);
 
     expect(el.querySelector<HTMLButtonElement>('[data-testid="proposal-pass-dialog-submit"]')!.disabled).toBe(false);
+    expect(el.querySelector('[data-testid="proposal-pass-cli-verb"]')?.textContent).toContain(
+      '--reason "not worth it yet"',
+    );
   });
 
   it('submits only with the entered reason, closing on success', async () => {

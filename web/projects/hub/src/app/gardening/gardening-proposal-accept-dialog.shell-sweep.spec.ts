@@ -5,7 +5,7 @@ import { page, userEvent } from 'vitest/browser';
 import { GardeningProposalAcceptDialogView } from './gardening-proposal-accept-dialog-view';
 
 /**
- * The Accept dialog's own half of `web:shell-sweep` (blizzard#403) — the
+ * The Accept dialog's own half of `web:shell-sweep` — the
  * mint/decline radiogroup genuinely stacks its two options, the footer's
  * Cancel/Accept buttons genuinely sit side by side, and neither overflows the panel,
  * at the phone and desktop widths the dialog is reachable at — real CSS layout claims
@@ -36,7 +36,7 @@ async function mount(width: number) {
   return { fixture, root };
 }
 
-describe('GardeningProposalAcceptDialogView shell sweep (web:shell-sweep, blizzard#403)', () => {
+describe('GardeningProposalAcceptDialogView shell sweep (web:shell-sweep)', () => {
   for (const width of [390, 1024]) {
     it(`stacks the mode options and sits Cancel/Accept side by side at ${width}px`, async () => {
       const { root } = await mount(width);

@@ -65,7 +65,7 @@ async function render() {
   return { fixture, stub };
 }
 
-describe('gardening proposals page layout shell sweep (web:shell-sweep, blizzard#403)', () => {
+describe('gardening proposals page layout shell sweep (web:shell-sweep)', () => {
   it('sits the list beside the panel above 480px, and stacks them at 390px and 320px', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);

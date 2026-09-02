@@ -4,7 +4,7 @@ import { errorMessage, injectAcceptGardenProposalMutation } from 'fleet';
 import { GardeningProposalAcceptDialogView, type AcceptSubmission } from './gardening-proposal-accept-dialog-view';
 
 /**
- * The garden proposal docket's Accept dialog container (blizzard#403 Decisions 5, 6,
+ * The garden proposal docket's Accept dialog container (Decisions 5, 6,
  * 7) — `blizzard hub garden-proposal accept <id> [--reason] [--body-file] [--no-work-
  * item]`'s own UI, submitted through `injectAcceptGardenProposalMutation`
  * (`bzh:generated-client`). Minting is the default and submits in one click;

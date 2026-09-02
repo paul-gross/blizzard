@@ -4,7 +4,7 @@ import { errorMessage, injectPassGardenProposalMutation } from 'fleet';
 import { GardeningProposalPassDialogView } from './gardening-proposal-pass-dialog-view';
 
 /**
- * The garden proposal docket's Pass dialog container (blizzard#403 Decisions 5, 7) —
+ * The garden proposal docket's Pass dialog container (Decisions 5, 7) —
  * `blizzard hub garden-proposal pass <id> --reason <text>`'s own UI: a single
  * required-reason field, submitted through `injectPassGardenProposalMutation`
  * (`bzh:generated-client`). Closure is terminal, so a 409 (a raced second close) is a

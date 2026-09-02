@@ -49,10 +49,12 @@ export function hubGardenProposalKey(proposalId: string | null): readonly unknow
   return ['hub', 'garden-proposal', proposalId];
 }
 
-/** One finding's full record, keyed by id — `GET /api/findings/{finding_id}`, the
- * docket detail's own evidence read. `hubGraphKey`'s own null-tolerant shape. */
-export function hubFindingKey(findingId: string | null): readonly unknown[] {
-  return ['hub', 'finding', findingId];
+/** The docket detail's live evidence read — every finding named in `findingIds`,
+ * fanned out and joined through `GET /api/findings/{finding_id}` (Decision 3). The
+ * whole id list rides the key, so a different selected proposal is its own cache
+ * entry. */
+export function hubFindingsKey(findingIds: readonly string[]): readonly unknown[] {
+  return ['hub', 'findings', ...findingIds];
 }
 
 /** One work item read by its source pointer, keyed by the pair — `GET

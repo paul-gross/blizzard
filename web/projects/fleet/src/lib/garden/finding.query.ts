@@ -1,30 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { getFindingApiFindingsFindingIdGet, type FindingView } from '../api/hub';
-import { hubFindingKey } from '../query-keys';
-
-/**
- * Hub `GET /api/findings/{finding_id}` read — one finding's full record. Reactive
- * over the selected finding id, `graphs.query.ts`'s own `injectHubGraphQuery`
- * null-tolerant conditional-query shape.
- */
-export function injectHubFindingQuery(findingId: () => string | null) {
-  return injectQuery(() => {
-    const id = findingId();
-    return {
-      queryKey: hubFindingKey(id),
-      enabled: id !== null,
-      queryFn: async (): Promise<FindingView> => {
-        const { data, error } = await getFindingApiFindingsFindingIdGet({
-          path: { finding_id: id! },
-          throwOnError: false,
-        });
-        if (error) throw error;
-        return data!;
-      },
-    };
-  });
-}
+import { hubFindingsKey } from '../query-keys';
 
 /**
  * Every id in `findingIds()`, read live through its own `GET
@@ -36,21 +13,29 @@ export function injectHubFindingQuery(findingId: () => string | null) {
  * whose `queryFn` fans the id list out and joins it — the id list itself is reactive
  * (re-derived per selected proposal), and Angular's injection context cannot vary a
  * fixed number of `injectQuery` calls at runtime the way a per-id call would need.
+ *
+ * A finding that fails to read (a 404, or any other error) is dropped from the joined
+ * result rather than failing every other finding's row — one id going stale never
+ * blanks the whole evidence table.
  */
 export function injectHubFindingsQuery(findingIds: () => readonly string[]) {
   return injectQuery(() => {
     const ids = findingIds();
     return {
-      queryKey: ['hub', 'findings', ...ids] as const,
+      queryKey: hubFindingsKey(ids),
       enabled: ids.length > 0,
       queryFn: async (): Promise<FindingView[]> => {
-        const results = await Promise.all(
-          ids.map((id) => getFindingApiFindingsFindingIdGet({ path: { finding_id: id }, throwOnError: false })),
+        const results = await Promise.allSettled(
+          ids.map(async (id) => {
+            const { data, error } = await getFindingApiFindingsFindingIdGet({
+              path: { finding_id: id },
+              throwOnError: false,
+            });
+            if (error) throw error;
+            return data!;
+          }),
         );
-        return results.map(({ data, error }) => {
-          if (error) throw error;
-          return data!;
-        });
+        return results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
       },
     };
   });

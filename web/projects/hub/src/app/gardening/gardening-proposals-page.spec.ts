@@ -147,9 +147,9 @@ describe('GardeningProposalsPage', () => {
     const { el } = rendered;
 
     expect(el.querySelector('[data-testid="gardening-proposal-class-all"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-proposal-class-fix-the-source"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-proposal-class-remediate"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-proposal-class-mechanize"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-proposal-class-item-fix-the-source"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-class-item-remediate"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-class-item-mechanize"]')).toBeNull();
   });
 
   it('filters the list down to one class', async () => {
@@ -157,11 +157,26 @@ describe('GardeningProposalsPage', () => {
     stub = rendered.stub;
     const { fixture, el } = rendered;
 
-    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-class-remediate"]')?.click();
+    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-class-item-remediate"]')?.click();
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_2"]')).toBeTruthy();
+  });
+
+  it("renders and filters by a deployment class literally named 'all' without colliding with the All-classes chip", async () => {
+    const rendered = await render([{ ...WAITING_A, class: 'all' }, WAITING_B]);
+    stub = rendered.stub;
+    const { fixture, el } = rendered;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_2"]')).toBeTruthy();
+
+    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-class-item-all"]')?.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_2"]')).toBeNull();
   });
 
   it('renders the empty state only once the read resolves', async () => {

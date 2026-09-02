@@ -31,9 +31,18 @@ type WaitingFilter = 'waiting' | 'all';
 
 const ALL_CLASSES = 'all';
 
+/** Every real class chip's value carries this prefix, so it can never collide with
+ * {@link ALL_CLASSES} no matter what a deployment names a class (`class` is opaque,
+ * deployment-chosen vocabulary — Decision 2) — a class literally named `all` is a
+ * real possibility, not a contrived one, and `KitChips` tracks and selects by
+ * `value` alone. The class chip's `testid` carries its own `-item-` guard against the
+ * same collision, one prefix protecting each of the two identifiers `KitChips` reads
+ * off an option. */
+const CLASS_VALUE_PREFIX = 'class:';
+
 /**
- * The `/gardening/proposals` sub-tab (blizzard#403,
- * `blizzard-product:/plans/garden/user-interface.md` §The docket) — the proposal
+ * The `/gardening/proposals` sub-tab
+ * (`blizzard-product:/plans/garden/user-interface.md` §The docket) — the proposal
  * list, filtered client-side by waiting state and by class (Decision 1: `GET
  * /api/garden-proposals` declares no query parameters), and the selected proposal's
  * detail area.
@@ -50,7 +59,7 @@ const ALL_CLASSES = 'all';
  * one list read returns every `GardenProposalView` field, so the detail area needs no
  * second by-id fetch of its own (Decision 1's client-side-filtering spirit applied to
  * selection too). Its evidence is different: a proposal carries finding *ids* only, so
- * this container fans those out live through `injectHubFindingsQueries` (Decision 3),
+ * this container fans those out live through `injectHubFindingsQuery` (Decision 3),
  * and, for an accepted-and-minted proposal, resolves the linked work item through its
  * closure's `source`/`ref` pointer (Decision 4) via `injectHubWorkItemQuery`.
  *
@@ -84,14 +93,21 @@ export class GardeningProposalsPage {
     const classes = Array.from(new Set(this.proposals().map((p) => p.class))).sort((a, b) => a.localeCompare(b));
     return [
       { value: ALL_CLASSES, label: 'All classes', testid: 'gardening-proposal-class-all' },
-      ...classes.map((c) => ({ value: c, label: c, testid: `gardening-proposal-class-${c}` })),
+      ...classes.map((c) => ({
+        value: CLASS_VALUE_PREFIX + c,
+        label: c,
+        testid: `gardening-proposal-class-item-${c}`,
+      })),
     ];
   });
 
-  protected readonly classChipValue = computed<string>(() => this.classFilter() ?? ALL_CLASSES);
+  protected readonly classChipValue = computed<string>(() => {
+    const cls = this.classFilter();
+    return cls === null ? ALL_CLASSES : CLASS_VALUE_PREFIX + cls;
+  });
 
   protected onClassChoose(value: string): void {
-    this.classFilter.set(value === ALL_CLASSES ? null : value);
+    this.classFilter.set(value === ALL_CLASSES ? null : value.slice(CLASS_VALUE_PREFIX.length));
   }
 
   protected readonly waitingChips: readonly KitChipOption[] = [
@@ -172,12 +188,14 @@ export class GardeningProposalsPage {
     () => this.acceptedItemPointer()?.ref ?? null,
   );
 
-  /** The accepted-and-minted work item, resolved for display — `label`/`webUrl`
-   * degrade gracefully while the read is still in flight or a `web_url` reads
-   * `null` once the chunk is terminal. */
+  /** The accepted-and-minted work item, resolved for display — `null` while the
+   * read is still in flight, so a loading window never shows a synthesized label
+   * that could pass for resolved data; once settled, `label`/`webUrl` come off the
+   * real record, or the bare pointer once the read has genuinely failed (the item
+   * is gone), and `web_url` alone reads `null` once the chunk is merely terminal. */
   private readonly workItemVm = computed<ProposalWorkItemVm | null>(() => {
     const pointer = this.acceptedItemPointer();
-    if (pointer === null) return null;
+    if (pointer === null || this.workItemQuery.isPending()) return null;
     const item = this.workItemQuery.data();
     return { label: item?.label ?? `${pointer.source}:${pointer.ref}`, webUrl: item?.web_url ?? null };
   });
