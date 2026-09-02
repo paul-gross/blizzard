@@ -65,6 +65,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
     IReadGardenProposalClosureRepository,
 )
 from blizzard.hub.domain.garden_proposals import GardenProposalAuthoring, IReadGardenProposalRepository
+from blizzard.hub.domain.garden_run import GardenRunService
 from blizzard.hub.domain.garden_sweeps import GardenSweepsService
 from blizzard.hub.domain.garden_trend import GardenTrendService
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
@@ -98,6 +99,7 @@ from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingSt
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
+from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
@@ -247,6 +249,8 @@ class HubServices:
     garden_trend: GardenTrendService
     #: A routine's per-scope last-swept table and windowed measurement series.
     garden_sweeps: GardenSweepsService
+    #: A routine's runs are readable — the run list and one run's own delta.
+    garden_run: GardenRunService
 
 
 def build_services(
@@ -384,6 +388,7 @@ def build_services(
     garden_delivery_store = GardenDeliveryStore(store_connections)
     garden_trend_store = GardenTrendStore(store_connections)
     garden_sweeps_store = GardenSweepsStore(store_connections)
+    garden_run_store = GardenRunStore(store_connections)
     # Bound as `.resolve` (a plain `garden_delivery.CommitResolver` callable), not the bare
     # instance, so `HubServices.commit_resolver` carries no dependency on the concrete class.
     commit_resolver = GitHubCommitResolver(
@@ -531,4 +536,5 @@ def build_services(
         commit_resolver=commit_resolver,
         garden_trend=GardenTrendService(repo=garden_trend_store),
         garden_sweeps=GardenSweepsService(repo=garden_sweeps_store, scopes=scope_store),
+        garden_run=GardenRunService(repo=garden_run_store, chunk_records=chunk_record, chunk_facts=chunk_facts),
     )

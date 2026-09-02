@@ -3425,6 +3425,105 @@
       "path": "hub routine",
       "short_help": "Operator verbs over routines: create, list, inspect, edit."
     },
+    "run": {
+      "commands": {
+        "list": {
+          "help": "List every run minted in --since/--until, newest first \u2014 both default to the\nlast 24 hours ending now.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "since",
+              "opts": [
+                "--since"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "until",
+              "opts": [
+                "--until"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub run list",
+          "short_help": "List every run minted in --since/--until, newest first \u2014 both default to the last 24 hours ending now."
+        },
+        "show": {
+          "help": "One run's full detail \u2014 identity, derived outcome, and, per finding set it\ndelivered, the added/observed/gone entries its own artifact published.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "chunk_id",
+              "opts": [
+                "chunk_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub run show",
+          "short_help": "One run's full detail \u2014 identity, derived outcome, and, per finding set it delivered, the added/observed/gone entries its own artifact published."
+        }
+      },
+      "help": "Reading routine runs: the windowed list and one run's own delta.",
+      "params": [],
+      "path": "hub run",
+      "short_help": "Reading routine runs: the windowed list and one run's own delta."
+    },
     "runner": {
       "commands": {
         "enroll": {
