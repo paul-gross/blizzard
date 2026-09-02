@@ -2660,7 +2660,7 @@
   "blizzard/runner/cli/__init__.py": {
    "comments": 0,
    "docstrings": 3,
-   "total": 49
+   "total": 51
   },
   "blizzard/runner/cli/artifact.py": {
    "comments": 3,
@@ -2686,6 +2686,11 @@
    "comments": 0,
    "docstrings": 5,
    "total": 54
+  },
+  "blizzard/runner/cli/opencode.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "total": 96
   },
   "blizzard/runner/cli/prompt.py": {
    "comments": 0,
@@ -2882,6 +2887,11 @@
    "docstrings": 89,
    "total": 214
   },
+  "blizzard/runner/harness/compatibility.py": {
+   "comments": 7,
+   "docstrings": 28,
+   "total": 342
+  },
   "blizzard/runner/harness/env_allowlist.py": {
    "comments": 4,
    "docstrings": 9,
@@ -2916,6 +2926,96 @@
    "comments": 42,
    "docstrings": 42,
    "total": 419
+  },
+  "blizzard/runner/harness/internal/opencode_attach.py": {
+   "comments": 2,
+   "docstrings": 9,
+   "total": 509
+  },
+  "blizzard/runner/harness/internal/opencode_compaction.py": {
+   "comments": 0,
+   "docstrings": 11,
+   "total": 275
+  },
+  "blizzard/runner/harness/internal/opencode_cursor.py": {
+   "comments": 0,
+   "docstrings": 22,
+   "total": 216
+  },
+  "blizzard/runner/harness/internal/opencode_diagnostic.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "total": 25
+  },
+  "blizzard/runner/harness/internal/opencode_evidence.py": {
+   "comments": 1,
+   "docstrings": 5,
+   "total": 155
+  },
+  "blizzard/runner/harness/internal/opencode_facts.py": {
+   "comments": 1,
+   "docstrings": 13,
+   "total": 188
+  },
+  "blizzard/runner/harness/internal/opencode_landlock.py": {
+   "comments": 0,
+   "docstrings": 9,
+   "total": 249
+  },
+  "blizzard/runner/harness/internal/opencode_loopback.py": {
+   "comments": 4,
+   "docstrings": 21,
+   "total": 359
+  },
+  "blizzard/runner/harness/internal/opencode_probe.py": {
+   "comments": 5,
+   "docstrings": 23,
+   "total": 1361
+  },
+  "blizzard/runner/harness/internal/opencode_process.py": {
+   "comments": 4,
+   "docstrings": 40,
+   "total": 821
+  },
+  "blizzard/runner/harness/internal/opencode_proof_script.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "total": 68
+  },
+  "blizzard/runner/harness/internal/opencode_sanitizer.py": {
+   "comments": 0,
+   "docstrings": 11,
+   "total": 281
+  },
+  "blizzard/runner/harness/internal/opencode_scratch_config.py": {
+   "comments": 10,
+   "docstrings": 16,
+   "total": 396
+  },
+  "blizzard/runner/harness/internal/opencode_scratch_git.py": {
+   "comments": 2,
+   "docstrings": 14,
+   "total": 123
+  },
+  "blizzard/runner/harness/internal/opencode_shapes.py": {
+   "comments": 2,
+   "docstrings": 28,
+   "total": 630
+  },
+  "blizzard/runner/harness/internal/opencode_takeover.py": {
+   "comments": 2,
+   "docstrings": 12,
+   "total": 340
+  },
+  "blizzard/runner/harness/internal/opencode_tool_boundary.py": {
+   "comments": 2,
+   "docstrings": 6,
+   "total": 182
+  },
+  "blizzard/runner/harness/internal/opencode_transcript.py": {
+   "comments": 8,
+   "docstrings": 9,
+   "total": 244
   },
   "blizzard/runner/harness/preamble.py": {
    "comments": 22,
@@ -4038,6 +4138,11 @@
    "comments": 39,
    "docstrings": 131,
    "total": 938
+  },
+  "support_opencode_binary.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "total": 541
   },
   "test_activity_api.py": {
    "comments": 2,
@@ -5493,6 +5598,16 @@
    "comments": 66,
    "docstrings": 85,
    "total": 1079
+  },
+  "test_runner_harness_opencode_compatibility.py": {
+   "comments": 10,
+   "docstrings": 6,
+   "total": 1095
+  },
+  "test_runner_harness_opencode_diagnostic.py": {
+   "comments": 19,
+   "docstrings": 7,
+   "total": 1335
   },
   "test_runner_harness_transcript.py": {
    "comments": 3,

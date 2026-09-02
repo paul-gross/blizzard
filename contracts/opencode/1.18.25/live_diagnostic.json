@@ -1,0 +1,63 @@
+{
+  "evidence": {
+    "origin": "phase5-live",
+    "captured": "authorized pinned OpenCode compatibility diagnostic",
+    "retained": "sanitized probe and transcript summary",
+    "sanitized": true
+  },
+  "harness": "opencode",
+  "version": "1.18.25",
+  "model": {
+    "provider": "openai",
+    "model": "gpt-5.6-luna",
+    "variant": "max"
+  },
+  "classification": "degraded",
+  "admissible": true,
+  "sandbox": {
+    "filesystem": "landlock-abi-3-or-newer",
+    "model_tool": "second-landlock-layer-excludes-credential-root"
+  },
+  "probes": {
+    "fresh_turn": "observed",
+    "resume": "observed",
+    "process_control": "observed",
+    "judgement": "observed",
+    "root_hook": "absent",
+    "permission": "observed",
+    "model_variant": "observed",
+    "usage_cost": "observed",
+    "takeover": "observed",
+    "transcript_read": "observed",
+    "transcript_cursor": "observed",
+    "child_sessions": "absent",
+    "configuration_isolation": "observed"
+  },
+  "permission_denial": {
+    "tool": "bash",
+    "command": "printf permission-probe",
+    "probe_path": "OpenCode unattended run agent tool execution",
+    "invocation": "run --auto --format json --agent compatibility",
+    "explicit_denial": true,
+    "auth_read_denied": true,
+    "external_write_denied": true
+  },
+  "configuration_isolation": {
+    "runner_config": "<isolation>/runner-config/opencode.json",
+    "project_competitor": "<scratch>/opencode.json",
+    "user_competitor": "<isolation>/xdg-config/opencode/opencode.json",
+    "project_config_disabled": true,
+    "content_override": true,
+    "effect_observed": "runner-owned bash denial"
+  },
+  "transcript": {
+    "repeated_live_exports": true,
+    "repeated_after_exports": true,
+    "pending_to_completed": true,
+    "compaction_observed": true,
+    "compaction_pruned": true,
+    "retained_history_not_replayed": true,
+    "appended_after_compaction": true
+  },
+  "degraded_absences": ["root_hook", "child_sessions"]
+}

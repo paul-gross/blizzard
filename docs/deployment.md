@@ -50,6 +50,12 @@ under them both daemons survive a crash or reboot with nothing lost and nothing 
 | [`deployment/spend.md`](./deployment/spend.md)                       | You are bounding what an unattended fleet costs: the per-chunk cap, the rolling runner ceiling, and the subscription rate-limit read             |
 | [`deployment/recovery.md`](./deployment/recovery.md)                 | You need to know what survives a `kill -9` or a reboot, and how to prove it on your own machine                                                  |
 
+### Diagnostics
+
+| File                                                                             | When to read                                                 |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`deployment/opencode-compatibility.md`](./deployment/opencode-compatibility.md) | You are running the pinned OpenCode compatibility diagnostic |
+
 ### Watching it
 
 | File                                                           | When to read                                                                                                           |

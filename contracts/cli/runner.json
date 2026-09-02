@@ -399,6 +399,77 @@
       "path": "runner migrate",
       "short_help": "Apply pending store migrations, or reverse with --down <rev>."
     },
+    "opencode": {
+      "commands": {
+        "compatibility": {
+          "help": "Prove OpenCode 1.18.25 in a disposable git repository and retain sanitized evidence.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "binary",
+              "opts": [
+                "--binary"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "file"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "model",
+              "opts": [
+                "--model"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "variant",
+              "opts": [
+                "--variant"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "evidence_directory",
+              "opts": [
+                "--evidence-dir"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "directory"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "live_provider",
+              "opts": [
+                "--live-provider",
+                "--allow-live-provider"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "boolean"
+            }
+          ],
+          "path": "runner opencode compatibility",
+          "short_help": "Prove OpenCode 1.18.25 in a disposable git repository and retain sanitized evidence."
+        }
+      },
+      "help": "Read-only diagnostics for the pinned OpenCode compatibility contract.",
+      "params": [],
+      "path": "runner opencode",
+      "short_help": "Read-only diagnostics for the pinned OpenCode compatibility contract."
+    },
     "pause": {
       "help": "Declarative control: pause this runner \u2014 it starts no new workers (issue #45). This runner's\n**own** brake, a pure client of its local API, so it works with the hub unreachable: it blocks\nevery spawn site and defers both the kill of a stalled worker and escalation at an exhausted retry\nbudget. No retry is consumed, and a live worker is left alone \u2014 this is not a drain. Distinct from\nthe hub's brake, and each is cleared where it was set.",
       "params": [

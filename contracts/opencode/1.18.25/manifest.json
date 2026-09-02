@@ -1,0 +1,169 @@
+{
+  "harness": "opencode",
+  "version": "1.18.25",
+  "sanitized": true,
+  "required_probes": [
+    "fresh_turn",
+    "resume",
+    "process_control",
+    "judgement",
+    "root_hook",
+    "permission",
+    "model_variant",
+    "usage_cost",
+    "takeover",
+    "transcript_read",
+    "transcript_cursor",
+    "child_sessions",
+    "configuration_isolation"
+  ],
+  "categories": [
+    "success",
+    "provider_error",
+    "permission_denial",
+    "interrupted_tool",
+    "compaction",
+    "child_session"
+  ],
+  "live_evidence": {
+    "version": "1.18.25",
+    "model": "openai/gpt-5.6-luna",
+    "variant": "max",
+    "classification": "degraded",
+    "admissible": true,
+    "sanitized": true,
+    "fixtures": {
+      "success": {
+        "fixture": "live_success",
+        "observed": [
+          "fresh_turn",
+          "resume",
+          "judgement",
+          "model_variant",
+          "usage_cost"
+        ]
+      },
+      "permission_denial": {
+        "path": "live_permission_denial_events.json",
+        "observed": ["permission"]
+      },
+      "diagnostic": {
+        "path": "live_diagnostic.json",
+        "observed": [
+          "fresh_turn",
+          "resume",
+          "process_control",
+          "judgement",
+          "permission",
+          "model_variant",
+          "usage_cost",
+          "takeover",
+          "transcript_read",
+          "transcript_cursor",
+          "configuration_isolation"
+        ],
+        "degraded": ["root_hook", "child_sessions"]
+      }
+    }
+  },
+  "probe_evidence": {
+    "fresh_turn": ["success", "live_success"],
+    "resume": ["success", "live_success"],
+    "process_control": ["interrupted_tool"],
+    "judgement": ["success", "live_success"],
+    "root_hook": ["success", "provider_error"],
+    "permission": ["permission_denial"],
+    "model_variant": ["success", "live_success"],
+    "usage_cost": ["success", "provider_error", "live_success"],
+    "takeover": ["success", "live_success"],
+    "transcript_read": ["success", "compaction"],
+    "transcript_cursor": ["interrupted_tool", "compaction"],
+    "child_sessions": ["child_session"],
+    "configuration_isolation": ["success", "live_success"]
+  },
+  "shape_parsers": {
+    "run_event": {
+      "parser": "parse_run_event",
+      "fixtures": [
+        "success",
+        "provider_error",
+        "permission_denial",
+        "interrupted_tool",
+        "compaction",
+        "child_session",
+        "live_success"
+      ]
+    },
+    "session_export": {
+      "parser": "parse_session_export",
+      "fixtures": [
+        "success",
+        "provider_error",
+        "permission_denial",
+        "interrupted_tool",
+        "compaction",
+        "child_session",
+        "live_success"
+      ]
+    },
+    "provider_error": {
+      "parser": "parse_run_event",
+      "fixtures": ["provider_error"]
+    },
+    "permission_request": {
+      "parser": "parse_run_event",
+      "fixtures": ["permission_denial"]
+    },
+    "tool_state": {
+      "parser": "parse_run_event",
+      "fixtures": ["success", "permission_denial", "interrupted_tool", "child_session", "live_success"]
+    },
+    "compaction_part": {
+      "parser": "parse_run_event",
+      "fixtures": ["compaction"]
+    },
+    "token_usage": {
+      "parser": "parse_run_event",
+      "fixtures": ["success", "permission_denial", "compaction", "child_session", "live_success"]
+    },
+    "child_sessions": {
+      "parser": "parse_child_sessions",
+      "fixtures": ["child_session"]
+    },
+    "child_session_export": {
+      "parser": "parse_session_export",
+      "fixtures": ["child_session"]
+    },
+    "worker_config": {
+      "parser": "parse_worker_config",
+      "fixtures": [
+        "success",
+        "provider_error",
+        "permission_denial",
+        "interrupted_tool",
+        "compaction",
+        "child_session",
+        "live_success"
+      ]
+    },
+    "model_reference": {
+      "parser": "parse_model_reference",
+      "fixtures": ["success", "child_session", "live_success"]
+    }
+  },
+  "fixtures": [
+    {"name": "success", "category": "success", "path": "success.json"},
+    {"name": "provider_error", "category": "provider_error", "path": "provider_error.json"},
+    {"name": "permission_denial", "category": "permission_denial", "path": "permission_denial.json"},
+    {"name": "interrupted_tool", "category": "interrupted_tool", "path": "interrupted_tool.json"},
+    {"name": "compaction", "category": "compaction", "path": "compaction.json"},
+    {
+      "name": "child_session",
+      "category": "child_session",
+      "path": "child_session.json",
+      "source": "synthetic",
+      "note": "Hand-authored. The diagnostic denies the `task` tool for every agent, so no live run can spawn a child session and the child_sessions probe is structurally degraded; this fixture pins the parser, not an observed OpenCode shape."
+    },
+    {"name": "live_success", "category": "success", "path": "live_success.json", "source": "phase5-live"}
+  ]
+}

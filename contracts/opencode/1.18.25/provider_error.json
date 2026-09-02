@@ -1,0 +1,38 @@
+{
+  "events": [
+    {
+      "type": "step_start",
+      "timestamp": 1788000010000,
+      "sessionID": "ses_provider_error",
+      "part": {"id": "prt_error_start", "sessionID": "ses_provider_error", "messageID": "msg_error_assistant", "type": "step-start"}
+    },
+    {
+      "type": "error",
+      "timestamp": 1788000010200,
+      "sessionID": "ses_provider_error",
+      "error": {"name": "ProviderError", "data": {"message": "provider request failed", "statusCode": 503}}
+    }
+  ],
+  "export": {
+    "info": {"id": "ses_provider_error", "version": "1.18.25", "directory": "<workdir>", "title": "Provider error"},
+    "messages": [
+      {
+        "info": {"id": "msg_error_user", "sessionID": "ses_provider_error", "role": "user"},
+        "parts": [{"id": "prt_error_user", "sessionID": "ses_provider_error", "messageID": "msg_error_user", "type": "text", "text": "Run the compatibility turn."}]
+      },
+      {
+        "info": {"id": "msg_error_assistant", "sessionID": "ses_provider_error", "role": "assistant", "providerID": "openai", "modelID": "gpt-5.6-luna", "cost": 0},
+        "parts": [
+          {"id": "prt_error_start", "sessionID": "ses_provider_error", "messageID": "msg_error_assistant", "type": "step-start"},
+          {"id": "prt_error_finish", "sessionID": "ses_provider_error", "messageID": "msg_error_assistant", "type": "step-finish", "reason": "error", "cost": 0, "tokens": {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}}
+        ]
+      }
+    ]
+  },
+  "children": [],
+  "model": {"provider": "openai", "model": "gpt-5.6-luna", "variant": "max"},
+  "config": {
+    "permission": {"*": "ask", "bash": "allow", "edit": "allow", "question": "deny"},
+    "plugin": ["file://<runner>/plugins/blizzard-heartbeat.ts"]
+  }
+}

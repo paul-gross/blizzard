@@ -1,0 +1,46 @@
+{
+  "events": [
+    {
+      "type": "step_start",
+      "timestamp": 1788000030000,
+      "sessionID": "ses_interrupted",
+      "part": {"id": "prt_interrupted_start", "sessionID": "ses_interrupted", "messageID": "msg_interrupted_assistant", "type": "step-start"}
+    },
+    {
+      "type": "tool_use",
+      "timestamp": 1788000030100,
+      "sessionID": "ses_interrupted",
+      "part": {
+        "id": "prt_interrupted_tool",
+        "sessionID": "ses_interrupted",
+        "messageID": "msg_interrupted_assistant",
+        "type": "tool",
+        "callID": "call_interrupted",
+        "tool": "bash",
+        "state": {"status": "running", "input": {"command": "sleep 30"}, "title": "Long-running command"}
+      }
+    }
+  ],
+  "export": {
+    "info": {"id": "ses_interrupted", "version": "1.18.25", "directory": "<workdir>", "title": "Interrupted tool"},
+    "messages": [
+      {
+        "info": {"id": "msg_interrupted_user", "sessionID": "ses_interrupted", "role": "user"},
+        "parts": [{"id": "prt_interrupted_user", "sessionID": "ses_interrupted", "messageID": "msg_interrupted_user", "type": "text", "text": "Run the long command."}]
+      },
+      {
+        "info": {"id": "msg_interrupted_assistant", "sessionID": "ses_interrupted", "role": "assistant", "providerID": "openai", "modelID": "gpt-5.6-luna"},
+        "parts": [
+          {"id": "prt_interrupted_start", "sessionID": "ses_interrupted", "messageID": "msg_interrupted_assistant", "type": "step-start"},
+          {"id": "prt_interrupted_tool", "sessionID": "ses_interrupted", "messageID": "msg_interrupted_assistant", "type": "tool", "callID": "call_interrupted", "tool": "bash", "state": {"status": "running", "input": {"command": "sleep 30"}, "title": "Long-running command"}}
+        ]
+      }
+    ]
+  },
+  "children": [],
+  "model": {"provider": "openai", "model": "gpt-5.6-luna", "variant": "max"},
+  "config": {
+    "permission": {"*": "ask", "bash": "allow", "edit": "allow", "question": "deny"},
+    "plugin": ["file://<runner>/plugins/blizzard-heartbeat.ts"]
+  }
+}

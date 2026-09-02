@@ -1,0 +1,300 @@
+{
+  "evidence": {
+    "origin": "phase5-live",
+    "retained": "shape-only",
+    "sanitized": true
+  },
+  "events": [
+    {
+      "type": "step_start",
+      "sessionID": "session_live_success",
+      "part": {
+        "id": "part_live_start",
+        "sessionID": "session_live_success",
+        "messageID": "message_live_assistant",
+        "type": "step-start"
+      }
+    },
+    {
+      "type": "tool_use",
+      "sessionID": "session_live_success",
+      "part": {
+        "id": "part_live_bash",
+        "sessionID": "session_live_success",
+        "messageID": "message_live_assistant",
+        "type": "tool",
+        "callID": "call_live_bash",
+        "tool": "bash",
+        "state": {
+          "status": "completed",
+          "input": {"command": "git status --short"},
+          "output": "sanitized output",
+          "title": "Inspect scratch repository",
+          "metadata": {}
+        }
+      }
+    },
+    {
+      "type": "tool_use",
+      "sessionID": "session_live_success",
+      "part": {
+        "id": "part_live_patch",
+        "sessionID": "session_live_success",
+        "messageID": "message_live_assistant",
+        "type": "tool",
+        "callID": "call_live_patch",
+        "tool": "apply_patch",
+        "state": {
+          "status": "completed",
+          "input": {"patchText": "sanitized patch"},
+          "output": "Applied",
+          "title": "Update scratch file",
+          "metadata": {}
+        }
+      }
+    },
+    {
+      "type": "text",
+      "sessionID": "session_live_success",
+      "part": {
+        "id": "part_live_answer",
+        "sessionID": "session_live_success",
+        "messageID": "message_live_assistant",
+        "type": "text",
+        "text": "Done. <Choice>pass</Choice>"
+      }
+    },
+    {
+      "type": "step_finish",
+      "sessionID": "session_live_success",
+      "part": {
+        "id": "part_live_finish",
+        "sessionID": "session_live_success",
+        "messageID": "message_live_assistant",
+        "type": "step-finish",
+        "reason": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 120,
+          "output": 45,
+          "reasoning": 18,
+          "cache": {"read": 30, "write": 15}
+        }
+      }
+    },
+    {
+      "type": "step_start",
+      "sessionID": "session_live_success",
+      "part": {
+        "id": "part_live_resume_start",
+        "sessionID": "session_live_success",
+        "messageID": "message_live_resume_assistant",
+        "type": "step-start"
+      }
+    },
+    {
+      "type": "text",
+      "sessionID": "session_live_success",
+      "part": {
+        "id": "part_live_resume_answer",
+        "sessionID": "session_live_success",
+        "messageID": "message_live_resume_assistant",
+        "type": "text",
+        "text": "<Choice>pass</Choice>"
+      }
+    },
+    {
+      "type": "step_finish",
+      "sessionID": "session_live_success",
+      "part": {
+        "id": "part_live_resume_finish",
+        "sessionID": "session_live_success",
+        "messageID": "message_live_resume_assistant",
+        "type": "step-finish",
+        "reason": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 30,
+          "output": 8,
+          "reasoning": 0,
+          "cache": {"read": 20, "write": 0}
+        }
+      }
+    }
+  ],
+  "export": {
+    "info": {
+      "id": "session_live_success",
+      "version": "1.18.25",
+      "directory": "<scratch>",
+      "title": "Compatibility proof",
+      "model": {"id": "gpt-5.6-luna", "providerID": "openai", "variant": "max"},
+      "cost": 0,
+      "tokens": {
+        "input": 120,
+        "output": 45,
+        "reasoning": 18,
+        "cache": {"read": 30, "write": 15}
+      }
+    },
+    "messages": [
+      {
+        "info": {"id": "message_live_user", "sessionID": "session_live_success", "role": "user"},
+        "parts": [
+          {
+            "id": "part_live_user",
+            "sessionID": "session_live_success",
+            "messageID": "message_live_user",
+            "type": "text",
+            "text": "Create the compatibility proof file."
+          }
+        ]
+      },
+      {
+        "info": {
+          "id": "message_live_assistant",
+          "sessionID": "session_live_success",
+          "role": "assistant",
+          "providerID": "openai",
+          "modelID": "gpt-5.6-luna",
+          "variant": "max",
+          "tokens": {
+            "input": 120,
+            "output": 45,
+            "reasoning": 18,
+            "cache": {"read": 30, "write": 15}
+          },
+          "cost": 0
+        },
+        "parts": [
+          {
+            "id": "part_live_start",
+            "sessionID": "session_live_success",
+            "messageID": "message_live_assistant",
+            "type": "step-start"
+          },
+          {
+            "id": "part_live_bash",
+            "sessionID": "session_live_success",
+            "messageID": "message_live_assistant",
+            "type": "tool",
+            "callID": "call_live_bash",
+            "tool": "bash",
+            "state": {
+              "status": "completed",
+              "input": {"command": "git status --short"},
+              "output": "sanitized output",
+              "title": "Inspect scratch repository",
+              "metadata": {}
+            }
+          },
+          {
+            "id": "part_live_patch",
+            "sessionID": "session_live_success",
+            "messageID": "message_live_assistant",
+            "type": "tool",
+            "callID": "call_live_patch",
+            "tool": "apply_patch",
+            "state": {
+              "status": "completed",
+              "input": {"patchText": "sanitized patch"},
+              "output": "Applied",
+              "title": "Update scratch file",
+              "metadata": {}
+            }
+          },
+          {
+            "id": "part_live_answer",
+            "sessionID": "session_live_success",
+            "messageID": "message_live_assistant",
+            "type": "text",
+            "text": "Done. <Choice>pass</Choice>"
+          },
+          {
+            "id": "part_live_finish",
+            "sessionID": "session_live_success",
+            "messageID": "message_live_assistant",
+            "type": "step-finish",
+            "reason": "stop",
+            "cost": 0,
+            "tokens": {
+              "input": 120,
+              "output": 45,
+              "reasoning": 18,
+              "cache": {"read": 30, "write": 15}
+            }
+          }
+        ]
+      },
+      {
+        "info": {"id": "message_live_resume_user", "sessionID": "session_live_success", "role": "user"},
+        "parts": [
+          {
+            "id": "part_live_resume_user",
+            "sessionID": "session_live_success",
+            "messageID": "message_live_resume_user",
+            "type": "text",
+            "text": "Continue the compatibility proof."
+          }
+        ]
+      },
+      {
+        "info": {
+          "id": "message_live_resume_assistant",
+          "sessionID": "session_live_success",
+          "role": "assistant",
+          "providerID": "openai",
+          "modelID": "gpt-5.6-luna",
+          "variant": "max",
+          "tokens": {
+            "input": 30,
+            "output": 8,
+            "reasoning": 0,
+            "cache": {"read": 20, "write": 0}
+          },
+          "cost": 0
+        },
+        "parts": [
+          {
+            "id": "part_live_resume_start",
+            "sessionID": "session_live_success",
+            "messageID": "message_live_resume_assistant",
+            "type": "step-start"
+          },
+          {
+            "id": "part_live_resume_answer",
+            "sessionID": "session_live_success",
+            "messageID": "message_live_resume_assistant",
+            "type": "text",
+            "text": "<Choice>pass</Choice>"
+          },
+          {
+            "id": "part_live_resume_finish",
+            "sessionID": "session_live_success",
+            "messageID": "message_live_resume_assistant",
+            "type": "step-finish",
+            "reason": "stop",
+            "cost": 0,
+            "tokens": {
+              "input": 30,
+              "output": 8,
+              "reasoning": 0,
+              "cache": {"read": 20, "write": 0}
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "children": [],
+  "model": {"provider": "openai", "model": "gpt-5.6-luna", "variant": "max"},
+  "config": {
+    "permission": {
+      "*": "ask",
+      "bash": {"*": "allow", "printf permission-probe": "deny"},
+      "edit": "allow",
+      "question": "deny"
+    },
+    "plugin": []
+  }
+}

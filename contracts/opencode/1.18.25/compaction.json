@@ -1,0 +1,45 @@
+{
+  "events": [
+    {
+      "type": "compaction",
+      "timestamp": 1788000040000,
+      "sessionID": "ses_compaction",
+      "part": {"id": "prt_compaction_marker", "sessionID": "ses_compaction", "messageID": "msg_compaction_assistant", "type": "compaction"}
+    },
+    {
+      "type": "text",
+      "timestamp": 1788000040100,
+      "sessionID": "ses_compaction",
+      "part": {"id": "prt_compaction_text", "sessionID": "ses_compaction", "messageID": "msg_compaction_assistant", "type": "text", "text": "The retained context is compacted. <Choice>pass</Choice>"}
+    },
+    {
+      "type": "step_finish",
+      "timestamp": 1788000040200,
+      "sessionID": "ses_compaction",
+      "part": {"id": "prt_compaction_finish", "sessionID": "ses_compaction", "messageID": "msg_compaction_assistant", "type": "step-finish", "reason": "stop", "cost": 0, "tokens": {"input": 200, "output": 25, "reasoning": 10, "cache": {"read": 90, "write": 5}}}
+    }
+  ],
+  "export": {
+    "info": {"id": "ses_compaction", "version": "1.18.25", "directory": "<workdir>", "title": "Compaction"},
+    "messages": [
+      {
+        "info": {"id": "msg_compaction_old", "sessionID": "ses_compaction", "role": "user"},
+        "parts": [{"id": "prt_compaction_old", "sessionID": "ses_compaction", "messageID": "msg_compaction_old", "type": "text", "text": "Earlier retained context."}]
+      },
+      {
+        "info": {"id": "msg_compaction_assistant", "sessionID": "ses_compaction", "role": "assistant", "providerID": "openai", "modelID": "gpt-5.6-luna", "variant": "max", "tokens": {"input": 200, "output": 25, "reasoning": 10, "cache": {"read": 90, "write": 5}}, "cost": 0},
+        "parts": [
+          {"id": "prt_compaction_marker", "sessionID": "ses_compaction", "messageID": "msg_compaction_assistant", "type": "compaction"},
+          {"id": "prt_compaction_text", "sessionID": "ses_compaction", "messageID": "msg_compaction_assistant", "type": "text", "text": "The retained context is compacted. <Choice>pass</Choice>"},
+          {"id": "prt_compaction_finish", "sessionID": "ses_compaction", "messageID": "msg_compaction_assistant", "type": "step-finish", "reason": "stop", "cost": 0, "tokens": {"input": 200, "output": 25, "reasoning": 10, "cache": {"read": 90, "write": 5}}}
+        ]
+      }
+    ]
+  },
+  "children": [],
+  "model": {"provider": "openai", "model": "gpt-5.6-luna", "variant": "max"},
+  "config": {
+    "permission": {"*": "ask", "bash": "allow", "edit": "allow", "question": "deny"},
+    "plugin": ["file://<runner>/plugins/blizzard-heartbeat.ts"]
+  }
+}

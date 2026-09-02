@@ -8,6 +8,7 @@ import click
 from blizzard.runner.cli.artifact import artifact_group
 from blizzard.runner.cli.control import pause, requeue, selftest, start, status, takeover
 from blizzard.runner.cli.external_usage import external_usage_group
+from blizzard.runner.cli.opencode import opencode_group
 from blizzard.runner.cli.prompt import prompt_group
 from blizzard.runner.cli.runtime import host, init, migrate_cmd, tick_cmd
 from blizzard.runner.cli.transcript import transcript_group
@@ -28,6 +29,7 @@ runner.add_command(host)
 runner.add_command(tick_cmd)
 
 runner.add_command(external_usage_group)
+runner.add_command(opencode_group)
 
 runner.add_command(heartbeat)
 runner.add_command(session_end)

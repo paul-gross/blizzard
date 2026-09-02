@@ -1,0 +1,68 @@
+{
+  "events": [
+    {
+      "type": "step_start",
+      "timestamp": 1788000050000,
+      "sessionID": "ses_child_root",
+      "part": {"id": "prt_child_start", "sessionID": "ses_child_root", "messageID": "msg_child_assistant", "type": "step-start"}
+    },
+    {
+      "type": "tool_use",
+      "timestamp": 1788000050100,
+      "sessionID": "ses_child_root",
+      "part": {
+        "id": "prt_child_tool",
+        "sessionID": "ses_child_root",
+        "messageID": "msg_child_assistant",
+        "type": "tool",
+        "callID": "call_child",
+        "tool": "task",
+        "state": {"status": "completed", "input": {"description": "Inspect the repository", "prompt": "List the relevant files", "agent": "explorer"}, "output": "The relevant files are present.", "title": "Child task", "metadata": {"sessionID": "ses_child"}}
+      }
+    },
+    {
+      "type": "step_finish",
+      "timestamp": 1788000050200,
+      "sessionID": "ses_child_root",
+      "part": {"id": "prt_child_finish", "sessionID": "ses_child_root", "messageID": "msg_child_assistant", "type": "step-finish", "reason": "stop", "cost": 0, "tokens": {"input": 80, "output": 20, "reasoning": 4, "cache": {"read": 10, "write": 2}}}
+    }
+  ],
+  "export": {
+    "info": {"id": "ses_child_root", "version": "1.18.25", "directory": "<workdir>", "title": "Child session root"},
+    "messages": [
+      {
+        "info": {"id": "msg_child_user", "sessionID": "ses_child_root", "role": "user"},
+        "parts": [{"id": "prt_child_user", "sessionID": "ses_child_root", "messageID": "msg_child_user", "type": "text", "text": "Delegate repository inspection."}]
+      },
+      {
+        "info": {"id": "msg_child_assistant", "sessionID": "ses_child_root", "role": "assistant", "providerID": "openai", "modelID": "gpt-5.6-luna", "variant": "max", "tokens": {"input": 80, "output": 20, "reasoning": 4, "cache": {"read": 10, "write": 2}}, "cost": 0},
+        "parts": [
+          {"id": "prt_child_start", "sessionID": "ses_child_root", "messageID": "msg_child_assistant", "type": "step-start"},
+          {"id": "prt_child_tool", "sessionID": "ses_child_root", "messageID": "msg_child_assistant", "type": "tool", "callID": "call_child", "tool": "task", "state": {"status": "completed", "input": {"description": "Inspect the repository", "prompt": "List the relevant files", "agent": "explorer"}, "output": "The relevant files are present.", "title": "Child task", "metadata": {"sessionID": "ses_child"}}},
+          {"id": "prt_child_finish", "sessionID": "ses_child_root", "messageID": "msg_child_assistant", "type": "step-finish", "reason": "stop", "cost": 0, "tokens": {"input": 80, "output": 20, "reasoning": 4, "cache": {"read": 10, "write": 2}}}
+        ]
+      }
+    ]
+  },
+  "children": [
+    {"id": "ses_child", "parentID": "ses_child_root", "directory": "<workdir>", "projectID": "prj_compatibility", "title": "Repository inspection"}
+  ],
+  "child_export": {
+    "info": {"id": "ses_child", "version": "1.18.25", "parentID": "ses_child_root", "directory": "<workdir>", "title": "Repository inspection"},
+    "messages": [
+      {
+        "info": {"id": "msg_child_child_user", "sessionID": "ses_child", "role": "user"},
+        "parts": [{"id": "prt_child_child_user", "sessionID": "ses_child", "messageID": "msg_child_child_user", "type": "text", "text": "List the relevant files."}]
+      },
+      {
+        "info": {"id": "msg_child_child_assistant", "sessionID": "ses_child", "role": "assistant", "providerID": "openai", "modelID": "gpt-5.6-luna", "tokens": {"input": 30, "output": 12, "reasoning": 2, "cache": {"read": 4, "write": 1}}, "cost": 0},
+        "parts": [{"id": "prt_child_child_text", "sessionID": "ses_child", "messageID": "msg_child_child_assistant", "type": "text", "text": "The relevant files are present."}]
+      }
+    ]
+  },
+  "model": {"provider": "openai", "model": "gpt-5.6-luna", "variant": "max"},
+  "config": {
+    "permission": {"*": "ask", "bash": "allow", "edit": "allow", "question": "deny"},
+    "plugin": ["file://<runner>/plugins/blizzard-heartbeat.ts"]
+  }
+}

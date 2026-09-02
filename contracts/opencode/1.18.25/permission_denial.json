@@ -1,0 +1,59 @@
+{
+  "events": [
+    {
+      "type": "step_start",
+      "timestamp": 1788000020000,
+      "sessionID": "ses_permission",
+      "part": {"id": "prt_permission_start", "sessionID": "ses_permission", "messageID": "msg_permission_assistant", "type": "step-start"}
+    },
+    {
+      "type": "permission",
+      "timestamp": 1788000020100,
+      "sessionID": "ses_permission",
+      "permission": {"id": "perm_permission", "permission": "question", "patterns": ["*"]}
+    },
+    {
+      "type": "tool_use",
+      "timestamp": 1788000020200,
+      "sessionID": "ses_permission",
+      "part": {
+        "id": "prt_permission_tool",
+        "sessionID": "ses_permission",
+        "messageID": "msg_permission_assistant",
+        "type": "tool",
+        "callID": "call_permission",
+        "tool": "question",
+        "state": {"status": "error", "input": {"questions": ["Need approval"]}, "error": "permission denied by rule", "title": "Question denied"}
+      }
+    },
+    {
+      "type": "step_finish",
+      "timestamp": 1788000020300,
+      "sessionID": "ses_permission",
+      "part": {"id": "prt_permission_finish", "sessionID": "ses_permission", "messageID": "msg_permission_assistant", "type": "step-finish", "reason": "stop", "cost": 0, "tokens": {"input": 40, "output": 8, "reasoning": 0, "cache": {"read": 0, "write": 0}}}
+    }
+  ],
+  "export": {
+    "info": {"id": "ses_permission", "version": "1.18.25", "directory": "<workdir>", "title": "Permission denial"},
+    "messages": [
+      {
+        "info": {"id": "msg_permission_user", "sessionID": "ses_permission", "role": "user"},
+        "parts": [{"id": "prt_permission_user", "sessionID": "ses_permission", "messageID": "msg_permission_user", "type": "text", "text": "Ask for an approval."}]
+      },
+      {
+        "info": {"id": "msg_permission_assistant", "sessionID": "ses_permission", "role": "assistant", "providerID": "openai", "modelID": "gpt-5.6-luna", "cost": 0},
+        "parts": [
+          {"id": "prt_permission_start", "sessionID": "ses_permission", "messageID": "msg_permission_assistant", "type": "step-start"},
+          {"id": "prt_permission_tool", "sessionID": "ses_permission", "messageID": "msg_permission_assistant", "type": "tool", "callID": "call_permission", "tool": "question", "state": {"status": "error", "input": {"questions": ["Need approval"]}, "error": "permission denied by rule", "title": "Question denied"}},
+          {"id": "prt_permission_finish", "sessionID": "ses_permission", "messageID": "msg_permission_assistant", "type": "step-finish", "reason": "stop", "cost": 0, "tokens": {"input": 40, "output": 8, "reasoning": 0, "cache": {"read": 0, "write": 0}}}
+        ]
+      }
+    ]
+  },
+  "children": [],
+  "model": {"provider": "openai", "model": "gpt-5.6-luna", "variant": "max"},
+  "config": {
+    "permission": {"*": "ask", "bash": "allow", "edit": "allow", "question": "deny"},
+    "plugin": ["file://<runner>/plugins/blizzard-heartbeat.ts"]
+  }
+}

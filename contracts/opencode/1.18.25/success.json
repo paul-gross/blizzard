@@ -1,0 +1,107 @@
+{
+  "events": [
+    {
+      "type": "step_start",
+      "timestamp": 1788000000000,
+      "sessionID": "ses_success",
+      "part": {"id": "prt_success_start", "sessionID": "ses_success", "messageID": "msg_success_assistant", "type": "step-start"}
+    },
+    {
+      "type": "reasoning",
+      "timestamp": 1788000000100,
+      "sessionID": "ses_success",
+      "part": {"id": "prt_success_reasoning", "sessionID": "ses_success", "messageID": "msg_success_assistant", "type": "reasoning", "text": "Inspect the small workspace change."}
+    },
+    {
+      "type": "text",
+      "timestamp": 1788000000200,
+      "sessionID": "ses_success",
+      "part": {"id": "prt_success_text", "sessionID": "ses_success", "messageID": "msg_success_assistant", "type": "text", "text": "I will update the proof file."}
+    },
+    {
+      "type": "tool_use",
+      "timestamp": 1788000000300,
+      "sessionID": "ses_success",
+      "part": {
+        "id": "prt_success_tool",
+        "sessionID": "ses_success",
+        "messageID": "msg_success_assistant",
+        "type": "tool",
+        "callID": "call_success",
+        "tool": "bash",
+        "state": {
+          "status": "completed",
+          "input": {"command": "printf 'ok\\n' > proof.txt"},
+          "output": "proof.txt",
+          "title": "Write proof file",
+          "metadata": {}
+        }
+      }
+    },
+    {
+      "type": "text",
+      "timestamp": 1788000000400,
+      "sessionID": "ses_success",
+      "part": {"id": "prt_success_answer", "sessionID": "ses_success", "messageID": "msg_success_assistant", "type": "text", "text": "Done. <Choice>pass</Choice>"}
+    },
+    {
+      "type": "step_finish",
+      "timestamp": 1788000000500,
+      "sessionID": "ses_success",
+      "part": {
+        "id": "prt_success_finish",
+        "sessionID": "ses_success",
+        "messageID": "msg_success_assistant",
+        "type": "step-finish",
+        "reason": "stop",
+        "cost": 0.0123,
+        "tokens": {"input": 120, "output": 45, "reasoning": 18, "cache": {"read": 30, "write": 15}}
+      }
+    }
+  ],
+  "export": {
+    "info": {"id": "ses_success", "version": "1.18.25", "directory": "<workdir>", "title": "Compatibility proof"},
+    "messages": [
+      {
+        "info": {"id": "msg_success_user", "sessionID": "ses_success", "role": "user"},
+        "parts": [
+          {"id": "prt_success_user", "sessionID": "ses_success", "messageID": "msg_success_user", "type": "text", "text": "Create proof.txt."}
+        ]
+      },
+      {
+        "info": {
+          "id": "msg_success_assistant",
+          "sessionID": "ses_success",
+          "role": "assistant",
+          "providerID": "openai",
+          "modelID": "gpt-5.6-luna",
+          "variant": "max",
+          "tokens": {"input": 120, "output": 45, "reasoning": 18, "cache": {"read": 30, "write": 15}},
+          "cost": 0.0123
+        },
+        "parts": [
+          {"id": "prt_success_start", "sessionID": "ses_success", "messageID": "msg_success_assistant", "type": "step-start"},
+          {"id": "prt_success_reasoning", "sessionID": "ses_success", "messageID": "msg_success_assistant", "type": "reasoning", "text": "Inspect the small workspace change."},
+          {"id": "prt_success_text", "sessionID": "ses_success", "messageID": "msg_success_assistant", "type": "text", "text": "I will update the proof file."},
+          {
+            "id": "prt_success_tool",
+            "sessionID": "ses_success",
+            "messageID": "msg_success_assistant",
+            "type": "tool",
+            "callID": "call_success",
+            "tool": "bash",
+            "state": {"status": "completed", "input": {"command": "printf 'ok\\n' > proof.txt"}, "output": "proof.txt", "title": "Write proof file", "metadata": {}}
+          },
+          {"id": "prt_success_answer", "sessionID": "ses_success", "messageID": "msg_success_assistant", "type": "text", "text": "Done. <Choice>pass</Choice>"},
+          {"id": "prt_success_finish", "sessionID": "ses_success", "messageID": "msg_success_assistant", "type": "step-finish", "reason": "stop", "cost": 0.0123, "tokens": {"input": 120, "output": 45, "reasoning": 18, "cache": {"read": 30, "write": 15}}}
+        ]
+      }
+    ]
+  },
+  "children": [],
+  "model": {"provider": "openai", "model": "gpt-5.6-luna", "variant": "max"},
+  "config": {
+    "permission": {"*": "ask", "bash": "allow", "edit": "allow", "question": "deny"},
+    "plugin": ["file://<runner>/plugins/blizzard-heartbeat.ts"]
+  }
+}
