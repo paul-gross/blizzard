@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
-import { settle, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, settle, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { GardeningProposalsPage } from './gardening-proposals-page';
@@ -48,6 +48,7 @@ const FINDING = {
 
 async function render() {
   const stub = stubRequestClient(hubClient, (method, path) => {
+    if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
     if (method === 'GET' && path === '/api/garden-proposals') return [PROPOSAL];
     if (method === 'GET' && path === '/api/findings/fin_1') return FINDING;
     return {};
