@@ -337,7 +337,7 @@ describe('GardeningRunsFindingsPage', () => {
     expect(delta.componentInstance.state()).toBe('error');
   });
 
-  describe('the findings triage bucket (blizzard#401 Phase 4)', () => {
+  describe('the findings triage bucket (blizzard#402 Phase 4)', () => {
     it("renders the bucket's own rest state until a routine/scope is chosen", async () => {
       const { fixture } = await mount(null);
       const el = fixture.nativeElement as HTMLElement;
@@ -414,7 +414,7 @@ describe('GardeningRunsFindingsPage', () => {
     });
   });
 
-  describe('the bulk-action triage dialog (blizzard#401 Phase 3)', () => {
+  describe('the bulk-action triage dialog (blizzard#402 Phase 3)', () => {
     it('forwards chunk:control to the finding list, withholding it for a read-only identity', async () => {
       const { fixture } = await mount(null, {
         routeOverride: (method, path) => {

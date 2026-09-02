@@ -20,7 +20,7 @@ const VERB_LABELS: Record<FindingTriageVerb, string> = {
 };
 
 /**
- * The findings triage bulk-action dialog's presentational view (blizzard#401
+ * The findings triage bulk-action dialog's presentational view (blizzard#402
  * Phase 3, Decisions 1, 5, 7) — a required note field every verb takes plus, for
  * `supersede` alone, a second required field naming the absorbing finding,
  * `gardening-proposal-accept-dialog-view.ts`'s own conditional-extra-field

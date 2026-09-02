@@ -71,7 +71,7 @@ const FINDING_STATES: readonly string[] = [
 ];
 
 /**
- * The `/gardening/runs-and-findings` sub-tab (blizzard#401 Phases 3-4,
+ * The `/gardening/runs-and-findings` sub-tab (blizzard#401 Phase 3, blizzard#402 Phases 1-4,
  * `plans/garden/user-interface.md`'s "Reading what a run saw" and "Triaging what's
  * left" sections) — the run list, the selected run's own delta, and the findings
  * triage bucket for a routine/scope pair. `graphs-page.ts`'s own list-stays-mounted
@@ -195,7 +195,7 @@ export class GardeningRunsFindingsPage {
     void this.router.navigate(['/gardening', 'runs-and-findings', chunkId]);
   }
 
-  // --- Findings triage bucket (blizzard#401 Phase 4) ---
+  // --- Findings triage bucket (blizzard#402 Phase 4) ---
 
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly scopesQuery = injectHubScopesQuery();

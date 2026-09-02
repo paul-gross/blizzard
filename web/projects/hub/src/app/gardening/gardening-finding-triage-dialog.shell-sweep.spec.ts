@@ -5,7 +5,7 @@ import { page } from 'vitest/browser';
 import { GardeningFindingTriageDialogView } from './gardening-finding-triage-dialog-view';
 
 /**
- * The findings triage dialog's own half of `web:shell-sweep` (blizzard#401 Phase 4) —
+ * The findings triage dialog's own half of `web:shell-sweep` (blizzard#402 Phase 4) —
  * the note field renders without overflowing the dialog panel, the `supersede` verb's
  * extra absorbing-finding field renders below/beside the note field with no overlap,
  * and the footer's Cancel/submit buttons genuinely sit side by side without
@@ -36,7 +36,7 @@ async function mount(width: number, verb: 'resolve' | 'supersede', findingIds: r
   return { fixture, root };
 }
 
-describe('GardeningFindingTriageDialogView shell sweep (web:shell-sweep, blizzard#401 Phase 4)', () => {
+describe('GardeningFindingTriageDialogView shell sweep (web:shell-sweep, blizzard#402 Phase 4)', () => {
   for (const width of [1400, 390, 320]) {
     it(`renders the note field without overflowing the panel, and sits Cancel/submit side by side, at ${width}px (resolve)`, async () => {
       const { root } = await mount(width, 'resolve', ['fin_1', 'fin_2']);

@@ -132,7 +132,7 @@ describe('FleetFindingList', () => {
     expect(el.querySelector('[data-testid="gardening-findings-empty"]')).toBeTruthy();
   });
 
-  describe('multi-select and the bulk bar (blizzard#401 Phase 3, D9)', () => {
+  describe('multi-select and the bulk bar (blizzard#402 Phase 3, D9)', () => {
     it('renders no checkbox and no bulk bar at all when canControl is false', async () => {
       const fixture = await mount({ canControl: false });
       const el = fixture.nativeElement as HTMLElement;

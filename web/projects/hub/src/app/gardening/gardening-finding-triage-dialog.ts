@@ -13,7 +13,7 @@ import {
 import { GardeningFindingTriageDialogView } from './gardening-finding-triage-dialog-view';
 
 /**
- * The findings triage bucket's bulk-action dialog container (blizzard#401 Phase
+ * The findings triage bucket's bulk-action dialog container (blizzard#402 Phase
  * 3) — one dialog for every verb {@link FindingTriageVerb} names, submitted
  * through whichever of the six `finding.mutations.ts` mutations {@link verb}
  * picks out (`gardening-proposal-pass-dialog.ts`'s own shape). All six are

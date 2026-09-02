@@ -19,7 +19,7 @@ async function loadDesignTokens(): Promise<void> {
 }
 
 /**
- * The findings triage list's own half of `web:shell-sweep` (blizzard#401 Phase 4) —
+ * The findings triage list's own half of `web:shell-sweep` (blizzard#402 Phase 4) —
  * a real, headless-Chromium proof of the two classes of claim jsdom cannot make: the
  * bulk bar's own buttons, driven into view exactly the way an operator reaches them
  * (through the select-all checkbox, not by poking component internals), must stay
@@ -101,7 +101,7 @@ async function mount() {
   return { fixture, root };
 }
 
-describe('FleetFindingList bulk-bar/table shell sweep (web:shell-sweep, blizzard#401 Phase 4)', () => {
+describe('FleetFindingList bulk-bar/table shell sweep (web:shell-sweep, blizzard#402 Phase 4)', () => {
   it('keeps the bulk bar’s buttons inside the viewport, non-overlapping, and the list itself unclipped at 1400/390/320px', async () => {
     const { fixture, root } = await mount();
     try {
@@ -158,7 +158,7 @@ describe('FleetFindingList bulk-bar/table shell sweep (web:shell-sweep, blizzard
   });
 });
 
-describe('FleetFindingList gone-row tint shell sweep (web:shell-sweep, blizzard#401 Phase 4)', () => {
+describe('FleetFindingList gone-row tint shell sweep (web:shell-sweep, blizzard#402 Phase 4)', () => {
   it('gives a gone-flagged row (D8) a genuinely different computed style than a plain, untinted row', async () => {
     await loadDesignTokens();
     const { root } = await mount();

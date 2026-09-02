@@ -28,7 +28,7 @@ export interface FindingListRowVm {
 }
 
 /** The bulk-bar verbs the findings triage list can dispatch — every human-driven
- * exit `finding.mutations.ts` exposes, plus `reopen` (blizzard#401 Phase 3). Named
+ * exit `finding.mutations.ts` exposes, plus `reopen` (blizzard#402 Phase 3). Named
  * off the CLI's own verb spelling (`src/blizzard/hub/cli/finding.py`), so a
  * container routes an emitted verb straight to the matching mutation with no
  * translation table of its own. */
@@ -45,7 +45,7 @@ const BULK_ACTIONS: readonly { verb: FindingTriageVerb; label: string }[] = [
 ];
 
 /**
- * The gardening runs-and-findings tab's findings triage list (blizzard#401 Phases
+ * The gardening runs-and-findings tab's findings triage list (blizzard#402 Phases
  * 3-4) — presentational only, no query injection, `run-list.ts`'s own shape: renders
  * the rows it is handed, exactly as filtered by the container (D3: class/state
  * filtering happens client-side, this component stays dumb over whatever `rows()`

@@ -1,5 +1,5 @@
 /**
- * The findings triage surface's own state classification (blizzard#401 Phase 4,
+ * The findings triage surface's own state classification (blizzard#402 Phase 4,
  * `plans/garden/user-interface.md`'s "Triaging what's left" section) — shared here
  * so {@link FleetFindingList} and any later triage affordance (Phase 3's `reopen`
  * on an exited row) read the same three buckets off `FindingView.state` rather than
