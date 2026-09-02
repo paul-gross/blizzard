@@ -8,9 +8,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-__all__ = ["AskRecord", "IReadAskRepository", "IWriteAskRepository", "ParkRecord"]
+from blizzard.foundation.clock import IClock
+from blizzard.foundation.ids import QUESTION_PREFIX, Id
+from blizzard.runner.events.publisher import IRunnerEventPublisher
+
+if TYPE_CHECKING:
+    from blizzard.runner.domain.leases import LeaseRecord
+
+__all__ = ["AskRecord", "AskService", "IReadAskRepository", "IWriteAskRepository", "ParkRecord"]
 
 
 @dataclass(frozen=True)
@@ -100,3 +107,33 @@ class IWriteAskRepository(IReadAskRepository, Protocol):
     def record_park_resume(self, *, lease_id: str, question_id: str, resumed_at: datetime) -> None:
         """End a lease's park — the answer arrived and the session was resumed."""
         ...
+
+
+class AskService:
+    """Composition-root-wired: the ask store, the clock, and the optional event publisher
+    (D4, blizzard#412)."""
+
+    def __init__(
+        self, store: IWriteAskRepository, clock: IClock, *, events: IRunnerEventPublisher | None = None
+    ) -> None:
+        self._store = store
+        self._clock = clock
+        self._events = events
+
+    def record_ask(self, lease: LeaseRecord, *, question: str, options: list[str]) -> str:
+        """Record a worker's ask against its lease, minting the question id (issue #51).
+
+        ``lease`` is already resolved by the caller (``bzh:domain-takes-objects``)."""
+        question_id = Id.mint(QUESTION_PREFIX, self._clock).value
+        self._store.record_ask(
+            lease_id=lease.lease_id,
+            chunk_id=lease.chunk_id,
+            question_id=question_id,
+            question=question,
+            options=options,
+            session_id=lease.session_id,
+            asked_at=self._clock.now(),
+        )
+        if self._events is not None:
+            self._events.publish_ask_changed(lease.lease_id, lease.chunk_id, question_id, cause="asked")
+        return question_id

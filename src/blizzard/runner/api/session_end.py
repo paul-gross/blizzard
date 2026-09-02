@@ -24,7 +24,5 @@ class SessionEndResponse(BaseModel):
 @router.post("/leases/{lease_id}/session-end", response_model=SessionEndResponse)
 def session_end(lease_id: str, request: Request) -> SessionEndResponse:
     """Record a lease's session-end, stamped with the injected clock."""
-    wiring = RunnerWiring.of(request)
-    session, clock = wiring.stores().session, wiring.clock()
-    session.record_session_end(lease_id=lease_id, ended_at=clock.now())
+    RunnerWiring.of(request).lease_sessions().record_session_end(lease_id)
     return SessionEndResponse(recorded=True, lease_id=lease_id)

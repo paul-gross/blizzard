@@ -6,10 +6,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
+from blizzard.foundation.clock import IClock
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 
 if TYPE_CHECKING:
     from blizzard.runner.domain.leases import LeaseRecord, PoolHead
+
+__all__ = ["IReadLeaseSessionRepository", "IWriteLeaseSessionRepository", "LeaseSessionService"]
 
 
 class IReadLeaseSessionRepository(Protocol):
@@ -76,3 +79,15 @@ class IWriteLeaseSessionRepository(IReadLeaseSessionRepository, Protocol):
         *"this prose was sent to this session"*, not *"a spawn happened"*, and is written
         after the spawn so a durable fingerprint implies the prose reached the process."""
         ...
+
+
+class LeaseSessionService:
+    """Composition-root-wired: the session store and the clock (D4, blizzard#412)."""
+
+    def __init__(self, store: IWriteLeaseSessionRepository, clock: IClock) -> None:
+        self._store = store
+        self._clock = clock
+
+    def record_session_end(self, lease_id: str) -> None:
+        """Record a lease's session-end, stamped with the injected clock."""
+        self._store.record_session_end(lease_id=lease_id, ended_at=self._clock.now())

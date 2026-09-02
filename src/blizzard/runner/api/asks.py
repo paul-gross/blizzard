@@ -11,7 +11,6 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 
-from blizzard.foundation.ids import QUESTION_PREFIX, Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
@@ -44,22 +43,10 @@ def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> Ask
     Token-authorized like every other worker verb (issue #291) — previously activeness was
     this route's whole gate, which would have widened admission with no credential behind it
     once an open takeover's closed reference lease qualified too."""
-    wiring = RunnerWiring.of(request)
-    asks, clock = wiring.stores().asks, wiring.clock()
     lease = authorized_lease(lease_id, request)
-    question_id = Id.mint(QUESTION_PREFIX, clock).value
-    asks.record_ask(
-        lease_id=lease_id,
-        chunk_id=lease.chunk_id,
-        question_id=question_id,
-        question=request_body.question,
-        options=request_body.options,
-        session_id=lease.session_id,
-        asked_at=clock.now(),
+    question_id = (
+        RunnerWiring.of(request).asks().record_ask(lease, question=request_body.question, options=request_body.options)
     )
-    events = wiring.events()
-    if events is not None:
-        events.publish_ask_changed(lease_id, lease.chunk_id, question_id, cause="asked")
     return AskResponse(recorded=True, question_id=question_id, lease_id=lease_id)
 
 
@@ -87,7 +74,7 @@ def list_asks(request: Request, open_only: bool = Query(True, alias="open")) -> 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="only open asks are queryable — no closed-ask history is kept",
         )
-    asks: IReadAskRepository = RunnerWiring.of(request).stores().asks
+    asks: IReadAskRepository = RunnerWiring.of(request).read_stores().asks
     return _ask_list(asks)
 
 

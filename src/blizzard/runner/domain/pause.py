@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Protocol
 
-__all__ = ["IReadPauseRepository", "IWritePauseRepository"]
+from blizzard.foundation.clock import IClock
+from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.events.publisher import IRunnerEventPublisher
+from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
+
+__all__ = ["IReadPauseRepository", "IWritePauseRepository", "PauseService"]
 
 
 class IReadPauseRepository(Protocol):
@@ -79,3 +85,34 @@ class IWritePauseRepository(IReadPauseRepository, Protocol):
     def record_pause_park_resume(self, *, lease_id: str, resumed_at: datetime) -> None:
         """End a lease's pause-park — the operator resumed it (issue #46)."""
         ...
+
+
+class PauseService:
+    """Composition-root-wired: the pause store, the clock, and the optional event
+    publisher (D4, blizzard#412)."""
+
+    def __init__(
+        self, store: IWritePauseRepository, clock: IClock, *, events: IRunnerEventPublisher | None = None
+    ) -> None:
+        self._store = store
+        self._clock = clock
+        self._events = events
+
+    def set_local_pause(self, runner_id: str, *, paused: bool, by: str) -> None:
+        """Set this runner's own pause brake and its upward report, atomically (issue #43).
+
+        The brake and its hub-bound report are one write: mirroring runs hub→runner only,
+        so a brake never reported up would never be repaired
+        (``tests/test_ingest_and_pause_verbs.py``)."""
+        now = self._clock.now()
+        report_kind = RUNNER_LOCALLY_PAUSED if paused else RUNNER_LOCALLY_RESUMED
+        seq = self._store.record_local_pause(
+            runner_id,
+            paused=paused,
+            at=now,
+            by=by,
+            report_kind=report_kind,
+            report_payload=json.dumps({"runner_id": runner_id, "by": by, "at": iso_utc(now)}),
+        )
+        if self._events is not None:
+            self._events.publish_fact_changed(seq=seq, kind=report_kind, chunk_id=None, lease_id=None)

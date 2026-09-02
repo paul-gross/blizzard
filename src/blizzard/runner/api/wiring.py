@@ -1,7 +1,10 @@
 """Resolving what the composition root wired onto ``app.state`` (``bzh:dependency-injection``).
 
 Every seam is optional — the OpenAPI exporter and the unit tier build a store-free app — so a
-route asks for what it needs and is refused with a ``503`` naming it, never served on nothing."""
+route asks for what it needs and is refused with a ``503`` naming it, never served on nothing.
+No accessor here resolves a write-capable store or bundle (``bzh:controller-read-only``,
+blizzard#412): :meth:`RunnerWiring.read_stores` is the one many-concept read, and every
+mutation resolves its own single-concept service instead."""
 
 from __future__ import annotations
 
@@ -14,15 +17,20 @@ from starlette.datastructures import State
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.asks import AskService
 from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
 from blizzard.runner.domain.leases import LeaseRecord, LocalLeaseService
+from blizzard.runner.domain.leases.liveness import LeaseLivenessService
+from blizzard.runner.domain.leases.session import LeaseSessionService
+from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.events.publisher import IRunnerEventPublisher
+from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.selftest.service import SelfTestService
-from blizzard.runner.stores import RunnerStores
+from blizzard.runner.stores import RunnerReadStores
 from blizzard.runner.transcripts.service import TranscriptService
 
 _STORE = "runner store"
@@ -47,8 +55,8 @@ class RunnerWiring:
         clock: IClock | None = getattr(self.state, "clock", None)
         return clock if clock is not None else self._refuse(_STORE)
 
-    def stores(self) -> RunnerStores:
-        stores = self.maybe_stores()
+    def read_stores(self) -> RunnerReadStores:
+        stores = self.maybe_read_stores()
         return stores if stores is not None else self._refuse(_STORE)
 
     def worker_lease(self, lease_id: str) -> LeaseRecord:
@@ -56,7 +64,7 @@ class RunnerWiring:
         active lease is gone — the one an open takeover names (issue #291). An open takeover
         is a second, independent source of worker-verb authorization, not a re-mint: the
         resolved record's id, node and epoch are unchanged from whatever they already were."""
-        stores = self.stores()
+        stores = self.read_stores()
         lease = stores.lease_record.active_lease(lease_id) or stores.takeover.lease_for_open_takeover(lease_id)
         if lease is None:
             raise HTTPException(
@@ -97,6 +105,26 @@ class RunnerWiring:
         service: SelfTestService | None = getattr(self.state, "selftests", None)
         return service if service is not None else self._refuse("selftest service")
 
+    def asks(self) -> AskService:
+        service: AskService | None = getattr(self.state, "asks", None)
+        return service if service is not None else self._refuse("ask service")
+
+    def pause(self) -> PauseService:
+        service: PauseService | None = getattr(self.state, "pause", None)
+        return service if service is not None else self._refuse("pause service")
+
+    def lease_liveness(self) -> LeaseLivenessService:
+        service: LeaseLivenessService | None = getattr(self.state, "lease_liveness", None)
+        return service if service is not None else self._refuse("lease liveness service")
+
+    def lease_sessions(self) -> LeaseSessionService:
+        service: LeaseSessionService | None = getattr(self.state, "lease_sessions", None)
+        return service if service is not None else self._refuse("lease session service")
+
+    def workspace_prompts(self) -> WorkspacePromptService:
+        service: WorkspacePromptService | None = getattr(self.state, "workspace_prompts", None)
+        return service if service is not None else self._refuse("workspace prompt service")
+
     def events(self) -> IRunnerEventPublisher | None:
         """The publish seam (D2/D4, blizzard#317) — see :mod:`~blizzard.runner.events.publisher`
         for why this is typed against the Protocol, not the concrete broker a composition root
@@ -107,8 +135,8 @@ class RunnerWiring:
     def maybe_config(self) -> RunnerConfig | None:
         return getattr(self.state, "config", None)
 
-    def maybe_stores(self) -> RunnerStores | None:
-        return getattr(self.state, "runner_stores", None)
+    def maybe_read_stores(self) -> RunnerReadStores | None:
+        return getattr(self.state, "runner_read_stores", None)
 
     @staticmethod
     def _refuse(what: str) -> NoReturn:

@@ -1,13 +1,17 @@
-"""The runner-store bundle and umbrella Protocols (blizzard#410, D4).
+"""The runner-store bundles and umbrella Protocols (blizzard#410, blizzard#412, D4).
 
 ``RunnerStores`` is the frozen bundle of write-capable Protocol seams
 :mod:`~blizzard.runner.composition` builds, for a collaborator spanning several concepts.
-``IReadRunnerStore``/``IWriteRunnerStore`` compose every concept Protocol into one seam —
-no ``src/`` collaborator holds either directly, every one now narrowed to a concept Protocol
-or the ``RunnerStores`` bundle, but ``tests/runner_fakes.py`` still takes ``IWriteRunnerStore``
-to type a fake that structurally satisfies every concept at once, and the write-protocol
-census gate walks both to check every concept's write-only surface. This module, not
-``runner/store/``, is their home, since no Protocol may be declared there."""
+``RunnerReadStores`` narrows it statically, one field per concept typed to its ``IRead*``
+twin, over the same adapter instances (D1) — the bundle every route resolves, so
+``bzh:controller-read-only`` holds at type-check time for the one collaborator every
+handler reaches through. ``IReadRunnerStore``/``IWriteRunnerStore`` compose every concept
+Protocol into one seam — no ``src/`` collaborator holds either directly, every one now
+narrowed to a concept Protocol or one of the two bundles above, but ``tests/runner_fakes.py``
+still takes ``IWriteRunnerStore`` to type a fake that structurally satisfies every concept at
+once, and the write-protocol census gate walks both to check every concept's write-only
+surface. This module, not ``runner/store/``, is their home, since no Protocol may be declared
+there."""
 
 from __future__ import annotations
 
@@ -44,7 +48,7 @@ from blizzard.runner.environments.repository import IReadEnvironmentRepository, 
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, IWriteTranscriptLedgerRepository
 
-__all__ = ["IReadRunnerStore", "IWriteRunnerStore", "RunnerStores"]
+__all__ = ["IReadRunnerStore", "IWriteRunnerStore", "RunnerReadStores", "RunnerStores"]
 
 
 class IReadRunnerStore(
@@ -128,3 +132,60 @@ class RunnerStores:
     checks: IWriteCheckRepository
     graph_artifacts: IWriteGraphArtifactRepository
     elicitations: IWriteElicitationRepository
+
+
+@dataclass(frozen=True)
+class RunnerReadStores:
+    """The controller-facing runner-store bundle — every field typed to its concept's
+    read Protocol only, so ``bzh:controller-read-only`` is enforced at type-check time for
+    the one collaborator every route handler reaches through. Narrows statically over the
+    same adapter instances :func:`of` is given (D1) — it wraps nothing and opens no second
+    connection."""
+
+    lease_record: IReadLeaseRecordRepository
+    session: IReadLeaseSessionRepository
+    liveness: IReadLeaseLivenessRepository
+    resume_intent: IReadLeaseResumeIntentRepository
+    environments: IReadEnvironmentRepository
+    transcript_ledger: IReadTranscriptLedgerRepository
+    tokens: IReadTokenRepository
+    workspace_prompt: IReadWorkspacePromptRepository
+    outbound: IReadOutboundRepository
+    asks: IReadAskRepository
+    pause: IReadPauseRepository
+    takeover: IReadTakeoverRepository
+    requeue: IReadRequeueRepository
+    escalations: IReadEscalationRepository
+    usage: IReadUsageRepository
+    attachments: IReadAttachmentRepository
+    git_commit_declarations: IReadGitCommitDeclarationRepository
+    checks: IReadCheckRepository
+    graph_artifacts: IReadGraphArtifactRepository
+    elicitations: IReadElicitationRepository
+
+    @classmethod
+    def of(cls, stores: RunnerStores) -> RunnerReadStores:
+        """Narrow ``stores`` to its read-only twin — every ``IWrite*`` field re-typed to its
+        ``IRead*`` twin over the same instance, never a second one (D1)."""
+        return cls(
+            lease_record=stores.lease_record,
+            session=stores.session,
+            liveness=stores.liveness,
+            resume_intent=stores.resume_intent,
+            environments=stores.environments,
+            transcript_ledger=stores.transcript_ledger,
+            tokens=stores.tokens,
+            workspace_prompt=stores.workspace_prompt,
+            outbound=stores.outbound,
+            asks=stores.asks,
+            pause=stores.pause,
+            takeover=stores.takeover,
+            requeue=stores.requeue,
+            escalations=stores.escalations,
+            usage=stores.usage,
+            attachments=stores.attachments,
+            git_commit_declarations=stores.git_commit_declarations,
+            checks=stores.checks,
+            graph_artifacts=stores.graph_artifacts,
+            elicitations=stores.elicitations,
+        )

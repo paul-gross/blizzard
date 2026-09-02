@@ -232,3 +232,23 @@ def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter()
                 if hit:
                     violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
     assert not violations, f"I — only runner/composition.py may name a concrete runner-store adapter: {violations}"
+
+
+_RUNNER_API_DIR = _RUNNER_DIR / "api"
+
+
+def test_runner_api_names_no_write_capable_store_or_bundle() -> None:
+    """AC (blizzard#412, D1): a runner route resolves only ``RunnerReadStores`` and its
+    per-concept mutation services — never ``RunnerStores`` nor an ``IWrite*`` seam, which
+    would let a route mutate directly instead of delegating to a domain service."""
+    violations: list[str] = []
+    for path in sorted(_RUNNER_API_DIR.rglob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            for alias in node.names:
+                is_write_repository = alias.name.startswith("IWrite") and alias.name.endswith("Repository")
+                if alias.name == "RunnerStores" or is_write_repository:
+                    violations.append(f"{path.relative_to(_REPO_ROOT)} imports {alias.name}")
+    assert not violations, f"J — runner/api/ must name no write-capable store or bundle: {violations}"

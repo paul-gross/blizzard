@@ -30,7 +30,5 @@ class HeartbeatResponse(BaseModel):
 @router.post("/heartbeat", response_model=HeartbeatResponse)
 def heartbeat(request_body: HeartbeatRequest, request: Request) -> HeartbeatResponse:
     """Record a lease heartbeat, stamped with the injected clock."""
-    wiring = RunnerWiring.of(request)
-    liveness, clock = wiring.stores().liveness, wiring.clock()
-    liveness.record_heartbeat(lease_id=request_body.lease_id, beat_at=clock.now())
+    RunnerWiring.of(request).lease_liveness().record_heartbeat(request_body.lease_id)
     return HeartbeatResponse(recorded=True, lease_id=request_body.lease_id)

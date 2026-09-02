@@ -42,7 +42,7 @@ def _node_row(artifact: EnvelopeArtifact) -> WorkerArtifact:
 
 def _graph_rows(graph_id: str, request: Request) -> list[WorkerArtifact]:
     """This lease's pinned mint's graph-scoped declarations, store-read only — never the hub."""
-    graph_artifacts: IReadGraphArtifactRepository = RunnerWiring.of(request).stores().graph_artifacts
+    graph_artifacts: IReadGraphArtifactRepository = RunnerWiring.of(request).read_stores().graph_artifacts
     return [
         WorkerArtifact(scope=ArtifactScope.GRAPH, name=r.name, kind=r.kind, content=r.content)
         for r in graph_artifacts.graph_artifacts_for_graph(graph_id)
