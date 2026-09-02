@@ -84,6 +84,9 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/routines/{routine_id}/run"): CHUNK_CONTROL,
     # The per-scope delta baseline a routine has swept (blizzard#399 D5) — a read, FLEET_VIEW.
     ("GET", "/api/routines/{routine_id}/baselines"): FLEET_VIEW,
+    # The run list and one run's own delta (blizzard#401) — reads, FLEET_VIEW.
+    ("GET", "/api/runs"): FLEET_VIEW,
+    ("GET", "/api/runs/{chunk_id}"): FLEET_VIEW,
     # Findings and garden proposals (blizzard#390) — read-only routes, both FLEET_VIEW (D8).
     ("GET", "/api/findings"): FLEET_VIEW,
     ("GET", "/api/findings/{finding_id}"): FLEET_VIEW,
