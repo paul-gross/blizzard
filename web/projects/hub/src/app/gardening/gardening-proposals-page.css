@@ -1,0 +1,21 @@
+.gp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.gp-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 12px;
+  min-width: 0;
+}
+@media (max-width: 480px) {
+  .gp-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.gp-list,
+.gp-panel {
+  min-width: 0;
+}

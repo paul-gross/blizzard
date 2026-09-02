@@ -126,6 +126,11 @@
  *     new-scope near-match warning genuinely renders below both new-scope
  *     inputs, and the footer's Cancel/Run buttons genuinely sit side by side
  *     with neither overflowing the panel.
+ *   - projects/hub/src/app/gardening/gardening-proposals-page.shell-sweep.spec.ts —
+ *     the garden proposal docket container's own list-beside-panel grid
+ *     (blizzard#403): the list and panel sit side by side at 1280px, and
+ *     genuinely collapse into a single stacked column at 390/320px, with no
+ *     horizontal overflow of the layout itself.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -150,6 +155,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposals-page.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {

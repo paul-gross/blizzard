@@ -1,6 +1,26 @@
-<fleet-kit-async-state
-  state="empty"
-  placement="inline"
-  emptyText="No proposals waiting — tending begins when there is growth worth pruning."
-  emptyTestid="gardening-proposals-empty"
-/>
+<div class="gp-filters">
+  <fleet-kit-chips
+    [options]="waitingChips"
+    [selectedValue]="waitingFilter()"
+    (choose)="onWaitingChoose($event)"
+  />
+  <fleet-kit-chips [options]="classChips()" [selectedValue]="classChipValue()" (choose)="onClassChoose($event)" />
+</div>
+
+<div class="gp-layout">
+  <fleet-proposal-list
+    class="gp-list"
+    [rows]="listRows()"
+    [selectedId]="selectedId()"
+    [state]="listState()"
+    (proposalPick)="select($event)"
+  />
+  <div class="gp-panel">
+    <fleet-kit-async-state
+      state="empty"
+      placement="inline"
+      emptyText="Select a proposal to see its case and evidence."
+      emptyTestid="gardening-proposal-panel-empty"
+    />
+  </div>
+</div>

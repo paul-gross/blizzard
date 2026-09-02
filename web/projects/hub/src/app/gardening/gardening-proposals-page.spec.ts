@@ -1,20 +1,135 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { hubClient } from 'fleet';
+import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { GardeningProposalsPage } from './gardening-proposals-page';
 
-describe('GardeningProposalsPage', () => {
-  it('renders its own empty state (blizzard#397 — the docket itself is a later issue)', async () => {
-    await TestBed.configureTestingModule({
-      imports: [GardeningProposalsPage],
-      providers: [provideZonelessChangeDetection()],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(GardeningProposalsPage);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+const WAITING_A = {
+  proposal_id: 'gp_1',
+  routine_name: 'comments',
+  class: 'fix-the-source',
+  title: 'Author a docstring standard',
+  body: 'Seventeen modules narrate their own change history.',
+  created_at: '2026-01-01T00:00:00Z',
+  findings: ['fin_1', 'fin_2'],
+  closure: null,
+};
 
-    expect(el.querySelector('[data-testid="gardening-proposals-empty"]')?.textContent).toContain(
-      'tending begins when there is growth worth pruning',
+const WAITING_B = {
+  proposal_id: 'gp_2',
+  routine_name: 'comments',
+  class: 'remediate',
+  title: 'Delete the dead helper',
+  body: 'Nothing calls it.',
+  created_at: '2026-01-02T00:00:00Z',
+  findings: ['fin_3'],
+  closure: null,
+};
+
+const PASSED = {
+  proposal_id: 'gp_3',
+  routine_name: 'comments',
+  class: 'fix-the-source',
+  title: 'Rewrite the whole module',
+  body: 'Too large for this pass.',
+  created_at: '2026-01-03T00:00:00Z',
+  findings: ['fin_4'],
+  closure: {
+    closure: 'passed',
+    reason: 'not worth it yet',
+    closed_by: 'u_1',
+    closed_at: '2026-01-04T00:00:00Z',
+    item_outcome: null,
+    source: null,
+    ref: null,
+  },
+};
+
+async function render(proposals: readonly unknown[] = [WAITING_A, WAITING_B, PASSED]) {
+  const stub = stubRequestClient(hubClient, (method, path) => {
+    if (method === 'GET' && path === '/api/garden-proposals') return proposals;
+    return {};
+  });
+  await TestBed.configureTestingModule({
+    imports: [GardeningProposalsPage],
+    providers: [
+      provideZonelessChangeDetection(),
+      provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+    ],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(GardeningProposalsPage);
+  await settle(fixture, 6);
+  return { fixture, stub, el: fixture.nativeElement as HTMLElement };
+}
+
+describe('GardeningProposalsPage', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub?.restore());
+
+  it('lists every waiting proposal by default, selecting the first', async () => {
+    const rendered = await render();
+    stub = rendered.stub;
+    const { el } = rendered;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_2"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_3"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')?.classList).toContain(
+      'pl-row--selected',
+    );
+  });
+
+  it('shows a passed proposal once the waiting filter is switched to all, and it stays reachable', async () => {
+    const rendered = await render();
+    stub = rendered.stub;
+    const { fixture, el } = rendered;
+
+    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-filter-all"]')?.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_3"]')).toBeTruthy();
+  });
+
+  it('derives the class chips from the fetched data, never a hardcoded list', async () => {
+    const rendered = await render();
+    stub = rendered.stub;
+    const { el } = rendered;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-class-all"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-class-fix-the-source"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-class-remediate"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-class-mechanize"]')).toBeNull();
+  });
+
+  it('filters the list down to one class', async () => {
+    const rendered = await render();
+    stub = rendered.stub;
+    const { fixture, el } = rendered;
+
+    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-class-remediate"]')?.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_2"]')).toBeTruthy();
+  });
+
+  it('renders the empty state only once the read resolves', async () => {
+    const rendered = await render([]);
+    stub = rendered.stub;
+    const { el } = rendered;
+
+    expect(el.querySelector('[data-testid="gardening-proposals-empty"]')).toBeTruthy();
+  });
+
+  it("renders the detail area's select-a-proposal rest state", async () => {
+    const rendered = await render([]);
+    stub = rendered.stub;
+    const { el } = rendered;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-panel-empty"]')?.textContent).toContain(
+      'Select a proposal',
     );
   });
 });

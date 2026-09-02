@@ -1,0 +1,26 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  emptyText="No proposals waiting — tending begins when there is growth worth pruning."
+  emptyTestid="gardening-proposals-empty"
+>
+  <ul class="pl-list" data-testid="gardening-proposals-list">
+    @for (row of rows(); track row.proposalId) {
+      <li>
+        <button
+          type="button"
+          class="pl-row"
+          [class.pl-row--selected]="row.proposalId === selectedId()"
+          [attr.data-testid]="'gardening-proposal-row-' + row.proposalId"
+          (click)="pick(row.proposalId)"
+        >
+          <span class="pl-title">{{ row.title }}</span>
+          <span class="pl-class">{{ row.proposalClass }}</span>
+          @if (!row.waiting) {
+            <span class="pl-closed" data-testid="gardening-proposal-row-closed">closed</span>
+          }
+        </button>
+      </li>
+    }
+  </ul>
+</fleet-kit-async-state>
