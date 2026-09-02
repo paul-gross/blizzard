@@ -1,0 +1,8 @@
+<app-gardening-proposal-pass-dialog-view
+  [proposalId]="proposalId()"
+  [proposalTitle]="proposalTitle()"
+  [submitting]="submitting()"
+  [submitError]="submitError()"
+  (closed)="closed.emit()"
+  (submitted)="onSubmit($event)"
+/>

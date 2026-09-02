@@ -1,0 +1,37 @@
+<fleet-kit-dialog
+  [open]="true"
+  [ariaLabel]="'Pass ' + proposalTitle()"
+  testid="gardening-proposal-pass-dialog"
+  (closed)="onClosed()"
+>
+  <h2 fleetKitDialogHeader data-testid="proposal-pass-dialog-title">Pass {{ proposalTitle() }}</h2>
+
+  <p>Passing is not a dismissal — it is the note that stops a later run raising the same response as though it were new.</p>
+
+  <fleet-kit-text-input
+    multiline
+    [rows]="3"
+    placeholder="Why the proposal is passed — required"
+    [value]="reason()"
+    (valueChange)="reason.set($event)"
+    testid="proposal-pass-reason-input"
+  />
+  <p class="cli-verb" data-testid="proposal-pass-cli-verb">{{ cliVerb() }}</p>
+
+  <div fleetKitDialogFooter class="footer">
+    @if (submitError(); as error) {
+      <p class="submit-error" data-testid="proposal-pass-submit-error">{{ error }}</p>
+    }
+    <fleet-kit-button [disabled]="submitting()" (click)="onClosed()" testid="proposal-pass-dialog-cancel">
+      Cancel
+    </fleet-kit-button>
+    <fleet-kit-button
+      variant="primary"
+      [disabled]="!canSubmit()"
+      (click)="onSubmitClick()"
+      testid="proposal-pass-dialog-submit"
+    >
+      Pass
+    </fleet-kit-button>
+  </div>
+</fleet-kit-dialog>

@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type GardenProposalView, listGardenProposalsApiGardenProposalsGet } from '../api/hub';
+import { listGardenProposalsApiGardenProposalsGet, type GardenProposalView } from '../api/hub';
 import { hubGardenProposalsKey } from '../query-keys';
 
 /**

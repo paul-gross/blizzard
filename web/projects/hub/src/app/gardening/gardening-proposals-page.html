@@ -1,6 +1,45 @@
-<fleet-kit-async-state
-  state="empty"
-  placement="inline"
-  emptyText="No proposals waiting — tending begins when there is growth worth pruning."
-  emptyTestid="gardening-proposals-empty"
-/>
+<div class="gp-filters">
+  <fleet-kit-chips
+    [options]="waitingChips"
+    [selectedValue]="waitingFilter()"
+    (choose)="onWaitingChoose($event)"
+  />
+  <fleet-kit-chips [options]="classChips()" [selectedValue]="classChipValue()" (choose)="onClassChoose($event)" />
+</div>
+
+<div class="gp-layout">
+  <fleet-proposal-list
+    class="gp-list"
+    [rows]="listRows()"
+    [selectedId]="selectedId()"
+    [state]="listState()"
+    (proposalPick)="select($event)"
+  />
+  <fleet-proposal-panel
+    class="gp-panel"
+    [vm]="panelVm()"
+    [state]="panelState()"
+    [evidence]="evidenceRows()"
+    [evidenceState]="evidenceState()"
+    [canControl]="canControl()"
+    (pass)="openPass()"
+    (accept)="openAccept()"
+  />
+</div>
+
+@if (passingProposal(); as proposal) {
+  <app-gardening-proposal-pass-dialog
+    [proposalId]="proposal.proposal_id"
+    [proposalTitle]="proposal.title"
+    (closed)="closePass()"
+  />
+}
+
+@if (acceptingProposal(); as proposal) {
+  <app-gardening-proposal-accept-dialog
+    [proposalId]="proposal.proposal_id"
+    [proposalTitle]="proposal.title"
+    [proposalBody]="proposal.body"
+    (closed)="closeAccept()"
+  />
+}

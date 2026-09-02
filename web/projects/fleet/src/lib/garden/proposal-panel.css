@@ -1,0 +1,54 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.pp {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px;
+}
+.pp-meta {
+  color: var(--dim);
+}
+.pp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.pp-actions code {
+  color: var(--dim);
+}
+.pp-cli code {
+  color: var(--dim);
+}
+.pp-reason {
+  font-style: italic;
+}
+.pp-note {
+  color: var(--dim);
+}
+.pp-closure {
+  border-left: 2px solid var(--line);
+  padding-left: 8px;
+}
+.pp-evidence ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pp-evidence li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.pp-finding-locus {
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+.pp-finding-gone {
+  color: var(--red, #c33);
+  font-style: italic;
+}

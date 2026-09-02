@@ -1,0 +1,105 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  emptyText="Select a proposal to see its case and evidence."
+  emptyTestid="gardening-proposal-panel-empty"
+>
+  @let panel = vm();
+  @if (panel) {
+    <section class="pp" data-testid="gardening-proposal-panel">
+      <header class="pp-case" data-testid="gardening-proposal-case">
+        <h3>{{ panel.title }}</h3>
+        <p class="pp-meta">
+          <span>{{ panel.proposalClass }}</span> · <span>{{ panel.routineName }}</span>
+        </p>
+        <p class="pp-body">{{ panel.body }}</p>
+        <p class="pp-cli">read with: <code>hub garden-proposal show {{ panel.proposalId }}</code></p>
+      </header>
+
+      @if (panel.closure === null && canControl()) {
+        <p class="pp-actions" data-testid="gardening-proposal-actions">
+          <fleet-kit-button (click)="pass.emit()" testid="gardening-proposal-pass">Pass</fleet-kit-button>
+          <fleet-kit-button variant="primary" (click)="accept.emit()" testid="gardening-proposal-accept">
+            Accept
+          </fleet-kit-button>
+          pass with: <code>hub garden-proposal pass {{ panel.proposalId }}</code>, accept with:
+          <code>hub garden-proposal accept {{ panel.proposalId }}</code>
+        </p>
+      }
+
+      @if (panel.closure; as closure) {
+        @if (closure.kind === 'passed') {
+          <section class="pp-closure" data-testid="gardening-proposal-closure-passed">
+            <p>Passed by {{ closure.closedBy }} <fleet-when [iso]="closure.closedAt" /></p>
+            <p class="pp-reason">{{ closure.reason }}</p>
+          </section>
+        } @else if (closure.workItem) {
+          <section class="pp-closure" data-testid="gardening-proposal-closure-accepted-minted">
+            <p>Accepted by {{ closure.closedBy }} <fleet-when [iso]="closure.closedAt" /></p>
+            @if (closure.reason) {
+              <p class="pp-reason">{{ closure.reason }}</p>
+            }
+            <p class="pp-work-item">
+              Work item:
+              @if (closure.workItem.webUrl; as url) {
+                <a [href]="url" data-testid="gardening-proposal-work-item-link">{{ closure.workItem.label }}</a>
+              } @else {
+                <span data-testid="gardening-proposal-work-item-label">{{ closure.workItem.label }}</span>
+              }
+            </p>
+            <p class="pp-note">Acceptance itself neither promotes this item nor changes any finding's state.</p>
+          </section>
+        } @else {
+          <section class="pp-closure" data-testid="gardening-proposal-closure-accepted-declined">
+            <p>
+              Accepted by {{ closure.closedBy }} <fleet-when [iso]="closure.closedAt" />
+              — <span data-testid="gardening-proposal-declined-mint">no work item minted</span>
+            </p>
+            @if (closure.reason) {
+              <p class="pp-reason">{{ closure.reason }}</p>
+            }
+            <p class="pp-note">Acceptance itself neither promotes an item nor changes any finding's state.</p>
+          </section>
+        }
+      }
+
+      <section class="pp-evidence" data-testid="gardening-proposal-evidence">
+        <h4>Evidence</h4>
+        <fleet-kit-async-state
+          [state]="evidenceState()"
+          placement="inline"
+          emptyText="No findings on record."
+          emptyTestid="gardening-proposal-evidence-empty"
+        >
+          <ul>
+            @for (row of evidence(); track row.findingId) {
+              <li [attr.data-testid]="'gardening-proposal-finding-' + row.findingId">
+                <p class="pp-finding-locus">{{ row.locus }}</p>
+                <p class="pp-finding-summary">{{ row.summary }}</p>
+                @if (!row.live) {
+                  <span class="pp-finding-gone" data-testid="gardening-proposal-finding-not-live">not live</span>
+                }
+                @if (row.workItem) {
+                  <p class="pp-work-item">
+                    Work item:
+                    @if (row.workItem.webUrl; as url) {
+                      <a
+                        [href]="url"
+                        [attr.data-testid]="'gardening-proposal-finding-work-item-link-' + row.findingId"
+                      >{{ row.workItem.label }}</a>
+                    } @else {
+                      <span [attr.data-testid]="'gardening-proposal-finding-work-item-label-' + row.findingId">{{
+                        row.workItem.label
+                      }}</span>
+                    }
+                  </p>
+                }
+              </li>
+            }
+          </ul>
+        </fleet-kit-async-state>
+        <p class="pp-cli">read with: <code>hub finding show &lt;finding_id&gt;</code></p>
+      </section>
+    </section>
+  }
+</fleet-kit-async-state>

@@ -1,0 +1,40 @@
+h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+.mode-field,
+.body-field,
+.reason-field,
+.decline-reason-field {
+  margin: 0 0 12px;
+}
+
+.mode-field .body,
+.body-field .body,
+.reason-field .body,
+.decline-reason-field .body {
+  padding: 8px;
+}
+
+.cli-verb {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--label);
+  word-break: break-all;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.submit-error {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--red);
+}
