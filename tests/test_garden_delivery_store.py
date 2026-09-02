@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
@@ -50,7 +50,7 @@ def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> 
         # insert order (`finding_facts` before the `finding_sets` row it references)
         # passed every other test here. Attached before the first connection so every
         # connection this engine ever opens, seeding included, enforces FKs.
-        @sa.event.listens_for(engine, "connect")
+        @event.listens_for(engine, "connect")
         def _enable_fk(dbapi_connection, connection_record) -> None:  # type: ignore[no-untyped-def]
             dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
