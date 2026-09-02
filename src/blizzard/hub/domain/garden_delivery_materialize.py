@@ -54,6 +54,7 @@ class FindingFactRecord:
 
     finding_id: str
     kind: str  # add | observed | gone
+    finding_set_id: str  # the delivered list this fact belongs to (blizzard#401 D1)
     note: str | None = None
 
 
@@ -167,6 +168,9 @@ class GardenDelivery:
         deltas: list[DeltaMaterialization] = []
 
         for delta, artifact_id in zip(validated.deltas, delta_artifact_ids, strict=True):
+            # Minted before the facts loop below: every fact this delta produces
+            # attributes to the set that carried it (blizzard#401 D1).
+            finding_set_id = Id.mint(FINDING_SET_PREFIX, self._clock).value
             new_findings: list[NewFinding] = []
             facts: list[FindingFactRecord] = []
             single_repo = single_repo_of(delta)
@@ -190,15 +194,21 @@ class GardenDelivery:
                             introduced_at=introduced_at,
                         )
                     )
-                    facts.append(FindingFactRecord(finding_id=finding_id, kind="add", note=None))
+                    facts.append(
+                        FindingFactRecord(finding_id=finding_id, kind="add", finding_set_id=finding_set_id, note=None)
+                    )
                 elif isinstance(op, ObservedFindingOp):
-                    facts.append(FindingFactRecord(finding_id=op.id, kind="observed", note=None))
+                    facts.append(
+                        FindingFactRecord(finding_id=op.id, kind="observed", finding_set_id=finding_set_id, note=None)
+                    )
                 else:
                     assert isinstance(op, GoneFindingOp)
-                    facts.append(FindingFactRecord(finding_id=op.id, kind="gone", note=op.note))
+                    facts.append(
+                        FindingFactRecord(finding_id=op.id, kind="gone", finding_set_id=finding_set_id, note=op.note)
+                    )
             # One finding_set per delta, even an empty one (delta.findings == []).
             finding_set = NewFindingSet(
-                finding_set_id=Id.mint(FINDING_SET_PREFIX, self._clock).value,
+                finding_set_id=finding_set_id,
                 artifact_id=artifact_id,
                 scope_slug=delta.scope,
                 revisions=dict(delta.revisions),

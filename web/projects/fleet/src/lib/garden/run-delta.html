@@ -1,0 +1,95 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  emptyText="Pick a run to see what it changed."
+  emptyTestid="gardening-run-delta-empty"
+>
+  @let delta = vm();
+  @if (delta) {
+    <section class="rd" data-testid="gardening-run-delta">
+      <header class="rd-hdr">
+        <h3>
+          <a [routerLink]="['/board', 'chunk', delta.chunkId]" data-testid="gardening-run-delta-chunk-link">{{
+            delta.chunkId
+          }}</a>
+        </h3>
+        <p class="rd-identity">
+          {{ delta.routineName }}/{{ delta.scopeSlug }} — mode={{ delta.mode }}
+          <fleet-kit-badge [tone]="STATUS_TONE[delta.outcome]" variant="soft" data-testid="rd-outcome">{{
+            delta.outcome
+          }}</fleet-kit-badge>
+        </p>
+        <p class="rd-caption" data-testid="gardening-run-delta-caption">
+          A delta of what this run changed — added, observed, and gone since its own baseline — not a current-state
+          snapshot.
+        </p>
+        @if (delta.escalation; as escalation) {
+          <p class="rd-escalation" data-testid="gardening-run-delta-escalation">
+            Escalated at {{ escalation.nodeName ?? 'unknown node' }} — takeover:
+            <code>{{ escalation.takeoverCommand }}</code>
+          </p>
+        }
+      </header>
+
+      @if (delta.sets.length) {
+        @for (set of delta.sets; track set.findingSetId) {
+          <section class="rd-set" [attr.data-testid]="'gardening-run-delta-set-' + set.findingSetId">
+            <h4>{{ set.findingSetId }}</h4>
+            <p class="rd-set-revisions">{{ set.revisionsLabel }}</p>
+            @if (set.measurement) {
+              <p class="rd-set-measurement">{{ set.measurement }}</p>
+            }
+
+            <div class="rd-groups">
+              <section class="rd-group rd-group--added" data-testid="rd-group-added">
+                <h5>Added</h5>
+                @if (set.added.length) {
+                  <ul>
+                    @for (a of set.added; track a.findingId ?? $index) {
+                      <li>
+                        <span class="rd-added-class">{{ a.findingClass }}</span>
+                        {{ a.locus }}: {{ a.summary }}
+                      </li>
+                    }
+                  </ul>
+                } @else {
+                  <p class="rd-group-none">none</p>
+                }
+              </section>
+
+              <section class="rd-group rd-group--observed" data-testid="rd-group-observed">
+                <h5>Observed</h5>
+                @if (set.observed.length) {
+                  <ul>
+                    @for (id of set.observed; track id) {
+                      <li>{{ id }}</li>
+                    }
+                  </ul>
+                } @else {
+                  <p class="rd-group-none">none</p>
+                }
+              </section>
+
+              <section class="rd-group rd-group--gone" data-testid="rd-group-gone">
+                <h5>Gone</h5>
+                @if (set.gone.length) {
+                  <ul>
+                    @for (g of set.gone; track g.findingId) {
+                      <li>{{ g.findingId }}: {{ g.note }}</li>
+                    }
+                  </ul>
+                } @else {
+                  <p class="rd-group-none">none</p>
+                }
+              </section>
+            </div>
+          </section>
+        }
+      } @else {
+        <p class="rd-no-delivery">No finding set delivered.</p>
+      }
+
+      <p class="rd-cli">read with: <code>hub run show {{ delta.chunkId }}</code></p>
+    </section>
+  }
+</fleet-kit-async-state>

@@ -121,6 +121,19 @@ def test_a_finding_is_named_by_id_across_two_runs(tmp_path: Path) -> None:
     assert fetched.last_seen_at == _LATER  # type: ignore[union-attr]
 
 
+def test_a_persons_exit_verb_records_no_finding_set(tmp_path: Path) -> None:
+    """A human-driven fact belongs to no run (blizzard#401 D1) — unlike a delivered
+    add/observed/gone, it carries no `finding_set_id`."""
+    store, engine = _store_and_engine(tmp_path)
+    _add(store)
+
+    store.record_fact("fin_1", kind="wont-fix", at=_LATER, actor="pgross")
+
+    with engine.connect() as conn:
+        row = conn.execute(sa.text("SELECT finding_set_id FROM finding_facts WHERE kind = 'wont-fix'")).one()
+    assert row.finding_set_id is None
+
+
 def test_a_gone_finding_is_excluded_from_list_for_unless_include_gone(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _add(store, finding_id="fin_1")

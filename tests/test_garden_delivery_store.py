@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
@@ -41,10 +41,19 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _RUN = RunContext(routine_name="nightly", scope_slug="blizzard", mode="dry_run")
 
 
-def _store_and_engine(tmp_path: Path) -> tuple[GardenDeliveryStore, Engine]:
+def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> tuple[GardenDeliveryStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
+    if enforce_foreign_keys:
+        # sqlite runs with FK enforcement off by default — the very reason a wrong
+        # insert order (`finding_facts` before the `finding_sets` row it references)
+        # passed every other test here. Attached before the first connection so every
+        # connection this engine ever opens, seeding included, enforces FKs.
+        @event.listens_for(engine, "connect")
+        def _enable_fk(dbapi_connection, connection_record) -> None:  # type: ignore[no-untyped-def]
+            dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
     with engine.begin() as conn:
         conn.execute(
             sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('blizzard', '', :now)"),
@@ -86,9 +95,11 @@ def _full_plan(*, at: datetime = _NOW) -> DeliveryPlan:
                     )
                 ],
                 facts=[
-                    FindingFactRecord(finding_id="fin_1", kind="add", note=None),
-                    FindingFactRecord(finding_id="fin_2", kind="observed", note=None),
-                    FindingFactRecord(finding_id="fin_3", kind="gone", note="couldn't reproduce"),
+                    FindingFactRecord(finding_id="fin_1", kind="add", finding_set_id="fins_1", note=None),
+                    FindingFactRecord(finding_id="fin_2", kind="observed", finding_set_id="fins_1", note=None),
+                    FindingFactRecord(
+                        finding_id="fin_3", kind="gone", finding_set_id="fins_1", note="couldn't reproduce"
+                    ),
                 ],
             )
         ],
@@ -125,6 +136,9 @@ def test_deliver_writes_every_row(tmp_path: Path) -> None:
             ("fin_2", "observed", None),
             ("fin_3", "gone", "couldn't reproduce"),
         ]
+        # Every add/observed/gone fact this delivery materialized attributes to the
+        # finding_set it was delivered under (blizzard#401 D1).
+        assert {r.finding_set_id for r in fact_rows} == {"fins_1"}
 
         set_rows = conn.execute(sa.select(finding_sets)).all()
         assert len(set_rows) == 1
@@ -144,6 +158,71 @@ def test_deliver_writes_every_row(tmp_path: Path) -> None:
         assert marker_rows[0].chunk_id == "ch_1"
         assert marker_rows[0].node_id == "nd_1"
         assert marker_rows[0].epoch == 1
+
+
+def test_deliver_writes_finding_sets_before_finding_facts_under_fk_enforcement(tmp_path: Path) -> None:
+    """`finding_facts.finding_set_id` references `finding_sets` — a delivery that
+    inserts `finding_facts` first raises `IntegrityError` the moment FK enforcement is
+    on, which is why this needs `enforce_foreign_keys=True` rather than trusting the
+    insert order by inspection. A minimal plan, not `_full_plan()`: that one's
+    `observed`/`gone` facts name findings no `new_findings` entry mints, standing in for
+    ones an earlier delivery already recorded — fine with FK enforcement off, but a
+    second, unrelated FK gap under strict enforcement this test is not about."""
+    store, engine = _store_and_engine(tmp_path, enforce_foreign_keys=True)
+    # `finding_sets.artifact_id` FKs to `artifacts` too — in production the routine's own
+    # `produces:` step already wrote this artifact before delivery ever runs; seeded here
+    # by hand only because this plan is built directly rather than through that path.
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(artifacts).values(
+                artifact_id="art_fk",
+                chunk_id="ch_1",
+                node_id="nd_1",
+                node_name="garden-survey",
+                epoch=1,
+                name="findings",
+                kind="asset",
+                data="{}",
+                produced_at=_NOW,
+            )
+        )
+    plan = DeliveryPlan(
+        chunk_id="ch_1",
+        node_id="nd_1",
+        node_name="garden-survey",
+        epoch=1,
+        at=_NOW,
+        run=_RUN,
+        deltas=[
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id="fins_fk",
+                    artifact_id="art_fk",
+                    scope_slug="blizzard",
+                    revisions={"blizzard": "aaa1111"},
+                    measurement=None,
+                ),
+                new_findings=[
+                    NewFinding(
+                        finding_id="fin_fk",
+                        routine_name="nightly",
+                        scope_slug="blizzard",
+                        class_="stale-docstring",
+                        locus="a.py:1",
+                        summary="s",
+                        introduced=None,
+                        introduced_at=None,
+                    )
+                ],
+                facts=[FindingFactRecord(finding_id="fin_fk", kind="add", finding_set_id="fins_fk", note=None)],
+            )
+        ],
+        proposals=[],
+    )
+
+    outcome = store.deliver(plan)
+
+    assert outcome is DeliveryOutcome.RECORDED
 
 
 def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
@@ -237,7 +316,7 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
                         introduced_at=None,
                     )
                 ],
-                facts=[FindingFactRecord(finding_id="fin_a", kind="add", note=None)],
+                facts=[FindingFactRecord(finding_id="fin_a", kind="add", finding_set_id="fins_a", note=None)],
             )
         ],
         proposals=[],
@@ -272,7 +351,9 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
                         introduced_at=None,
                     )
                 ],
-                facts=[FindingFactRecord(finding_id="fin_a_replay", kind="add", note=None)],
+                facts=[
+                    FindingFactRecord(finding_id="fin_a_replay", kind="add", finding_set_id="fins_a_replay", note=None)
+                ],
             ),
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -294,7 +375,7 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
                         introduced_at=None,
                     )
                 ],
-                facts=[FindingFactRecord(finding_id="fin_b", kind="add", note=None)],
+                facts=[FindingFactRecord(finding_id="fin_b", kind="add", finding_set_id="fins_b", note=None)],
             ),
         ],
         proposals=[],

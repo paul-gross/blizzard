@@ -172,6 +172,54 @@
         "title": "ActivityView",
         "type": "object"
       },
+      "AddedFindingView": {
+        "properties": {
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "finding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The finding this add minted, or null when the delivered set predates the finding_facts.finding_set_id linkage \u2014 the add still renders from the artifact, just linked to no finding row.",
+            "title": "Finding Id"
+          },
+          "introduced": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Introduced"
+          },
+          "locus": {
+            "title": "Locus",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "class",
+          "locus",
+          "summary",
+          "introduced"
+        ],
+        "title": "AddedFindingView",
+        "type": "object"
+      },
       "AnalyticsChunkSpendResponse": {
         "description": "A bounded page (blizzard#256 D8) \u2014 ``next_cursor`` is ``None`` exactly when this\nis the last page. Not a point-in-time snapshot: each page's sums are recomputed at\nfetch time, so an earlier page's chunk can be invalidated by a usage fact recorded\nwhile a later page still streams.",
         "properties": {
@@ -2063,6 +2111,96 @@
         "title": "DecisionView",
         "type": "object"
       },
+      "DeliveredSetDeltaView": {
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/AddedFindingView"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "finding_set_id": {
+            "title": "Finding Set Id",
+            "type": "string"
+          },
+          "gone": {
+            "items": {
+              "$ref": "#/components/schemas/GoneFindingView"
+            },
+            "title": "Gone",
+            "type": "array"
+          },
+          "measurement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement"
+          },
+          "observed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Observed",
+            "type": "array"
+          },
+          "revisions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Revisions",
+            "type": "object"
+          }
+        },
+        "required": [
+          "finding_set_id",
+          "revisions",
+          "measurement",
+          "added",
+          "observed",
+          "gone"
+        ],
+        "title": "DeliveredSetDeltaView",
+        "type": "object"
+      },
+      "DeliveredSetView": {
+        "properties": {
+          "finding_set_id": {
+            "title": "Finding Set Id",
+            "type": "string"
+          },
+          "measurement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement"
+          },
+          "revisions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Revisions",
+            "type": "object"
+          }
+        },
+        "required": [
+          "finding_set_id",
+          "revisions",
+          "measurement"
+        ],
+        "title": "DeliveredSetView",
+        "type": "object"
+      },
       "DocketEntryView": {
         "description": "One of a chunk's not-yet-materialized proposals, as it stands at a gate \u2014 the\nproposing node, its kind-shaped ``payload``, and whether an operator has struck it.\nUnder ``malformed`` no field but ``proposal_id``, ``node_name``, and ``kind`` may be\nrelied on: a stored proposal this hub version can no longer parse renders bare\nrather than failing the whole gate read. ``struck_by``/``struck_at`` are set only\nwhen ``struck`` is true.",
         "properties": {
@@ -2995,6 +3133,24 @@
           "measurements"
         ],
         "title": "GardenSweepsView",
+        "type": "object"
+      },
+      "GoneFindingView": {
+        "properties": {
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "note"
+        ],
+        "title": "GoneFindingView",
         "type": "object"
       },
       "GraphArtifact": {
@@ -5261,6 +5417,143 @@
           "created_at"
         ],
         "title": "RoutineView",
+        "type": "object"
+      },
+      "RunDeltaView": {
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "escalation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunEscalationView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "scope_slug": {
+            "title": "Scope Slug",
+            "type": "string"
+          },
+          "sets": {
+            "items": {
+              "$ref": "#/components/schemas/DeliveredSetDeltaView"
+            },
+            "title": "Sets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "routine_name",
+          "scope_slug",
+          "mode",
+          "outcome",
+          "escalation",
+          "sets"
+        ],
+        "title": "RunDeltaView",
+        "type": "object"
+      },
+      "RunEscalationView": {
+        "properties": {
+          "node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Name"
+          },
+          "takeover_command": {
+            "title": "Takeover Command",
+            "type": "string"
+          },
+          "wrapped_takeover_command": {
+            "title": "Wrapped Takeover Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_name",
+          "takeover_command",
+          "wrapped_takeover_command"
+        ],
+        "title": "RunEscalationView",
+        "type": "object"
+      },
+      "RunRowView": {
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "delivered": {
+            "items": {
+              "$ref": "#/components/schemas/DeliveredSetView"
+            },
+            "title": "Delivered",
+            "type": "array"
+          },
+          "escalation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunEscalationView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "minted_at": {
+            "title": "Minted At",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "scope_slug": {
+            "title": "Scope Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "routine_name",
+          "scope_slug",
+          "mode",
+          "minted_at",
+          "outcome",
+          "escalation",
+          "delivered"
+        ],
+        "title": "RunRowView",
         "type": "object"
       },
       "RunnerEnrollmentResponse": {
@@ -13708,6 +14001,119 @@
         "summary": "Resume Runner",
         "tags": [
           "runners"
+        ]
+      }
+    },
+    "/api/runs": {
+      "get": {
+        "description": "Every routine run minted in `[since, until)`, newest first \u2014 `since`/`until`\ndefault to the last 24 hours ending now. Each row carries its routine, scope, mode,\nits derived outcome, and, where it delivered, every finding-set row it published.\n422 on a malformed instant or an inverted span.",
+        "operationId": "list_runs_api_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunRowView"
+                  },
+                  "title": "Response List Runs Api Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs",
+        "tags": [
+          "garden-runs"
+        ]
+      }
+    },
+    "/api/runs/{chunk_id}": {
+      "get": {
+        "description": "One run's full detail: its routine, scope, mode, derived outcome, and, per\nfinding-set it delivered, the added/observed/gone entries its own artifact\npublished. 404 when `chunk_id` names no routine run.",
+        "operationId": "run_delta_api_runs__chunk_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDeltaView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Delta",
+        "tags": [
+          "garden-runs"
         ]
       }
     },

@@ -12,6 +12,7 @@ from blizzard.hub.cli.chunk import chunk_group
 from blizzard.hub.cli.decision import decision_group
 from blizzard.hub.cli.finding import finding_group
 from blizzard.hub.cli.garden_proposal import garden_proposal_group
+from blizzard.hub.cli.garden_run import run_group
 from blizzard.hub.cli.graph import graph_group
 from blizzard.hub.cli.item import item_group
 from blizzard.hub.cli.marker import record_marker
@@ -47,6 +48,7 @@ hub.add_command(runner_group)
 hub.add_command(graph_group)
 hub.add_command(scope_group)
 hub.add_command(routine_group)
+hub.add_command(run_group)
 hub.add_command(finding_group)
 hub.add_command(garden_proposal_group)
 hub.add_command(queue_group)

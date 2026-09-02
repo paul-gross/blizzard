@@ -12,12 +12,15 @@ import json
 import os
 import sqlite3
 import subprocess
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.graphs import PACKAGED
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
@@ -255,6 +258,7 @@ def test_garden_routine_runs_end_to_end_on_all_four_paths(tmp_path: Path) -> Non
             return resp.json()
 
         # -- found: survey → reconcile → propose → deliver, two findings minted -------
+        runs_since = iso_utc(datetime.now(UTC) - timedelta(minutes=5))
         found_chunk = run("found", _SCOPE_FOUND)
         assert _edges(hub, found_chunk) == [
             ("survey", "found"),
@@ -269,6 +273,32 @@ def test_garden_routine_runs_end_to_end_on_all_four_paths(tmp_path: Path) -> Non
         }
         assert all(r["live"] for r in found_rows)
         assert hub.get("/api/garden-proposals").json() == []
+
+        # -- the run list and one run's own delta read the delivered `found` run back --
+        runs_until = iso_utc(datetime.now(UTC) + timedelta(minutes=5))
+        runs_resp = hub.get("/api/runs", params={"since": runs_since, "until": runs_until})
+        assert runs_resp.status_code == 200, runs_resp.text
+        (found_row,) = [r for r in runs_resp.json() if r["chunk_id"] == found_chunk]
+        assert found_row["routine_name"] == _ROUTINE
+        assert found_row["scope_slug"] == _SCOPE_FOUND
+        assert found_row["mode"] == "full"
+        assert found_row["outcome"] == ChunkStatus.DONE
+        assert [d["finding_set_id"] for d in found_row["delivered"]], (
+            f"found run's row did not carry the finding-set(s) it published: {found_row}"
+        )
+
+        delta_resp = hub.get(f"/api/runs/{found_chunk}")
+        assert delta_resp.status_code == 200, delta_resp.text
+        delta = delta_resp.json()
+        assert delta["chunk_id"] == found_chunk
+        assert delta["outcome"] == ChunkStatus.DONE
+        (set_delta,) = delta["sets"]
+        assert {(a["class"], a["locus"], a["summary"]) for a in set_delta["added"]} == {
+            ("stale-docstring", "src/app.py:1", "first weed"),
+            ("stale-docstring", "src/app.py:2", "second weed"),
+        }
+        assert set_delta["observed"] == []
+        assert set_delta["gone"] == []
 
         # -- clean: survey straight to deliver; the empty delta's datapoint recorded --
         clean_chunk = run("clean", _SCOPE_CLEAN)

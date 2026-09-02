@@ -74,6 +74,20 @@ export function hubRoutineBaselinesKey(routineId: string): readonly unknown[] {
   return ['hub', 'routines', routineId, 'baselines'];
 }
 
+/** The garden run list's key prefix — `GET /api/runs`, windowed by `since` alone;
+ * `until` rides no key or request param (`garden-runs.query.ts`'s own doc), so a new
+ * `since` is its own cache entry, `hubRoutineTrendKey`'s own window-in-key shape. */
+export function hubRunsKey(since: string): readonly unknown[] {
+  return ['hub', 'runs', since];
+}
+
+/** One run's own delta, keyed by chunk id — `GET /api/runs/{chunk_id}`. Nullable,
+ * `hubChunkKey`'s own null-tolerant shape, for the disabled-query rest state while no
+ * run is selected. */
+export function hubRunDeltaKey(chunkId: string | null): readonly unknown[] {
+  return ['hub', 'run', chunkId];
+}
+
 /** One chunk's full aggregate, keyed by id. */
 export function hubChunkKey(chunkId: string | null): readonly unknown[] {
   return ['hub', 'chunk', chunkId];

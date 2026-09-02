@@ -56,3 +56,20 @@ windowed: a scope swept months ago still reads its true last-swept instant, neve
 The hub board's Gardening tab renders both reads, plus a routine's stored record and its strategy — the effective
 graph's own node preambles — as read-only prose, and the Run action above it. A routine whose graph has lost every
 enabled mint shows as blocked there instead of offering a run.
+
+## Reading runs
+
+`blizzard hub run list [--since <time>] [--until <time>]` and `blizzard hub run show <chunk_id>` read routine runs —
+distinct from `blizzard hub routine run`, which starts one. A **run** is one chunk a routine's own run minted: `run
+list` reports every run minted in `--since`/`--until` (defaulting to the last 24 hours ending now), newest first, each
+carrying its routine, scope, mode, its derived outcome, and, where it delivered, every finding-set row it published
+(revisions and measurement) — a run can deliver several lists in one act, and each is reported as its own entry,
+never merged into one. A run that escalated before delivering anything still appears, since the list is read from the
+run's own identity, not from what it delivered. A run whose chunk was later grouped away or deleted is the one
+exclusion: it is absent from both reads, since neither has a live chunk left to read outcome and identity from.
+
+`run show <chunk_id>` reads one run's full detail: the same identity and outcome, plus, per finding-set it delivered,
+the delta that set actually published — added, observed, and gone, kept as three separate groups. An added entry
+that predates the finding-id-linkage this read relies on renders with no matched finding id rather than a guessed
+one. A run whose outcome is `needs_human` also carries the escalating node's name and its takeover command(s) — the
+hub records no reason an escalated run stopped, only where it stopped and how to resume it.

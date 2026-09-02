@@ -116,6 +116,8 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
 
     fset = delta_materialization.finding_set
     assert fset.finding_set_id.startswith(f"{FINDING_SET_PREFIX}_")
+    # The fact attributes to the very set it was delivered under (blizzard#401 D1).
+    assert delta_materialization.facts[0].finding_set_id == fset.finding_set_id
     assert fset.artifact_id == "art_1"
     assert fset.scope_slug == "runner"
     assert fset.revisions == {"blizzard": "a" * 40}
@@ -221,6 +223,9 @@ def test_deliver_over_two_deltas_groups_each_deltas_own_rows_separately() -> Non
 
     # Each group carries only its own delta's rows — no cross-contamination.
     assert materialized_a.new_findings[0].finding_id != materialized_b.new_findings[0].finding_id
+    assert {f.finding_set_id for f in materialized_a.facts} == {materialized_a.finding_set.finding_set_id}
+    assert {f.finding_set_id for f in materialized_b.facts} == {materialized_b.finding_set.finding_set_id}
+    assert materialized_a.finding_set.finding_set_id != materialized_b.finding_set.finding_set_id
 
 
 def test_deliver_builds_a_proposal_and_its_finding_links() -> None:
