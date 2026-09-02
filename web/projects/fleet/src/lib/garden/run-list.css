@@ -27,7 +27,7 @@
 .rl-row--selected {
   background: var(--panel-highlight, rgba(255, 255, 255, 0.06));
 }
-/* An escalated row's own distinct treatment (blizzard#397 Phase 3) — a real border
+/* An escalated row's own distinct treatment (blizzard#401 Phase 3) — a real border
  * and background tint against `--red`, not merely the outcome badge's own color, so
  * the row reads as escalated even where the badge itself scrolls out of view. */
 .rl-row--escalated {

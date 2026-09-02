@@ -21,7 +21,7 @@ from blizzard.hub.domain.garden_run import (
     RunIdentity,
     RunRecord,
 )
-from blizzard.hub.domain.work import Chunk, ChunkFacts, EscalationFact, TransitionFact
+from blizzard.hub.domain.work import Chunk, ChunkFacts, EscalationFact, MigrationFact, TransitionFact
 
 pytestmark = pytest.mark.unit
 
@@ -150,6 +150,51 @@ def test_an_escalated_run_carries_its_node_and_takeover_command() -> None:
     assert row.escalation.wrapped_takeover_command == "wrapped"
 
 
+def test_an_escalation_reports_the_node_it_opened_on_not_a_later_migration() -> None:
+    """A migration never supersedes `ChunkFacts.open_escalation`, so one recorded
+    after the escalation can re-pin the chunk elsewhere while it stays open — the row
+    must still name the node the escalation was actually raised from."""
+    identity = _identity("ch_1")
+    repo = _FakeRepo(records=[RunRecord(identity=identity, delivered=[])])
+    chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1", graph_id="gr_new")})
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        transitions=[
+            TransitionFact(
+                to_node_id="nd_build",
+                to_node_executor=Executor.RUNNER,
+                epoch=1,
+                recorded_at=_T0,
+                from_node_id=None,
+                graph_id="gr_old",
+            )
+        ],
+        escalations=[
+            EscalationFact(epoch=1, recorded_at=_T0, takeover_command="resume", wrapped_takeover_command="wrapped")
+        ],
+        migrations=[
+            MigrationFact(
+                from_node_id="nd_build",
+                from_graph_id="gr_old",
+                to_graph_id="gr_new",
+                landed_node_id="nd_entry",
+                choice_name=None,
+                model=None,
+                epoch=2,
+                recorded_at=_T0.replace(year=_T0.year + 1),
+            )
+        ],
+    )
+    chunk_facts = _FakeChunkFacts(facts={"ch_1": facts})
+
+    (row,) = _service(repo, chunk_records, chunk_facts).list_runs(since=_SINCE, until=_UNTIL)
+
+    assert row.escalation is not None
+    assert row.escalation.graph_id == "gr_old"
+    assert row.escalation.node_id == "nd_build"
+
+
 def test_a_run_that_delivered_nothing_still_lists_with_an_empty_delivered_list() -> None:
     """A run that delivered an empty finding list still leaves a `finding_sets` row —
     it is reported, not confused with an escalated run that left none at all."""
@@ -194,7 +239,7 @@ def test_a_run_whose_chunk_is_ephemeral_is_absent_from_the_list() -> None:
 def test_run_delta_is_none_for_a_chunk_with_no_run_identity() -> None:
     service = _service(_FakeRepo())
 
-    assert service.run_delta("ch_ghost") is None
+    assert service.run_delta(_chunk("ch_ghost")) is None
 
 
 def test_run_delta_splits_add_observed_and_gone_into_three_groups() -> None:
@@ -216,7 +261,7 @@ def test_run_delta_splits_add_observed_and_gone_into_three_groups() -> None:
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
 
-    delta = _service(repo, chunk_records, chunk_facts).run_delta("ch_1")
+    delta = _service(repo, chunk_records, chunk_facts).run_delta(_chunk("ch_1"))
 
     assert delta is not None
     (set_delta,) = delta.sets
@@ -239,7 +284,7 @@ def test_an_add_op_with_no_matching_fact_degrades_to_an_unmatched_finding_id() -
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
 
-    delta = _service(repo, chunk_records, chunk_facts).run_delta("ch_1")
+    delta = _service(repo, chunk_records, chunk_facts).run_delta(_chunk("ch_1"))
 
     assert delta is not None
     (set_delta,) = delta.sets
@@ -265,7 +310,7 @@ def test_add_ids_are_matched_to_add_ops_positionally() -> None:
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
 
-    delta = _service(repo, chunk_records, chunk_facts).run_delta("ch_1")
+    delta = _service(repo, chunk_records, chunk_facts).run_delta(_chunk("ch_1"))
 
     assert delta is not None
     (set_delta,) = delta.sets
@@ -281,7 +326,7 @@ def test_a_finding_never_named_in_the_artifact_appears_in_no_group() -> None:
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
 
-    delta = _service(repo, chunk_records, chunk_facts).run_delta("ch_1")
+    delta = _service(repo, chunk_records, chunk_facts).run_delta(_chunk("ch_1"))
 
     assert delta is not None
     (set_delta,) = delta.sets
@@ -305,7 +350,7 @@ def test_run_delta_keeps_several_sets_from_one_run_separately_grouped() -> None:
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
 
-    delta = _service(repo, chunk_records, chunk_facts).run_delta("ch_1")
+    delta = _service(repo, chunk_records, chunk_facts).run_delta(_chunk("ch_1"))
 
     assert delta is not None
     assert [s.finding_set_id for s in delta.sets] == ["fins_1", "fins_2"]

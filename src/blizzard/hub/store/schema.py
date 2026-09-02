@@ -344,7 +344,7 @@ finding_facts = Table(
     Column("proposal_id", String, ForeignKey("garden_proposals.proposal_id"), nullable=True),
     # The absorbing finding, set only on a `superseded` fact (blizzard#394).
     Column("superseded_by", String, ForeignKey("findings.finding_id"), nullable=True),
-    # The delivered list this fact belongs to (blizzard#396 D1) — written by delivery for
+    # The delivered list this fact belongs to (blizzard#401 D1) — written by delivery for
     # the `add`/`observed`/`gone` facts it materializes; null for a person's exit verb,
     # which belongs to no run. No backfill: a fact predating this column reads back null.
     Column("finding_set_id", String, ForeignKey("finding_sets.finding_set_id"), nullable=True),
@@ -356,6 +356,11 @@ finding_facts = Table(
 )
 
 Index("ix_finding_facts_finding_id_id", finding_facts.c.finding_id, finding_facts.c.id)
+
+# A run's own delta reads every fact belonging to one delivered set, once per set, on
+# every `GET /api/runs/{chunk_id}` (blizzard#401) — unindexed like no other fact-table
+# filter column here.
+Index("ix_finding_facts_finding_set_id", finding_facts.c.finding_set_id)
 
 # The set a delivered finding list mints, one per artifact (D6) — scope, the
 # per-repository revisions, and the routine's measurement live here, never per finding.

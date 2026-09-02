@@ -45,7 +45,7 @@
                 <h5>Added</h5>
                 @if (set.added.length) {
                   <ul>
-                    @for (a of set.added; track a.findingId ?? a.summary) {
+                    @for (a of set.added; track a.findingId ?? $index) {
                       <li>
                         <span class="rd-added-class">{{ a.findingClass }}</span>
                         {{ a.locus }}: {{ a.summary }}

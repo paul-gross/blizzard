@@ -54,7 +54,7 @@ export interface RunDeltaVm {
 }
 
 /**
- * The gardening runs-and-findings tab's run delta (blizzard#397 Phase 3) —
+ * The gardening runs-and-findings tab's run delta (blizzard#401 Phase 3) —
  * presentational only, no query injection: one run's added/observed/gone, grouped
  * three ways and captioned as a **delta of what changed**, not a current-state
  * snapshot (the plan's own explicit acceptance criterion — stated in the rendered

@@ -38,7 +38,7 @@
 }
 /* Every delivered set's own added/observed/gone triad stacks — never a side-by-side
  * layout that could let a narrow viewport clip or overlap one group against another
- * (blizzard#397 Phase 3's D4: several sets, and each set's three groups, stay visibly
+ * (blizzard#401 Phase 3's D4: several sets, and each set's three groups, stay visibly
  * distinct rather than merged or overlapped). */
 .rd-groups {
   display: flex;

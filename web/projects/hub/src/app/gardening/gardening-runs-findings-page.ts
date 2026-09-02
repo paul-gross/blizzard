@@ -28,7 +28,7 @@ function revisionsLabel(revisions: Record<string, string>): string {
 }
 
 /**
- * The `/gardening/runs-and-findings` sub-tab (blizzard#397 Phase 3,
+ * The `/gardening/runs-and-findings` sub-tab (blizzard#401 Phase 3,
  * `plans/garden/user-interface.md`'s "Reading what a run saw" section) — the run
  * list, and the selected run's own delta. `graphs-page.ts`'s own list-stays-mounted
  * shape: both `runs-and-findings` and `runs-and-findings/:chunkId` render this one
@@ -59,10 +59,7 @@ export class GardeningRunsFindingsPage {
    * "last 28 days" a routine's own trend already reports. */
   private readonly window = defaultRoutineWindow(Date.now());
 
-  private readonly runsQuery = injectHubRunsQuery(
-    () => this.window.since,
-    () => this.window.until,
-  );
+  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
 
   /** The `chunkId` route param, or `null` on the bare `runs-and-findings` list route —
    * `graphs-page.ts`'s own `graphId` read. */
@@ -129,10 +126,16 @@ export class GardeningRunsFindingsPage {
     };
   });
 
-  /** Never carries an "empty" reading of its own (D4: a run with zero delivered sets
+  /** `chunkId() === null` branches out *before* `asyncState` — `deltaQuery` is
+   * `enabled: false` then, which reports `isPending()` forever
+   * (`query-state.ts`'s own documented trap), so "nothing selected" must resolve to
+   * `'empty'` directly rather than fall into a permanent loading spinner. Once a run
+   * is selected, `isEmpty` is always `false` (D4: a run with zero delivered sets
    * still renders as a normal, fully-read row, not an empty state) — only loading and
-   * error need distinguishing here, `isEmpty: false` always. */
-  protected readonly deltaState = computed<KitAsyncStateValue>(() => asyncState(this.deltaQuery, false));
+   * error need distinguishing there. */
+  protected readonly deltaState = computed<KitAsyncStateValue>(() =>
+    this.chunkId() === null ? 'empty' : asyncState(this.deltaQuery, false),
+  );
 
   protected select(chunkId: string): void {
     void this.router.navigate(['/gardening', 'runs-and-findings', chunkId]);

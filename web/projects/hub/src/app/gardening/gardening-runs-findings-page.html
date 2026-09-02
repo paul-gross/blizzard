@@ -6,11 +6,5 @@
     [state]="listState()"
     (runPick)="select($event)"
   />
-  @if (chunkId(); as id) {
-    <fleet-run-delta class="grf-delta" [vm]="deltaVm()" [state]="deltaState()" />
-  } @else {
-    <div class="grf-placeholder" data-testid="gardening-runs-findings-placeholder">
-      <p>Select a run to see what it changed.</p>
-    </div>
-  }
+  <fleet-run-delta class="grf-delta" [vm]="deltaVm()" [state]="deltaState()" />
 </div>

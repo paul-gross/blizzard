@@ -13,10 +13,7 @@ import { injectHubRunDeltaQuery, injectHubRunsQuery } from './garden-runs.query'
   template: '',
 })
 class TestRunsQueryHost {
-  readonly query = injectHubRunsQuery(
-    () => '2026-01-01T00:00:00Z',
-    () => '2026-01-29T00:00:00Z',
-  );
+  readonly query = injectHubRunsQuery(() => '2026-01-01T00:00:00Z');
 }
 
 @Component({
@@ -41,7 +38,7 @@ describe('injectHubRunsQuery', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  it('reads the run list off GET /api/runs, with since/until on the query string', async () => {
+  it('reads the run list off GET /api/runs', async () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/runs') {
         return [

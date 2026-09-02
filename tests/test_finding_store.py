@@ -122,7 +122,7 @@ def test_a_finding_is_named_by_id_across_two_runs(tmp_path: Path) -> None:
 
 
 def test_a_persons_exit_verb_records_no_finding_set(tmp_path: Path) -> None:
-    """A human-driven fact belongs to no run (blizzard#396 D1) — unlike a delivered
+    """A human-driven fact belongs to no run (blizzard#401 D1) — unlike a delivered
     add/observed/gone, it carries no `finding_set_id`."""
     store, engine = _store_and_engine(tmp_path)
     _add(store)

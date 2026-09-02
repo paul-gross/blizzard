@@ -12,7 +12,7 @@ import json
 from collections import defaultdict
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from blizzard.hub.domain.garden_run import (
     DeliveredSet,
@@ -51,6 +51,15 @@ _IDENTITY_COLUMNS = (
     work_item_runs.c.mode,
 )
 
+# A chunk that absorbed another's work refs (`GroupService.group`) carries more than one
+# `chunk_work_refs` row — a run's own identity is always the lowest-id one, its mint-time row.
+_CANONICAL_WORK_REF = chunk_work_refs.c.id == (
+    select(func.min(chunk_work_refs.c.id))
+    .where(chunk_work_refs.c.chunk_id == chunks.c.chunk_id)
+    .correlate(chunks)
+    .scalar_subquery()
+)
+
 
 def _identity_of(row: object) -> RunIdentity:
     return RunIdentity(
@@ -73,7 +82,7 @@ class GardenRunStore:
             rows = conn.execute(
                 select(*_IDENTITY_COLUMNS)
                 .select_from(_RUN_IDENTITY_JOIN)
-                .where(chunks.c.minted_at >= since, chunks.c.minted_at < until)
+                .where(chunks.c.minted_at >= since, chunks.c.minted_at < until, _CANONICAL_WORK_REF)
                 .order_by(chunks.c.minted_at.desc(), chunks.c.chunk_id.desc())
             ).all()
             delivered_by_chunk = self._delivered_sets_by_chunk(conn, [row.chunk_id for row in rows])
@@ -84,7 +93,9 @@ class GardenRunStore:
     def run_identity(self, chunk_id: str) -> RunIdentity | None:
         with self._store.read("run_identity") as conn:
             row = conn.execute(
-                select(*_IDENTITY_COLUMNS).select_from(_RUN_IDENTITY_JOIN).where(chunks.c.chunk_id == chunk_id)
+                select(*_IDENTITY_COLUMNS)
+                .select_from(_RUN_IDENTITY_JOIN)
+                .where(chunks.c.chunk_id == chunk_id, _CANONICAL_WORK_REF)
             ).one_or_none()
         return _identity_of(row) if row is not None else None
 

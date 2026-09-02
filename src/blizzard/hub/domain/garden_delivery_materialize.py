@@ -54,7 +54,7 @@ class FindingFactRecord:
 
     finding_id: str
     kind: str  # add | observed | gone
-    finding_set_id: str  # the delivered list this fact belongs to (blizzard#396 D1)
+    finding_set_id: str  # the delivered list this fact belongs to (blizzard#401 D1)
     note: str | None = None
 
 
@@ -169,7 +169,7 @@ class GardenDelivery:
 
         for delta, artifact_id in zip(validated.deltas, delta_artifact_ids, strict=True):
             # Minted before the facts loop below: every fact this delta produces
-            # attributes to the set that carried it (blizzard#396 D1).
+            # attributes to the set that carried it (blizzard#401 D1).
             finding_set_id = Id.mint(FINDING_SET_PREFIX, self._clock).value
             new_findings: list[NewFinding] = []
             facts: list[FindingFactRecord] = []

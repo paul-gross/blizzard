@@ -21,7 +21,7 @@ async function loadDesignTokens(): Promise<void> {
 }
 
 /**
- * The gardening runs-and-findings tab's own half of `web:shell-sweep` (blizzard#397
+ * The gardening runs-and-findings tab's own half of `web:shell-sweep` (blizzard#401
  * Phase 3) — a real, headless-Chromium proof of the two classes of layout/style claim
  * jsdom cannot make: {@link FleetRunList}'s escalated row must carry a genuinely
  * different computed `background-color` from a normal row (not merely a different
@@ -85,7 +85,7 @@ const DELTA_VM: RunDeltaVm = {
   ],
 };
 
-describe('FleetRunList escalated row shell sweep (web:shell-sweep, blizzard#397 Phase 3)', () => {
+describe('FleetRunList escalated row shell sweep (web:shell-sweep, blizzard#401 Phase 3)', () => {
   it('gives an escalated row a genuinely different computed background than a normal row', async () => {
     await loadDesignTokens();
     await TestBed.configureTestingModule({
@@ -120,7 +120,7 @@ describe('FleetRunList escalated row shell sweep (web:shell-sweep, blizzard#397 
   });
 });
 
-describe('FleetRunDelta stacking shell sweep (web:shell-sweep, blizzard#397 Phase 3)', () => {
+describe('FleetRunDelta stacking shell sweep (web:shell-sweep, blizzard#401 Phase 3)', () => {
   it('stacks every finding set, and each set’s added/observed/gone groups, with no overlap at 390px', async () => {
     await TestBed.configureTestingModule({
       imports: [FleetRunDelta],

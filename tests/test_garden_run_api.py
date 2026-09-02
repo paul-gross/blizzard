@@ -172,6 +172,20 @@ def test_list_runs_rejects_an_until_not_after_since(tmp_path: Path) -> None:
     assert resp.status_code == 422, resp.text
 
 
+def test_list_runs_rejects_a_since_older_than_the_span_cap(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    resp = hub.client.get(
+        "/api/runs",
+        params={
+            "since": iso_utc(datetime(2020, 1, 1, tzinfo=UTC)),
+            "until": iso_utc(datetime(2026, 1, 1, tzinfo=UTC)),
+        },
+    )
+
+    assert resp.status_code == 422, resp.text
+
+
 def test_run_delta_reads_back_the_added_observed_and_gone_groups(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine = _routine(hub)

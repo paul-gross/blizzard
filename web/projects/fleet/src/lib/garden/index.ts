@@ -18,7 +18,5 @@ export type {
   RoutineBaselineView,
   RoutineRunResponse,
   RoutineView,
-  RunDeltaView,
-  RunRowView,
   ScopeView,
 } from '../api/hub';

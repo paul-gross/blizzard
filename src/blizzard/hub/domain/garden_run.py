@@ -21,7 +21,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.garden_delivery import parse_delta
-from blizzard.hub.domain.work import ChunkFacts
+from blizzard.hub.domain.work import Chunk, ChunkFacts
 from blizzard.wire.finding import AddFindingOp, GoneFindingOp, ObservedFindingOp
 
 
@@ -162,15 +162,42 @@ class IReadGardenRunRepository(Protocol):
         ...
 
 
+def _movement_as_of(facts: ChunkFacts, at: datetime, *, default_graph_id: str) -> tuple[str, str | None] | None:
+    """The `(graph_id, node_id)` the chunk stood on at `at` — `ChunkFacts.latest_movement`'s
+    own family ranking, restricted to movements no later than `at`. Needed because a
+    migration recorded after an escalation opened can re-pin the chunk elsewhere while
+    the escalation stays open (a migration never supersedes it, `bzh:facts-not-status`),
+    so `chunk.graph_id` alone would read the new pin, not the one escalated from."""
+    ranked: list[tuple[datetime, int, int, str, str | None]] = []
+    transitions = [t for t in facts.transitions if t.recorded_at <= at]
+    if transitions:
+        t = max(transitions, key=lambda t: (t.recorded_at, t.epoch))
+        ranked.append((t.recorded_at, t.epoch, 0, t.graph_id or default_graph_id, t.to_node_id))
+    migrations = [m for m in facts.migrations if m.recorded_at <= at]
+    if migrations:
+        m = max(migrations, key=lambda m: (m.recorded_at, m.epoch))
+        ranked.append((m.recorded_at, m.epoch, 1, m.to_graph_id, m.landed_node_id))
+    restarts = [r for r in facts.restarts if r.recorded_at <= at]
+    if restarts:
+        r = max(restarts, key=lambda r: (r.recorded_at, r.epoch))
+        ranked.append((r.recorded_at, r.epoch, 2, r.graph_id, r.to_node_id))
+    if not ranked:
+        return None
+    _, _, _, graph_id, node_id = max(ranked, key=lambda entry: entry[:3])
+    return graph_id, node_id
+
+
 def _escalation(chunk_graph_id: str, facts: ChunkFacts) -> RunEscalation | None:
     """The open escalation a `NEEDS_HUMAN` chunk carries, or `None` on any other
     outcome — `ChunkFacts.status` returning `NEEDS_HUMAN` implies one exists."""
     escalation = facts.open_escalation()
     if escalation is None:
         return None
+    movement = _movement_as_of(facts, escalation.recorded_at, default_graph_id=chunk_graph_id)
+    graph_id, node_id = movement if movement is not None else (chunk_graph_id, None)
     return RunEscalation(
-        graph_id=chunk_graph_id,
-        node_id=facts.current_node_id(),
+        graph_id=graph_id,
+        node_id=node_id,
         takeover_command=escalation.takeover_command,
         wrapped_takeover_command=escalation.wrapped_takeover_command,
     )
@@ -235,17 +262,18 @@ class GardenRunService:
         self._chunk_facts = chunk_facts
 
     def list_runs(self, *, since: datetime, until: datetime) -> list[RunRow]:
+        """`chunk_records`/`chunk_facts` are read one chunk at a time — `records` is
+        already the window's own bounded set (`runs_in_window`'s own SQL `WHERE`), so
+        the per-row cost tracks runs in the window, not `list_all`/`load_all_facts`'s
+        whole-store cost, which would grow with every chunk the fleet has ever minted
+        regardless of how few runs the window actually names."""
         records = self._repo.runs_in_window(since=since, until=until)
-        if not records:
-            return []
-        chunks_by_id = {chunk.chunk_id: chunk for chunk in self._chunk_records.list_all()}
-        facts_by_chunk = self._chunk_facts.load_all_facts()
         rows: list[RunRow] = []
         for record in records:
-            chunk = chunks_by_id.get(record.identity.chunk_id)
+            chunk = self._chunk_records.get(record.identity.chunk_id)
             if chunk is None:
                 continue  # an ephemeral (grouped-away/deleted) chunk's run is absent from every read
-            facts = facts_by_chunk.get(record.identity.chunk_id) or ChunkFacts(minted=True)
+            facts = self._chunk_facts.load_facts(record.identity.chunk_id) or ChunkFacts(minted=True)
             outcome, escalation = _outcome_and_escalation(chunk.graph_id, facts)
             rows.append(
                 RunRow(
@@ -261,18 +289,18 @@ class GardenRunService:
             )
         return rows
 
-    def run_delta(self, chunk_id: str) -> RunDelta | None:
-        identity = self._repo.run_identity(chunk_id)
+    def run_delta(self, chunk: Chunk) -> RunDelta | None:
+        """`chunk` is already resolved (`bzz:domain-takes-objects`) — the caller 404s on
+        an unknown chunk id before this is ever invoked; `None` here means only that
+        `chunk` names no `work_item_runs`-backed run."""
+        identity = self._repo.run_identity(chunk.chunk_id)
         if identity is None:
             return None
-        chunk = self._chunk_records.get(chunk_id)
-        if chunk is None:
-            return None  # an ephemeral (grouped-away/deleted) chunk's run is absent from every read
-        facts = self._chunk_facts.load_facts(chunk_id) or ChunkFacts(minted=True)
+        facts = self._chunk_facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
         outcome, escalation = _outcome_and_escalation(chunk.graph_id, facts)
-        sets = [_set_delta(raw) for raw in self._repo.delivered_sets(chunk_id)]
+        sets = [_set_delta(raw) for raw in self._repo.delivered_sets(chunk.chunk_id)]
         return RunDelta(
-            chunk_id=chunk_id,
+            chunk_id=chunk.chunk_id,
             routine_name=identity.routine_name,
             scope_slug=identity.scope_slug,
             mode=identity.mode,

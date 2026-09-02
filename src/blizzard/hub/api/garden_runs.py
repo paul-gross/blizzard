@@ -40,11 +40,15 @@ router = APIRouter(prefix="/api", tags=["garden-runs"], dependencies=[Depends(re
 @dataclass(frozen=True)
 class _RunWindow:
     """One `GET /runs` request's parsed window — both edges optional, defaulting to the
-    last 24 hours ending now (the `GET /activity` shape); a malformed edge or an
-    inverted span is the 422 it names."""
+    last 24 hours ending now (the `GET /activity` shape); a malformed edge, an inverted
+    span, or one past the day cap is the 422 it names."""
 
     since: datetime
     until: datetime
+
+    #: The span cap (`GET /routines/trend`'s own `_MAX_PERIODS` shape) — a run list is
+    #: bounded by window, not paged, but the window still needs a floor (D5).
+    _MAX_SPAN_DAYS = 366
 
     @classmethod
     def of(cls, *, since: str | None, until: str | None, now: datetime) -> _RunWindow:
@@ -52,6 +56,11 @@ class _RunWindow:
         parsed_since = _parse_instant(since, field="since") if since is not None else parsed_until - timedelta(hours=24)
         if parsed_until <= parsed_since:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="until must be after since")
+        if (parsed_until - parsed_since) > timedelta(days=cls._MAX_SPAN_DAYS):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"since/until would span more than {cls._MAX_SPAN_DAYS} days",
+            )
         return cls(since=parsed_since, until=parsed_until)
 
 
@@ -151,7 +160,8 @@ def run_delta(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     """One run's full detail: its routine, scope, mode, derived outcome, and, per
     finding-set it delivered, the added/observed/gone entries its own artifact
     published. 404 when `chunk_id` names no routine run."""
-    delta = services.garden_run.run_delta(chunk_id)
+    chunk = services.chunks.record.get(chunk_id)
+    delta = services.garden_run.run_delta(chunk) if chunk is not None else None
     if delta is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown run {chunk_id}")
     names = GraphNames(services.graphs.get)

@@ -116,7 +116,7 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
 
     fset = delta_materialization.finding_set
     assert fset.finding_set_id.startswith(f"{FINDING_SET_PREFIX}_")
-    # The fact attributes to the very set it was delivered under (blizzard#396 D1).
+    # The fact attributes to the very set it was delivered under (blizzard#401 D1).
     assert delta_materialization.facts[0].finding_set_id == fset.finding_set_id
     assert fset.artifact_id == "art_1"
     assert fset.scope_slug == "runner"

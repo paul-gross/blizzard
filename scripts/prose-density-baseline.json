@@ -933,9 +933,9 @@
    "total": 169
   },
   "blizzard/hub/api/garden_runs.py": {
-   "comments": 2,
+   "comments": 4,
    "docstrings": 13,
-   "total": 158
+   "total": 168
   },
   "blizzard/hub/api/graph_names.py": {
    "comments": 0,
@@ -1558,9 +1558,9 @@
    "total": 106
   },
   "blizzard/hub/domain/garden_run.py": {
-   "comments": 2,
-   "docstrings": 50,
-   "total": 282
+   "comments": 1,
+   "docstrings": 63,
+   "total": 310
   },
   "blizzard/hub/domain/garden_sweeps.py": {
    "comments": 0,
@@ -1908,9 +1908,9 @@
    "total": 109
   },
   "blizzard/hub/store/internal/garden_run_store.py": {
-   "comments": 9,
+   "comments": 11,
    "docstrings": 12,
-   "total": 157
+   "total": 168
   },
   "blizzard/hub/store/internal/garden_sweeps_store.py": {
    "comments": 0,
@@ -2373,9 +2373,9 @@
    "total": 38
   },
   "blizzard/hub/store/migrations/versions/20260901_0900_finding_facts_finding_set_id.py": {
-   "comments": 0,
-   "docstrings": 7,
-   "total": 48
+   "comments": 2,
+   "docstrings": 6,
+   "total": 58
   },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
@@ -2383,9 +2383,9 @@
    "total": 0
   },
   "blizzard/hub/store/schema.py": {
-   "comments": 411,
+   "comments": 414,
    "docstrings": 6,
-   "total": 1288
+   "total": 1293
   },
   "blizzard/hub/system_artifacts/__init__.py": {
    "comments": 3,
@@ -3615,7 +3615,7 @@
   "blizzard/wire/garden_run.py": {
    "comments": 0,
    "docstrings": 1,
-   "total": 64
+   "total": 68
   },
   "blizzard/wire/garden_sweeps.py": {
    "comments": 0,
@@ -4640,9 +4640,9 @@
    "total": 262
   },
   "test_garden_delivery_store.py": {
-   "comments": 9,
-   "docstrings": 16,
-   "total": 453
+   "comments": 17,
+   "docstrings": 23,
+   "total": 527
   },
   "test_garden_proposal_api.py": {
    "comments": 1,
@@ -4692,17 +4692,17 @@
   "test_garden_run_api.py": {
    "comments": 0,
    "docstrings": 6,
-   "total": 221
+   "total": 235
   },
   "test_garden_run_component.py": {
    "comments": 5,
-   "docstrings": 13,
-   "total": 302
+   "docstrings": 16,
+   "total": 332
   },
   "test_garden_run_domain.py": {
    "comments": 4,
-   "docstrings": 9,
-   "total": 312
+   "docstrings": 12,
+   "total": 357
   },
   "test_garden_sweeps_component.py": {
    "comments": 0,

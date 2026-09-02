@@ -187,6 +187,7 @@
                 "type": "null"
               }
             ],
+            "description": "The finding this add minted, or null when the delivered set predates the finding_facts.finding_set_id linkage \u2014 the add still renders from the artifact, just linked to no finding row.",
             "title": "Finding Id"
           },
           "introduced": {

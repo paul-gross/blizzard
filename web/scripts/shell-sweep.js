@@ -102,7 +102,7 @@
  *     revision hashes wrap inside their column rather than widening it.
  *   - projects/fleet/src/lib/garden/garden-runs.shell-sweep.spec.ts — the
  *     gardening runs-and-findings tab's two presentational components
- *     (blizzard#397 Phase 3): `FleetRunList`'s escalated row carries a
+ *     (blizzard#401 Phase 3): `FleetRunList`'s escalated row carries a
  *     genuinely different computed background/border-left color from a
  *     normal row at 390px, and `FleetRunDelta` genuinely stacks its
  *     finding-set blocks, and each set's added/observed/gone groups, with no

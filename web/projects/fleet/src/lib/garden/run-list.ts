@@ -30,7 +30,7 @@ export interface RunListRowVm {
 }
 
 /**
- * The gardening runs-and-findings tab's run list (blizzard#397 Phase 3) —
+ * The gardening runs-and-findings tab's run list (blizzard#401 Phase 3) —
  * presentational only, no query injection: renders the rows it is handed, colors each
  * row's outcome by the fleet-wide {@link STATUS_TONE} vocabulary (rather than a second
  * status→color mapping), and keeps every delivered finding-set its own visible

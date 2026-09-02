@@ -59,7 +59,7 @@ const RUN_DELTA = {
 };
 
 /**
- * Exercises the `/gardening/runs-and-findings` container (blizzard#397 Phase 3) —
+ * Exercises the `/gardening/runs-and-findings` container (blizzard#401 Phase 3) —
  * the run list is always mounted, and the optional `chunkId` route param drives
  * whether the delta shows, `graphs-page.spec.ts`'s own stubbed-`ActivatedRoute`
  * shape. `FleetRunList`/`FleetRunDelta` own their own row/group rendering and are
@@ -153,19 +153,19 @@ describe('GardeningRunsFindingsPage', () => {
     expect(navigate).toHaveBeenCalledWith(['/gardening', 'runs-and-findings', 'ch_1']);
   });
 
-  it('shows the placeholder and no delta when the route carries no chunkId', async () => {
+  it("shows fleet-run-delta's own empty state when the route carries no chunkId", async () => {
     const { fixture } = await mount(null);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="gardening-runs-findings-placeholder"]')).toBeTruthy();
-    expect(el.querySelector('fleet-run-delta')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-run-delta-empty"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-run-delta"]')).toBeNull();
   });
 
   it('mounts the run delta for the chunkId in the route param, keeping the list mounted too, with its chunk link and CLI verb', async () => {
     const { fixture } = await mount('ch_1');
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="gardening-runs-findings-placeholder"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-run-delta-empty"]')).toBeNull();
     expect(el.querySelector('fleet-run-list')).toBeTruthy();
     const link = el.querySelector<HTMLAnchorElement>('[data-testid="gardening-run-delta-chunk-link"]');
     expect(link?.getAttribute('href')).toBe('/board/chunk/ch_1');
@@ -199,7 +199,7 @@ describe('GardeningRunsFindingsPage', () => {
 
     expect(fixture.componentInstance).toBe(pageInstance);
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="gardening-runs-findings-placeholder"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-run-delta-empty"]')).toBeTruthy();
   });
 
   it('resolves a run-list read failure to the error state', async () => {

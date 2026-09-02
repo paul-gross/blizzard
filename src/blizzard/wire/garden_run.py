@@ -33,7 +33,11 @@ class RunRowView(BaseModel):
 class AddedFindingView(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    finding_id: str | None
+    finding_id: str | None = Field(
+        description="The finding this add minted, or null when the delivered set predates "
+        "the finding_facts.finding_set_id linkage — the add still renders from the "
+        "artifact, just linked to no finding row."
+    )
     class_: str = Field(alias="class")
     locus: str
     summary: str

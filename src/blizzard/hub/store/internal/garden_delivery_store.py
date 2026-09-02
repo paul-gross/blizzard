@@ -112,20 +112,6 @@ class GardenDeliveryStore:
                         for f in new_findings
                     ],
                 )
-            if facts:
-                conn.execute(
-                    insert(finding_facts),
-                    [
-                        {
-                            "finding_id": fact.finding_id,
-                            "kind": fact.kind,
-                            "recorded_at": plan.at,
-                            "note": fact.note,
-                            "finding_set_id": fact.finding_set_id,
-                        }
-                        for fact in facts
-                    ],
-                )
             if finding_set_rows:
                 conn.execute(
                     insert(finding_sets),
@@ -140,6 +126,20 @@ class GardenDeliveryStore:
                             "measurement": fs.measurement,
                         }
                         for fs in finding_set_rows
+                    ],
+                )
+            if facts:
+                conn.execute(
+                    insert(finding_facts),
+                    [
+                        {
+                            "finding_id": fact.finding_id,
+                            "kind": fact.kind,
+                            "recorded_at": plan.at,
+                            "note": fact.note,
+                            "finding_set_id": fact.finding_set_id,
+                        }
+                        for fact in facts
                     ],
                 )
             if surviving_proposals:

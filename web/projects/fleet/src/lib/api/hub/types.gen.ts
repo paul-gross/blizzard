@@ -97,6 +97,8 @@ export type AddedFindingView = {
     class: string;
     /**
      * Finding Id
+     *
+     * The finding this add minted, or null when the delivered set predates the finding_facts.finding_set_id linkage — the add still renders from the artifact, just linked to no finding row.
      */
     finding_id: string | null;
     /**

@@ -65,7 +65,8 @@ list` reports every run minted in `--since`/`--until` (defaulting to the last 24
 carrying its routine, scope, mode, its derived outcome, and, where it delivered, every finding-set row it published
 (revisions and measurement) — a run can deliver several lists in one act, and each is reported as its own entry,
 never merged into one. A run that escalated before delivering anything still appears, since the list is read from the
-run's own identity, not from what it delivered.
+run's own identity, not from what it delivered. A run whose chunk was later grouped away or deleted is the one
+exclusion: it is absent from both reads, since neither has a live chunk left to read outcome and identity from.
 
 `run show <chunk_id>` reads one run's full detail: the same identity and outcome, plus, per finding-set it delivered,
 the delta that set actually published — added, observed, and gone, kept as three separate groups. An added entry
