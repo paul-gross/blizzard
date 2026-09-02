@@ -1,0 +1,20 @@
+<div class="rsp-picker">
+  <label>
+    Routine
+    <select data-testid="gardening-findings-routine-select" (change)="onRoutineChange($event)">
+      <option value="" [selected]="selectedRoutine() === null" disabled>Choose a routine</option>
+      @for (r of routines(); track r.routine_id) {
+        <option [value]="r.name" [selected]="r.name === selectedRoutine()">{{ r.name }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    Scope
+    <select data-testid="gardening-findings-scope-select" (change)="onScopeChange($event)">
+      <option value="" [selected]="selectedScope() === null" disabled>Choose a scope</option>
+      @for (s of scopes(); track s.slug) {
+        <option [value]="s.slug" [selected]="s.slug === selectedScope()">{{ s.slug }}</option>
+      }
+    </select>
+  </label>
+</div>

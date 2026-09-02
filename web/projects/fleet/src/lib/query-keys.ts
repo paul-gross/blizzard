@@ -57,10 +57,34 @@ export function hubFindingsKey(findingIds: readonly string[]): readonly unknown[
   return ['hub', 'findings', ...findingIds];
 }
 
+/** The findings triage bucket read's key prefix — the triage surface's own `GET
+ * /api/findings?routine=&scope=` read (as distinct from {@link hubFindingsKey}'s
+ * by-id fan-out), appended with the selected routine and scope so a different pair is
+ * its own cache entry, `hubFleetSpendKey`'s own reason. A triage exit mutation doesn't
+ * know which routine/scope is currently selected, so it invalidates this bare prefix
+ * instead (TanStack's default prefix match on `invalidateQueries`) — every cached
+ * routine/scope combination closes at once. */
+export const hubFindingsBucketPrefixKey = ['hub', 'findings-bucket'] as const;
+
+/** The findings triage bucket read, keyed by the selected routine and scope. Both are
+ * required by the server (`ListFindingsApiFindingsGetData.query`), `hubGraphKey`'s own
+ * null-tolerant shape for the disabled-query rest state while either is unset. */
+export function hubFindingsBucketKey(routine: string | null, scope: string | null): readonly unknown[] {
+  return [...hubFindingsBucketPrefixKey, routine, scope];
+}
+
 /** One work item read by its source pointer, keyed by the pair — `GET
  * /api/work-sources/{source}/items/{ref}`. `hubGraphKey`'s own null-tolerant shape. */
 export function hubWorkItemKey(source: string | null, ref: string | null): readonly unknown[] {
   return ['hub', 'work-item', source, ref];
+}
+
+/** The findings triage bucket's linked-work-items fan-out read — every `[source,
+ * ref]` pointer in `pointers`, keyed by the whole list so a different selected
+ * routine/scope (and thus a different pointer set) is its own cache entry,
+ * {@link hubFindingsKey}'s own "the whole id list rides the key" shape. */
+export function hubWorkItemsKey(pointers: readonly (readonly [string, string])[]): readonly unknown[] {
+  return ['hub', 'work-items', ...pointers.flatMap(([source, ref]) => [source, ref])];
 }
 /** The scope list — `GET /api/scopes`. Feeds both the gardening run dialog's scope
  * picker and the routines panel's scope list. Scopes change rarely and carry no SSE

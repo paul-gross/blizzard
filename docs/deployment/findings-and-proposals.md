@@ -20,6 +20,13 @@ one or many ids and exits them together, in one call. `blizzard hub finding reop
 whichever exit or `gone` fact was newest, restoring the finding to `live`. Every verb 404s on an unknown finding id and
 422s on a blank note; a hand `resolve` from this verb records no garden proposal of its own.
 
+**The same runs-and-findings sub-tab that reads a run's own delta also reaches a findings triage list over one
+routine/scope bucket, filterable by class and by state. An operator multi-selects rows and applies one exit verb — or,
+on rows that have already exited, `reopen` — with one note across the whole selection in a single call. A `gone`-flagged
+finding renders tinted but stays a normal, live, selectable row; an exited finding stays visible too, rendered dimmed
+rather than removed. A finding named by an accepted-and-minted proposal shows that proposal's linked work item beside
+it. Neither the bulk bar nor its dialog is offered without `chunk:control`.**
+
 ## Garden proposals
 
 `blizzard hub garden-proposal list` and `show <proposal_id>` read every proposal, or one by id, each naming the findings

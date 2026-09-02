@@ -1,0 +1,91 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.fl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.fl-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--line);
+}
+/* A `gone`-flagged row (D8) renders tinted against the amber family — "flagged for
+ * review", distinct from an escalated row's red (`run-list.css`'s own
+ * `.rl-row--escalated`) and from an exited row's plain dimming below. `gone` is
+ * *not* exited: this row stays a normal, fully rendered, selectable-looking row. */
+.fl-row--gone {
+  border-left-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+}
+/* An exited row (state one of `finding-state.ts`'s `FINDING_EXIT_STATES`) renders
+ * dimmed but present — reduced opacity, never removed from the DOM. */
+.fl-row--exited {
+  opacity: 0.55;
+}
+.fl-hdr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.fl-class {
+  font-weight: bold;
+}
+.fl-locus,
+.fl-observed,
+.fl-introduced,
+.fl-last-seen {
+  color: var(--dim);
+}
+.fl-state {
+  text-transform: uppercase;
+  font-size: var(--fs-xs);
+  color: var(--cyan);
+}
+.fl-summary {
+  margin: 0;
+}
+.fl-note {
+  margin: 0;
+  color: var(--amber-hi);
+}
+.fl-work-item {
+  margin: 0;
+}
+.fl-work-item a {
+  color: var(--cyan);
+}
+.fl-cli {
+  margin: 8px 0 0;
+  color: var(--dim);
+}
+.fl-select-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  color: var(--dim);
+}
+.fl-select {
+  margin-right: 4px;
+}
+.fl-bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+}
+.fl-bulk-count {
+  color: var(--dim);
+}

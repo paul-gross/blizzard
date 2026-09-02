@@ -1,0 +1,26 @@
+h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+.cli-verb {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--label);
+  word-break: break-all;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.submit-error {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--red);
+}

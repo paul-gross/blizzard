@@ -1,7 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getFindingApiFindingsFindingIdGet, type FindingView } from '../api/hub';
-import { hubFindingsKey } from '../query-keys';
+import { getFindingApiFindingsFindingIdGet, listFindingsApiFindingsGet, type FindingView } from '../api/hub';
+import { hubFindingsBucketKey, hubFindingsKey } from '../query-keys';
 
 /**
  * Every id in `findingIds()`, read live through its own `GET
@@ -36,6 +36,36 @@ export function injectHubFindingsQuery(findingIds: () => readonly string[]) {
           }),
         );
         return results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+      },
+    };
+  });
+}
+
+/**
+ * The findings triage bucket read — every finding for one routine+scope pair, live
+ * through `GET /api/findings?routine=&scope=` (the triage surface, as distinct from
+ * {@link injectHubFindingsQuery}'s by-id fan-out the docket detail's evidence table
+ * reads). Both `routine` and `scope` are required by the server
+ * (`ListFindingsApiFindingsGetData.query`), so the query stays disabled until both are
+ * chosen, `work-item.query.ts`'s own null-tolerant disabled-query shape. Always reads
+ * with `include_gone: true` — a gone finding still belongs on the triage surface until
+ * a person confirms it (that's what `confirm-gone` records), so the bucket can't
+ * afford to have the server drop it before a person has weighed in.
+ */
+export function injectHubFindingsBucketQuery(routine: () => string | null, scope: () => string | null) {
+  return injectQuery(() => {
+    const r = routine();
+    const s = scope();
+    return {
+      queryKey: hubFindingsBucketKey(r, s),
+      enabled: r !== null && s !== null,
+      queryFn: async (): Promise<FindingView[]> => {
+        const { data, error } = await listFindingsApiFindingsGet({
+          query: { routine: r!, scope: s!, include_gone: true },
+          throwOnError: false,
+        });
+        if (error) throw error;
+        return data ?? [];
       },
     };
   });

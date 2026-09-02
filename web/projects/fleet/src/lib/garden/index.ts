@@ -1,3 +1,6 @@
+export * from './finding-list';
+export * from './finding-state';
+export * from './finding.mutations';
 export * from './finding.query';
 export * from './garden-proposal.mutations';
 export * from './garden-proposals.query';
@@ -8,6 +11,7 @@ export * from './routine-baselines.query';
 export * from './routine-list';
 export * from './routine-panel';
 export * from './routine-run.mutations';
+export * from './routine-scope-picker';
 export * from './routine-window';
 export * from './routines.query';
 export * from './run-delta';
