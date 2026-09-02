@@ -39,7 +39,7 @@ def get_dashboard(request: Request) -> DashboardView:
     populate; ``fleet_summary`` is ``None`` on a hub outage or an unwired runner."""
     wiring = RunnerWiring.of(request)
     service = wiring.status()
-    asks: IReadAskRepository = wiring.stores().asks
+    asks: IReadAskRepository = wiring.read_stores().asks
     return DashboardView(
         runner=_runner_status_view(service),
         environments=_environment_list(service),

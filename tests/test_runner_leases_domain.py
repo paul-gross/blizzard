@@ -24,7 +24,7 @@ from blizzard.runner.domain.leases import (
 )
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
-from tests.runner_fakes import FakeProbe, SqlAlchemyRunnerStore, make_store, make_stores, runner_store_errors
+from tests.runner_fakes import FakeProbe, SqlAlchemyRunnerStore, make_read_stores, make_store, runner_store_errors
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -267,7 +267,7 @@ def _counting_store(tmp_path) -> _CountingParkedIdsStore:  # type: ignore[no-unt
 @pytest.mark.component
 def test_list_active_over_empty_store_returns_empty_list(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    service = LocalLeaseService(make_stores(store), FixedClock(_NOW), FakeProbe())
+    service = LocalLeaseService(make_read_stores(store), FixedClock(_NOW), FakeProbe())
 
     assert service.list_active() == []
 
@@ -281,7 +281,7 @@ def test_list_active_joins_binding_and_heartbeat(tmp_path) -> None:  # type: ign
     beat_at = _NOW + timedelta(minutes=5)
     store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
     probe = FakeProbe(alive={(100, "start-100")})
-    service = LocalLeaseService(make_stores(store), FixedClock(beat_at), probe)
+    service = LocalLeaseService(make_read_stores(store), FixedClock(beat_at), probe)
 
     activities = service.list_active()
 
@@ -308,7 +308,7 @@ def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path) ->
     resumed_at = _NOW + timedelta(hours=3)
     store.record_spawn("lease_1", pid=101, process_start_time="start-101", session_id="sess-a", spawned_at=resumed_at)
     probe = FakeProbe(alive={(101, "start-101")})
-    service = LocalLeaseService(make_stores(store), FixedClock(resumed_at + timedelta(seconds=30)), probe)
+    service = LocalLeaseService(make_read_stores(store), FixedClock(resumed_at + timedelta(seconds=30)), probe)
 
     activities = service.list_active()
 
@@ -324,7 +324,7 @@ def test_list_active_reads_parked_lease_ids_once_not_per_lease(tmp_path) -> None
     _seed_lease(store, chunk="ch_2", lease="lease_2")
     store.record_spawn("lease_2", pid=200, process_start_time="start-200", session_id="sess-b", spawned_at=_NOW)
     probe = FakeProbe(alive={(100, "start-100"), (200, "start-200")})
-    service = LocalLeaseService(make_stores(store), FixedClock(_NOW), probe)
+    service = LocalLeaseService(make_read_stores(store), FixedClock(_NOW), probe)
 
     activities = service.list_active()
 
@@ -347,7 +347,7 @@ def test_list_recent_appends_closed_leases_after_active(tmp_path) -> None:  # ty
         lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", reason="transitioned", closed_at=closed_at
     )
     probe = FakeProbe(alive={(100, "start-100")})
-    service = LocalLeaseService(make_stores(store), FixedClock(_NOW), probe)
+    service = LocalLeaseService(make_read_stores(store), FixedClock(_NOW), probe)
 
     activities = service.list_recent()
 
@@ -386,7 +386,7 @@ def test_list_recent_active_lease_not_crowded_out_by_newer_closed_leases(tmp_pat
         closed_at=newer_closed_at,
     )
     probe = FakeProbe(alive={(100, "start-100")})
-    service = LocalLeaseService(make_stores(store), FixedClock(_NOW), probe, recent_limit=1)
+    service = LocalLeaseService(make_read_stores(store), FixedClock(_NOW), probe, recent_limit=1)
 
     activities = service.list_recent()
 
@@ -403,7 +403,7 @@ def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) ->
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
-    service = LocalLeaseService(make_stores(store), FixedClock(_NOW), FakeProbe())
+    service = LocalLeaseService(make_read_stores(store), FixedClock(_NOW), FakeProbe())
 
     activities = service.list_recent()
 

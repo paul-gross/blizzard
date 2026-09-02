@@ -45,6 +45,6 @@ def list_staged_attachments(lease_id: str, request: Request) -> list[StagedAttac
     """The lease's currently staged submissions — newest content per ``name``, not yet
     published into any envelope (issue #169)."""
     lease = authorized_lease(lease_id, request)
-    attachments = RunnerWiring.of(request).stores().attachments
+    attachments = RunnerWiring.of(request).read_stores().attachments
     staged = attachments.attachments_for_lease(lease.lease_id)
     return [StagedAttachment(name=name, content=content) for name, content in sorted(staged.items())]

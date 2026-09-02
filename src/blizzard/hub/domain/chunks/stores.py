@@ -1,8 +1,9 @@
 """The chunk-store bundles (D1) — composition-and-test handles for a
-collaborator spanning several chunk seams. Unlike :class:`~blizzard.runner.stores.RunnerStores`,
-no ``src/`` domain collaborator takes either bundle: every service names its seams explicitly,
-so no chunk service can hold write access to a concept it never calls. Declares no umbrella
-Protocol either — unlike the runner's, nothing would hold one."""
+collaborator spanning several chunk seams. Unlike :class:`~blizzard.runner.stores.RunnerStores`
+and its read-only twin :class:`~blizzard.runner.stores.RunnerReadStores`, no ``src/`` domain
+collaborator takes either bundle here: every service names its seams explicitly, so no chunk
+service can hold write access to a concept it never calls. Declares no umbrella Protocol
+either — unlike the runner's, nothing would hold one."""
 
 from __future__ import annotations
 

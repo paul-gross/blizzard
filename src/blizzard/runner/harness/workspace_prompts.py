@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+from blizzard.foundation.clock import IClock
+
 WORKSPACE_PROMPT_FILENAME = "workspace-prompt.md"
 
 
@@ -73,3 +75,21 @@ class IWriteWorkspacePromptRepository(IReadWorkspacePromptRepository, Protocol):
         Removing the row is what distinguishes clearing from overriding with empty text: the
         absent row is the only state that resolves back to the configured prompt."""
         ...
+
+
+class WorkspacePromptService:
+    """Composition-root-wired: the workspace-prompt store and the clock (D4, blizzard#412)."""
+
+    def __init__(self, store: IWriteWorkspacePromptRepository, clock: IClock) -> None:
+        self._store = store
+        self._clock = clock
+
+    def replace(self, workspace_id: str, *, prompt: str) -> None:
+        """Replace the runtime workspace-prompt override — effective on subsequent spawns
+        (issue #17)."""
+        self._store.set_workspace_prompt(workspace_id, prompt=prompt, at=self._clock.now())
+
+    def clear(self, workspace_id: str) -> None:
+        """Drop the runtime workspace-prompt override so the runner's configured prompt
+        resolves again (issue #344)."""
+        self._store.clear_workspace_prompt(workspace_id)

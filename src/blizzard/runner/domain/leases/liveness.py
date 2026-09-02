@@ -6,6 +6,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.clock import IClock
+
+__all__ = ["IReadLeaseLivenessRepository", "IWriteLeaseLivenessRepository", "LeaseLivenessService"]
+
 
 class IReadLeaseLivenessRepository(Protocol):
     """Read-only heartbeat and spawn queries — REAP's staleness baseline (held by
@@ -49,3 +53,15 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         by an earlier session of the same lease can be told from one recorded by the process
         running now (issue #13)."""
         ...
+
+
+class LeaseLivenessService:
+    """Composition-root-wired: the liveness store and the clock (D4, blizzard#412)."""
+
+    def __init__(self, store: IWriteLeaseLivenessRepository, clock: IClock) -> None:
+        self._store = store
+        self._clock = clock
+
+    def record_heartbeat(self, lease_id: str) -> None:
+        """Record a lease heartbeat, stamped with the injected clock."""
+        self._store.record_heartbeat(lease_id=lease_id, beat_at=self._clock.now())

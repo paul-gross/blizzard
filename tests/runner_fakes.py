@@ -67,6 +67,7 @@ from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_
 from blizzard.runner.stores import (
     IReadRunnerStore,
     IWriteRunnerStore,
+    RunnerReadStores,
     RunnerStores,
 )
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
@@ -182,6 +183,12 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         graph_artifacts=store,
         elicitations=store,
     )
+
+
+def make_read_stores(store: IWriteRunnerStore) -> RunnerReadStores:
+    """The :class:`RunnerReadStores` bundle over one flat store — :func:`make_stores`
+    narrowed the way :meth:`RunnerReadStores.of` narrows a wired ``RunnerStores``."""
+    return RunnerReadStores.of(make_stores(store))
 
 
 def _create_all(md: MetaData, engine: object) -> None:

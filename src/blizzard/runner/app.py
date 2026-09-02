@@ -63,9 +63,13 @@ from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
 from blizzard.runner.composition import build_stores
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.asks import AskService
 from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
 from blizzard.runner.domain.leases import LocalLeaseService
+from blizzard.runner.domain.leases.liveness import LeaseLivenessService
+from blizzard.runner.domain.leases.session import LeaseSessionService
+from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
@@ -76,12 +80,13 @@ from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
+from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.stores import RunnerStores
+from blizzard.runner.stores import RunnerReadStores, RunnerStores
 from blizzard.runner.transcripts.internal.http_archived_transcript_repository import (
     HttpArchivedTranscriptRepository,
 )
@@ -169,6 +174,11 @@ def create_app(
     selftests: SelfTestService | None = None,
     attachments: AttachmentService | None = None,
     git_commit_declarations: GitCommitDeclarationService | None = None,
+    asks: AskService | None = None,
+    pause: PauseService | None = None,
+    lease_liveness: LeaseLivenessService | None = None,
+    lease_sessions: LeaseSessionService | None = None,
+    workspace_prompts: WorkspacePromptService | None = None,
     hub_http_client: httpx.Client | None = None,
     jti_cache: IJtiCache | None = None,
     events: EventBroker | None = None,
@@ -186,7 +196,11 @@ def create_app(
     # The seams below are None on the store-free app.
     app.state.workspace_provider = workspace_provider
     app.state.harness = harness
-    app.state.runner_stores = runner_stores
+    # The controller-facing narrowing of `runner_stores` (D1, D2, blizzard#412) — every
+    # route resolves this; the write bundle itself is never stashed on `app.state`, so no
+    # route can reach it — only used here, to derive this and the five single-concept
+    # mutating services below.
+    app.state.runner_read_stores = RunnerReadStores.of(runner_stores) if runner_stores is not None else None
     # The SSE broker (D2) — `None` on every composer with no stream to feed, where
     # :class:`~blizzard.foundation.events.stream.Stream` degrades cleanly.
     app.state.events = events
@@ -202,6 +216,22 @@ def create_app(
     app.state.requeue = requeue
     app.state.attachments = attachments
     app.state.git_commit_declarations = git_commit_declarations
+    # Each single-concept, no cross-collaborator beyond its own write seam and the clock
+    # (D3, D4, blizzard#412) — built here, like `selftests` below, rather than requiring
+    # every composer to repeat the derivation `runner_stores` already makes trivial.
+    app.state.asks = asks or (AskService(runner_stores.asks, SystemClock(), events=events) if runner_stores else None)
+    app.state.pause = pause or (
+        PauseService(runner_stores.pause, SystemClock(), events=events) if runner_stores else None
+    )
+    app.state.lease_liveness = lease_liveness or (
+        LeaseLivenessService(runner_stores.liveness, SystemClock()) if runner_stores else None
+    )
+    app.state.lease_sessions = lease_sessions or (
+        LeaseSessionService(runner_stores.session, SystemClock()) if runner_stores else None
+    )
+    app.state.workspace_prompts = workspace_prompts or (
+        WorkspacePromptService(runner_stores.workspace_prompt, SystemClock()) if runner_stores else None
+    )
     # The adapter-drift canary (issue #54): store-free, so wired unconditionally.
     app.state.selftests = selftests or SelfTestService(
         adapters={CLAUDE_CODE_HARNESS_NAME: harness} if harness is not None else {},
@@ -283,7 +313,9 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         transcript_source=harness_transcript_source,
     )
     # ``stale_after`` is left at its default so the two readers never desync (#28).
-    leases = LocalLeaseService(stores=runner_stores, clock=SystemClock(), process=LinuxProcessProbe())
+    leases = LocalLeaseService(
+        stores=RunnerReadStores.of(runner_stores), clock=SystemClock(), process=LinuxProcessProbe()
+    )
     # Projected off the harness's own source, via the accessor — never built twice.
     transcript_repository = ProjectedTranscriptRepository(harness.transcript_source())
     # The archived-transcript seam (blizzard#249, D4) needs its own authenticated client:

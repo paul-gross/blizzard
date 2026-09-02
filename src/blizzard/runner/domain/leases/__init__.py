@@ -38,7 +38,7 @@ from blizzard.runner.environments.repository import EnvBindingRecord
 
 if TYPE_CHECKING:
     # Deferred: ``runner/stores.py`` composes this module's own Protocol.
-    from blizzard.runner.stores import RunnerStores
+    from blizzard.runner.stores import RunnerReadStores
 
 __all__ = [
     "HEARTBEAT_STALENESS_THRESHOLD",
@@ -238,11 +238,12 @@ class LocalLeaseService:
     """Derive every active lease's state at read time — the panel's list (issue #28).
 
     A status the store never stores. Spans leases, asks (parked) and environments
-    (bindings), so it holds the :class:`~blizzard.runner.stores.RunnerStores` bundle (D4)."""
+    (bindings), so it holds the :class:`~blizzard.runner.stores.RunnerReadStores` bundle
+    (D4) — verified read-only over it, so it takes the narrowed bundle (blizzard#412)."""
 
     def __init__(
         self,
-        stores: RunnerStores,
+        stores: RunnerReadStores,
         clock: IClock,
         process: IProcessProbe,
         stale_after: timedelta = HEARTBEAT_STALENESS_THRESHOLD,
