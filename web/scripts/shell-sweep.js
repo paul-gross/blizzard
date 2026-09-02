@@ -139,6 +139,18 @@
  *     options, the decline reason field genuinely renders below them once
  *     chosen, and the footer's Cancel/Accept sit side by side with neither
  *     overflowing the panel, at phone and desktop widths.
+ *   - projects/fleet/src/lib/garden/gardening-findings-triage.shell-sweep.spec.ts —
+ *     the findings triage list (blizzard#401 Phase 4, `FleetFindingList`): with
+ *     every row selected through the real select-all checkbox, the bulk bar's own
+ *     buttons genuinely stay inside the viewport and never overlap each other or the
+ *     list itself, at 1400/390/320px, and a `gone`-flagged row (D8) carries a
+ *     genuinely different computed background/border-left color from a plain row.
+ *   - projects/hub/src/app/gardening/gardening-finding-triage-dialog.shell-sweep.spec.ts —
+ *     the findings triage dialog (blizzard#401 Phase 4): the note field renders
+ *     without overflowing the panel, the `supersede` verb's extra absorbing-finding
+ *     field renders below/beside the note field with no overlap, and the footer's
+ *     Cancel/submit buttons sit side by side without overflowing the panel, at
+ *     1400/390/320px.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -166,6 +178,8 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposals-page.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-accept-dialog.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/gardening-findings-triage.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-finding-triage-dialog.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {

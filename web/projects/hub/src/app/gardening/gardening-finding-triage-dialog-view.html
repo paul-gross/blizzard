@@ -1,0 +1,46 @@
+<fleet-kit-dialog
+  [open]="true"
+  [ariaLabel]="heading()"
+  testid="gardening-finding-triage-dialog"
+  (closed)="onClosed()"
+>
+  <h2 fleetKitDialogHeader data-testid="finding-triage-dialog-title">{{ heading() }}</h2>
+
+  @if (verb() === 'supersede') {
+    <fleet-kit-text-input
+      placeholder="Absorbing finding id — required"
+      ariaLabel="Absorbing finding id"
+      [value]="supersededBy()"
+      (valueChange)="supersededBy.set($event)"
+      testid="finding-triage-superseded-by-input"
+    />
+  }
+
+  <fleet-kit-text-input
+    multiline
+    [rows]="3"
+    placeholder="Note — required"
+    ariaLabel="Note"
+    [value]="note()"
+    (valueChange)="note.set($event)"
+    testid="finding-triage-note-input"
+  />
+  <p class="cli-verb" data-testid="finding-triage-cli-verb">{{ cliVerb() }}</p>
+
+  <div fleetKitDialogFooter class="footer">
+    @if (submitError(); as error) {
+      <p class="submit-error" data-testid="finding-triage-submit-error">{{ error }}</p>
+    }
+    <fleet-kit-button [disabled]="submitting()" (click)="onClosed()" testid="finding-triage-dialog-cancel">
+      Cancel
+    </fleet-kit-button>
+    <fleet-kit-button
+      variant="primary"
+      [disabled]="!canSubmit()"
+      (click)="onSubmitClick()"
+      testid="finding-triage-dialog-submit"
+    >
+      {{ heading() }}
+    </fleet-kit-button>
+  </div>
+</fleet-kit-dialog>

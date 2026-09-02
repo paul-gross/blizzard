@@ -1,0 +1,8 @@
+<app-gardening-finding-triage-dialog-view
+  [verb]="verb()"
+  [findingIds]="findingIds()"
+  [submitting]="submitting()"
+  [submitError]="submitError()"
+  (closed)="closed.emit()"
+  (submitted)="onSubmit($event.note, $event.supersededBy)"
+/>

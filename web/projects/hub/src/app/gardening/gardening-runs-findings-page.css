@@ -13,3 +13,22 @@
 .grf-delta {
   min-width: 0;
 }
+.grf-bucket {
+  margin-top: 16px;
+}
+.grf-bucket-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.grf-bucket-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.grf-bucket-summary {
+  margin: 0 0 12px;
+  color: var(--dim);
+}

@@ -4,8 +4,8 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 
 import { client as hubClient } from '../api/hub/client.gen';
 import { settle } from '../testing/settle';
-import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
-import { injectHubWorkItemQuery } from './work-item.query';
+import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
+import { injectHubWorkItemQuery, injectHubWorkItemsQuery, type WorkItemPointer } from './work-item.query';
 
 @Component({
   selector: 'fleet-test-work-item-query-host',
@@ -19,6 +19,33 @@ class TestWorkItemQueryHost {
     () => this.source(),
     () => this.ref(),
   );
+}
+
+@Component({
+  selector: 'fleet-test-work-items-query-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '',
+})
+class TestWorkItemsQueryHost {
+  readonly pointers = signal<readonly WorkItemPointer[]>([]);
+  readonly query = injectHubWorkItemsQuery(() => this.pointers());
+}
+
+function workItem(source: string, ref: string, label: string) {
+  return {
+    source,
+    ref,
+    title: 't',
+    body: 'b',
+    author: { kind: 'user', user_id: 'u_1' },
+    closure: null,
+    closed_at: null,
+    created_at: '2026-01-01T00:00:00Z',
+    edited_at: '2026-01-01T00:00:00Z',
+    label,
+    stated_priority: null,
+    web_url: null,
+  };
 }
 
 describe('injectHubWorkItemQuery', () => {
@@ -70,5 +97,68 @@ describe('injectHubWorkItemQuery', () => {
 
     expect(fixture.componentInstance.query.data()?.label).toBe('hub#42');
     expect(stub.forRoute('/api/work-sources/hub/items/42', 'GET')).toHaveLength(1);
+  });
+});
+
+describe('injectHubWorkItemsQuery', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub?.restore());
+
+  it('stays disabled for an empty pointer list', async () => {
+    stub = stubRequestClient(hubClient, () => ({}));
+    TestBed.configureTestingModule({
+      imports: [TestWorkItemsQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestWorkItemsQueryHost);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.query.isPending()).toBe(true);
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it('reads every pointer independently, live, and joins the results', async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/work-sources/hub/items/1') return workItem('hub', '1', 'hub#1');
+      if (method === 'GET' && path === '/api/work-sources/hub/items/2') return workItem('hub', '2', 'hub#2');
+      return {};
+    });
+    TestBed.configureTestingModule({
+      imports: [TestWorkItemsQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestWorkItemsQueryHost);
+    fixture.componentInstance.pointers.set([
+      { source: 'hub', ref: '1' },
+      { source: 'hub', ref: '2' },
+    ]);
+    await settle(fixture);
+
+    const data = fixture.componentInstance.query.data();
+    expect(data?.map((w) => w.label).sort()).toEqual(['hub#1', 'hub#2']);
+    expect(stub.forRoute('/api/work-sources/hub/items/1', 'GET')).toHaveLength(1);
+    expect(stub.forRoute('/api/work-sources/hub/items/2', 'GET')).toHaveLength(1);
+  });
+
+  it("drops a failed pointer's row rather than failing the whole join", async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/work-sources/hub/items/1') return workItem('hub', '1', 'hub#1');
+      if (method === 'GET' && path === '/api/work-sources/hub/items/2') return stubError(404, { detail: 'not found' });
+      return {};
+    });
+    TestBed.configureTestingModule({
+      imports: [TestWorkItemsQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestWorkItemsQueryHost);
+    fixture.componentInstance.pointers.set([
+      { source: 'hub', ref: '1' },
+      { source: 'hub', ref: '2' },
+    ]);
+    await settle(fixture);
+
+    const data = fixture.componentInstance.query.data();
+    expect(data?.map((w) => w.label)).toEqual(['hub#1']);
+    expect(fixture.componentInstance.query.isError()).toBe(false);
   });
 });

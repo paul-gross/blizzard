@@ -4,7 +4,7 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
 import { vi } from 'vitest';
 
@@ -58,6 +58,115 @@ const RUN_DELTA = {
   ],
 };
 
+const ROUTINES = [
+  { routine_id: 'rt_1', name: 'nightly', graph_name: 'sweep', default_scope_slug: 'blizzard', created_at: '2026-01-01T00:00:00Z' },
+];
+
+const SCOPES = [{ slug: 'blizzard', description: 'the blizzard repo', created_at: '2026-01-01T00:00:00Z' }];
+
+function findingFixture(overrides: { state: string } & Record<string, unknown>) {
+  return {
+    routine_name: 'nightly',
+    scope_slug: 'blizzard',
+    observed_count: 1,
+    last_seen_at: '2026-01-05T00:00:00Z',
+    introduced: '2026-01-01T00:00:00Z',
+    note: null,
+    live: overrides.state === 'live',
+    ...overrides,
+  };
+}
+
+const FINDING_LIVE = findingFixture({
+  finding_id: 'fnd_10',
+  class: 'stale-docstring',
+  locus: 'a.py:1',
+  summary: 'summary a',
+  state: 'live',
+});
+const FINDING_GONE = findingFixture({
+  finding_id: 'fnd_11',
+  class: 'unused-import',
+  locus: 'b.py:2',
+  summary: 'summary b',
+  state: 'gone',
+  note: 'not seen in the last sweep',
+});
+const FINDING_RESOLVED_1 = findingFixture({
+  finding_id: 'fnd_12',
+  class: 'stale-docstring',
+  locus: 'c.py:3',
+  summary: 'summary c',
+  state: 'resolved',
+  note: 'fixed',
+});
+const FINDING_RESOLVED_2 = findingFixture({
+  finding_id: 'fnd_13',
+  class: 'stale-docstring',
+  locus: 'd.py:4',
+  summary: 'summary d',
+  state: 'resolved',
+});
+const FINDING_GONE_CONFIRMED = findingFixture({
+  finding_id: 'fnd_14',
+  class: 'unused-import',
+  locus: 'e.py:5',
+  summary: 'summary e',
+  state: 'gone-confirmed',
+  note: 'confirmed gone',
+});
+const FINDING_WONT_FIX = findingFixture({
+  finding_id: 'fnd_15',
+  class: 'stale-docstring',
+  locus: 'f.py:6',
+  summary: 'summary f',
+  state: 'wont-fix',
+  note: 'not worth it',
+});
+
+const BUCKET = [
+  FINDING_LIVE,
+  FINDING_GONE,
+  FINDING_RESOLVED_1,
+  FINDING_RESOLVED_2,
+  FINDING_GONE_CONFIRMED,
+  FINDING_WONT_FIX,
+];
+
+const PROPOSAL_ACCEPTED_MINTED = {
+  proposal_id: 'gp_1',
+  routine_name: 'nightly',
+  class: 'stale-docstring',
+  title: 'Extract the shared helper',
+  body: 'Three call sites duplicate this logic.',
+  created_at: '2026-01-01T00:00:00Z',
+  findings: ['fnd_10'],
+  closure: {
+    closure: 'accepted',
+    reason: null,
+    closed_by: 'u_1',
+    closed_at: '2026-01-02T00:00:00Z',
+    item_outcome: 'minted',
+    source: 'hub',
+    ref: '42',
+  },
+};
+
+const WORK_ITEM_42 = {
+  source: 'hub',
+  ref: '42',
+  label: 'hub#42',
+  web_url: '/board/chunk/ch_9',
+  title: 't',
+  body: 'b',
+  author: { kind: 'user' },
+  closure: null,
+  closed_at: null,
+  created_at: '2026-01-01T00:00:00Z',
+  edited_at: '2026-01-01T00:00:00Z',
+  stated_priority: null,
+};
+
 /**
  * Exercises the `/gardening/runs-and-findings` container (blizzard#401 Phase 3) —
  * the run list is always mounted, and the optional `chunkId` route param drives
@@ -81,8 +190,13 @@ describe('GardeningRunsFindingsPage', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       const overridden = opts.routeOverride?.(method, path);
       if (overridden !== undefined) return overridden;
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runs') return [RUN_ROW, ESCALATED_RUN_ROW];
       if (method === 'GET' && path === '/api/runs/ch_1') return RUN_DELTA;
+      if (method === 'GET' && path === '/api/findings') return [];
+      if (method === 'GET' && path === '/api/garden-proposals') return [];
+      if (method === 'GET' && path === '/api/routines') return ROUTINES;
+      if (method === 'GET' && path === '/api/scopes') return SCOPES;
       return {};
     });
     await TestBed.configureTestingModule({
@@ -221,5 +335,119 @@ describe('GardeningRunsFindingsPage', () => {
 
     const delta = fixture.debugElement.query(By.css('fleet-run-delta'));
     expect(delta.componentInstance.state()).toBe('error');
+  });
+
+  describe('the findings triage bucket (blizzard#401 Phase 4)', () => {
+    it("renders the bucket's own rest state until a routine/scope is chosen", async () => {
+      const { fixture } = await mount(null);
+      const el = fixture.nativeElement as HTMLElement;
+
+      const list = fixture.debugElement.query(By.css('fleet-finding-list'));
+      expect(list.componentInstance.state()).toBe('empty');
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeNull();
+    });
+
+    it("reads the selected run's own routine and scope by default, tinting a gone row and dimming an exited row while keeping both rendered", async () => {
+      const { fixture } = await mount('ch_1', {
+        routeOverride: (method, path) => (method === 'GET' && path === '/api/findings' ? BUCKET : undefined),
+      });
+      const el = fixture.nativeElement as HTMLElement;
+
+      const live = el.querySelector('[data-testid="gardening-finding-row-fnd_10"]');
+      const gone = el.querySelector('[data-testid="gardening-finding-row-fnd_11"]');
+      const resolved = el.querySelector('[data-testid="gardening-finding-row-fnd_12"]');
+      expect(live).toBeTruthy();
+      expect(gone?.classList.contains('fl-row--gone')).toBe(true);
+      expect(gone?.querySelector('[data-testid="fl-note"]')?.textContent).toContain('not seen in the last sweep');
+      expect(resolved).toBeTruthy();
+      expect(resolved?.classList.contains('fl-row--exited')).toBe(true);
+    });
+
+    it('narrows the rendered rows via the class and state filters', async () => {
+      const { fixture } = await mount('ch_1', {
+        routeOverride: (method, path) => (method === 'GET' && path === '/api/findings' ? BUCKET : undefined),
+      });
+      const el = fixture.nativeElement as HTMLElement;
+
+      el.querySelector<HTMLElement>('[data-testid="gardening-finding-class-item-unused-import"]')?.click();
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeNull();
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_14"]')).toBeTruthy();
+
+      el.querySelector<HTMLElement>('[data-testid="gardening-finding-state-item-gone"]')?.click();
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_14"]')).toBeNull();
+    });
+
+    it('separates outflow from withdrawn counts in the summary given a mixed bucket', async () => {
+      const { fixture } = await mount('ch_1', {
+        routeOverride: (method, path) => (method === 'GET' && path === '/api/findings' ? BUCKET : undefined),
+      });
+      const el = fixture.nativeElement as HTMLElement;
+
+      const summary = el.querySelector('[data-testid="gardening-findings-summary"]')?.textContent ?? '';
+      expect(summary).toContain('3');
+      expect(summary).toContain('1');
+    });
+
+    it('resolves an accepted-and-minted proposal work item beside a finding that is still live', async () => {
+      const { fixture } = await mount('ch_1', {
+        routeOverride: (method, path) => {
+          if (method === 'GET' && path === '/api/findings') return BUCKET;
+          if (method === 'GET' && path === '/api/garden-proposals') return [PROPOSAL_ACCEPTED_MINTED];
+          if (method === 'GET' && path === '/api/work-sources/hub/items/42') return WORK_ITEM_42;
+          return undefined;
+        },
+      });
+      await settle(fixture, 8);
+      const el = fixture.nativeElement as HTMLElement;
+
+      const row = el.querySelector('[data-testid="gardening-finding-row-fnd_10"]');
+      expect(row?.querySelector('[data-testid="fl-state"]')?.textContent).toContain('live');
+      const link = row?.querySelector<HTMLAnchorElement>('[data-testid="fl-work-item-link"]');
+      expect(link?.textContent).toBe('hub#42');
+      expect(link?.getAttribute('href')).toBe('/board/chunk/ch_9');
+    });
+  });
+
+  describe('the bulk-action triage dialog (blizzard#401 Phase 3)', () => {
+    it('forwards chunk:control to the finding list, withholding it for a read-only identity', async () => {
+      const { fixture } = await mount(null, {
+        routeOverride: (method, path) => {
+          if (method === 'GET' && path === '/api/me') {
+            return { ...OPERATOR_ME_RESPONSE, permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'chunk:control') };
+          }
+          return undefined;
+        },
+      });
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="gardening-findings-select-all"]')).toBeNull();
+    });
+
+    it('opens the triage dialog when the finding list emits bulkTriage, closing it again on (closed)', async () => {
+      const { fixture } = await mount('ch_1', {
+        routeOverride: (method, path) => (method === 'GET' && path === '/api/findings' ? BUCKET : undefined),
+      });
+      const el = fixture.nativeElement as HTMLElement;
+
+      const list = fixture.debugElement.query(By.css('fleet-finding-list'));
+      list.componentInstance.bulkTriage.emit({ verb: 'resolve', findingIds: ['fnd_10'] });
+      await settle(fixture);
+
+      const dialog = el.querySelector('[data-testid="gardening-finding-triage-dialog"]');
+      expect(dialog).toBeTruthy();
+      expect(dialog?.textContent).toContain('Resolve 1 finding');
+
+      const dialogComponent = fixture.debugElement.query(By.css('app-gardening-finding-triage-dialog'));
+      dialogComponent.componentInstance.closed.emit();
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="gardening-finding-triage-dialog"]')).toBeNull();
+    });
   });
 });
