@@ -344,6 +344,10 @@ finding_facts = Table(
     Column("proposal_id", String, ForeignKey("garden_proposals.proposal_id"), nullable=True),
     # The absorbing finding, set only on a `superseded` fact (blizzard#394).
     Column("superseded_by", String, ForeignKey("findings.finding_id"), nullable=True),
+    # The delivered list this fact belongs to (blizzard#396 D1) — written by delivery for
+    # the `add`/`observed`/`gone` facts it materializes; null for a person's exit verb,
+    # which belongs to no run. No backfill: a fact predating this column reads back null.
+    Column("finding_set_id", String, ForeignKey("finding_sets.finding_set_id"), nullable=True),
     CheckConstraint(
         "kind IN ('add', 'observed', 'gone', 'resolved', 'gone-confirmed', 'wont-fix', 'not-a-finding',"
         " 'superseded', 'reopened')",

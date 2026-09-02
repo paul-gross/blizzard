@@ -116,7 +116,13 @@ class GardenDeliveryStore:
                 conn.execute(
                     insert(finding_facts),
                     [
-                        {"finding_id": fact.finding_id, "kind": fact.kind, "recorded_at": plan.at, "note": fact.note}
+                        {
+                            "finding_id": fact.finding_id,
+                            "kind": fact.kind,
+                            "recorded_at": plan.at,
+                            "note": fact.note,
+                            "finding_set_id": fact.finding_set_id,
+                        }
                         for fact in facts
                     ],
                 )

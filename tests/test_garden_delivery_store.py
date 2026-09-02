@@ -86,9 +86,11 @@ def _full_plan(*, at: datetime = _NOW) -> DeliveryPlan:
                     )
                 ],
                 facts=[
-                    FindingFactRecord(finding_id="fin_1", kind="add", note=None),
-                    FindingFactRecord(finding_id="fin_2", kind="observed", note=None),
-                    FindingFactRecord(finding_id="fin_3", kind="gone", note="couldn't reproduce"),
+                    FindingFactRecord(finding_id="fin_1", kind="add", finding_set_id="fins_1", note=None),
+                    FindingFactRecord(finding_id="fin_2", kind="observed", finding_set_id="fins_1", note=None),
+                    FindingFactRecord(
+                        finding_id="fin_3", kind="gone", finding_set_id="fins_1", note="couldn't reproduce"
+                    ),
                 ],
             )
         ],
@@ -125,6 +127,9 @@ def test_deliver_writes_every_row(tmp_path: Path) -> None:
             ("fin_2", "observed", None),
             ("fin_3", "gone", "couldn't reproduce"),
         ]
+        # Every add/observed/gone fact this delivery materialized attributes to the
+        # finding_set it was delivered under (blizzard#396 D1).
+        assert {r.finding_set_id for r in fact_rows} == {"fins_1"}
 
         set_rows = conn.execute(sa.select(finding_sets)).all()
         assert len(set_rows) == 1
@@ -237,7 +242,7 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
                         introduced_at=None,
                     )
                 ],
-                facts=[FindingFactRecord(finding_id="fin_a", kind="add", note=None)],
+                facts=[FindingFactRecord(finding_id="fin_a", kind="add", finding_set_id="fins_a", note=None)],
             )
         ],
         proposals=[],
@@ -272,7 +277,9 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
                         introduced_at=None,
                     )
                 ],
-                facts=[FindingFactRecord(finding_id="fin_a_replay", kind="add", note=None)],
+                facts=[
+                    FindingFactRecord(finding_id="fin_a_replay", kind="add", finding_set_id="fins_a_replay", note=None)
+                ],
             ),
             DeltaMaterialization(
                 finding_set=NewFindingSet(
@@ -294,7 +301,7 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
                         introduced_at=None,
                     )
                 ],
-                facts=[FindingFactRecord(finding_id="fin_b", kind="add", note=None)],
+                facts=[FindingFactRecord(finding_id="fin_b", kind="add", finding_set_id="fins_b", note=None)],
             ),
         ],
         proposals=[],
