@@ -7,24 +7,27 @@ import {
   injectResolveFindingsMutation,
   injectSupersedeFindingsMutation,
   injectWontFixFindingsMutation,
+  type FindingExitVars,
   type FindingTriageVerb,
 } from 'fleet';
 
 import { GardeningFindingTriageDialogView } from './gardening-finding-triage-dialog-view';
 
 /**
- * The findings triage bucket's bulk-action dialog container (blizzard#402 Phase
- * 3) — one dialog for every verb {@link FindingTriageVerb} names, submitted
+ * The findings triage bucket's bulk-action dialog container — one dialog for
+ * every verb {@link FindingTriageVerb} names, submitted
  * through whichever of the six `finding.mutations.ts` mutations {@link verb}
  * picks out (`gardening-proposal-pass-dialog.ts`'s own shape). All six are
  * injected unconditionally at field-initializer time — the same DI context every
  * one of these `inject*` calls already runs in, not a conditional hook call.
  *
- * {@link mutationFor} answers `isPending()` alone (every one of the six shares
- * that surface); firing the actual `.mutate(...)` is its own `switch` in
- * {@link onSubmit}, since `supersede`'s vars carry `supersededBy` where every
- * other verb's don't — a single shared call site would have to satisfy both
- * shapes at once.
+ * {@link mutationsByVerb} collapses `isPending()` and the actual `.mutate(...)`
+ * call for all six into one `Record<FindingTriageVerb, …>`, built once, rather
+ * than two parallel six-arm `switch`es that would otherwise have to be kept in
+ * sync by hand. `supersede`'s vars carry `supersededBy` where every other verb's
+ * don't, so each entry's own `mutate` closes over its own mutation and folds that
+ * field in only where it applies — {@link onSubmit} passes it through unconditionally,
+ * `undefined` for the five verbs that ignore it.
  *
  * A rejected batch (D5) surfaces through this container's own `submitError` and
  * does **not** close the dialog — the container's caller keeps the same
@@ -49,6 +52,11 @@ export class GardeningFindingTriageDialog {
 
   readonly closed = output<void>();
 
+  /** Emitted once the batch actually lands — distinct from {@link closed}, which
+   * also fires on a plain cancel; the host page's own selection-clear (F1) fires
+   * off this, never off `closed` alone. */
+  readonly succeeded = output<void>();
+
   private readonly resolveMutation = injectResolveFindingsMutation();
   private readonly confirmGoneMutation = injectConfirmGoneFindingsMutation();
   private readonly wontFixMutation = injectWontFixFindingsMutation();
@@ -56,54 +64,59 @@ export class GardeningFindingTriageDialog {
   private readonly supersedeMutation = injectSupersedeFindingsMutation();
   private readonly reopenMutation = injectReopenFindingsMutation();
 
-  protected readonly submitting = computed(() => this.mutationFor(this.verb()).isPending());
-  protected readonly submitError = signal<string | null>(null);
-
-  /** The one mutation {@link verb} names, narrowed only to the surface every one
-   * of the six shares (`isPending()`) — {@link onSubmit}'s own `switch` fires the
-   * actual `.mutate(...)` call, since the vars shape differs for `supersede`. */
-  private mutationFor(verb: FindingTriageVerb): { isPending(): boolean } {
-    switch (verb) {
-      case 'resolve':
-        return this.resolveMutation;
-      case 'confirm-gone':
-        return this.confirmGoneMutation;
-      case 'wont-fix':
-        return this.wontFixMutation;
-      case 'not-a-finding':
-        return this.notAFindingMutation;
-      case 'supersede':
-        return this.supersedeMutation;
-      case 'reopen':
-        return this.reopenMutation;
+  /** One entry per verb, each closing over its own injected mutation —
+   * {@link submitting} reads `isPending()` off the entry {@link verb} names,
+   * {@link onSubmit} calls its `mutate`. `supersededBy` is threaded through
+   * uniformly; only `supersede`'s entry actually uses it. */
+  private readonly mutationsByVerb: Record<
+    FindingTriageVerb,
+    {
+      isPending(): boolean;
+      mutate(
+        vars: FindingExitVars,
+        supersededBy: string | undefined,
+        opts: { onSuccess: () => void; onError: (error: unknown) => void },
+      ): void;
     }
-  }
+  > = {
+    resolve: {
+      isPending: () => this.resolveMutation.isPending(),
+      mutate: (vars, _supersededBy, opts) => this.resolveMutation.mutate(vars, opts),
+    },
+    'confirm-gone': {
+      isPending: () => this.confirmGoneMutation.isPending(),
+      mutate: (vars, _supersededBy, opts) => this.confirmGoneMutation.mutate(vars, opts),
+    },
+    'wont-fix': {
+      isPending: () => this.wontFixMutation.isPending(),
+      mutate: (vars, _supersededBy, opts) => this.wontFixMutation.mutate(vars, opts),
+    },
+    'not-a-finding': {
+      isPending: () => this.notAFindingMutation.isPending(),
+      mutate: (vars, _supersededBy, opts) => this.notAFindingMutation.mutate(vars, opts),
+    },
+    supersede: {
+      isPending: () => this.supersedeMutation.isPending(),
+      mutate: (vars, supersededBy, opts) =>
+        this.supersedeMutation.mutate({ ...vars, supersededBy: supersededBy ?? '' }, opts),
+    },
+    reopen: {
+      isPending: () => this.reopenMutation.isPending(),
+      mutate: (vars, _supersededBy, opts) => this.reopenMutation.mutate(vars, opts),
+    },
+  };
+
+  protected readonly submitting = computed(() => this.mutationsByVerb[this.verb()].isPending());
+  protected readonly submitError = signal<string | null>(null);
 
   protected onSubmit(note: string, supersededBy?: string): void {
     this.submitError.set(null);
     const verb = this.verb();
-    const findingIds = this.findingIds();
-    const onSuccess = () => this.closed.emit();
+    const onSuccess = () => {
+      this.succeeded.emit();
+      this.closed.emit();
+    };
     const onError = (error: unknown) => this.submitError.set(errorMessage(error, `${verb} failed.`));
-    switch (verb) {
-      case 'resolve':
-        this.resolveMutation.mutate({ findingIds, note }, { onSuccess, onError });
-        return;
-      case 'confirm-gone':
-        this.confirmGoneMutation.mutate({ findingIds, note }, { onSuccess, onError });
-        return;
-      case 'wont-fix':
-        this.wontFixMutation.mutate({ findingIds, note }, { onSuccess, onError });
-        return;
-      case 'not-a-finding':
-        this.notAFindingMutation.mutate({ findingIds, note }, { onSuccess, onError });
-        return;
-      case 'supersede':
-        this.supersedeMutation.mutate({ findingIds, note, supersededBy: supersededBy ?? '' }, { onSuccess, onError });
-        return;
-      case 'reopen':
-        this.reopenMutation.mutate({ findingIds, note }, { onSuccess, onError });
-        return;
-    }
+    this.mutationsByVerb[verb].mutate({ findingIds: this.findingIds(), note }, supersededBy, { onSuccess, onError });
   }
 }

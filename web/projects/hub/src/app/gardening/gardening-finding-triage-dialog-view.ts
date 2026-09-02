@@ -9,6 +9,14 @@ export interface FindingTriageSubmission {
   readonly supersededBy?: string;
 }
 
+/** Escapes a value for safe interpolation inside a double-quoted shell argument —
+ * backslashes first, then double quotes — so {@link GardeningFindingTriageDialogView.cliVerb}'s
+ * `--note "..."` mirror stays a command that actually runs if copy-pasted even when
+ * the note itself contains a `"` (F11). */
+function shellDoubleQuoted(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
 /** Every verb's human-readable dialog heading label. */
 const VERB_LABELS: Record<FindingTriageVerb, string> = {
   resolve: 'Resolve',
@@ -20,9 +28,9 @@ const VERB_LABELS: Record<FindingTriageVerb, string> = {
 };
 
 /**
- * The findings triage bulk-action dialog's presentational view (blizzard#402
- * Phase 3, Decisions 1, 5, 7) — a required note field every verb takes plus, for
- * `supersede` alone, a second required field naming the absorbing finding,
+ * The findings triage bulk-action dialog's presentational view (Decisions 1, 5, 7)
+ * — a required note field every verb takes plus, for `supersede` alone, a second
+ * required field naming the absorbing finding,
  * `gardening-proposal-accept-dialog-view.ts`'s own conditional-extra-field
  * shape. Here the branch is on the {@link verb} input rather than a local mode
  * signal — the verb is fixed for this dialog's whole lifetime, chosen before it
@@ -77,7 +85,7 @@ export class GardeningFindingTriageDialogView {
     const parts = [`blizzard hub finding ${verb} ${ids}`];
     if (verb === 'supersede') parts.push(`--by ${this.supersededBy().trim()}`);
     const note = this.note().trim();
-    if (note) parts.push(`--note "${note}"`);
+    if (note) parts.push(`--note ${shellDoubleQuoted(note)}`);
     return parts.join(' ');
   });
 

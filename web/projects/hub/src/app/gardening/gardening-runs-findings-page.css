@@ -16,12 +16,6 @@
 .grf-bucket {
   margin-top: 16px;
 }
-.grf-bucket-picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 12px;
-}
 .grf-bucket-filters {
   display: flex;
   flex-wrap: wrap;

@@ -11,6 +11,7 @@ export * from './routine-baselines.query';
 export * from './routine-list';
 export * from './routine-panel';
 export * from './routine-run.mutations';
+export * from './routine-scope-picker';
 export * from './routine-window';
 export * from './routines.query';
 export * from './run-delta';

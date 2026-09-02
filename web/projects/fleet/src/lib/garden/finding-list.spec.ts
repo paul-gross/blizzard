@@ -50,6 +50,7 @@ describe('FleetFindingList', () => {
     rows?: readonly FindingListRowVm[];
     state?: KitAsyncStateValue;
     canControl?: boolean;
+    clearSelectionOn?: number;
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetFindingList],
@@ -59,6 +60,7 @@ describe('FleetFindingList', () => {
     fixture.componentRef.setInput('rows', inputs.rows ?? ROWS);
     fixture.componentRef.setInput('state', inputs.state ?? 'ready');
     fixture.componentRef.setInput('canControl', inputs.canControl ?? false);
+    if (inputs.clearSelectionOn !== undefined) fixture.componentRef.setInput('clearSelectionOn', inputs.clearSelectionOn);
     await fixture.whenStable();
     return fixture;
   }
@@ -132,7 +134,7 @@ describe('FleetFindingList', () => {
     expect(el.querySelector('[data-testid="gardening-findings-empty"]')).toBeTruthy();
   });
 
-  describe('multi-select and the bulk bar (blizzard#402 Phase 3, D9)', () => {
+  describe('multi-select and the bulk bar (D9)', () => {
     it('renders no checkbox and no bulk bar at all when canControl is false', async () => {
       const fixture = await mount({ canControl: false });
       const el = fixture.nativeElement as HTMLElement;
@@ -219,6 +221,23 @@ describe('FleetFindingList', () => {
       el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.click();
       await fixture.whenStable();
       expect(el.querySelector('[data-testid="gardening-finding-bulk-reopen"]')).toBeNull();
+    });
+
+    it('clears the selection when clearSelectionOn changes, but not on a mere re-render (F1)', async () => {
+      const fixture = await mount({ canControl: true, clearSelectionOn: 0 });
+      const el = fixture.nativeElement as HTMLElement;
+
+      el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.click();
+      await fixture.whenStable();
+      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.checked).toBe(true);
+
+      fixture.componentRef.setInput('rows', ROWS);
+      await fixture.whenStable();
+      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.checked).toBe(true);
+
+      fixture.componentRef.setInput('clearSelectionOn', 1);
+      await fixture.whenStable();
+      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.checked).toBe(false);
     });
   });
 });

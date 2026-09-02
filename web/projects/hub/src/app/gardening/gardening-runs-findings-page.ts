@@ -4,7 +4,9 @@ import { ActivatedRoute, Router } from '@angular/router';
 import {
   asyncState,
   defaultRoutineWindow,
+  FINDING_STATES,
   FleetFindingList,
+  FleetRoutineScopePicker,
   FleetRunDelta,
   FleetRunList,
   hasPermission,
@@ -57,23 +59,9 @@ const ALL_STATES = 'all';
  * so a real class named `all` can never collide with {@link ALL_CLASSES}. */
 const CLASS_VALUE_PREFIX = 'class:';
 
-/** The finding state vocabulary itself — fixed (`FindingView.state`'s own closed
- * set, `finding-state.ts`'s own domain fact), unlike class, so the state chips
- * carry no prefix and no collision guard: none of the seven literally reads `all`. */
-const FINDING_STATES: readonly string[] = [
-  'live',
-  'gone',
-  'resolved',
-  'gone-confirmed',
-  'wont-fix',
-  'not-a-finding',
-  'superseded',
-];
-
 /**
- * The `/gardening/runs-and-findings` sub-tab (blizzard#401 Phase 3, blizzard#402 Phases 1-4,
- * `plans/garden/user-interface.md`'s "Reading what a run saw" and "Triaging what's
- * left" sections) — the run list, the selected run's own delta, and the findings
+ * The `/gardening/runs-and-findings` sub-tab (`plans/garden/user-interface.md`'s "Reading what a
+ * run saw" and "Triaging what's left" sections) — the run list, the selected run's own delta, and the findings
  * triage bucket for a routine/scope pair. `graphs-page.ts`'s own list-stays-mounted
  * shape: both `runs-and-findings` and `runs-and-findings/:chunkId` render this one
  * component, and the optional `chunkId` route param drives which run's delta shows.
@@ -97,7 +85,7 @@ const FINDING_STATES: readonly string[] = [
 @Component({
   selector: 'app-gardening-runs-findings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRunList, FleetRunDelta, FleetFindingList, GardeningFindingTriageDialog, KitChips],
+  imports: [FleetRunList, FleetRunDelta, FleetFindingList, FleetRoutineScopePicker, GardeningFindingTriageDialog, KitChips],
   templateUrl: './gardening-runs-findings-page.html',
   styleUrl: './gardening-runs-findings-page.css',
 })
@@ -195,7 +183,7 @@ export class GardeningRunsFindingsPage {
     void this.router.navigate(['/gardening', 'runs-and-findings', chunkId]);
   }
 
-  // --- Findings triage bucket (blizzard#402 Phase 4) ---
+  // --- Findings triage bucket ---
 
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly scopesQuery = injectHubScopesQuery();
@@ -220,12 +208,31 @@ export class GardeningRunsFindingsPage {
     () => this.explicitScope() ?? this.deltaVm()?.scopeSlug ?? null,
   );
 
-  protected onRoutineChoose(event: Event): void {
-    this.explicitRoutine.set((event.target as HTMLSelectElement).value);
+  /** Picking one half of the pair snapshots the *other* half's current effective
+   * value into its own explicit signal first, if it isn't explicit already (F2) —
+   * without this, picking a new routine while scope is still deriving from
+   * `deltaVm()` left scope silently pinned to the *previously selected run's* own
+   * scope, a pairing the operator never chose, that the query would keep firing on
+   * even after a different run was picked. Once both halves are explicit they stop
+   * tracking `deltaVm()` altogether, so the pair only ever changes on a deliberate
+   * pick. Each pick also clears the class/state filters (F5): a filter chosen
+   * against the old bucket can otherwise strand the new one looking empty with no
+   * active chip explaining why. */
+  protected onRoutineChoose(routine: string): void {
+    if (this.explicitScope() === null) this.explicitScope.set(this.selectedScope());
+    this.explicitRoutine.set(routine);
+    this.resetBucketFilters();
   }
 
-  protected onScopeChoose(event: Event): void {
-    this.explicitScope.set((event.target as HTMLSelectElement).value);
+  protected onScopeChoose(scope: string): void {
+    if (this.explicitRoutine() === null) this.explicitRoutine.set(this.selectedRoutine());
+    this.explicitScope.set(scope);
+    this.resetBucketFilters();
+  }
+
+  private resetBucketFilters(): void {
+    this.classFilter.set(null);
+    this.stateFilter.set(null);
   }
 
   private readonly bucketQuery = injectHubFindingsBucketQuery(
@@ -263,6 +270,9 @@ export class GardeningRunsFindingsPage {
     this.classFilter.set(value === ALL_CLASSES ? null : value.slice(CLASS_VALUE_PREFIX.length));
   }
 
+  /** {@link FINDING_STATES} (`finding-state.ts`'s own domain fact) is fixed, unlike
+   * `class`, so — unlike {@link classChips} — these carry no value prefix and no
+   * collision guard: none of the seven literally reads `all`. */
   protected readonly stateChips: readonly KitChipOption[] = [
     { value: ALL_STATES, label: 'All states', testid: 'gardening-finding-state-all' },
     ...FINDING_STATES.map((s) => ({ value: s, label: s, testid: `gardening-finding-state-item-${s}` })),
@@ -368,4 +378,13 @@ export class GardeningRunsFindingsPage {
   protected readonly triagingBulkAction = signal<{ verb: FindingTriageVerb; findingIds: readonly string[] } | null>(
     null,
   );
+
+  /** Bumped on the dialog's own `succeeded` output — {@link FleetFindingList.clearSelectionOn}'s
+   * own token, so a landed bulk action clears the checkboxes but a plain cancel
+   * doesn't (F1). */
+  protected readonly clearSelectionToken = signal(0);
+
+  protected onTriageSucceeded(): void {
+    this.clearSelectionToken.update((n) => n + 1);
+  }
 }

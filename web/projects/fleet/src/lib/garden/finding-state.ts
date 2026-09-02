@@ -1,9 +1,9 @@
 /**
- * The findings triage surface's own state classification (blizzard#402 Phase 4,
- * `plans/garden/user-interface.md`'s "Triaging what's left" section) — shared here
- * so {@link FleetFindingList} and any later triage affordance (Phase 3's `reopen`
- * on an exited row) read the same three buckets off `FindingView.state` rather than
- * each re-deriving them.
+ * The findings triage surface's own state classification
+ * (`plans/garden/user-interface.md`'s "Triaging what's left" section) — shared here
+ * so {@link FleetFindingList} and any later triage affordance (`reopen` on an
+ * exited row) read the same three buckets off `FindingView.state` rather than each
+ * re-deriving them.
  *
  * `FindingView.live` is **not** this classification — it is a wire boolean set by
  * `derive_liveness` (`src/blizzard/hub/domain/findings.py:102-126`) as
@@ -22,10 +22,17 @@ export const FINDING_OUTFLOW_STATES: readonly string[] = ['resolved', 'gone-conf
  * standing regardless. */
 export const FINDING_WITHDRAWN_STATES: readonly string[] = ['wont-fix', 'not-a-finding', 'superseded'];
 
-/** Every state `EXIT_KINDS` names (`src/blizzard/hub/domain/findings.py:22`) — the
+/** Every state `EXIT_KINDS` names (`src/blizzard/hub/domain/findings.py:23`) — the
  * outflow and withdrawn sets combined. A finding in one of these states has exited:
  * it renders dimmed but present, never removed from the list. */
 export const FINDING_EXIT_STATES: readonly string[] = [...FINDING_OUTFLOW_STATES, ...FINDING_WITHDRAWN_STATES];
+
+/** `FindingView.state`'s own closed set — `"live"`, `"gone"`, or one of `EXIT_KINDS`
+ * (`src/blizzard/hub/domain/findings.py`'s own doc comment on the field). `'live'`
+ * and `'gone'` (still open) plus every exit state, derived from the same constants
+ * above rather than a second hand-typed list, so this file stays the one place the
+ * full vocabulary is spelled out. */
+export const FINDING_STATES: readonly string[] = ['live', 'gone', ...FINDING_EXIT_STATES];
 
 /** Whether `state` is one of {@link FINDING_EXIT_STATES}. */
 export function isFindingExited(state: string): boolean {

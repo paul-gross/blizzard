@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitButton } from '../kit/kit-button';
@@ -28,10 +28,9 @@ export interface FindingListRowVm {
 }
 
 /** The bulk-bar verbs the findings triage list can dispatch — every human-driven
- * exit `finding.mutations.ts` exposes, plus `reopen` (blizzard#402 Phase 3). Named
- * off the CLI's own verb spelling (`src/blizzard/hub/cli/finding.py`), so a
- * container routes an emitted verb straight to the matching mutation with no
- * translation table of its own. */
+ * exit `finding.mutations.ts` exposes, plus `reopen`. Named off the CLI's own verb
+ * spelling (`src/blizzard/hub/cli/finding.py`), so a container routes an emitted
+ * verb straight to the matching mutation with no translation table of its own. */
 export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a-finding' | 'supersede' | 'reopen';
 
 /** One bulk-bar action button, always offered (Reopen is handled separately,
@@ -45,11 +44,10 @@ const BULK_ACTIONS: readonly { verb: FindingTriageVerb; label: string }[] = [
 ];
 
 /**
- * The gardening runs-and-findings tab's findings triage list (blizzard#402 Phases
- * 3-4) — presentational only, no query injection, `run-list.ts`'s own shape: renders
- * the rows it is handed, exactly as filtered by the container (D3: class/state
- * filtering happens client-side, this component stays dumb over whatever `rows()`
- * it's given).
+ * The gardening runs-and-findings tab's findings triage list — presentational
+ * only, no query injection, `run-list.ts`'s own shape: renders the rows it is
+ * handed, exactly as filtered by the container (D3: class/state filtering happens
+ * client-side, this component stays dumb over whatever `rows()` it's given).
  *
  * A row's own `state` decides its treatment (`finding-state.ts`'s own three-way
  * classification): still open with no flag renders plain; a `gone`-flagged row
@@ -84,6 +82,15 @@ export class FleetFindingList {
    * panel.ts`'s own `canControl` gating. */
   readonly canControl = input(false);
 
+  /** Bumped by the container once a bulk action actually lands — never on a mere
+   * cancel or dialog-open, since those leave the same batch worth retrying under a
+   * different verb. Exited rows stay in {@link rows} (D6), so a completed action
+   * can't be detected by rows disappearing; the container has to say so. Any
+   * change clears the selection, including the very first (harmless, since it
+   * starts empty) — a plain counter, not a boolean, so two same-shaped actions in a
+   * row each still register as a change. */
+  readonly clearSelectionOn = input<number>(0);
+
   /** Emitted with a verb and the ids it applies to when a bulk-bar button is
    * activated — the container decides what the verb means (D4), this component
    * only reports the selection at the moment of the click. */
@@ -93,6 +100,13 @@ export class FleetFindingList {
 
   /** Finding ids checked for a bulk action. */
   private readonly selection = signal<ReadonlySet<string>>(new Set());
+
+  constructor() {
+    effect(() => {
+      this.clearSelectionOn();
+      this.selection.set(new Set());
+    });
+  }
 
   protected isGone(row: FindingListRowVm): boolean {
     return isFindingGoneFlagged(row.state);

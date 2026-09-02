@@ -12,26 +12,14 @@
 <section class="grf-bucket">
   <h3>Findings</h3>
 
-  <div class="grf-bucket-picker">
-    <label>
-      Routine
-      <select data-testid="gardening-findings-routine-select" (change)="onRoutineChoose($event)">
-        <option value="" [selected]="selectedRoutine() === null" disabled>Choose a routine</option>
-        @for (r of routines(); track r.routine_id) {
-          <option [value]="r.name" [selected]="r.name === selectedRoutine()">{{ r.name }}</option>
-        }
-      </select>
-    </label>
-    <label>
-      Scope
-      <select data-testid="gardening-findings-scope-select" (change)="onScopeChoose($event)">
-        <option value="" [selected]="selectedScope() === null" disabled>Choose a scope</option>
-        @for (s of scopes(); track s.slug) {
-          <option [value]="s.slug" [selected]="s.slug === selectedScope()">{{ s.slug }}</option>
-        }
-      </select>
-    </label>
-  </div>
+  <fleet-routine-scope-picker
+    [routines]="routines()"
+    [scopes]="scopes()"
+    [selectedRoutine]="selectedRoutine()"
+    [selectedScope]="selectedScope()"
+    (routinePick)="onRoutineChoose($event)"
+    (scopePick)="onScopeChoose($event)"
+  />
 
   <div class="grf-bucket-filters">
     <fleet-kit-chips [options]="classChips()" [selectedValue]="classChipValue()" (choose)="onClassChoose($event)" />
@@ -43,13 +31,14 @@
   </div>
 
   <p class="grf-bucket-summary" data-testid="gardening-findings-summary">
-    {{ outflowCount() }} resolved · {{ withdrawnCount() }} struck
+    {{ outflowCount() }} outflow · {{ withdrawnCount() }} withdrawn
   </p>
 
   <fleet-finding-list
     [rows]="findingListRows()"
     [state]="bucketState()"
     [canControl]="canControl()"
+    [clearSelectionOn]="clearSelectionToken()"
     (bulkTriage)="triagingBulkAction.set($event)"
   />
 </section>
@@ -59,5 +48,6 @@
     [verb]="t.verb"
     [findingIds]="t.findingIds"
     (closed)="triagingBulkAction.set(null)"
+    (succeeded)="onTriageSucceeded()"
   />
 }

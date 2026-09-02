@@ -140,13 +140,13 @@
  *     chosen, and the footer's Cancel/Accept sit side by side with neither
  *     overflowing the panel, at phone and desktop widths.
  *   - projects/fleet/src/lib/garden/gardening-findings-triage.shell-sweep.spec.ts —
- *     the findings triage list (blizzard#402 Phase 4, `FleetFindingList`): with
+ *     the findings triage list (`FleetFindingList`): with
  *     every row selected through the real select-all checkbox, the bulk bar's own
  *     buttons genuinely stay inside the viewport and never overlap each other or the
  *     list itself, at 1400/390/320px, and a `gone`-flagged row (D8) carries a
  *     genuinely different computed background/border-left color from a plain row.
  *   - projects/hub/src/app/gardening/gardening-finding-triage-dialog.shell-sweep.spec.ts —
- *     the findings triage dialog (blizzard#402 Phase 4): the note field renders
+ *     the findings triage dialog: the note field renders
  *     without overflowing the panel, the `supersede` verb's extra absorbing-finding
  *     field renders below/beside the note field with no overlap, and the footer's
  *     Cancel/submit buttons sit side by side without overflowing the panel, at

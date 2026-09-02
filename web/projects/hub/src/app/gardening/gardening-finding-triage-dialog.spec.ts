@@ -145,6 +145,19 @@ describe('GardeningFindingTriageDialog', () => {
     );
   });
 
+  it('escapes a quote in the note so the CLI mirror stays a runnable command (F11)', async () => {
+    const mounted = await mount('resolve', ['fnd_1'], () => [FINDING]);
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+
+    setNote(el, 'the "real" fix landed');
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="finding-triage-cli-verb"]')?.textContent).toContain(
+      String.raw`blizzard hub finding resolve fnd_1 --note "the \"real\" fix landed"`,
+    );
+  });
+
   it('names the supersede CLI verb, carrying --by ahead of --note', async () => {
     const mounted = await mount('supersede', ['fnd_1'], () => [FINDING]);
     stub = mounted.stub;
@@ -195,5 +208,40 @@ describe('GardeningFindingTriageDialog', () => {
     await settle(fixture);
 
     expect(closed).toBe(true);
+  });
+
+  it('emits succeeded on a successful submission, distinct from a plain cancel (F1)', async () => {
+    const mounted = await mount('reopen', ['fnd_1'], () => [FINDING]);
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+    let succeeded = false;
+    fixture.componentInstance.succeeded.subscribe(() => (succeeded = true));
+
+    fixture.componentInstance.closed.emit();
+    expect(succeeded).toBe(false);
+
+    setNote(el, 'reopening');
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.click();
+    await settle(fixture);
+
+    expect(succeeded).toBe(true);
+  });
+
+  it('does not emit succeeded when the batch is rejected', async () => {
+    const mounted = await mount('resolve', ['fnd_1'], (method, path) =>
+      method === 'POST' && path === '/api/findings/resolve' ? stubError(404, { detail: 'unknown finding' }) : {},
+    );
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+    let succeeded = false;
+    fixture.componentInstance.succeeded.subscribe(() => (succeeded = true));
+
+    setNote(el, 'landed elsewhere');
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.click();
+    await settle(fixture);
+
+    expect(succeeded).toBe(false);
   });
 });

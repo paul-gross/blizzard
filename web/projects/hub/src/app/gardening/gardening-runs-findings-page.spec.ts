@@ -60,6 +60,7 @@ const RUN_DELTA = {
 
 const ROUTINES = [
   { routine_id: 'rt_1', name: 'nightly', graph_name: 'sweep', default_scope_slug: 'blizzard', created_at: '2026-01-01T00:00:00Z' },
+  { routine_id: 'rt_2', name: 'weekly', graph_name: 'sweep', default_scope_slug: 'blizzard', created_at: '2026-01-01T00:00:00Z' },
 ];
 
 const SCOPES = [{ slug: 'blizzard', description: 'the blizzard repo', created_at: '2026-01-01T00:00:00Z' }];
@@ -337,7 +338,7 @@ describe('GardeningRunsFindingsPage', () => {
     expect(delta.componentInstance.state()).toBe('error');
   });
 
-  describe('the findings triage bucket (blizzard#402 Phase 4)', () => {
+  describe('the findings triage bucket', () => {
     it("renders the bucket's own rest state until a routine/scope is chosen", async () => {
       const { fixture } = await mount(null);
       const el = fixture.nativeElement as HTMLElement;
@@ -383,15 +384,66 @@ describe('GardeningRunsFindingsPage', () => {
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_14"]')).toBeNull();
     });
 
+    it('pins scope to its current effective value on a routine pick, surviving the run selection that value came from being cleared (F2)', async () => {
+      const { fixture } = await mount('ch_1', {
+        routeOverride: (method, path) => (method === 'GET' && path === '/api/findings' ? BUCKET : undefined),
+      });
+      const el = fixture.nativeElement as HTMLElement;
+      const routineSelect = el.querySelector<HTMLSelectElement>('[data-testid="gardening-findings-routine-select"]')!;
+      const scopeSelect = el.querySelector<HTMLSelectElement>('[data-testid="gardening-findings-scope-select"]')!;
+      expect(routineSelect.value).toBe('nightly');
+      expect(scopeSelect.value).toBe('blizzard');
+
+      routineSelect.value = 'weekly';
+      routineSelect.dispatchEvent(new Event('change'));
+      await settle(fixture);
+
+      // Scope keeps reading as the run's own 'blizzard' — now pinned explicitly,
+      // not merely echoing `deltaVm()` under the hood.
+      expect(scopeSelect.value).toBe('blizzard');
+
+      paramMap$.next(convertToParamMap({}));
+      await settle(fixture);
+
+      // Deselecting the run zeroes `deltaVm()`; before the fix this silently blanked
+      // the scope pick right along with it.
+      expect(scopeSelect.value).toBe('blizzard');
+    });
+
+    it('clears the class and state filters on a routine or scope pick (F5)', async () => {
+      const { fixture } = await mount('ch_1', {
+        routeOverride: (method, path) => (method === 'GET' && path === '/api/findings' ? BUCKET : undefined),
+      });
+      const el = fixture.nativeElement as HTMLElement;
+
+      el.querySelector<HTMLElement>('[data-testid="gardening-finding-class-item-unused-import"]')?.click();
+      el.querySelector<HTMLElement>('[data-testid="gardening-finding-state-item-gone"]')?.click();
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="gardening-finding-class-item-unused-import"]')?.getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+      expect(el.querySelector('[data-testid="gardening-finding-state-item-gone"]')?.getAttribute('aria-pressed')).toBe('true');
+
+      const routineSelect = el.querySelector<HTMLSelectElement>('[data-testid="gardening-findings-routine-select"]')!;
+      routineSelect.value = 'weekly';
+      routineSelect.dispatchEvent(new Event('change'));
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="gardening-finding-class-all"]')?.getAttribute('aria-pressed')).toBe('true');
+      expect(el.querySelector('[data-testid="gardening-finding-state-all"]')?.getAttribute('aria-pressed')).toBe('true');
+    });
+
     it('separates outflow from withdrawn counts in the summary given a mixed bucket', async () => {
       const { fixture } = await mount('ch_1', {
         routeOverride: (method, path) => (method === 'GET' && path === '/api/findings' ? BUCKET : undefined),
       });
       const el = fixture.nativeElement as HTMLElement;
 
-      const summary = el.querySelector('[data-testid="gardening-findings-summary"]')?.textContent ?? '';
-      expect(summary).toContain('3');
-      expect(summary).toContain('1');
+      const summary = el.querySelector('[data-testid="gardening-findings-summary"]')?.textContent?.trim() ?? '';
+      // 2 resolved + 1 gone-confirmed outflow, 1 wont-fix withdrawn (D2) — pinned to
+      // the exact rendered order so a swapped outflow/withdrawn count fails here.
+      expect(summary).toBe('3 outflow · 1 withdrawn');
     });
 
     it('resolves an accepted-and-minted proposal work item beside a finding that is still live', async () => {
@@ -414,7 +466,7 @@ describe('GardeningRunsFindingsPage', () => {
     });
   });
 
-  describe('the bulk-action triage dialog (blizzard#402 Phase 3)', () => {
+  describe('the bulk-action triage dialog', () => {
     it('forwards chunk:control to the finding list, withholding it for a read-only identity', async () => {
       const { fixture } = await mount(null, {
         routeOverride: (method, path) => {
@@ -448,6 +500,34 @@ describe('GardeningRunsFindingsPage', () => {
       await settle(fixture);
 
       expect(el.querySelector('[data-testid="gardening-finding-triage-dialog"]')).toBeNull();
+    });
+
+    it('clears the finding list selection once the dialog reports success, not on a mere cancel (F1)', async () => {
+      const { fixture } = await mount('ch_1', {
+        routeOverride: (method, path) => (method === 'GET' && path === '/api/findings' ? BUCKET : undefined),
+      });
+      const el = fixture.nativeElement as HTMLElement;
+
+      el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_10"]')!.click();
+      await settle(fixture);
+      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_10"]')!.checked).toBe(true);
+
+      el.querySelector<HTMLButtonElement>('[data-testid="gardening-finding-bulk-resolve"]')!.click();
+      await settle(fixture);
+      fixture.debugElement.query(By.css('app-gardening-finding-triage-dialog')).componentInstance.closed.emit();
+      await settle(fixture);
+
+      // A plain cancel — `closed` with no `succeeded` — leaves the selection intact.
+      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_10"]')!.checked).toBe(true);
+
+      el.querySelector<HTMLButtonElement>('[data-testid="gardening-finding-bulk-resolve"]')!.click();
+      await settle(fixture);
+      const dialogComponent2 = fixture.debugElement.query(By.css('app-gardening-finding-triage-dialog'));
+      dialogComponent2.componentInstance.succeeded.emit();
+      dialogComponent2.componentInstance.closed.emit();
+      await settle(fixture);
+
+      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_10"]')!.checked).toBe(false);
     });
   });
 });
