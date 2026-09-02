@@ -100,6 +100,13 @@
  *     measurement, and last-swept blocks genuinely stack at 1280/390/320px
  *     with no horizontal overflow, and the last-swept table's own long
  *     revision hashes wrap inside their column rather than widening it.
+ *   - projects/fleet/src/lib/garden/garden-runs.shell-sweep.spec.ts — the
+ *     gardening runs-and-findings tab's two presentational components
+ *     (blizzard#397 Phase 3): `FleetRunList`'s escalated row carries a
+ *     genuinely different computed background/border-left color from a
+ *     normal row at 390px, and `FleetRunDelta` genuinely stacks its
+ *     finding-set blocks, and each set's added/observed/gone groups, with no
+ *     overlap or horizontal overflow at 390px.
  *   - projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts —
  *     the gardening routines container's own list-beside-panel grid
  *     (blizzard#397): the list and panel sit side by side at 1280px, and
@@ -139,6 +146,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-control-row.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/garden-runs.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts' },

@@ -88,6 +88,32 @@ export type ActivityView = {
 };
 
 /**
+ * AddedFindingView
+ */
+export type AddedFindingView = {
+    /**
+     * Class
+     */
+    class: string;
+    /**
+     * Finding Id
+     */
+    finding_id: string | null;
+    /**
+     * Introduced
+     */
+    introduced: string | null;
+    /**
+     * Locus
+     */
+    locus: string;
+    /**
+     * Summary
+     */
+    summary: string;
+};
+
+/**
  * AnalyticsChunkSpendResponse
  *
  * A bounded page (blizzard#256 D8) — ``next_cursor`` is ``None`` exactly when this
@@ -1338,6 +1364,58 @@ export type DecisionView = {
 };
 
 /**
+ * DeliveredSetDeltaView
+ */
+export type DeliveredSetDeltaView = {
+    /**
+     * Added
+     */
+    added: Array<AddedFindingView>;
+    /**
+     * Finding Set Id
+     */
+    finding_set_id: string;
+    /**
+     * Gone
+     */
+    gone: Array<GoneFindingView>;
+    /**
+     * Measurement
+     */
+    measurement: string | null;
+    /**
+     * Observed
+     */
+    observed: Array<string>;
+    /**
+     * Revisions
+     */
+    revisions: {
+        [key: string]: string;
+    };
+};
+
+/**
+ * DeliveredSetView
+ */
+export type DeliveredSetView = {
+    /**
+     * Finding Set Id
+     */
+    finding_set_id: string;
+    /**
+     * Measurement
+     */
+    measurement: string | null;
+    /**
+     * Revisions
+     */
+    revisions: {
+        [key: string]: string;
+    };
+};
+
+/**
  * DocketEntryView
  *
  * One of a chunk's not-yet-materialized proposals, as it stands at a gate — the
@@ -1968,6 +2046,20 @@ export type GardenSweepsView = {
      * Until
      */
     until: string;
+};
+
+/**
+ * GoneFindingView
+ */
+export type GoneFindingView = {
+    /**
+     * Finding Id
+     */
+    finding_id: string;
+    /**
+     * Note
+     */
+    note: string;
 };
 
 /**
@@ -3462,6 +3554,84 @@ export type RoutineView = {
      * Routine Id
      */
     routine_id: string;
+};
+
+/**
+ * RunDeltaView
+ */
+export type RunDeltaView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    escalation: RunEscalationView | null;
+    /**
+     * Mode
+     */
+    mode: string;
+    outcome: ChunkStatus;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+    /**
+     * Scope Slug
+     */
+    scope_slug: string;
+    /**
+     * Sets
+     */
+    sets: Array<DeliveredSetDeltaView>;
+};
+
+/**
+ * RunEscalationView
+ */
+export type RunEscalationView = {
+    /**
+     * Node Name
+     */
+    node_name: string | null;
+    /**
+     * Takeover Command
+     */
+    takeover_command: string;
+    /**
+     * Wrapped Takeover Command
+     */
+    wrapped_takeover_command: string;
+};
+
+/**
+ * RunRowView
+ */
+export type RunRowView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Delivered
+     */
+    delivered: Array<DeliveredSetView>;
+    escalation: RunEscalationView | null;
+    /**
+     * Minted At
+     */
+    minted_at: string;
+    /**
+     * Mode
+     */
+    mode: string;
+    outcome: ChunkStatus;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+    /**
+     * Scope Slug
+     */
+    scope_slug: string;
 };
 
 /**
@@ -8321,6 +8491,72 @@ export type ResumeRunnerApiRunnersRunnerIdResumePostResponses = {
 };
 
 export type ResumeRunnerApiRunnersRunnerIdResumePostResponse = ResumeRunnerApiRunnersRunnerIdResumePostResponses[keyof ResumeRunnerApiRunnersRunnerIdResumePostResponses];
+
+export type ListRunsApiRunsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/runs';
+};
+
+export type ListRunsApiRunsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRunsApiRunsGetError = ListRunsApiRunsGetErrors[keyof ListRunsApiRunsGetErrors];
+
+export type ListRunsApiRunsGetResponses = {
+    /**
+     * Response List Runs Api Runs Get
+     *
+     * Successful Response
+     */
+    200: Array<RunRowView>;
+};
+
+export type ListRunsApiRunsGetResponse = ListRunsApiRunsGetResponses[keyof ListRunsApiRunsGetResponses];
+
+export type RunDeltaApiRunsChunkIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/runs/{chunk_id}';
+};
+
+export type RunDeltaApiRunsChunkIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RunDeltaApiRunsChunkIdGetError = RunDeltaApiRunsChunkIdGetErrors[keyof RunDeltaApiRunsChunkIdGetErrors];
+
+export type RunDeltaApiRunsChunkIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunDeltaView;
+};
+
+export type RunDeltaApiRunsChunkIdGetResponse = RunDeltaApiRunsChunkIdGetResponses[keyof RunDeltaApiRunsChunkIdGetResponses];
 
 export type ListScopesApiScopesGetData = {
     body?: never;

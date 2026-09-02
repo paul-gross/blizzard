@@ -1,0 +1,18 @@
+.grf-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 12px;
+  min-width: 0;
+}
+@media (max-width: 480px) {
+  .grf-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.grf-list,
+.grf-delta {
+  min-width: 0;
+}
+.grf-placeholder {
+  color: var(--dim);
+}

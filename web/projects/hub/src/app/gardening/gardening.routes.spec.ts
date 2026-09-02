@@ -30,6 +30,7 @@ describe('the /gardening route subtree', () => {
       if (method === 'GET' && path === '/api/garden-proposals') return [];
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
+      if (method === 'GET' && path === '/api/runs') return [];
       if (method === 'GET' && path === '/api/scopes') return [];
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       return {};

@@ -41,9 +41,9 @@ export const routes: Routes = [
   { path: 'events', loadComponent: () => import('./events/events-page').then((m) => m.EventsPage) },
   // The gardening tab (blizzard#397) — a top-level peer of board/graphs/events, not a
   // panel inside any of them. Three deep-linkable children, one per noun the garden
-  // machinery itself has (routines / runs and findings / proposals); each child page is
-  // this chunk's shell only — the sheet content behind every one of them is its own,
-  // later issue.
+  // machinery itself has (routines / runs and findings / proposals). Runs and findings
+  // (Phase 3) is itself a `graphs`/`graphs/:graphId` pair — the run list stays mounted
+  // and the optional `chunkId` drives which run's delta shows.
   {
     path: 'gardening',
     loadComponent: () => import('./gardening/gardening-page').then((m) => m.GardeningPage),
@@ -53,8 +53,17 @@ export const routes: Routes = [
         path: 'routines',
         loadComponent: () => import('./gardening/gardening-routines-page').then((m) => m.GardeningRoutinesPage),
       },
+      // Both `runs-and-findings` and `runs-and-findings/:chunkId` render the same
+      // page (`GardeningRunsFindingsPage`) — the `graphs`/`graphs/:graphId` pair's
+      // own shape, so the run list stays mounted and the optional `chunkId` param
+      // drives which run's delta shows.
       {
         path: 'runs-and-findings',
+        loadComponent: () =>
+          import('./gardening/gardening-runs-findings-page').then((m) => m.GardeningRunsFindingsPage),
+      },
+      {
+        path: 'runs-and-findings/:chunkId',
         loadComponent: () =>
           import('./gardening/gardening-runs-findings-page').then((m) => m.GardeningRunsFindingsPage),
       },

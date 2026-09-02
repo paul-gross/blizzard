@@ -1,0 +1,78 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.rl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rl-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rl-row--selected {
+  background: var(--panel-highlight, rgba(255, 255, 255, 0.06));
+}
+/* An escalated row's own distinct treatment (blizzard#397 Phase 3) — a real border
+ * and background tint against `--red`, not merely the outcome badge's own color, so
+ * the row reads as escalated even where the badge itself scrolls out of view. */
+.rl-row--escalated {
+  border-left-color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+.rl-hdr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.rl-mode {
+  color: var(--dim);
+}
+.rl-escalated-note {
+  margin: 0;
+  color: var(--red);
+  font-weight: bold;
+}
+.rl-sets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--line);
+}
+.rl-set {
+  display: flex;
+  flex-direction: column;
+}
+.rl-set-id {
+  font-weight: bold;
+}
+.rl-set-revisions,
+.rl-set-measurement {
+  color: var(--dim);
+}
+.rl-no-delivery {
+  margin: 0;
+  color: var(--dim);
+}
+.rl-cli {
+  margin: 8px 0 0;
+  color: var(--dim);
+}

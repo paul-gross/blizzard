@@ -1,0 +1,82 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.rd {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rd-hdr {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rd-caption {
+  margin: 0;
+  color: var(--dim);
+  font-style: italic;
+}
+.rd-escalation {
+  margin: 0;
+  color: var(--red);
+}
+.rd-set {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rd-set-revisions,
+.rd-set-measurement {
+  margin: 0;
+  color: var(--dim);
+}
+/* Every delivered set's own added/observed/gone triad stacks — never a side-by-side
+ * layout that could let a narrow viewport clip or overlap one group against another
+ * (blizzard#397 Phase 3's D4: several sets, and each set's three groups, stay visibly
+ * distinct rather than merged or overlapped). */
+.rd-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rd-group {
+  border-left: 2px solid var(--line);
+  padding-left: 8px;
+}
+.rd-group--added {
+  border-left-color: var(--green);
+}
+.rd-group--observed {
+  border-left-color: var(--dim);
+}
+.rd-group--gone {
+  border-left-color: var(--red);
+}
+.rd-group h5 {
+  margin: 0 0 2px;
+}
+.rd-group ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.rd-group-none {
+  margin: 0;
+  color: var(--dim);
+}
+.rd-added-class {
+  font-weight: bold;
+}
+.rd-no-delivery {
+  margin: 0;
+  color: var(--dim);
+}
+.rd-cli {
+  margin: 0;
+  color: var(--dim);
+}

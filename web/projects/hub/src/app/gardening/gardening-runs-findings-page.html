@@ -1,6 +1,16 @@
-<fleet-kit-async-state
-  state="empty"
-  placement="inline"
-  emptyText="No runs recorded yet — tending begins when there is growth worth pruning."
-  emptyTestid="gardening-runs-findings-empty"
-/>
+<div class="grf-layout">
+  <fleet-run-list
+    class="grf-list"
+    [rows]="listRows()"
+    [selectedChunkId]="chunkId()"
+    [state]="listState()"
+    (runPick)="select($event)"
+  />
+  @if (chunkId(); as id) {
+    <fleet-run-delta class="grf-delta" [vm]="deltaVm()" [state]="deltaState()" />
+  } @else {
+    <div class="grf-placeholder" data-testid="gardening-runs-findings-placeholder">
+      <p>Select a run to see what it changed.</p>
+    </div>
+  }
+</div>
