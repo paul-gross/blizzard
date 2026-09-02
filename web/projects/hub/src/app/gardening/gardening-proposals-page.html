@@ -15,12 +15,11 @@
     [state]="listState()"
     (proposalPick)="select($event)"
   />
-  <div class="gp-panel">
-    <fleet-kit-async-state
-      state="empty"
-      placement="inline"
-      emptyText="Select a proposal to see its case and evidence."
-      emptyTestid="gardening-proposal-panel-empty"
-    />
-  </div>
+  <fleet-proposal-panel
+    class="gp-panel"
+    [vm]="panelVm()"
+    [state]="panelState()"
+    [evidence]="evidenceRows()"
+    [evidenceState]="evidenceState()"
+  />
 </div>

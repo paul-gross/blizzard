@@ -2,14 +2,22 @@ import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/c
 import {
   asyncState,
   FleetProposalList,
+  FleetProposalPanel,
+  injectHubFindingsQuery,
   injectHubGardenProposalsQuery,
+  injectHubWorkItemQuery,
   isGardenProposalWaiting,
-  KitAsyncState,
   KitChips,
+  type FindingView,
+  type GardenProposalClosureView,
   type GardenProposalView,
   type KitAsyncStateValue,
   type KitChipOption,
+  type ProposalClosureVm,
+  type ProposalEvidenceRowVm,
   type ProposalListRowVm,
+  type ProposalPanelVm,
+  type ProposalWorkItemVm,
 } from 'fleet';
 
 /** The docket's waiting filter — a proposal not yet closed, or every proposal
@@ -33,14 +41,18 @@ const ALL_CLASSES = 'all';
  * shape, re-derived against the *filtered* set so a filter change never strands the
  * selection on a row no longer shown.
  *
- * The detail area's real content — case, closure record, evidence — is a later
- * phase's own `FleetProposalPanel`; this phase renders only its "select a proposal"
- * rest state.
+ * The selected proposal's own record already carries its full case and closure — the
+ * one list read returns every `GardenProposalView` field, so the detail area needs no
+ * second by-id fetch of its own (Decision 1's client-side-filtering spirit applied to
+ * selection too). Its evidence is different: a proposal carries finding *ids* only, so
+ * this container fans those out live through `injectHubFindingsQueries` (Decision 3),
+ * and, for an accepted-and-minted proposal, resolves the linked work item through its
+ * closure's `source`/`ref` pointer (Decision 4) via `injectHubWorkItemQuery`.
  */
 @Component({
   selector: 'app-gardening-proposals-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetProposalList, KitAsyncState, KitChips],
+  imports: [FleetProposalList, FleetProposalPanel, KitChips],
   templateUrl: './gardening-proposals-page.html',
   styleUrl: './gardening-proposals-page.css',
 })
@@ -119,4 +131,86 @@ export class GardeningProposalsPage {
   protected select(proposalId: string): void {
     this.explicitSelection.set(proposalId);
   }
+
+  /** The selected row's own full record — already carried by the one list read, so
+   * this is a lookup, never a second fetch. */
+  private readonly selectedProposal = computed<GardenProposalView | null>(
+    () => this.proposals().find((p) => p.proposal_id === this.selectedId()) ?? null,
+  );
+
+  /** Panel state branches on selection before ever consulting the list read's own
+   * async state (`bzh:frontend-empty-state-gated`) — once something is selected its
+   * record is already in hand, synchronously, from {@link proposals}. */
+  protected readonly panelState = computed<KitAsyncStateValue>(() =>
+    this.selectedId() === null ? asyncState(this.proposalsQuery, true) : 'ready',
+  );
+
+  private readonly findingsQuery = injectHubFindingsQuery(() => this.selectedProposal()?.findings ?? []);
+
+  /** The (source, ref) pair naming an accepted-and-minted proposal's linked work
+   * item — `null` for a waiting, passed, or accepted-and-declined proposal, so the
+   * work-item query stays disabled for all three. */
+  private readonly acceptedItemPointer = computed<{ source: string; ref: string } | null>(() => {
+    const closure = this.selectedProposal()?.closure;
+    if (closure?.closure !== 'accepted' || closure.item_outcome !== 'minted') return null;
+    return { source: closure.source!, ref: closure.ref! };
+  });
+
+  private readonly workItemQuery = injectHubWorkItemQuery(
+    () => this.acceptedItemPointer()?.source ?? null,
+    () => this.acceptedItemPointer()?.ref ?? null,
+  );
+
+  /** The accepted-and-minted work item, resolved for display — `label`/`webUrl`
+   * degrade gracefully while the read is still in flight or a `web_url` reads
+   * `null` once the chunk is terminal. */
+  private readonly workItemVm = computed<ProposalWorkItemVm | null>(() => {
+    const pointer = this.acceptedItemPointer();
+    if (pointer === null) return null;
+    const item = this.workItemQuery.data();
+    return { label: item?.label ?? `${pointer.source}:${pointer.ref}`, webUrl: item?.web_url ?? null };
+  });
+
+  private closureVm(closure: GardenProposalClosureView): ProposalClosureVm {
+    if (closure.closure === 'passed') {
+      return { kind: 'passed', closedBy: closure.closed_by, closedAt: closure.closed_at, reason: closure.reason };
+    }
+    return {
+      kind: 'accepted',
+      closedBy: closure.closed_by,
+      closedAt: closure.closed_at,
+      reason: closure.reason,
+      workItem: closure.item_outcome === 'minted' ? this.workItemVm() : null,
+    };
+  }
+
+  protected readonly panelVm = computed<ProposalPanelVm | null>(() => {
+    const proposal = this.selectedProposal();
+    if (proposal === null) return null;
+    return {
+      proposalId: proposal.proposal_id,
+      routineName: proposal.routine_name,
+      proposalClass: proposal.class,
+      title: proposal.title,
+      body: proposal.body,
+      closure: proposal.closure ? this.closureVm(proposal.closure) : null,
+    };
+  });
+
+  private readonly evidenceFindings = computed<readonly FindingView[]>(() => this.findingsQuery.data() ?? []);
+
+  protected readonly evidenceRows = computed<readonly ProposalEvidenceRowVm[]>(() => {
+    const workItem = this.workItemVm();
+    return this.evidenceFindings().map((f) => ({
+      findingId: f.finding_id,
+      locus: f.locus,
+      summary: f.summary,
+      live: f.live,
+      workItem,
+    }));
+  });
+
+  protected readonly evidenceState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.findingsQuery, this.evidenceFindings().length === 0),
+  );
 }

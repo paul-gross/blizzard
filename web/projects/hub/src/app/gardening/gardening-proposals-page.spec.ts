@@ -47,9 +47,47 @@ const PASSED = {
   },
 };
 
+const ACCEPTED_MINTED = {
+  proposal_id: 'gp_4',
+  routine_name: 'comments',
+  class: 'fix-the-source',
+  title: 'Extract the shared helper',
+  body: 'Three call sites duplicate this logic.',
+  created_at: '2026-01-05T00:00:00Z',
+  findings: ['fin_5'],
+  closure: {
+    closure: 'accepted',
+    reason: null,
+    closed_by: 'u_1',
+    closed_at: '2026-01-06T00:00:00Z',
+    item_outcome: 'minted',
+    source: 'hub',
+    ref: '42',
+  },
+};
+
+function findingFixture(findingId: string) {
+  return {
+    finding_id: findingId,
+    routine_name: 'comments',
+    scope_slug: 'blizzard',
+    class: 'stale-docstring',
+    locus: `src/${findingId}.py:1`,
+    summary: `summary for ${findingId}`,
+    state: 'live',
+    live: true,
+    observed_count: 1,
+    last_seen_at: '2026-01-01T00:00:00Z',
+  };
+}
+
 async function render(proposals: readonly unknown[] = [WAITING_A, WAITING_B, PASSED]) {
   const stub = stubRequestClient(hubClient, (method, path) => {
     if (method === 'GET' && path === '/api/garden-proposals') return proposals;
+    if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
+    if (method === 'GET' && path === '/api/work-sources/hub/items/42') {
+      return { source: 'hub', ref: '42', label: 'hub#42', web_url: '/board/chunk/ch_1', title: 't', body: 'b', author: { kind: 'user' }, closure: null, closed_at: null, created_at: '2026-01-01T00:00:00Z', edited_at: '2026-01-01T00:00:00Z', stated_priority: null };
+    }
     return {};
   });
   await TestBed.configureTestingModule({
@@ -131,5 +169,40 @@ describe('GardeningProposalsPage', () => {
     expect(el.querySelector('[data-testid="gardening-proposal-panel-empty"]')?.textContent).toContain(
       'Select a proposal',
     );
+  });
+
+  it("renders the selected proposal's case and its live-read evidence", async () => {
+    const rendered = await render();
+    stub = rendered.stub;
+    const { fixture, el } = rendered;
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="gardening-proposal-case"]')?.textContent).toContain(
+      'Author a docstring standard',
+    );
+    expect(el.querySelector('[data-testid="gardening-proposal-finding-fin_1"]')?.textContent).toContain(
+      'summary for fin_1',
+    );
+    expect(el.querySelector('[data-testid="gardening-proposal-finding-fin_2"]')?.textContent).toContain(
+      'summary for fin_2',
+    );
+  });
+
+  it('resolves an accepted-and-minted work item through the closure pointer and shows its link on the finding row', async () => {
+    const rendered = await render([ACCEPTED_MINTED]);
+    stub = rendered.stub;
+    const { fixture, el } = rendered;
+    await settle(fixture);
+    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-filter-all"]')?.click();
+    await settle(fixture, 10);
+
+    const closureEl = el.querySelector('[data-testid="gardening-proposal-closure-accepted-minted"]');
+    const link = closureEl?.querySelector<HTMLAnchorElement>('[data-testid="gardening-proposal-work-item-link"]');
+    expect(link?.textContent).toBe('hub#42');
+    expect(link?.getAttribute('href')).toBe('/board/chunk/ch_1');
+    expect(stub.forRoute('/api/work-sources/hub/items/42', 'GET').length).toBeGreaterThan(0);
+
+    const findingLink = el.querySelector('[data-testid="gardening-proposal-finding-work-item-link-fin_5"]');
+    expect(findingLink?.textContent).toBe('hub#42');
   });
 });

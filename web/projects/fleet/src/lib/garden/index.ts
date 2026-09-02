@@ -3,6 +3,7 @@ export * from './garden-proposal.mutations';
 export * from './garden-proposals.query';
 export * from './garden-runs.query';
 export * from './proposal-list';
+export * from './proposal-panel';
 export * from './routine-baselines.query';
 export * from './routine-list';
 export * from './routine-panel';
