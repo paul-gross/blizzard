@@ -1,4 +1,4 @@
-"""Builds the 15 chunk-seam adapters as one :class:`ChunkStores` bundle (package-private)
+"""Builds the chunk-seam adapters as one :class:`ChunkStores` bundle (package-private)
 — the one place their construction order is expressed, so ``hub/composition.py`` and a
 component test's own store-level fixture wire the identical shape rather than each
 re-deriving it."""
@@ -11,6 +11,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
 from blizzard.hub.store.internal.chunk_delivery_store import ChunkDeliveryStore
+from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
 from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -26,7 +27,7 @@ from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 
 
 def build_chunk_stores(store: HubStoreConnections, clock: IClock) -> ChunkStores:
-    """All 15 chunk-seam adapters over one connection seam and clock. ``facts`` is built
+    """All chunk-seam adapters over one connection seam and clock. ``facts`` is built
     first since ``record``/``work_refs``/``escalations`` each hold it as their own read
     collaborator."""
     facts = ChunkFactsStore(store, clock)
@@ -46,4 +47,5 @@ def build_chunk_stores(store: HubStoreConnections, clock: IClock) -> ChunkStores
         usage=ChunkUsageStore(store, clock),
         delivery=ChunkDeliveryStore(store, clock),
         hub_exec=ChunkHubExecStore(store, clock),
+        dependencies=ChunkDependenciesStore(store, clock),
     )

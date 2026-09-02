@@ -27,6 +27,7 @@ from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import Frontend
 from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
+from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.decisions import router as decisions_router
 from blizzard.hub.api.events import router as events_router
@@ -197,6 +198,7 @@ def create_app(
     app.include_router(garden_proposals_router)
     app.include_router(garden_runs_router)
     app.include_router(chunks_router)
+    app.include_router(chunk_dependencies_router)
     app.include_router(decisions_router)
     app.include_router(queue_router)
     app.include_router(questions_router)

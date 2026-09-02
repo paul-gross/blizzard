@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Final
 
-from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
@@ -32,18 +32,15 @@ class UnsetType(Enum):
 #: means "clear it", and from a field's own falsy value.
 UNSET: Final = UnsetType.TOKEN
 
-#: The unclaimed admit set — not "never claimed": see :class:`ChunkAlreadyMoved`.
-_PRE_CLAIM_WINDOW = frozenset({ChunkStatus.NOT_READY, ChunkStatus.READY})
-
 #: Closed at ``done``/``stopped`` — no future transition is left to consult the intent.
 _INTENDED_MIGRATION_WINDOW = frozenset(ChunkStatus) - frozenset({ChunkStatus.DONE, ChunkStatus.STOPPED})
 
 #: Per-field editable-status sets (issue #124), keyed by the same field names
 #: :class:`ChunkEdit` carries.
 _FIELD_WINDOW: Final[dict[str, frozenset[ChunkStatus]]] = {
-    "graph_id": _PRE_CLAIM_WINDOW,
-    "default_model": _PRE_CLAIM_WINDOW,
-    "default_effort": _PRE_CLAIM_WINDOW,
+    "graph_id": PRE_CLAIM_STATUSES,
+    "default_model": PRE_CLAIM_STATUSES,
+    "default_effort": PRE_CLAIM_STATUSES,
     "intended_migration": _INTENDED_MIGRATION_WINDOW,
 }
 

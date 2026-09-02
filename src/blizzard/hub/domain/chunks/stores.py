@@ -12,6 +12,10 @@ from dataclasses import dataclass
 from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.decisions import IReadChunkDecisionsRepository, IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunks.delivery import IReadChunkDeliveryRepository, IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunks.dependencies import (
+    IReadChunkDependenciesRepository,
+    IWriteChunkDependenciesRepository,
+)
 from blizzard.hub.domain.chunks.escalations import IReadChunkEscalationsRepository, IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.events import IReadChunkEventsRepository, IWriteChunkEventsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
@@ -47,6 +51,7 @@ class ChunkStores:
     usage: IWriteChunkUsageRepository
     delivery: IWriteChunkDeliveryRepository
     hub_exec: IWriteChunkHubExecRepository
+    dependencies: IWriteChunkDependenciesRepository
 
 
 @dataclass(frozen=True)
@@ -72,3 +77,4 @@ class ChunkReadStores:
     usage: IReadChunkUsageRepository
     delivery: IReadChunkDeliveryRepository
     hub_exec: IReadChunkHubExecRepository
+    dependencies: IReadChunkDependenciesRepository

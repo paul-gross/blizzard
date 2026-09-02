@@ -175,8 +175,8 @@ def test_delete_succeeds_at_every_groupable_status(facts_factory: object) -> Non
     ],
 )
 def test_delete_refuses_a_non_groupable_status(facts_factory: object) -> None:
-    """Deletion is refused at every status outside ``GROUPABLE_STATUSES`` — paused
-    included, matching the plan's own explicit callout."""
+    """Deletion is refused at every status outside ``PRE_CLAIM_STATUSES`` — ``paused``
+    refused right alongside the runner-held and terminal statuses, not a special case."""
     service, items = _service(_CHUNK, facts_factory())  # type: ignore[operator]
 
     with pytest.raises(ChunkNotDeletable):

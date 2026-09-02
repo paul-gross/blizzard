@@ -736,6 +736,103 @@ class SegmentChunkResolves(QueryCheck):
         ]
 
 
+class NoStandingDependencyCycle(QueryCheck):
+    """The standing (unreleased) ``chunk_dependencies`` edges form no cycle — a derived
+    cross-fact invariant with no engine constraint behind it, held only by
+    ``DependencyService`` under the claim lock (issue #456)."""
+
+    def run(self) -> list[Violation]:
+        graph: dict[str, list[str]] = {}
+        for row in self.conn.execute(
+            select(hub.chunk_dependencies.c.dependent_chunk_id, hub.chunk_dependencies.c.prerequisite_chunk_id).where(
+                hub.chunk_dependencies.c.released_at.is_(None)
+            )
+        ):
+            graph.setdefault(row.dependent_chunk_id, []).append(row.prerequisite_chunk_id)
+
+        violations: list[Violation] = []
+        for start in sorted(graph):
+            if self._reaches(graph, start, start):
+                violations.append(
+                    Violation(
+                        "hub:no-standing-dependency-cycle",
+                        f"chunk {start} is on a cycle in the standing dependency graph",
+                    )
+                )
+        return violations
+
+    @staticmethod
+    def _reaches(graph: dict[str, list[str]], node: str, target: str) -> bool:
+        frontier = list(graph.get(node, []))
+        seen = set(frontier)
+        while frontier:
+            current = frontier.pop()
+            if current == target:
+                return True
+            for neighbor in graph.get(current, []):
+                if neighbor not in seen:
+                    seen.add(neighbor)
+                    frontier.append(neighbor)
+        return False
+
+
+class NoDuplicateStandingDependency(QueryCheck):
+    """At most one standing (unreleased) edge per ordered ``(dependent, prerequisite)``
+    pair — a durable invariant held only by domain code under the claim lock, since
+    ``chunk_dependencies`` carries no database uniqueness constraint on the pair
+    (issue #456)."""
+
+    def run(self) -> list[Violation]:
+        violations: list[Violation] = []
+        pairs = Counter(
+            (row.dependent_chunk_id, row.prerequisite_chunk_id)
+            for row in self.conn.execute(
+                select(
+                    hub.chunk_dependencies.c.dependent_chunk_id, hub.chunk_dependencies.c.prerequisite_chunk_id
+                ).where(hub.chunk_dependencies.c.released_at.is_(None))
+            )
+        )
+        for (dependent_chunk_id, prerequisite_chunk_id), n in pairs.items():
+            if n > 1:
+                violations.append(
+                    Violation(
+                        "hub:no-duplicate-standing-dependency",
+                        f"chunk {dependent_chunk_id} has {n} standing dependencies on {prerequisite_chunk_id}",
+                    )
+                )
+        return violations
+
+
+class NoStandingDependencyOntoEphemeralChunk(QueryCheck):
+    """A standing (unreleased) edge whose dependent or prerequisite is ephemeral (grouped
+    away or deleted) — its FK still resolves, so the engine enforces nothing here. The
+    residual left by ``GroupService`` taking no claim lock (issue #456); a released edge
+    no longer stands, so it is exempt."""
+
+    def run(self) -> list[Violation]:
+        ephemeral = {row[0] for row in self.conn.execute(select(hub.chunk_grouped.c.chunk_id))} | {
+            row[0] for row in self.conn.execute(select(hub.chunk_deleted.c.chunk_id))
+        }
+        if not ephemeral:
+            return []
+        violations: list[Violation] = []
+        for row in self.conn.execute(
+            select(hub.chunk_dependencies.c.dependent_chunk_id, hub.chunk_dependencies.c.prerequisite_chunk_id).where(
+                hub.chunk_dependencies.c.released_at.is_(None)
+            )
+        ):
+            for role, chunk_id in (("dependent", row.dependent_chunk_id), ("prerequisite", row.prerequisite_chunk_id)):
+                if chunk_id in ephemeral:
+                    violations.append(
+                        Violation(
+                            "hub:no-standing-dependency-onto-ephemeral-chunk",
+                            f"standing dependency {row.dependent_chunk_id} on {row.prerequisite_chunk_id} "
+                            f"names ephemeral {role} {chunk_id}",
+                        )
+                    )
+        return violations
+
+
 @dataclass(frozen=True)
 class HubInvariants:
     """The hub store's durable invariants (transitions, epochs, delivery)."""
@@ -759,6 +856,9 @@ class HubInvariants:
                 NoPendingIntentAgainstATerminalRef(conn),
                 NoUnenqueuedClosableRef(conn),
                 SegmentChunkResolves(conn),
+                NoStandingDependencyCycle(conn),
+                NoDuplicateStandingDependency(conn),
+                NoStandingDependencyOntoEphemeralChunk(conn),
             )
             for check in checks:
                 violations.extend(check.run())

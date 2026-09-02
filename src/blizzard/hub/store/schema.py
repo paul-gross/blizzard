@@ -743,6 +743,23 @@ chunk_deleted = Table(
     Column("deleted_by", String, nullable=False),
 )
 
+# --- Chunk dependency edges (issue #456) --------------------------------------
+# One row per edge; ``released_at``/``released_by`` set once, together — never deleted.
+
+chunk_dependencies = Table(
+    "chunk_dependencies",
+    metadata,
+    Column("dependency_id", String, primary_key=True),  # dep_<ulid>
+    Column("dependent_chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("prerequisite_chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("declared_at", UtcDateTime, nullable=False),
+    Column("declared_by", String, nullable=False),
+    Column("released_at", UtcDateTime, nullable=True),  # null while standing
+    Column("released_by", String, nullable=True),
+)
+Index("ix_chunk_dependencies_dependent_chunk_id", chunk_dependencies.c.dependent_chunk_id)
+Index("ix_chunk_dependencies_prerequisite_chunk_id", chunk_dependencies.c.prerequisite_chunk_id)
+
 escalations = Table(
     "escalations",
     metadata,

@@ -203,6 +203,27 @@ def mint_chunk(
     )
 
 
+@dataclass(frozen=True)
+class DependencyEdge:
+    """One ``chunk_dependencies`` row (shape: ``hub/store/schema.py``) — a declared
+    dependent-on-prerequisite edge (issue #456). Loaded through its own seam
+    (:mod:`~blizzard.hub.domain.chunks.dependencies`), never folded into :class:`ChunkFacts`
+    — an edge is a relation between two chunks, not an input to either one's own status."""
+
+    dependency_id: str
+    dependent_chunk_id: str
+    prerequisite_chunk_id: str
+    declared_at: datetime
+    declared_by: str
+    released_at: datetime | None = None
+    released_by: str | None = None
+
+    @property
+    def standing(self) -> bool:
+        """``True`` while the edge is unreleased."""
+        return self.released_at is None
+
+
 # --- Facts that feed the derivations ---------------------------------------
 # Each is the domain-object form of a fact row; a hydrating repository fills them.
 

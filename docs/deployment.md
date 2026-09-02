@@ -42,13 +42,13 @@ under them both daemons survive a crash or reboot with nothing lost and nothing 
 
 ### Operating a running fleet
 
-| File                                                                 | When to read                                                                                                                                     |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`deployment/runner-doors.md`](./deployment/runner-doors.md)         | You are reaching a runner daemon: which of its two listeners a client addresses, and what each one will and won't do                             |
-| [`deployment/chunk-operations.md`](./deployment/chunk-operations.md) | You are taking over a parked session, editing an unclaimed chunk, migrating one to another graph, following the latest mint, or retiring a graph |
-| [`deployment/control-verbs.md`](./deployment/control-verbs.md)       | You are stopping, re-aiming, or settling work: `chunk pause`/`restart`/`stop`/`done`, `detach`, and the two unrelated senses of "pause a runner" |
-| [`deployment/spend.md`](./deployment/spend.md)                       | You are bounding what an unattended fleet costs: the per-chunk cap, the rolling runner ceiling, and the subscription rate-limit read             |
-| [`deployment/recovery.md`](./deployment/recovery.md)                 | You need to know what survives a `kill -9` or a reboot, and how to prove it on your own machine                                                  |
+| File                                                                 | When to read                                                                                                                                                                                         |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`deployment/runner-doors.md`](./deployment/runner-doors.md)         | You are reaching a runner daemon: which of its two listeners a client addresses, and what each one will and won't do                                                                                 |
+| [`deployment/chunk-operations.md`](./deployment/chunk-operations.md) | You are taking over a parked session, editing an unclaimed chunk, migrating one to another graph, following the latest mint, retiring a graph, or declaring or releasing a dependency between chunks |
+| [`deployment/control-verbs.md`](./deployment/control-verbs.md)       | You are stopping, re-aiming, or settling work: `chunk pause`/`restart`/`stop`/`done`, `detach`, and the two unrelated senses of "pause a runner"                                                     |
+| [`deployment/spend.md`](./deployment/spend.md)                       | You are bounding what an unattended fleet costs: the per-chunk cap, the rolling runner ceiling, and the subscription rate-limit read                                                                 |
+| [`deployment/recovery.md`](./deployment/recovery.md)                 | You need to know what survives a `kill -9` or a reboot, and how to prove it on your own machine                                                                                                      |
 
 ### Diagnostics
 

@@ -89,7 +89,7 @@ def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
     assert chunks.delivery.pending_close_intents() == []
 
 
-# --- refusal at every status outside GROUPABLE_STATUSES, success at both members ---
+# --- refusal at every status outside PRE_CLAIM_STATUSES, success at both members ---
 
 
 def _make_running(chunks: ChunkStores, chunk_id: str) -> None:

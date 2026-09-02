@@ -697,6 +697,77 @@ export type ChunkDeleteResponse = {
 };
 
 /**
+ * ChunkDependencyDeclareRequest
+ *
+ * Declare that CHUNK depends on ``prerequisite_chunk_id`` (issue #456). Records who
+ * declared it.
+ */
+export type ChunkDependencyDeclareRequest = {
+    /**
+     * By
+     */
+    by?: string;
+    /**
+     * Prerequisite Chunk Id
+     */
+    prerequisite_chunk_id: string;
+};
+
+/**
+ * ChunkDependencyEdgeView
+ *
+ * One declared dependency edge (issue #456) — the row a declare or release
+ * answers with. ``released_at``/``released_by`` are null while the edge stands.
+ */
+export type ChunkDependencyEdgeView = {
+    /**
+     * Declared At
+     */
+    declared_at: string;
+    /**
+     * Declared By
+     */
+    declared_by: string;
+    /**
+     * Dependency Id
+     */
+    dependency_id: string;
+    /**
+     * Dependent Chunk Id
+     */
+    dependent_chunk_id: string;
+    /**
+     * Prerequisite Chunk Id
+     */
+    prerequisite_chunk_id: string;
+    /**
+     * Released At
+     */
+    released_at?: string | null;
+    /**
+     * Released By
+     */
+    released_by?: string | null;
+};
+
+/**
+ * ChunkDependencyReleaseRequest
+ *
+ * Release CHUNK's standing dependency on ``prerequisite_chunk_id`` (issue #456),
+ * addressed by the ordered pair rather than a minted edge id. Records who released it.
+ */
+export type ChunkDependencyReleaseRequest = {
+    /**
+     * By
+     */
+    by?: string;
+    /**
+     * Prerequisite Chunk Id
+     */
+    prerequisite_chunk_id: string;
+};
+
+/**
  * ChunkDetail
  *
  * The whole chunk aggregate — one response model behind both the hub's own detail read and the
@@ -6182,6 +6253,66 @@ export type CompleteChunkApiChunksChunkIdCompletePostResponses = {
 };
 
 export type CompleteChunkApiChunksChunkIdCompletePostResponse = CompleteChunkApiChunksChunkIdCompletePostResponses[keyof CompleteChunkApiChunksChunkIdCompletePostResponses];
+
+export type DeclareDependencyApiChunksChunkIdDependenciesPostData = {
+    body: ChunkDependencyDeclareRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/dependencies';
+};
+
+export type DeclareDependencyApiChunksChunkIdDependenciesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeclareDependencyApiChunksChunkIdDependenciesPostError = DeclareDependencyApiChunksChunkIdDependenciesPostErrors[keyof DeclareDependencyApiChunksChunkIdDependenciesPostErrors];
+
+export type DeclareDependencyApiChunksChunkIdDependenciesPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkDependencyEdgeView;
+};
+
+export type DeclareDependencyApiChunksChunkIdDependenciesPostResponse = DeclareDependencyApiChunksChunkIdDependenciesPostResponses[keyof DeclareDependencyApiChunksChunkIdDependenciesPostResponses];
+
+export type ReleaseDependencyApiChunksChunkIdDependenciesReleasePostData = {
+    body: ChunkDependencyReleaseRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/dependencies/release';
+};
+
+export type ReleaseDependencyApiChunksChunkIdDependenciesReleasePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReleaseDependencyApiChunksChunkIdDependenciesReleasePostError = ReleaseDependencyApiChunksChunkIdDependenciesReleasePostErrors[keyof ReleaseDependencyApiChunksChunkIdDependenciesReleasePostErrors];
+
+export type ReleaseDependencyApiChunksChunkIdDependenciesReleasePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkDependencyEdgeView;
+};
+
+export type ReleaseDependencyApiChunksChunkIdDependenciesReleasePostResponse = ReleaseDependencyApiChunksChunkIdDependenciesReleasePostResponses[keyof ReleaseDependencyApiChunksChunkIdDependenciesReleasePostResponses];
 
 export type DetachChunkApiChunksChunkIdDetachPostData = {
     body?: never;

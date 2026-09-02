@@ -14,7 +14,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, next_route_seq, route_of_conn
+from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, ephemeral_ids, next_route_seq, route_of_conn
 
 
 class ChunkLifecycleStore:
@@ -23,6 +23,10 @@ class ChunkLifecycleStore:
     def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
+
+    def is_ephemeral(self, chunk_id: str) -> bool:
+        with self._store.read("is_ephemeral") as conn:
+            return chunk_id in ephemeral_ids(conn)
 
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""

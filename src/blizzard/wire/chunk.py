@@ -477,3 +477,67 @@ class WorkItemsView(BaseModel):
     yields one entry per pointer, each fetched fresh and never stored."""
 
     items: list[WorkItemEntry] = []
+
+
+class ChunkDependencyDeclareRequest(BaseModel):
+    """Declare that CHUNK depends on ``prerequisite_chunk_id`` (issue #456). Records who
+    declared it."""
+
+    prerequisite_chunk_id: str
+    by: str = "operator"
+
+
+class ChunkDependencyReleaseRequest(BaseModel):
+    """Release CHUNK's standing dependency on ``prerequisite_chunk_id`` (issue #456),
+    addressed by the ordered pair rather than a minted edge id. Records who released it."""
+
+    prerequisite_chunk_id: str
+    by: str = "operator"
+
+
+class ChunkDependencyEdgeView(BaseModel):
+    """One declared dependency edge (issue #456) — the row a declare or release
+    answers with. ``released_at``/``released_by`` are null while the edge stands."""
+
+    dependency_id: str
+    dependent_chunk_id: str
+    prerequisite_chunk_id: str
+    declared_at: str
+    declared_by: str
+    released_at: str | None = None
+    released_by: str | None = None
+
+
+class DependentNotEditableView(BaseModel):
+    """The 409 body: the dependent chunk has left its declarable window — no longer
+    ``not_ready`` or ``ready`` (issue #456)."""
+
+    chunk_id: str
+    status: ChunkStatus
+    detail: str = "dependent chunk is not editable at this status"
+
+
+class DependencyWouldCloseCycleView(BaseModel):
+    """The 409 body: declaring this edge would close a cycle in the standing
+    dependency graph (issue #456) — a self-edge is among the cycle cases."""
+
+    dependent_chunk_id: str
+    prerequisite_chunk_id: str
+    detail: str = "declaring this edge would close a cycle in the standing dependency graph"
+
+
+class NoStandingDependencyView(BaseModel):
+    """The 409 body: the release named an ordered pair with no standing edge
+    (issue #456)."""
+
+    dependent_chunk_id: str
+    prerequisite_chunk_id: str
+    detail: str = "no standing dependency to release"
+
+
+class PrerequisiteIsEphemeralView(BaseModel):
+    """The 409 body: the named prerequisite is ephemeral — grouped-away or deleted
+    (issue #456) — and so not a legal prerequisite."""
+
+    chunk_id: str
+    detail: str = "prerequisite chunk is ephemeral and cannot be named as a prerequisite"

@@ -311,7 +311,7 @@ def test_delete_deletes_an_unacquired_holder_and_returns_200(tmp_path: Path) -> 
 
 def test_delete_is_409_while_an_acquired_chunk_holds_the_item_and_200_once_it_is_stopped(tmp_path: Path) -> None:
     """A claimed (running) holder is genuinely acquired — outside
-    ``GROUPABLE_STATUSES`` — so DELETE still refuses it, exactly as before (D3). A
+    ``PRE_CLAIM_STATUSES`` — so DELETE still refuses it, exactly as before (D3). A
     terminal holder's own withdrawal is unaffected either way, deleting nothing."""
     hub = build_hub(tmp_path)
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()

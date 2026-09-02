@@ -84,15 +84,15 @@ _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 def hub_store_connections(engine: Engine) -> HubStoreConnections:
     """The ``hub/store/internal/`` seam (issue #413) every adapter test wires over its
-    own migrated engine — one helper so the 27 adapters' test files construct it
+    own migrated engine — one helper so every adapter's test file constructs it
     identically."""
     return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
 
 
 def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
-    """All 15 chunk-seam adapters over one engine/clock, bundled the same shape
+    """All chunk-seam adapters over one engine/clock, bundled the same shape
     ``hub/composition.py`` wires in production (:func:`build_chunk_stores`) — the
-    store-level test's own single-object fixture-setup convenience a 15-way physical
+    store-level test's own single-object fixture-setup convenience a per-seam physical
     split would otherwise take from it. A test calls ``stores.<seam>.<method>(...)`` in
     place of the old single ``ChunkStore``'s bare method call."""
     return build_chunk_stores(hub_store_connections(engine), clock)

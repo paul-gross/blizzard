@@ -18,3 +18,7 @@ class ChunkStatus(StrEnum):
 
 
 TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
+
+#: The unclaimed admit set — a status test, not "never claimed": a chunk back at one of
+#: these would admit again. Every consumer names this constant (``bzh:one-prose-home``).
+PRE_CLAIM_STATUSES = frozenset({ChunkStatus.NOT_READY, ChunkStatus.READY})

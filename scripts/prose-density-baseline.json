@@ -718,9 +718,9 @@
    "total": 25
   },
   "blizzard/foundation/chunk_status.py": {
-   "comments": 0,
+   "comments": 2,
    "docstrings": 1,
-   "total": 20
+   "total": 24
   },
   "blizzard/foundation/clock.py": {
    "comments": 0,
@@ -763,9 +763,9 @@
    "total": 17
   },
   "blizzard/foundation/ids.py": {
-   "comments": 13,
+   "comments": 14,
    "docstrings": 15,
-   "total": 100
+   "total": 101
   },
   "blizzard/foundation/logging.py": {
    "comments": 2,
@@ -881,6 +881,11 @@
    "comments": 0,
    "docstrings": 5,
    "total": 18
+  },
+  "blizzard/hub/api/chunk_dependencies.py": {
+   "comments": 2,
+   "docstrings": 20,
+   "total": 147
   },
   "blizzard/hub/api/chunk_edit.py": {
    "comments": 0,
@@ -1030,7 +1035,7 @@
   "blizzard/hub/app.py": {
    "comments": 30,
    "docstrings": 33,
-   "total": 342
+   "total": 344
   },
   "blizzard/hub/auth/__init__.py": {
    "comments": 0,
@@ -1288,9 +1293,9 @@
    "total": 93
   },
   "blizzard/hub/composition.py": {
-   "comments": 77,
-   "docstrings": 14,
-   "total": 540
+   "comments": 79,
+   "docstrings": 13,
+   "total": 552
   },
   "blizzard/hub/config.py": {
    "comments": 45,
@@ -1407,6 +1412,11 @@
    "docstrings": 30,
    "total": 89
   },
+  "blizzard/hub/domain/chunks/dependencies.py": {
+   "comments": 0,
+   "docstrings": 14,
+   "total": 41
+  },
   "blizzard/hub/domain/chunks/escalations.py": {
    "comments": 0,
    "docstrings": 21,
@@ -1429,8 +1439,8 @@
   },
   "blizzard/hub/domain/chunks/lifecycle.py": {
    "comments": 0,
-   "docstrings": 23,
-   "total": 46
+   "docstrings": 26,
+   "total": 52
   },
   "blizzard/hub/domain/chunks/movement.py": {
    "comments": 0,
@@ -1460,7 +1470,7 @@
   "blizzard/hub/domain/chunks/stores.py": {
    "comments": 0,
    "docstrings": 12,
-   "total": 74
+   "total": 80
   },
   "blizzard/hub/domain/chunks/usage.py": {
    "comments": 0,
@@ -1492,15 +1502,20 @@
    "docstrings": 15,
    "total": 65
   },
+  "blizzard/hub/domain/dependencies.py": {
+   "comments": 5,
+   "docstrings": 34,
+   "total": 155
+  },
   "blizzard/hub/domain/detach.py": {
    "comments": 0,
    "docstrings": 13,
    "total": 34
   },
   "blizzard/hub/domain/edit.py": {
-   "comments": 9,
+   "comments": 8,
    "docstrings": 41,
-   "total": 212
+   "total": 209
   },
   "blizzard/hub/domain/enrollment.py": {
    "comments": 2,
@@ -1628,9 +1643,9 @@
    "total": 64
   },
   "blizzard/hub/domain/queue.py": {
-   "comments": 5,
-   "docstrings": 46,
-   "total": 243
+   "comments": 3,
+   "docstrings": 47,
+   "total": 239
   },
   "blizzard/hub/domain/registry.py": {
    "comments": 13,
@@ -1684,8 +1699,8 @@
   },
   "blizzard/hub/domain/work.py": {
    "comments": 52,
-   "docstrings": 356,
-   "total": 1376
+   "docstrings": 361,
+   "total": 1397
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 5,
@@ -1817,6 +1832,11 @@
    "docstrings": 20,
    "total": 212
   },
+  "blizzard/hub/store/internal/chunk_dependencies_store.py": {
+   "comments": 4,
+   "docstrings": 13,
+   "total": 121
+  },
   "blizzard/hub/store/internal/chunk_escalations_store.py": {
    "comments": 2,
    "docstrings": 25,
@@ -1840,7 +1860,7 @@
   "blizzard/hub/store/internal/chunk_lifecycle_store.py": {
    "comments": 0,
    "docstrings": 18,
-   "total": 94
+   "total": 98
   },
   "blizzard/hub/store/internal/chunk_movement_store.py": {
    "comments": 2,
@@ -1875,7 +1895,7 @@
   "blizzard/hub/store/internal/chunk_store_factory.py": {
    "comments": 0,
    "docstrings": 7,
-   "total": 49
+   "total": 51
   },
   "blizzard/hub/store/internal/chunk_usage_store.py": {
    "comments": 2,
@@ -2377,15 +2397,20 @@
    "docstrings": 6,
    "total": 58
   },
+  "blizzard/hub/store/migrations/versions/20260902_0900_chunk_dependencies.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "total": 33
+  },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
    "docstrings": 0,
    "total": 0
   },
   "blizzard/hub/store/schema.py": {
-   "comments": 414,
+   "comments": 418,
    "docstrings": 6,
-   "total": 1293
+   "total": 1310
   },
   "blizzard/hub/system_artifacts/__init__.py": {
    "comments": 3,
@@ -3639,8 +3664,8 @@
   },
   "blizzard/tools/invariants.py": {
    "comments": 23,
-   "docstrings": 69,
-   "total": 792
+   "docstrings": 80,
+   "total": 892
   },
   "blizzard/tools/openapi.py": {
    "comments": 0,
@@ -3669,8 +3694,8 @@
   },
   "blizzard/wire/chunk.py": {
    "comments": 31,
-   "docstrings": 103,
-   "total": 479
+   "docstrings": 117,
+   "total": 543
   },
   "blizzard/wire/completion.py": {
    "comments": 15,
@@ -4329,6 +4354,16 @@
    "docstrings": 3,
    "total": 50
   },
+  "test_chunk_dependencies_api.py": {
+   "comments": 3,
+   "docstrings": 27,
+   "total": 301
+  },
+  "test_chunk_dependencies_store.py": {
+   "comments": 2,
+   "docstrings": 3,
+   "total": 91
+  },
   "test_chunk_detail_aggregate.py": {
    "comments": 9,
    "docstrings": 7,
@@ -4348,6 +4383,11 @@
    "comments": 2,
    "docstrings": 11,
    "total": 96
+  },
+  "test_chunk_lifecycle_is_ephemeral.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "total": 58
   },
   "test_chunk_pause.py": {
    "comments": 103,
@@ -4373,6 +4413,11 @@
    "comments": 5,
    "docstrings": 15,
    "total": 274
+  },
+  "test_chunk_store_factory_dependencies.py": {
+   "comments": 2,
+   "docstrings": 5,
+   "total": 41
   },
   "test_chunk_store_latest_artifact.py": {
    "comments": 5,
@@ -4568,6 +4613,21 @@
    "comments": 4,
    "docstrings": 14,
    "total": 98
+  },
+  "test_dependency_race.py": {
+   "comments": 7,
+   "docstrings": 13,
+   "total": 136
+  },
+  "test_dependency_service.py": {
+   "comments": 5,
+   "docstrings": 31,
+   "total": 330
+  },
+  "test_dependency_service_component.py": {
+   "comments": 1,
+   "docstrings": 21,
+   "total": 137
   },
   "test_detach_late_write_fence.py": {
    "comments": 14,
@@ -5032,7 +5092,7 @@
   "test_hub_store_seam.py": {
    "comments": 0,
    "docstrings": 8,
-   "total": 223
+   "total": 230
   },
   "test_hub_store_utc.py": {
    "comments": 1,
@@ -5101,8 +5161,8 @@
   },
   "test_invariant_checker.py": {
    "comments": 20,
-   "docstrings": 81,
-   "total": 918
+   "docstrings": 95,
+   "total": 1095
   },
   "test_is_retryable_push_error.py": {
    "comments": 0,
@@ -5390,9 +5450,9 @@
    "total": 359
   },
   "test_route_classification.py": {
-   "comments": 50,
+   "comments": 52,
    "docstrings": 36,
-   "total": 356
+   "total": 360
   },
   "test_route_permission_matrix.py": {
    "comments": 9,
@@ -5855,9 +5915,9 @@
    "total": 201
   },
   "test_store_migrations.py": {
-   "comments": 23,
-   "docstrings": 46,
-   "total": 456
+   "comments": 24,
+   "docstrings": 49,
+   "total": 479
   },
   "test_subprocess_check_runner.py": {
    "comments": 3,

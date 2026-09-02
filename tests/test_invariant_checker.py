@@ -916,3 +916,180 @@ def test_a_segment_naming_a_minted_chunk_is_not_a_violation(tmp_path: Path) -> N
     slugs = {v.invariant for v in HubInvariants(engine).run()}
 
     assert "hub:segment-chunk-resolves" not in slugs
+
+
+def _dependency_edge_values(**overrides: object) -> dict:
+    values: dict = {
+        "dependency_id": "dep_1",
+        "dependent_chunk_id": "ch_dependent",
+        "prerequisite_chunk_id": "ch_prereq",
+        "declared_at": _NOW,
+        "declared_by": "user:alice",
+        "released_at": None,
+        "released_by": None,
+    }
+    values.update(overrides)
+    return values
+
+
+def test_a_standing_dependency_cycle_is_a_violation(tmp_path: Path) -> None:
+    """Hand-seeded counterexample: ``a`` depends on ``b``, ``b`` depends on ``a`` —
+    a two-chunk cycle with no engine constraint to catch it."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.chunk_dependencies).values(
+                **_dependency_edge_values(
+                    dependency_id="dep_1", dependent_chunk_id="ch_a", prerequisite_chunk_id="ch_b"
+                )
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_dependencies).values(
+                **_dependency_edge_values(
+                    dependency_id="dep_2", dependent_chunk_id="ch_b", prerequisite_chunk_id="ch_a"
+                )
+            )
+        )
+
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+
+    assert "hub:no-standing-dependency-cycle" in slugs
+
+
+def test_an_acyclic_dependency_chain_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.chunk_dependencies).values(
+                **_dependency_edge_values(
+                    dependency_id="dep_1", dependent_chunk_id="ch_a", prerequisite_chunk_id="ch_b"
+                )
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_dependencies).values(
+                **_dependency_edge_values(
+                    dependency_id="dep_2", dependent_chunk_id="ch_b", prerequisite_chunk_id="ch_c"
+                )
+            )
+        )
+
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+
+    assert "hub:no-standing-dependency-cycle" not in slugs
+
+
+def test_a_released_edge_reopening_a_cycle_is_not_a_violation(tmp_path: Path) -> None:
+    """A released row stays (never deleted); it must not itself close the cycle it once
+    stood in."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.chunk_dependencies).values(
+                **_dependency_edge_values(
+                    dependency_id="dep_1", dependent_chunk_id="ch_a", prerequisite_chunk_id="ch_b"
+                )
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_dependencies).values(
+                **_dependency_edge_values(
+                    dependency_id="dep_2",
+                    dependent_chunk_id="ch_b",
+                    prerequisite_chunk_id="ch_a",
+                    released_at=_NOW,
+                    released_by="user:alice",
+                )
+            )
+        )
+
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+
+    assert "hub:no-standing-dependency-cycle" not in slugs
+
+
+def test_two_standing_rows_for_one_ordered_pair_is_a_violation(tmp_path: Path) -> None:
+    """Hand-seeded counterexample: no database uniqueness constraint backs at-most-one
+    standing edge per ordered pair — two standing rows for the same pair is the
+    exact breach ``NoDuplicateStandingDependency`` exists to catch."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values(dependency_id="dep_1")))
+        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values(dependency_id="dep_2")))
+
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+
+    assert "hub:no-duplicate-standing-dependency" in slugs
+
+
+def test_a_declared_edge_after_a_release_of_the_same_pair_is_not_a_violation(tmp_path: Path) -> None:
+    """Declaring after a release mints a fresh row, so this is legal: one released row plus
+    one standing row for the same pair is not a duplicate-standing breach."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.chunk_dependencies).values(
+                **_dependency_edge_values(dependency_id="dep_1", released_at=_NOW, released_by="user:alice")
+            )
+        )
+        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values(dependency_id="dep_2")))
+
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+
+    assert "hub:no-duplicate-standing-dependency" not in slugs
+
+
+def test_a_standing_edge_onto_a_grouped_away_prerequisite_is_a_violation(tmp_path: Path) -> None:
+    """Hand-seeded counterexample: the exact residual ``GroupService``'s missing claim
+    lock leaves — a standing edge naming a prerequisite grouped away after the guard read."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values()))
+        conn.execute(
+            insert(hub.chunk_grouped).values(chunk_id="ch_prereq", grouped_into="ch_survivor", grouped_at=_NOW)
+        )
+
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+
+    assert "hub:no-standing-dependency-onto-ephemeral-chunk" in slugs
+
+
+def test_a_standing_edge_onto_a_deleted_prerequisite_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values()))
+        conn.execute(insert(hub.chunk_deleted).values(chunk_id="ch_prereq", deleted_at=_NOW, deleted_by="user:alice"))
+
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+
+    assert "hub:no-standing-dependency-onto-ephemeral-chunk" in slugs
+
+
+def test_a_standing_edges_dependent_gone_ephemeral_is_also_a_violation(tmp_path: Path) -> None:
+    """Either endpoint qualifies — the dependent going ephemeral is as unwitnessed by the
+    engine as the prerequisite doing so."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunk_dependencies).values(**_dependency_edge_values()))
+        conn.execute(
+            insert(hub.chunk_deleted).values(chunk_id="ch_dependent", deleted_at=_NOW, deleted_by="user:alice")
+        )
+
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+
+    assert "hub:no-standing-dependency-onto-ephemeral-chunk" in slugs
+
+
+def test_a_released_edge_onto_an_ephemeral_chunk_is_not_a_violation(tmp_path: Path) -> None:
+    """A released edge no longer stands, so it is exempt even onto an ephemeral chunk."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.chunk_dependencies).values(**_dependency_edge_values(released_at=_NOW, released_by="user:alice"))
+        )
+        conn.execute(insert(hub.chunk_deleted).values(chunk_id="ch_prereq", deleted_at=_NOW, deleted_by="user:alice"))
+
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+
+    assert "hub:no-standing-dependency-onto-ephemeral-chunk" not in slugs

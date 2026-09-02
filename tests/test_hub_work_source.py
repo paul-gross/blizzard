@@ -434,7 +434,7 @@ def test_withdraw_of_an_item_the_cascade_already_closed_is_refused(tmp_path: Pat
 
 def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Path) -> None:
     """A claimed (running) holder is genuinely acquired — outside
-    ``GROUPABLE_STATUSES`` — so withdraw still refuses it exactly as before (D3)."""
+    ``PRE_CLAIM_STATUSES`` — so withdraw still refuses it exactly as before (D3)."""
     source, _, chunks, _, engine, clock = _source(tmp_path)
     created = source.create(
         title="t",

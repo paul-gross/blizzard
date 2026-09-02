@@ -8,10 +8,16 @@ from typing import Protocol
 
 
 class IReadChunkLifecycleRepository(Protocol):
-    """Read-only chunk-lifecycle access — empty: the concept's one read, ``get``, is the
-    same query as ``record``'s, so callers needing it depend on
-    :class:`~blizzard.hub.domain.chunks.record.IReadChunkRecordRepository` instead rather
-    than standing up a second adapter for byte-identical SQL."""
+    """Read-only chunk-lifecycle access — no ``get``: it would be ``record``'s
+    byte-identical query, so a caller needing it depends on that seam instead."""
+
+    def is_ephemeral(self, chunk_id: str) -> bool:
+        """Whether ``chunk_id`` names a grouped-away or deleted chunk (issue #456) — the
+        read that tells an ephemeral prerequisite apart from one never minted at all,
+        since :meth:`~blizzard.hub.domain.chunks.record.IReadChunkRecordRepository.get`
+        answers ``None`` for both. The record seam's exclusion of ephemeral ids from
+        every other read is not widened by this."""
+        ...
 
 
 class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):

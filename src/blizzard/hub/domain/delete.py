@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import threading
 
-from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.queue import GROUPABLE_STATUSES, ChunkNotFound
+from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import Chunk, IWriteWorkItemRepository
 
 
@@ -22,7 +22,7 @@ class ChunkNotDeletable(ValueError):
     def __init__(self, chunk_id: str, status: ChunkStatus) -> None:
         super().__init__(
             f"chunk {chunk_id} is {status.value} — deletion needs a chunk at "
-            f"{' or '.join(sorted(s.value for s in GROUPABLE_STATUSES))}: "
+            f"{' or '.join(sorted(s.value for s in PRE_CLAIM_STATUSES))}: "
             "no runner holding it, and no human hold or terminal on it either"
         )
         self.chunk_id = chunk_id
@@ -60,6 +60,6 @@ class DeleteService:
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             status = facts.status()
-            if status not in GROUPABLE_STATUSES:
+            if status not in PRE_CLAIM_STATUSES:
                 raise ChunkNotDeletable(chunk.chunk_id, status)
             return self._items.delete_chunk_and_withdraw_hub_items(chunk, by=by, at=self._clock.now())

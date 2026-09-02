@@ -3,8 +3,7 @@
 One place the store-backed collaborators are constructed and injected. Controllers read
 the stores through their **read** Protocols and mutate only through the services
 (``bzh:controller-read-only``); every chunk seam below — ``HubServices.chunks``'s bundle and
-every domain service's own narrow parameter alike — is the same one of the 15
-``hub/store/internal/chunk_<seam>_store.py`` instances built here."""
+every domain service's own narrow parameter alike — is the same instance built here."""
 
 from __future__ import annotations
 
@@ -53,6 +52,7 @@ from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.complete import CompleteService
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
 from blizzard.hub.domain.delete import DeleteService
+from blizzard.hub.domain.dependencies import DependencyService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
@@ -137,6 +137,9 @@ class HubServices:
     stop: StopService
     complete: CompleteService
     edit: EditService
+    #: Declare/release a dependency edge between two chunks (issue #456) — under the same
+    #: shared claim lock ``claim``/``edit``/``restart`` already take.
+    dependencies: DependencyService
     #: The unacquired-chunk delete/withdraw service (issue #364) — the composite write
     #: ``WorkItemEditService.withdraw`` also reaches through for an unacquired holder.
     delete: DeleteService
@@ -291,7 +294,7 @@ def build_services(
     # The hub-store seam (issue #413) — one collaborator shared by every
     # ``hub/store/internal/`` adapter, replacing the bare engine (D2).
     store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
-    # The 15 chunk-seam adapters, in the one place their construction order is expressed.
+    # The chunk-seam adapters, in the one place their construction order is expressed.
     chunk_stores = build_chunk_stores(store_connections, clock)
     chunk_facts = chunk_stores.facts
     chunk_record = chunk_stores.record
@@ -308,6 +311,7 @@ def build_services(
     chunk_usage = chunk_stores.usage
     chunk_delivery = chunk_stores.delivery
     chunk_hub_exec = chunk_stores.hub_exec
+    chunk_dependencies = chunk_stores.dependencies
     graph_store = GraphStore(store_connections)
     registry_store = RunnerRegistryStore(store_connections)
     transcript_store = TranscriptSegmentStore(store_connections)
@@ -411,6 +415,7 @@ def build_services(
             usage=chunk_usage,
             delivery=chunk_delivery,
             hub_exec=chunk_hub_exec,
+            dependencies=chunk_dependencies,
         ),
         graphs=graph_store,
         ingest=IngestService(record=chunk_record, work_refs=chunk_work_refs, clock=clock),
@@ -445,6 +450,13 @@ def build_services(
         stop=StopService(facts=chunk_facts, lifecycle=chunk_lifecycle, clock=clock),
         complete=CompleteService(facts=chunk_facts, lifecycle=chunk_lifecycle, clock=clock),
         edit=EditService(facts=chunk_facts, record=chunk_record, graphs=graph_store, claim_lock=claim_lock),
+        dependencies=DependencyService(
+            facts=chunk_facts,
+            lifecycle=chunk_lifecycle,
+            dependencies=chunk_dependencies,
+            clock=clock,
+            claim_lock=claim_lock,
+        ),
         delete=delete,
         facts=FactIngestService(
             facts=chunk_facts,

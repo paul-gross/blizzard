@@ -997,6 +997,100 @@
         "title": "ChunkDeleteResponse",
         "type": "object"
       },
+      "ChunkDependencyDeclareRequest": {
+        "description": "Declare that CHUNK depends on ``prerequisite_chunk_id`` (issue #456). Records who\ndeclared it.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          },
+          "prerequisite_chunk_id": {
+            "title": "Prerequisite Chunk Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prerequisite_chunk_id"
+        ],
+        "title": "ChunkDependencyDeclareRequest",
+        "type": "object"
+      },
+      "ChunkDependencyEdgeView": {
+        "description": "One declared dependency edge (issue #456) \u2014 the row a declare or release\nanswers with. ``released_at``/``released_by`` are null while the edge stands.",
+        "properties": {
+          "declared_at": {
+            "title": "Declared At",
+            "type": "string"
+          },
+          "declared_by": {
+            "title": "Declared By",
+            "type": "string"
+          },
+          "dependency_id": {
+            "title": "Dependency Id",
+            "type": "string"
+          },
+          "dependent_chunk_id": {
+            "title": "Dependent Chunk Id",
+            "type": "string"
+          },
+          "prerequisite_chunk_id": {
+            "title": "Prerequisite Chunk Id",
+            "type": "string"
+          },
+          "released_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released At"
+          },
+          "released_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released By"
+          }
+        },
+        "required": [
+          "dependency_id",
+          "dependent_chunk_id",
+          "prerequisite_chunk_id",
+          "declared_at",
+          "declared_by"
+        ],
+        "title": "ChunkDependencyEdgeView",
+        "type": "object"
+      },
+      "ChunkDependencyReleaseRequest": {
+        "description": "Release CHUNK's standing dependency on ``prerequisite_chunk_id`` (issue #456),\naddressed by the ordered pair rather than a minted edge id. Records who released it.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          },
+          "prerequisite_chunk_id": {
+            "title": "Prerequisite Chunk Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prerequisite_chunk_id"
+        ],
+        "title": "ChunkDependencyReleaseRequest",
+        "type": "object"
+      },
       "ChunkDetail": {
         "description": "The whole chunk aggregate \u2014 one response model behind both the hub's own detail read and the\nrunner's pass-through proxy of it (issue #314): transition history, inline artifact store, and the\nopen escalation. Declared once, never re-typed per route, so a field reaches both specs at once.",
         "properties": {
@@ -10308,6 +10402,112 @@
         "summary": "Complete Chunk",
         "tags": [
           "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/dependencies": {
+      "post": {
+        "description": "Declare that CHUNK depends on ``prerequisite_chunk_id`` (issue #456).\n\nIdempotent: an already-standing pair is reported back before the prerequisite is even resolved, so one since gone\nephemeral cannot turn a refusal. 404 for an unknown dependent, or one a race deletes between resolving it and this\nwrite; 409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite.",
+        "operationId": "declare_dependency_api_chunks__chunk_id__dependencies_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkDependencyDeclareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkDependencyEdgeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Declare Dependency",
+        "tags": [
+          "chunk-dependencies"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/dependencies/release": {
+      "post": {
+        "description": "Release CHUNK's standing dependency on ``prerequisite_chunk_id`` (issue\n#456) \u2014 recorded, never deleted. Admitted whenever the edge stands, whatever the\nprerequisite's own state. 404 for an unknown dependent; 409 when no edge stands.",
+        "operationId": "release_dependency_api_chunks__chunk_id__dependencies_release_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkDependencyReleaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkDependencyEdgeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Dependency",
+        "tags": [
+          "chunk-dependencies"
         ]
       }
     },

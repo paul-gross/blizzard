@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
@@ -21,7 +21,7 @@ from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
-from blizzard.hub.domain.work import Chunk, ChunkFacts
+from blizzard.hub.domain.work import Chunk
 
 _log = get_logger("blizzard.hub.queue")
 
@@ -42,18 +42,14 @@ class ChunkNotFound(LookupError):
         self.chunk_id = chunk_id
 
 
-#: The statuses a chunk may be **grouped** at (issue #141) — a status set, not a
-#: route-liveness read (pinned by ``tests/test_queue_shaping.py``).
-GROUPABLE_STATUSES = frozenset({ChunkStatus.NOT_READY, ChunkStatus.READY})
-
-
 class ChunkNotGroupable(ValueError):
-    """A group op named a chunk that is not free to be folded away (issue #141)."""
+    """A group op named a chunk that is not free to be folded away (issue #141) — outside
+    :data:`~blizzard.foundation.chunk_status.PRE_CLAIM_STATUSES`, the pre-claim window."""
 
     def __init__(self, chunk_id: str, status: ChunkStatus) -> None:
         super().__init__(
             f"chunk {chunk_id} is {status.value} — grouping needs a chunk at "
-            f"{' or '.join(sorted(s.value for s in GROUPABLE_STATUSES))}: "
+            f"{' or '.join(sorted(s.value for s in PRE_CLAIM_STATUSES))}: "
             "no runner holding it, and no human hold or terminal on it either"
         )
         self.chunk_id = chunk_id
@@ -199,9 +195,9 @@ class GroupService:
     def group(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
         """Fold ``merge_ids`` into ``survivor_id``; the survivor absorbs their pointers.
 
-        The survivor and every merged chunk must be **unacquired**
-        (:data:`GROUPABLE_STATUSES`); ``ready`` is not required (issue #141). Merged work
-        refs union into the survivor, whose own status is unchanged."""
+        The survivor and every merged chunk must be **unacquired** (:data:`PRE_CLAIM_STATUSES`);
+        ``ready`` is not required (issue #141). Merged work refs union into the survivor,
+        whose own status is unchanged."""
         survivor, survivor_status = self._require_unacquired_chunk(survivor_id)
         targets = self._resolve_targets(survivor_id, merge_ids)
 
@@ -237,7 +233,7 @@ class GroupService:
         facts = self._facts.load_facts(chunk_id)
         if chunk is None or facts is None:
             raise ChunkNotFound(chunk_id)
-        status = (facts if facts is not None else ChunkFacts(minted=True)).status()
-        if status not in GROUPABLE_STATUSES:
+        status = facts.status()
+        if status not in PRE_CLAIM_STATUSES:
             raise ChunkNotGroupable(chunk_id, status)
         return chunk, status

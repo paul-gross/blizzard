@@ -1,7 +1,7 @@
 """The hub-store error-wrapping seam (blizzard#413) — a driver fault through every one
-of the 27 ``hub/store/internal/`` adapters raises the wrapped ``HubStoreError``, logged
-once at the collaborator's single wrap site (D1, D4). One parametrized case drives all
-27 (D6, ``bzh:case-pins-its-own-name``) rather than 27 near-identical copies."""
+of the ``hub/store/internal/`` adapters raises the wrapped ``HubStoreError``, logged once
+at the collaborator's single wrap site (D1, D4). One parametrized case drives every
+adapter below (D6, ``bzh:case-pins-its-own-name``) rather than one copy each."""
 
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOpe
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
 from blizzard.hub.store.internal.chunk_delivery_store import ChunkDeliveryStore
+from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
 from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -168,6 +169,12 @@ _ADAPTER_CASES = [
         lambda a: a.count_live_hub_exec_slots(),
         "count_live_hub_exec_slots",
     ),
+    _AdapterCase(
+        "ChunkDependenciesStore",
+        lambda store: ChunkDependenciesStore(store, FixedClock(_NOW)),
+        lambda a: a.list_standing_edges(),
+        "list_standing_edges",
+    ),
     _AdapterCase("FindingStore", lambda store: FindingStore(store), lambda a: a.get("fin_x"), "get"),
     _AdapterCase("FindingSetStore", lambda store: FindingSetStore(store), lambda a: a.get("fins_x"), "get"),
     _AdapterCase("GardenProposalStore", lambda store: GardenProposalStore(store), lambda a: a.get("gp_x"), "get"),
@@ -197,7 +204,7 @@ _ADAPTER_CASES = [
 
 def _schema_missing_engine(tmp_path: Path) -> Engine:
     """A migrated engine whose schema then vanishes from under it — every one of the
-    13 adapters' methods below queries a table that no longer exists, a genuine driver
+    adapters' methods below queries a table that no longer exists, a genuine driver
     fault raised mid-query rather than at connection acquisition (the
     ``test_scope_store.py`` pilot's own technique, reused here across every adapter)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
