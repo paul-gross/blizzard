@@ -214,9 +214,8 @@ class GroupService:
         self._record = record
         self._facts = facts
         self._clock = clock
-        # The same lock ClaimService/EditService/RestartService/DependencyService/
-        # DeleteService already share (issue #120) — closes the residual GroupService
-        # previously left open against a racing declare (D2, issue #460).
+        # The same lock ClaimService/EditService/RestartService/DependencyService/DeleteService already share — closes
+        # the residual GroupService previously left open against a racing declare (D2).
         self._claim_lock = claim_lock
 
     def group(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:

@@ -94,9 +94,8 @@ class DependencyService:
             return self._declare_locked(dependent, prerequisite, by=by)
 
     def _declare_locked(self, dependent: Chunk, prerequisite: Chunk, *, by: str) -> DependencyEdge:
-        # Imported locally: `queue.py` imports this module's `plan_fold`/
-        # `would_close_a_cycle` at module scope (issue #460), so a module-level import
-        # the other way would close a circular-import loop.
+        # Imported locally: `queue.py` imports this module's `plan_fold`/`would_close_a_cycle` at module scope, so a
+        # module-level import the other way would close a circular-import loop.
         from blizzard.hub.domain.queue import ChunkNotFound
 
         existing = self._dependencies.standing_edge(dependent.chunk_id, prerequisite.chunk_id)
@@ -141,22 +140,11 @@ class DependencyService:
 def derive_blocked_markings(
     standing_edges: Iterable[DependencyEdge], statuses: Mapping[str, ChunkStatus]
 ) -> dict[str, str]:
-    """The blocked marking per dependent chunk id — never folded into :class:`ChunkFacts`
-    or its :meth:`~blizzard.hub.domain.work.ChunkFacts.status` (``bzh:facts-not-status``,
-    issue #457, D1). ``standing_edges`` must already carry
-    :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.list_standing_edges`'s
-    own ``(declared_at, dependency_id)`` order: the first unmet edge per dependent wins, one hop,
-    with no chain walk (D4). A prerequisite absent from ``statuses`` still blocks (D3) — deletion
-    now refuses a standing edge onto a live prerequisite (issue #460), so this only guards the
-    accepted residual race between a status read and a concurrent write, not an ordinary
-    reachable path.
-
-    Only a dependent read at :data:`PRE_CLAIM_STATUSES` derives a marking (review round 1 F1):
-    the marking answers why a chunk cannot yet be claimed, and that question stops applying once
-    a dependent is claimed, running, delivering, human-gated, paused, or terminal — even though
-    its edge, declared while it was still pre-claim, persists unreleased through all of that. A
-    dependent absent from ``statuses`` is treated the way its default ``not_ready`` would read —
-    eligible, not excluded."""
+    """The blocked marking per dependent chunk id — never folded into :class:`ChunkFacts` (``bzh:facts-not-status``).
+    Only a dependent read at :data:`PRE_CLAIM_STATUSES` derives one; a dependent absent from ``statuses`` reads as its
+    default ``not_ready``. ``standing_edges`` must already carry
+    :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.list_standing_edges`'s own order.
+    Full rule: `blizzard-context:/domain/work/statuses.md` §The blocked marking."""
     markings: dict[str, str] = {}
     for edge in standing_edges:
         if edge.dependent_chunk_id in markings:
@@ -171,13 +159,10 @@ def derive_blocked_markings(
 
 
 def would_close_a_cycle(standing: list[DependencyEdge], added: list[tuple[str, str]]) -> bool:
-    """Would folding ``added``'s ordered ``(dependent, prerequisite)`` pairs into
-    ``standing``'s existing edges close a cycle in the resulting graph (issue #456,
-    extended #460)? ``standing`` is assumed acyclic already — the domain's own
-    maintained invariant — so a cycle can only pass through one of ``added``. Generalizes
-    the single-edge check :class:`DependencyService` uses to declare an edge to the
-    set-level question :class:`~blizzard.hub.domain.queue.GroupService` asks over a
-    whole fold, so neither duplicates the graph-walk."""
+    """Would folding ``added``'s ordered ``(dependent, prerequisite)`` pairs into ``standing``'s edges close a cycle
+    in the resulting graph? ``standing`` is assumed acyclic already, so a cycle can only pass through one of
+    ``added``. Shared by :class:`DependencyService` (single edge) and
+    :class:`~blizzard.hub.domain.queue.GroupService` (a whole fold's edge set)."""
     graph: dict[str, list[str]] = {}
     for edge in standing:
         graph.setdefault(edge.dependent_chunk_id, []).append(edge.prerequisite_chunk_id)
@@ -214,17 +199,10 @@ class FoldEdgePlan:
 
 
 def plan_fold(standing: list[DependencyEdge], survivor_id: str, folded_ids: list[str]) -> FoldEdgePlan:
-    """The dependency-edge side of folding ``folded_ids`` into ``survivor_id`` (D3):
-    every standing edge naming a folded chunk in either role is released; its remapped
-    pair — folded ids mapped to ``survivor_id``, everything else unchanged — mints
-    nothing further when it collapses to a self-edge or duplicates a pair already
-    resulting (either untouched in ``standing``, or minted earlier in this same pass,
-    ``standing``'s own ``(declared_at, dependency_id)`` order breaking every tie), and
-    is minted fresh otherwise. An edge naming two different folded chunks is attributed
-    to whichever endpoint is folded when only one is, and to the dependent side's target
-    when both are (either choice is correct; this one is deterministic). Raises nothing —
-    the caller checks :func:`would_close_a_cycle` against the result before writing
-    anything."""
+    """The dependency-edge side of folding ``folded_ids`` into ``survivor_id`` (D3): every standing edge naming a
+    folded chunk in either role is released, and its remapped pair is minted unless it collapses to a self-edge or
+    duplicates a pair already resulting. Raises nothing — the caller checks :func:`would_close_a_cycle` first. Full
+    per-edge outcome table: `blizzard-context:/architecture/crash-correctness/hub.md` §A fold's edge rewrite."""
     folded = set(folded_ids)
 
     def remap(chunk_id: str) -> str:

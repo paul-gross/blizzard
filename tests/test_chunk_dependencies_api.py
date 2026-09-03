@@ -47,13 +47,10 @@ def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str, *, by: st
 
 
 def _strand_by_direct_delete(hub: HubHarness, chunk_id: str) -> None:
-    """Insert a ``chunk_deleted`` row directly, bypassing ``DeleteService``'s own
-    standing-prerequisite guard (issue #460). Once both delete and group are
-    dependency-aware, no API path can strand a standing edge onto an ephemeral
-    prerequisite any more — this reaches that state the only way left, to prove
-    release/declare still answer it the same way rather than mishandling a state the
-    accepted residual race (``bzh:invariant-checker``'s
-    ``NoStandingDependencyOntoEphemeralChunk``) could still produce."""
+    """Insert a ``chunk_deleted`` row directly, bypassing ``DeleteService``'s own standing-prerequisite guard. Once
+    delete and group are both dependency-aware, no API path can strand a standing edge onto an ephemeral prerequisite
+    any more — this reaches that state the only way left, to prove release/declare still answer the accepted residual
+    race (``bzh:invariant-checker``'s ``NoStandingDependencyOntoEphemeralChunk``) the same way."""
     with hub.engine.begin() as conn:
         conn.execute(
             s.chunk_deleted.insert().values(chunk_id=chunk_id, deleted_at=hub.clock.now(), deleted_by="operator")

@@ -137,11 +137,9 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
 
 
 def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_shared_lock(tmp_path: Path) -> None:
-    """D2, issue #460: ``GroupService`` now holds the same shared lock for its whole
-    fold, so a declaration naming the chunk being folded away as a prerequisite cannot
-    land mid-fold — it blocks until the fold's own write releases the lock. The fold
-    carries no edges of its own, so ``record_fold``'s write is reached (and paused)
-    almost immediately."""
+    """D2: ``GroupService`` now holds the shared lock for its whole fold, so a declaration naming the folded-away
+    chunk as prerequisite blocks mid-fold until the fold's write releases the lock — reached (and paused) almost
+    immediately, since this fold carries no edges of its own."""
     hub = build_hub(tmp_path)
     survivor_id = ingest(hub, [{"source": "default", "ref": "survivor"}], promote=False)
     target_id = ingest(hub, [{"source": "default", "ref": "target"}], promote=False)
@@ -191,8 +189,7 @@ def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_sha
     declare_thread.join(timeout=5)
 
     assert "result" in fold_result, fold_result
-    # Serialized, not merely blocked-then-stale: the declaration resumes only once the
-    # fold has fully landed, so it sees `target` already ephemeral and is refused —
-    # never a standing edge naming a chunk the fold just grouped away.
+    # Serialized, not merely blocked-then-stale: the declaration resumes only once the fold has fully landed, so it
+    # sees `target` already ephemeral and is refused — never a standing edge naming a chunk just grouped away.
     assert "refused" in declare_result, declare_result
     assert isinstance(declare_result["refused"], PrerequisiteIsEphemeral)
