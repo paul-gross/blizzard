@@ -10263,7 +10263,7 @@
     },
     "/api/chunks/{chunk_id}": {
       "delete": {
-        "description": "Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds\nin the same write (issue #364). 404 for an unknown chunk, or one a race deletes\nbetween resolving it and this write; 409 for one a runner or a human holds, or one\nterminal \u2014 deletion needs a chunk at the same statuses grouping does. Irreversible:\nCHUNK is gone from every read the instant this returns.",
+        "description": "Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds\nin the same write (issue #364). 404 for an unknown chunk, or one a race deletes\nbetween resolving it and this write; 409 for one a runner or a human holds, or one\nterminal \u2014 deletion needs a chunk at the same statuses grouping does; 409 also when\nCHUNK is a standing prerequisite for another chunk (issue #460), naming the\ndependents. Irreversible: CHUNK is gone from every read the instant this returns.",
         "operationId": "delete_chunk_api_chunks__chunk_id__delete",
         "parameters": [
           {
@@ -10681,7 +10681,7 @@
     },
     "/api/chunks/{chunk_id}/group": {
       "post": {
-        "description": "Merge unacquired chunks into ``chunk_id``.\n\nAccepts ``not_ready`` and ``ready`` participants alike (issue #141); 409 names the\nfirst chunk a runner holds, or one already finished.",
+        "description": "Merge unacquired chunks into ``chunk_id``.\n\nAccepts ``not_ready`` and ``ready`` participants alike (issue #141); 409 names the\nfirst chunk a runner holds, or one already finished. The survivor also absorbs each\nfolded chunk's standing dependency edges rather than leaving them dangling (issue\n#460); 409 refuses the whole fold when carrying them would close a cycle.",
         "operationId": "group_chunks_api_chunks__chunk_id__group_post",
         "parameters": [
           {
@@ -14952,7 +14952,7 @@
     },
     "/api/work-sources/{source}/items/{ref}": {
       "delete": {
-        "description": "Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref\n(D9), or a chunk a race deletes between resolving it and this write; 409 for a known\nsource with no editor (D4), an item that already carries a closure, or one an\n*acquired* live chunk still holds (D5, D10) \u2014 an unacquired holder deletes instead,\npublishing the same ``chunk-changed``/``queue-changed`` pair a direct delete does.",
+        "description": "Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref\n(D9), or a chunk a race deletes between resolving it and this write; 409 for a known\nsource with no editor (D4), an item that already carries a closure, or one an\n*acquired* live chunk still holds (D5, D10) \u2014 an unacquired holder deletes instead,\npublishing the same ``chunk-changed``/``queue-changed`` pair a direct delete does;\n409 also when the unacquired holder is a standing prerequisite for another chunk\n(issue #460).",
         "operationId": "withdraw_work_item_api_work_sources__source__items__ref__delete",
         "parameters": [
           {

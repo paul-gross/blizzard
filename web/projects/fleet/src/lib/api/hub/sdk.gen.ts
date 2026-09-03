@@ -293,8 +293,9 @@ export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(o
  * Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
  * in the same write (issue #364). 404 for an unknown chunk, or one a race deletes
  * between resolving it and this write; 409 for one a runner or a human holds, or one
- * terminal — deletion needs a chunk at the same statuses grouping does. Irreversible:
- * CHUNK is gone from every read the instant this returns.
+ * terminal — deletion needs a chunk at the same statuses grouping does; 409 also when
+ * CHUNK is a standing prerequisite for another chunk (issue #460), naming the
+ * dependents. Irreversible: CHUNK is gone from every read the instant this returns.
  */
 export const deleteChunkApiChunksChunkIdDelete = <ThrowOnError extends boolean = false>(options: Options<DeleteChunkApiChunksChunkIdDeleteData, ThrowOnError>): RequestResult<DeleteChunkApiChunksChunkIdDeleteResponses, DeleteChunkApiChunksChunkIdDeleteErrors, ThrowOnError> => (options.client ?? client).delete<DeleteChunkApiChunksChunkIdDeleteResponses, DeleteChunkApiChunksChunkIdDeleteErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}',
@@ -412,7 +413,9 @@ export const recordGardenDeliveryApiChunksChunkIdGardenDeliveryPost = <ThrowOnEr
  * Merge unacquired chunks into ``chunk_id``.
  *
  * Accepts ``not_ready`` and ``ready`` participants alike (issue #141); 409 names the
- * first chunk a runner holds, or one already finished.
+ * first chunk a runner holds, or one already finished. The survivor also absorbs each
+ * folded chunk's standing dependency edges rather than leaving them dangling (issue
+ * #460); 409 refuses the whole fold when carrying them would close a cycle.
  */
 export const groupChunksApiChunksChunkIdGroupPost = <ThrowOnError extends boolean = false>(options: Options<GroupChunksApiChunksChunkIdGroupPostData, ThrowOnError>): RequestResult<GroupChunksApiChunksChunkIdGroupPostResponses, GroupChunksApiChunksChunkIdGroupPostErrors, ThrowOnError> => (options.client ?? client).post<GroupChunksApiChunksChunkIdGroupPostResponses, GroupChunksApiChunksChunkIdGroupPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/group',
@@ -1507,7 +1510,9 @@ export const createWorkItemApiWorkSourcesSourceItemsPost = <ThrowOnError extends
  * (D9), or a chunk a race deletes between resolving it and this write; 409 for a known
  * source with no editor (D4), an item that already carries a closure, or one an
  * *acquired* live chunk still holds (D5, D10) — an unacquired holder deletes instead,
- * publishing the same ``chunk-changed``/``queue-changed`` pair a direct delete does.
+ * publishing the same ``chunk-changed``/``queue-changed`` pair a direct delete does;
+ * 409 also when the unacquired holder is a standing prerequisite for another chunk
+ * (issue #460).
  */
 export const withdrawWorkItemApiWorkSourcesSourceItemsRefDelete = <ThrowOnError extends boolean = false>(options: Options<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteData, ThrowOnError>): RequestResult<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponses, WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors, ThrowOnError> => (options.client ?? client).delete<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponses, WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors, ThrowOnError>({ url: '/api/work-sources/{source}/items/{ref}', ...options });
 
