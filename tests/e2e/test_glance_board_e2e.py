@@ -127,7 +127,8 @@ def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populat
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        fenced: dict[str, str] = {}
+        fenced = dict(os.environ)
+        fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
         status = _drive_until_done(config, hub, chunk_id, fenced)
         assert status == "needs_human", f"chunk did not derive needs_human (last status {status!r})"
 

@@ -16,7 +16,7 @@ import httpx
 import pytest
 
 if TYPE_CHECKING:
-    from playwright.sync_api import ViewportSize
+    from playwright.sync_api import Page, ViewportSize
 
 from blizzard.hub.events.broker import EVENT_LOGGED
 from tests.e2e.test_acceptance_loop import (
@@ -137,7 +137,8 @@ def test_a_verdict_less_exit_surfaces_a_critical_worker_lost_event(tmp_path: Pat
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        fenced: dict[str, str] = {}
+        fenced = dict(os.environ)
+        fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
         status = _drive_until_done(config, hub, chunk_id, fenced)
         assert status == "needs_human", f"chunk did not derive needs_human (last status {status!r})"
 
@@ -328,9 +329,15 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
                 browser.close()
 
 
+def _rail_messages(page: Page) -> list[str]:
+    """The rail's rendered messages, less the live-only queue signal: no durable fact backs
+    it, so `GET /api/activity` backfill cannot reproduce it after a restart."""
+    return [m for m in page.get_by_test_id("event-log-message").all_text_contents() if m != "ready queue changed"]
+
+
 def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: Path, chromium_available: bool) -> None:
     """Event log rail backfill (issue #213): after a hub restart (fresh replay ring, same
-    on-disk store), a reload shows the same row count and chunk-ref set as before restart —
+    on-disk store), a reload shows the same durable row count and chunk-ref set as before —
     proving `GET /api/activity` backfill, not leftover live replay."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
@@ -377,8 +384,9 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                 expect(page.get_by_test_id("event-log-panel")).to_be_visible()
                 # Facts already landed before this subscribes, so the replay tail alone
                 # carries them — this is the baseline row set, not yet the restart assertion.
-                expect(page.get_by_test_id("event-log-row")).to_have_count(3)
-                first_load_messages = page.get_by_test_id("event-log-message").all_text_contents()
+                expect(page.get_by_test_id("event-log-row")).to_have_count(5)  # 3 durable + a queue signal per mint
+                first_load_messages = _rail_messages(page)
+                assert len(first_load_messages) == 3, first_load_messages
 
             # The hub exits here; facts are durable (sqlite) but `EventBroker`'s replay
             # ring is not — the next `_hub()` call starts a fresh, empty one over the same store.
@@ -388,7 +396,7 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                 # The fresh broker's replay tail is empty — only `GET /api/activity`
                 # backfill can repopulate these rows, at the same count as the baseline.
                 expect(page.get_by_test_id("event-log-row")).to_have_count(3)
-                reload_messages = page.get_by_test_id("event-log-message").all_text_contents()
+                reload_messages = _rail_messages(page)
 
                 # The event-logged row carries the same severity/kind fields whichever
                 # source renders it, so its text matches exactly across both loads.
