@@ -64,6 +64,15 @@ def test_garden_routine_prompts_read_the_formats_from_system_scope() -> None:
     assert "garden/proposal-format" in doc.node("propose").prompt  # type: ignore[union-attr, operator]
 
 
+def test_garden_routine_reconcile_owns_the_measurement_survey_could_not_settle() -> None:
+    """The axis registry may declare a measurement only reconciliation can compute — how
+    many findings a run opened is unknowable while candidates are still unmatched. So
+    `reconcile` carries the survey envelope's `measurement` forward corrected, not verbatim."""
+    prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
+    assert "`measurement` corrected" in prompt  # type: ignore[operator]
+    assert "`scope` and `revisions` through" in prompt  # type: ignore[operator]
+
+
 def test_garden_routine_session_policy_is_load_bearing() -> None:
     """Matching wants cold eyes, drafting wants the delta still in context: `survey`
     holds the expensive sweep lineage, `reconcile` enters on a fresh match session, and

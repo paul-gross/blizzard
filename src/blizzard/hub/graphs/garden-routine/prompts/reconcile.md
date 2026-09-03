@@ -49,6 +49,6 @@ through, its `ref` carried too when it has one), an `observed` (`{"op": "observe
 (adds a `note`). That is the shape read live with
 `blizzard runner artifact get --scope system garden/finding-format --content`; if that read fails or comes back empty,
 proceed on the restatement above. Publish with `blizzard runner artifact create --name delta` (content on stdin). Carry
-the survey envelope's `scope`, `revisions`, and `measurement` through onto it — the delivered artifact is where they
-become durable. Every transformation must name a `fin_` id that is actually live on this routine; the delivery step
+the survey envelope's `scope` and `revisions` through, and its `measurement` corrected — the survey counted candidates,
+not what opened. Every transformation must name a `fin_` id that is actually live on this routine; the delivery step
 rejects the artifact if it does not.
