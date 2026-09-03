@@ -8,6 +8,7 @@ import click
 from blizzard.runner.cli.artifact import artifact_group
 from blizzard.runner.cli.control import pause, requeue, selftest, start, status, takeover
 from blizzard.runner.cli.external_usage import external_usage_group
+from blizzard.runner.cli.garden import garden_group
 from blizzard.runner.cli.opencode import opencode_group
 from blizzard.runner.cli.prompt import prompt_group
 from blizzard.runner.cli.runtime import host, init, migrate_cmd, tick_cmd
@@ -42,6 +43,7 @@ runner.add_command(chunk_group)
 runner.add_command(prompt_group)
 runner.add_command(transcript_group)
 runner.add_command(artifact_group)
+runner.add_command(garden_group)
 
 runner.add_command(status)
 runner.add_command(pause)

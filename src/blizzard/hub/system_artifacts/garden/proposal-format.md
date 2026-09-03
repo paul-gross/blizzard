@@ -1,24 +1,24 @@
 # garden/proposal-format
 
-The shape a garden routine's run submits for a proposal. This is blizzard's own format,
-published the same way `garden/finding-format` is — a garden graph must never carry its
-own copy of it, since the delivery script validates a submission against exactly this
-shape.
+The shape a garden routine's run submits for a proposal. This is blizzard's own format, published the same way
+`garden/finding-format` is — a garden graph must never carry its own copy of it, since the delivery script validates a
+submission against exactly this shape.
 
-A proposal is a proposed response to one or more findings. It has no id until delivery
-mints one; `ref` names it only within its own submission, the same way a finding
-candidate's `ref` does.
+A proposal is a proposed response to one or more findings. It has no id until delivery mints one; `ref` names it only
+within its own submission, the same way a finding candidate's `ref` does.
+
+## The proposal a run submits
 
 - `ref` — a local reference, stable only within this submission.
-- `class` — the deployment's own taxonomy for a kind of response, exactly as a finding's
-  `class` is its taxonomy for a kind of weed. blizzard stores it, indexes it, groups by
-  it, and never interprets it — a deployment declares its own vocabulary of proposal
-  classes and settles what any of them mean.
+- `class` — the deployment's own taxonomy for a kind of response, exactly as a finding's `class` is its taxonomy for a
+  kind of weed. blizzard stores it, indexes it, groups by it, and never interprets it — a deployment declares its own
+  vocabulary of proposal classes and settles what any of them mean.
 - `title` — a short label for the response.
-- `body` — the case for it, in enough detail that a person can decide without re-reading
-  the findings behind it.
-- `findings` — the ids of the findings this proposal answers. Required and non-empty: a
-  proposal with nothing behind it is an opinion the run was not asked for.
+- `body` — the case for it, in enough detail that a person can decide without re-reading the findings behind it.
+- `findings` — the findings this proposal answers. Required and non-empty: a proposal with nothing behind it is an
+  opinion the run was not asked for. Each entry is either a `fin_` id already live on this routine, or the
+  submission-local `ref` an `add` op in a delta delivered by this same call carries — resolved against the id the hub
+  mints for it at delivery, so a proposal may answer a finding this very run opened.
 
 ### GardenProposalCandidate
 

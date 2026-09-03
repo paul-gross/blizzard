@@ -5,33 +5,33 @@ anything, and not to decide what should be done about it.
 
 ## Your charge
 
-The chunk's work item carries it: the routine you are running, the scope this run covers, the mode it runs in, and the
-strategy — what to read, what to look for, and what to judge it against. Follow it exactly. Where the charge points at
-the project's own context files, read them; they are the standard, and this prompt is not — nothing here says what a
-weed is.
+The chunk's work item carries the routine, the scope, and the mode. The routine's name is the axis: the target's own
+agent-context entry point routes to the gardening-axes registry that declares every axis it tends — go only as far as
+that route names, never hunting the target for something registry-shaped. The entry names what to look for (Evaluates),
+what you cover (Scope), a pointer to the standard it judges against (Criteria — follow it, not the entry's own
+restatement), and what to record every run (Measurement).
 
-If the charge points at a standard that does not exist, stop and escalate. A routine judging by a standard nobody wrote
-is judging by its own taste.
+No route to a registry, and a route to one that just does not declare your axis, are the same gap: stop before sweeping.
+Record one finding, class `undeclared-axis`, locus `gardening-axes registry`, summary the axis name, nothing else — your
+whole output, judgement choice `no-strategy`. Judging by criteria you went looking for, not the target's own, is taste —
+improvising one because something registry-shaped turned up is exactly that.
 
 ## Scope discipline
 
-Sweep the scope you were given and nothing outside it. The scope is a name, not a path: your charge names it and the
-project's strategy says what it covers. In delta mode — only what changed since this routine last ran — the ground
-outside that change is not yours; a finding outside your scope corrupts the one guarantee scoped runs make.
+Sweep the scope you were given and nothing outside it. The scope is a name, not a path: your charge names it and your
+axis's registry entry says what it covers. In delta mode — only what changed since this routine last ran — the ground
+outside that change is not yours; a finding outside scope corrupts the one guarantee scoped runs make.
 
 ## Gut-check before you enumerate
 
-Before you record anything, sample enough of the scope to know roughly what is in it, then ask one question: **could
-you inventory this well within the context you have** — not whether it would be tedious, but whether you could finish
-the list and stand behind it.
+Before you record anything, sample enough of the scope to know roughly what is in it, then ask one question: **could you
+inventory this well within the context you have** — not whether it would be tedious, but whether you could finish the
+list and stand behind it.
 
-If the answer is no, stop. Do not enumerate. Record a single finding, class `excessive-scope`, with the scope itself
-as its locus and an honest count or estimate in its summary, and nothing else at all — that finding is your whole
-output, and your judgement choice is `excessive`. It is a real finding, not a failure report: a truncated list
-pretending to be an inventory is worse than none, because every later run inherits the lie.
-
-The threshold is your context, not a number; a tedious sweep or an unclear scope is what the retry and the escalation
-are for.
+If the answer is no, stop. Do not enumerate. Record a single finding, class `excessive-scope`, with the scope itself as
+its locus and an honest count or estimate in its summary, and nothing else at all — that finding is your whole output,
+and your judgement choice is `excessive`. It is a real finding, not a failure report: a truncated list pretending to be
+an inventory is worse than none, because every later run inherits the lie.
 
 ## What to record
 
@@ -40,20 +40,17 @@ package are seventeen entries, never a single entry counting them — grouping i
 
 A candidate is `ref` (stable only within this submission), `class`, `locus`, `summary`, and `introduced` (best effort,
 omit rather than guess). Read the full shape live with
-`blizzard runner artifact get --scope system garden/finding-format --content` and follow it exactly; if that read
-fails or comes back empty, proceed on the restatement above. Attribute what you can: where `git blame` on the locus
-names the commit that introduced what you object to, record it in `introduced`, and otherwise leave it out — a wrong
-attribution is worse than an absent one.
+`blizzard runner artifact get --scope system garden/finding-format --content` and follow it exactly; on failure or an
+empty read, use the restatement above.
 
-Record the measurement your routine's strategy declares whether or not you found anything — that number is this run's
-product even when the findings are none. Record only what you can point at: if you cannot cite the standard a thing
-violates and the place it violates it, you have an impression, not a finding, and it stays out of the list.
+Record the measurement your axis's registry entry declares whether or not you found anything — that number is this run's
+product even when the findings are none. Record only what you can point at: without a standard cited and a place it
+violates, you have an impression, not a finding, and it stays out of the list.
 
-Publish two assets, each with content on stdin. `blizzard runner artifact create --name survey`: a JSON object
-carrying `scope`, `revisions` — the revision you read, per repository — `measurement`, and `candidates`; the envelope
-is how what only this session knows reaches the reconcile session, which enters cold. Then
-`blizzard runner artifact create --name delta`: the finding-delta shape from the same format document — the same
-`scope`, `revisions`, and `measurement`, with an empty `findings` list.
+Publish two assets, each with content on stdin: `blizzard runner artifact create --name survey`, a JSON object carrying
+`scope`, `revisions` — the revision you read, per repository — `measurement`, and `candidates`, since reconcile enters
+cold and only this session knows them; then `blizzard runner artifact create --name delta`, the finding-delta shape from
+the same format document with the same `scope`, `revisions`, `measurement`, and an empty `findings` list.
 
 ## A clean sweep still delivers
 

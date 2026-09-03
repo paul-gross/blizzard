@@ -295,6 +295,20 @@
       "path": "runner external-usage",
       "short_help": "Diagnostics for the runner's own external-subscription usage sampling (issue #218)."
     },
+    "garden": {
+      "commands": {
+        "findings": {
+          "help": "Worker: list this run's live finding bucket as JSON. The routine and the scope\nare derived server-side from this lease's own chunk \u2014 nothing here names either, so\na worker cannot point this read at another routine's bucket.",
+          "params": [],
+          "path": "runner garden findings",
+          "short_help": "Worker: list this run's live finding bucket as JSON."
+        }
+      },
+      "help": "Worker: read this run's own garden machinery.\n\nThe lease binding is ambient, like ``artifact``: every verb acts on the worker's own\nlease, resolved from the spawn environment \u2014 none takes a flag naming another routine\nor scope.",
+      "params": [],
+      "path": "runner garden",
+      "short_help": "Worker: read this run's own garden machinery."
+    },
     "heartbeat": {
       "help": "Worker hook: record a lease heartbeat (identity from the environment).\n\nFails **soft**: a hook must never break the worker's tool call, so a missing identity or an\nunreachable runner is reported to stderr and this still exits 0.",
       "params": [],

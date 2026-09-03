@@ -399,6 +399,104 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
         assert len(marker_rows) == 2
 
 
+def test_deliver_substitutes_a_dropped_deltas_minted_id_for_a_proposals_ref_citation(tmp_path: Path) -> None:
+    """A later visit resolving `art_a` as already-materialized still mints a fresh id for
+    its `ref`-carrying `add` op. A proposal in the same visit citing that ref must land on
+    `fin_a`, the id the first visit actually recorded."""
+    store, engine = _store_and_engine(tmp_path)
+    first = DeliveryPlan(
+        chunk_id="ch_1",
+        node_id="nd_1",
+        node_name="garden-survey",
+        epoch=1,
+        at=_NOW,
+        run=_RUN,
+        deltas=[
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id="fins_a",
+                    artifact_id="art_a",
+                    scope_slug="blizzard",
+                    revisions={"blizzard": "aaaaaaa"},
+                    measurement="1.0s",
+                ),
+                new_findings=[
+                    NewFinding(
+                        finding_id="fin_a",
+                        routine_name="nightly",
+                        scope_slug="blizzard",
+                        class_="stale-docstring",
+                        locus="a.py:1",
+                        summary="s_a",
+                        introduced=None,
+                        introduced_at=None,
+                    )
+                ],
+                facts=[FindingFactRecord(finding_id="fin_a", kind="add", finding_set_id="fins_a", ref="F1")],
+            )
+        ],
+        proposals=[],
+    )
+    assert store.deliver(first) is DeliveryOutcome.RECORDED
+
+    second = DeliveryPlan(
+        chunk_id="ch_1",
+        node_id="nd_2",
+        node_name="garden-survey",
+        epoch=2,
+        at=_NOW,
+        run=_RUN,
+        deltas=[
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id="fins_a_replay",
+                    artifact_id="art_a",  # already materialized under `first` — dropped
+                    scope_slug="blizzard",
+                    revisions={"blizzard": "aaaaaaa"},
+                    measurement="1.0s",
+                ),
+                new_findings=[
+                    NewFinding(
+                        finding_id="fin_a_phantom",
+                        routine_name="nightly",
+                        scope_slug="blizzard",
+                        class_="stale-docstring",
+                        locus="a.py:1",
+                        summary="s_a",
+                        introduced=None,
+                        introduced_at=None,
+                    )
+                ],
+                facts=[
+                    FindingFactRecord(finding_id="fin_a_phantom", kind="add", finding_set_id="fins_a_replay", ref="F1")
+                ],
+            )
+        ],
+        proposals=[
+            NewProposal(
+                proposal_id="gprop_2",
+                routine_name="nightly",
+                class_="fix-the-source",
+                title="Republished docket",
+                body="the case",
+                source_artifact_id="art_docket_2",
+                ref="p1",
+                finding_ids=["fin_a_phantom"],
+            )
+        ],
+    )
+
+    outcome = store.deliver(second)
+
+    assert outcome is DeliveryOutcome.RECORDED
+    with engine.connect() as conn:
+        finding_ids = {r.finding_id for r in conn.execute(sa.select(findings))}
+        assert finding_ids == {"fin_a"}  # the phantom id was never inserted
+
+        links = conn.execute(sa.select(garden_proposal_findings)).all()
+        assert [link.finding_id for link in links] == ["fin_a"]
+
+
 def test_deliver_at_a_new_epoch_resolving_the_same_proposal_artifact_mints_no_duplicate(tmp_path: Path) -> None:
     """The proposal twin of the delta idempotence test above: a fresh (node_id, epoch)
     re-carrying the same `--proposals` artifact must mint the proposal exactly once,

@@ -110,7 +110,7 @@ def _set_delta_view(delta: DeliveredSetDelta) -> DeliveredSetDeltaView:
         measurement=delta.measurement,
         added=[
             # `class_`'s alias is the Python keyword `class` — constructed by alias via
-            # `model_validate`, the `findings.py` `_finding_view` shape.
+            # `model_validate`, the `findings.py` `finding_view` shape.
             AddedFindingView.model_validate(
                 {
                     "finding_id": a.finding_id,

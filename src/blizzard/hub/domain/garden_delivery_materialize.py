@@ -2,7 +2,8 @@
 into the rows a passing delivery mints, written in one transaction
 (blizzard-product:/plans/garden/machinery.md §Delivery). Sibling to ``garden_delivery.py``
 rather than folded into it so that module stays pure validation with no I/O; this one
-mints ids and hands a ready-to-insert plan to the store."""
+mints ids, resolves a proposal's submission-local ref citations against them, and hands
+a ready-to-insert plan to the store, trusting that validation rather than repeating it."""
 
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
-from blizzard.hub.domain.garden_delivery import ValidatedDelivery, single_repo_of
+from blizzard.hub.domain.garden_delivery import ValidatedDelivery, is_finding_id_shaped, single_repo_of
 from blizzard.hub.domain.graph import Node
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import Chunk
@@ -56,6 +57,9 @@ class FindingFactRecord:
     kind: str  # add | observed | gone
     finding_set_id: str  # the delivered list this fact belongs to (blizzard#401 D1)
     note: str | None = None
+    #: The `add` op's own submission-local ref, when it carried one — never set for
+    #: `observed`/`gone`.
+    ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -102,9 +106,10 @@ class DeltaMaterialization:
 
 @dataclass(frozen=True)
 class DeliveryPlan:
-    """Everything :class:`IWriteGardenDeliveryRepository` needs to do its writes with no
-    further computation — every id already minted, every timestamp already stamped
-    (`bzh:injected-clock`), so the store adapter is pure "insert these rows"."""
+    """Everything :class:`IWriteGardenDeliveryRepository` needs to do its writes — every
+    id already minted, every timestamp already stamped (`bzh:injected-clock`). The store
+    still resolves one thing of its own: a proposal's citation of a ref whose delta
+    turns out to already be materialized, against the id that earlier visit minted."""
 
     chunk_id: str
     node_id: str
@@ -166,6 +171,9 @@ class GardenDelivery:
         node_name = node.name
         at = self._clock.now()
         deltas: list[DeltaMaterialization] = []
+        # Each `add` op's `ref` -> the `fin_` id minted for it, across every delta at
+        # once: a proposal's citation names no delta of its own.
+        finding_id_by_ref: dict[str, str] = {}
 
         for delta, artifact_id in zip(validated.deltas, delta_artifact_ids, strict=True):
             # Minted before the facts loop below: every fact this delta produces
@@ -177,6 +185,8 @@ class GardenDelivery:
             for op in delta.findings:
                 if isinstance(op, AddFindingOp):
                     finding_id = Id.mint(FINDING_PREFIX, self._clock).value
+                    if op.ref is not None:
+                        finding_id_by_ref[op.ref] = finding_id
                     introduced_at = (
                         validated.introduced_at.get((single_repo, op.introduced))
                         if op.introduced is not None and single_repo is not None
@@ -195,7 +205,7 @@ class GardenDelivery:
                         )
                     )
                     facts.append(
-                        FindingFactRecord(finding_id=finding_id, kind="add", finding_set_id=finding_set_id, note=None)
+                        FindingFactRecord(finding_id=finding_id, kind="add", finding_set_id=finding_set_id, ref=op.ref)
                     )
                 elif isinstance(op, ObservedFindingOp):
                     facts.append(
@@ -225,7 +235,11 @@ class GardenDelivery:
                 body=candidate.body,
                 source_artifact_id=artifact_id,
                 ref=candidate.ref,
-                finding_ids=list(candidate.findings),
+                # A `fin_`-shaped entry is already an id; anything else is a ref, resolved
+                # against the id its own `add` op minted above.
+                finding_ids=[
+                    entry if is_finding_id_shaped(entry) else finding_id_by_ref[entry] for entry in candidate.findings
+                ],
             )
             for candidate, artifact_id in zip(validated.proposals, proposal_artifact_ids, strict=True)
         ]

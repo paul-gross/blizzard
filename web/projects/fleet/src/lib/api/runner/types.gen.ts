@@ -801,6 +801,65 @@ export type FactView = {
 };
 
 /**
+ * FindingView
+ *
+ * A finding. `state` is the newest fact's own kind, folded to `"live"` for
+ * `add`/`observed`/`reopened` (blizzard#394) — `live` is kept alongside it as the
+ * `state == "live"` shorthand existing consumers already read. `note` is the newest
+ * fact's own note, whatever kind it is — `None` for a kind that carries none.
+ */
+export type FindingView = {
+    /**
+     * Class
+     */
+    class: string;
+    /**
+     * Finding Id
+     */
+    finding_id: string;
+    /**
+     * Introduced
+     */
+    introduced?: string | null;
+    /**
+     * Last Seen At
+     */
+    last_seen_at: string | null;
+    /**
+     * Live
+     */
+    live: boolean;
+    /**
+     * Locus
+     */
+    locus: string;
+    /**
+     * Note
+     */
+    note?: string | null;
+    /**
+     * Observed Count
+     */
+    observed_count: number;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+    /**
+     * Scope Slug
+     */
+    scope_slug: string;
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Summary
+     */
+    summary: string;
+};
+
+/**
  * FleetSummaryView
  *
  * The fleet-pulse counts: ``ready``; ``running`` (``running`` + ``delivering``);
@@ -2991,6 +3050,38 @@ export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses = {
 };
 
 export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponse = RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses[keyof RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses];
+
+export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/garden/findings';
+};
+
+export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetError = ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors[keyof ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors];
+
+export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses = {
+    /**
+     * Response List Garden Findings Api Leases  Lease Id  Garden Findings Get
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponse = ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses[keyof ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses];
 
 export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostData = {
     body: GitCommitDeclarationRequest;

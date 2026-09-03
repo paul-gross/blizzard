@@ -9,10 +9,12 @@
 # hub-executed delivery node. It differs from the delivery lanes in what it produces:
 # zero commits, and artifacts that are lists.
 #
-# The routine supplies the strategy, not this graph. Every prompt here is written to
-# read the routine's own charge — over what scope, in which mode, judged against what —
-# out of the chunk's work item, and to follow wherever that charge points. Nothing in
-# this file names a standard, a rule, or a kind of weed.
+# The target supplies what to judge by, not this graph. Every prompt here reads the
+# routine's own charge — the scope and the mode — out of the chunk's work item, and
+# resolves the routine's own name as an axis against the target project's gardening-axes
+# registry, following that entry's own pointers wherever they lead. Nothing in this file
+# names a standard, a rule, a kind of weed, or the registry itself by path — one
+# packaged graph drives any deployment unchanged.
 
 name: garden-routine
 entry: survey
@@ -42,7 +44,7 @@ nodes:
     session: fresh:sweep         # every run is a cold read of the target
     produces:
       - survey                   # candidate observations, no ids yet — or, on the
-                                 # `excessive` path, exactly one bail-out candidate
+                                 # `excessive`/`no-strategy` paths, one bail-out candidate
       - delta                    # the empty skeleton `clean` delivers directly; see
                                  # ./README.md's Corrections section for why survey
                                  # also declares it
@@ -54,6 +56,9 @@ nodes:
           to: reconcile
         excessive:
           description: The scope is past what one pass can inventory. The survey holds a single excessive-scope candidate and no inventory at all; reconcile converges it against any bail-out already live on this routine.
+          to: reconcile
+        no-strategy:
+          description: The target's gardening-axes registry declares no entry for this routine's axis. The survey holds a single undeclared-axis candidate and no inventory at all; reconcile converges it against any bail-out already live on this routine.
           to: reconcile
         clean:
           description: The scope was swept and nothing was observed. The run still delivers, because its measurement is the product whether or not it found anything.
@@ -106,20 +111,21 @@ nodes:
       - name: materialize-garden-artifacts
         command: python3 -m blizzard.hub.graphs.scripts.garden_deliver --delta delta --proposals docket
     # The script validates each artifact's shape and nothing else: that it parses,
-    # that every finding carries the fields the format requires, that ids are
-    # well-formed, that every fin_ referenced by a transformation or a proposal is
-    # live on this routine, and that any commit cited exists. It reads none of the
-    # prose. On success it mints a fin_<ULID> per addition, a fins_<ULID> set per
-    # artifact list, applies the transformations, and attaches the surviving proposals
-    # to the routine. A run that reached here clean records its measurement and mints
-    # nothing.
+    # that every finding carries the fields the format requires, that every
+    # transformation's id is well-formed and live on this routine, that a proposal's
+    # own citation is either such a live fin_ id or a ref this delivery's own add op
+    # carries — unique within its delta and within the citing proposal — and that any
+    # commit cited exists. It reads none of the prose. On success it mints a
+    # fin_<ULID> per addition, a fins_<ULID> set per artifact list, applies the
+    # transformations, and attaches the surviving proposals to the routine. A run
+    # that reached here clean records its measurement and mints nothing.
     judgement:
       choices:
         recorded:
           description: The delta and proposals are durable; findings and proposals are attached to the routine.
           to: done
         invalid:
-          description: An artifact failed shape validation — malformed entry, unknown finding id, or a commit that does not exist. Nothing was written.
+          description: An artifact failed shape validation — malformed entry, an unknown finding id or ref, a ref or citation repeated where it must be unique, or a commit that does not exist. Nothing was written.
           to: reconcile
           prompt_addendum: ./prompts/reconcile.from-deliver.md
         failure:

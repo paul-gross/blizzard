@@ -12049,6 +12049,53 @@
         ]
       }
     },
+    "/api/fleet/chunks/{chunk_id}/garden/findings": {
+      "get": {
+        "description": "A worker's own routine's live finding bucket (D5, D6) \u2014 the chunk's own run\ncontext derives the routine and the scope; no caller-supplied flag can name\nanother. 404 both for an unknown chunk and for one carrying no run context (not a\nroutine run): a chunk with nothing to read is refused rather than answered with an\nempty bucket.",
+        "operationId": "get_garden_findings_api_fleet_chunks__chunk_id__garden_findings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingView"
+                  },
+                  "title": "Response Get Garden Findings Api Fleet Chunks  Chunk Id  Garden Findings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Garden Findings",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
     "/api/fleet/chunks/{chunk_id}/hub-advance": {
       "post": {
         "description": "Drive a chunk parked at a generic hub command node one step (#65), running that node's\nhub-side command once under the fleet-wide serialization\nslot. ``ran=False`` is never an error: a different chunk holds the slot, or (#66) the node reported\n``pending`` and ``poll_interval`` has not elapsed, or the chunk is not parked at a hub command node\nat all \u2014 ``detail`` names which. The request declares no ``runner_id`` to confine against.",

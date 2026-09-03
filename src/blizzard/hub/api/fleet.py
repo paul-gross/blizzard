@@ -24,6 +24,7 @@ from blizzard.hub.api import system_artifacts as system_artifacts_api
 from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.api.auth import AuthMode, RunnerPrincipal, require_runner_principal
 from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import HubConfig
@@ -45,6 +46,7 @@ from blizzard.wire.facts import (
     RunnerFactAck,
     RunnerFactBatch,
 )
+from blizzard.wire.finding import FindingView
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekResponse
@@ -288,6 +290,25 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
         arrival_addendum=Arrival.of_transition(graph, facts.newest_transition()).addendum,
         entered_by_restart=facts.entered_by_restart(),
     ).wire
+
+
+@router.get("/chunks/{chunk_id}/garden/findings", response_model=list[FindingView])
+def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[FindingView]:
+    """A worker's own routine's live finding bucket (D5, D6) — the chunk's own run
+    context derives the routine and the scope; no caller-supplied flag can name
+    another. 404 both for an unknown chunk and for one carrying no run context (not a
+    routine run): a chunk with nothing to read is refused rather than answered with an
+    empty bucket."""
+    chunk = services.chunks.record.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    run = services.run_context.for_chunk(chunk)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"chunk {chunk_id} carries no run context — not a routine run",
+        )
+    return [finding_view(f) for f in services.findings.list_for(run.routine_name, run.scope_slug)]
 
 
 @router.post("/chunks/{chunk_id}/hub-advance", response_model=HubAdvanceResponse)

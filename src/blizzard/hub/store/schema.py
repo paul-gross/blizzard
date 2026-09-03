@@ -348,6 +348,9 @@ finding_facts = Table(
     # the `add`/`observed`/`gone` facts it materializes; null for a person's exit verb,
     # which belongs to no run. No backfill: a fact predating this column reads back null.
     Column("finding_set_id", String, ForeignKey("finding_sets.finding_set_id"), nullable=True),
+    # An `add` fact's own submission-local ref — null for every other kind, and null on
+    # any fact predating this column.
+    Column("ref", String, nullable=True),
     CheckConstraint(
         "kind IN ('add', 'observed', 'gone', 'resolved', 'gone-confirmed', 'wont-fix', 'not-a-finding',"
         " 'superseded', 'reopened')",

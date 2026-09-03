@@ -49,22 +49,27 @@ _ROUTINE = "garden-e2e"
 _SCOPE_FOUND = "garden-found"
 _SCOPE_CLEAN = "garden-clean"
 _SCOPE_THICKET = "garden-thicket"
+# A scope this routine has never touched, swept by a run whose own additions are what its
+# docket cites — the proof that a delivery can answer the findings it just opened.
+_SCOPE_VIRGIN = "garden-virgin"
+# A scope swept under an axis the target's gardening-axes registry does not declare.
+_SCOPE_UNDECLARED = "garden-undeclared-axis"
 
 # A well-formed fin_<ULID> that is live on no routine — delivery must reject it as
 # unknown, not as malformed.
 _UNKNOWN_FINDING_ID = "fin_0" + "Z" * 25
 
 
-def _common(hub_port: int) -> str:
+def _common() -> str:
     """The shared preamble: the charge parsed off the real work item, the worker
-    artifact verbs, and the bucket read the packaged reconcile prompt names."""
+    artifact verbs, and the bucket read the packaged reconcile prompt names — the
+    worker-scoped `blizzard runner garden findings`, never `blizzard hub finding list`
+    (no `BZ_HUB_URL` in the worker's own environment at all)."""
     return (
         "import json, os, pathlib, subprocess\n"
         "chunk_id = os.environ['BLIZZARD_CHUNK_ID']\n"
-        "def sh(*args, inp=None, env_extra=None):\n"
-        "    env = dict(os.environ)\n"
-        "    if env_extra: env.update(env_extra)\n"
-        "    return subprocess.run(list(args), input=inp, check=True, capture_output=True, text=True, env=env).stdout\n"
+        "def sh(*args, inp=None):\n"
+        "    return subprocess.run(list(args), input=inp, check=True, capture_output=True, text=True).stdout\n"
         "item = json.loads(sh('blizzard', 'runner', 'work-items', chunk_id))['items'][0]\n"
         "lines = item['body'].splitlines()\n"
         "path = next(l.split('=', 1)[1] for l in lines if l.startswith('path='))\n"
@@ -72,8 +77,7 @@ def _common(hub_port: int) -> str:
         "def publish(name, content):\n"
         "    sh('blizzard', 'runner', 'artifact', 'create', '--name', name, inp=content)\n"
         "def bucket():\n"
-        "    rows = json.loads(sh('blizzard', 'hub', 'finding', 'list', '--routine', "
-        f"{_ROUTINE!r}, '--scope', scope, '--json', env_extra={{'BZ_HUB_URL': 'http://127.0.0.1:{hub_port}'}}))\n"
+        "    rows = json.loads(sh('blizzard', 'runner', 'garden', 'findings'))\n"
         "    assert all(r['scope_slug'] == scope for r in rows), f'bucket leaked another scope: {rows}'\n"
         "    return [r for r in rows if r['live']]\n"
         "addendum_marker = pathlib.Path(f'.garden-addendum-{chunk_id}')\n"
@@ -86,7 +90,7 @@ _SURVEY = (
     "rev = sh('git', '-C', 'toy-api', 'rev-parse', 'HEAD').strip()\n"
     "fmt = sh('blizzard', 'runner', 'artifact', 'get', '--scope', 'system', 'garden/finding-format', '--content')\n"
     "assert 'FindingDelta' in fmt, 'system-scope finding format did not resolve'\n"
-    "if path in ('found', 'invalid'):\n"
+    "if path in ('found', 'invalid', 'virgin'):\n"
     "    cands = [\n"
     "        {'ref': 'F1', 'class': 'stale-docstring', 'locus': 'src/app.py:1', 'summary': 'first weed'},\n"
     "        {'ref': 'F2', 'class': 'stale-docstring', 'locus': 'src/app.py:2', 'summary': 'second weed'},\n"
@@ -94,6 +98,11 @@ _SURVEY = (
     "elif path == 'excessive':\n"
     "    cands = [{'ref': 'F1', 'class': 'excessive-scope', 'locus': scope,\n"
     "              'summary': 'roughly four hundred instances across the scope'}]\n"
+    "elif path == 'no-strategy':\n"
+    "    # As `survey.md` directs when the registry declares no entry for the axis: one\n"
+    "    # bail-out candidate naming the registry and the axis, nothing else.\n"
+    "    cands = [{'ref': 'F1', 'class': 'undeclared-axis', 'locus': 'gardening-axes registry',\n"
+    "              'summary': 'the routine axis has no declared registry entry'}]\n"
     "else:\n"
     "    cands = []\n"
     "measurement = f'e2e sweep of {scope}: {len(cands)} flagged'\n"
@@ -106,7 +115,8 @@ _SURVEY = (
 )
 
 _SURVEY_JUDGEMENT = (
-    "choice = {'found': 'found', 'invalid': 'found', 'excessive': 'excessive', 'clean': 'clean'}[path]\n"
+    "choice = {'found': 'found', 'invalid': 'found', 'virgin': 'found', 'excessive': 'excessive',\n"
+    "          'no-strategy': 'no-strategy', 'clean': 'clean'}[path]\n"
     "verdict(choice, 'scripted sweep')\n"
 )
 
@@ -125,8 +135,10 @@ _RECONCILE = (
     "        if match:\n"
     "            ops.append({'op': 'observed', 'id': match['finding_id']})\n"
     "        else:\n"
+    "            # `ref` carried through from the candidate: this addition's own\n"
+    "            # submission-local name, citable by propose in this same delivery.\n"
     "            ops.append({'op': 'add', 'class': cand['class'], 'locus': cand['locus'],\n"
-    "                        'summary': cand['summary']})\n"
+    "                        'summary': cand['summary'], 'ref': cand['ref']})\n"
     "    delta = {'scope': scope, 'revisions': envelope['revisions'], 'measurement': envelope['measurement'],\n"
     "             'findings': ops}\n"
     "publish('delta', json.dumps(delta))\n"
@@ -145,13 +157,20 @@ _RECONCILE_FROM_DELIVER = (
     "addendum_marker.write_text('threaded')\n"
 )
 
-# propose: cite every live finding in the bucket, or publish the empty docket — a run's
-# own additions are not live until delivery, so only an earlier run's are citable.
+# propose: cite every live finding in the bucket — or, on `virgin`, the refs this run's
+# own reconcile just minted — or publish the empty docket.
 _PROPOSE = (
     "fmt = sh('blizzard', 'runner', 'artifact', 'get', '--scope', 'system', 'garden/proposal-format', '--content')\n"
     "assert 'GardenProposalCandidate' in fmt, 'system-scope proposal format did not resolve'\n"
     "live = bucket()\n"
-    "if path == 'invalid' or not live:\n"
+    "if path == 'virgin':\n"
+    "    delta = json.loads(\n"
+    "        sh('blizzard', 'runner', 'artifact', 'get', 'delta', '--node', 'reconcile', '--content'))\n"
+    "    own_refs = [op['ref'] for op in delta['findings'] if op['op'] == 'add']\n"
+    "    docket = [{'ref': 'P1', 'class': 'handoff', 'title': f'hand {scope} out of the fleet',\n"
+    "               'body': 'scripted proposal citing the refs this very run minted',\n"
+    "               'findings': own_refs}]\n"
+    "elif path == 'invalid' or not live:\n"
     "    docket = []\n"
     "else:\n"
     "    docket = [{'ref': 'P1', 'class': 'handoff', 'title': f'hand {scope} out of the fleet',\n"
@@ -160,14 +179,17 @@ _PROPOSE = (
     "publish('docket', json.dumps(docket))\n"
 )
 
-_PROPOSE_JUDGEMENT = "verdict('proposed' if (path != 'invalid' and bucket()) else 'none', 'scripted propose')\n"
+_PROPOSE_JUDGEMENT = (
+    "verdict('proposed' if (path == 'virgin' or (path != 'invalid' and bucket())) else 'none',\n"
+    "        'scripted propose')\n"
+)
 
 
-def _scripted_garden_graph_yaml(hub_port: int) -> str:
+def _scripted_garden_graph_yaml() -> str:
     """The real packaged ``garden-routine`` body with only its prompts swapped for
     scripts — nodes, edges, session pools, and the deliver command stay verbatim."""
     body = PACKAGED.named("garden-routine").body
-    common = _common(hub_port)
+    common = _common()
     nodes: Any = body["nodes"]
     nodes["survey"]["prompt"] = common + _SURVEY
     nodes["survey"]["judgement"]["prompt"] = common + _SURVEY_JUDGEMENT
@@ -186,9 +208,10 @@ def _edges(hub, chunk_id: str) -> list[tuple[str | None, str | None]]:
     return [(t["from_node_name"], t["choice_name"]) for t in detail.json()["history"]]
 
 
-def test_garden_routine_runs_end_to_end_on_all_four_paths(tmp_path: Path) -> None:
-    """Five runs of one routine over the packaged graph: found, clean, excessive twice
-    (the convergence), and invalid (the rejected delivery's bounce)."""
+def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None:
+    """Seven runs of one routine over the packaged graph: found, clean, excessive twice
+    (the convergence), invalid (the bounce), virgin (a first run citing its own delta's
+    refs), and no-strategy (an undeclared axis delivered as a finding)."""
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
@@ -221,7 +244,7 @@ def test_garden_routine_runs_end_to_end_on_all_four_paths(tmp_path: Path) -> Non
         _forge(bin_dir, scratch / FIXTURE_ENV / "origins", forge_port),
         _hub(tmp_path / "hub", forge_port, hub_port) as hub,
     ):
-        minted = hub.post("/api/graphs", json={"definition_yaml": _scripted_garden_graph_yaml(hub_port)})
+        minted = hub.post("/api/graphs", json={"definition_yaml": _scripted_garden_graph_yaml()})
         assert minted.status_code == 201, minted.text
 
         created = hub.post(
@@ -361,6 +384,42 @@ def test_garden_routine_runs_end_to_end_on_all_four_paths(tmp_path: Path) -> Non
             f"the corrected delta's observed ops did not land: {found_before} -> {found_after}"
         )
         assert len(hub.get("/api/garden-proposals").json()) == 1  # still only the bail-out's
+
+        # -- virgin: no live findings at all; the docket cites reconcile's own refs and
+        #    materializes onto the ids this delivery minted for them -------------------
+        virgin_chunk = run("virgin", _SCOPE_VIRGIN)
+        assert _edges(hub, virgin_chunk) == [
+            ("survey", "found"),
+            ("reconcile", "converged"),
+            ("propose", "proposed"),  # this run's own additions, cited by their submission-local refs
+            ("deliver", "recorded"),
+        ]
+        virgin_rows = findings(_SCOPE_VIRGIN)
+        assert {(r["class"], r["locus"]) for r in virgin_rows} == {
+            ("stale-docstring", "src/app.py:1"),
+            ("stale-docstring", "src/app.py:2"),
+        }
+        virgin_ids = {r["finding_id"] for r in virgin_rows}
+        virgin_proposal = next(p for p in hub.get("/api/garden-proposals").json() if set(p["findings"]) == virgin_ids)
+        assert virgin_proposal["class"] == "handoff"
+        assert virgin_proposal["routine_name"] == _ROUTINE
+        assert set(virgin_proposal["findings"]) == virgin_ids, (
+            "the docket's link rows did not point at the ids this run minted"
+        )
+
+        # -- no-strategy: the target's registry declares no entry for this routine's
+        #    axis; the run still delivers, the gap itself landing as the finding --------
+        undeclared_chunk = run("no-strategy", _SCOPE_UNDECLARED)
+        assert _edges(hub, undeclared_chunk) == [
+            ("survey", "no-strategy"),
+            ("reconcile", "converged"),
+            ("propose", "none"),
+            ("deliver", "recorded"),
+        ]
+        undeclared_rows = findings(_SCOPE_UNDECLARED)
+        assert len(undeclared_rows) == 1, undeclared_rows
+        assert undeclared_rows[0]["class"] == "undeclared-axis"
+        assert undeclared_rows[0]["live"]
 
     # -- the load-bearing session policy, off the runner's own store -----------------
     db_url = config.db_url

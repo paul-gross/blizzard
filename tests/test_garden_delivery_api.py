@@ -106,8 +106,11 @@ def _delta(*, scope: str = _SCOPE, revisions: dict[str, str] | None = None, find
     return json.dumps({"scope": scope, "revisions": revisions or {}, "measurement": None, "findings": findings or []})
 
 
-def _add_op(*, class_: str = "c", locus: str = "a.py:1", summary: str = "s") -> dict:
-    return {"op": "add", "class": class_, "locus": locus, "summary": summary}
+def _add_op(*, class_: str = "c", locus: str = "a.py:1", summary: str = "s", ref: str | None = None) -> dict:
+    op = {"op": "add", "class": class_, "locus": locus, "summary": summary}
+    if ref is not None:
+        op["ref"] = ref
+    return op
 
 
 def _observed_op(finding_id: str) -> dict:
@@ -196,6 +199,60 @@ def test_a_mixed_delta_with_proposals_is_recorded(tmp_path: Path) -> None:
     assert _finding_count(hub) == 2  # the pre-seeded one plus the freshly-added one
     with hub.engine.begin() as conn:
         assert conn.execute(select(s.garden_proposals)).all()
+
+
+def test_a_docket_citing_its_own_runs_add_ref_materializes_with_the_minted_id(tmp_path: Path) -> None:
+    """A docket citing only a submission-local `ref` from this delivery's own delta
+    materializes, and the proposal's link row names the `fin_` id delivery itself
+    minted, not the `ref` spelling."""
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op(ref="new-1")]))
+    _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=["new-1"]))
+
+    resp = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcome"] == "recorded"
+    with hub.engine.begin() as conn:
+        minted_finding_id = conn.execute(select(s.findings.c.finding_id)).scalar_one()
+        link_finding_ids = [row.finding_id for row in conn.execute(select(s.garden_proposal_findings))]
+    assert link_finding_ids == [minted_finding_id]
+    assert link_finding_ids != ["new-1"]
+
+
+def test_a_docket_citing_a_prior_runs_live_id_still_works_unchanged(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    _seed_finding(hub, finding_id)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta())
+    _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
+
+    resp = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcome"] == "recorded"
+    with hub.engine.begin() as conn:
+        link_finding_ids = [row.finding_id for row in conn.execute(select(s.garden_proposal_findings))]
+    assert link_finding_ids == [finding_id]
+
+
+def test_an_empty_docket_is_recorded(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op()]))
+    _record_artifact(hub, chunk_id, name="docket", content="[]")
+
+    resp = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"outcome": "recorded", "detail": ""}
+    with hub.engine.begin() as conn:
+        assert conn.execute(select(s.garden_proposals)).all() == []
 
 
 # --- invalid -----------------------------------------------------------------
@@ -357,6 +414,77 @@ def test_a_proposals_artifact_naming_one_ref_twice_is_invalid(tmp_path: Path) ->
         assert conn.execute(select(s.garden_proposals)).all() == []
 
 
+def test_a_docket_citing_the_same_finding_twice_is_invalid(tmp_path: Path) -> None:
+    """A repeated citation collides on `garden_proposal_findings`'s own primary key —
+    rejected here as a legible `invalid` rather than left to fail the insert raw."""
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    _seed_finding(hub, finding_id)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta())
+    _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id, finding_id]))
+
+    resp = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["outcome"] == "invalid"
+    assert finding_id in body["detail"]
+    with hub.engine.begin() as conn:
+        assert conn.execute(select(s.garden_proposals)).all() == []
+
+
+def test_a_docket_citing_a_ref_absent_from_the_delta_is_invalid_naming_it(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op(ref="new-1")]))
+    _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=["ghost-ref"]))
+
+    resp = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["outcome"] == "invalid"
+    assert "ghost-ref" in body["detail"]
+    assert _finding_count(hub) == 0
+    with hub.engine.begin() as conn:
+        assert conn.execute(select(s.garden_proposals)).all() == []
+
+
+def test_an_add_ops_ref_shaped_like_a_finding_id_is_invalid(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    disguised_ref = Id.mint(FINDING_PREFIX, hub.clock).value
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op(ref=disguised_ref)]))
+
+    resp = _post(hub, chunk_id, delta=["delta"])
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["outcome"] == "invalid"
+    assert disguised_ref in body["detail"]
+    assert _finding_count(hub) == 0
+
+
+def test_an_add_ref_duplicated_across_the_deliverys_deltas_is_invalid(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta-a", content=_delta(findings=[_add_op(locus="a.py:1", ref="new-1")]))
+    _record_artifact(hub, chunk_id, name="delta-b", content=_delta(findings=[_add_op(locus="b.py:2", ref="new-1")]))
+
+    resp = _post(hub, chunk_id, delta=["delta-a", "delta-b"])
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["outcome"] == "invalid"
+    assert "new-1" in body["detail"]
+    assert _finding_count(hub) == 0
+
+
 # --- replay --------------------------------------------------------------
 
 
@@ -451,6 +579,36 @@ def test_a_later_delivery_re_carrying_the_same_proposals_mints_no_duplicate(tmp_
     assert second.json()["outcome"] == "recorded"
     with hub.engine.begin() as conn:
         assert conn.execute(select(s.garden_proposals)).all().__len__() == 1  # not minted twice
+
+
+def test_a_republished_dockets_ref_citation_still_resolves_after_its_delta_is_dropped(tmp_path: Path) -> None:
+    """A worker that never saw a `recorded` response may resubmit at a fresh epoch. The
+    delta is then dropped as already-materialized, but the docket's citation of `add`'s
+    own ref must still land on the finding that first visit actually minted."""
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op(ref="F1")]))
+    _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=["F1"]))
+
+    first = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    assert first.status_code == 200 and first.json()["outcome"] == "recorded"
+    assert _finding_count(hub) == 1
+    with hub.engine.begin() as conn:
+        minted_finding_id = conn.execute(select(s.findings.c.finding_id)).scalar_one()
+
+    # Republish only the docket, at a fresh epoch — a new artifact, same `ref`.
+    _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=["F1"]), epoch=_EPOCH + 1)
+    second = _post(hub, chunk_id, delta=["delta"], proposals=["docket"], epoch=_EPOCH + 1)
+
+    assert second.status_code == 200, second.text
+    assert second.json()["outcome"] == "recorded"
+    assert _finding_count(hub) == 1  # the delta is unchanged — nothing new minted
+    with hub.engine.begin() as conn:
+        proposals = conn.execute(select(s.garden_proposals)).all()
+        assert len(proposals) == 2  # a genuinely new proposal artifact each visit
+        links = conn.execute(select(s.garden_proposal_findings)).all()
+        assert [link.finding_id for link in links] == [minted_finding_id, minted_finding_id]
 
 
 # --- the script over the route ------------------------------------------------

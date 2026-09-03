@@ -1292,6 +1292,94 @@
         "title": "FactView",
         "type": "object"
       },
+      "FindingView": {
+        "description": "A finding. `state` is the newest fact's own kind, folded to `\"live\"` for\n`add`/`observed`/`reopened` (blizzard#394) \u2014 `live` is kept alongside it as the\n`state == \"live\"` shorthand existing consumers already read. `note` is the newest\nfact's own note, whatever kind it is \u2014 `None` for a kind that carries none.",
+        "properties": {
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "introduced": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Introduced"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "live": {
+            "title": "Live",
+            "type": "boolean"
+          },
+          "locus": {
+            "title": "Locus",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "observed_count": {
+            "title": "Observed Count",
+            "type": "integer"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "scope_slug": {
+            "title": "Scope Slug",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "routine_name",
+          "scope_slug",
+          "class",
+          "locus",
+          "summary",
+          "live",
+          "state",
+          "last_seen_at",
+          "observed_count"
+        ],
+        "title": "FindingView",
+        "type": "object"
+      },
       "FleetSummaryView": {
         "description": "The fleet-pulse counts: ``ready``; ``running`` (``running`` + ``delivering``);\n``waiting`` (``waiting_on_human`` + ``paused``); ``needs`` (``needs_human``).\n``not_ready``, ``stopped``, and ``done`` count toward no bucket \u2014 a pulse, not a total.",
         "properties": {
@@ -4716,6 +4804,53 @@
           }
         },
         "summary": "Record Attachment",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/garden/findings": {
+      "get": {
+        "description": "Forward this lease's chunk's garden-findings read to the hub \u2014 the layered\npass-through. A chunk with no run context (not a routine run) reaches this only as\nthe hub's own refusal, forwarded verbatim rather than answered as an empty bucket.",
+        "operationId": "list_garden_findings_api_leases__lease_id__garden_findings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingView"
+                  },
+                  "title": "Response List Garden Findings Api Leases  Lease Id  Garden Findings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Garden Findings",
         "tags": [
           "runner"
         ]

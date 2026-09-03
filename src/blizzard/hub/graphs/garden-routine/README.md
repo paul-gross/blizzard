@@ -22,9 +22,10 @@ Conventions for the `prompts/` tree are owned by the
 - **The prompts name their verbs.** The plan's prompts pointed at "the `findings` doc" and "the CLI" abstractly, from
   before the verbs existed; the packaged prompts name the runtime reads
   (`blizzard runner artifact get --scope system
-  garden/finding-format`, `blizzard hub finding list`) and the writes
-  (`blizzard runner artifact create`). The `survey` asset is specified as an envelope — scope, revisions, measurement,
-  candidates — because `reconcile` enters on a cold session and the delta it delivers needs all three run-level facts.
+  garden/finding-format`, `blizzard runner garden findings`) and the
+  writes (`blizzard runner artifact create`). The `survey` asset is specified as an envelope — scope, revisions,
+  measurement, candidates — because `reconcile` enters on a cold session and the delta it delivers needs all three
+  run-level facts.
 - **`survey.md` is condensed** to the packaged 4,000-byte node-prompt bar (`tests/test_prompt_byte_bars.py`); every rule
   survives, some rationale does not.
 - **`deliver` authors a `failure` edge.** The plan left `garden_deliver`'s own nonzero-exit paths (a missing env var, a
@@ -35,9 +36,23 @@ Conventions for the `prompts/` tree are owned by the
 - **Every system-scope pointer carries the additive fallback `bzh:graph-artifact-pointer-fallback` requires** —
   `survey.md`, `reconcile.md`, `propose.md`, and `reconcile.from-deliver.md` each restate the minimum shape they point
   at, so a failed or empty read still carries the node-step to completion.
-- **`propose.md` states the live-id constraint.** A proposal's `findings` must each name a `fin_` id already live on
-  this routine; an `add` in this run's own delta has none yet, since the hub mints it only at delivery. The bail-out
-  section is corrected to match: a first-run `excessive-scope` candidate is not yet citable, so that run chooses `none`,
-  and the hand-out proposal drafts once the bail-out is live on a later run.
+- **`propose.md` lets a proposal cite its own run's `add`.** A proposal's `findings` entry names either a `fin_` id
+  already live on this routine or the submission-local `ref` an `add` op in this run's own delta carries, resolved
+  against the id the hub mints for it at delivery — so a first-run `excessive-scope` or `undeclared-axis` candidate is
+  citable by that same run's hand-out proposal.
 - **`reconcile.from-deliver.md` named a `findings` doc the packaged graph never ships.** Corrected to the same runtime
   read the sibling prompts use, and given the `invalid` bounce's own loop-bound check.
+- **The plan's "strategy" is the target's own gardening-axes registry, not a field the charge carries.** The plan
+  artifact had `survey.md` read "the strategy" straight out of the chunk's work item and stop-and-escalate when a named
+  standard did not exist; `canon:gardening-axes` already owns this ground, so `survey.md` instead resolves the routine's
+  own name as an axis from the registry the target project declares, follows that entry's Criteria pointer to the
+  standard's actual home, and records its declared Measurement — naming the registry by concept only, never by path, so
+  the one packaged graph still drives a non-blizzard deployment unchanged.
+- **`survey` gained a `no-strategy` choice, mirroring `excessive` exactly.** An axis the target's registry does not
+  declare is a finding about the harness, not a reason to improvise or to escalate: one candidate, class
+  `undeclared-axis`, locus `gardening-axes registry`, no inventory, routed to `reconcile` the same way `excessive` is. A
+  machinery-level class the packaged prompts declare, the same standing as `excessive-scope`.
+- **The plan's "strategy" vocabulary for `class` is retired the same way `survey`'s is.** The plan artifact had
+  `propose.md` name `class` as "one of the response classes your routine's strategy declares"; canon's four required
+  registry fields carry no response-class vocabulary, so `class` is the deployment's own taxonomy for a kind of response
+  — the hub stores, indexes, and groups by it, and never interprets it.

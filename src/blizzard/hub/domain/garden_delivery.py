@@ -91,6 +91,16 @@ def parse_proposals(artifact_name: str, raw: str) -> list[GardenProposalCandidat
         ) from exc
 
 
+def is_finding_id_shaped(value: str) -> bool:
+    """Whether `value` parses as a well-formed `fin_<ULID>` id — the shape rule a
+    proposal's `findings` entry is discriminated on: true resolves against
+    `live_findings` exactly as before this submission-local `ref` existed; false
+    resolves against a `ref` an `add` op in this same delivery carries. Shared with
+    `garden_delivery_materialize` so the discrimination is asked once."""
+    parsed = Id.parse(value)
+    return parsed is not None and parsed.has_prefix(FINDING_PREFIX)
+
+
 def single_repo_of(delta: FindingDelta) -> str | None:
     """The one repository `delta.revisions` names, or `None` if it names zero or several
     — `introduced` carries no repository of its own, so this is the sole case its commit
@@ -123,6 +133,12 @@ def check_delta(
     single_repo = single_repo_of(delta)
     for op in delta.findings:
         if isinstance(op, AddFindingOp):
+            if op.ref is not None and is_finding_id_shaped(op.ref):
+                # Otherwise the shape rule a proposal's citation is discriminated on
+                # could be gamed into rebinding an existing finding id.
+                raise GardenDeliveryRejected(
+                    f"add op ref {op.ref!r} is shaped like a finding id and cannot be used as a submission-local ref"
+                )
             if op.introduced is not None:
                 # `introduced` names no repository of its own, so it resolves only against
                 # a sole declared one; zero or several leave which one ambiguous.
@@ -138,19 +154,46 @@ def check_delta(
     return introduced_at
 
 
+def check_add_refs(deltas: Sequence[FindingDelta]) -> frozenset[str]:
+    """Every `ref` an `add` op carries across `deltas` — what :func:`check_proposal`
+    resolves a non-`fin_` citation against — raising :class:`GardenDeliveryRejected` if
+    one is carried by more than one op, the same way :func:`check_proposal_refs` already
+    refuses a duplicated proposal ref."""
+    seen: set[str] = set()
+    for delta in deltas:
+        for op in delta.findings:
+            if isinstance(op, AddFindingOp) and op.ref is not None:
+                if op.ref in seen:
+                    raise GardenDeliveryRejected(f"add op ref {op.ref!r} is carried more than once in this delivery")
+                seen.add(op.ref)
+    return frozenset(seen)
+
+
 def check_proposal(
     proposal: GardenProposalCandidate,
     *,
     run: RunContext,
     live_findings: LiveFindings,
     exited_ids: frozenset[str] = frozenset(),
+    known_refs: frozenset[str] = frozenset(),
 ) -> None:
-    """Validate one already-parsed proposal candidate: every id in `proposal.findings`
-    must be a well-formed `fin_<ULID>` and live on `run.routine_name` — a proposal
-    carries no scope of its own to check the finding against (unlike a delta's
-    transformations, see :func:`check_delta`)."""
-    for finding_id in proposal.findings:
-        _check_known_id(finding_id, run=run, live_findings=live_findings, scope=None, exited_ids=exited_ids)
+    """Validate one already-parsed proposal candidate. Each entry in `proposal.findings`
+    is either a `fin_<ULID>` id live on `run.routine_name` or a `ref` an `add` op in this
+    same delivery carries, checked against `known_refs`. An entry repeated within the same
+    proposal is refused too — `garden_proposal_findings`'s own primary key can carry a
+    finding only once per proposal."""
+    seen: set[str] = set()
+    for entry in proposal.findings:
+        if entry in seen:
+            raise GardenDeliveryRejected(f"proposal {proposal.ref!r} cites {entry!r} more than once")
+        seen.add(entry)
+        if is_finding_id_shaped(entry):
+            _check_known_id(entry, run=run, live_findings=live_findings, scope=None, exited_ids=exited_ids)
+        elif entry not in known_refs:
+            raise GardenDeliveryRejected(
+                f"proposal cites {entry!r}, which is neither a live finding id nor a ref carried by an add op "
+                "in this delivery's own deltas"
+            )
 
 
 def check_proposal_refs(artifact_name: str, proposals: Sequence[GardenProposalCandidate]) -> None:
@@ -204,8 +247,9 @@ def validate_delivery(
                 delta, run=run, live_findings=live_findings, exited_ids=exited_ids, resolve_commit=resolve_commit
             )
         )
+    known_refs = check_add_refs(deltas)
     for proposal in proposals:
-        check_proposal(proposal, run=run, live_findings=live_findings, exited_ids=exited_ids)
+        check_proposal(proposal, run=run, live_findings=live_findings, exited_ids=exited_ids, known_refs=known_refs)
 
     return ValidatedDelivery(
         run=run,
@@ -224,8 +268,7 @@ def _check_known_id(
     scope: str | None,
     exited_ids: frozenset[str] = frozenset(),
 ) -> None:
-    parsed = Id.parse(finding_id)
-    if parsed is None or not parsed.has_prefix(FINDING_PREFIX):
+    if not is_finding_id_shaped(finding_id):
         raise GardenDeliveryRejected(f"finding id {finding_id!r} is not a well-formed {FINDING_PREFIX}_<ULID> id")
     live_scope = live_findings.get(finding_id)
     if live_scope is None:

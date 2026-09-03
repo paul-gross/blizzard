@@ -7,11 +7,18 @@ owns the concept; this covers the verbs only.
 
 ## Findings
 
-`blizzard hub finding list --routine <name> --scope <slug> [--include-gone]` and `show <finding_id>` are the finding
-reads. `list` is the read a running pass calls to cross-reference its own bucket — a routine's findings under one scope,
-live only unless `--include-gone`, which now also surfaces every exited finding alongside a merely `gone` one. `state`,
-`live`, `last_seen_at`, and `observed_count` track each finding's own fact history, changing as later runs observe or
-lose it, or a person exits or reopens it.
+`blizzard hub finding list --routine <name> --scope <slug> [--include-gone]` and `show <finding_id>` are the operator's
+own finding reads — an operator or an integration holding a hub credential, naming any routine and any scope, live only
+unless `--include-gone`, which also surfaces every exited finding alongside a merely `gone` one. `state`, `live`,
+`last_seen_at`, and `observed_count` track each finding's own fact history, changing as later runs observe or lose it,
+or a person exits or reopens it.
+
+A running pass cross-references its own bucket a different way: `blizzard runner garden findings`, flagless — the
+routine and the scope are derived server-side from the lease's own chunk, so a worker cannot point this read at another
+routine's bucket, and it needs no hub credential in its child environment at all. It is a pure client of the runner's
+local API, authorized by the spawn-injected lease identity, the same shape the `blizzard runner artifact` verbs take
+(see [artifacts.md](./artifacts.md)); [openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint
+shape.
 
 A person takes a finding out of the live set for good with one of five exit verbs, each requiring `--note`:
 `blizzard hub finding resolve <finding_id>...`, `confirm-gone <finding_id>...`, `wont-fix <finding_id>...`,

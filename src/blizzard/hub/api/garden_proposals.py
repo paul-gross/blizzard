@@ -52,7 +52,7 @@ def _closure_view(closure: GardenProposalClosure) -> GardenProposalClosureView:
 
 def _proposal_view(proposal: GardenProposal, closure: GardenProposalClosure | None) -> GardenProposalView:
     # `class_`'s alias is the Python keyword `class` — constructed by alias via
-    # `model_validate`, the `_finding_view` shape.
+    # `model_validate`, the `finding_view` shape.
     return GardenProposalView.model_validate(
         {
             "proposal_id": proposal.proposal_id,

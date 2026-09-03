@@ -18,6 +18,7 @@ from blizzard.hub.domain.garden_delivery import (
     CommitResolution,
     CommitResolver,
     GardenDeliveryRejected,
+    check_add_refs,
     check_delta,
     check_proposal,
     check_proposal_refs,
@@ -78,12 +79,16 @@ def _resolver(result: bool | None) -> CommitResolver:
     return lambda repo, sha: resolution
 
 
-def _add(*, locus: str = "a.py:1", summary: str = "s", introduced: str | None = None) -> AddFindingOp:
+def _add(
+    *, locus: str = "a.py:1", summary: str = "s", introduced: str | None = None, ref: str | None = None
+) -> AddFindingOp:
     # `class` is a pydantic alias (`AddFindingOp.class_`), so this builds via
     # `model_validate` rather than the `class_=` kwarg — `tests/test_finding_wire.py`'s shape.
     payload: dict[str, object] = {"op": "add", "class": "stale-docstring", "locus": locus, "summary": summary}
     if introduced is not None:
         payload["introduced"] = introduced
+    if ref is not None:
+        payload["ref"] = ref
     return AddFindingOp.model_validate(payload)
 
 
@@ -184,6 +189,22 @@ def test_check_proposal_accepts_a_live_finding() -> None:
     check_proposal(proposal, run=_RUN, live_findings=_live())  # does not raise
 
 
+def test_check_proposal_rejects_the_same_finding_id_cited_twice() -> None:
+    # `garden_proposal_findings`'s primary key is `(proposal_id, finding_id)` — a
+    # repeated citation would collide there rather than bounce legibly.
+    proposal = _proposal(findings=[_FIN1, _FIN1])
+
+    with pytest.raises(GardenDeliveryRejected, match=f"{_FIN1}.*more than once"):
+        check_proposal(proposal, run=_RUN, live_findings=_live())
+
+
+def test_check_proposal_rejects_the_same_ref_cited_twice() -> None:
+    proposal = _proposal(findings=["new-1", "new-1"])
+
+    with pytest.raises(GardenDeliveryRejected, match=r"new-1.*more than once"):
+        check_proposal(proposal, run=_RUN, live_findings=_live(), known_refs=frozenset({"new-1"}))
+
+
 def test_check_proposal_refs_rejects_one_artifact_naming_a_ref_twice() -> None:
     # `(source artifact, ref)` is a delivered proposal's identity — one artifact naming
     # `p1` twice claims two different proposals are the same one.
@@ -197,6 +218,136 @@ def test_check_proposal_refs_accepts_distinct_refs() -> None:
     proposals = [_proposal(findings=[_FIN1], ref="p1"), _proposal(findings=[_FIN2], ref="p2")]
 
     check_proposal_refs("docket", proposals)  # does not raise
+
+
+# --- submission-local finding refs --------------------------------------------------
+
+
+def test_check_delta_rejects_an_add_ops_ref_shaped_like_a_finding_id() -> None:
+    delta = FindingDelta(scope="runner", findings=[_add(ref=_fin())])
+
+    with pytest.raises(GardenDeliveryRejected, match="shaped like a finding id"):
+        check_delta(delta, run=_RUN, live_findings=_live())
+
+
+def test_check_delta_accepts_an_add_op_carrying_an_ordinary_ref() -> None:
+    delta = FindingDelta(scope="runner", findings=[_add(ref="new-1")])
+
+    check_delta(delta, run=_RUN, live_findings=_live())  # does not raise
+
+
+def test_check_add_refs_collects_every_distinct_ref_across_deltas() -> None:
+    delta_a = FindingDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
+    delta_b = FindingDelta(scope="runner", findings=[_add(locus="b.py:2", ref="new-2")])
+
+    assert check_add_refs([delta_a, delta_b]) == {"new-1", "new-2"}
+
+
+def test_check_add_refs_ignores_add_ops_carrying_no_ref() -> None:
+    delta = FindingDelta(scope="runner", findings=[_add(locus="a.py:1")])
+
+    assert check_add_refs([delta]) == frozenset()
+
+
+def test_check_add_refs_rejects_a_ref_duplicated_across_deltas() -> None:
+    delta_a = FindingDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
+    delta_b = FindingDelta(scope="runner", findings=[_add(locus="b.py:2", ref="new-1")])
+
+    with pytest.raises(GardenDeliveryRejected, match=r"new-1.*more than once"):
+        check_add_refs([delta_a, delta_b])
+
+
+def test_check_proposal_accepts_a_ref_from_this_deliverys_own_deltas() -> None:
+    proposal = _proposal(findings=["new-1"])
+
+    check_proposal(proposal, run=_RUN, live_findings=_live(), known_refs=frozenset({"new-1"}))  # does not raise
+
+
+def test_check_proposal_rejects_a_ref_absent_from_this_deliverys_deltas() -> None:
+    proposal = _proposal(findings=["ghost-ref"])
+
+    with pytest.raises(GardenDeliveryRejected, match="ghost-ref"):
+        check_proposal(proposal, run=_RUN, live_findings=_live(), known_refs=frozenset({"new-1"}))
+
+
+def test_check_proposal_accepts_a_mix_of_live_id_and_own_run_ref() -> None:
+    proposal = _proposal(findings=[_FIN1, "new-1"])
+
+    check_proposal(proposal, run=_RUN, live_findings=_live(), known_refs=frozenset({"new-1"}))  # does not raise
+
+
+def test_validate_delivery_resolves_a_proposal_citing_its_own_runs_add_ref() -> None:
+    delta = FindingDelta(scope="runner", findings=[_add(ref="new-1")])
+    proposal = _proposal(findings=["new-1"])
+
+    result = validate_delivery(
+        run=_RUN,
+        delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
+        proposal_artifacts={"docket": f"[{proposal.model_dump_json(by_alias=True)}]"},
+        known_findings=[],
+    )
+
+    assert [p.findings for p in result.proposals] == [["new-1"]]
+
+
+def test_validate_delivery_rejects_a_proposal_citing_a_ref_absent_from_the_delta() -> None:
+    proposal = _proposal(findings=["ghost-ref"])
+
+    with pytest.raises(GardenDeliveryRejected, match="ghost-ref"):
+        validate_delivery(
+            run=_RUN,
+            delta_artifacts={},
+            proposal_artifacts={"docket": f"[{proposal.model_dump_json(by_alias=True)}]"},
+            known_findings=[],
+        )
+
+
+def test_validate_delivery_rejects_an_add_ref_duplicated_across_two_delta_artifacts() -> None:
+    delta_a = FindingDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
+    delta_b = FindingDelta(scope="runner", findings=[_add(locus="b.py:2", ref="new-1")])
+
+    with pytest.raises(GardenDeliveryRejected, match=r"new-1.*more than once"):
+        validate_delivery(
+            run=_RUN,
+            delta_artifacts={
+                "survey-a.json": delta_a.model_dump_json(by_alias=True),
+                "survey-b.json": delta_b.model_dump_json(by_alias=True),
+            },
+            proposal_artifacts={},
+            known_findings=[],
+        )
+
+
+def test_validate_delivery_still_accepts_a_proposal_citing_a_prior_runs_live_id() -> None:
+    """A docket citing a `fin_` id already live on the routine still resolves exactly as
+    before this submission-local ref existed — unaffected by whether this delivery's own
+    deltas carry any `add` ops at all."""
+    proposal = _proposal(findings=[_FIN1])
+
+    result = validate_delivery(
+        run=_RUN,
+        delta_artifacts={},
+        proposal_artifacts={"docket": f"[{proposal.model_dump_json(by_alias=True)}]"},
+        known_findings=[_finding(_FIN1)],
+    )
+
+    assert [p.findings for p in result.proposals] == [[_FIN1]]
+
+
+def test_validate_delivery_accepts_an_empty_proposals_docket() -> None:
+    """`--proposals` naming an artifact whose content is `[]` — a docket with nothing in
+    it — validates cleanly, `validate_delivery`'s own share of "an empty docket delivers
+    as recorded"."""
+    delta = FindingDelta(scope="runner", findings=[])
+
+    result = validate_delivery(
+        run=_RUN,
+        delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
+        proposal_artifacts={"docket": "[]"},
+        known_findings=[],
+    )
+
+    assert result.proposals == []
 
 
 # --- commit checks -----------------------------------------------------------------

@@ -28,9 +28,10 @@ class FindingCandidate(BaseModel):
 
 
 class AddFindingOp(BaseModel):
-    """The candidate minus its `ref` — a delta, not a state (see
+    """The candidate minus its identity — a delta, not a state (see
     [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md))
-    — the hub mints an id for each."""
+    — the hub mints the `fin_` id, never the run. Optional `ref` names this addition
+    within its own submission, for a proposal in the same delivery to cite."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -39,6 +40,7 @@ class AddFindingOp(BaseModel):
     locus: str
     summary: str
     introduced: str | None = None
+    ref: str | None = None
 
 
 class ObservedFindingOp(BaseModel):

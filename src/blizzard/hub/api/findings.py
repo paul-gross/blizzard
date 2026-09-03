@@ -25,7 +25,9 @@ from blizzard.wire.finding import FindingExitRequest, FindingSupersedeRequest, F
 router = APIRouter(prefix="/api", tags=["findings"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _finding_view(finding: Finding) -> FindingView:
+def finding_view(finding: Finding) -> FindingView:
+    """The one ``Finding`` -> ``FindingView`` projection — reused as-is by the runner-facing
+    fleet route (``blizzard.hub.api.fleet``) rather than restated there."""
     # `class_`'s alias is the Python keyword `class` — constructed by alias via
     # `model_validate`, the `_proposal_view` shape.
     return FindingView.model_validate(
@@ -67,7 +69,7 @@ def _reread(findings: list[Finding], services: HubServices) -> list[FindingView]
     for f in findings:
         fresh = by_id.get(f.finding_id)
         assert fresh is not None  # just written a fact against it; cannot have vanished
-        views.append(_finding_view(fresh))
+        views.append(finding_view(fresh))
     return views
 
 
@@ -81,7 +83,7 @@ def list_findings(
     """A routine's findings under one scope — live only, unless `include_gone` (D3),
     which also surfaces every exited finding, not just a merely `gone` one; the read a
     running pass calls to cross-reference its own bucket."""
-    return [_finding_view(f) for f in services.findings.list_for(routine, scope, include_gone=include_gone)]
+    return [finding_view(f) for f in services.findings.list_for(routine, scope, include_gone=include_gone)]
 
 
 @router.get("/findings/{finding_id}", response_model=FindingView, dependencies=[Depends(require(FLEET_VIEW))])
@@ -90,7 +92,7 @@ def get_finding(finding_id: str, services: Annotated[HubServices, Depends(get_se
     finding = services.findings.get(finding_id)
     if finding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown finding {finding_id}")
-    return _finding_view(finding)
+    return finding_view(finding)
 
 
 def _exit_verb(

@@ -77,14 +77,19 @@ def test_garden_routine_session_policy_is_load_bearing() -> None:
     assert (doc.node("propose").session, doc.node("propose").session_source) == (SessionMode.RESUME, "match")  # type: ignore[union-attr]
 
 
-def test_garden_routine_survey_routes_the_three_ways_out() -> None:
+def test_garden_routine_survey_routes_the_four_ways_out() -> None:
     doc = _doc()
     survey = doc.node("survey")
     assert survey is not None and survey.judgement is not None
     routes = {c.name: c.to for c in survey.judgement.choices}
-    # `excessive` still runs through reconcile, so a weekly routine converges its
-    # bail-out against the one already live instead of minting a fresh one every week.
-    assert routes == {"found": "reconcile", "excessive": "reconcile", "clean": "deliver"}
+    # Both bail-outs run through reconcile, so a repeating routine converges either
+    # against the one already live instead of minting a fresh one every run.
+    assert routes == {
+        "found": "reconcile",
+        "excessive": "reconcile",
+        "no-strategy": "reconcile",
+        "clean": "deliver",
+    }
 
 
 def test_garden_routine_reconcile_and_propose_both_end_at_deliver() -> None:

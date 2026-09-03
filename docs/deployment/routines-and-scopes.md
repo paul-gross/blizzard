@@ -14,7 +14,8 @@ stored slug or description.
 
 ## Routines
 
-`blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort]`, `list`, `show
+`blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort]`, `list`,
+`show
 <routine_id>`, and `edit <routine_id> --graph <name> --scope <slug> [--model] [--effort]` are the routine verbs.
 `GRAPH_NAME` must resolve to a currently-enabled graph — a create or edit naming one that does not refuses, naming it.
 `DEFAULT_SCOPE_SLUG` is minted through the same path `scope create` uses if the slug is unseen, so a routine's default
@@ -22,15 +23,20 @@ scope never needs a separate `scope create` first.
 
 A routine's `name` is its lineage and is immutable once minted: `routine edit` never changes it, and a create naming an
 already-existing routine name is refused rather than duplicating it. `routine_id` is the id every other verb addresses
-the routine by; `edit` still requires the current name be restated, and refuses a request that names a different one.
+the routine by; `edit` still requires the current name be restated, and refuses a request that names a different one. A
+routine running the `garden-routine` graph resolves its axis from this same `name` — the target project's gardening-axes
+registry must declare an entry under it. Naming one the registry does not declare is not refused at create time: every
+run instead bails out with a single `undeclared-axis` finding, at full model cost. Because `name` is immutable, that
+cannot be fixed with `routine edit` either — only a new routine, starting its own baselines and trend history over,
+corrects it.
 
 ## Running one
 
 `blizzard hub routine run <name> [--scope <slug>] [--mode full|delta] [--note <text>]` mints, ingests, and promotes a
 hub work item from the named routine, in one act. `NAME` resolves to the routine's `routine_id` through the routine
-list; `--scope` overrides the routine's own default, minting an unseen slug the same way `scope create` does.
-`--mode` defaults to `full`; a requested `delta` against a routine/scope pair with no recorded baseline downgrades to
-`full` rather than refusing — the CLI names the downgrade in its output, and the item's own charge does too. A retired
+list; `--scope` overrides the routine's own default, minting an unseen slug the same way `scope create` does. `--mode`
+defaults to `full`; a requested `delta` against a routine/scope pair with no recorded baseline downgrades to `full`
+rather than refusing — the CLI names the downgrade in its output, and the item's own charge does too. A retired
 effective scope, or a routine whose graph has lost every enabled mint, refuses the run rather than running it anyway.
 
 The hub board's gardening tab offers the same act as a dialog, reachable from the selected routine's own panel. It
@@ -38,8 +44,8 @@ resolves the delta baseline *before* the operator submits, through `GET /api/rou
 entry per scope this routine has ever swept, each carrying its finding-set id, the instant it was recorded, and, per
 repo the sweep touched, how many `delivery_repo_landed` events that repo has recorded since. A scope absent from the
 list has never been swept by this routine; the dialog steers those pairs to full rather than offering a delta with
-nothing to run against. A new scope is minted through `POST /api/scopes`, with its description, before the run is
-ever submitted — never left to the run route's own empty-description mint.
+nothing to run against. A new scope is minted through `POST /api/scopes`, with its description, before the run is ever
+submitted — never left to the run route's own empty-description mint.
 
 ## Reading a routine's health
 
@@ -50,26 +56,27 @@ withdrawn roll-ups, and the introduced-age cut against `--introduced-boundary`.
 `blizzard hub routine sweeps <name> --since <time> --until <time>` reports two things at once: a last-swept table —
 every non-retired scope, plus any retired scope `name` has swept, each with its newest delivered finding set's instant
 and per-repository revisions, or `never` when the pair has recorded none — and a measurement series, the opaque text
-each delivered set records, cut to `--since`/`--until`. Unlike the last-swept table, the measurement series is
-windowed: a scope swept months ago still reads its true last-swept instant, never "never".
+each delivered set records, cut to `--since`/`--until`. Unlike the last-swept table, the measurement series is windowed:
+a scope swept months ago still reads its true last-swept instant, never "never".
 
-The hub board's Gardening tab renders both reads, plus a routine's stored record and its strategy — the effective
-graph's own node preambles — as read-only prose, and the Run action above it. A routine whose graph has lost every
-enabled mint shows as blocked there instead of offering a run.
+The hub board's Gardening tab renders both reads, plus a routine's stored record and the effective graph's own node
+prompts, as read-only prose, and the Run action above it. A routine whose graph has lost every enabled mint shows as
+blocked there instead of offering a run.
 
 ## Reading runs
 
 `blizzard hub run list [--since <time>] [--until <time>]` and `blizzard hub run show <chunk_id>` read routine runs —
-distinct from `blizzard hub routine run`, which starts one. A **run** is one chunk a routine's own run minted: `run
-list` reports every run minted in `--since`/`--until` (defaulting to the last 24 hours ending now), newest first, each
-carrying its routine, scope, mode, its derived outcome, and, where it delivered, every finding-set row it published
-(revisions and measurement) — a run can deliver several lists in one act, and each is reported as its own entry,
-never merged into one. A run that escalated before delivering anything still appears, since the list is read from the
-run's own identity, not from what it delivered. A run whose chunk was later grouped away or deleted is the one
-exclusion: it is absent from both reads, since neither has a live chunk left to read outcome and identity from.
+distinct from `blizzard hub routine run`, which starts one. A **run** is one chunk a routine's own run minted:
+`run
+list` reports every run minted in `--since`/`--until` (defaulting to the last 24 hours ending now), newest first,
+each carrying its routine, scope, mode, its derived outcome, and, where it delivered, every finding-set row it published
+(revisions and measurement) — a run can deliver several lists in one act, and each is reported as its own entry, never
+merged into one. A run that escalated before delivering anything still appears, since the list is read from the run's
+own identity, not from what it delivered. A run whose chunk was later grouped away or deleted is the one exclusion: it
+is absent from both reads, since neither has a live chunk left to read outcome and identity from.
 
 `run show <chunk_id>` reads one run's full detail: the same identity and outcome, plus, per finding-set it delivered,
-the delta that set actually published — added, observed, and gone, kept as three separate groups. An added entry
-that predates the finding-id-linkage this read relies on renders with no matched finding id rather than a guessed
-one. A run whose outcome is `needs_human` also carries the escalating node's name and its takeover command(s) — the
-hub records no reason an escalated run stopped, only where it stopped and how to resume it.
+the delta that set actually published — added, observed, and gone, kept as three separate groups. An added entry that
+predates the finding-id-linkage this read relies on renders with no matched finding id rather than a guessed one. A run
+whose outcome is `needs_human` also carries the escalating node's name and its takeover command(s) — the hub records no
+reason an escalated run stopped, only where it stopped and how to resume it.

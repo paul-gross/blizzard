@@ -13,7 +13,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX
+from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.garden_delivery import ValidatedDelivery
 from blizzard.hub.domain.garden_delivery_materialize import (
@@ -67,10 +67,18 @@ def _as_write_repo(repo: _FakeGardenDeliveryRepo) -> IWriteGardenDeliveryReposit
     return cast(IWriteGardenDeliveryRepository, repo)
 
 
-def _add(*, locus: str = "a.py:1", summary: str = "s", introduced: str | None = None) -> AddFindingOp:
+def _fin() -> str:
+    return Id.mint_at(FINDING_PREFIX, _T0).value
+
+
+def _add(
+    *, locus: str = "a.py:1", summary: str = "s", introduced: str | None = None, ref: str | None = None
+) -> AddFindingOp:
     payload: dict[str, object] = {"op": "add", "class": "stale-docstring", "locus": locus, "summary": summary}
     if introduced is not None:
         payload["introduced"] = introduced
+    if ref is not None:
+        payload["ref"] = ref
     return AddFindingOp.model_validate(payload)
 
 
@@ -231,7 +239,8 @@ def test_deliver_over_two_deltas_groups_each_deltas_own_rows_separately() -> Non
 def test_deliver_builds_a_proposal_and_its_finding_links() -> None:
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
-    proposal = _proposal(findings=["fin_1", "fin_2"])
+    fin_1, fin_2 = _fin(), _fin()
+    proposal = _proposal(findings=[fin_1, fin_2])
     validated = ValidatedDelivery(run=_RUN, deltas=[], proposals=[proposal], proposal_sources=["docket"])
 
     service.deliver(
@@ -249,7 +258,54 @@ def test_deliver_builds_a_proposal_and_its_finding_links() -> None:
     assert built.body == "b"
     assert built.source_artifact_id == "art_p"
     assert built.ref == "p1"
-    assert built.finding_ids == ["fin_1", "fin_2"]
+    assert built.finding_ids == [fin_1, fin_2]
+
+
+def test_deliver_resolves_a_proposals_ref_citation_against_the_id_its_own_add_op_minted() -> None:
+    """The `ref -> finding_id` map is built in the same walk that mints each `add` op's
+    id (D2) — a proposal citing that `ref` lands with the actual minted id in its link
+    rows, never the submission-local spelling."""
+    repo = _FakeGardenDeliveryRepo()
+    service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    delta = FindingDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
+    proposal = _proposal(findings=["new-1"])
+    validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[proposal], proposal_sources=["docket"])
+
+    service.deliver(
+        validated,
+        chunk=_CHUNK,
+        node=_NODE,
+        epoch=1,
+        delta_artifact_ids=["art_1"],
+        proposal_artifact_ids=["art_p"],
+    )
+
+    plan = repo.delivered[0]
+    minted_finding_id = plan.deltas[0].new_findings[0].finding_id
+    assert plan.proposals[0].finding_ids == [minted_finding_id]
+    assert minted_finding_id != "new-1"
+
+
+def test_deliver_resolves_a_proposal_mixing_a_ref_and_a_prior_runs_live_id() -> None:
+    repo = _FakeGardenDeliveryRepo()
+    service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    prior_live = _fin()
+    delta = FindingDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
+    proposal = _proposal(findings=[prior_live, "new-1"])
+    validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[proposal], proposal_sources=["docket"])
+
+    service.deliver(
+        validated,
+        chunk=_CHUNK,
+        node=_NODE,
+        epoch=1,
+        delta_artifact_ids=["art_1"],
+        proposal_artifact_ids=["art_p"],
+    )
+
+    plan = repo.delivered[0]
+    minted_finding_id = plan.deltas[0].new_findings[0].finding_id
+    assert plan.proposals[0].finding_ids == [prior_live, minted_finding_id]
 
 
 def test_deliver_returns_the_repository_outcome() -> None:
