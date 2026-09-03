@@ -138,6 +138,11 @@ class ChunkSummary(BaseModel):
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     # The chunk's derived completion instant (issue #173) — null for every non-terminal status.
     completed_at: str | None = None
+    # The chunk's blocked marking (issue #457) — non-None only on the fleet-list and detail reads,
+    # where a pre-claim dependent's standing edge names a prerequisite not yet done; every other
+    # route returning this model (the operator verbs) does not derive it and reads null even on a
+    # blocked chunk. Carried independently of ``status``; see BlockedView.
+    blocked: BlockedView | None = None
 
 
 class RouteView(BaseModel):
@@ -391,6 +396,16 @@ class PauseView(BaseModel):
     set_at: str
 
 
+class BlockedView(BaseModel):
+    """A chunk's blocked marking (issue #457) — present iff a pre-claim dependent (``not_ready`` or
+    ``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.
+    Carried beside ``status``, never a status of its own; names the immediate prerequisite only, with
+    no transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at
+    once, names the earliest-declared one."""
+
+    prerequisite_chunk_id: str
+
+
 class ChunkDetail(BaseModel):
     """The whole chunk aggregate — one response model behind both the hub's own detail read and the
     runner's pass-through proxy of it (issue #314): transition history, inline artifact store, and the
@@ -417,6 +432,11 @@ class ChunkDetail(BaseModel):
     # The operator's per-chunk pause brake (issue #46) — non-None iff currently paused, and carried
     # independently of ``status`` so a gated-and-paused chunk stays legible (see PauseView).
     pause: PauseView | None = None
+    # The chunk's blocked marking (issue #457) — non-None only on the fleet-list and detail reads,
+    # where a pre-claim dependent's standing edge names a prerequisite not yet done; every other
+    # route returning this model (the operator verbs) does not derive it and reads null even on a
+    # blocked chunk. Carried independently of ``status``; see BlockedView.
+    blocked: BlockedView | None = None
     # The chunk's live gate decision — the open (waiting_on_human) or resolved-but-not-
     # yet-transitioned one.
     decision: DecisionView | None = None

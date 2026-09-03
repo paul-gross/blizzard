@@ -89,3 +89,36 @@ def test_declare_after_release_mints_a_fresh_row(tmp_path: Path) -> None:
 
     assert second.dependency_id != first.dependency_id
     assert dependencies.standing_edge("ch_dependent", "ch_prereq") == second
+
+
+def test_list_standing_edges_orders_by_declared_at_ascending(tmp_path: Path) -> None:
+    """Review round 1 F2: ``derive_blocked_markings``'s "earliest-declared wins" rule
+    (D4) delegates entirely to this ordering, so it must be pinned here — declared with
+    genuinely different ``declared_at`` instants, and out of chronological call order, so
+    a store that returned insertion order rather than sorting would fail this."""
+    dependencies, engine = _dependencies(tmp_path)
+    with engine.begin() as conn:
+        seed_chunk(conn, "ch_prereq_2", graph_id="gr_1", at=_NOW)
+
+    later = dependencies.declare("ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW + timedelta(hours=1))
+    earlier = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
+
+    ordered = dependencies.list_standing_edges()
+
+    assert [e.dependency_id for e in ordered] == [earlier.dependency_id, later.dependency_id]
+
+
+def test_list_standing_edges_breaks_a_declared_at_tie_by_dependency_id(tmp_path: Path) -> None:
+    """The same rule's tiebreak (``bzh:sql-portable`` — an explicit total order, never an
+    implicit one): two edges declared at the identical instant still resolve to one
+    deterministic order, ascending by the minted ``dependency_id``."""
+    dependencies, engine = _dependencies(tmp_path)
+    with engine.begin() as conn:
+        seed_chunk(conn, "ch_prereq_2", graph_id="gr_1", at=_NOW)
+
+    first = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
+    second = dependencies.declare("ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW)
+
+    ordered = dependencies.list_standing_edges()
+
+    assert [e.dependency_id for e in ordered] == sorted([first.dependency_id, second.dependency_id])

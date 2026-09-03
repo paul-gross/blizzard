@@ -35,9 +35,18 @@ edge stands, whatever status the dependent reads and whatever became of the prer
 A release naming a pair with no standing edge is refused 409; a dependent the hub cannot resolve — never minted, or
 itself grouped away or deleted — is 404.
 
+## The blocked marking
+
+A standing, unsatisfied dependency derives a **blocked marking** — a nullable field carried beside `status` on
+`GET /api/chunks`, `GET /api/chunks/{chunk_id}`, `GET /api/queue`, and `GET /api/backlog`, naming the earliest-declared
+prerequisite that has not reached `done`. What the marking means, its one-hop scope, and the `not_ready`/`ready` window
+it is confined to are `blizzard-context:/domain/work/statuses.md`'s to say. Satisfaction is not stored: an edge is met
+when its prerequisite reads `done`, read fresh at the point something consults it rather than cached on the edge
+itself, so declaring onto an already-`done` prerequisite is an ordinary accepted edge that names no marking. A
+prerequisite absent from the fleet's statuses — a standing edge onto a since-deleted id — still blocks, the
+conservative read.
+
 ## What declaring an edge does not yet do
 
-A standing, unsatisfied dependency changes nothing about how its dependent is queued, claimed, or shown on the board —
-it derives no blocked marking, denies no claim, and reaches no board surface. Satisfaction is not stored either: an edge
-is met when its prerequisite reads `done`, read fresh at the point something consults it rather than cached on the edge
-itself, so declaring onto an already-`done` prerequisite is an ordinary accepted edge with no special case.
+A standing, unsatisfied dependency still changes nothing about how its dependent is claimed or shown on the board: it
+denies no claim, and reaches no board surface.

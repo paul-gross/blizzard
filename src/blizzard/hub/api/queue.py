@@ -17,8 +17,10 @@ from blizzard.auth_core import FLEET_VIEW, QUEUE_REORDER
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.chunk_views import blocked_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.dependencies import derive_blocked_markings
 from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotGroupable, QueueList
 from blizzard.hub.domain.work import Chunk
 from blizzard.wire.chunk import WorkRefModel
@@ -50,6 +52,18 @@ def _refusal_detail(chunk_id: str, *, expected: QueueList, other_ids: set[str]) 
 
 def _other_list(list_: QueueList) -> QueueList:
     return QueueList.NOT_READY if list_ is QueueList.READY else QueueList.READY
+
+
+def _blocked_markings(services: HubServices) -> dict[str, str]:
+    """Every currently-blocked dependent's marking, from one bulk facts read and one bulk
+    standing-edges read, joined here rather than inside a store (``bzh:dependency-inversion``).
+    A second bulk facts pass beside the one the ordering read already drives internally
+    (``ChunkRecordStore._listed_with_status``) — the reviewed plan's own D2 directs
+    ``ReadyQueue.view``/``Backlog.view`` to "gain the two bulk reads they need to populate
+    it", both still flat in fleet size regardless."""
+    facts = services.chunks.facts.load_all_facts()
+    statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
+    return derive_blocked_markings(services.chunks.dependencies.list_standing_edges(), statuses)
 
 
 def _refuse(chunk_id: str, *, expected: QueueList, services: HubServices) -> HTTPException:
@@ -101,13 +115,16 @@ def _reposition(list_: QueueList, chunk_id: str, after_chunk_id: str | None, ser
 
 @dataclass(frozen=True)
 class ReadyQueue:
-    """The hub-ordered ready queue as every peek renders it — position is the order itself."""
+    """The hub-ordered ready queue as every peek renders it — position is the order itself.
+    ``markings`` is resolved once in :meth:`of`, alongside ``chunks``, so :attr:`view` stays
+    a pure projection over already-fetched state rather than an I/O-performing property."""
 
     chunks: list[Chunk]
+    markings: dict[str, str]
 
     @classmethod
     def of(cls, services: HubServices) -> ReadyQueue:
-        return cls(services.queue.ordered_ready())
+        return cls(services.queue.ordered_ready(), _blocked_markings(services))
 
     @property
     def view(self) -> QueuePeekResponse:
@@ -118,6 +135,7 @@ class ReadyQueue:
                     graph_id=chunk.graph_id,
                     position=position,
                     work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
+                    blocked=blocked_view(self.markings.get(chunk.chunk_id)),
                 )
                 for position, chunk in enumerate(self.chunks)
             ]
@@ -159,13 +177,16 @@ def reposition_queue(
 @dataclass(frozen=True)
 class Backlog:
     """The hub-ordered ``not_ready`` list as every peek renders it — position is the
-    order itself."""
+    order itself. ``markings`` is resolved once in :meth:`of`, alongside ``chunks``, so
+    :attr:`view` stays a pure projection over already-fetched state rather than an
+    I/O-performing property."""
 
     chunks: list[Chunk]
+    markings: dict[str, str]
 
     @classmethod
     def of(cls, services: HubServices) -> Backlog:
-        return cls(services.queue.ordered_not_ready())
+        return cls(services.queue.ordered_not_ready(), _blocked_markings(services))
 
     @property
     def view(self) -> BacklogPeekResponse:
@@ -176,6 +197,7 @@ class Backlog:
                     graph_id=chunk.graph_id,
                     position=position,
                     work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
+                    blocked=blocked_view(self.markings.get(chunk.chunk_id)),
                 )
                 for position, chunk in enumerate(self.chunks)
             ]

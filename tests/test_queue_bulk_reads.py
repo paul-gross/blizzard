@@ -1,8 +1,9 @@
 """``GET /api/queue`` and ``GET /api/backlog`` — the ordered-list read paths (component
 tier).
 
-Proves each peek derives the whole fleet's statuses with one bulk facts read, so its query
-count is unchanged as the fleet grows and never reaches per-chunk ``load_facts`` at all."""
+Proves each peek derives the whole fleet's statuses, and each entry's blocked marking (issue
+#457), with bulk reads only, so its query count is unchanged as the fleet grows and never
+reaches per-chunk ``load_facts`` at all."""
 
 from __future__ import annotations
 
@@ -97,5 +98,7 @@ def test_peek_reads_facts_in_bulk_and_never_per_chunk(tmp_path: Path, path: str,
 
     assert resp.status_code == 200, resp.text
     assert len(resp.json()["entries"]) == 2
-    assert counting.load_all_facts_calls == 1
+    # One bulk read resolves the candidate list, a second derives each entry's blocked
+    # marking (issue #457) — both bulk, neither per-chunk.
+    assert counting.load_all_facts_calls == 2
     assert counting.load_facts_calls == 0

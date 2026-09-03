@@ -8,6 +8,7 @@ window. Both share ``ClaimService``/``EditService``/``RestartService``'s ``threa
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterable, Mapping
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -130,6 +131,36 @@ class DependencyService:
             if released is None:
                 raise NoStandingDependencyToRelease(edge.dependent_chunk_id, edge.prerequisite_chunk_id)
             return released
+
+
+def derive_blocked_markings(
+    standing_edges: Iterable[DependencyEdge], statuses: Mapping[str, ChunkStatus]
+) -> dict[str, str]:
+    """The blocked marking per dependent chunk id — never folded into :class:`ChunkFacts`
+    or its :meth:`~blizzard.hub.domain.work.ChunkFacts.status` (``bzh:facts-not-status``,
+    issue #457, D1). ``standing_edges`` must already carry
+    :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.list_standing_edges`'s
+    own ``(declared_at, dependency_id)`` order: the first unmet edge per dependent wins, one hop,
+    with no chain walk (D4). A prerequisite absent from ``statuses`` still blocks (D3) — deletion
+    does not yet refuse a standing edge onto a vanished prerequisite.
+
+    Only a dependent read at :data:`PRE_CLAIM_STATUSES` derives a marking (review round 1 F1):
+    the marking answers why a chunk cannot yet be claimed, and that question stops applying once
+    a dependent is claimed, running, delivering, human-gated, paused, or terminal — even though
+    its edge, declared while it was still pre-claim, persists unreleased through all of that. A
+    dependent absent from ``statuses`` is treated the way its default ``not_ready`` would read —
+    eligible, not excluded."""
+    markings: dict[str, str] = {}
+    for edge in standing_edges:
+        if edge.dependent_chunk_id in markings:
+            continue
+        dependent_status = statuses.get(edge.dependent_chunk_id)
+        if dependent_status is not None and dependent_status not in PRE_CLAIM_STATUSES:
+            continue
+        if statuses.get(edge.prerequisite_chunk_id) is ChunkStatus.DONE:
+            continue
+        markings[edge.dependent_chunk_id] = edge.prerequisite_chunk_id
+    return markings
 
 
 def _closes_cycle(standing: list[DependencyEdge], dependent_chunk_id: str, prerequisite_chunk_id: str) -> bool:

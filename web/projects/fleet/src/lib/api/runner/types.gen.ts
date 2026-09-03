@@ -204,6 +204,22 @@ export type AttachmentResponse = {
 };
 
 /**
+ * BlockedView
+ *
+ * A chunk's blocked marking (issue #457) — present iff a pre-claim dependent (``not_ready`` or
+ * ``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.
+ * Carried beside ``status``, never a status of its own; names the immediate prerequisite only, with
+ * no transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at
+ * once, names the earliest-declared one.
+ */
+export type BlockedView = {
+    /**
+     * Prerequisite Chunk Id
+     */
+    prerequisite_chunk_id: string;
+};
+
+/**
  * BounceView
  *
  * One recorded delivery kick-back (#64) — contention, not failure, and never itself a status.
@@ -260,6 +276,7 @@ export type ChunkDetail = {
      * Awaiting External Merge
      */
     awaiting_external_merge?: boolean;
+    blocked?: BlockedView | null;
     /**
      * Bounces
      */
@@ -380,6 +397,7 @@ export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'wa
  * unrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.
  */
 export type ChunkSummary = {
+    blocked?: BlockedView | null;
     /**
      * Chunk Id
      */

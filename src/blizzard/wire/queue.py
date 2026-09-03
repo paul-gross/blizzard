@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.wire.chunk import WorkRefModel
+from blizzard.wire.chunk import BlockedView, WorkRefModel
 
 
 class QueuePeekEntry(BaseModel):
@@ -19,6 +19,8 @@ class QueuePeekEntry(BaseModel):
     graph_id: str
     position: int
     work_refs: list[WorkRefModel] = []
+    # The chunk's blocked marking (issue #457) — see BlockedView.
+    blocked: BlockedView | None = None
 
 
 class QueuePeekResponse(BaseModel):
@@ -53,6 +55,8 @@ class BacklogPeekEntry(BaseModel):
     graph_id: str
     position: int
     work_refs: list[WorkRefModel] = []
+    # The chunk's blocked marking (issue #457) — see BlockedView.
+    blocked: BlockedView | None = None
 
 
 class BacklogPeekResponse(BaseModel):
