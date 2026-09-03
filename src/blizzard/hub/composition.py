@@ -425,6 +425,7 @@ def build_services(
             record=chunk_record,
             facts=chunk_facts,
             artifacts=chunk_artifacts,
+            dependencies=chunk_dependencies,
             graphs=graph_store,
             registry=registry_store,
             clock=clock,

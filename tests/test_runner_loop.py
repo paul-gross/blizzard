@@ -393,6 +393,33 @@ def test_fill_terminal_denial_releases_and_keeps_filling(tmp_path):  # type: ign
 
 
 @pytest.mark.unit
+def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path):  # type: ignore[no-untyped-def]
+    """A distinct refusal (blizzard#458): the chunk stands on a prerequisite that has
+    not reached ``done`` — not a race loss, so FILL releases the binding and keeps
+    trying its remaining slots, same as a terminal denial or a race-loss conflict."""
+    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.wire.route import RouteClaimDependencyDenial
+
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = RouteClaimOutcome(
+        denied_dependency=RouteClaimDependencyDenial(chunk_id="ch_1", prerequisite_chunk_id="ch_0")
+    )
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
+
+    Fill(ctx).run()
+
+    assert len(hub.claims) == 1  # the claim was actually attempted
+    assert provider.released == ["e1"]  # released the acquired-but-unclaimed env
+    assert store.held_environment_ids() == []
+    assert store.list_active_leases() == []
+    assert harness.spawns == []
+
+
+@pytest.mark.unit
 def test_fill_env_bound_skips(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = FakeHub()

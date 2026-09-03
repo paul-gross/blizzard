@@ -19,6 +19,7 @@ from blizzard.wire.queue import QueuePeekResponse
 from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
+    RouteClaimDependencyDenial,
     RouteClaimPausedDenial,
     RouteClaimResponse,
     RouteClaimTerminalDenial,
@@ -44,13 +45,15 @@ class ChunkNotFoundError(HubClientError):
 @dataclass(frozen=True)
 class RouteClaimOutcome:
     """The result of a route claim: exactly one of ``claimed`` / ``conflict`` /
-    ``denied_paused`` (#44) / ``denied_terminal`` (#118) set. A conflict is a race this
-    claim lost; either denial means the hub refused it before any race."""
+    ``denied_paused`` (#44) / ``denied_terminal`` (#118) / ``denied_dependency``
+    (blizzard#458) set. A conflict is a race this claim lost; every denial means the hub
+    refused it before any race."""
 
     claimed: RouteClaimResponse | None = None
     conflict: RouteClaimConflict | None = None
     denied_paused: RouteClaimPausedDenial | None = None
     denied_terminal: RouteClaimTerminalDenial | None = None
+    denied_dependency: RouteClaimDependencyDenial | None = None
 
     @property
     def won(self) -> bool:
@@ -66,8 +69,9 @@ class IHubClient(Protocol):
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
         """``POST /api/fleet/routes`` — claim work; 409 loses the race (or, distinctly,
-        the chunk is already terminal — issue #118), 403 means the hub registry already
-        has this runner paused (issue #44)."""
+        the chunk is already terminal — issue #118 — or stands on an unmet prerequisite —
+        blizzard#458), 403 means the hub registry already has this runner paused (issue
+        #44)."""
         ...
 
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:

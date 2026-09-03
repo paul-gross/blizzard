@@ -21,6 +21,7 @@ from blizzard.wire.queue import QueuePeekResponse
 from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
+    RouteClaimDependencyDenial,
     RouteClaimPausedDenial,
     RouteClaimResponse,
     RouteClaimTerminalDenial,
@@ -55,10 +56,13 @@ class HttpHubClient:
             raise self._wrap(exc, "POST /fleet/routes") from exc
         if resp.status_code == httpx.codes.CONFLICT:
             body = resp.json()
-            # Two distinct 409 shapes share the status code (issue #118): a race loss
-            # (`held_by_runner_id`) and a terminal denial (`status`), told apart by body.
+            # Three distinct 409 shapes share the status code: a race loss
+            # (`held_by_runner_id`), a terminal denial (`status`, issue #118), and a
+            # dependency denial (`prerequisite_chunk_id`, blizzard#458) — told apart by body.
             if "status" in body:
                 return RouteClaimOutcome(denied_terminal=RouteClaimTerminalDenial.model_validate(body))
+            if "prerequisite_chunk_id" in body:
+                return RouteClaimOutcome(denied_dependency=RouteClaimDependencyDenial.model_validate(body))
             return RouteClaimOutcome(conflict=RouteClaimConflict.model_validate(body))
         if resp.status_code == httpx.codes.FORBIDDEN:
             return RouteClaimOutcome(denied_paused=RouteClaimPausedDenial.model_validate(resp.json()))

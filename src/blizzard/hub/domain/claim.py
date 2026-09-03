@@ -16,6 +16,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunks.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
@@ -68,6 +69,20 @@ class ClaimDeniedTerminal(Exception):
         self.status = status
 
 
+class ClaimDeniedDependency(Exception):
+    """The chunk stands on a prerequisite that has not reached ``done`` — refused before
+    the race, mirroring :class:`ClaimDeniedTerminal`'s shape. Re-derived fresh under the
+    claim lock (blizzard#458) so a race between a peek and a claim can never slip a
+    blocked chunk through, whether the edge landed or the prerequisite finished after the
+    peek. Names the one standing edge found unmet, earliest-declared first — not every
+    unmet edge the chunk may carry."""
+
+    def __init__(self, *, chunk_id: str, prerequisite_chunk_id: str) -> None:
+        super().__init__(f"chunk {chunk_id} depends on unmet prerequisite {prerequisite_chunk_id}")
+        self.chunk_id = chunk_id
+        self.prerequisite_chunk_id = prerequisite_chunk_id
+
+
 @dataclass(frozen=True)
 class ClaimResult:
     """A won claim — the route fact, its first node envelope, and the route's plaintext
@@ -91,6 +106,7 @@ class ClaimService:
         record: IReadChunkRecordRepository,
         facts: IReadChunkFactsRepository,
         artifacts: IReadChunkArtifactsRepository,
+        dependencies: IReadChunkDependenciesRepository,
         graphs: IReadGraphRepository,
         registry: IReadRunnerRegistry,
         clock: IClock,
@@ -100,6 +116,7 @@ class ClaimService:
         self._record = record
         self._facts = facts
         self._artifacts = artifacts
+        self._dependencies = dependencies
         # Re-resolves the chunk's graph fresh under the lock — see `_claim_locked`.
         self._graphs = graphs
         self._registry = registry
@@ -159,6 +176,13 @@ class ClaimService:
         if status in TERMINAL_STATUSES:
             raise ClaimDeniedTerminal(chunk_id=chunk.chunk_id, status=status)
 
+        # Re-derived fresh under the same lock (blizzard#458): a declared edge or a
+        # prerequisite's completion landing after this runner's peek is invisible to the
+        # peek, exactly as a terminal transition is (issue #118).
+        unmet = self._unmet_prerequisite(chunk.chunk_id)
+        if unmet is not None:
+            raise ClaimDeniedDependency(chunk_id=chunk.chunk_id, prerequisite_chunk_id=unmet)
+
         # The claim carries the current epoch (0 before the first lease report) and mints
         # no lease of its own; the fence consumes the runner's reported epoch, not this.
         epoch = facts.latest_epoch() or 0 if facts is not None else 0
@@ -190,6 +214,20 @@ class ClaimService:
             entered_by_restart=facts is not None and facts.entered_by_restart(),
         ).wire
         return ClaimResult(route=route, envelope=envelope, route_token=route_token, route_id=route_id)
+
+    def _unmet_prerequisite(self, chunk_id: str) -> str | None:
+        """The earliest-declared standing edge naming ``chunk_id`` as dependent whose
+        prerequisite has not reached ``done`` — ``None`` when every standing edge is met
+        or the chunk carries none. Filters the full standing set rather than a targeted
+        read, mirroring ``DependencyService``'s own cycle check: the read seam answers
+        two questions and no more (``blizzard.hub.domain.chunks.dependencies``)."""
+        edges = [e for e in self._dependencies.list_standing_edges() if e.dependent_chunk_id == chunk_id]
+        for edge in edges:
+            prerequisite_facts = self._facts.load_facts(edge.prerequisite_chunk_id)
+            status = prerequisite_facts.status() if prerequisite_facts is not None else ChunkStatus.NOT_READY
+            if status != ChunkStatus.DONE:
+                return edge.prerequisite_chunk_id
+        return None
 
     def rekey(self, route: Route) -> str:
         """Rotate a live route's capability token (issue #84b) — the lost-plaintext

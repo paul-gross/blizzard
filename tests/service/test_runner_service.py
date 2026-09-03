@@ -158,6 +158,34 @@ def test_dropped_ack_reapplies_idempotently_through_to_done(tmp_path: Path) -> N
         assert _status(hub, chunk_id) == "done"
 
 
+def test_fill_absorbs_a_dependency_denial_then_claims_once_it_clears(tmp_path: Path) -> None:
+    """blizzard#458, real runner against the mock hub: the ``dependency_unmet`` lever
+    denies FILL's claim with a 409 the runner has no special case for — the chunk stays
+    unclaimed while the lever stands, and lands once the prerequisite is cleared."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        chunk_id = _seed(hub)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+
+        assert (
+            hub.post(
+                "/_levers/dependency_unmet",
+                json={"chunk_id": chunk_id, "payload": {"prerequisite_chunk_id": "ch_prereq"}},
+            ).status_code
+            == 200
+        )
+        _drive(config, fenced, ticks=2, pause=0.3)
+        assert _status(hub, chunk_id) == "ready"  # denied outright — FILL never claimed it
+
+        assert hub.delete("/_levers/dependency_unmet", params={"chunk_id": chunk_id}).status_code == 200
+        landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
+        assert landed, f"chunk did not land once the dependency cleared (status {_status(hub, chunk_id)!r})"
+
+
 def _pending_transcript_outbound(config: RunnerConfig) -> int:
     """The depth of the runner's transcript-lane buffer — D3's own, never the fact lane's."""
     engine = create_engine_from_url(config.db_url)

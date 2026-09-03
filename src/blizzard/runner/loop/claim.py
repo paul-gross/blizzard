@@ -75,6 +75,16 @@ class ReadyQueue:
             )
             self.ctx.env_release.release_binding(chunk_id, acquired)
             return True
+        if outcome.denied_dependency is not None:
+            # Stands on an unmet prerequisite (blizzard#458) — not a race loss either.
+            # Undo the binding and move on; it may become claimable again later.
+            _log.info(
+                "route claim denied — unmet prerequisite",
+                chunk_id=chunk_id,
+                prerequisite_chunk_id=outcome.denied_dependency.prerequisite_chunk_id,
+            )
+            self.ctx.env_release.release_binding(chunk_id, acquired)
+            return True
         if outcome.conflict is not None or outcome.claimed is None:
             _log.info("route claim lost the race", chunk_id=chunk_id)
             self.ctx.env_release.release_binding(chunk_id, acquired)  # someone else won — undo our binding

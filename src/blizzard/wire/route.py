@@ -50,6 +50,17 @@ class RouteClaimTerminalDenial(BaseModel):
     detail: str = "chunk is terminal"
 
 
+class RouteClaimDependencyDenial(BaseModel):
+    """The 409 body: the chunk stands on a prerequisite that has not reached ``done``
+    (blizzard#458) — refused outright, not a race loss. Distinct from both other 409
+    shapes: no other runner holds this chunk and it is not terminal, it simply named a
+    prerequisite still standing."""
+
+    chunk_id: str
+    prerequisite_chunk_id: str
+    detail: str = "chunk depends on an unmet prerequisite"
+
+
 class RouteClaimPausedDenial(BaseModel):
     """The 403 body: the claiming runner is paused at the hub registry (issue #44).
 

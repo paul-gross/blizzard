@@ -96,6 +96,31 @@ def test_claim_route_409_with_a_status_field_is_a_terminal_denial_not_a_conflict
 
 
 @pytest.mark.unit
+def test_claim_route_409_with_a_prerequisite_chunk_id_field_is_a_dependency_denial_not_a_conflict() -> None:
+    """The third 409 shape (blizzard#458): a dependency denial carries
+    ``prerequisite_chunk_id`` where a terminal denial carries ``status`` and a race-loss
+    conflict carries ``held_by_runner_id`` — the adapter tells them apart on that field."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            409,
+            json={
+                "chunk_id": "ch_1",
+                "prerequisite_chunk_id": "ch_0",
+                "detail": "chunk depends on an unmet prerequisite",
+            },
+        )
+
+    outcome = _client(handler).claim_route(
+        RouteClaim(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
+    )
+    assert not outcome.won
+    assert outcome.conflict is None
+    assert outcome.denied_terminal is None
+    assert outcome.denied_dependency is not None and outcome.denied_dependency.prerequisite_chunk_id == "ch_0"
+
+
+@pytest.mark.unit
 def test_claim_route_403_is_a_paused_denial_not_a_conflict() -> None:
     """A distinct outcome from the 409 race loss (issue #44): the hub's registry has
     this runner paused and refused the claim outright."""
