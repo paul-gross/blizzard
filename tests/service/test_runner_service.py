@@ -186,6 +186,60 @@ def test_fill_absorbs_a_dependency_denial_then_claims_once_it_clears(tmp_path: P
         assert landed, f"chunk did not land once the dependency cleared (status {_status(hub, chunk_id)!r})"
 
 
+def test_fill_reaches_past_a_marked_head_by_default_against_a_real_mock_hub(tmp_path: Path) -> None:
+    """blizzard#459, real runner against the mock hub: with a marked head and an
+    unmarked entry behind it, the default (``queue_strict=False``) reaches past the
+    marked head and claims the unmarked one — the marked one stays ``ready``."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        blocked_id = _seed(hub)  # seeded first — the peek's marked head
+        open_id = _seed(hub)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+
+        assert (
+            hub.post(
+                "/_levers/dependency_unmet",
+                json={"chunk_id": blocked_id, "payload": {"prerequisite_chunk_id": "ch_prereq"}},
+            ).status_code
+            == 200
+        )
+        reached = poll_until(lambda: _run_and_check(config, fenced, hub, open_id, "running"), timeout=60.0)
+        assert reached, f"the unmarked entry was never claimed (status {_status(hub, open_id)!r})"
+        assert _status(hub, blocked_id) == "ready"  # never even attempted — no denial to absorb
+
+
+def test_fill_strict_holds_at_a_marked_head_against_a_real_mock_hub(tmp_path: Path) -> None:
+    """blizzard#459, real runner against the mock hub: the same marked-head peek, this
+    time under ``[queue] strict`` — FILL claims neither entry, holding at the head
+    rather than reaching past it."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        blocked_id = _seed(hub)  # seeded first — the peek's marked head
+        open_id = _seed(hub)
+        config = dataclasses.replace(
+            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), queue_strict=True
+        )
+
+        assert (
+            hub.post(
+                "/_levers/dependency_unmet",
+                json={"chunk_id": blocked_id, "payload": {"prerequisite_chunk_id": "ch_prereq"}},
+            ).status_code
+            == 200
+        )
+        _drive(config, fenced, ticks=2, pause=0.3)
+        assert _status(hub, blocked_id) == "ready"  # held at the marked head
+        assert _status(hub, open_id) == "ready"  # never reached — strict does not fall through
+
+
 def _pending_transcript_outbound(config: RunnerConfig) -> int:
     """The depth of the runner's transcript-lane buffer — D3's own, never the fact lane's."""
     engine = create_engine_from_url(config.db_url)

@@ -299,6 +299,55 @@ def test_transcripts_ship_rejects_a_non_boolean_typo_rather_than_coercing_it(tmp
 
 
 @pytest.mark.unit
+def test_queue_strict_defaults_false(tmp_path: Path) -> None:
+    # Off by default (blizzard#459) — a fresh scaffold reaches past a marked head.
+    assert RunnerConfig.scaffold(tmp_path).queue_strict is False
+
+
+@pytest.mark.unit
+def test_queue_strict_absent_when_queue_table_omits_the_key(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[queue]\n')
+    assert RunnerConfig.load(root).queue_strict is False
+
+
+@pytest.mark.unit
+def test_queue_strict_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    edited = RunnerConfig(root=root, db_url=RunnerConfig.default_db_url(root), queue_strict=True)
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.queue_strict is True
+
+
+@pytest.mark.unit
+def test_queue_strict_parses_from_a_hand_written_queue_table(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[queue]\nstrict = true\n'
+    )
+    assert RunnerConfig.load(root).queue_strict is True
+
+
+@pytest.mark.unit
+def test_queue_strict_rejects_a_non_boolean_typo_rather_than_coercing_it(tmp_path: Path) -> None:
+    """Mirrors ``transcripts.ship`` (review F10, blizzard#246): ``bool("false")`` is truthy —
+    a typo'd string on this selection switch must not silently turn strictness on."""
+    from blizzard.runner.config import ConfigError
+
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[queue]\nstrict = "false"\n'
+    )
+    with pytest.raises(ConfigError, match="strict"):
+        RunnerConfig.load(root)
+
+
+@pytest.mark.unit
 def test_chunk_cap_usd_defaults_absent(tmp_path: Path) -> None:
     # No `[cost]` table at all on a fresh scaffold — absent means no cap (issue #61a).
     assert RunnerConfig.scaffold(tmp_path).chunk_cap_usd is None

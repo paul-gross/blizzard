@@ -420,6 +420,93 @@ def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path):  # type: i
 
 
 @pytest.mark.unit
+def test_fill_reaches_past_a_marked_head_by_default(tmp_path):  # type: ignore[no-untyped-def]
+    """Reach-ahead (blizzard#459), the default: a marked head is skipped for the first
+    unmarked entry, at whatever depth in the peeked list."""
+    from blizzard.wire.chunk import BlockedView
+
+    store = _store(tmp_path)
+    hub = FakeHub()
+    env = _build_envelope("ch_2")
+    hub.queue = [
+        QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0, blocked=BlockedView(prerequisite_chunk_id="ch_0")),
+        QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=1),
+    ]
+    hub.claim_outcome = claimed_outcome("ch_2", env)
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
+
+    Fill(ctx).run()
+
+    assert len(hub.claims) == 1
+    assert hub.claims[0].chunk_id == "ch_2"
+    assert len(harness.spawns) == 1
+
+
+@pytest.mark.unit
+def test_fill_strict_holds_at_a_marked_head_and_idles(tmp_path):  # type: ignore[no-untyped-def]
+    """Strict (``[queue] strict``, blizzard#459) yields no entry at a marked head rather
+    than falling through to a later unmarked one — an idle tick, not a claim attempt."""
+    from blizzard.wire.chunk import BlockedView
+
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [
+        QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0, blocked=BlockedView(prerequisite_chunk_id="ch_0")),
+        QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=1),
+    ]
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, queue_strict=True),
+    )
+
+    Fill(ctx).run()
+
+    assert hub.claims == []  # never attempted — held at the marked head
+    assert store.list_active_leases() == []
+    assert harness.spawns == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("strict", [False, True])
+def test_fill_finds_no_entry_when_every_peeked_chunk_is_marked(tmp_path, strict):  # type: ignore[no-untyped-def]
+    """The whole-list scan's exhaustion boundary (blizzard#459): every entry marked yields
+    nothing under both the default reach-ahead and strict — pinned explicitly rather than
+    left to converge with the strict case by accident."""
+    from blizzard.wire.chunk import BlockedView
+
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [
+        QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0, blocked=BlockedView(prerequisite_chunk_id="ch_0")),
+        QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=1, blocked=BlockedView(prerequisite_chunk_id="ch_0")),
+    ]
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, queue_strict=strict),
+    )
+
+    Fill(ctx).run()
+
+    assert hub.claims == []
+    assert store.list_active_leases() == []
+    assert harness.spawns == []
+
+
+@pytest.mark.unit
 def test_fill_env_bound_skips(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = FakeHub()

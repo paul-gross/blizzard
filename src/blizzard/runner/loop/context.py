@@ -91,6 +91,10 @@ class LoopConfig:
     #: `blizzard.runner.transcripts.caps`'s own defaults, which own the values.
     transcript_record_max_bytes: int | None = None
     transcript_chunk_max_bytes: int | None = None
+    #: This runner's selection policy over the peeked ready queue (``[queue] strict``,
+    #: blizzard#459); off by default reaches past a marked head for the first unmarked
+    #: entry, ``True`` holds at a marked head and yields no entry instead.
+    queue_strict: bool = False
 
 
 @dataclass(frozen=True)

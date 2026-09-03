@@ -101,7 +101,23 @@ class ReadyQueue:
             peek = self.ctx.hub.peek_queue()
         except HubClientError:
             return None  # hub unreachable — try next tick
-        return peek.entries[0] if peek.entries else None
+        return self._select(peek.entries)
+
+    def _select(self, entries: list[QueuePeekEntry]) -> QueuePeekEntry | None:
+        """Pick this runner's entry out of the whole peeked list (blizzard#459).
+
+        Strict holds at a marked head and yields nothing rather than falling through — an
+        idle tick reads the same as an empty queue at this seam. Reach-ahead (the default)
+        scans the whole list for the first unmarked entry, at any depth."""
+        if not entries:
+            return None
+        if self.ctx.config.queue_strict:
+            head = entries[0]
+            return None if head.blocked is not None else head
+        for entry in entries:
+            if entry.blocked is None:
+                return entry
+        return None
 
     def _acquire(self, entry: QueuePeekEntry) -> list[AcquiredEnvironment] | None:
         held = self.ctx.stores.environments.held_environment_ids()

@@ -219,6 +219,25 @@ class ExternalUsage:
 
 
 @dataclass(frozen=True)
+class Queue:
+    """The ``[queue]`` table (blizzard#459) — this runner's selection policy over the peeked
+    ready queue, applied at :class:`~blizzard.runner.loop.claim.ReadyQueue`'s peek seam."""
+
+    table: Table
+
+    @classmethod
+    def of(cls, raw: object) -> Queue:
+        return cls(Table.of(raw))
+
+    @property
+    def strict(self) -> bool:
+        """Off by default: a marked head is reached past for the first unmarked entry.
+        ``True`` holds at a marked head instead, yielding no entry rather than falling
+        through — that runner's operator has chosen to idle over reaching ahead."""
+        return self.table.boolean("strict", False)
+
+
+@dataclass(frozen=True)
 class Transcripts:
     """The ``[transcripts]`` table (issue #246) — the dedicated outbound lane's own switch,
     distinct from the top-level ``transcripts_root`` (the harness source's read location)."""
@@ -330,6 +349,10 @@ class RunnerConfig:
     #: The transcript outbound lane's own switch (``[transcripts] ship``, issue #246);
     #: off by default (D5) — the pump enqueues no delta while this is ``False``.
     transcripts_ship: bool = False
+    #: This runner's selection policy over the peeked ready queue (``[queue] strict``,
+    #: blizzard#459); off by default reaches past a marked head for the first unmarked
+    #: entry, ``True`` holds at a marked head and yields no entry instead.
+    queue_strict: bool = False
     #: The per-chunk spend cap (issue #61a); ``None`` means no cap. A chunk reaching it
     #: parks ``needs_human`` at its next step boundary.
     chunk_cap_usd: float | None = None
@@ -606,6 +629,11 @@ class RunnerConfig:
             "# one, the pump merely shrinks them.\n"
             + _cap_line("record_max_bytes", self.transcript_record_max_bytes, TRANSCRIPT_RECORD_MAX_BYTES)
             + _cap_line("chunk_max_bytes", self.transcript_chunk_max_bytes, CHUNK_TRANSCRIPT_MAX_BYTES)
+            + "\n# This runner's selection over the peeked ready queue (blizzard#459); off by\n"
+            "# default reaches past a marked head for the first unmarked entry. `true` holds\n"
+            "# at a marked head instead and idles rather than falling through.\n"
+            "[queue]\n"
+            f"strict = {'true' if self.queue_strict else 'false'}\n"
             + "\n# Spend controls (epic #57); absent = no cap. `chunk_cap_usd` parks a chunk\n"
             "# needs_human at its next step boundary once its derived spend reaches this cap.\n"
             "# `runner_ceiling_usd` engages this runner's own local pause brake (the same one\n"
@@ -686,6 +714,7 @@ class RunnerConfig:
         context = Context.of(raw.get("context"))
         auth = Auth.of(raw.get("auth"))
         transcripts = Transcripts.of(raw.get("transcripts"))
+        queue = Queue.of(raw.get("queue"))
         return cls(
             root=root,
             db_url=str(raw["db_url"]),
@@ -717,6 +746,7 @@ class RunnerConfig:
             transcripts_ship=transcripts.ship,
             transcript_record_max_bytes=transcripts.record_max_bytes,
             transcript_chunk_max_bytes=transcripts.chunk_max_bytes,
+            queue_strict=queue.strict,
             chunk_cap_usd=spend.chunk_cap_usd,
             runner_ceiling_usd=spend.ceiling_usd,
             runner_ceiling_window_hours=spend.window_hours,

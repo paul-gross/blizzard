@@ -46,7 +46,18 @@ itself, so declaring onto an already-`done` prerequisite is an ordinary accepted
 prerequisite absent from the fleet's statuses — a standing edge onto a since-deleted id — still blocks, the
 conservative read.
 
-## What declaring an edge does not yet do
+## What a standing edge does to claiming
 
-A standing, unsatisfied dependency still changes nothing about how its dependent is claimed or shown on the board: it
-denies no claim, and reaches no board surface.
+A standing, unsatisfied dependency denies a claim on its dependent outright: `POST /api/fleet/routes` answers `409`
+with the marking's own body shape — `chunk_id` and `prerequisite_chunk_id`, distinct from the conflict and terminal
+`409`s a claim can otherwise answer with — re-derived fresh under the claim lock rather than trusted from an earlier
+read, so a peek-then-claim race can never slip a blocked chunk through.
+
+A runner's own FILL step does not have to run into that denial to make progress: `GET /api/fleet/queue/peek` already
+carries the marking on every entry it returns, and a runner reaches past a marked head for the first unmarked entry
+in the peeked list by default, rather than spending a claim attempt it already knows will be refused. An operator who
+sets `[queue] strict = true` in that runner's config opts out of reaching ahead — a marked head yields no entry and
+FILL idles for the tick rather than trying a later one. Either way the claim-time denial above still stands as the
+structural guarantee: reach-ahead is an efficiency over the peek, never a replacement for it.
+
+What a standing edge does not yet do is reach the board: no board surface shows it.
