@@ -191,6 +191,7 @@ export class ChunkDetailPage {
    * (`bzh:frontend-formatters`), since this route's `detail` is the same
    * shared `hubApi.ChunkDetail` shape field for field. */
   protected readonly tone = computed(() => STATUS_TONE[this.detail()?.status ?? 'ready']);
+  protected readonly blockedOn = computed(() => this.detail()?.blocked?.prerequisite_chunk_id ?? null);
 
   /** The open chunk's related work items + fetch state for the Issue pane —
    * the same {@link deriveWorkItemsState} fold `fleet`'s own `ChunkDetail`

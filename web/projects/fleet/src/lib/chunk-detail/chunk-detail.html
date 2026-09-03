@@ -19,6 +19,7 @@
         [canResolve]="canResolve()"
         [graphLinkBase]="graphLinkBase()"
         (dismiss)="dismiss.emit()"
+        (selectChunk)="selectChunk.emit($event)"
         (answerQuestion)="onAnswer($event)"
         (resolveDecision)="onResolve($event)"
         (detach)="onDetach($event)"

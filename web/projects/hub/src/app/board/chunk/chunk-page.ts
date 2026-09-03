@@ -204,6 +204,7 @@ export class ChunkPage {
   protected readonly workItems = computed<WorkItemsState>(() => deriveWorkItemsState(this.workItemsQuery));
 
   protected readonly tone = computed(() => STATUS_TONE[this.detail()?.status ?? 'ready']);
+  protected readonly blockedOn = computed(() => this.detail()?.blocked?.prerequisite_chunk_id ?? null);
 
   /** Clear both report channels — every action on this page starts here. Kept as one
    * method for the same reason the desktop container does: a stale outcome left up while

@@ -64,6 +64,11 @@ export class ChunkDetail {
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
+  /** Emitted with a chunk id when the blocked marking's dock-select button is clicked
+   * (issue #461) — forwarded up unchanged from {@link ChunkDetailPanel}, so a host
+   * composing this container selects the prerequisite into the same dock. */
+  readonly selectChunk = output<string>();
+
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
   private readonly workItemsQuery = injectHubChunkWorkItemsQuery(() => this.chunkId());
   private readonly answerMutation = injectAnswerQuestionMutation();

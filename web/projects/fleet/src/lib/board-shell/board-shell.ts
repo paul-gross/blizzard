@@ -122,6 +122,7 @@ export class BoardShell {
         costUsd: chunk.cost?.cost_usd ?? 0,
         costPartial: chunk.cost?.cost_partial ?? false,
         completedAt: chunk.completed_at ?? null,
+        blockedOn: chunk.blocked?.prerequisite_chunk_id ?? null,
       });
     }
     // READY is ordered rather than listed: it is a queue, so its rank comes

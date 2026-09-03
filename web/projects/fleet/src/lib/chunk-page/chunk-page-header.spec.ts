@@ -1,5 +1,6 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { ChunkPageHeader } from './chunk-page-header';
 
@@ -8,21 +9,23 @@ const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 @Component({
   selector: 'fleet-chunk-page-header-test-host',
   imports: [ChunkPageHeader],
-  template: `<fleet-chunk-page-header [chunkId]="chunkId" [status]="status" [tone]="tone" />`,
+  template: `<fleet-chunk-page-header [chunkId]="chunkId" [status]="status" [tone]="tone" [blockedOn]="blockedOn" />`,
 })
 class TestHost {
   chunkId = CHUNK_ID;
   status = 'running';
   tone: 'running' | 'needs' = 'running';
+  blockedOn: string | null = null;
 }
 
 describe('ChunkPageHeader', () => {
-  async function render(): Promise<HTMLElement> {
+  async function render(blockedOn: string | null = null): Promise<HTMLElement> {
     await TestBed.configureTestingModule({
       imports: [TestHost],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
     const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.blockedOn = blockedOn;
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
   }
@@ -52,5 +55,19 @@ describe('ChunkPageHeader', () => {
     expect(header).not.toBeNull();
     expect(header?.querySelector('[data-testid="mobile-chunk-ref"]')).not.toBeNull();
     expect(header?.querySelector('[data-testid="mobile-chunk-status"]')).not.toBeNull();
+  });
+
+  it('renders no blocked marking for a chunk carrying none', async () => {
+    const el = await render(null);
+
+    expect(el.querySelector('[data-testid="chunk-blocked"]')).toBeNull();
+  });
+
+  it('renders the blocked marking as a link to the prerequisite', async () => {
+    const el = await render('ch_01prereq00000000000000000');
+
+    const marking = el.querySelector('a[data-testid="chunk-blocked"]');
+    expect(marking).not.toBeNull();
+    expect(marking?.getAttribute('href')).toBe('/board/chunk/ch_01prereq00000000000000000');
   });
 });

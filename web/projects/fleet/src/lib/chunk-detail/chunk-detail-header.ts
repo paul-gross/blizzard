@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, ChunkStatus, PauseView, WorkRefView, RouteView } from '../api/hub';
+import { ChunkBlocked } from '../chunk-blocked/chunk-blocked';
 import { KitButton } from '../kit/kit-button';
 
 /** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
@@ -47,7 +48,7 @@ const NOT_COMPLETABLE = new Set<ChunkStatus>(['done']);
 @Component({
   selector: 'fleet-chunk-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, RouterLink],
+  imports: [ChunkBlocked, KitButton, RouterLink],
   templateUrl: './chunk-detail-header.html',
   styleUrl: './chunk-detail-header.css',
 })
@@ -82,6 +83,11 @@ export class ChunkDetailHeader {
   /** Emitted with the chunk id when the operator confirms Complete (issue #294). */
   readonly complete = output<string>();
 
+  /** Emitted with the prerequisite's chunk id when the blocked marking's dock-select
+   * button is clicked (issue #461) — the same one-hop move a board card click already
+   * makes, not a navigation. */
+  readonly selectChunk = output<string>();
+
   /** The chunk's work refs, for the header — each linked out to its source's web
    * address when the configured binding rendered one (a null `web_url` degrades to
    * plain text, no broken link). */
@@ -110,6 +116,10 @@ export class ChunkDetailHeader {
    * click that would write nothing. Every other status is completable, independent of
    * `pausable`/`route`: Complete does not hang off a live route the way Detach does. */
   protected readonly completable = computed<boolean>(() => !NOT_COMPLETABLE.has(this.detail().status));
+
+  /** The unmet prerequisite's chunk id, from `ChunkDetail.blocked` (issue #461) — null
+   * when the chunk carries no marking. */
+  protected readonly blockedOn = computed<string | null>(() => this.detail().blocked?.prerequisite_chunk_id ?? null);
 
   /** Confirm, then emit `detach` for the container's mutation to fire. */
   protected onDetach(): void {

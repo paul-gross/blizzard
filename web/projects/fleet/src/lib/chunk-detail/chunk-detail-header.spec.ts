@@ -437,4 +437,43 @@ describe('ChunkDetailHeader', () => {
     expect(message).toContain('no un-complete verb');
     confirmSpy.mockRestore();
   });
+
+  it('renders no blocked marking for a chunk carrying none', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="chunk-blocked"]')).toBeNull();
+  });
+
+  it('renders the blocked marking naming the prerequisite beside the status', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', {
+      ...ISSUE_DETAIL,
+      blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000' },
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const marking = el.querySelector('[data-testid="chunk-blocked"]');
+    expect(marking).not.toBeNull();
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('running');
+  });
+
+  it('emits selectChunk with the prerequisite id when the marking is clicked', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', {
+      ...ISSUE_DETAIL,
+      blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000' },
+    });
+    let emitted: string | undefined;
+    fixture.componentInstance.selectChunk.subscribe((chunkId) => (emitted = chunkId));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="chunk-blocked"]')?.click();
+
+    expect(emitted).toBe('ch_01prereq00000000000000000');
+  });
 });

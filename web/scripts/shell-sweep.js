@@ -165,6 +165,10 @@
  *     `flex-wrap`), and `FleetScopePanel`'s description editor holds the row's
  *     remaining width beside its actions rather than pushing them out of the
  *     panel (`.sp-edit`/`.edit-input`'s `flex: 1; min-width: 0`).
+ *   - projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts —
+ *     the blocked marking's adjacency to a card's status: it renders directly below the
+ *     status row without moving the status's own position or overflowing the card, at
+ *     800px and at 390/320px.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -196,6 +200,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-finding-triage-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-page-grids.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/garden-panels.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {

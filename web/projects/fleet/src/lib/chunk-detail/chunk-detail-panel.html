@@ -7,6 +7,7 @@
     (pauseChunk)="pauseChunk.emit($event)"
     (resumeChunk)="resumeChunk.emit($event)"
     (complete)="complete.emit($event)"
+    (selectChunk)="selectChunk.emit($event)"
   />
 
   @if (actionError(); as err) {

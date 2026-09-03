@@ -672,4 +672,24 @@ describe('BoardShell', () => {
       expect(laneIds(fixture.nativeElement as HTMLElement, 'done')).toEqual([newest.chunk_id, oldest.chunk_id]);
     });
   });
+
+  describe('the blocked marking (issue #461)', () => {
+    it("carries a chunk's blocked prerequisite onto its card", async () => {
+      const blocked: ChunkSummary = {
+        ...READY('blocked00000000000000'),
+        blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000' },
+      };
+      const fixture = await render([blocked]);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="chunk-blocked"]')).not.toBeNull();
+    });
+
+    it('renders no marking for a chunk carrying none', async () => {
+      const fixture = await render([READY('plain0000000000000000')]);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="chunk-blocked"]')).toBeNull();
+    });
+  });
 });

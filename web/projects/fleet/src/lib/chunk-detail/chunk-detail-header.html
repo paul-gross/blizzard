@@ -29,6 +29,9 @@
         }
       }
       <span class="st" data-testid="detail-status">{{ detail().status }}</span>
+      @if (blockedOn(); as prerequisiteId) {
+        <fleet-chunk-blocked [prerequisiteChunkId]="prerequisiteId" (selectChunk)="selectChunk.emit($event)" />
+      }
     </span>
   </div>
   <div class="d-meta">

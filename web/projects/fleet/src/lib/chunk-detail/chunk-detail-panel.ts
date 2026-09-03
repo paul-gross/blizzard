@@ -95,6 +95,10 @@ export class ChunkDetailPanel {
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
+  /** Emitted with a chunk id when the blocked marking's dock-select button is clicked
+   * (issue #461) — forwarded up unchanged from {@link ChunkDetailHeader}. */
+  readonly selectChunk = output<string>();
+
   /** Emitted when the operator answers an open question (MVP criterion 7). */
   readonly answerQuestion = output<AnswerQuestionEvent>();
 
