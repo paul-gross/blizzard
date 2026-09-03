@@ -69,4 +69,15 @@ sets `[queue] strict = true` in that runner's config opts out of reaching ahead 
 FILL idles for the tick rather than trying a later one. Either way the claim-time denial above still stands as the
 structural guarantee: reach-ahead is an efficiency over the peek, never a replacement for it.
 
-What a standing edge does not yet do is reach the board: no board surface shows it.
+## On the board
+
+The blocked marking renders beside a chunk's unchanged status everywhere the board lists one: the desktop board card,
+the chunk detail dock's header, and the routed chunk page header the hub's mobile board and the runner app share.
+Clicking it selects the named prerequisite into the dock on the board and in the dock header; from the routed page,
+which has no dock to select into, it links there instead. `blizzard-context:/domain/work/statuses.md` owns what the
+marking means and which chunks can carry one.
+
+The dock header carries the declare and release controls beside Complete, gated the same way (`CHUNK_CONTROL`). One
+free-text field serves both — there is no read that lists a chunk's standing edges for a picker to offer — prefilled
+with the marked prerequisite when one stands. Every refusal above renders in the dock's action notice, naming the
+chunk id or ids the way the API itself does, rather than a generic failure.
