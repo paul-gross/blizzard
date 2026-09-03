@@ -142,10 +142,20 @@ def derive_blocked_markings(
     :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.list_standing_edges`'s
     own ``(declared_at, dependency_id)`` order: the first unmet edge per dependent wins, one hop,
     with no chain walk (D4). A prerequisite absent from ``statuses`` still blocks (D3) — deletion
-    does not yet refuse a standing edge onto a vanished prerequisite."""
+    does not yet refuse a standing edge onto a vanished prerequisite.
+
+    Only a dependent read at :data:`PRE_CLAIM_STATUSES` derives a marking (review round 1 F1):
+    the marking answers why a chunk cannot yet be claimed, and that question stops applying once
+    a dependent is claimed, running, delivering, human-gated, paused, or terminal — even though
+    its edge, declared while it was still pre-claim, persists unreleased through all of that. A
+    dependent absent from ``statuses`` is treated the way its default ``not_ready`` would read —
+    eligible, not excluded."""
     markings: dict[str, str] = {}
     for edge in standing_edges:
         if edge.dependent_chunk_id in markings:
+            continue
+        dependent_status = statuses.get(edge.dependent_chunk_id)
+        if dependent_status is not None and dependent_status not in PRE_CLAIM_STATUSES:
             continue
         if statuses.get(edge.prerequisite_chunk_id) is ChunkStatus.DONE:
             continue

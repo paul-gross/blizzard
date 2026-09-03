@@ -927,7 +927,7 @@
         "type": "object"
       },
       "BlockedView": {
-        "description": "A chunk's blocked marking (issue #457) \u2014 present iff a standing dependency edge names a\nprerequisite that has not reached ``done``. Carried beside ``status``, never a status of its own;\nnames the immediate prerequisite only, with no transitive walk to whatever it may itself wait on.",
+        "description": "A chunk's blocked marking (issue #457) \u2014 present iff a pre-claim dependent (``not_ready`` or\n``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.\nCarried beside ``status``, never a status of its own; names the immediate prerequisite only, with\nno transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at\nonce, names the earliest-declared one.",
         "properties": {
           "prerequisite_chunk_id": {
             "title": "Prerequisite Chunk Id",

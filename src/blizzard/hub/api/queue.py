@@ -17,12 +17,13 @@ from blizzard.auth_core import FLEET_VIEW, QUEUE_REORDER
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.chunk_views import blocked_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.dependencies import derive_blocked_markings
 from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotGroupable, QueueList
 from blizzard.hub.domain.work import Chunk
-from blizzard.wire.chunk import BlockedView, WorkRefModel
+from blizzard.wire.chunk import WorkRefModel
 from blizzard.wire.queue import (
     BacklogPeekEntry,
     BacklogPeekResponse,
@@ -54,17 +55,15 @@ def _other_list(list_: QueueList) -> QueueList:
 
 
 def _blocked_markings(services: HubServices) -> dict[str, str]:
-    """Every currently-blocked dependent's marking, from the fleet's bulk facts and one
-    bulk standing-edges read, joined here rather than inside a store
-    (``bzh:dependency-inversion``, issue #457, D2) — the ready queue and the backlog's own
-    bulk fact pass, extended."""
+    """Every currently-blocked dependent's marking, from one bulk facts read and one bulk
+    standing-edges read, joined here rather than inside a store (``bzh:dependency-inversion``).
+    A second bulk facts pass beside the one the ordering read already drives internally
+    (``ChunkRecordStore._listed_with_status``) — the reviewed plan's own D2 directs
+    ``ReadyQueue.view``/``Backlog.view`` to "gain the two bulk reads they need to populate
+    it", both still flat in fleet size regardless."""
     facts = services.chunks.facts.load_all_facts()
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
     return derive_blocked_markings(services.chunks.dependencies.list_standing_edges(), statuses)
-
-
-def _blocked_view(prerequisite_chunk_id: str | None) -> BlockedView | None:
-    return BlockedView(prerequisite_chunk_id=prerequisite_chunk_id) if prerequisite_chunk_id is not None else None
 
 
 def _refuse(chunk_id: str, *, expected: QueueList, services: HubServices) -> HTTPException:
@@ -116,18 +115,19 @@ def _reposition(list_: QueueList, chunk_id: str, after_chunk_id: str | None, ser
 
 @dataclass(frozen=True)
 class ReadyQueue:
-    """The hub-ordered ready queue as every peek renders it — position is the order itself."""
+    """The hub-ordered ready queue as every peek renders it — position is the order itself.
+    ``markings`` is resolved once in :meth:`of`, alongside ``chunks``, so :attr:`view` stays
+    a pure projection over already-fetched state rather than an I/O-performing property."""
 
-    services: HubServices
     chunks: list[Chunk]
+    markings: dict[str, str]
 
     @classmethod
     def of(cls, services: HubServices) -> ReadyQueue:
-        return cls(services, services.queue.ordered_ready())
+        return cls(services.queue.ordered_ready(), _blocked_markings(services))
 
     @property
     def view(self) -> QueuePeekResponse:
-        markings = _blocked_markings(self.services)
         return QueuePeekResponse(
             entries=[
                 QueuePeekEntry(
@@ -135,7 +135,7 @@ class ReadyQueue:
                     graph_id=chunk.graph_id,
                     position=position,
                     work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
-                    blocked=_blocked_view(markings.get(chunk.chunk_id)),
+                    blocked=blocked_view(self.markings.get(chunk.chunk_id)),
                 )
                 for position, chunk in enumerate(self.chunks)
             ]
@@ -177,18 +177,19 @@ def reposition_queue(
 @dataclass(frozen=True)
 class Backlog:
     """The hub-ordered ``not_ready`` list as every peek renders it — position is the
-    order itself."""
+    order itself. ``markings`` is resolved once in :meth:`of`, alongside ``chunks``, so
+    :attr:`view` stays a pure projection over already-fetched state rather than an
+    I/O-performing property."""
 
-    services: HubServices
     chunks: list[Chunk]
+    markings: dict[str, str]
 
     @classmethod
     def of(cls, services: HubServices) -> Backlog:
-        return cls(services, services.queue.ordered_not_ready())
+        return cls(services.queue.ordered_not_ready(), _blocked_markings(services))
 
     @property
     def view(self) -> BacklogPeekResponse:
-        markings = _blocked_markings(self.services)
         return BacklogPeekResponse(
             entries=[
                 BacklogPeekEntry(
@@ -196,7 +197,7 @@ class Backlog:
                     graph_id=chunk.graph_id,
                     position=position,
                     work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
-                    blocked=_blocked_view(markings.get(chunk.chunk_id)),
+                    blocked=blocked_view(self.markings.get(chunk.chunk_id)),
                 )
                 for position, chunk in enumerate(self.chunks)
             ]

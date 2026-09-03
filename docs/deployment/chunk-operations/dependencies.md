@@ -39,13 +39,12 @@ itself grouped away or deleted — is 404.
 
 A standing, unsatisfied dependency derives a **blocked marking** — a nullable field carried beside `status` on
 `GET /api/chunks`, `GET /api/chunks/{chunk_id}`, `GET /api/queue`, and `GET /api/backlog`, naming the earliest-declared
-prerequisite that has not reached `done`. It names that one prerequisite and stops there: where the chunk it waits on is
-itself blocked, the chain is not walked, and an operator who wants the root follows the naming one hop at a time. The
-marking changes nothing about how a chunk is queued, claimed, grouped, deleted, or edited — it keeps the status it
-derives, the rank it holds, and the list it lives in. Satisfaction is not stored: an edge is met when its prerequisite
-reads `done`, read fresh at the point something consults it rather than cached on the edge itself, so declaring onto an
-already-`done` prerequisite is an ordinary accepted edge that names no marking. A prerequisite absent from the fleet's
-statuses — a standing edge onto a since-deleted id — still blocks, the conservative read.
+prerequisite that has not reached `done`. What the marking means, its one-hop scope, and the `not_ready`/`ready` window
+it is confined to are `blizzard-context:/domain/work/statuses.md`'s to say. Satisfaction is not stored: an edge is met
+when its prerequisite reads `done`, read fresh at the point something consults it rather than cached on the edge
+itself, so declaring onto an already-`done` prerequisite is an ordinary accepted edge that names no marking. A
+prerequisite absent from the fleet's statuses — a standing edge onto a since-deleted id — still blocks, the
+conservative read.
 
 ## What declaring an edge does not yet do
 

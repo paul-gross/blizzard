@@ -50,6 +50,14 @@ class _RouteNotInjected(Enum):
 _ROUTE_NOT_INJECTED: Final = _RouteNotInjected.TOKEN
 
 
+def blocked_view(prerequisite_chunk_id: str | None) -> BlockedView | None:
+    """A derived marking's wire wrapping (issue #457) — the one home every caller of
+    :func:`~blizzard.hub.domain.dependencies.derive_blocked_markings` reaches through,
+    listing routes and ``ChunkView`` alike (review round 1 F6), rather than each
+    re-declaring the same ``str | None -> BlockedView | None`` wrap."""
+    return BlockedView(prerequisite_chunk_id=prerequisite_chunk_id) if prerequisite_chunk_id is not None else None
+
+
 @dataclass(frozen=True)
 class ChunkView:
     """One chunk read — the row, the facts every derived value comes from
@@ -70,12 +78,22 @@ class ChunkView:
 
     @classmethod
     def of(
-        cls, services: HubServices, chunk: Chunk, names: GraphNames | None = None, blocked: BlockedView | None = None
+        cls,
+        services: HubServices,
+        chunk: Chunk,
+        names: GraphNames | None = None,
+        blocked: BlockedView | None = None,
+        facts: ChunkFacts | None = None,
     ) -> ChunkView:
+        """``facts`` lets a caller that already loaded the chunk's own facts for another
+        reason (the detail route's blocked-marking gate, issue #457 F5) hand it in rather
+        than this reloading it a second time; omitted, this loads it as before."""
         return cls(
             services=services,
             chunk=chunk,
-            facts=services.chunks.facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True),
+            facts=facts
+            if facts is not None
+            else (services.chunks.facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)),
             names=names or GraphNames(services.graphs.get),
             blocked=blocked,
         )

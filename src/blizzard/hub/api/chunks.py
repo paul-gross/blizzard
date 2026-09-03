@@ -20,7 +20,7 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
-from blizzard.hub.api.chunk_views import ChunkView
+from blizzard.hub.api.chunk_views import ChunkView, blocked_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
@@ -158,27 +158,31 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
             facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
             routes.get(chunk.chunk_id),
             names,
-            blocked=_blocked_view(markings.get(chunk.chunk_id)),
+            blocked=blocked_view(markings.get(chunk.chunk_id)),
         ).summary()
         for chunk in services.chunks.record.list_all()
     ]
 
 
-def _blocked_view(prerequisite_chunk_id: str | None) -> BlockedView | None:
-    return BlockedView(prerequisite_chunk_id=prerequisite_chunk_id) if prerequisite_chunk_id is not None else None
-
-
-def _blocked_view_for_chunk(services: HubServices, chunk_id: str) -> BlockedView | None:
+def _blocked_view_for_chunk(
+    services: HubServices, chunk_id: str, *, dependent_status: ChunkStatus
+) -> BlockedView | None:
     """``GET /api/chunks/{chunk_id}``'s bounded blocked-marking read (issue #457, D7): unlike
-    the fleet-wide listing, this reads only the facts of the prerequisites this one chunk's own
-    edges name, so the route's query count does not scale with the fleet."""
+    the fleet-wide listing's `load_all_facts`, this reads only the facts of the prerequisites
+    this chunk's own edges name, so this route's facts reads are bounded by its own edge count
+    rather than scaling with the fleet — the standing edges read is still one fleet-wide bulk
+    query, exactly as it is for a declare (issue #456). ``dependent_status`` is the caller's own
+    already-derived status for `chunk_id` (the pre-claim gate, review round 1 F1), so this need
+    not reload facts this route's caller has already loaded (F5)."""
     edges = [e for e in services.chunks.dependencies.list_standing_edges() if e.dependent_chunk_id == chunk_id]
-    statuses: dict[str, ChunkStatus] = {}
+    if not edges:
+        return None
+    statuses: dict[str, ChunkStatus] = {chunk_id: dependent_status}
     for edge in edges:
         prerequisite_facts = services.chunks.facts.load_facts(edge.prerequisite_chunk_id)
         if prerequisite_facts is not None:
             statuses[edge.prerequisite_chunk_id] = prerequisite_facts.status()
-    return _blocked_view(derive_blocked_markings(edges, statuses).get(chunk_id))
+    return blocked_view(derive_blocked_markings(edges, statuses).get(chunk_id))
 
 
 @dataclass(frozen=True)
@@ -207,7 +211,9 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    return ChunkView.of(services, chunk, blocked=_blocked_view_for_chunk(services, chunk_id)).detail()
+    facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
+    blocked = _blocked_view_for_chunk(services, chunk_id, dependent_status=facts.status())
+    return ChunkView.of(services, chunk, blocked=blocked, facts=facts).detail()
 
 
 @router.post(

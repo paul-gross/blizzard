@@ -622,9 +622,11 @@ export type BacklogReplaceRequest = {
 /**
  * BlockedView
  *
- * A chunk's blocked marking (issue #457) — present iff a standing dependency edge names a
- * prerequisite that has not reached ``done``. Carried beside ``status``, never a status of its own;
- * names the immediate prerequisite only, with no transitive walk to whatever it may itself wait on.
+ * A chunk's blocked marking (issue #457) — present iff a pre-claim dependent (``not_ready`` or
+ * ``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.
+ * Carried beside ``status``, never a status of its own; names the immediate prerequisite only, with
+ * no transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at
+ * once, names the earliest-declared one.
  */
 export type BlockedView = {
     /**

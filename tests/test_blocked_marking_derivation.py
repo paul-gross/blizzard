@@ -89,3 +89,54 @@ def test_a_blocked_prerequisite_is_named_without_walking_its_own_chain() -> None
     statuses = {"chk_b": ChunkStatus.NOT_READY, "chk_c": ChunkStatus.NOT_READY}
 
     assert derive_blocked_markings(edges, statuses) == {"chk_a": "chk_b", "chk_b": "chk_c"}
+
+
+@pytest.mark.parametrize("dependent_status", [ChunkStatus.READY, ChunkStatus.NOT_READY])
+def test_a_pre_claim_dependent_derives_a_marking(dependent_status: ChunkStatus) -> None:
+    edges = [_edge("dep_1", "chk_a", "chk_b")]
+    statuses = {"chk_a": dependent_status, "chk_b": ChunkStatus.NOT_READY}
+
+    assert derive_blocked_markings(edges, statuses) == {"chk_a": "chk_b"}
+
+
+@pytest.mark.parametrize(
+    "dependent_status",
+    [
+        ChunkStatus.RUNNING,
+        ChunkStatus.DELIVERING,
+        ChunkStatus.WAITING_ON_HUMAN,
+        ChunkStatus.NEEDS_HUMAN,
+        ChunkStatus.PAUSED,
+        ChunkStatus.STOPPED,
+        ChunkStatus.DONE,
+    ],
+)
+def test_a_dependent_past_the_pre_claim_window_derives_no_marking(dependent_status: ChunkStatus) -> None:
+    """Review round 1 F1: the marking answers why a chunk cannot yet be claimed. Once a
+    dependent is claimed, running, human-gated, paused, or terminal, that question no
+    longer applies even though its edge — declared while it was still pre-claim — persists
+    unreleased."""
+    edges = [_edge("dep_1", "chk_a", "chk_b")]
+    statuses = {"chk_a": dependent_status, "chk_b": ChunkStatus.NOT_READY}
+
+    assert derive_blocked_markings(edges, statuses) == {}
+
+
+def test_a_dependent_absent_from_statuses_still_derives_a_marking() -> None:
+    """A dependent the status map carries nothing for reads the way its default
+    ``not_ready`` would — eligible, not excluded — the same conservative-by-default shape
+    D3 already gives the prerequisite side."""
+    edges = [_edge("dep_1", "chk_a", "chk_b")]
+
+    assert derive_blocked_markings(edges, {"chk_b": ChunkStatus.NOT_READY}) == {"chk_a": "chk_b"}
+
+
+def test_a_stopped_prerequisite_still_blocks() -> None:
+    """Only ``done`` clears an edge (D6/the product plan's "done means done") — a stopped
+    prerequisite, itself terminal, still leaves its dependent blocked. Pins the derivation's
+    exact predicate against a plausible future widening to ``TERMINAL_STATUSES``, which
+    would wrongly also treat ``stopped`` as satisfying."""
+    edges = [_edge("dep_1", "chk_a", "chk_b")]
+    statuses = {"chk_a": ChunkStatus.READY, "chk_b": ChunkStatus.STOPPED}
+
+    assert derive_blocked_markings(edges, statuses) == {"chk_a": "chk_b"}
