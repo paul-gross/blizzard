@@ -554,6 +554,7 @@ export type ArtifactView = {
  * One ``not_ready`` chunk, in backlog order.
  */
 export type BacklogPeekEntry = {
+    blocked?: BlockedView | null;
     /**
      * Chunk Id
      */
@@ -616,6 +617,20 @@ export type BacklogReplaceRequest = {
      * Chunk Ids
      */
     chunk_ids: Array<string>;
+};
+
+/**
+ * BlockedView
+ *
+ * A chunk's blocked marking (issue #457) — present iff a standing dependency edge names a
+ * prerequisite that has not reached ``done``. Carried beside ``status``, never a status of its own;
+ * names the immediate prerequisite only, with no transitive walk to whatever it may itself wait on.
+ */
+export type BlockedView = {
+    /**
+     * Prerequisite Chunk Id
+     */
+    prerequisite_chunk_id: string;
 };
 
 /**
@@ -783,6 +798,7 @@ export type ChunkDetail = {
      * Awaiting External Merge
      */
     awaiting_external_merge?: boolean;
+    blocked?: BlockedView | null;
     /**
      * Bounces
      */
@@ -1061,6 +1077,7 @@ export type ChunkStopRequest = {
  * unrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.
  */
 export type ChunkSummary = {
+    blocked?: BlockedView | null;
     /**
      * Chunk Id
      */
@@ -3113,6 +3130,7 @@ export type QuestionView = {
  * One ready chunk, in queue order.
  */
 export type QueuePeekEntry = {
+    blocked?: BlockedView | null;
     /**
      * Chunk Id
      */

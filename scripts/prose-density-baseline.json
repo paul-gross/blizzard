@@ -898,14 +898,14 @@
    "total": 87
   },
   "blizzard/hub/api/chunk_views.py": {
-   "comments": 3,
+   "comments": 6,
    "docstrings": 49,
-   "total": 386
+   "total": 402
   },
   "blizzard/hub/api/chunks.py": {
-   "comments": 24,
-   "docstrings": 73,
-   "total": 664
+   "comments": 26,
+   "docstrings": 76,
+   "total": 693
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -984,8 +984,8 @@
   },
   "blizzard/hub/api/queue.py": {
    "comments": 2,
-   "docstrings": 46,
-   "total": 250
+   "docstrings": 50,
+   "total": 271
   },
   "blizzard/hub/api/readiness.py": {
    "comments": 0,
@@ -1504,8 +1504,8 @@
   },
   "blizzard/hub/domain/dependencies.py": {
    "comments": 5,
-   "docstrings": 34,
-   "total": 155
+   "docstrings": 41,
+   "total": 176
   },
   "blizzard/hub/domain/detach.py": {
    "comments": 0,
@@ -3708,9 +3708,9 @@
    "total": 31
   },
   "blizzard/wire/chunk.py": {
-   "comments": 31,
-   "docstrings": 117,
-   "total": 543
+   "comments": 35,
+   "docstrings": 120,
+   "total": 557
   },
   "blizzard/wire/completion.py": {
    "comments": 15,
@@ -3793,9 +3793,9 @@
    "total": 69
   },
   "blizzard/wire/queue.py": {
-   "comments": 0,
+   "comments": 2,
    "docstrings": 31,
-   "total": 97
+   "total": 101
   },
   "blizzard/wire/requeue.py": {
    "comments": 0,
@@ -4333,6 +4333,16 @@
    "comments": 18,
    "docstrings": 5,
    "total": 111
+  },
+  "test_blocked_marking_api.py": {
+   "comments": 6,
+   "docstrings": 8,
+   "total": 178
+  },
+  "test_blocked_marking_derivation.py": {
+   "comments": 0,
+   "docstrings": 13,
+   "total": 91
   },
   "test_check_version_tag.py": {
    "comments": 0,
@@ -5420,9 +5430,9 @@
    "total": 371
   },
   "test_queue_bulk_reads.py": {
-   "comments": 7,
-   "docstrings": 7,
-   "total": 101
+   "comments": 9,
+   "docstrings": 8,
+   "total": 104
   },
   "test_queue_service.py": {
    "comments": 23,

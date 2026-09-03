@@ -8,6 +8,7 @@ window. Both share ``ClaimService``/``EditService``/``RestartService``'s ``threa
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterable, Mapping
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -130,6 +131,26 @@ class DependencyService:
             if released is None:
                 raise NoStandingDependencyToRelease(edge.dependent_chunk_id, edge.prerequisite_chunk_id)
             return released
+
+
+def derive_blocked_markings(
+    standing_edges: Iterable[DependencyEdge], statuses: Mapping[str, ChunkStatus]
+) -> dict[str, str]:
+    """The blocked marking per dependent chunk id — never folded into :class:`ChunkFacts`
+    or its :meth:`~blizzard.hub.domain.work.ChunkFacts.status` (``bzh:facts-not-status``,
+    issue #457, D1). ``standing_edges`` must already carry
+    :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.list_standing_edges`'s
+    own ``(declared_at, dependency_id)`` order: the first unmet edge per dependent wins, one hop,
+    with no chain walk (D4). A prerequisite absent from ``statuses`` still blocks (D3) — deletion
+    does not yet refuse a standing edge onto a vanished prerequisite."""
+    markings: dict[str, str] = {}
+    for edge in standing_edges:
+        if edge.dependent_chunk_id in markings:
+            continue
+        if statuses.get(edge.prerequisite_chunk_id) is ChunkStatus.DONE:
+            continue
+        markings[edge.dependent_chunk_id] = edge.prerequisite_chunk_id
+    return markings
 
 
 def _closes_cycle(standing: list[DependencyEdge], dependent_chunk_id: str, prerequisite_chunk_id: str) -> bool:

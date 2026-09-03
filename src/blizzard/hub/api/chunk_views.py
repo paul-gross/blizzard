@@ -19,6 +19,7 @@ from blizzard.hub.domain.work import Chunk, ChunkFacts, holds_claim
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
     ArtifactView,
+    BlockedView,
     BounceView,
     ChunkDetail,
     ChunkEscalationView,
@@ -62,24 +63,37 @@ class ChunkView:
     facts: ChunkFacts
     names: GraphNames
     route: Route | None | _RouteNotInjected = _ROUTE_NOT_INJECTED
+    #: The chunk's blocked marking (issue #457) — the caller's own already-derived value;
+    #: neither constructor derives it itself, so a caller that has no use for it (every verb
+    #: response but the list and detail reads) pays nothing for it.
+    blocked: BlockedView | None = None
 
     @classmethod
-    def of(cls, services: HubServices, chunk: Chunk, names: GraphNames | None = None) -> ChunkView:
+    def of(
+        cls, services: HubServices, chunk: Chunk, names: GraphNames | None = None, blocked: BlockedView | None = None
+    ) -> ChunkView:
         return cls(
             services=services,
             chunk=chunk,
             facts=services.chunks.facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True),
             names=names or GraphNames(services.graphs.get),
+            blocked=blocked,
         )
 
     @classmethod
     def injected(
-        cls, services: HubServices, chunk: Chunk, facts: ChunkFacts, route: Route | None, names: GraphNames
+        cls,
+        services: HubServices,
+        chunk: Chunk,
+        facts: ChunkFacts,
+        route: Route | None,
+        names: GraphNames,
+        blocked: BlockedView | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of` (issue #421): a fan-out list read injects
         already-fetched facts and route instead of calling ``load_facts``/``route_of`` per
         chunk. ``route=None`` means "no live route"; :meth:`of` leaves it uninjected."""
-        return cls(services=services, chunk=chunk, facts=facts, names=names, route=route)
+        return cls(services=services, chunk=chunk, facts=facts, names=names, route=route, blocked=blocked)
 
     def _resolved_route(self) -> Route | None:
         """The chunk's route: the injected value if one was given, otherwise fetched lazily
@@ -115,6 +129,7 @@ class ChunkView:
             environment_count=len(route.environment_ids) if route is not None else 0,
             cost=self.usage_total(),
             completed_at=iso_utc(completed_at) if completed_at is not None else None,
+            blocked=self.blocked,
         )
 
     def current_node(self) -> tuple[str | None, str | None]:
@@ -176,6 +191,7 @@ class ChunkView:
             route=self._route(),
             escalation=self._escalation(),
             pause=self._pause(),
+            blocked=self.blocked,
             decision=self._decision(),
             history=history.transitions(),
             migrations=history.migrations(),

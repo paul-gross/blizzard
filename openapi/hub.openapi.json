@@ -829,6 +829,16 @@
       "BacklogPeekEntry": {
         "description": "One ``not_ready`` chunk, in backlog order.",
         "properties": {
+          "blocked": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BlockedView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
@@ -914,6 +924,20 @@
           "chunk_ids"
         ],
         "title": "BacklogReplaceRequest",
+        "type": "object"
+      },
+      "BlockedView": {
+        "description": "A chunk's blocked marking (issue #457) \u2014 present iff a standing dependency edge names a\nprerequisite that has not reached ``done``. Carried beside ``status``, never a status of its own;\nnames the immediate prerequisite only, with no transitive walk to whatever it may itself wait on.",
+        "properties": {
+          "prerequisite_chunk_id": {
+            "title": "Prerequisite Chunk Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prerequisite_chunk_id"
+        ],
+        "title": "BlockedView",
         "type": "object"
       },
       "BounceView": {
@@ -1106,6 +1130,16 @@
             "default": false,
             "title": "Awaiting External Merge",
             "type": "boolean"
+          },
+          "blocked": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BlockedView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "bounces": {
             "default": [],
@@ -1615,6 +1649,16 @@
       "ChunkSummary": {
         "description": "One row of the fleet chunk list \u2014 the derived status and current node. ``current_node_name`` is\nthe node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.\n``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a terminal chunk reads\nunrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.",
         "properties": {
+          "blocked": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BlockedView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
@@ -4766,6 +4810,16 @@
       "QueuePeekEntry": {
         "description": "One ready chunk, in queue order.",
         "properties": {
+          "blocked": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BlockedView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
