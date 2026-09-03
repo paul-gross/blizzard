@@ -516,7 +516,8 @@ describe('ChunkDetailHeader', () => {
     expect(plainInput?.value).toBe('');
   });
 
-  it('emits declareDependency with the field value on Declare', async () => {
+  it('emits declareDependency with the field value once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -532,9 +533,32 @@ describe('ChunkDetailHeader', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
 
     expect(emitted).toEqual({ chunkId: ISSUE_DETAIL.chunk_id, prerequisiteChunkId: 'ch_01prereq00000000000000000' });
+    confirmSpy.mockRestore();
   });
 
-  it('emits releaseDependency with the field value on Release', async () => {
+  it('emits nothing when the operator declines the declare confirm', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    let emitted = false;
+    fixture.componentInstance.declareDependency.subscribe(() => (emitted = true));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const input = el.querySelector<HTMLInputElement>('[data-testid="dependency-prerequisite-input"]')!;
+    input.value = 'ch_01prereq00000000000000000';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(false);
+    confirmSpy.mockRestore();
+  });
+
+  it('emits releaseDependency with the field value once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', {
       ...ISSUE_DETAIL,
@@ -549,9 +573,11 @@ describe('ChunkDetailHeader', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="release-dependency"]')?.click();
 
     expect(emitted).toEqual({ chunkId: ISSUE_DETAIL.chunk_id, prerequisiteChunkId: 'ch_01prereq00000000000000000' });
+    confirmSpy.mockRestore();
   });
 
-  it('emits nothing when Declare is clicked with a blank field', async () => {
+  it('emits nothing when Declare is clicked with a blank field, without prompting to confirm', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -562,6 +588,8 @@ describe('ChunkDetailHeader', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
 
+    expect(confirmSpy).not.toHaveBeenCalled();
     expect(emitted).toBe(false);
+    confirmSpy.mockRestore();
   });
 });

@@ -354,7 +354,8 @@ describe('ChunkDetail container', () => {
     return el;
   }
 
-  it('fires the declare client call with the entered prerequisite id', async () => {
+  it('fires the declare client call once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
@@ -366,9 +367,25 @@ describe('ChunkDetail container', () => {
     const calls = stub.forRoute('/api/chunks/ch_routed/dependencies', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ prerequisite_chunk_id: 'ch_prereq', by: 'operator' });
+    confirmSpy.mockRestore();
   });
 
-  it('fires the release client call with the entered prerequisite id', async () => {
+  it('emits nothing when the operator declines the declare confirm', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = await enterPrerequisite(fixture, 'ch_prereq');
+
+    el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_routed/dependencies', 'POST')).toHaveLength(0);
+    confirmSpy.mockRestore();
+  });
+
+  it('fires the release client call once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
@@ -380,10 +397,12 @@ describe('ChunkDetail container', () => {
     const calls = stub.forRoute('/api/chunks/ch_routed/dependencies/release', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ prerequisite_chunk_id: 'ch_prereq', by: 'operator' });
+    confirmSpy.mockRestore();
   });
 
   it('surfaces the dependent-not-editable 409 refusal in the action notice', async () => {
     declareResponse = stubError(409, { detail: 'dependent chunk is not editable at this status' });
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
@@ -393,12 +412,14 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('not editable at this status');
+    confirmSpy.mockRestore();
   });
 
   it('surfaces the would-close-a-cycle 409 refusal in the action notice', async () => {
     declareResponse = stubError(409, {
       detail: 'declaring this edge would close a cycle in the standing dependency graph',
     });
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
@@ -408,12 +429,14 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('would close a cycle');
+    confirmSpy.mockRestore();
   });
 
   it('surfaces the ephemeral-prerequisite 409 refusal in the action notice', async () => {
     declareResponse = stubError(409, {
       detail: 'prerequisite chunk is ephemeral and cannot be named as a prerequisite',
     });
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
@@ -423,10 +446,12 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('ephemeral');
+    confirmSpy.mockRestore();
   });
 
   it('surfaces the unknown-chunk 404 refusal in the action notice', async () => {
     declareResponse = stubError(404, { detail: 'unknown chunk ch_prereq' });
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
@@ -436,10 +461,12 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown chunk ch_prereq');
+    confirmSpy.mockRestore();
   });
 
   it('surfaces the no-standing-dependency 409 refusal from release in the action notice', async () => {
     releaseResponse = stubError(409, { detail: 'no standing dependency to release' });
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
@@ -449,6 +476,7 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('no standing dependency');
+    confirmSpy.mockRestore();
   });
 
   // --- Answering a question, and losing the race for it (issue #165) ---------

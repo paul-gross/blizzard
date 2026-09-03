@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import type { ChunkDetail, ChunkStatus, PauseView, WorkRefView, RouteView } from '../api/hub';
 import { ChunkBlocked } from '../chunk-blocked/chunk-blocked';
 import { KitButton } from '../kit/kit-button';
+import { KitTextInput } from '../kit/kit-text-input';
 
 /** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
  * here so the dock never offers a Pause the server would answer with a 409 (issue #46).
@@ -48,15 +49,15 @@ export interface DependencyEvent {
  * no way back once clicked.
  *
  * Presentational only: it holds the detail input and emits `dismiss`,
- * `detach`, `pauseChunk`, `resumeChunk`, and `complete` (each guarded by a
- * `confirm()` — the route-releasing, worker-killing, and terminal-marking
- * verbs, the one browser affordance this dock reaches for); the mutations
- * those events drive live in the container.
+ * `detach`, `pauseChunk`, `resumeChunk`, `complete`, `declareDependency`, and
+ * `releaseDependency` (every write but `dismiss` guarded by a `confirm()` —
+ * the one browser affordance this dock reaches for); the mutations those
+ * events drive live in the container.
  */
 @Component({
   selector: 'fleet-chunk-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkBlocked, KitButton, RouterLink],
+  imports: [ChunkBlocked, KitButton, KitTextInput, RouterLink],
   templateUrl: './chunk-detail-header.html',
   styleUrl: './chunk-detail-header.css',
 })
@@ -96,14 +97,12 @@ export class ChunkDetailHeader {
    * makes, not a navigation. */
   readonly selectChunk = output<string>();
 
-  /** Emitted when the operator declares a dependency on {@link prerequisiteInput}
-   * (issue #461). Not confirm-guarded like Detach/Pause/Complete: declaring an edge is
-   * reversible by releasing it, not a route-releasing, worker-killing, or terminal
-   * verb. */
+  /** Emitted when the operator confirms a dependency declaration on
+   * {@link prerequisiteInput} (issue #461). */
   readonly declareDependency = output<DependencyEvent>();
 
-  /** Emitted when the operator releases the standing dependency on
-   * {@link prerequisiteInput} (issue #461). Reversible the same way, by re-declaring. */
+  /** Emitted when the operator confirms releasing the standing dependency on
+   * {@link prerequisiteInput} (issue #461). */
   readonly releaseDependency = output<DependencyEvent>();
 
   /** The chunk's work refs, for the header — each linked out to its source's web
@@ -146,11 +145,15 @@ export class ChunkDetailHeader {
    * marking) and Declare always names a chunk the marking never carries. */
   protected readonly prerequisiteInput = signal('');
 
+  /** Which chunk is open, deduped by `computed`'s default equality — unlike reading
+   * `detail()` directly, this does not change (and so does not re-run the prefill
+   * effect below) on a same-chunk refetch, only on an actual chunk switch. A poll or
+   * SSE-triggered refresh of the open chunk must never wipe an in-progress edit. */
+  private readonly openChunkId = computed(() => this.detail().chunk_id);
+
   constructor() {
     effect(() => {
-      // Reads `chunk_id` to key the reset on which chunk is open, not just its
-      // identity object — a re-fetched `ChunkDetail` is a new object every poll.
-      void this.detail().chunk_id;
+      this.openChunkId();
       this.prerequisiteInput.set(this.blockedOn() ?? '');
     });
   }
@@ -202,18 +205,27 @@ export class ChunkDetailHeader {
     this.complete.emit(this.detail().chunk_id);
   }
 
-  /** Emit `declareDependency` for the container's mutation to fire (issue #461). A blank
-   * field emits nothing — the hub has no chunk id to resolve. */
+  /** Confirm, then emit `declareDependency` for the container's mutation to fire (issue
+   * #461). A blank field emits nothing — the hub has no chunk id to resolve. */
   protected onDeclareDependency(): void {
     const prerequisiteChunkId = this.prerequisiteInput().trim();
     if (!prerequisiteChunkId) return;
+    const confirmed = globalThis.confirm(
+      `Declare that chunk ${this.detail().chunk_id} depends on ${prerequisiteChunkId}?`,
+    );
+    if (!confirmed) return;
     this.declareDependency.emit({ chunkId: this.detail().chunk_id, prerequisiteChunkId });
   }
 
-  /** Emit `releaseDependency` for the container's mutation to fire (issue #461). */
+  /** Confirm, then emit `releaseDependency` for the container's mutation to fire (issue
+   * #461). */
   protected onReleaseDependency(): void {
     const prerequisiteChunkId = this.prerequisiteInput().trim();
     if (!prerequisiteChunkId) return;
+    const confirmed = globalThis.confirm(
+      `Release chunk ${this.detail().chunk_id}'s dependency on ${prerequisiteChunkId}?`,
+    );
+    if (!confirmed) return;
     this.releaseDependency.emit({ chunkId: this.detail().chunk_id, prerequisiteChunkId });
   }
 }

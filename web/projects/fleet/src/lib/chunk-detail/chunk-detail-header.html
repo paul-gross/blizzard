@@ -76,13 +76,12 @@
         <!-- Declare/release (issue #461): one free-text field serves both, prefilled
              from the marking when one stands (D5) — the board has no read that lists
              a chunk's standing edges for a picker to offer instead. -->
-        <input
-          type="text"
+        <fleet-kit-text-input
           class="dep-input"
-          data-testid="dependency-prerequisite-input"
-          [attr.aria-label]="'Prerequisite chunk id for ' + detail().chunk_id"
+          testid="dependency-prerequisite-input"
+          [ariaLabel]="'Prerequisite chunk id for ' + detail().chunk_id"
           [value]="prerequisiteInput()"
-          (input)="prerequisiteInput.set($any($event.target).value)"
+          (valueChange)="prerequisiteInput.set($event)"
           placeholder="prerequisite chunk id"
         />
         <fleet-kit-button

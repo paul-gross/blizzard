@@ -90,19 +90,12 @@ a.iss:focus-visible {
   align-items: center;
   gap: 6px;
 }
+/* `fleet-kit-text-input` owns its own chrome (`bzh:frontend-kit-floor`) — this only
+   sizes the host within the `.d-actions` flex row, the way `.answer-input` sizes the
+   same component in `chunk-awaiting-human.css`. */
 .dep-input {
-  background: var(--surface-resting);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-xs);
-  padding: 2px 4px;
-  width: 12ch;
+  flex: 0 0 12ch;
   min-width: 0;
-}
-.dep-input:focus-visible {
-  outline: 1px solid var(--cyan);
-  outline-offset: 1px;
 }
 .d-route .rn {
   color: var(--cyan);
