@@ -383,7 +383,9 @@ def chunk_group_cmd(cli: CliContext, chunk_id: str, merge_ids: tuple[str, ...]) 
 
     A pure client of ``POST /api/chunks/{id}/group``: the survivor and every merge id
     must currently be **unacquired** — ``not_ready`` or ``ready``, in any mix (409
-    otherwise). The survivor absorbs the union of work refs and keeps its own status."""
+    otherwise). The survivor absorbs the union of work refs and keeps its own status. It
+    also absorbs each merged chunk's standing dependency edges; the merge is refused 409
+    if that would close a cycle."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/group",
         "POST /chunks/{id}/group",

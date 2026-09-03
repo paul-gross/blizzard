@@ -39,3 +39,19 @@ class IWriteChunkDependenciesRepository(IReadChunkDependenciesRepository, Protoc
         """Set ``released_at``/``released_by`` together, once, on the standing edge for
         this ordered pair. A no-op returning ``None`` when no edge stands."""
         ...
+
+    def record_fold(
+        self,
+        chunk_id: str,
+        *,
+        grouped_into: str,
+        release: list[str],
+        mint: list[tuple[str, str]],
+        by: str,
+        at: datetime,
+    ) -> int:
+        """Fold ``chunk_id``'s dependency edges per the caller's own release/mint decision
+        (D1, D3, D4, issue #460), atomically with recording its ``chunk.grouped`` row. The
+        caller (:class:`~blizzard.hub.domain.queue.GroupService`) has already computed the
+        split and checked the resulting set closes no cycle."""
+        ...

@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.lifecycle import IReadChunkLifecycleRepository
-from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import Chunk, DependencyEdge
 
 
@@ -57,7 +57,7 @@ class PrerequisiteIsEphemeral(Exception):
     """A **declaration** named an ephemeral (grouped-away or deleted) prerequisite,
     raised by :class:`DependencyService` from a fresh ``is_ephemeral`` read taken under
     the shared claim lock — closing the race against every writer that shares the lock,
-    but only narrowing it against ``GroupService``, which takes none. Release never raises it."""
+    `GroupService` included as of issue #460. Release never raises it."""
 
     def __init__(self, chunk_id: str) -> None:
         super().__init__(f"chunk {chunk_id} is ephemeral and cannot be named as a prerequisite")
@@ -94,6 +94,11 @@ class DependencyService:
             return self._declare_locked(dependent, prerequisite, by=by)
 
     def _declare_locked(self, dependent: Chunk, prerequisite: Chunk, *, by: str) -> DependencyEdge:
+        # Imported locally: `queue.py` imports this module's `plan_fold`/
+        # `would_close_a_cycle` at module scope (issue #460), so a module-level import
+        # the other way would close a circular-import loop.
+        from blizzard.hub.domain.queue import ChunkNotFound
+
         existing = self._dependencies.standing_edge(dependent.chunk_id, prerequisite.chunk_id)
         if existing is not None:
             return existing
@@ -108,12 +113,12 @@ class DependencyService:
             raise DependentNotEditable(dependent.chunk_id, status)
 
         # Re-derived under the same lock: closes the race against every writer holding it
-        # (delete included); `GroupService` holds none, so this only narrows that race.
+        # — delete and the fold both included (issue #460).
         if self._lifecycle.is_ephemeral(prerequisite.chunk_id):
             raise PrerequisiteIsEphemeral(prerequisite.chunk_id)
 
         standing = self._dependencies.list_standing_edges()
-        if _closes_cycle(standing, dependent.chunk_id, prerequisite.chunk_id):
+        if would_close_a_cycle(standing, [(dependent.chunk_id, prerequisite.chunk_id)]):
             raise DependencyWouldCloseCycle(dependent.chunk_id, prerequisite.chunk_id)
 
         return self._dependencies.declare(dependent.chunk_id, prerequisite.chunk_id, by=by, at=self._clock.now())
@@ -165,24 +170,82 @@ def derive_blocked_markings(
     return markings
 
 
-def _closes_cycle(standing: list[DependencyEdge], dependent_chunk_id: str, prerequisite_chunk_id: str) -> bool:
-    """Would adding the edge ``dependent_chunk_id`` depends-on ``prerequisite_chunk_id``
-    close a cycle over ``standing``? True exactly when ``dependent_chunk_id`` is already
-    reachable from ``prerequisite_chunk_id`` by following existing standing edges —
-    including the zero-length case ``prerequisite_chunk_id == dependent_chunk_id``, the
-    trivial self-edge cycle."""
+def would_close_a_cycle(standing: list[DependencyEdge], added: list[tuple[str, str]]) -> bool:
+    """Would folding ``added``'s ordered ``(dependent, prerequisite)`` pairs into
+    ``standing``'s existing edges close a cycle in the resulting graph (issue #456,
+    extended #460)? ``standing`` is assumed acyclic already — the domain's own
+    maintained invariant — so a cycle can only pass through one of ``added``. Generalizes
+    the single-edge check :class:`DependencyService` uses to declare an edge to the
+    set-level question :class:`~blizzard.hub.domain.queue.GroupService` asks over a
+    whole fold, so neither duplicates the graph-walk."""
     graph: dict[str, list[str]] = {}
     for edge in standing:
         graph.setdefault(edge.dependent_chunk_id, []).append(edge.prerequisite_chunk_id)
+    for dependent, prerequisite in added:
+        graph.setdefault(dependent, []).append(prerequisite)
 
-    frontier = [prerequisite_chunk_id]
-    seen = {prerequisite_chunk_id}
-    while frontier:
-        node = frontier.pop()
-        if node == dependent_chunk_id:
-            return True
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[str, int] = {}
+
+    def visit(node: str) -> bool:
+        color[node] = GRAY
         for neighbor in graph.get(node, []):
-            if neighbor not in seen:
-                seen.add(neighbor)
-                frontier.append(neighbor)
-    return False
+            state = color.get(neighbor, WHITE)
+            if state == GRAY:
+                return True
+            if state == WHITE and visit(neighbor):
+                return True
+        color[node] = BLACK
+        return False
+
+    return any(visit(node) for node in list(graph) if color.get(node, WHITE) == WHITE)
+
+
+@dataclass(frozen=True)
+class FoldEdgePlan:
+    """Per-target dependency-edge rewrite instructions for one fold (D3, D4, issue
+    #460) — the release/mint pairing :class:`~blizzard.hub.domain.queue.GroupService`
+    applies inside each target's own atomic write, plus the untouched remainder of
+    ``standing`` the cycle check runs against."""
+
+    release_by_target: dict[str, list[str]]
+    mint_by_target: dict[str, list[tuple[str, str]]]
+    remaining: list[DependencyEdge]
+
+
+def plan_fold(standing: list[DependencyEdge], survivor_id: str, folded_ids: list[str]) -> FoldEdgePlan:
+    """The dependency-edge side of folding ``folded_ids`` into ``survivor_id`` (D3):
+    every standing edge naming a folded chunk in either role is released; its remapped
+    pair — folded ids mapped to ``survivor_id``, everything else unchanged — mints
+    nothing further when it collapses to a self-edge or duplicates a pair already
+    resulting (either untouched in ``standing``, or minted earlier in this same pass,
+    ``standing``'s own ``(declared_at, dependency_id)`` order breaking every tie), and
+    is minted fresh otherwise. An edge naming two different folded chunks is attributed
+    to whichever endpoint is folded when only one is, and to the dependent side's target
+    when both are (either choice is correct; this one is deterministic). Raises nothing —
+    the caller checks :func:`would_close_a_cycle` against the result before writing
+    anything."""
+    folded = set(folded_ids)
+
+    def remap(chunk_id: str) -> str:
+        return survivor_id if chunk_id in folded else chunk_id
+
+    release_by_target: dict[str, list[str]] = {cid: [] for cid in folded_ids}
+    mint_by_target: dict[str, list[tuple[str, str]]] = {cid: [] for cid in folded_ids}
+    remaining = [e for e in standing if e.dependent_chunk_id not in folded and e.prerequisite_chunk_id not in folded]
+    resulting_pairs = {(e.dependent_chunk_id, e.prerequisite_chunk_id) for e in remaining}
+
+    for edge in standing:
+        dep_folded = edge.dependent_chunk_id in folded
+        prereq_folded = edge.prerequisite_chunk_id in folded
+        if not dep_folded and not prereq_folded:
+            continue
+        owner = edge.dependent_chunk_id if dep_folded else edge.prerequisite_chunk_id
+        release_by_target[owner].append(edge.dependency_id)
+        pair = (remap(edge.dependent_chunk_id), remap(edge.prerequisite_chunk_id))
+        if pair[0] == pair[1] or pair in resulting_pairs:
+            continue
+        resulting_pairs.add(pair)
+        mint_by_target[owner].append(pair)
+
+    return FoldEdgePlan(release_by_target=release_by_target, mint_by_target=mint_by_target, remaining=remaining)

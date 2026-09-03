@@ -51,6 +51,10 @@ A chunk currently named as another's prerequisite cannot itself be deleted while
 409, naming the dependents. Deleting the *dependent* chunk instead is unaffected — it succeeds, and releases that
 chunk's own outgoing standing edges as part of the same delete, rather than refusing.
 
+Grouping a chunk away carries its standing edges onto the survivor rather than dropping them: each edge naming the
+folded chunk, in either role, is released and re-minted, remapped onto the survivor — never updated in place. The whole
+fold is refused 409 if carrying its edges would close a cycle in the resulting standing graph.
+
 ## What a standing edge does to claiming
 
 A standing, unsatisfied dependency denies a claim on its dependent outright: `POST /api/fleet/routes` answers `409`

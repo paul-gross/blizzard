@@ -46,14 +46,18 @@ def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str, *, by: st
     return hub.client.post(f"/api/chunks/{dependent_id}/dependencies/release", json=body)
 
 
-def _group_away(hub: HubHarness, chunk_id: str) -> None:
-    """Group ``chunk_id`` away into a fresh survivor chunk. Deletion can no longer make a
-    chunk with a standing outgoing edge ephemeral this way — issue #460 refuses deleting a
-    chunk while it stands as another's prerequisite — so grouping, not yet dependency-aware
-    (Phase 2), is the remaining lever a test reaches for that state."""
-    survivor_id = ingest(hub, [{"source": "default", "ref": f"survivor-for-{chunk_id}"}], promote=False)
-    resp = hub.client.post(f"/api/chunks/{survivor_id}/group", json={"merge_chunk_ids": [chunk_id]})
-    assert resp.status_code == 200, resp.text
+def _strand_by_direct_delete(hub: HubHarness, chunk_id: str) -> None:
+    """Insert a ``chunk_deleted`` row directly, bypassing ``DeleteService``'s own
+    standing-prerequisite guard (issue #460). Once both delete and group are
+    dependency-aware, no API path can strand a standing edge onto an ephemeral
+    prerequisite any more — this reaches that state the only way left, to prove
+    release/declare still answer it the same way rather than mishandling a state the
+    accepted residual race (``bzh:invariant-checker``'s
+    ``NoStandingDependencyOntoEphemeralChunk``) could still produce."""
+    with hub.engine.begin() as conn:
+        conn.execute(
+            s.chunk_deleted.insert().values(chunk_id=chunk_id, deleted_at=hub.clock.now(), deleted_by="operator")
+        )
 
 
 def _rows(hub: HubHarness) -> list[dict[str, Any]]:
@@ -180,7 +184,7 @@ def test_release_is_admitted_when_the_prerequisite_was_since_deleted(tmp_path: P
     dependent_id = ingest(hub, [_DEPENDENT], promote=False)
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
     assert _declare(hub, dependent_id, prerequisite_id).status_code == 202
-    _group_away(hub, prerequisite_id)
+    _strand_by_direct_delete(hub, prerequisite_id)
 
     resp = _release(hub, dependent_id, prerequisite_id, by="user:bob")
 
@@ -288,7 +292,7 @@ def test_declare_of_a_standing_edge_is_idempotent_even_once_the_prerequisite_is_
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
     first = _declare(hub, dependent_id, prerequisite_id)
     assert first.status_code == 202, first.text
-    _group_away(hub, prerequisite_id)
+    _strand_by_direct_delete(hub, prerequisite_id)
     before = _rows(hub)
 
     resp = _declare(hub, dependent_id, prerequisite_id)

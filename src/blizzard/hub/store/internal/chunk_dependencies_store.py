@@ -17,6 +17,7 @@ from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepos
 from blizzard.hub.domain.work import DependencyEdge
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 
 
 class ChunkDependenciesStore:
@@ -91,6 +92,44 @@ class ChunkDependenciesStore:
             released_by=by,
         )
 
+    def record_fold(
+        self,
+        chunk_id: str,
+        *,
+        grouped_into: str,
+        release: list[str],
+        mint: list[tuple[str, str]],
+        by: str,
+        at: datetime,
+    ) -> int:
+        """Record ``chunk_id``'s ``chunk.grouped`` row and rewrite its own dependency edges
+        — releasing ``release``'s dependency ids and minting ``mint``'s fresh
+        ``(dependent, prerequisite)`` pairs — atomically in one transaction (D1, D4, issue
+        #460). ``mint`` never revives a released row, always a fresh insert. Returns the
+        freshly-inserted ``chunk_grouped.id``."""
+        with self._store.write("record_fold") as conn:
+            grouped_id = record_grouped_row_conn(conn, chunk_id, grouped_into=grouped_into, at=at)
+            if release:
+                conn.execute(
+                    update(s.chunk_dependencies)
+                    .where(s.chunk_dependencies.c.dependency_id.in_(release))
+                    .values(released_at=at, released_by=by)
+                )
+            for dependent_chunk_id, prerequisite_chunk_id in mint:
+                dependency_id = Id.mint_at(DEPENDENCY_EDGE_PREFIX, at).value
+                conn.execute(
+                    s.chunk_dependencies.insert().values(
+                        dependency_id=dependency_id,
+                        dependent_chunk_id=dependent_chunk_id,
+                        prerequisite_chunk_id=prerequisite_chunk_id,
+                        declared_at=at,
+                        declared_by=by,
+                        released_at=None,
+                        released_by=None,
+                    )
+                )
+        return grouped_id
+
 
 def _standing_row(conn: Connection, dependent_chunk_id: str, prerequisite_chunk_id: str):  # type: ignore[no-untyped-def]
     return conn.execute(
@@ -125,10 +164,7 @@ def release_outgoing_edges_conn(conn: Connection, chunk_id: str, *, by: str, at:
     shape."""
     conn.execute(
         update(s.chunk_dependencies)
-        .where(
-            (s.chunk_dependencies.c.dependent_chunk_id == chunk_id)
-            & (s.chunk_dependencies.c.released_at.is_(None))
-        )
+        .where((s.chunk_dependencies.c.dependent_chunk_id == chunk_id) & (s.chunk_dependencies.c.released_at.is_(None)))
         .values(released_at=at, released_by=by)
     )
 

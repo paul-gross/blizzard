@@ -559,7 +559,7 @@
           "short_help": "Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294)."
         },
         "group": {
-          "help": "Merge MERGE_IDS into CHUNK_ID, the survivor.\n\nA pure client of ``POST /api/chunks/{id}/group``: the survivor and every merge id\nmust currently be **unacquired** \u2014 ``not_ready`` or ``ready``, in any mix (409\notherwise). The survivor absorbs the union of work refs and keeps its own status.",
+          "help": "Merge MERGE_IDS into CHUNK_ID, the survivor.\n\nA pure client of ``POST /api/chunks/{id}/group``: the survivor and every merge id\nmust currently be **unacquired** \u2014 ``not_ready`` or ``ready``, in any mix (409\notherwise). The survivor absorbs the union of work refs and keeps its own status. It\nalso absorbs each merged chunk's standing dependency edges; the merge is refused 409\nif that would close a cycle.",
           "params": [
             {
               "hidden": false,

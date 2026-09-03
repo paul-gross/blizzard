@@ -108,6 +108,37 @@ def test_list_standing_edges_orders_by_declared_at_ascending(tmp_path: Path) -> 
     assert [e.dependency_id for e in ordered] == [earlier.dependency_id, later.dependency_id]
 
 
+def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Path) -> None:
+    """``ChunkDependenciesStore.record_fold`` — the fold's own composite write (issue
+    #460): a chunk's own ``chunk_grouped`` row, one release, and one mint, all in one
+    transaction. The minted pair never revives the released row's ``dependency_id``."""
+    dependencies, engine = _dependencies(tmp_path)
+    with engine.begin() as conn:
+        seed_chunk(conn, "ch_survivor", graph_id="gr_1", at=_NOW)
+    declared = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
+    at = _NOW + timedelta(hours=1)
+
+    grouped_id = dependencies.record_fold(
+        "ch_prereq",
+        grouped_into="ch_survivor",
+        release=[declared.dependency_id],
+        mint=[("ch_dependent", "ch_survivor")],
+        by="fold",
+        at=at,
+    )
+
+    assert grouped_id > 0
+    assert dependencies.standing_edge("ch_dependent", "ch_prereq") is None
+    minted = dependencies.standing_edge("ch_dependent", "ch_survivor")
+    assert minted is not None
+    assert minted.dependency_id != declared.dependency_id
+    assert minted.declared_by == "fold"
+
+    with engine.connect() as conn:
+        row = conn.execute(select(s.chunk_grouped).where(s.chunk_grouped.c.chunk_id == "ch_prereq")).mappings().one()
+    assert row["grouped_into"] == "ch_survivor"
+
+
 def test_list_standing_edges_breaks_a_declared_at_tie_by_dependency_id(tmp_path: Path) -> None:
     """The same rule's tiebreak (``bzh:sql-portable`` — an explicit total order, never an
     implicit one): two edges declared at the identical instant still resolve to one
