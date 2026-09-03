@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.graphs import GraphFile
 from tests.e2e.test_acceptance_loop import _free_port, _hub
 
 pytestmark = [
@@ -329,12 +330,13 @@ def _assert_node_geometry(seed_name: str, node: dict) -> None:
 
 
 def _seed_graph_yamls() -> dict[str, str]:
-    """Every graph blizzard ships — ``src/blizzard/hub/graphs/*/graph.yaml``.
+    """Every graph blizzard ships — ``src/blizzard/hub/graphs/*/graph.yaml``, inlined.
 
     Discovered from the tree rather than listed, so a newly shipped graph is covered
-    the day it lands."""
+    the day it lands — inlined because ``POST /graphs`` resolves no file reference of its
+    own, and a shipped graph may carry one."""
     seed_dir = Path(__file__).resolve().parents[2] / "src" / "blizzard" / "hub" / "graphs"
-    yamls = {path.parent.name: path.read_text() for path in sorted(seed_dir.glob("*/graph.yaml"))}
+    yamls = {path.parent.name: GraphFile(path).inlined_yaml for path in sorted(seed_dir.glob("*/graph.yaml"))}
     assert yamls, f"no shipped seed graphs found under {seed_dir}"
     return yamls
 
