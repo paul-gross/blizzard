@@ -6,13 +6,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 import pytest
 from sqlalchemy import Engine, func, select
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreError
 from tests.support import chunk_stores, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
@@ -118,16 +120,14 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
     declared = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
     at = _NOW + timedelta(hours=1)
 
-    grouped_id = dependencies.record_fold(
-        "ch_prereq",
+    grouped_ids = dependencies.record_fold(
+        [FoldTarget(chunk_id="ch_prereq", release=[declared.dependency_id], mint=[("ch_dependent", "ch_survivor")])],
         grouped_into="ch_survivor",
-        release=[declared.dependency_id],
-        mint=[("ch_dependent", "ch_survivor")],
         by="fold",
         at=at,
     )
 
-    assert grouped_id > 0
+    assert grouped_ids["ch_prereq"] > 0
     assert dependencies.standing_edge("ch_dependent", "ch_prereq") is None
     minted = dependencies.standing_edge("ch_dependent", "ch_survivor")
     assert minted is not None
@@ -137,6 +137,34 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
     with engine.connect() as conn:
         row = conn.execute(select(s.chunk_grouped).where(s.chunk_grouped.c.chunk_id == "ch_prereq")).mappings().one()
     assert row["grouped_into"] == "ch_survivor"
+
+
+def test_record_fold_writes_every_target_in_one_transaction(tmp_path: Path) -> None:
+    """A fault partway through a later target's write rolls back an earlier target's row
+    too (F4, issue #460) — proven against the real engine, since a cross-target rollback
+    is not observable through a seam double."""
+    dependencies, engine = _dependencies(tmp_path)
+    with engine.begin() as conn:
+        seed_chunk(conn, "ch_survivor", graph_id="gr_1", at=_NOW)
+        seed_chunk(conn, "ch_a", graph_id="gr_1", at=_NOW)
+        seed_chunk(conn, "ch_b", graph_id="gr_1", at=_NOW)
+    at = _NOW + timedelta(hours=1)
+
+    with pytest.raises(HubStoreError):
+        dependencies.record_fold(
+            [
+                FoldTarget(chunk_id="ch_a", release=[], mint=[]),
+                # A `None` dependent id fails the NOT NULL column only after ch_a's row
+                # lands on the same connection — covers both targets' writes, not one.
+                FoldTarget(chunk_id="ch_b", release=[], mint=[(cast(str, None), "ch_survivor")]),
+            ],
+            grouped_into="ch_survivor",
+            by="fold",
+            at=at,
+        )
+
+    with engine.connect() as conn:
+        assert conn.execute(select(s.chunk_grouped)).all() == []
 
 
 def test_list_standing_edges_breaks_a_declared_at_tie_by_dependency_id(tmp_path: Path) -> None:

@@ -13,7 +13,7 @@ from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.queue import ChunkNotFound
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.work import Chunk, IWriteWorkItemRepository
 
 
@@ -67,12 +67,10 @@ class DeleteService:
 
     def delete(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.deleted`` and withdraw every open ``hub:``-source item
-        ``chunk`` holds, atomically. Raises :class:`ChunkNotFound` for a chunk already
-        grouped or deleted away, :class:`ChunkNotDeletable` for one a runner or a human
-        holds, or one terminal, and :class:`ChunkHasDependents` for one that is a
-        standing prerequisite for another chunk (issue #460). Derives the guard's status
-        fresh under the lock from a single ``load_facts`` call, exactly as
-        ``EditService.edit`` does."""
+        ``chunk`` holds, atomically. Raises :class:`ChunkNotFound` for one already
+        grouped or deleted, :class:`ChunkNotDeletable` for one held or terminal, and
+        :class:`ChunkHasDependents` for one a standing prerequisite for another chunk
+        (issue #460) — every guard read taken fresh under the lock."""
         with self._claim_lock:
             facts = self._facts.load_facts(chunk.chunk_id)
             if facts is None:

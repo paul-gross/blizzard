@@ -21,7 +21,8 @@ from blizzard.hub.api.chunk_views import blocked_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.dependencies import derive_blocked_markings
-from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotGroupable, FoldWouldCloseCycle, QueueList
+from blizzard.hub.domain.errors import ChunkNotFound
+from blizzard.hub.domain.queue import ChunkNotGroupable, FoldWouldCloseCycle, QueueList
 from blizzard.hub.domain.work import Chunk
 from blizzard.wire.chunk import WorkRefModel
 from blizzard.wire.queue import (
@@ -245,13 +246,10 @@ def group_chunks(
     request: ChunkGroupRequest,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> object:
-    """Merge unacquired chunks into ``chunk_id``.
-
-    Accepts ``not_ready`` and ``ready`` participants alike (issue #141); 409 names the
-    first chunk a runner holds, or one already finished. The survivor also absorbs each
-    folded chunk's standing dependency edges rather than leaving them dangling (issue
-    #460); 409 refuses the whole fold when carrying them would close a cycle.
-    """
+    """Merge unacquired chunks into ``chunk_id``. Accepts ``not_ready`` and ``ready``
+    participants alike (issue #141); 409 names the first chunk a runner holds, or one
+    already finished. The survivor also absorbs each folded chunk's standing dependency
+    edges (issue #460); 409 refuses a fold that would close a cycle."""
     before = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         result = services.group.group(chunk_id, request.merge_chunk_ids)

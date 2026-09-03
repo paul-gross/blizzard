@@ -153,10 +153,10 @@ def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_sha
     release_write = threading.Event()
     real_record_fold = _writable_dependencies(hub).record_fold
 
-    def _blocking_record_fold(chunk_id: str, **kwargs):  # type: ignore[no-untyped-def]
+    def _blocking_record_fold(targets, **kwargs):  # type: ignore[no-untyped-def]
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
-        return real_record_fold(chunk_id, **kwargs)
+        return real_record_fold(targets, **kwargs)
 
     _writable_dependencies(hub).record_fold = _blocking_record_fold  # type: ignore[method-assign]
 

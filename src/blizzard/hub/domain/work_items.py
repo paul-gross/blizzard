@@ -17,9 +17,9 @@ from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.edit import UNSET, UnsetType
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import require_no_live_holder
-from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,

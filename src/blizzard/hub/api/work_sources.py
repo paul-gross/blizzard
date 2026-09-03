@@ -22,9 +22,9 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.edit import UNSET
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import WorkItemAuthor, WorkItemPriority, WorkItemRecord, WorkRef
 from blizzard.hub.domain.work_items import (
     WorkItemEdit,
@@ -236,11 +236,9 @@ def withdraw_work_item(
 ) -> WorkItemView:
     """Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref
     (D9), or a chunk a race deletes between resolving it and this write; 409 for a known
-    source with no editor (D4), an item that already carries a closure, or one an
-    *acquired* live chunk still holds (D5, D10) — an unacquired holder deletes instead,
-    publishing the same ``chunk-changed``/``queue-changed`` pair a direct delete does;
-    409 also when the unacquired holder is a standing prerequisite for another chunk
-    (issue #460)."""
+    source with no editor (D4), an item already closed, or one an *acquired* live chunk
+    holds (D5, D10) — an unacquired holder deletes instead unless it is now a standing
+    prerequisite for another chunk (issue #460), also 409."""
     source_obj, editor = _require_editor(source, services)
     pointer = WorkRef(source=source, ref=ref)
     try:

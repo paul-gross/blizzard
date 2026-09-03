@@ -36,11 +36,11 @@ from blizzard.hub.domain.edit import (
     MigrationTargetIsCurrentPin,
     TargetGraphRetired,
 )
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.garden_delivery import GardenDeliveryRejected, validate_delivery
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pause import ChunkNotPausable
-from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.restart import ChunkNotRestartable, RestartCurrentNodeUnknown, RestartNodeUnknown
 from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
@@ -588,11 +588,10 @@ def delete_chunk(
     chunk_id: str, request: ChunkDeleteRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkDeleteResponse:
     """Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
-    in the same write (issue #364). 404 for an unknown chunk, or one a race deletes
-    between resolving it and this write; 409 for one a runner or a human holds, or one
-    terminal — deletion needs a chunk at the same statuses grouping does; 409 also when
-    CHUNK is a standing prerequisite for another chunk (issue #460), naming the
-    dependents. Irreversible: CHUNK is gone from every read the instant this returns."""
+    in the same write (issue #364). 404 for an unknown chunk or one a race deletes
+    between resolving it and this write; 409 for one held, terminal, or a standing
+    prerequisite for another chunk (issue #460), naming the dependents in that case.
+    Irreversible: CHUNK is gone from every read the instant this returns."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")

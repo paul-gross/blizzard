@@ -17,12 +17,13 @@ from enum import Enum
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.dependencies import plan_fold, would_close_a_cycle
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.work import Chunk
 
 _log = get_logger("blizzard.hub.queue")
@@ -38,14 +39,6 @@ class QueueList(Enum):
 
     READY = "ready"
     NOT_READY = "not_ready"
-
-
-class ChunkNotFound(LookupError):
-    """A named chunk does not exist (or was grouped or deleted away)."""
-
-    def __init__(self, chunk_id: str) -> None:
-        super().__init__(f"unknown chunk {chunk_id}")
-        self.chunk_id = chunk_id
 
 
 class ChunkNotGroupable(ValueError):
@@ -237,17 +230,23 @@ class GroupService:
             raise FoldWouldCloseCycle(survivor_id, folded_ids)
 
         now = self._clock.now()
-        grouped_id: int | None = None
         for target in targets:
             self._work_refs.add_work_refs(survivor_id, target.work_refs, at=now)
-            grouped_id = self._dependencies.record_fold(
-                target.chunk_id,
-                grouped_into=survivor_id,
-                release=plan.release_by_target[target.chunk_id],
-                mint=plan.mint_by_target[target.chunk_id],
-                by=FOLD_ACTOR,
-                at=now,
-            )
+
+        grouped_id: int | None = None
+        if targets:
+            fold_targets = [
+                FoldTarget(
+                    chunk_id=target.chunk_id,
+                    release=plan.release_by_target[target.chunk_id],
+                    mint=plan.mint_by_target[target.chunk_id],
+                )
+                for target in targets
+            ]
+            # One call, one transaction across every target (D4, issue #460) — a target's
+            # own row can never commit ahead of a sibling's edge release/mint.
+            grouped_ids = self._dependencies.record_fold(fold_targets, grouped_into=survivor_id, by=FOLD_ACTOR, at=now)
+            grouped_id = grouped_ids[targets[-1].chunk_id]
         _log.info(
             "chunks grouped",
             survivor=survivor_id,

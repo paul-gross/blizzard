@@ -28,7 +28,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_facts_store as chunk_facts_store_module
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
-from blizzard.hub.store.internal.chunk_rows import record_deleted_row
+from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from tests.support import build_hub, chunk_stores, count_queries, hub_store_connections, ingest, migrate_to, seed_graph
 
 pytestmark = pytest.mark.component
@@ -184,7 +184,8 @@ def _seed_fixture(store: ChunkStores, engine: Engine) -> None:
     # AC4: grouped-away and deleted chunks are ephemeral — excluded from every read.
     _mint(store, "ch_grouped")
     store.queue.record_promote("ch_grouped", at=_T0)
-    store.lifecycle.record_grouped("ch_grouped", grouped_into="ch_ready", at=_T0)
+    with engine.begin() as conn:
+        record_grouped_row_conn(conn, "ch_grouped", grouped_into="ch_ready", at=_T0)
 
     _mint(store, "ch_deleted")
     with engine.begin() as conn:

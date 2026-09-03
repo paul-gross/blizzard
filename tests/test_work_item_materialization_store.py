@@ -26,6 +26,7 @@ from blizzard.hub.domain.work import (
     mint_chunk,
 )
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
     HubHarness,
@@ -380,7 +381,8 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         artifacts=[],
         proposals=[_proposal_row(grouped_after_delivery, "wip_grouped")],
     )
-    chunks.lifecycle.record_grouped(grouped_after_delivery, grouped_into=runner_terminal, at=_T0)
+    with hub.engine.begin() as conn:
+        record_grouped_row_conn(conn, grouped_after_delivery, grouped_into=runner_terminal, at=_T0)
 
     candidates = {row.proposal_id for row in chunks.delivery.unmaterialized_proposals()}
 

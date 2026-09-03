@@ -15,7 +15,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
@@ -68,6 +68,7 @@ class _FakeDependenciesRepo:
 
     edges: list[DependencyEdge] = field(default_factory=list)
     folds: list[dict[str, Any]] = field(default_factory=list)
+    fold_calls: int = 0
     _next_id: int = 1
 
     def list_standing_edges(self) -> list[DependencyEdge]:
@@ -75,27 +76,28 @@ class _FakeDependenciesRepo:
 
     def record_fold(
         self,
-        chunk_id: str,
+        targets: list[FoldTarget],
         *,
         grouped_into: str,
-        release: list[str],
-        mint: list[tuple[str, str]],
         by: str,
         at: datetime,
-    ) -> int:
-        self.folds.append(
-            {
-                "chunk_id": chunk_id,
-                "grouped_into": grouped_into,
-                "release": release,
-                "mint": mint,
-                "by": by,
-                "at": at,
-            }
-        )
-        fold_id = self._next_id
-        self._next_id += 1
-        return fold_id
+    ) -> dict[str, int]:
+        self.fold_calls += 1
+        grouped_ids: dict[str, int] = {}
+        for target in targets:
+            self.folds.append(
+                {
+                    "chunk_id": target.chunk_id,
+                    "grouped_into": grouped_into,
+                    "release": target.release,
+                    "mint": target.mint,
+                    "by": by,
+                    "at": at,
+                }
+            )
+            grouped_ids[target.chunk_id] = self._next_id
+            self._next_id += 1
+        return grouped_ids
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"GroupService should not touch dependencies.{name!r}")
@@ -206,6 +208,25 @@ def test_two_targets_sharing_an_outside_edge_mint_only_once_across_the_fold() ->
     assert by_chunk["chk_a"]["mint"] == [("chk_survivor", "chk_outside")]
     assert by_chunk["chk_b"]["release"] == ["dep_b_outside"]
     assert by_chunk["chk_b"]["mint"] == []  # the pair already resulted from chk_a's mint
+
+
+def test_two_targets_with_an_edge_between_them_reach_the_seam_in_one_fold_call() -> None:
+    """``chk_b`` depends on ``chk_a``, both folded into the same survivor (F4, issue
+    #460): every target's split reaches the seam in one ``record_fold`` call, so a real
+    store can't let one target's row commit ahead of the other's edge release."""
+    chunks = {"chk_survivor": _chunk("chk_survivor"), "chk_a": _chunk("chk_a"), "chk_b": _chunk("chk_b")}
+    facts = {cid: _not_ready_facts() for cid in chunks}
+    edges = [_edge("chk_b", "chk_a", dependency_id="dep_b_a")]
+    service, _, dependencies = _service(chunks, facts, edges=edges)
+
+    service.group("chk_survivor", ["chk_a", "chk_b"])
+
+    assert dependencies.fold_calls == 1
+    by_chunk = {fold["chunk_id"]: fold for fold in dependencies.folds}
+    assert by_chunk["chk_b"]["release"] == ["dep_b_a"]
+    assert by_chunk["chk_b"]["mint"] == []
+    assert by_chunk["chk_a"]["release"] == []
+    assert by_chunk["chk_a"]["mint"] == []
 
 
 def test_a_genuinely_new_edge_is_released_and_re_minted_attributed_to_its_own_target() -> None:

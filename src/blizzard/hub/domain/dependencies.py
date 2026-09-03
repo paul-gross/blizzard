@@ -16,6 +16,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.lifecycle import IReadChunkLifecycleRepository
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.work import Chunk, DependencyEdge
 
 
@@ -94,10 +95,6 @@ class DependencyService:
             return self._declare_locked(dependent, prerequisite, by=by)
 
     def _declare_locked(self, dependent: Chunk, prerequisite: Chunk, *, by: str) -> DependencyEdge:
-        # Imported locally: `queue.py` imports this module's `plan_fold`/`would_close_a_cycle` at module scope, so a
-        # module-level import the other way would close a circular-import loop.
-        from blizzard.hub.domain.queue import ChunkNotFound
-
         existing = self._dependencies.standing_edge(dependent.chunk_id, prerequisite.chunk_id)
         if existing is not None:
             return existing
@@ -161,8 +158,7 @@ def derive_blocked_markings(
 def would_close_a_cycle(standing: list[DependencyEdge], added: list[tuple[str, str]]) -> bool:
     """Would folding ``added``'s ordered ``(dependent, prerequisite)`` pairs into ``standing``'s edges close a cycle
     in the resulting graph? ``standing`` is assumed acyclic already, so a cycle can only pass through one of
-    ``added``. Shared by :class:`DependencyService` (single edge) and
-    :class:`~blizzard.hub.domain.queue.GroupService` (a whole fold's edge set)."""
+    ``added`` — one pair or a whole fold's edge set alike."""
     graph: dict[str, list[str]] = {}
     for edge in standing:
         graph.setdefault(edge.dependent_chunk_id, []).append(edge.prerequisite_chunk_id)
@@ -189,9 +185,8 @@ def would_close_a_cycle(standing: list[DependencyEdge], added: list[tuple[str, s
 @dataclass(frozen=True)
 class FoldEdgePlan:
     """Per-target dependency-edge rewrite instructions for one fold (D3, D4, issue
-    #460) — the release/mint pairing :class:`~blizzard.hub.domain.queue.GroupService`
-    applies inside each target's own atomic write, plus the untouched remainder of
-    ``standing`` the cycle check runs against."""
+    #460): the release/mint pairing to apply inside each target's own atomic write,
+    plus the untouched remainder of ``standing`` the cycle check runs against."""
 
     release_by_target: dict[str, list[str]]
     mint_by_target: dict[str, list[tuple[str, str]]]
