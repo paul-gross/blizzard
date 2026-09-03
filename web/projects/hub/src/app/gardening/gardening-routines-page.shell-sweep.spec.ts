@@ -56,6 +56,18 @@ const SWEEPS = {
   measurements: [{ scope_slug: 'blizzard', produced_at: '2026-01-10T00:00:00Z', measurement: '3 findings' }],
 };
 
+const SCOPES = [
+  { slug: 'blizzard', description: 'the hub, runner, CLI and board', created_at: '2026-01-01T00:00:00Z', retired: false },
+];
+
+const ME = {
+  user_id: 'usr_1',
+  username: 'gardener',
+  display_name: 'Gardener',
+  role: 'admin',
+  permissions: ['graph:edit'],
+};
+
 const TREND = {
   routine_name: 'nightly',
   since: '2026-01-01T00:00:00Z',
@@ -74,6 +86,8 @@ async function render() {
     if (method === 'GET' && path === '/api/graphs/gr_1') return GRAPH_DETAIL;
     if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') return SWEEPS;
     if (method === 'GET' && path === '/api/routines/trend') return TREND;
+    if (method === 'GET' && path === '/api/scopes') return SCOPES;
+    if (method === 'GET' && path === '/api/me') return ME;
     return {};
   });
   await TestBed.configureTestingModule({
