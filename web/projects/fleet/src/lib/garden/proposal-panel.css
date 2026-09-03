@@ -7,46 +7,88 @@
 .pp {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 8px;
+  min-width: 0;
+}
+.pp-sec {
+  padding: 10px 8px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.pp-sec:first-child {
+  border-top: none;
+}
+.pp-title {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 .pp-meta {
-  color: var(--dim);
+  margin: 4px 0 0;
+  color: var(--label);
 }
-.pp-actions {
+.pp-actions fleet-kit-fact-list {
+  display: block;
+  margin-bottom: 10px;
+}
+.pp-actions-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-}
-.pp-actions code {
-  color: var(--dim);
-}
-.pp-cli code {
-  color: var(--dim);
-}
-.pp-reason {
-  font-style: italic;
+  gap: 12px;
 }
 .pp-note {
-  color: var(--dim);
+  color: var(--label);
 }
 .pp-closure {
   border-left: 2px solid var(--line);
   padding-left: 8px;
 }
+.pp-closure fleet-kit-prose-block {
+  display: block;
+  margin: 4px 0;
+}
+.pp-evidence .tag {
+  display: block;
+  margin-bottom: 6px;
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
 .pp-evidence ul {
   list-style: none;
-  margin: 0;
+  margin: 8px 0 0;
   padding: 0;
 }
 .pp-evidence li {
   padding: 6px 0;
   border-bottom: 1px solid var(--line);
 }
+.pp-finding-head {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.pp-finding-ref {
+  color: var(--amber-hi);
+  text-decoration: none;
+}
+.pp-finding-ref:hover,
+.pp-finding-ref:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
 .pp-finding-locus {
-  color: var(--dim);
+  margin: 0;
+  color: var(--label);
   overflow-wrap: anywhere;
+  min-width: 0;
+}
+.pp-evidence li fleet-kit-prose-block {
+  display: block;
+  margin-top: 4px;
 }
 .pp-finding-gone {
   color: var(--red, #c33);

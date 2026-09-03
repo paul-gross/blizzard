@@ -1,30 +1,63 @@
+/* A flex column so `.gr-layout` below can resolve `.body`'s bounded height
+ * (`gardening-page.css`) into its own full-height grid track, the way that
+ * page's own `:host` resolves the app shell's height into `.body`. */
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* `grid-template-rows: minmax(0, 1fr)` gives the row the grid container's
+ * full bounded height regardless of content — `align-items: start` then
+ * keeps a short column at its own content height instead of stretching it to
+ * match, so the two columns may genuinely differ in height while a tall one
+ * still hits the row's bound and scrolls inside its own box (`.gr-left`/
+ * `.gr-right` below) rather than dragging the other column down with it. */
 .gr-layout {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: var(--master-list-col) 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
   min-width: 0;
+  flex: 1;
+  min-height: 0;
 }
-@media (max-width: 480px) {
+@media (max-width: 720px) {
   .gr-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
+    flex: none;
+    min-height: 0;
+  }
+  /* Stacked, `.body` is the scroller again (`gardening-page.css`) — a column
+   * bound to the grid row's height no longer applies once there is no row to
+   * bound it against. */
+  .gr-left,
+  .gr-right {
+    max-height: none;
+    overflow-y: visible;
   }
 }
-.gr-list,
-.gr-panel {
+.gr-left,
+.gr-right {
   min-width: 0;
+  max-height: 100%;
+  overflow-y: auto;
 }
-.gr-scopes {
-  margin-top: 12px;
-}
-.gr-scopes h3 {
-  margin: 0 0 4px;
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--label);
-}
-.gr-scopes-error {
-  margin: 0 0 4px;
-  color: var(--red);
-  font-size: var(--fs-xs);
+/* A floor under the empty/loading text (`fleet-kit-async-state`'s own inline
+ * status line, `routine-panel.html`) so a routine-less right column reads as a
+ * panel awaiting a selection rather than a bare line of text collapsed to fit
+ * its content.
+ *
+ * `.gr-right` wraps the routed detail child, which is `display: contents`
+ * (`gardening-detail-host.css`) so `fleet-routine-panel` and its stacked
+ * `<fleet-kit-panel>`s sit here directly. Those panels size to their own
+ * content and do not shrink to share this column's height, so `.gr-right`'s
+ * `overflow-y: auto` above is the one real scroller for all of them — a long Activity or Strategy
+ * panel is reached by scrolling this column, not by scrolling inside the panel.
+ * That is why the panels set `bodyScroll` false (`kit-panel.ts`): a second
+ * scrollport inside a panel would steal the drag from this one. */
+.gr-right {
+  min-height: 240px;
 }

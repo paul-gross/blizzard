@@ -22,8 +22,42 @@ def test_no_facts_reads_live_with_nothing_seen() -> None:
     state = derive_liveness([])
 
     assert state.live is True
+    assert state.first_observed_at is None
     assert state.last_seen_at is None
     assert state.observed_count == 0
+
+
+def test_first_observed_at_is_the_add_facts_own_instant() -> None:
+    facts = [FindingFact(kind="add", recorded_at=_T0), FindingFact(kind="observed", recorded_at=_T2)]
+
+    state = derive_liveness(facts)
+
+    assert state.first_observed_at == _T0
+    assert state.last_seen_at == _T2
+
+
+def test_first_observed_at_reads_off_recorded_at_not_insertion_order() -> None:
+    """The same out-of-order guarantee `last_seen_at` carries: both ends of the
+    add/observed span come from `recorded_at`, so ingesting facts out of order still
+    derives the true first and last instants."""
+    facts = [FindingFact(kind="observed", recorded_at=_T2), FindingFact(kind="add", recorded_at=_T0)]
+
+    state = derive_liveness(facts)
+
+    assert state.first_observed_at == _T0
+    assert state.last_seen_at == _T2
+
+
+def test_an_exit_verb_does_not_move_first_observed_at() -> None:
+    """An exit is not an observation — only `add`/`observed` bound the span."""
+    facts = [
+        FindingFact(kind="add", recorded_at=_T1),
+        FindingFact(kind="resolved", recorded_at=_T2, note="fixed", actor="usr_1"),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert state.first_observed_at == _T1
 
 
 def test_a_freshly_added_finding_is_live() -> None:

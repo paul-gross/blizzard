@@ -1,0 +1,81 @@
+:host {
+  display: block;
+}
+/* The transcript turn's own gutter shape (`transcripts/transcript-viewer.css`'s
+   `.turn`), lifted into the kit: a hairline rail running the full height of the
+   prose with a single tick marking where it starts, and the text set beside it.
+   Deliberately not a bordered, filled box — the rail reads as "an agent wrote
+   this" without boxing the prose off from the panel it sits in, which is what
+   lets several of these stack in one panel and still read as one document. */
+.prose {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 8px;
+  padding: 4px 0;
+}
+.rail {
+  position: relative;
+}
+/* Runs the full height of the row rather than a fixed length, so a one-line
+   measurement and a forty-line proposal body are both fully spanned. */
+.rail::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+/* The tick's color is the whole signal, and it carries the transcript's own
+   meaning (`transcripts/transcript-viewer.css`): a dark tick is something an
+   agent *wrote*, a cyan one is context something *reads*. The transcript's
+   other two — green for a tool call, amber for thinking — have no counterpart
+   here, so this component declares only the two kinds gardening actually has
+   rather than mirroring a vocabulary it cannot produce. */
+.tick {
+  position: absolute;
+  left: 3px;
+  top: 5px;
+  width: 7px;
+  height: 7px;
+  z-index: 1;
+}
+/* Agent output — the transcript's own default turn. */
+.prose--output .tick {
+  background: var(--panel-deep);
+  border: 1px solid var(--label-dim);
+}
+.prose--output .who {
+  color: var(--label);
+}
+/* Context pushed *to* an agent — the transcript's `env` turn. */
+.prose--context .tick {
+  background: var(--cyan-dim);
+  border: 1px solid var(--cyan);
+}
+.prose--context .who {
+  color: var(--cyan);
+}
+.body {
+  min-width: 0;
+}
+.who {
+  font-size: var(--fs-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 1px;
+}
+/* `pre-wrap` is the whole point: agent prose carries its own paragraph breaks and
+   indentation, and collapsing them turns a structured answer into one run. Set in
+   `--mono` for the same reason the transcript is — the text routinely contains
+   code, paths, and rule ids that only line up in a monospace face. */
+.tx {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  font-family: var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

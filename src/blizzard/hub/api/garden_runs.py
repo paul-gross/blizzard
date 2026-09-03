@@ -29,6 +29,7 @@ from blizzard.wire.garden_run import (
     DeliveredSetDeltaView,
     DeliveredSetView,
     GoneFindingView,
+    ObservedFindingView,
     RunDeltaView,
     RunEscalationView,
     RunRowView,
@@ -76,7 +77,12 @@ def _parse_instant(value: str, *, field: str) -> datetime:
 
 def _delivered_view(delivered: DeliveredSet) -> DeliveredSetView:
     return DeliveredSetView(
-        finding_set_id=delivered.finding_set_id, revisions=delivered.revisions, measurement=delivered.measurement
+        finding_set_id=delivered.finding_set_id,
+        revisions=delivered.revisions,
+        measurement=delivered.measurement,
+        added_count=delivered.added_count,
+        observed_count=delivered.observed_count,
+        gone_count=delivered.gone_count,
     )
 
 
@@ -122,7 +128,13 @@ def _set_delta_view(delta: DeliveredSetDelta) -> DeliveredSetDeltaView:
             )
             for a in delta.added
         ],
-        observed=list(delta.observed),
+        observed=[
+            # `class_`'s alias is the Python keyword `class`, the added group's own shape.
+            ObservedFindingView.model_validate(
+                {"finding_id": o.finding_id, "class": o.class_, "locus": o.locus, "summary": o.summary}
+            )
+            for o in delta.observed
+        ],
         gone=[GoneFindingView(finding_id=g.finding_id, note=g.note) for g in delta.gone],
     )
 

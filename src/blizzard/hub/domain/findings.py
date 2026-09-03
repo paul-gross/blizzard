@@ -58,6 +58,10 @@ class Finding:
     #: The `introduced` commit's own authored instant — nullable, never backfilled
     #: (blizzard#394 D5): null wherever unresolved, by design.
     introduced_at: datetime | None
+    #: When a routine first recorded this finding — the `add` fact's own instant.
+    #: Distinct from `introduced_at`: that is when the *commit* landed, this is when
+    #: the garden first *saw* it. Derived, never stored.
+    first_observed_at: datetime | None
     #: schema.py's `findings` table carries no such column (D2-D4).
     live: bool
     #: "live", "gone", or one of `EXIT_KINDS` — the newest fact's own kind (blizzard#394).
@@ -95,17 +99,21 @@ class FindingLiveness:
     state: str
     live: bool
     note: str | None
+    first_observed_at: datetime | None
     last_seen_at: datetime | None
     observed_count: int
 
 
 def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
     """The newest-fact-wins read over a finding's facts (D1-D3, blizzard#394): any later
-    fact reverses `gone`, but only `reopened` reverses an `EXIT_KINDS` verb. `last_seen_at`
-    uses `recorded_at`, not insertion order, so out-of-order ingestion still derives
+    fact reverses `gone`, but only `reopened` reverses an `EXIT_KINDS` verb.
+    `first_observed_at`/`last_seen_at` are the min/max of the same `add`/`observed` span
+    and use `recorded_at`, not insertion order, so out-of-order ingestion still derives
     correctly."""
     if not facts:
-        return FindingLiveness(state="live", live=True, note=None, last_seen_at=None, observed_count=0)
+        return FindingLiveness(
+            state="live", live=True, note=None, first_observed_at=None, last_seen_at=None, observed_count=0
+        )
     seen = [f for f in facts if f.kind in ("add", "observed")]
     newest = facts[0]
     for fact in facts[1:]:
@@ -121,6 +129,7 @@ def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
         state=state,
         live=state == "live",
         note=newest.note,
+        first_observed_at=min((f.recorded_at for f in seen), default=None),
         last_seen_at=max((f.recorded_at for f in seen), default=None),
         observed_count=sum(1 for f in facts if f.kind == "observed"),
     )

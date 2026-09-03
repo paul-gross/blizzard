@@ -1,0 +1,61 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.fp {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px;
+  min-width: 0;
+}
+.fp-hdr h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+.fp-ref {
+  color: var(--label-dim);
+  font-weight: normal;
+}
+.fp-locus {
+  margin: 4px 0 0;
+  color: var(--label);
+  overflow-wrap: anywhere;
+}
+/* The kit fact grid owns the columns, alignment and typography; the panel only
+   places it and sizes its label column, which has to hold `first observed` —
+   wider than the kit's own default. */
+.fp-facts {
+  margin: 8px 0 0;
+  --kv-label-col: max-content;
+}
+.fp-rev {
+  color: var(--amber-hi);
+}
+.fp-unresolved {
+  color: var(--label-dim);
+  font-style: italic;
+}
+.fp-work-item {
+  margin: 0;
+}
+.fp-work-item a {
+  color: var(--amber-hi);
+}
+/* Five CTA-sized buttons (`kit-button.css`'s own `.cta`, `9px 22px` padding) are a
+ * lot of visual weight for the panel's own right-hand column — `flex-wrap` lets
+ * them wrap onto as many rows as the column's own width forces rather than
+ * spilling into a horizontal scroll, `proposal-panel.css`'s own `.pp-actions-bar`
+ * shape and gap, reused here for the same five-wide row. */
+.fp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}

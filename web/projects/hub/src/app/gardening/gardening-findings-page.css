@@ -1,0 +1,80 @@
+/* A flex column so `.gf-layout` below can resolve `.body`'s bounded height
+ * (`gardening-page.css`) into its own full-height grid track, the way that
+ * page's own `:host` resolves the app shell's height into `.body` — the
+ * filter block above the layout stays its own natural height (`flex: none`
+ * below) and only the layout grows to fill what is left. */
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* A fixed label column beside a chips column, one grid row per filter group —
+ * `kit-fact-list.css`'s own `.kv` two-column shape (`--kv-label-col`), so this
+ * filter block's label column lines up with the fact lists used elsewhere in
+ * gardening rather than drifting to its own measurements. `fleet-kit-chips`
+ * itself is `display: contents` (`kit-chips.css`), so each chips row becomes a
+ * real grid item here with no wrapper element needed, and wraps within its own
+ * row on overflow rather than spilling into the row below. */
+.gf-filters {
+  display: grid;
+  grid-template-columns: var(--kv-label-col, 74px) 1fr;
+  align-items: start;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  flex: none;
+}
+.gf-filter-label {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+  padding-top: 4px;
+}
+/* `grid-template-rows: minmax(0, 1fr)` gives the row the grid container's
+ * full bounded height regardless of content — `align-items: start` then
+ * keeps a short column at its own content height instead of stretching it to
+ * match, so the two columns may genuinely differ in height while a tall one
+ * still hits the row's bound and scrolls inside its own box (`.gf-list`/
+ * `.gf-detail` below) rather than dragging the other column down with it. */
+.gf-layout {
+  display: grid;
+  grid-template-columns: var(--master-list-col) 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+}
+/* `chunk-node-history-tab.css`'s own master/detail breakpoint, for the same shape:
+ * a fixed-width list column beside a detail pane collapses to one column on a
+ * narrow viewport rather than clipping the list. */
+@media (max-width: 720px) {
+  .gf-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    flex: none;
+    min-height: 0;
+  }
+  /* Stacked, `.body` is the scroller again (`gardening-page.css`) — a column
+   * bound to the grid row's height no longer applies once there is no row to
+   * bound it against. */
+  .gf-list,
+  .gf-detail {
+    max-height: none;
+    overflow-y: visible;
+  }
+}
+.gf-list,
+.gf-detail {
+  min-width: 0;
+  max-height: 100%;
+  overflow-y: auto;
+}
+/* A floor under the empty/loading text (`fleet-kit-async-state`'s own inline
+ * status line) so it reads as a panel awaiting a selection rather than a
+ * bare line of text collapsed to fit its content. */
+.gf-detail {
+  min-height: 240px;
+}

@@ -23,4 +23,18 @@ describe('compactRef', () => {
     expect(compactRef('cho_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('CH-3YJ9');
     expect(compactRef('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('C-3YJ9');
   });
+
+  it('renders the garden entity prefixes as their registered sigils', () => {
+    expect(compactRef('fin_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('F-3YJ9');
+    expect(compactRef('fins_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('FS-3YJ9');
+    expect(compactRef('gprop_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('GP-3YJ9');
+    expect(compactRef('rtn_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('R-3YJ9');
+  });
+
+  it('keeps a finding and a finding set with the same tail apart via the registry', () => {
+    // `fins` would default to `F`, the same sigil `fin` gets, on ids that would
+    // otherwise render identically — the exact collision the registry exists to prevent.
+    expect(compactRef('fin_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('F-3YJ9');
+    expect(compactRef('fins_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('FS-3YJ9');
+  });
 });

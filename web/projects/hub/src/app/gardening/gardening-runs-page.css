@@ -1,0 +1,56 @@
+/* A flex column so `.gr-layout` below can resolve `.body`'s bounded height
+ * (`gardening-page.css`) into its own full-height grid track, the way that
+ * page's own `:host` resolves the app shell's height into `.body`. */
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* `grid-template-rows: minmax(0, 1fr)` gives the row the grid container's
+ * full bounded height regardless of content — `align-items: start` then
+ * keeps a short column at its own content height instead of stretching it to
+ * match, so the two columns may genuinely differ in height while a tall one
+ * still hits the row's bound and scrolls inside its own box (`.gr-list`/
+ * `.gr-detail` below) rather than dragging the other column down with it. */
+.gr-layout {
+  display: grid;
+  grid-template-columns: var(--master-list-col) 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+}
+/* `chunk-node-history-tab.css`'s own master/detail breakpoint, for the same shape:
+ * a fixed-width list column beside a detail pane collapses to one column on a
+ * narrow viewport rather than clipping the list. */
+@media (max-width: 720px) {
+  .gr-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    flex: none;
+    min-height: 0;
+  }
+  /* Stacked, `.body` is the scroller again (`gardening-page.css`) — a column
+   * bound to the grid row's height no longer applies once there is no row to
+   * bound it against. */
+  .gr-list,
+  .gr-detail {
+    max-height: none;
+    overflow-y: visible;
+  }
+}
+.gr-list,
+.gr-detail {
+  min-width: 0;
+  max-height: 100%;
+  overflow-y: auto;
+}
+/* A floor under the empty/loading text (`fleet-kit-async-state`'s own inline
+ * status line) so it reads as a panel awaiting a selection rather than a
+ * bare line of text collapsed to fit its content. */
+.gr-detail {
+  min-height: 240px;
+}

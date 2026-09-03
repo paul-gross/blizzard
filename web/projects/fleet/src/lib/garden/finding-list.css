@@ -9,83 +9,84 @@
   margin: 0;
   padding: 0;
 }
-.fl-row {
+.fl-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  border-left: 3px solid transparent;
-  border-bottom: 1px solid var(--line);
+  gap: 2px;
+  /* Cancels `kit-select-row.css`'s own fixed `padding: 6px 8px` on `.row` so this
+   * div's background can flush against the row's edges — `run-list.css`'s own
+   * `.rl-body` shape and its doc comment on why: a tint here paints on top of
+   * whatever background the kit row itself is already showing, so a selected row
+   * stays legible as gone/exited too. */
+  margin: -6px -8px;
+  padding: 6px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 /* A `gone`-flagged row (D8) renders tinted against the amber family — "flagged for
- * review", distinct from an escalated row's red (`run-list.css`'s own
- * `.rl-row--escalated`) and from an exited row's plain dimming below. `gone` is
+ * review", distinct from an escalated run's red (`run-list.css`'s own
+ * `.rl-body--escalated`) and from an exited row's plain dimming below. `gone` is
  * *not* exited: this row stays a normal, fully rendered, selectable-looking row. */
-.fl-row--gone {
-  border-left-color: var(--amber);
+.fl-body--gone {
   background: color-mix(in srgb, var(--amber) 10%, transparent);
 }
 /* An exited row (state one of `finding-state.ts`'s `FINDING_EXIT_STATES`) renders
  * dimmed but present — reduced opacity, never removed from the DOM. */
-.fl-row--exited {
+.fl-body--exited {
   opacity: 0.55;
-}
-.fl-hdr {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.fl-class {
-  font-weight: bold;
-}
-.fl-locus,
-.fl-observed,
-.fl-introduced,
-.fl-last-seen {
-  color: var(--dim);
-}
-.fl-state {
-  text-transform: uppercase;
-  font-size: var(--fs-xs);
-  color: var(--cyan);
 }
 .fl-summary {
   margin: 0;
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  /* The row's own headline — `proposal-list.css`'s own `.pl-title` shape, clamped
+   * to four lines so the two lists read alike: real summaries are long
+   * multi-sentence agent prose, and the clamp is load-bearing (the full text reads
+   * in `fleet-finding-panel` once the row is picked). */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.fl-note {
+.fl-hdr {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 2px;
+  color: var(--label);
+  font-size: var(--fs-xs);
+  min-width: 0;
+}
+/* No wrap — the class ellipsizes instead of breaking onto a second line, so the
+   trailing ref (`.fl-ref`'s `margin-left: auto`) always lands at the row's right
+   edge rather than wrapping under it (`proposal-list.css`'s own `.pl-class`/
+   `.pl-ref` shape, matched here so the two lists read alike). */
+.fl-class {
+  font-weight: bold;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fl-ref {
+  flex: none;
+  margin-left: auto;
+  color: var(--label-dim);
+  white-space: nowrap;
+}
+.fl-locus {
   margin: 0;
-  color: var(--amber-hi);
+  color: var(--label);
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
-.fl-work-item {
+.fl-seen {
   margin: 0;
-}
-.fl-work-item a {
-  color: var(--cyan);
+  color: var(--label-dim);
+  font-size: var(--fs-label);
 }
 .fl-cli {
   margin: 8px 0 0;
-  color: var(--dim);
-}
-.fl-select-all {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 6px;
-  color: var(--dim);
-}
-.fl-select {
-  margin-right: 4px;
-}
-.fl-bulk-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin: 8px 0 0;
-  padding: 8px;
-  border-top: 1px solid var(--line);
-}
-.fl-bulk-count {
-  color: var(--dim);
+  color: var(--label-dim);
 }

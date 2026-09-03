@@ -1,33 +1,13 @@
 <div class="gr-layout">
-  <fleet-routine-list
-    class="gr-list"
-    [rows]="listRows()"
-    [selectedId]="selectedId()"
-    [state]="listState()"
-    (routinePick)="select($event)"
-  />
-  <fleet-routine-panel class="gr-panel" [vm]="panelVm()" [state]="panelState()" (run)="run()" />
+  <fleet-kit-panel class="gr-left" label="Routines">
+    <fleet-routine-list
+      [rows]="listRows()"
+      [selectedName]="selectedRoutineName()"
+      [state]="listState()"
+      (routinePick)="selectRoutine($event)"
+    />
+  </fleet-kit-panel>
+  <div class="gr-right">
+    <router-outlet />
+  </div>
 </div>
-
-@if (runningRoutine(); as routine) {
-  <app-gardening-run-dialog
-    [routineId]="routine.routine_id"
-    [routineName]="routine.name"
-    (closed)="closeDialog()"
-  />
-}
-
-<section class="gr-scopes">
-  <h3>Scopes</h3>
-  @if (scopeActionError(); as err) {
-    <p class="gr-scopes-error" data-testid="gardening-scopes-error">{{ err }}</p>
-  }
-  <fleet-scope-list
-    [rows]="scopeRows()"
-    [state]="scopesState()"
-    [canEdit]="canEditScopes()"
-    (editDescription)="onEditScopeDescription($event)"
-    (retire)="onRetireScope($event)"
-    (enable)="onEnableScope($event)"
-  />
-</section>

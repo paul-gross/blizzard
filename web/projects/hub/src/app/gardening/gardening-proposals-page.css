@@ -1,21 +1,62 @@
+/* A flex column so `.gp-layout` below can resolve `.body`'s bounded height
+ * (`gardening-page.css`) into its own full-height grid track, the way that
+ * page's own `:host` resolves the app shell's height into `.body` — the
+ * filter chips above the layout stay their own natural height (`flex: none`
+ * below) and only the layout grows to fill what is left. */
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 .gp-filters {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 12px;
+  flex: none;
 }
+/* `grid-template-rows: minmax(0, 1fr)` gives the row the grid container's
+ * full bounded height regardless of content — `align-items: start` then
+ * keeps a short column at its own content height instead of stretching it to
+ * match, so the two columns may genuinely differ in height while a tall one
+ * still hits the row's bound and scrolls inside its own box (`.gp-list`/
+ * `.gp-panel` below) rather than dragging the other column down with it. */
 .gp-layout {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: var(--master-list-col) 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
   min-width: 0;
+  flex: 1;
+  min-height: 0;
 }
-@media (max-width: 480px) {
+@media (max-width: 720px) {
   .gp-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
+    flex: none;
+    min-height: 0;
+  }
+  /* Stacked, `.body` is the scroller again (`gardening-page.css`) — a column
+   * bound to the grid row's height no longer applies once there is no row to
+   * bound it against. */
+  .gp-list,
+  .gp-panel {
+    max-height: none;
+    overflow-y: visible;
   }
 }
 .gp-list,
 .gp-panel {
   min-width: 0;
+  max-height: 100%;
+  overflow-y: auto;
+}
+/* A floor under the empty/loading text (`fleet-kit-async-state`'s own inline
+ * status line) so it reads as a panel awaiting a selection rather than a
+ * bare line of text collapsed to fit its content. */
+.gp-panel {
+  min-height: 240px;
 }

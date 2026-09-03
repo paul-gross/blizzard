@@ -7,29 +7,28 @@
 .subnav {
   flex: none;
 }
-.note {
-  margin-left: auto;
-  padding: 0 12px;
-  display: flex;
-  align-items: center;
-  color: var(--label-dim);
-  white-space: nowrap;
-}
-.cnt {
-  display: inline-block;
-  min-width: 16px;
+[data-testid='gardening-tab-proposals'] fleet-kit-count-badge {
   margin-left: 6px;
-  padding: 0 5px;
-  background: var(--amber-dim);
-  color: var(--snow);
-  border-radius: 8px;
-  font-size: 10px;
-  line-height: 16px;
-  letter-spacing: 0;
   vertical-align: middle;
 }
+/* No longer the scroller (each tab's own two-column grid owns that split,
+ * `gardening-scopes-page.css` and its siblings) — a flex column so the active
+ * tab's own layout can size to the full remaining height and split it between
+ * its two columns, each scrolling on its own. */
 .body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+}
+/* Below 720px every tab's own grid collapses to one stacked column (its own
+ * `@media (max-width: 720px)` rule) — there is no per-column split left to
+ * bound, so this goes back to being the one scroll container for the whole
+ * tab, the way a single stacked page normally scrolls. */
+@media (max-width: 720px) {
+  .body {
+    display: block;
+    overflow-y: auto;
+  }
 }

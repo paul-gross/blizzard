@@ -78,7 +78,15 @@ class FindingView(BaseModel):
     """A finding. `state` is the newest fact's own kind, folded to `"live"` for
     `add`/`observed`/`reopened` (blizzard#394) — `live` is kept alongside it as the
     `state == "live"` shorthand existing consumers already read. `note` is the newest
-    fact's own note, whatever kind it is — `None` for a kind that carries none."""
+    fact's own note, whatever kind it is — `None` for a kind that carries none.
+
+    Two distinct instants ride alongside `introduced`: `introduced_at` is the authored
+    time of the commit `introduced` names, and is null wherever that commit was never
+    resolved — a delivery declaring zero or several repositories leaves which one
+    `introduced` refers to ambiguous, so no instant is looked up. `first_observed_at` is
+    when a routine first recorded the finding — the earliest of its `add`/`observed`
+    span — and is null for a finding carrying neither, which is how a finding whose only
+    facts are exit verbs reads."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -89,6 +97,8 @@ class FindingView(BaseModel):
     locus: str
     summary: str
     introduced: str | None = None
+    introduced_at: str | None = None
+    first_observed_at: str | None = None
     live: bool
     state: str
     note: str | None = None

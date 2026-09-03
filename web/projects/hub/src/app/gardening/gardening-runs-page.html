@@ -1,0 +1,14 @@
+<div class="gr-layout">
+  <fleet-kit-panel class="gr-list" label="Runs">
+    <fleet-run-list
+      [rows]="runs.listRows()"
+      [selectedChunkId]="chunkId()"
+      [state]="runs.listState()"
+      (runPick)="selectRun($event)"
+    />
+  </fleet-kit-panel>
+
+  <fleet-kit-panel class="gr-detail" label="Run">
+    <router-outlet />
+  </fleet-kit-panel>
+</div>

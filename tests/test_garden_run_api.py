@@ -212,6 +212,18 @@ def test_run_delta_reads_back_the_added_observed_and_gone_groups(tmp_path: Path)
         conn.execute(
             insert(s.finding_facts).values(finding_id="fin_new", kind="add", recorded_at=_NOW, finding_set_id="fins_1")
         )
+        conn.execute(
+            insert(s.findings).values(
+                finding_id="fin_seen",
+                routine_name="gardening",
+                scope_slug="blizzard",
+                class_="dead-code",
+                locus="b.py:7",
+                summary="unused helper",
+                introduced=None,
+                introduced_at=None,
+            )
+        )
 
     resp = hub.client.get(f"/api/runs/{chunk_id}")
 
@@ -221,7 +233,11 @@ def test_run_delta_reads_back_the_added_observed_and_gone_groups(tmp_path: Path)
     (added,) = set_delta["added"]
     assert added["finding_id"] == "fin_new"
     assert added["class"] == "stale-docstring"
-    assert set_delta["observed"] == ["fin_seen"]
+    # An observed op names only an id on the wire's way in; its class/locus/summary are
+    # read back from the finding row, under the same `class` key the added group uses.
+    assert set_delta["observed"] == [
+        {"finding_id": "fin_seen", "class": "dead-code", "locus": "b.py:7", "summary": "unused helper"}
+    ]
     (gone,) = set_delta["gone"]
     assert gone["finding_id"] == "fin_missing"
 

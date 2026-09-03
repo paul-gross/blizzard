@@ -3,8 +3,10 @@ identity minted through ``routine_run.run`` (not hand-rolled), then delivery/esc
 facts seeded directly the ``test_routine_run_service.py`` shape. Proves the three
 acceptance shapes together: a run that delivered, one that delivered an empty list, and
 one that escalated before delivering anything all appear in the list; a run's delta
-reads back added/observed/gone per delivered set; and several sets from one run stay
-separately grouped in both the list row and the delta."""
+reads back added/observed/gone per delivered set; a delivered set's own
+added/observed/gone counts fold only that delivery's facts, zero rather than null for
+an absent kind, and stay per-set; and several sets from one run stay separately
+grouped in both the list row and the delta."""
 
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import insert
+from sqlalchemy import insert, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.graph import Graph
@@ -98,22 +100,38 @@ def _seed_delivery(
 
 
 def _seed_add_fact(hub: HubHarness, finding_id: str, *, finding_set_id: str | None, at: datetime = _NOW) -> None:
+    _seed_finding_fact(hub, finding_id, kind="add", finding_set_id=finding_set_id, at=at)
+
+
+def _seed_finding_fact(
+    hub: HubHarness,
+    finding_id: str,
+    *,
+    kind: str,
+    finding_set_id: str | None,
+    note: str | None = None,
+    at: datetime = _NOW,
+) -> None:
+    """One `finding_facts` row of any kind, minting `finding_id` first when it doesn't
+    already exist — the general-purpose sibling of `_seed_add_fact`, for seeding
+    `observed`/`gone`/exit facts too."""
     with hub.engine.begin() as conn:
-        conn.execute(
-            insert(s.findings).values(
-                finding_id=finding_id,
-                routine_name="gardening",
-                scope_slug="blizzard",
-                class_="stale-docstring",
-                locus="a.py:1",
-                summary="s",
-                introduced=None,
-                introduced_at=None,
+        if conn.execute(select(s.findings.c.finding_id).where(s.findings.c.finding_id == finding_id)).first() is None:
+            conn.execute(
+                insert(s.findings).values(
+                    finding_id=finding_id,
+                    routine_name="gardening",
+                    scope_slug="blizzard",
+                    class_="stale-docstring",
+                    locus="a.py:1",
+                    summary="s",
+                    introduced=None,
+                    introduced_at=None,
+                )
             )
-        )
         conn.execute(
             insert(s.finding_facts).values(
-                finding_id=finding_id, kind="add", recorded_at=at, finding_set_id=finding_set_id
+                finding_id=finding_id, kind=kind, recorded_at=at, note=note, finding_set_id=finding_set_id
             )
         )
 
@@ -154,6 +172,9 @@ def test_a_delivered_run_appears_with_its_finding_set(tmp_path: Path) -> None:
     (delivered,) = row.delivered
     assert delivered.finding_set_id == "fins_1"
     assert delivered.revisions == {"blizzard": "aaa"}
+    assert delivered.added_count == 0
+    assert delivered.observed_count == 0
+    assert delivered.gone_count == 0
 
 
 def test_a_run_that_delivered_an_empty_list_still_appears_with_its_set(tmp_path: Path) -> None:
@@ -228,6 +249,66 @@ def test_several_finding_sets_from_one_run_stay_separately_grouped_in_the_list(t
     assert {d.finding_set_id for d in row.delivered} == {"fins_1", "fins_2"}
 
 
+def test_delivered_set_counts_reflect_only_this_deliverys_add_observed_and_gone_facts(tmp_path: Path) -> None:
+    """A set with all three kinds present, and one fact of a kind that must never be
+    counted: an exit verb (`resolved`) recorded against the same set never surfaces in
+    any of the three counts, even when it carries a `finding_set_id`."""
+    hub = build_hub(tmp_path)
+    routine = _routine(hub)
+    chunk_id = _run(hub, routine)
+    _seed_delivery(hub, chunk_id, "fins_1", artifact_id="art_1", findings=[])
+    _seed_finding_fact(hub, "fin_1", kind="add", finding_set_id="fins_1")
+    _seed_finding_fact(hub, "fin_2", kind="add", finding_set_id="fins_1")
+    _seed_finding_fact(hub, "fin_3", kind="add", finding_set_id="fins_1")
+    _seed_finding_fact(hub, "fin_4", kind="add", finding_set_id="fins_1")
+    for finding_id in ["fin_5", "fin_6"]:
+        _seed_finding_fact(hub, finding_id, kind="observed", finding_set_id="fins_1")
+    _seed_finding_fact(hub, "fin_1", kind="gone", finding_set_id="fins_1", note="not found this pass")
+    _seed_finding_fact(hub, "fin_2", kind="resolved", finding_set_id="fins_1", note="landed")
+
+    (row,) = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+
+    (delivered,) = row.delivered
+    assert delivered.added_count == 4
+    assert delivered.observed_count == 2
+    assert delivered.gone_count == 1
+
+
+def test_delivered_set_counts_are_zero_not_null_for_an_absent_kind(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    routine = _routine(hub)
+    chunk_id = _run(hub, routine)
+    _seed_delivery(hub, chunk_id, "fins_1", artifact_id="art_1", findings=[])
+    _seed_finding_fact(hub, "fin_1", kind="add", finding_set_id="fins_1")
+
+    (row,) = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+
+    (delivered,) = row.delivered
+    assert delivered.added_count == 1
+    assert delivered.observed_count == 0
+    assert delivered.gone_count == 0
+
+
+def test_delivered_set_counts_stay_per_set_never_merged_across_sets_in_one_run(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    routine = _routine(hub)
+    chunk_id = _run(hub, routine)
+    _seed_delivery(hub, chunk_id, "fins_1", artifact_id="art_1", findings=[], revisions={"a": "1"})
+    _seed_delivery(hub, chunk_id, "fins_2", artifact_id="art_2", findings=[], revisions={"b": "2"})
+    _seed_finding_fact(hub, "fin_1", kind="add", finding_set_id="fins_1")
+    _seed_finding_fact(hub, "fin_2", kind="add", finding_set_id="fins_2")
+    _seed_finding_fact(hub, "fin_3", kind="add", finding_set_id="fins_2")
+    _seed_finding_fact(hub, "fin_4", kind="observed", finding_set_id="fins_2")
+
+    (row,) = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
+
+    by_set = {d.finding_set_id: d for d in row.delivered}
+    assert by_set["fins_1"].added_count == 1
+    assert by_set["fins_1"].observed_count == 0
+    assert by_set["fins_2"].added_count == 2
+    assert by_set["fins_2"].observed_count == 1
+
+
 # --------------------------------------------------------------------------- #
 # run_delta
 
@@ -243,6 +324,7 @@ def test_run_delta_reads_back_added_observed_and_gone(tmp_path: Path) -> None:
     ]
     _seed_delivery(hub, chunk_id, "fins_1", artifact_id="art_1", findings=findings, revisions={"blizzard": "aaa"})
     _seed_add_fact(hub, "fin_new", finding_set_id="fins_1")
+    _seed_finding_fact(hub, "fin_seen", kind="observed", finding_set_id="fins_1")
 
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
@@ -255,10 +337,36 @@ def test_run_delta_reads_back_added_observed_and_gone(tmp_path: Path) -> None:
     (added,) = set_delta.added
     assert added.finding_id == "fin_new"
     assert added.class_ == "stale-docstring"
-    assert set_delta.observed == ["fin_seen"]
+    (observed,) = set_delta.observed
+    assert observed.finding_id == "fin_seen"
+    # The artifact's observed op names an id and nothing else — these three come from
+    # the finding row itself.
+    assert observed.class_ == "stale-docstring"
+    assert observed.locus == "a.py:1"
+    assert observed.summary == "s"
     (gone,) = set_delta.gone
     assert gone.finding_id == "fin_missing"
     assert gone.note == "not found this pass"
+
+
+def test_an_observed_op_naming_no_finding_row_still_renders_by_id(tmp_path: Path) -> None:
+    """The finding an observed op names can be absent from `findings` — the entry keeps
+    its id and reports null class/locus/summary rather than dropping out of the group."""
+    hub = build_hub(tmp_path)
+    routine = _routine(hub)
+    chunk_id = _run(hub, routine)
+    findings: list[dict[str, object]] = [{"op": "observed", "id": "fin_ghost"}]
+    _seed_delivery(hub, chunk_id, "fins_1", artifact_id="art_1", findings=findings)
+
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+    delta = hub.services.garden_run.run_delta(chunk)
+
+    assert delta is not None
+    (set_delta,) = delta.sets
+    (observed,) = set_delta.observed
+    assert observed.finding_id == "fin_ghost"
+    assert (observed.class_, observed.locus, observed.summary) == (None, None, None)
 
 
 def test_an_add_predating_the_finding_set_link_renders_with_no_matched_id(tmp_path: Path) -> None:

@@ -1327,7 +1327,7 @@
         "type": "object"
       },
       "FindingView": {
-        "description": "A finding. `state` is the newest fact's own kind, folded to `\"live\"` for\n`add`/`observed`/`reopened` (blizzard#394) \u2014 `live` is kept alongside it as the\n`state == \"live\"` shorthand existing consumers already read. `note` is the newest\nfact's own note, whatever kind it is \u2014 `None` for a kind that carries none.",
+        "description": "A finding. `state` is the newest fact's own kind, folded to `\"live\"` for\n`add`/`observed`/`reopened` (blizzard#394) \u2014 `live` is kept alongside it as the\n`state == \"live\"` shorthand existing consumers already read. `note` is the newest\nfact's own note, whatever kind it is \u2014 `None` for a kind that carries none.\n\nTwo distinct instants ride alongside `introduced`: `introduced_at` is the authored\ntime of the commit `introduced` names, and is null wherever that commit was never\nresolved \u2014 a delivery declaring zero or several repositories leaves which one\n`introduced` refers to ambiguous, so no instant is looked up. `first_observed_at` is\nwhen a routine first recorded the finding \u2014 the earliest of its `add`/`observed`\nspan \u2014 and is null for a finding carrying neither, which is how a finding whose only\nfacts are exit verbs reads.",
         "properties": {
           "class": {
             "title": "Class",
@@ -1336,6 +1336,17 @@
           "finding_id": {
             "title": "Finding Id",
             "type": "string"
+          },
+          "first_observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Observed At"
           },
           "introduced": {
             "anyOf": [
@@ -1347,6 +1358,17 @@
               }
             ],
             "title": "Introduced"
+          },
+          "introduced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Introduced At"
           },
           "last_seen_at": {
             "anyOf": [

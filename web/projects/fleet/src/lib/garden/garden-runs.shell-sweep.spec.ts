@@ -21,11 +21,12 @@ async function loadDesignTokens(): Promise<void> {
 }
 
 /**
- * The gardening runs-and-findings tab's own half of `web:shell-sweep` (blizzard#401
+ * The gardening runs tab's own half of `web:shell-sweep` (blizzard#401
  * Phase 3) — a real, headless-Chromium proof of the two classes of layout/style claim
- * jsdom cannot make: {@link FleetRunList}'s escalated row must carry a genuinely
- * different computed `background-color` from a normal row (not merely a different
- * class name jsdom would accept without evaluating it against the stylesheet), and
+ * jsdom cannot make: {@link FleetRunList}'s escalated row's own body must carry a
+ * genuinely different computed `background-color` from a normal row's (not merely a
+ * different class name jsdom would accept without evaluating it against the
+ * stylesheet), and
  * {@link FleetRunDelta}'s finding-set blocks — and, within each set, its own
  * added/observed/gone groups — must genuinely stack with distinct `top`s rather than
  * overlapping at a phone width. Gardening sits in the hub's mobile bottom tab bar, so
@@ -44,7 +45,7 @@ const ROWS: readonly RunListRowVm[] = [
     mintedAt: '2026-01-10T00:00:00Z',
     outcome: 'done',
     escalated: false,
-    delivered: [],
+    counts: { added: 1, observed: 11, gone: 0 },
   },
   {
     chunkId: 'ch_2',
@@ -54,7 +55,7 @@ const ROWS: readonly RunListRowVm[] = [
     mintedAt: '2026-01-11T00:00:00Z',
     outcome: 'needs_human',
     escalated: true,
-    delivered: [],
+    counts: null,
   },
 ];
 
@@ -62,8 +63,7 @@ const DELTA_VM: RunDeltaVm = {
   chunkId: 'ch_1',
   routineName: 'nightly',
   scopeSlug: 'blizzard',
-  mode: 'full',
-  outcome: 'done',
+  mintedAt: '2026-01-10T00:00:00Z',
   escalation: null,
   sets: [
     {
@@ -71,7 +71,7 @@ const DELTA_VM: RunDeltaVm = {
       revisionsLabel: 'blizzard@abc123',
       measurement: '3 findings',
       added: [{ findingId: 'fnd_1', findingClass: 'style', locus: 'a.py:1', summary: 'unused import', introduced: null }],
-      observed: ['fnd_2'],
+      observed: [{ findingId: 'fnd_2', findingClass: 'perf', locus: 'b.py:7', summary: 'still reproducing' }],
       gone: [{ findingId: 'fnd_3', note: 'resolved' }],
     },
     {
@@ -86,7 +86,7 @@ const DELTA_VM: RunDeltaVm = {
 };
 
 describe('FleetRunList escalated row shell sweep (web:shell-sweep, blizzard#401 Phase 3)', () => {
-  it('gives an escalated row a genuinely different computed background than a normal row', async () => {
+  it('gives an escalated row’s body a genuinely different computed background than a normal row’s, on top of whichever background the shared kit row itself is painting', async () => {
     await loadDesignTokens();
     await TestBed.configureTestingModule({
       imports: [FleetRunList],
@@ -102,18 +102,27 @@ describe('FleetRunList escalated row shell sweep (web:shell-sweep, blizzard#401 
       await page.viewport(390, 800);
       await fixture.whenStable();
 
-      const normal = root.querySelector<HTMLElement>('[data-testid="gardening-run-row-ch_1"]')!;
-      const escalated = root.querySelector<HTMLElement>('[data-testid="gardening-run-row-ch_2"]')!;
-      const normalBg = getComputedStyle(normal).backgroundColor;
-      const escalatedBg = getComputedStyle(escalated).backgroundColor;
-      expect(escalatedBg, 'the escalated row must not share the normal row’s computed background').not.toBe(normalBg);
+      // The escalation tint rides `.rl-body`, the projected content inside
+      // `fleet-kit-select-row`'s own encapsulated `<button>` — that button's own
+      // background is where *selection* paints (`kit-select-row.css`'s own
+      // `.selected`), so the two backgrounds are compared where each is actually
+      // drawn rather than both read off the outer button.
+      const normalBody = root.querySelector<HTMLElement>('[data-testid="gardening-run-row-ch_1"] .rl-body')!;
+      const escalatedBody = root.querySelector<HTMLElement>('[data-testid="gardening-run-row-ch_2"] .rl-body')!;
+      const normalBg = getComputedStyle(normalBody).backgroundColor;
+      const escalatedBg = getComputedStyle(escalatedBody).backgroundColor;
+      expect(escalatedBg, 'the escalated row’s body must not share the normal row’s computed background').not.toBe(
+        normalBg,
+      );
 
-      const normalBorder = getComputedStyle(normal).borderLeftColor;
-      const escalatedBorder = getComputedStyle(escalated).borderLeftColor;
+      // The left edge belongs to selection unconditionally — an escalated row that
+      // is not selected must not claim it, unlike the row's own tint.
+      const normalRow = root.querySelector<HTMLElement>('[data-testid="gardening-run-row-ch_1"]')!;
+      const escalatedRow = root.querySelector<HTMLElement>('[data-testid="gardening-run-row-ch_2"]')!;
       expect(
-        escalatedBorder,
-        'the escalated row must not share the normal row’s computed border-left color',
-      ).not.toBe(normalBorder);
+        getComputedStyle(escalatedRow).borderLeftColor,
+        'an unselected escalated row must not claim the selection edge',
+      ).toBe(getComputedStyle(normalRow).borderLeftColor);
     } finally {
       root.remove();
     }

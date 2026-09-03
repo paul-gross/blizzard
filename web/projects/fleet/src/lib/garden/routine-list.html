@@ -7,16 +7,20 @@
   <ul class="rt-list" data-testid="gardening-routines-list">
     @for (row of rows(); track row.routineId) {
       <li>
-        <button
-          type="button"
-          class="rt-row"
-          [class.rt-row--selected]="row.routineId === selectedId()"
-          [attr.data-testid]="'gardening-routine-row-' + row.routineId"
-          (click)="pick(row.routineId)"
+        <fleet-kit-select-row
+          [selected]="row.name === selectedName()"
+          [testid]="'gardening-routine-row-' + row.name"
+          (picked)="pick(row.name)"
         >
           <span class="rt-name">{{ row.name }}</span>
-          <span class="rt-graph">{{ row.graphName }}</span>
-        </button>
+          <span class="rt-line2">
+            <span class="rt-graph">{{ row.graphName }}</span>
+            <span class="rt-ref" [title]="row.routineId">{{ compactRef(row.routineId) }}</span>
+          </span>
+          @if (row.blocked) {
+            <span class="rt-blocked">blocked</span>
+          }
+        </fleet-kit-select-row>
       </li>
     }
   </ul>

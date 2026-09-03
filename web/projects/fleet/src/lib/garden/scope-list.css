@@ -9,49 +9,17 @@
   margin: 0;
   padding: 0;
 }
-.sc-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-}
-.sc-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-}
-.sc-state {
-  color: var(--dim);
-}
-.sc-state--retired {
-  color: var(--red);
-}
-.sc-description {
-  margin: 0;
-  color: var(--amber);
-  overflow-wrap: anywhere;
-}
-.sc-edit {
-  display: flex;
-  gap: 4px;
-}
-.edit-input {
-  flex: 1;
+.sc-slug {
+  display: block;
   min-width: 0;
-  font-family: inherit;
-  font-size: var(--fs-xs);
-  background: var(--overlay-35);
-  border: 1px solid var(--line);
-  color: var(--text);
-  padding: 2px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.edit-input:focus-visible {
-  outline: 1px solid var(--cyan);
-  outline-offset: 0;
-}
-.sc-cli {
-  margin: 0;
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
+.sc-retired {
+  display: inline-block;
+  color: var(--red);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }

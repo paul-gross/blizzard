@@ -1478,7 +1478,7 @@ export type DeliveredSetDeltaView = {
     /**
      * Observed
      */
-    observed: Array<string>;
+    observed: Array<ObservedFindingView>;
     /**
      * Revisions
      */
@@ -1492,13 +1492,25 @@ export type DeliveredSetDeltaView = {
  */
 export type DeliveredSetView = {
     /**
+     * Added Count
+     */
+    added_count: number;
+    /**
      * Finding Set Id
      */
     finding_set_id: string;
     /**
+     * Gone Count
+     */
+    gone_count: number;
+    /**
      * Measurement
      */
     measurement: string | null;
+    /**
+     * Observed Count
+     */
+    observed_count: number;
     /**
      * Revisions
      */
@@ -1795,6 +1807,14 @@ export type FindingSupersedeRequest = {
  * `add`/`observed`/`reopened` (blizzard#394) — `live` is kept alongside it as the
  * `state == "live"` shorthand existing consumers already read. `note` is the newest
  * fact's own note, whatever kind it is — `None` for a kind that carries none.
+ *
+ * Two distinct instants ride alongside `introduced`: `introduced_at` is the authored
+ * time of the commit `introduced` names, and is null wherever that commit was never
+ * resolved — a delivery declaring zero or several repositories leaves which one
+ * `introduced` refers to ambiguous, so no instant is looked up. `first_observed_at` is
+ * when a routine first recorded the finding — the earliest of its `add`/`observed`
+ * span — and is null for a finding carrying neither, which is how a finding whose only
+ * facts are exit verbs reads.
  */
 export type FindingView = {
     /**
@@ -1806,9 +1826,17 @@ export type FindingView = {
      */
     finding_id: string;
     /**
+     * First Observed At
+     */
+    first_observed_at?: string | null;
+    /**
      * Introduced
      */
     introduced?: string | null;
+    /**
+     * Introduced At
+     */
+    introduced_at?: string | null;
     /**
      * Last Seen At
      */
@@ -2906,6 +2934,28 @@ export type NodeEnvelope = {
     work_refs?: Array<{
         [key: string]: string;
     }>;
+};
+
+/**
+ * ObservedFindingView
+ */
+export type ObservedFindingView = {
+    /**
+     * Class
+     */
+    class: string | null;
+    /**
+     * Finding Id
+     */
+    finding_id: string;
+    /**
+     * Locus
+     */
+    locus: string | null;
+    /**
+     * Summary
+     */
+    summary: string | null;
 };
 
 /**

@@ -1,6 +1,10 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
+import { compactRef } from '../compact-ref';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitPanel } from '../kit/kit-panel';
+import { KitSelectRow } from '../kit/kit-select-row';
+import { FleetWhen } from '../when-display';
 
 /** One row of the proposal docket list — just enough to pick a proposal (`hub
  * garden-proposal list` is the read this list serves). `waiting` is the row's own
@@ -11,6 +15,7 @@ export interface ProposalListRowVm {
   readonly title: string;
   readonly proposalClass: string;
   readonly waiting: boolean;
+  readonly createdAt: string;
 }
 
 /**
@@ -22,7 +27,7 @@ export interface ProposalListRowVm {
 @Component({
   selector: 'fleet-proposal-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState],
+  imports: [FleetWhen, KitAsyncState, KitPanel, KitSelectRow],
   templateUrl: './proposal-list.html',
   styleUrl: './proposal-list.css',
 })
@@ -34,6 +39,8 @@ export class FleetProposalList {
   /** Named `proposalPick`, not `select` — `@angular-eslint/no-output-native` forbids
    * an output shadowing the native DOM `select` event. */
   readonly proposalPick = output<string>();
+
+  protected readonly compactRef = compactRef;
 
   protected pick(proposalId: string): void {
     this.proposalPick.emit(proposalId);

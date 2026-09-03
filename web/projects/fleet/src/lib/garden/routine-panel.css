@@ -1,34 +1,56 @@
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   font-family: var(--mono);
   font-size: var(--fs-base);
   color: var(--text);
+  min-width: 0;
 }
-.rp {
+/* Each panel sizes to its own content instead of shrinking to share the host's
+   height. The host sits in a height-bounded, scrolling column
+   (`gardening-routines-page.css`'s `.gr-right`), and a default `flex: 0 1 auto`
+   would let every panel shrink to fit that bound at once — squeezing Activity
+   and Strategy into cramped scrollports of their own. `flex: none` stacks them
+   at natural height and leaves the column the one real scroller: a long panel
+   is reached by scrolling the column past the panels above it. The panels also
+   pass `bodyScroll` false, so no `.p-body` opens a second scrollport that would
+   take the drag from that column. */
+fleet-kit-panel {
+  flex: none;
+}
+.rp-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 8px;
+  min-width: 0;
 }
-.rp dl {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 2px 8px;
-  margin: 4px 0;
+.rp-record h3 {
+  margin: 0 0 6px;
 }
-.rp dt {
-  color: var(--dim);
-}
-.rp-cli code {
-  color: var(--dim);
+/* The kit fact grid's own 74px label column is narrower than `default effort`
+   and its two `default …` siblings, which wrap onto a second line against it.
+   `max-content` sizes the column to the longest of them instead
+   (`finding-panel.css`'s own override, for the same reason). The Activity
+   panel's fact list keeps the kit default: it is a separate panel with short
+   labels of its own, so the two never sit side by side to read as misaligned. */
+.rp-record-facts {
+  --kv-label-col: max-content;
 }
 .rp-blocked {
   color: var(--red, #c33);
 }
-.rp-run {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.rp-measurement {
+  margin-bottom: 8px;
+}
+.rp-measurement:last-child {
+  margin-bottom: 0;
+}
+.rp-measurement-meta {
+  margin: 0 0 2px;
+  color: var(--label);
+  font-size: var(--fs-sm);
 }
 table {
   width: 100%;
@@ -43,6 +65,6 @@ td {
   overflow-wrap: anywhere;
 }
 .rp-never {
-  color: var(--dim);
+  color: var(--label-dim);
   font-style: italic;
 }

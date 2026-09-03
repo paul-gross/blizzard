@@ -22,7 +22,6 @@ import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
  */
 const VM: RoutinePanelVm = {
   record: {
-    routineId: 'rtn_1',
     name: 'nightly',
     graphName: 'garden-routine',
     defaultScopeSlug: 'blizzard',
@@ -112,5 +111,42 @@ describe('gardening routine panel layout shell sweep (web:shell-sweep, blizzard#
     }
 
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+});
+
+describe('gardening routine record label column shell sweep (web:shell-sweep)', () => {
+  it.each([1280, 390, 320])('keeps every record label on one line at %ipx', async (width) => {
+    const fixture = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(width, 900);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      // `default scope`/`default model`/`default effort` are all wider than the kit
+      // fact grid's own 74px label column and wrapped to a second line against it —
+      // `routine-panel.css` sizes this list's column to `max-content` instead. Line
+      // count is what the fix is about, so the claim is that every label is exactly
+      // as tall as the shortest one (`graph`, one line at any width): a wrapped
+      // label is taller, and jsdom lays out text without ever measuring it.
+      const labels = Array.from(
+        root.querySelectorAll<HTMLElement>('[data-testid="gardening-routine-record-facts"] dt'),
+      );
+      expect(labels.map((l) => l.textContent?.trim())).toEqual([
+        'graph',
+        'default scope',
+        'default model',
+        'default effort',
+      ]);
+      const heights = labels.map((l) => l.getBoundingClientRect().height);
+      expect(
+        new Set(heights.map((h) => Math.round(h))).size,
+        `a record label wrapped at ${width}px — heights were ${heights.join(', ')}`,
+      ).toBe(1);
+    } finally {
+      root.remove();
+    }
   });
 });

@@ -1,0 +1,14 @@
+<fleet-finding-panel
+  [vm]="findingPanelVm()"
+  [state]="findingPanelState()"
+  [canControl]="canControl()"
+  (triage)="onPanelTriage($event)"
+/>
+
+@if (triagingAction(); as t) {
+  <app-gardening-finding-triage-dialog
+    [verb]="t.verb"
+    [findingIds]="t.findingIds"
+    (closed)="triagingAction.set(null)"
+  />
+}

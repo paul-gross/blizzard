@@ -3,6 +3,11 @@
   font-family: var(--mono);
   font-size: var(--fs-base);
   color: var(--text);
+  /* The delta sits straight inside a `fleet-kit-panel` body, which carries no
+   * padding of its own, so the interior inset is this component's to own —
+   * `routine-panel.css`'s own `.rp-body` inset, matched so the gardening detail
+   * panes sit off their borders by the same amount. */
+  padding: 8px;
 }
 .rd {
   display: flex;
@@ -14,10 +19,11 @@
   flex-direction: column;
   gap: 4px;
 }
-.rd-caption {
+.rd-meta {
   margin: 0;
-  color: var(--dim);
-  font-style: italic;
+  color: var(--label);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .rd-escalation {
   margin: 0;
@@ -31,15 +37,29 @@
   flex-direction: column;
   gap: 6px;
 }
-.rd-set-revisions,
-.rd-set-measurement {
+.rd-set-revisions {
   margin: 0;
-  color: var(--dim);
+  color: var(--label);
+  /* Full `repo@sha` provenance belongs here (`run-list.css`'s own doc comment on why
+   * it was dropped from the list row) — wrapped rather than left to overflow the
+   * pane the way an unbroken 40-char SHA once did. */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+/* The chunk/finding-set/finding reference link — `chunk-artifact-body.css`'s own
+ * `.a-branch` is this app's model for a reference link, matched here rather than
+ * falling through to the browser's default (purple) link color. */
+.rd-ref {
+  color: var(--amber-hi);
+  text-decoration: none;
+}
+.rd-ref:hover,
+.rd-ref:focus-visible {
+  text-decoration: underline;
+  outline: none;
 }
 /* Every delivered set's own added/observed/gone triad stacks — never a side-by-side
- * layout that could let a narrow viewport clip or overlap one group against another
- * (blizzard#401 Phase 3's D4: several sets, and each set's three groups, stay visibly
- * distinct rather than merged or overlapped). */
+ * layout that could let a narrow viewport clip or overlap one group against another. */
 .rd-groups {
   display: flex;
   flex-direction: column;
@@ -49,34 +69,65 @@
   border-left: 2px solid var(--line);
   padding-left: 8px;
 }
+/* A new finding is bad news, so Added reads red; a finding that stopped
+ * reproducing is good news, so Gone reads green. */
 .rd-group--added {
-  border-left-color: var(--green);
-}
-.rd-group--observed {
-  border-left-color: var(--dim);
-}
-.rd-group--gone {
   border-left-color: var(--red);
 }
+.rd-group--observed {
+  border-left-color: var(--line);
+}
+.rd-group--gone {
+  border-left-color: var(--green);
+}
+/* Each group's header announces the list under it, so it reads as a header rather
+ * than one more dim label: the kit's engraved treatment (`kit-panel.css`'s own
+ * `.lbl` — uppercase, wide tracking, cut shadow) taken up a step to `--fs-sm` in
+ * `--snow`, which sits above the `--text` entries beneath instead of receding
+ * behind them the way the muted `--label` grey would. The colour stays neutral:
+ * the group's own left border already carries the added/gone signal, and tinting
+ * the header to match would say it twice. */
 .rd-group h5 {
-  margin: 0 0 2px;
+  margin: 0 0 6px;
+  font-size: var(--fs-sm);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--snow);
+  text-shadow: 0 1px 0 var(--overlay-90);
 }
 .rd-group ul {
   margin: 0;
   padding-left: 16px;
 }
-.rd-group-none {
-  margin: 0;
-  color: var(--dim);
+.rd-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.rd-added-class {
+.rd-entry-head {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.rd-entry-class {
   font-weight: bold;
+}
+.rd-entry-locus {
+  color: var(--label);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.rd-entry-ref-none {
+  color: var(--label);
+}
+.rd-entry fleet-kit-prose-block {
+  display: block;
+  margin-top: 2px;
 }
 .rd-no-delivery {
   margin: 0;
-  color: var(--dim);
-}
-.rd-cli {
-  margin: 0;
-  color: var(--dim);
+  color: var(--label);
 }

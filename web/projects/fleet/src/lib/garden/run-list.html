@@ -2,48 +2,44 @@
   [state]="state()"
   placement="inline"
   emptyText="No runs recorded yet — tending begins when there is growth worth pruning."
-  emptyTestid="gardening-runs-findings-empty"
+  emptyTestid="gardening-runs-empty"
 >
   <ul class="rl-list" data-testid="gardening-runs-list">
     @for (row of rows(); track row.chunkId) {
       <li>
-        <button
-          type="button"
-          class="rl-row"
-          [class.rl-row--selected]="row.chunkId === selectedChunkId()"
-          [class.rl-row--escalated]="row.escalated"
-          [attr.data-testid]="'gardening-run-row-' + row.chunkId"
-          (click)="pick(row.chunkId)"
+        <fleet-kit-select-row
+          [selected]="row.chunkId === selectedChunkId()"
+          [testid]="'gardening-run-row-' + row.chunkId"
+          (picked)="pick(row.chunkId)"
         >
-          <div class="rl-hdr">
-            <span class="rl-routine">{{ row.routineName }}/{{ row.scopeSlug }}</span>
-            <span class="rl-mode">mode={{ row.mode }}</span>
-            <fleet-kit-badge [tone]="STATUS_TONE[row.outcome]" variant="soft" data-testid="rl-outcome">{{
-              row.outcome
-            }}</fleet-kit-badge>
-            <fleet-when [iso]="row.mintedAt" />
-          </div>
-          @if (row.escalated) {
-            <p class="rl-escalated-note" data-testid="rl-escalated-note">Escalated — needs a human.</p>
-          }
-          @if (row.delivered.length) {
-            <ul class="rl-sets" data-testid="rl-sets">
-              @for (set of row.delivered; track set.findingSetId) {
-                <li class="rl-set" [attr.data-testid]="'gardening-run-set-' + set.findingSetId">
-                  <span class="rl-set-id">{{ set.findingSetId }}</span>
-                  <span class="rl-set-revisions">{{ set.revisionsLabel }}</span>
-                  @if (set.measurement) {
-                    <span class="rl-set-measurement">{{ set.measurement }}</span>
+          <div class="rl-body" [class.rl-body--escalated]="row.escalated">
+            <div class="rl-line">
+              <span class="rl-routine">{{ row.routineName }}/{{ row.scopeSlug }}</span>
+              <fleet-kit-badge
+                class="rl-outcome"
+                [tone]="STATUS_TONE[row.outcome]"
+                variant="soft"
+                [attr.data-testid]="'rl-outcome-' + row.chunkId"
+                >{{ row.outcome }}</fleet-kit-badge
+              >
+            </div>
+            <div class="rl-line rl-meta">
+              <span class="rl-mode">{{ modeLabel(row.mode) }}</span>
+              <span class="rl-ref" [title]="row.chunkId" data-testid="rl-chunk-ref">{{ compactRef(row.chunkId) }}</span>
+            </div>
+            <div class="rl-line rl-seen">
+              <fleet-when [iso]="row.mintedAt" />
+              @if (row.counts; as counts) {
+                <span class="rl-counts" data-testid="rl-counts">
+                  @for (leg of countLegs(counts); track $index) {
+                    <span [class]="leg.cssClass">{{ leg.text }}</span>
                   }
-                </li>
+                </span>
               }
-            </ul>
-          } @else {
-            <p class="rl-no-delivery">No finding set delivered.</p>
-          }
-        </button>
+            </div>
+          </div>
+        </fleet-kit-select-row>
       </li>
     }
   </ul>
-  <p class="rl-cli">list with: <code>hub run list</code></p>
 </fleet-kit-async-state>

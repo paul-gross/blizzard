@@ -1,7 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { getFindingApiFindingsFindingIdGet, listFindingsApiFindingsGet, type FindingView } from '../api/hub';
-import { hubFindingsBucketKey, hubFindingsKey } from '../query-keys';
+import { hubFindingKey, hubFindingsBucketKey, hubFindingsKey } from '../query-keys';
 
 /**
  * Every id in `findingIds()`, read live through its own `GET
@@ -16,7 +16,9 @@ import { hubFindingsBucketKey, hubFindingsKey } from '../query-keys';
  *
  * A finding that fails to read (a 404, or any other error) is dropped from the joined
  * result rather than failing every other finding's row — one id going stale never
- * blanks the whole evidence table.
+ * blanks the whole evidence table. That is a table's bargain, not a detail pane's:
+ * a surface reading exactly one finding wants the failure, and takes
+ * {@link injectHubFindingQuery} instead.
  */
 export function injectHubFindingsQuery(findingIds: () => readonly string[]) {
   return injectQuery(() => {
@@ -36,6 +38,38 @@ export function injectHubFindingsQuery(findingIds: () => readonly string[]) {
           }),
         );
         return results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+      },
+    };
+  });
+}
+
+/**
+ * One finding, read live through `GET /api/findings/{finding_id}` — the read a
+ * surface takes when the finding it names is the whole surface, so a 404 or a 500
+ * has to reach the reader as an error state.
+ *
+ * Deliberately not {@link injectHubFindingsQuery} with a one-element list: that
+ * fan-out swallows a failed read to protect the docket's other evidence rows, which
+ * on a single id turns "this finding could not be read" into a successful empty
+ * result indistinguishable from "nothing is selected". Same endpoint, opposite
+ * bargain, so it carries its own cache key ({@link hubFindingKey}).
+ *
+ * Stays disabled while `findingId()` is null — the caller's own "nothing selected"
+ * rest state is branched before this read is consulted, `bzh:frontend-empty-state-gated`.
+ */
+export function injectHubFindingQuery(findingId: () => string | null) {
+  return injectQuery(() => {
+    const id = findingId();
+    return {
+      queryKey: hubFindingKey(id),
+      enabled: id !== null,
+      queryFn: async (): Promise<FindingView> => {
+        const { data, error } = await getFindingApiFindingsFindingIdGet({
+          path: { finding_id: id! },
+          throwOnError: false,
+        });
+        if (error) throw error;
+        return data!;
       },
     };
   });

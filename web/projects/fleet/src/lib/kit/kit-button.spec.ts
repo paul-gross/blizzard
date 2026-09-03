@@ -9,6 +9,7 @@ import { KitButton } from './kit-button';
   template: `
     <fleet-kit-button
       [variant]="variant()"
+      [size]="size()"
       [disabled]="disabled()"
       [testid]="'act'"
       [ariaLabel]="'Do the thing'"
@@ -20,6 +21,7 @@ import { KitButton } from './kit-button';
 })
 class TestHost {
   readonly variant = signal<'default' | 'primary' | 'danger'>('default');
+  readonly size = signal<'default' | 'cta'>('default');
   readonly disabled = signal(false);
   clicks = 0;
 }
@@ -73,5 +75,23 @@ describe('KitButton', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector<HTMLButtonElement>('[data-testid="act"]')?.disabled).toBe(true);
+  });
+
+  it('renders the default size with no cta class — byte-for-byte the original chrome', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const button = el.querySelector('[data-testid="act"]');
+    expect(button?.className).toBe('act');
+  });
+
+  it('applies the cta class when size is cta', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.size.set('cta');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="act"]')?.classList.contains('cta')).toBe(true);
   });
 });

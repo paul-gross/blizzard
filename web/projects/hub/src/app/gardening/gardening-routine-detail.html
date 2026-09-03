@@ -1,0 +1,9 @@
+<fleet-routine-panel [vm]="panelVm()" [state]="panelState()" (run)="run()" />
+
+@if (runningRoutine(); as routine) {
+  <app-gardening-run-dialog
+    [routineId]="routine.routine_id"
+    [routineName]="routine.name"
+    (closed)="closeDialog()"
+  />
+}

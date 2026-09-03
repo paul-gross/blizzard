@@ -1,0 +1,34 @@
+:host {
+  display: inline-block;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  padding: 0 5px;
+  border-radius: 9px;
+  /* A filled chip in the palette's resting attention color, read dark-on-bright.
+     The contrast that matters for a count badge is the badge against the bar it
+     sits in, not the numeral against the badge: this fill stands at ~10:1 on
+     `--panel`, so it carries across a tab strip the operator is not looking at,
+     and the near-black numeral sits at ~10.7:1 inside it.
+
+     `--amber`, not `--amber-hi`: the brighter step is the palette's hover/emphasis
+     level (`.a-branch`, `chunk-awaiting-human`'s `.answered`), and spending it at
+     rest leaves nothing above it to raise to. Not `--red` either — `kit/tone.ts`
+     fixes red as human-*blocked* and amber as human-*parked*, and a queue of
+     proposals waiting on review is the latter. */
+  background: var(--amber);
+  color: var(--bg);
+  /* `--fs-xs` is the step the token scale names for "dense secondary text — node
+     names, counts, badges"; `--fs-label` is the engraved-uppercase-label step and
+     reads a shade too small for a numeral meant to be legible at a glance. */
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}

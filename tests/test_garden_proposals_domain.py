@@ -36,6 +36,7 @@ def _finding(finding_id: str) -> Finding:
         summary="s",
         introduced=None,
         introduced_at=None,
+        first_observed_at=_T0,
         live=True,
         state="live",
         note=None,

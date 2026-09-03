@@ -1,7 +1,7 @@
 <div class="gp-filters">
   <fleet-kit-chips
     [options]="waitingChips"
-    [selectedValue]="waitingFilter()"
+    [selectedValue]="waitingChipValue()"
     (choose)="onWaitingChoose($event)"
   />
   <fleet-kit-chips [options]="classChips()" [selectedValue]="classChipValue()" (choose)="onClassChoose($event)" />
@@ -11,35 +11,11 @@
   <fleet-proposal-list
     class="gp-list"
     [rows]="listRows()"
-    [selectedId]="selectedId()"
+    [selectedId]="proposalId()"
     [state]="listState()"
     (proposalPick)="select($event)"
   />
-  <fleet-proposal-panel
-    class="gp-panel"
-    [vm]="panelVm()"
-    [state]="panelState()"
-    [evidence]="evidenceRows()"
-    [evidenceState]="evidenceState()"
-    [canControl]="canControl()"
-    (pass)="openPass()"
-    (accept)="openAccept()"
-  />
+  <div class="gp-panel">
+    <router-outlet />
+  </div>
 </div>
-
-@if (passingProposal(); as proposal) {
-  <app-gardening-proposal-pass-dialog
-    [proposalId]="proposal.proposal_id"
-    [proposalTitle]="proposal.title"
-    (closed)="closePass()"
-  />
-}
-
-@if (acceptingProposal(); as proposal) {
-  <app-gardening-proposal-accept-dialog
-    [proposalId]="proposal.proposal_id"
-    [proposalTitle]="proposal.title"
-    [proposalBody]="proposal.body"
-    (closed)="closeAccept()"
-  />
-}

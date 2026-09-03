@@ -925,7 +925,7 @@
   "blizzard/hub/api/findings.py": {
    "comments": 3,
    "docstrings": 33,
-   "total": 198
+   "total": 202
   },
   "blizzard/hub/api/fleet.py": {
    "comments": 23,
@@ -938,9 +938,9 @@
    "total": 169
   },
   "blizzard/hub/api/garden_runs.py": {
-   "comments": 4,
+   "comments": 5,
    "docstrings": 13,
-   "total": 168
+   "total": 180
   },
   "blizzard/hub/api/graph_names.py": {
    "comments": 0,
@@ -1228,9 +1228,9 @@
    "total": 146
   },
   "blizzard/hub/cli/garden_run.py": {
-   "comments": 0,
+   "comments": 2,
    "docstrings": 12,
-   "total": 98
+   "total": 103
   },
   "blizzard/hub/cli/graph.py": {
    "comments": 0,
@@ -1295,7 +1295,7 @@
   "blizzard/hub/composition.py": {
    "comments": 79,
    "docstrings": 13,
-   "total": 558
+   "total": 560
   },
   "blizzard/hub/config.py": {
    "comments": 45,
@@ -1538,9 +1538,9 @@
    "total": 330
   },
   "blizzard/hub/domain/findings.py": {
-   "comments": 19,
-   "docstrings": 61,
-   "total": 338
+   "comments": 22,
+   "docstrings": 62,
+   "total": 347
   },
   "blizzard/hub/domain/fleet.py": {
    "comments": 0,
@@ -1578,9 +1578,9 @@
    "total": 106
   },
   "blizzard/hub/domain/garden_run.py": {
-   "comments": 1,
-   "docstrings": 63,
-   "total": 310
+   "comments": 4,
+   "docstrings": 76,
+   "total": 358
   },
   "blizzard/hub/domain/garden_sweeps.py": {
    "comments": 0,
@@ -1915,7 +1915,7 @@
   "blizzard/hub/store/internal/finding_store.py": {
    "comments": 5,
    "docstrings": 25,
-   "total": 340
+   "total": 342
   },
   "blizzard/hub/store/internal/garden_delivery_store.py": {
    "comments": 15,
@@ -1933,9 +1933,9 @@
    "total": 109
   },
   "blizzard/hub/store/internal/garden_run_store.py": {
-   "comments": 11,
-   "docstrings": 12,
-   "total": 168
+   "comments": 15,
+   "docstrings": 19,
+   "total": 201
   },
   "blizzard/hub/store/internal/garden_sweeps_store.py": {
    "comments": 0,
@@ -3744,8 +3744,8 @@
   },
   "blizzard/wire/finding.py": {
    "comments": 0,
-   "docstrings": 30,
-   "total": 114
+   "docstrings": 38,
+   "total": 124
   },
   "blizzard/wire/fleet.py": {
    "comments": 0,
@@ -3758,9 +3758,9 @@
    "total": 83
   },
   "blizzard/wire/garden_run.py": {
-   "comments": 0,
+   "comments": 7,
    "docstrings": 1,
-   "total": 68
+   "total": 87
   },
   "blizzard/wire/garden_sweeps.py": {
    "comments": 0,
@@ -4742,7 +4742,7 @@
   "test_finding_exit_service.py": {
    "comments": 0,
    "docstrings": 4,
-   "total": 163
+   "total": 164
   },
   "test_finding_exits_migration.py": {
    "comments": 8,
@@ -4771,8 +4771,8 @@
   },
   "test_findings_domain.py": {
    "comments": 1,
-   "docstrings": 7,
-   "total": 74
+   "docstrings": 11,
+   "total": 108
   },
   "test_fleet_auth.py": {
    "comments": 15,
@@ -4847,7 +4847,7 @@
   "test_garden_delivery_domain.py": {
    "comments": 34,
    "docstrings": 21,
-   "total": 637
+   "total": 638
   },
   "test_garden_delivery_materialize.py": {
    "comments": 3,
@@ -4882,7 +4882,7 @@
   "test_garden_proposal_resolution_domain.py": {
    "comments": 4,
    "docstrings": 9,
-   "total": 280
+   "total": 281
   },
   "test_garden_proposal_store.py": {
    "comments": 3,
@@ -4897,7 +4897,7 @@
   "test_garden_proposals_domain.py": {
    "comments": 0,
    "docstrings": 4,
-   "total": 120
+   "total": 121
   },
   "test_garden_routine_graph.py": {
    "comments": 21,
@@ -4910,19 +4910,19 @@
    "total": 29
   },
   "test_garden_run_api.py": {
-   "comments": 0,
+   "comments": 2,
    "docstrings": 6,
-   "total": 235
+   "total": 251
   },
   "test_garden_run_component.py": {
-   "comments": 5,
-   "docstrings": 16,
-   "total": 332
+   "comments": 7,
+   "docstrings": 26,
+   "total": 440
   },
   "test_garden_run_domain.py": {
    "comments": 4,
-   "docstrings": 12,
-   "total": 357
+   "docstrings": 21,
+   "total": 514
   },
   "test_garden_sweeps_component.py": {
    "comments": 0,
@@ -5067,7 +5067,7 @@
   "test_hub_cli_garden_run.py": {
    "comments": 8,
    "docstrings": 4,
-   "total": 303
+   "total": 305
   },
   "test_hub_cli_graph.py": {
    "comments": 1,
@@ -5697,7 +5697,7 @@
   "test_runner_garden_findings_api.py": {
    "comments": 3,
    "docstrings": 11,
-   "total": 203
+   "total": 205
   },
   "test_runner_garden_findings_cli.py": {
    "comments": 1,

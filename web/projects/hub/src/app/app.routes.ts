@@ -40,36 +40,106 @@ export const routes: Routes = [
   { path: 'graphs/:graphId', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'events', loadComponent: () => import('./events/events-page').then((m) => m.EventsPage) },
   // The gardening tab (blizzard#397) — a top-level peer of board/graphs/events, not a
-  // panel inside any of them. Three deep-linkable children, one per noun the garden
-  // machinery itself has (routines / runs and findings / proposals). Runs and findings
-  // (Phase 3) is itself a `graphs`/`graphs/:graphId` pair — the run list stays mounted
-  // and the optional `chunkId` drives which run's delta shows.
+  // panel inside any of them. Five deep-linkable children, one per noun the garden
+  // machinery itself has: scopes, routines, runs, findings, proposals — every one of
+  // them unrelated to its neighbors, so every one of them gets its own tab and its
+  // own list; none of the five shares a selection with another any more.
+  //
+  // All five have one shape: the tab's list *is* the route, and its detail pane is a
+  // child route under it — a bare child that selects nothing, and a `:param` child
+  // naming the selection, both mounting the same detail component. Angular reuses a
+  // route's component only across the same route config, so the flat pair these grew
+  // from (two routes onto one component) tore the whole tab down and rebuilt it on
+  // every row click, silently discarding the filters the list held. Nested, only the
+  // right-hand child is swapped; the list, its filters, and its scroll position all
+  // survive. Filter state itself rides the query string (`route-state.ts`), which
+  // makes a filtered view shareable by URL as well as durable.
   {
     path: 'gardening',
     loadComponent: () => import('./gardening/gardening-page').then((m) => m.GardeningPage),
     children: [
-      { path: '', redirectTo: 'routines', pathMatch: 'full' },
+      { path: '', redirectTo: 'scopes', pathMatch: 'full' },
+      // A scope has no id of its own — its slug *is* the id (`foundation/ids.py`).
+      {
+        path: 'scopes',
+        loadComponent: () => import('./gardening/gardening-scopes-page').then((m) => m.GardeningScopesPage),
+        children: [
+          {
+            path: '',
+            loadComponent: () => import('./gardening/gardening-scope-detail').then((m) => m.GardeningScopeDetail),
+          },
+          {
+            path: ':scopeSlug',
+            loadComponent: () => import('./gardening/gardening-scope-detail').then((m) => m.GardeningScopeDetail),
+          },
+        ],
+      },
+      // Routines are keyed by `name` (`hub/store/schema.py`'s `uq_routines_name`),
+      // not id.
       {
         path: 'routines',
         loadComponent: () => import('./gardening/gardening-routines-page').then((m) => m.GardeningRoutinesPage),
+        children: [
+          {
+            path: '',
+            loadComponent: () => import('./gardening/gardening-routine-detail').then((m) => m.GardeningRoutineDetail),
+          },
+          {
+            path: ':routineName',
+            loadComponent: () => import('./gardening/gardening-routine-detail').then((m) => m.GardeningRoutineDetail),
+          },
+        ],
       },
-      // Both `runs-and-findings` and `runs-and-findings/:chunkId` render the same
-      // page (`GardeningRunsFindingsPage`) — the `graphs`/`graphs/:graphId` pair's
-      // own shape, so the run list stays mounted and the optional `chunkId` param
-      // drives which run's delta shows.
       {
-        path: 'runs-and-findings',
-        loadComponent: () =>
-          import('./gardening/gardening-runs-findings-page').then((m) => m.GardeningRunsFindingsPage),
+        path: 'runs',
+        loadComponent: () => import('./gardening/gardening-runs-page').then((m) => m.GardeningRunsPage),
+        children: [
+          {
+            path: '',
+            loadComponent: () => import('./gardening/gardening-run-detail').then((m) => m.GardeningRunDetail),
+          },
+          {
+            path: ':chunkId',
+            loadComponent: () => import('./gardening/gardening-run-detail').then((m) => m.GardeningRunDetail),
+          },
+        ],
       },
+      // The tab the nesting above earns its keep on: this list holds four filters,
+      // which the flat pair silently reset on every row click.
       {
-        path: 'runs-and-findings/:chunkId',
-        loadComponent: () =>
-          import('./gardening/gardening-runs-findings-page').then((m) => m.GardeningRunsFindingsPage),
+        path: 'findings',
+        loadComponent: () => import('./gardening/gardening-findings-page').then((m) => m.GardeningFindingsPage),
+        children: [
+          {
+            path: '',
+            loadComponent: () => import('./gardening/gardening-finding-detail').then((m) => m.GardeningFindingDetail),
+          },
+          {
+            path: ':findingId',
+            loadComponent: () => import('./gardening/gardening-finding-detail').then((m) => m.GardeningFindingDetail),
+          },
+        ],
       },
+      // A proposal is keyed by its own id (`gprop_…`, rendered compactly as `GP-…`).
+      // The one place this tab diverges from its four siblings: on a docket with anything in it the list route sends
+      // the bare path to the first row of the *filtered* set rather than resting on
+      // an empty pane — the docket is a work queue, and arriving at it with nothing
+      // to read would make the operator click before reading anything.
       {
         path: 'proposals',
         loadComponent: () => import('./gardening/gardening-proposals-page').then((m) => m.GardeningProposalsPage),
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./gardening/gardening-proposal-detail').then((m) => m.GardeningProposalDetail),
+          },
+          {
+            path: ':proposalId',
+            loadComponent: () =>
+              import('./gardening/gardening-proposal-detail').then((m) => m.GardeningProposalDetail),
+          },
+        ],
       },
     ],
   },

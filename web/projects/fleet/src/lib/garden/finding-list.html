@@ -4,81 +4,32 @@
   emptyText="No findings in this bucket."
   emptyTestid="gardening-findings-empty"
 >
-  @if (canControl()) {
-    <p class="fl-select-all">
-      <input
-        type="checkbox"
-        data-testid="gardening-findings-select-all"
-        aria-label="Select every finding in view"
-        [checked]="allVisibleSelected()"
-        [indeterminate]="someVisibleSelected()"
-        (change)="toggleSelectAll()"
-      />
-      <span>Select all</span>
-    </p>
-  }
   <ul class="fl-list" data-testid="gardening-findings-list">
     @for (row of rows(); track row.findingId) {
       <li>
-        <div
-          class="fl-row"
-          [class.fl-row--gone]="isGone(row)"
-          [class.fl-row--exited]="isExited(row)"
-          [attr.data-testid]="'gardening-finding-row-' + row.findingId"
+        <fleet-kit-select-row
+          [selected]="row.findingId === selectedId()"
+          [testid]="'gardening-finding-row-' + row.findingId"
+          (picked)="findingPick.emit(row.findingId)"
         >
-          <div class="fl-hdr">
-            @if (canControl()) {
-              <input
-                type="checkbox"
-                class="fl-select"
-                [attr.data-testid]="'gardening-finding-select-' + row.findingId"
-                [attr.aria-label]="'Select ' + row.findingId"
-                [checked]="isSelected(row.findingId)"
-                (change)="toggle(row.findingId)"
-              />
-            }
-            <span class="fl-class">{{ row.findingClass }}</span>
-            <span class="fl-locus">{{ row.locus }}</span>
-            <span class="fl-state" data-testid="fl-state">{{ row.state }}</span>
-            <span class="fl-observed">observed x{{ row.observedCount }}</span>
-            @if (row.introduced) {
-              <span class="fl-introduced">introduced <fleet-when [iso]="row.introduced" /></span>
-            }
-            @if (row.lastSeenAt) {
-              <span class="fl-last-seen">last seen <fleet-when [iso]="row.lastSeenAt" /></span>
-            }
-          </div>
-          <p class="fl-summary">{{ row.summary }}</p>
-          @if (row.note) {
-            <p class="fl-note" data-testid="fl-note">{{ row.note }}</p>
-          }
-          @if (row.workItem; as workItem) {
-            <p class="fl-work-item" data-testid="fl-work-item">
-              @if (workItem.webUrl) {
-                <a [href]="workItem.webUrl" data-testid="fl-work-item-link">{{ workItem.label }}</a>
+          <div class="fl-body" [class.fl-body--gone]="isGone(row)" [class.fl-body--exited]="isExited(row)">
+            <p class="fl-summary">{{ row.summary }}</p>
+            <div class="fl-hdr">
+              <span class="fl-class">{{ row.findingClass }}</span>
+              <span class="fl-ref" [title]="row.findingId">{{ compactRef(row.findingId) }}</span>
+            </div>
+            <p class="fl-locus">{{ row.locus }}</p>
+            <p class="fl-seen">
+              @if (row.lastSeenAt) {
+                <fleet-when [iso]="row.lastSeenAt" />
               } @else {
-                <span>{{ workItem.label }}</span>
+                —
               }
             </p>
-          }
-        </div>
+          </div>
+        </fleet-kit-select-row>
       </li>
     }
   </ul>
-  @if (canControl() && selectedIds().length > 0) {
-    <div class="fl-bulk-bar" data-testid="gardening-findings-bulk-bar">
-      <span class="fl-bulk-count">{{ selectedIds().length }} selected</span>
-      @for (action of bulkActions; track action.verb) {
-        <fleet-kit-button [testid]="'gardening-finding-bulk-' + action.verb" (click)="emitBulk(action.verb)">
-          {{ action.label }}
-        </fleet-kit-button>
-      }
-      @if (canReopenSelection()) {
-        <fleet-kit-button testid="gardening-finding-bulk-reopen" (click)="emitBulk('reopen')">
-          Reopen
-        </fleet-kit-button>
-      }
-    </div>
-  }
   <p class="fl-cli">list with: <code>hub finding list</code></p>
 </fleet-kit-async-state>

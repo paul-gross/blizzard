@@ -56,6 +56,14 @@
   --fs-lg: 19px; /* the brand and header values */
 
   /*
+   * The master column's width in a master/detail layout — the fixed-width list
+   * beside a flexible detail pane. Named here so the surfaces that share the
+   * shape stay the same width as each other by construction rather than by five
+   * copies of the same literal drifting apart.
+   */
+  --master-list-col: 320px;
+
+  /*
    * Overlay opacities (issue #78) — the discrete black washes used for panel
    * headers, table heads, pressed/inset surfaces, and the engraved-label text
    * shadow. Named by their opacity so a component picks the wash it already

@@ -9,70 +9,73 @@
   margin: 0;
   padding: 0;
 }
-.rl-row {
+.rl-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  padding: 8px;
-  border: none;
-  border-left: 3px solid transparent;
-  border-bottom: 1px solid var(--line);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+  gap: 2px;
+  /* Cancels `kit-select-row.css`'s own fixed `padding: 6px 8px` on `.row` so this
+   * div's background can flush against the row's edges. Nothing outside a
+   * component's own template can paint that button's encapsulated background, so an
+   * escalated row's tint instead rides this projected child, painting on top of
+   * whatever background the kit row itself is currently showing (resting, hover, or
+   * selected) rather than replacing it — the only way a selected *and* escalated row
+   * stays legible as both at once. */
+  margin: -6px -8px;
+  padding: 6px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-.rl-row--selected {
-  background: var(--panel-highlight, rgba(255, 255, 255, 0.06));
-}
-/* An escalated row's own distinct treatment (blizzard#401 Phase 3) — a real border
- * and background tint against `--red`, not merely the outcome badge's own color, so
- * the row reads as escalated even where the badge itself scrolls out of view. */
-.rl-row--escalated {
-  border-left-color: var(--red);
+.rl-body--escalated {
   background: color-mix(in srgb, var(--red) 10%, transparent);
 }
-.rl-hdr {
+.rl-line {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
+  min-width: 0;
 }
-.rl-mode {
-  color: var(--dim);
+/* The row's three lines read as a hierarchy, not three equal ones — the same
+ * three-tier scale the sibling lists already establish (`finding-list.css`'s own
+ * `.fl-summary`/`.fl-hdr`/`.fl-seen`, `proposal-list.css`'s `.pl-title`/
+ * `.pl-meta`/`.pl-created`): the headline keeps the host's `--fs-base` in
+ * `--text`, the mode/ref line steps down to `--fs-xs` in `--label`, and the
+ * timestamp/counts line down again to `--fs-label` in `--label-dim`. */
+.rl-routine {
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-.rl-escalated-note {
-  margin: 0;
+.rl-meta {
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  color: var(--label);
+}
+.rl-seen {
+  margin-top: 2px;
+  font-size: var(--fs-label);
+  color: var(--label-dim);
+}
+.rl-outcome {
+  flex: none;
+  margin-left: auto;
+}
+.rl-ref {
+  flex: none;
+  margin-left: auto;
+  color: var(--label-dim);
+  white-space: nowrap;
+}
+.rl-counts {
+  margin-left: auto;
+}
+/* The count legs carry their own reading of the delta, so each keeps its color
+ * against the dimmed line it sits on. */
+.rl-count-added {
   color: var(--red);
-  font-weight: bold;
 }
-.rl-sets {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 12px;
-  border-left: 2px solid var(--line);
+.rl-count-added--zero {
+  color: var(--green);
 }
-.rl-set {
-  display: flex;
-  flex-direction: column;
-}
-.rl-set-id {
-  font-weight: bold;
-}
-.rl-set-revisions,
-.rl-set-measurement {
-  color: var(--dim);
-}
-.rl-no-delivery {
-  margin: 0;
-  color: var(--dim);
-}
-.rl-cli {
-  margin: 8px 0 0;
-  color: var(--dim);
+.rl-count-gone {
+  color: var(--green);
 }

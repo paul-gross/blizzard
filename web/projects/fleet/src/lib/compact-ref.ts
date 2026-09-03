@@ -41,6 +41,12 @@ export const ENTITY_DISPLAY: Readonly<Record<string, EntityDisplay>> = {
   art: { sigil: 'A', tailLength: 4 },
   tr: { sigil: 'TR', tailLength: 4 },
   self: { sigil: 'S', tailLength: 4 },
+  fin: { sigil: 'F', tailLength: 4 },
+  /* `fins` (a finding set) would default to the same `F` as `fin` (a finding) above. */
+  fins: { sigil: 'FS', tailLength: 4 },
+  /* `gprop` (a garden proposal) would default to `G`, colliding with the registered `gr` (graphs). */
+  gprop: { sigil: 'GP', tailLength: 4 },
+  rtn: { sigil: 'R', tailLength: 4 },
 };
 
 const DEFAULT_TAIL_LENGTH = 4;

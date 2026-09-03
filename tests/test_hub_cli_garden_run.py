@@ -220,7 +220,9 @@ def test_run_show_renders_added_observed_and_gone_per_set(monkeypatch: pytest.Mo
                                 "introduced": None,
                             }
                         ],
-                        "observed": ["fin_2"],
+                        "observed": [
+                            {"finding_id": "fin_2", "class": "dead-code", "locus": "b.py:7", "summary": "unused"}
+                        ],
                         "gone": [{"finding_id": "fin_3", "note": "not found"}],
                     }
                 ]
@@ -234,7 +236,7 @@ def test_run_show_renders_added_observed_and_gone_per_set(monkeypatch: pytest.Mo
     assert "fins_1" in result.output
     assert "score: 4" in result.output
     assert "[fin_1] stale-docstring" in result.output
-    assert "= fin_2" in result.output
+    assert "= fin_2 dead-code  b.py:7: unused" in result.output
     assert "- fin_3: not found" in result.output
 
 

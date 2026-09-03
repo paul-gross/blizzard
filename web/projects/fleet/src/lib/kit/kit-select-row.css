@@ -1,0 +1,41 @@
+:host {
+  display: block;
+}
+.row {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  /* Reserved transparent — `.selected` below only ever recolors this edge, so
+     selecting a row never shifts the row's own box (`design/tokens.css`'s
+     `--surface-*` doc comment). */
+  border-left: 2px solid transparent;
+  padding: 6px 8px;
+  cursor: pointer;
+  /* A long unbreakable token in the projected content (an id, a path) could
+     otherwise overflow the row's own grid track; both properties are needed
+     for `overflow-wrap` to actually take effect on a flex/grid item. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.row:hover {
+  background: var(--surface-hover);
+}
+.row:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -2px;
+}
+.row.selected {
+  border-left-color: var(--cyan);
+  background: var(--surface-selected);
+}
+/* Selection is the "stickier" state: hovering an already-selected row keeps
+   the selected background rather than dimming to the hover tone. */
+.row.selected:hover {
+  background: var(--surface-selected);
+}

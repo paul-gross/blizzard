@@ -1,12 +1,14 @@
 """``GardenRunService`` (unit tier) — the run list and one run's own delta, composed
 over fake `IReadGardenRunRepository`/`IReadChunkRecordRepository`/
-`IReadChunkFactsRepository` collaborators. No store: proves the outcome derivation, the
-escalation carry, and the artifact-delta fold (added/observed/gone, positional add-id
-matching) as pure composition over already-loaded facts."""
+`IReadChunkFactsRepository`/`IReadFindingRepository` collaborators. No store: proves the
+outcome derivation, the escalation carry, and the artifact-delta fold (added/observed/
+gone, positional add-id matching, the observed group's own finding-row lookup) as pure
+composition over already-loaded facts."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -14,6 +16,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor
+from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_run import (
     DeliveredSet,
     DeliveredSetRaw,
@@ -74,6 +77,53 @@ class _FakeChunkFacts:
         return dict(self.facts)
 
 
+@dataclass
+class _FakeFindings:
+    """`IReadFindingRepository`'s read side, narrowed to the one method the delta read
+    calls — `calls` records each batch so a per-id read cannot pass unnoticed."""
+
+    findings: dict[str, Finding] = field(default_factory=dict)
+    calls: list[list[str]] = field(default_factory=list)
+
+    def get(self, finding_id: str) -> Finding | None:
+        raise NotImplementedError
+
+    def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
+        self.calls.append(list(finding_ids))
+        return {fid: f for fid in finding_ids if (f := self.findings.get(fid)) is not None}
+
+    def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
+        raise NotImplementedError
+
+    def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
+        raise NotImplementedError
+
+    def count_by_class(self, routine_name: str, class_: str) -> int:
+        raise NotImplementedError
+
+    def has_resolution_for_proposal(self, proposal_id: str) -> bool:
+        raise NotImplementedError
+
+
+def _finding(finding_id: str, *, class_: str = "stale-docstring", locus: str = "a.py:1", summary: str = "s") -> Finding:
+    return Finding(
+        finding_id=finding_id,
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_=class_,
+        locus=locus,
+        summary=summary,
+        introduced=None,
+        introduced_at=None,
+        first_observed_at=_T0,
+        live=True,
+        state="live",
+        note=None,
+        last_seen_at=_T0,
+        observed_count=1,
+    )
+
+
 def _chunk(chunk_id: str, *, graph_id: str = "gr_1") -> Chunk:
     return Chunk(chunk_id=chunk_id, graph_id=graph_id, work_refs=[], minted_at=_T0)
 
@@ -88,11 +138,13 @@ def _service(
     repo: _FakeRepo | None = None,
     chunk_records: _FakeChunkRecords | None = None,
     chunk_facts: _FakeChunkFacts | None = None,
+    findings: _FakeFindings | None = None,
 ) -> GardenRunService:
     return GardenRunService(
         repo=repo or _FakeRepo(),
         chunk_records=chunk_records or _FakeChunkRecords(),
         chunk_facts=chunk_facts or _FakeChunkFacts(),
+        findings=findings or _FakeFindings(),
     )
 
 
@@ -108,7 +160,16 @@ def _delta_artifact(findings: list[dict[str, object]], *, measurement: str | Non
 
 def test_a_delivered_run_reports_its_outcome_and_finding_sets() -> None:
     identity = _identity("ch_1")
-    delivered = [DeliveredSet(finding_set_id="fins_1", revisions={"blizzard": "aaa"}, measurement="score: 4")]
+    delivered = [
+        DeliveredSet(
+            finding_set_id="fins_1",
+            revisions={"blizzard": "aaa"},
+            measurement="score: 4",
+            added_count=4,
+            observed_count=52,
+            gone_count=1,
+        )
+    ]
     repo = _FakeRepo(records=[RunRecord(identity=identity, delivered=delivered)])
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
@@ -199,7 +260,16 @@ def test_a_run_that_delivered_nothing_still_lists_with_an_empty_delivered_list()
     """A run that delivered an empty finding list still leaves a `finding_sets` row —
     it is reported, not confused with an escalated run that left none at all."""
     identity = _identity("ch_1")
-    delivered = [DeliveredSet(finding_set_id="fins_empty", revisions={}, measurement=None)]
+    delivered = [
+        DeliveredSet(
+            finding_set_id="fins_empty",
+            revisions={},
+            measurement=None,
+            added_count=0,
+            observed_count=0,
+            gone_count=0,
+        )
+    ]
     repo = _FakeRepo(records=[RunRecord(identity=identity, delivered=delivered)])
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
@@ -212,8 +282,22 @@ def test_a_run_that_delivered_nothing_still_lists_with_an_empty_delivered_list()
 def test_several_delivered_sets_from_one_run_stay_separate_never_merged() -> None:
     identity = _identity("ch_1")
     delivered = [
-        DeliveredSet(finding_set_id="fins_1", revisions={"a": "1"}, measurement=None),
-        DeliveredSet(finding_set_id="fins_2", revisions={"b": "2"}, measurement="score: 9"),
+        DeliveredSet(
+            finding_set_id="fins_1",
+            revisions={"a": "1"},
+            measurement=None,
+            added_count=2,
+            observed_count=0,
+            gone_count=0,
+        ),
+        DeliveredSet(
+            finding_set_id="fins_2",
+            revisions={"b": "2"},
+            measurement="score: 9",
+            added_count=0,
+            observed_count=3,
+            gone_count=0,
+        ),
     ]
     repo = _FakeRepo(records=[RunRecord(identity=identity, delivered=delivered)])
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
@@ -261,13 +345,15 @@ def test_run_delta_splits_add_observed_and_gone_into_three_groups() -> None:
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
 
-    delta = _service(repo, chunk_records, chunk_facts).run_delta(_chunk("ch_1"))
+    findings = _FakeFindings(findings={"fin_seen": _finding("fin_seen")})
+
+    delta = _service(repo, chunk_records, chunk_facts, findings).run_delta(_chunk("ch_1"))
 
     assert delta is not None
     (set_delta,) = delta.sets
     assert [a.finding_id for a in set_delta.added] == ["fin_new"]
     assert set_delta.added[0].class_ == "stale-docstring"
-    assert set_delta.observed == ["fin_seen"]
+    assert [o.finding_id for o in set_delta.observed] == ["fin_seen"]
     assert [(g.finding_id, g.note) for g in set_delta.gone] == [("fin_missing", "not found this pass")]
 
 
@@ -317,6 +403,76 @@ def test_add_ids_are_matched_to_add_ops_positionally() -> None:
     assert [a.finding_id for a in set_delta.added] == ["fin_first", "fin_second"]
 
 
+def test_an_observed_op_carries_its_findings_class_locus_and_summary() -> None:
+    """The artifact repeats no descriptive field for a finding it merely re-observes —
+    they come from the finding row the observed id names."""
+    artifact = _delta_artifact([{"op": "observed", "id": "fin_seen"}])
+    raw = DeliveredSetRaw(
+        finding_set_id="fins_1", revisions={}, measurement=None, artifact_data=artifact, add_finding_ids=[]
+    )
+    repo = _FakeRepo(identities={"ch_1": _identity("ch_1")}, delivered={"ch_1": [raw]})
+    chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
+    chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
+    findings = _FakeFindings(
+        findings={"fin_seen": _finding("fin_seen", class_="dead-code", locus="b.py:7", summary="unused helper")}
+    )
+
+    delta = _service(repo, chunk_records, chunk_facts, findings).run_delta(_chunk("ch_1"))
+
+    assert delta is not None
+    (set_delta,) = delta.sets
+    (observed,) = set_delta.observed
+    assert observed.finding_id == "fin_seen"
+    assert observed.class_ == "dead-code"
+    assert observed.locus == "b.py:7"
+    assert observed.summary == "unused helper"
+
+
+def test_an_observed_op_with_no_finding_row_keeps_its_id_and_degrades_to_none_fields() -> None:
+    """An observed id naming no finding row still renders — by id alone, with the three
+    descriptive fields null rather than fabricated, and never dropped from the group."""
+    artifact = _delta_artifact([{"op": "observed", "id": "fin_ghost"}, {"op": "observed", "id": "fin_seen"}])
+    raw = DeliveredSetRaw(
+        finding_set_id="fins_1", revisions={}, measurement=None, artifact_data=artifact, add_finding_ids=[]
+    )
+    repo = _FakeRepo(identities={"ch_1": _identity("ch_1")}, delivered={"ch_1": [raw]})
+    chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
+    chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
+    findings = _FakeFindings(findings={"fin_seen": _finding("fin_seen")})
+
+    delta = _service(repo, chunk_records, chunk_facts, findings).run_delta(_chunk("ch_1"))
+
+    assert delta is not None
+    (set_delta,) = delta.sets
+    assert [o.finding_id for o in set_delta.observed] == ["fin_ghost", "fin_seen"]
+    ghost = set_delta.observed[0]
+    assert (ghost.class_, ghost.locus, ghost.summary) == (None, None, None)
+
+
+def test_every_observed_id_in_a_run_is_read_in_one_batched_lookup() -> None:
+    """One `get_many` for the whole delta read, across every set the run delivered —
+    never one read per observed id."""
+    first = _delta_artifact([{"op": "observed", "id": "fin_a"}, {"op": "observed", "id": "fin_b"}])
+    second = _delta_artifact([{"op": "observed", "id": "fin_c"}])
+    raws = [
+        DeliveredSetRaw(
+            finding_set_id="fins_1", revisions={}, measurement=None, artifact_data=first, add_finding_ids=[]
+        ),
+        DeliveredSetRaw(
+            finding_set_id="fins_2", revisions={}, measurement=None, artifact_data=second, add_finding_ids=[]
+        ),
+    ]
+    repo = _FakeRepo(identities={"ch_1": _identity("ch_1")}, delivered={"ch_1": raws})
+    chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
+    chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
+    findings = _FakeFindings(findings={fid: _finding(fid) for fid in ("fin_a", "fin_b", "fin_c")})
+
+    delta = _service(repo, chunk_records, chunk_facts, findings).run_delta(_chunk("ch_1"))
+
+    assert delta is not None
+    assert findings.calls == [["fin_a", "fin_b", "fin_c"]]
+
+
 def test_a_finding_never_named_in_the_artifact_appears_in_no_group() -> None:
     artifact = _delta_artifact([{"op": "observed", "id": "fin_seen"}])
     raw = DeliveredSetRaw(
@@ -325,13 +481,14 @@ def test_a_finding_never_named_in_the_artifact_appears_in_no_group() -> None:
     repo = _FakeRepo(identities={"ch_1": _identity("ch_1")}, delivered={"ch_1": [raw]})
     chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1")})
     chunk_facts = _FakeChunkFacts(facts={"ch_1": ChunkFacts(minted=True, promoted=True)})
+    findings = _FakeFindings(findings={"fin_seen": _finding("fin_seen")})
 
-    delta = _service(repo, chunk_records, chunk_facts).run_delta(_chunk("ch_1"))
+    delta = _service(repo, chunk_records, chunk_facts, findings).run_delta(_chunk("ch_1"))
 
     assert delta is not None
     (set_delta,) = delta.sets
     assert set_delta.added == []
-    assert set_delta.observed == ["fin_seen"]
+    assert [o.finding_id for o in set_delta.observed] == ["fin_seen"]
     assert set_delta.gone == []
 
 

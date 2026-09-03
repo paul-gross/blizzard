@@ -9,23 +9,43 @@
   margin: 0;
   padding: 0;
 }
-.rt-row {
-  display: flex;
-  width: 100%;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 6px 8px;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+/* One label per line, each clipping on its own rather than wrapping — the app's
+   standing rule for list rows (`board-card.css`, `chunk-timeline-selection.css`). */
+.rt-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.rt-row--selected {
-  background: var(--panel-highlight, rgba(255, 255, 255, 0.06));
+/* Line 2 — the graph name on the left, the routine's compact ref pinned to the
+   trailing edge (`chunk-timeline-selection.css`'s `.line2 .ts`,
+   `chunk-artifacts-panel.css`'s `.art-item .sub .kind`), so the refs form a clean
+   column down the list. */
+.rt-line2 {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: var(--label);
+  font-size: var(--fs-sm);
 }
 .rt-graph {
-  color: var(--dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rt-ref {
+  flex: none;
+  margin-left: auto;
+  color: var(--label-dim);
+  white-space: nowrap;
+}
+.rt-blocked {
+  display: inline-block;
+  color: var(--red);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }

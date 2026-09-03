@@ -27,12 +27,15 @@ one or many ids and exits them together, in one call. `blizzard hub finding reop
 whichever exit or `gone` fact was newest, restoring the finding to `live`. Every verb 404s on an unknown finding id and
 422s on a blank note; a hand `resolve` from this verb records no garden proposal of its own.
 
-**The same runs-and-findings sub-tab that reads a run's own delta also reaches a findings triage list over one
-routine/scope bucket, filterable by class and by state. An operator multi-selects rows and applies one exit verb — or,
-on rows that have already exited, `reopen` — with one note across the whole selection in a single call. A `gone`-flagged
-finding renders tinted but stays a normal, live, selectable row; an exited finding stays visible too, rendered dimmed
-rather than removed. A finding named by an accepted-and-minted proposal shows that proposal's linked work item beside
-it. Neither the bulk bar nor its dialog is offered without `chunk:control`.**
+**The hub board's Gardening tab reaches the same verbs from its own Findings sub-tab: a triage list over one
+routine/scope bucket, further filterable by class and by state, beside the selected finding's own panel. Every one of
+those four filters, and the selection itself, rides the URL, so a filtered bucket is a link and a row click never
+discards a filter. `resolve`, `confirm-gone`, `wont-fix` and `not-a-finding` — or, on a finding that has already exited,
+`reopen` — are dispatched one finding at a time from that panel, with a note. `supersede` is not among them: it needs
+the absorbing finding's id, which the panel collects nowhere, so it stays a CLI and API verb. A `gone`-flagged finding
+renders tinted but stays a normal, live, selectable row; an exited finding stays visible too, rendered dimmed rather
+than removed. A finding named by an accepted-and-minted proposal shows that proposal's linked work item beside it.
+Neither the triage actions nor their dialog is offered without `chunk:control`.**
 
 ## Garden proposals
 
@@ -51,12 +54,12 @@ proposal named that is still live is resolved, attributed to the proposal, the s
 `blizzard hub finding resolve` but requiring no verb of its own. Re-delivering the same item resolves nothing a second
 time. Either closing verb answers 409, naming the proposal's existing closure, when called again — closure is terminal.
 
-**The hub board's Gardening tab renders a docket sheet over the same reads: every proposal, filtered by waiting state
-and by class, each read as prose beside its findings — read live, one finding at a time, never a copy the proposal
-itself carries. Passing and accepting are each a dialog off the selected proposal, the reason and the mint/decline
-choice exposed the same way the CLI takes them; an accepted proposal's linked work item, once one exists, is read
-through the closure's own pointer and shown beside every finding it answers. Neither dialog is offered without
-`chunk:control`.**
+**The hub board's Gardening tab renders a docket sheet on its own Proposals sub-tab, over the same reads: every
+proposal, filtered by waiting state and by class, each read as prose beside its findings — read live, one finding at a
+time, never a copy the proposal itself carries. Passing and accepting are each a dialog off the selected proposal, the
+reason and the mint/decline choice exposed the same way the CLI takes them; an accepted proposal's linked work item,
+once one exists, is read through the closure's own pointer and shown beside every finding it answers. Neither dialog is
+offered without `chunk:control`.**
 
 ## Trend
 

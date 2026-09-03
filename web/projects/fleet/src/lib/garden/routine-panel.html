@@ -1,77 +1,59 @@
-<fleet-kit-async-state
-  [state]="state()"
-  placement="inline"
-  emptyText="Select a routine to see its record, strategy, and health."
-  emptyTestid="gardening-routine-panel-empty"
->
-  @let panel = vm();
-  @if (panel) {
-    <section class="rp" data-testid="gardening-routine-panel">
-      <header class="rp-record" data-testid="gardening-routine-record">
-        <h3>{{ panel.record.name }}</h3>
-        <dl>
-          <dt>graph</dt>
-          <dd>{{ panel.record.graphName }}</dd>
-          <dt>default scope</dt>
-          <dd>{{ panel.record.defaultScopeSlug }}</dd>
-          <dt>default model</dt>
-          <dd>{{ panel.record.defaultModel.length ? panel.record.defaultModel.join(', ') : '—' }}</dd>
-          <dt>default effort</dt>
-          <dd>{{ panel.record.defaultEffort ?? '—' }}</dd>
-        </dl>
-        <p class="rp-cli">read with: <code>hub routine show {{ panel.record.routineId }}</code></p>
-      </header>
+@let panel = vm();
 
-      @if (panel.blockedReason !== null) {
-        <p class="rp-blocked" data-testid="gardening-routine-blocked">
-          Blocked — {{ panel.blockedReason }}. No run is offered.
-        </p>
-      } @else {
-        <p class="rp-run">
-          <fleet-kit-button (click)="run.emit()" testid="gardening-routine-run">Run</fleet-kit-button>
-          run with: <code>hub routine run {{ panel.record.name }}</code>
-        </p>
-        <section class="rp-strategy" data-testid="gardening-routine-strategy">
-          <h4>Strategy</h4>
-          @for (step of panel.strategy; track step.name) {
-            <article class="rp-step">
-              <h5>{{ step.name }}</h5>
-              <p>{{ step.prompt ?? '(no prompt)' }}</p>
-            </article>
-          }
-          <p class="rp-cli">read with: <code>hub routine show {{ panel.record.routineId }}</code></p>
-        </section>
-      }
+<fleet-kit-panel label="Routine" data-testid="gardening-routine-panel" [bodyScroll]="false">
+  <fleet-kit-async-state
+    [state]="state()"
+    placement="inline"
+    emptyText="Select a routine to see its record, strategy, and health."
+    emptyTestid="gardening-routine-panel-empty"
+  >
+    @if (panel) {
+      <div class="rp-body">
+        <header class="rp-record" data-testid="gardening-routine-record">
+          <h3>{{ panel.record.name }}</h3>
+          <fleet-kit-fact-list
+            class="rp-record-facts"
+            [rows]="recordRows(panel.record)"
+            testid="gardening-routine-record-facts"
+          />
+        </header>
 
+        @if (panel.blockedReason !== null) {
+          <p class="rp-blocked" data-testid="gardening-routine-blocked">
+            Blocked — {{ panel.blockedReason }}. No run is offered.
+          </p>
+        } @else {
+          <div class="rp-run" data-testid="gardening-routine-actions">
+            <fleet-kit-button size="cta" (click)="run.emit()" testid="gardening-routine-run">Run</fleet-kit-button>
+          </div>
+        }
+      </div>
+    }
+  </fleet-kit-async-state>
+</fleet-kit-panel>
+
+@if (panel) {
+  <fleet-kit-panel label="Activity" data-testid="gardening-routine-runtime" [bodyScroll]="false">
+    <div class="rp-body">
       <section class="rp-trend" data-testid="gardening-routine-trend">
         <h4>Inflow &amp; outflow — {{ panel.windowLabel }}</h4>
         @if (panel.trend) {
-          <dl>
-            <dt>created</dt>
-            <dd data-testid="gardening-routine-trend-created">{{ panel.trend.created }}</dd>
-            <dt>outflow</dt>
-            <dd data-testid="gardening-routine-trend-outflow">{{ panel.trend.outflow }}</dd>
-            <dt>withdrawn</dt>
-            <dd data-testid="gardening-routine-trend-withdrawn">{{ panel.trend.withdrawn }}</dd>
-            <dt>reopened</dt>
-            <dd data-testid="gardening-routine-trend-reopened">{{ panel.trend.reopened }}</dd>
-          </dl>
+          <fleet-kit-fact-list [rows]="trendRows(panel.trend)" testid="gardening-routine-trend-facts" />
         }
-        <p class="rp-cli">read with: <code>hub routine trend {{ panel.record.name }}</code></p>
       </section>
 
       <section class="rp-measurements" data-testid="gardening-routine-measurements">
         <h4>Measurement — {{ panel.windowLabel }}</h4>
         @if (panel.measurements.length) {
-          <ul>
-            @for (m of panel.measurements; track m.scopeSlug + m.producedAt) {
-              <li><fleet-when [iso]="m.producedAt" /> — {{ m.scopeSlug }}: {{ m.measurement }}</li>
-            }
-          </ul>
+          @for (m of panel.measurements; track m.scopeSlug + m.producedAt) {
+            <div class="rp-measurement">
+              <p class="rp-measurement-meta">{{ m.scopeSlug }} · <fleet-when [iso]="m.producedAt" /></p>
+              <fleet-kit-prose-block [text]="m.measurement" />
+            </div>
+          }
         } @else {
           <p>No measurement recorded in this window.</p>
         }
-        <p class="rp-cli">read with: <code>hub routine sweeps {{ panel.record.name }}</code></p>
       </section>
 
       <section class="rp-last-swept" data-testid="gardening-routine-last-swept">
@@ -98,8 +80,20 @@
             }
           </tbody>
         </table>
-        <p class="rp-cli">read with: <code>hub routine sweeps {{ panel.record.name }}</code></p>
       </section>
-    </section>
-  }
-</fleet-kit-async-state>
+    </div>
+  </fleet-kit-panel>
+
+  <fleet-kit-panel label="Strategy" data-testid="gardening-routine-strategy-panel" [bodyScroll]="false">
+    <div class="rp-body">
+      <section class="rp-strategy" data-testid="gardening-routine-strategy">
+        @for (step of panel.strategy; track step.name) {
+          <!-- A graph node's prompt is context this run pushes toward an agent — the
+               transcript's own `env` meaning — the one prose in this tab an agent
+               reads rather than writes. -->
+          <fleet-kit-prose-block kind="context" [label]="step.name" [text]="step.prompt ?? '(no prompt)'" />
+        }
+      </section>
+    </div>
+  </fleet-kit-panel>
+}

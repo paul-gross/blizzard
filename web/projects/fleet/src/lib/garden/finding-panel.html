@@ -1,0 +1,102 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  emptyText="Select a finding to see its record."
+  emptyTestid="gardening-finding-panel-empty"
+>
+  @let panel = vm();
+  @if (panel) {
+    <section class="fp" data-testid="gardening-finding-panel">
+      <header class="fp-hdr">
+        <h3>
+          <span class="fp-class">{{ panel.findingClass }}</span>
+          <span class="fp-ref" [title]="panel.findingId">{{ compactRef(panel.findingId) }}</span>
+        </h3>
+        <p class="fp-locus">{{ panel.locus }}</p>
+        <ng-template #introducedValue>
+          @if (panel.introducedRev) {
+            in <span class="fp-rev">{{ panel.introducedRev }}</span>
+            @if (panel.introducedAt) {
+              (<fleet-when [iso]="panel.introducedAt" data-testid="fp-introduced-at" />)
+            } @else {
+              <span
+                class="fp-unresolved"
+                data-testid="fp-introduced-at-unresolved"
+                title="Resolves only when the delivery that recorded this finding named exactly one repository."
+              >
+                date unresolved
+              </span>
+            }
+          } @else {
+            —
+          }
+        </ng-template>
+        <ng-template #firstObservedValue>
+          @if (panel.firstObservedAt) {
+            <fleet-when [iso]="panel.firstObservedAt" />
+          } @else {
+            —
+          }
+        </ng-template>
+        <ng-template #lastSeenValue>
+          @if (panel.lastSeenAt) {
+            <fleet-when [iso]="panel.lastSeenAt" />
+          } @else {
+            —
+          }
+        </ng-template>
+        <fleet-kit-fact-list
+          class="fp-facts"
+          testid="fp-facts"
+          [rows]="factRows(panel, introducedValue, firstObservedValue, lastSeenValue)"
+        />
+      </header>
+
+      <fleet-kit-prose-block label="Summary" [text]="panel.summary" testid="fp-summary" />
+      @if (panel.note) {
+        <fleet-kit-prose-block label="Note" [text]="panel.note" testid="fp-note" />
+      }
+
+      @if (panel.workItem; as workItem) {
+        <p class="fp-work-item" data-testid="fp-work-item">
+          Work item:
+          @if (workItem.webUrl) {
+            <a [href]="workItem.webUrl" data-testid="fp-work-item-link">{{ workItem.label }}</a>
+          } @else {
+            <span data-testid="fp-work-item-label">{{ workItem.label }}</span>
+          }
+        </p>
+      }
+
+      @if (canControl()) {
+        <div class="fp-actions" data-testid="gardening-finding-panel-actions">
+          <fleet-kit-button size="cta" testid="gardening-finding-panel-resolve" (click)="triage.emit('resolve')">
+            Resolve
+          </fleet-kit-button>
+          <fleet-kit-button
+            size="cta"
+            testid="gardening-finding-panel-confirm-gone"
+            (click)="triage.emit('confirm-gone')"
+          >
+            Confirm gone
+          </fleet-kit-button>
+          <fleet-kit-button size="cta" testid="gardening-finding-panel-wont-fix" (click)="triage.emit('wont-fix')">
+            Won't fix
+          </fleet-kit-button>
+          <fleet-kit-button
+            size="cta"
+            testid="gardening-finding-panel-not-a-finding"
+            (click)="triage.emit('not-a-finding')"
+          >
+            Not a finding
+          </fleet-kit-button>
+          @if (exited()) {
+            <fleet-kit-button size="cta" testid="gardening-finding-panel-reopen" (click)="triage.emit('reopen')">
+              Reopen
+            </fleet-kit-button>
+          }
+        </div>
+      }
+    </section>
+  }
+</fleet-kit-async-state>

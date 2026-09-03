@@ -1,0 +1,9 @@
+<fleet-scope-panel
+  [vm]="scopePanelVm()"
+  [state]="scopePanelState()"
+  [canEdit]="canEditScopes()"
+  [actionError]="scopeActionError()"
+  (editDescription)="onEditScopeDescription($event)"
+  (retire)="onRetireScope($event)"
+  (enable)="onEnableScope($event)"
+/>

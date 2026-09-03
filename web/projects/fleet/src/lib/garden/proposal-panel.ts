@@ -1,7 +1,12 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
+import { compactRef } from '../compact-ref';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitButton } from '../kit/kit-button';
+import { KitFactList, type KitFact } from '../kit/kit-fact-list';
+import { KitPanel } from '../kit/kit-panel';
+import { KitProseBlock } from '../kit/kit-prose-block';
 import { FleetWhen } from '../when-display';
 
 /** A linked hub work item, legible for display — `label`/`webUrl` come straight off
@@ -48,6 +53,7 @@ export interface ProposalPanelVm {
   readonly title: string;
   readonly body: string;
   readonly closure: ProposalClosureVm | null;
+  readonly createdAt: string;
 }
 
 /**
@@ -70,7 +76,7 @@ export interface ProposalPanelVm {
 @Component({
   selector: 'fleet-proposal-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitButton],
+  imports: [KitAsyncState, FleetWhen, KitButton, KitFactList, KitPanel, KitProseBlock, RouterLink],
   templateUrl: './proposal-panel.html',
   styleUrl: './proposal-panel.css',
 })
@@ -87,4 +93,17 @@ export class FleetProposalPanel {
 
   readonly pass = output<void>();
   readonly accept = output<void>();
+
+  protected readonly compactRef = compactRef;
+
+  /** The pass/accept CLI hints as an aligned fact grid, above the action bar
+   * (`fleet-kit-fact-list`, `KitFact`'s own shape) — a method, not a stored
+   * computed, since it depends on the still-waiting proposal's id, already read
+   * off `vm()` at the one call site in the template. */
+  protected cliRows(proposalId: string): readonly KitFact[] {
+    return [
+      { label: 'pass', value: `hub garden-proposal pass ${proposalId}` },
+      { label: 'accept', value: `hub garden-proposal accept ${proposalId}` },
+    ];
+  }
 }

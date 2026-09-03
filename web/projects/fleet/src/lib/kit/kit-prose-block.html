@@ -1,0 +1,9 @@
+<div class="prose" [class]="'prose--' + kind()" [attr.data-testid]="testid()">
+  <span class="rail"><span class="tick"></span></span>
+  <div class="body">
+    @if (label(); as label) {
+      <div class="who">{{ label }}</div>
+    }
+    <div class="tx">{{ text() }}</div>
+  </div>
+</div>

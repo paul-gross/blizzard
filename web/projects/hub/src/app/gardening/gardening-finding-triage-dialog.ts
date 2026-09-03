@@ -31,8 +31,8 @@ import { GardeningFindingTriageDialogView } from './gardening-finding-triage-dia
  *
  * A rejected batch (D5) surfaces through this container's own `submitError` and
  * does **not** close the dialog — the container's caller keeps the same
- * `findingIds` selection in hand (`gardening-runs-findings-page.ts`'s own
- * `triagingBulkAction` signal is untouched by an error), so the same batch is one
+ * `findingIds` selection in hand (`gardening-findings-page.ts`'s own
+ * `triagingAction` signal is untouched by an error), so the same batch is one
  * click away from a retry.
  *
  * The host page mounts this with `@if` around the bulk action in flight

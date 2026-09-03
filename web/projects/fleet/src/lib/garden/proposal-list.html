@@ -1,26 +1,30 @@
-<fleet-kit-async-state
-  [state]="state()"
-  placement="inline"
-  emptyText="No proposals waiting — tending begins when there is growth worth pruning."
-  emptyTestid="gardening-proposals-empty"
->
-  <ul class="pl-list" data-testid="gardening-proposals-list">
-    @for (row of rows(); track row.proposalId) {
-      <li>
-        <button
-          type="button"
-          class="pl-row"
-          [class.pl-row--selected]="row.proposalId === selectedId()"
-          [attr.data-testid]="'gardening-proposal-row-' + row.proposalId"
-          (click)="pick(row.proposalId)"
-        >
-          <span class="pl-title">{{ row.title }}</span>
-          <span class="pl-class">{{ row.proposalClass }}</span>
-          @if (!row.waiting) {
-            <span class="pl-closed" data-testid="gardening-proposal-row-closed">closed</span>
-          }
-        </button>
-      </li>
-    }
-  </ul>
-</fleet-kit-async-state>
+<fleet-kit-panel label="Proposals" data-testid="gardening-proposal-list-panel">
+  <fleet-kit-async-state
+    [state]="state()"
+    placement="inline"
+    emptyText="No proposals waiting — tending begins when there is growth worth pruning."
+    emptyTestid="gardening-proposals-empty"
+  >
+    <ul class="pl-list" data-testid="gardening-proposals-list">
+      @for (row of rows(); track row.proposalId) {
+        <li>
+          <fleet-kit-select-row
+            [selected]="row.proposalId === selectedId()"
+            [testid]="'gardening-proposal-row-' + row.proposalId"
+            (picked)="pick(row.proposalId)"
+          >
+            <span class="pl-title">{{ row.title }}</span>
+            <span class="pl-meta">
+              <span class="pl-class">{{ row.proposalClass }}</span>
+              @if (!row.waiting) {
+                <span class="pl-closed" data-testid="gardening-proposal-row-closed">closed</span>
+              }
+              <span class="pl-ref" [title]="row.proposalId">{{ compactRef(row.proposalId) }}</span>
+            </span>
+            <span class="pl-created"><fleet-when [iso]="row.createdAt" /></span>
+          </fleet-kit-select-row>
+        </li>
+      }
+    </ul>
+  </fleet-kit-async-state>
+</fleet-kit-panel>

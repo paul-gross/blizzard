@@ -57,6 +57,18 @@ export function hubFindingsKey(findingIds: readonly string[]): readonly unknown[
   return ['hub', 'findings', ...findingIds];
 }
 
+/** One finding read on its own through `GET /api/findings/{finding_id}` — the
+ * detail pane's read, as distinct from {@link hubFindingsKey}'s joined fan-out.
+ * It carries its own prefix because the two reads answer a failed request
+ * differently (the fan-out drops a failure, this one surfaces it), and a shared
+ * key would let whichever mounted first decide that for both. */
+export const hubFindingPrefixKey = ['hub', 'finding'] as const;
+
+/** @see hubFindingPrefixKey */
+export function hubFindingKey(findingId: string | null): readonly unknown[] {
+  return [...hubFindingPrefixKey, findingId];
+}
+
 /** The findings triage bucket read's key prefix — the triage surface's own `GET
  * /api/findings?routine=&scope=` read (as distinct from {@link hubFindingsKey}'s
  * by-id fan-out), appended with the selected routine and scope so a different pair is

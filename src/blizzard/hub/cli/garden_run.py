@@ -82,8 +82,13 @@ class RunDetail:
             for added in delivered["added"]:
                 finding_id = added["finding_id"] or "unmatched"
                 yield f"    + [{finding_id}] {added['class']}  {added['locus']}: {added['summary']}"
-            for finding_id in delivered["observed"]:
-                yield f"    = {finding_id}"
+            for observed in delivered["observed"]:
+                # An observed id naming no finding row carries none of the three
+                # descriptive fields — it still renders, by id alone.
+                described = (
+                    f" {observed['class']}  {observed['locus']}: {observed['summary']}" if observed["class"] else ""
+                )
+                yield f"    = {observed['finding_id']}{described}"
             for gone in delivered["gone"]:
                 yield f"    - {gone['finding_id']}: {gone['note']}"
 

@@ -1,0 +1,72 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.sp {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px;
+}
+.sp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sp-head h3 {
+  margin: 0;
+}
+.sp-state {
+  color: var(--label);
+}
+.sp-state--retired {
+  color: var(--red);
+}
+.sp-description {
+  margin: 0;
+  color: var(--amber);
+  overflow-wrap: anywhere;
+}
+.sp-edit {
+  display: flex;
+  gap: 4px;
+}
+.edit-input {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  background: var(--overlay-35);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 2px 4px;
+}
+.edit-input:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 0;
+}
+.sp-actions {
+  display: flex;
+}
+.sp-error {
+  margin: 0;
+  color: var(--red);
+  font-size: var(--fs-xs);
+}
+.sp-routines h4 {
+  margin: 0 0 4px;
+  font-size: var(--fs-sm);
+  color: var(--label);
+}
+.sp-routines ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.sp-routines p {
+  margin: 0;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}

@@ -16,6 +16,19 @@
 .act.danger {
   color: var(--red);
 }
+/* `cta` — a genuine call-to-action, larger than the default hairline chrome
+   every other surface uses. `default`+`cta` stays outlined, just bigger;
+   `primary`+`cta` additionally fills with the cyan-tinted `--tint-selected`
+   wash behind a full-strength `--cyan` border so it reads as the affirmative
+   action rather than one more outlined button. */
+.act.cta {
+  padding: 9px 22px;
+  font-size: var(--fs-base);
+}
+.act.cta.primary {
+  background: var(--tint-selected);
+  border-color: var(--cyan);
+}
 .act:hover:not(:disabled) {
   border-color: var(--cyan);
 }

@@ -1,0 +1,70 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  emptyText="Select a scope to see its description, lifecycle, and defaulting routines."
+  emptyTestid="gardening-scope-panel-empty"
+>
+  @let panel = vm();
+  @if (panel) {
+    <section class="sp" data-testid="gardening-scope-panel">
+      <header class="sp-head">
+        <h3>{{ panel.slug }}</h3>
+        <span class="sp-state" [class.sp-state--retired]="panel.retired" data-testid="gardening-scope-panel-state">
+          {{ panel.retired ? 'retired' : 'enabled' }}
+        </span>
+      </header>
+
+      @if (canEdit()) {
+        <span class="sp-edit">
+          <input
+            #descInput
+            class="edit-input"
+            type="text"
+            [value]="panel.description"
+            data-testid="gardening-scope-panel-description-input"
+            [attr.aria-label]="'Set description for scope ' + panel.slug"
+          />
+          <fleet-kit-button
+            testid="gardening-scope-panel-description-submit"
+            (click)="submitDescription(descInput.value)"
+          >
+            Set
+          </fleet-kit-button>
+        </span>
+      } @else {
+        <p class="sp-description">{{ panel.description || '—' }}</p>
+      }
+
+      @if (canEdit()) {
+        <div class="sp-actions">
+          @if (panel.retired) {
+            <fleet-kit-button size="cta" testid="gardening-scope-panel-enable" (click)="onEnable()">
+              Re-enable
+            </fleet-kit-button>
+          } @else {
+            <fleet-kit-button variant="danger" size="cta" testid="gardening-scope-panel-retire" (click)="onRetire()">
+              Retire
+            </fleet-kit-button>
+          }
+        </div>
+      }
+
+      @if (actionError(); as err) {
+        <p class="sp-error" data-testid="gardening-scope-panel-error">{{ err }}</p>
+      }
+
+      <section class="sp-routines" data-testid="gardening-scope-panel-routines">
+        <h4>Routines defaulting here</h4>
+        @if (panel.defaultingRoutineNames.length) {
+          <ul>
+            @for (name of panel.defaultingRoutineNames; track name) {
+              <li>{{ name }}</li>
+            }
+          </ul>
+        } @else {
+          <p>No routine defaults to this scope.</p>
+        }
+      </section>
+    </section>
+  }
+</fleet-kit-async-state>

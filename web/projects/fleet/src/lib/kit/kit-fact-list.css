@@ -1,0 +1,28 @@
+:host {
+  display: block;
+  /* The fact grid's label-column width — fixed rather than `auto`-sized so a
+     consumer placing more than one fact list on the same surface can size their
+     label columns identically instead of each fitting its own longest label and
+     drifting apart (`chunk-facts.css`'s own note on the same property, this
+     grid's one owner now). */
+  --kv-label-col: 74px;
+}
+.kv {
+  display: grid;
+  grid-template-columns: var(--kv-label-col, 74px) 1fr;
+  gap: 2px 8px;
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.kv dt {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  align-self: center;
+}
+.kv dd {
+  margin: 0;
+  color: var(--amber);
+  overflow-wrap: anywhere;
+}

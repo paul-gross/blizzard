@@ -11,6 +11,13 @@ class DeliveredSetView(BaseModel):
     finding_set_id: str
     revisions: dict[str, str]
     measurement: str | None
+    #: How many `add`/`observed`/`gone` facts this delivery recorded — this delivery's
+    #: own act, never a finding's whole life history. `0`, never null, when a kind is
+    #: absent. Named with the `_count` suffix, distinct from `DeliveredSetDeltaView`'s
+    #: own full `added`/`observed`/`gone` lists.
+    added_count: int
+    observed_count: int
+    gone_count: int
 
 
 class RunEscalationView(BaseModel):
@@ -44,6 +51,18 @@ class AddedFindingView(BaseModel):
     introduced: str | None
 
 
+class ObservedFindingView(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    finding_id: str
+    #: The finding row's own class/locus/summary — an observed op names only an id, so
+    #: these are read back from the finding it points at, and are null when it names no
+    #: finding row: the entry still renders by id rather than being dropped.
+    class_: str | None = Field(alias="class")
+    locus: str | None
+    summary: str | None
+
+
 class GoneFindingView(BaseModel):
     finding_id: str
     note: str
@@ -54,7 +73,7 @@ class DeliveredSetDeltaView(BaseModel):
     revisions: dict[str, str]
     measurement: str | None
     added: list[AddedFindingView]
-    observed: list[str]
+    observed: list[ObservedFindingView]
     gone: list[GoneFindingView]
 
 

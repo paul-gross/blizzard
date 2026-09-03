@@ -8,29 +8,49 @@
   list-style: none;
   margin: 0;
   padding: 0;
+  min-width: 0;
 }
-.pl-row {
+.pl-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* No wrap — the class ellipsizes instead of breaking onto a second line, so the
+   trailing ref (`.pl-ref`'s `margin-left: auto`) always lands at the row's right
+   edge rather than wrapping under it (`chunk-timeline-selection.css`'s own
+   `.line2 .jg-to`/`.line2 .ts` shape: the middle fact ellipsizes, the trailing one
+   is pinned right, neither wraps). */
+.pl-meta {
   display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
+  align-items: baseline;
   gap: 6px;
-  padding: 6px 8px;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.pl-row--selected {
-  background: var(--panel-highlight, rgba(255, 255, 255, 0.06));
+  margin-top: 2px;
+  color: var(--label);
+  font-size: var(--fs-xs);
+  min-width: 0;
 }
 .pl-class {
-  color: var(--dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pl-closed {
-  color: var(--dim);
+  flex: none;
   font-style: italic;
+}
+.pl-ref {
+  flex: none;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.pl-created {
+  display: block;
+  margin-top: 2px;
+  color: var(--label-dim);
+  font-size: var(--fs-label);
 }

@@ -151,6 +151,20 @@
  *     field renders below/beside the note field with no overlap, and the footer's
  *     Cancel/submit buttons sit side by side without overflowing the panel, at
  *     1400/390/320px.
+ *   - projects/hub/src/app/gardening/gardening-page-grids.shell-sweep.spec.ts —
+ *     the three gardening sub-tabs the five-way split added (Scopes, Runs,
+ *     Findings): each one's own master/detail grid sits list beside detail at
+ *     1280px and genuinely collapses to a single stacked column at 700/390/320px
+ *     with no horizontal overflow — the same `@media (max-width: 720px)` claim
+ *     Routines and Proposals each carry, driven from one table rather than three
+ *     copied files.
+ *   - projects/fleet/src/lib/garden/garden-panels.shell-sweep.spec.ts — the two
+ *     presentational panels the same split added: `FleetFindingPanel`'s four
+ *     CTA-sized triage buttons genuinely wrap onto more than one row at 320px
+ *     rather than spilling into a horizontal scroll (`.fp-actions`'s own
+ *     `flex-wrap`), and `FleetScopePanel`'s description editor holds the row's
+ *     remaining width beside its actions rather than pushing them out of the
+ *     panel (`.sp-edit`/`.edit-input`'s `flex: 1; min-width: 0`).
  */
 
 const { spawnSync } = require('node:child_process');
@@ -180,6 +194,8 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-accept-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/gardening-findings-triage.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-finding-triage-dialog.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-page-grids.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/garden-panels.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {

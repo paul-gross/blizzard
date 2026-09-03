@@ -6,56 +6,17 @@
 >
   <ul class="sc-list" data-testid="gardening-scopes-list">
     @for (row of rows(); track row.slug) {
-      <li class="sc-row" [attr.data-testid]="'gardening-scope-row-' + row.slug">
-        <div class="sc-head">
+      <li>
+        <fleet-kit-select-row
+          [selected]="row.slug === selectedSlug()"
+          [testid]="'gardening-scope-row-' + row.slug"
+          (picked)="pick(row.slug)"
+        >
           <span class="sc-slug">{{ row.slug }}</span>
-          <span class="sc-state" [class.sc-state--retired]="row.retired">
-            {{ row.retired ? 'retired' : 'enabled' }}
-          </span>
-        </div>
-        @if (canEdit()) {
-          <span class="sc-edit">
-            <input
-              #descInput
-              class="edit-input"
-              type="text"
-              [value]="row.description"
-              [attr.data-testid]="'gardening-scope-description-input-' + row.slug"
-              [attr.aria-label]="'Set description for scope ' + row.slug"
-            />
-            <fleet-kit-button
-              [testid]="'gardening-scope-description-submit-' + row.slug"
-              (click)="submitDescription(row.slug, descInput.value)"
-            >
-              Set
-            </fleet-kit-button>
-          </span>
-        } @else {
-          <p class="sc-description">{{ row.description || '—' }}</p>
-        }
-        @if (canEdit()) {
           @if (row.retired) {
-            <fleet-kit-button [testid]="'gardening-scope-enable-' + row.slug" (click)="onEnable(row.slug)">
-              Re-enable
-            </fleet-kit-button>
-          } @else {
-            <fleet-kit-button
-              variant="danger"
-              [testid]="'gardening-scope-retire-' + row.slug"
-              (click)="onRetire(row.slug)"
-            >
-              Retire
-            </fleet-kit-button>
+            <span class="sc-retired">retired</span>
           }
-        }
-        <p class="sc-cli">
-          edit with: <code>hub scope edit {{ row.slug }} --description ...</code>
-          @if (row.retired) {
-            , re-enable with: <code>hub scope enable {{ row.slug }}</code>
-          } @else {
-            , retire with: <code>hub scope retire {{ row.slug }}</code>
-          }
-        </p>
+        </fleet-kit-select-row>
       </li>
     }
   </ul>

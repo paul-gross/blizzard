@@ -1,0 +1,13 @@
+<div class="gs-layout">
+  <fleet-kit-panel class="gs-left" label="Scopes">
+    <fleet-scope-list
+      [rows]="scopeRows()"
+      [selectedSlug]="selectedScopeSlug()"
+      [state]="scopesState()"
+      (scopePick)="selectScope($event)"
+    />
+  </fleet-kit-panel>
+  <fleet-kit-panel class="gs-right" label="Scope">
+    <router-outlet />
+  </fleet-kit-panel>
+</div>

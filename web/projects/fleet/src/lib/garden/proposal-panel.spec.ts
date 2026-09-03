@@ -1,15 +1,23 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { vi } from 'vitest';
 
-import { FleetProposalPanel, type ProposalClosureVm, type ProposalEvidenceRowVm, type ProposalPanelVm } from './proposal-panel';
+import {
+  FleetProposalPanel,
+  type ProposalClosureVm,
+  type ProposalEvidenceRowVm,
+  type ProposalPanelVm,
+} from './proposal-panel';
 
 const BASE_VM: ProposalPanelVm = {
-  proposalId: 'gp_1',
+  proposalId: 'gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y2',
   routineName: 'comments',
   proposalClass: 'fix-the-source',
   title: 'Author a docstring standard',
   body: 'Seventeen modules narrate their own change history.',
   closure: null,
+  createdAt: new Date(2026, 6, 18, 9, 5, 3).toISOString(),
 };
 
 const EVIDENCE: readonly ProposalEvidenceRowVm[] = [
@@ -18,6 +26,14 @@ const EVIDENCE: readonly ProposalEvidenceRowVm[] = [
 ];
 
 describe('FleetProposalPanel', () => {
+  beforeEach(() => {
+    vi.setSystemTime(new Date(2026, 6, 18, 15, 30));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   async function mount(inputs: {
     vm?: ProposalPanelVm | null;
     state?: 'loading' | 'error' | 'empty' | 'ready';
@@ -27,7 +43,7 @@ describe('FleetProposalPanel', () => {
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetProposalPanel],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
     const fixture = TestBed.createComponent(FleetProposalPanel);
     fixture.componentRef.setInput('vm', inputs.vm ?? BASE_VM);
@@ -48,17 +64,48 @@ describe('FleetProposalPanel', () => {
     );
   });
 
-  it('renders the case as prose', async () => {
+  it('sits inside the kit panel shell, labelled Proposal', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    const panel = el.querySelector('[data-testid="gardening-proposal-detail-panel"]');
+    expect(panel?.tagName.toLowerCase()).toBe('fleet-kit-panel');
+    expect(panel?.textContent).toContain('Proposal');
+  });
+
+  it('renders the header title and meta line, with the full id in a title attribute', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
     const caseEl = el.querySelector('[data-testid="gardening-proposal-case"]');
     expect(caseEl?.textContent).toContain('Author a docstring standard');
-    expect(caseEl?.textContent).toContain('Seventeen modules narrate their own change history.');
     expect(caseEl?.textContent).toContain('fix-the-source');
+    expect(caseEl?.textContent).toContain('GP-X1Y2');
+
+    const meta = caseEl?.querySelector('.pp-meta');
+    const refSpan = meta?.firstElementChild;
+    expect(refSpan?.textContent?.trim()).toBe('GP-X1Y2');
+    expect(refSpan?.getAttribute('title')).toBe('gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y2');
   });
 
-  it('renders findings from the live evidence read, not from any proposal-carried text', async () => {
+  it('renders the panel meta line as one uniform id-first sequence: ref, class, routine, created', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    const meta = el.querySelector('[data-testid="gardening-proposal-case"] .pp-meta');
+    const spans = Array.from(meta?.querySelectorAll('span') ?? []).map((s) => s.textContent?.trim());
+    expect(spans).toEqual(['GP-X1Y2', 'fix-the-source', 'comments', '09:05']);
+    expect(el.querySelector('.pp-ref')).toBeNull();
+  });
+
+  it('renders the body through the prose block', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.textContent).toContain('Seventeen modules narrate their own change history.');
+  });
+
+  it('renders findings from the live evidence read, not from any proposal-carried text, each linked by compact ref', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
@@ -66,6 +113,10 @@ describe('FleetProposalPanel', () => {
     expect(live?.textContent).toContain('src/a.py:1');
     expect(live?.textContent).toContain('stale docstring');
     expect(live?.querySelector('[data-testid="gardening-proposal-finding-not-live"]')).toBeNull();
+
+    const link = live?.querySelector<HTMLAnchorElement>('[data-testid="gardening-proposal-finding-link-fin_1"]');
+    expect(link?.textContent).toBe('F-1');
+    expect(link?.getAttribute('href')).toBe('/gardening/findings/fin_1');
 
     const gone = el.querySelector('[data-testid="gardening-proposal-finding-fin_2"]');
     expect(gone?.querySelector('[data-testid="gardening-proposal-finding-not-live"]')).toBeTruthy();
@@ -148,12 +199,70 @@ describe('FleetProposalPanel', () => {
     expect(el.querySelector('[data-testid="gardening-proposal-work-item-label"]')).toBeNull();
   });
 
-  it('offers Pass and Accept for a waiting proposal with chunk:control', async () => {
+  it('offers Pass and Accept for a waiting proposal with chunk:control, both as cta-sized buttons', async () => {
     const fixture = await mount({ canControl: true });
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="gardening-proposal-pass"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-proposal-accept"]')).toBeTruthy();
+    const pass = el.querySelector('[data-testid="gardening-proposal-pass"]');
+    const accept = el.querySelector('[data-testid="gardening-proposal-accept"]');
+    expect(pass).toBeTruthy();
+    expect(accept).toBeTruthy();
+    expect(pass?.classList.contains('cta')).toBe(true);
+    expect(accept?.classList.contains('cta')).toBe(true);
+    expect(accept?.classList.contains('primary')).toBe(true);
+  });
+
+  it('renders the pass/accept CLI hints as an aligned fact grid above the action bar', async () => {
+    const fixture = await mount({ canControl: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const cli = el.querySelector('[data-testid="gardening-proposal-cli"]');
+    expect(cli?.tagName.toLowerCase()).toBe('dl');
+    expect(cli?.textContent).toContain('hub garden-proposal pass gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y2');
+    expect(cli?.textContent).toContain('hub garden-proposal accept gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y2');
+
+    const actions = el.querySelector('[data-testid="gardening-proposal-actions"]');
+    const cliIndex = Array.from(actions?.children ?? []).findIndex((c) =>
+      c.querySelector('[data-testid="gardening-proposal-cli"]'),
+    );
+    const barIndex = Array.from(actions?.children ?? []).findIndex((c) =>
+      c.querySelector('[data-testid="gardening-proposal-pass"]'),
+    );
+    expect(cliIndex).toBeGreaterThanOrEqual(0);
+    expect(barIndex).toBeGreaterThan(cliIndex);
+  });
+
+  it('no longer offers a read-with CLI hint under Evidence', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    const evidence = el.querySelector('[data-testid="gardening-proposal-evidence"]');
+    expect(evidence?.textContent).not.toContain('hub finding show');
+  });
+
+  it("renders each evidence row's summary through a prose block, formatting preserved", async () => {
+    const evidence: readonly ProposalEvidenceRowVm[] = [
+      { findingId: 'fin_1', locus: 'src/a.py:1', summary: 'line one\nline two', live: true, workItem: null },
+    ];
+    const fixture = await mount({ evidence });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const summary = el.querySelector('[data-testid="gardening-proposal-finding-summary-fin_1"] .tx');
+    expect(summary?.textContent).toBe('line one\nline two');
+  });
+
+  it("renders a closure's reason through a prose block", async () => {
+    const closure: ProposalClosureVm = {
+      kind: 'passed',
+      closedBy: 'u_1',
+      closedAt: '2026-01-04T00:00:00Z',
+      reason: 'not worth it yet',
+    };
+    const fixture = await mount({ vm: { ...BASE_VM, closure } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const reason = el.querySelector('[data-testid="gardening-proposal-closure-reason"] .tx');
+    expect(reason?.textContent).toBe('not worth it yet');
   });
 
   it('withholds Pass and Accept without chunk:control', async () => {

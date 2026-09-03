@@ -5,42 +5,30 @@ import { FleetFindingList, type FindingListRowVm } from './finding-list';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
 
 const LIVE_ROW: FindingListRowVm = {
-  findingId: 'fnd_1',
+  findingId: 'fin_01M1KANH0RZEABSD44RCEH6G9B',
   findingClass: 'stale-docstring',
   locus: 'src/a.py:1',
   summary: 'docstring narrates a removed parameter',
-  introduced: '2026-01-01T00:00:00Z',
-  lastSeenAt: '2026-01-05T00:00:00Z',
-  observedCount: 3,
   state: 'live',
-  note: null,
-  workItem: null,
+  lastSeenAt: '2026-01-05T00:00:00Z',
 };
 
 const GONE_ROW: FindingListRowVm = {
-  findingId: 'fnd_2',
+  findingId: 'fin_2',
   findingClass: 'unused-import',
   locus: 'src/b.py:4',
   summary: 'import no longer referenced',
-  introduced: '2026-01-02T00:00:00Z',
-  lastSeenAt: '2026-01-04T00:00:00Z',
-  observedCount: 2,
   state: 'gone',
-  note: 'not seen in the last sweep',
-  workItem: null,
+  lastSeenAt: '2026-01-06T00:00:00Z',
 };
 
 const RESOLVED_ROW: FindingListRowVm = {
-  findingId: 'fnd_3',
+  findingId: 'fin_3',
   findingClass: 'stale-docstring',
   locus: 'src/c.py:9',
   summary: 'docstring rewritten to match the signature',
-  introduced: '2026-01-03T00:00:00Z',
-  lastSeenAt: '2026-01-06T00:00:00Z',
-  observedCount: 1,
   state: 'resolved',
-  note: 'fixed in the same pass',
-  workItem: null,
+  lastSeenAt: null,
 };
 
 const ROWS: readonly FindingListRowVm[] = [LIVE_ROW, GONE_ROW, RESOLVED_ROW];
@@ -49,8 +37,7 @@ describe('FleetFindingList', () => {
   async function mount(inputs: {
     rows?: readonly FindingListRowVm[];
     state?: KitAsyncStateValue;
-    canControl?: boolean;
-    clearSelectionOn?: number;
+    selectedId?: string | null;
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetFindingList],
@@ -59,65 +46,90 @@ describe('FleetFindingList', () => {
     const fixture = TestBed.createComponent(FleetFindingList);
     fixture.componentRef.setInput('rows', inputs.rows ?? ROWS);
     fixture.componentRef.setInput('state', inputs.state ?? 'ready');
-    fixture.componentRef.setInput('canControl', inputs.canControl ?? false);
-    if (inputs.clearSelectionOn !== undefined) fixture.componentRef.setInput('clearSelectionOn', inputs.clearSelectionOn);
+    if (inputs.selectedId !== undefined) fixture.componentRef.setInput('selectedId', inputs.selectedId);
     await fixture.whenStable();
     return fixture;
   }
 
-  it('renders every row with its class, locus, and summary', async () => {
+  it('renders every row with its summary headline, class, compact ref, and locus', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
-    const row = el.querySelector('[data-testid="gardening-finding-row-fnd_1"]');
+    const row = el.querySelector('[data-testid="gardening-finding-row-fin_01M1KANH0RZEABSD44RCEH6G9B"]');
     expect(row?.textContent).toContain('stale-docstring');
+    expect(row?.textContent).toContain('F-6G9B');
     expect(row?.textContent).toContain('src/a.py:1');
     expect(row?.textContent).toContain('docstring narrates a removed parameter');
-    expect(row?.textContent).toContain('observed x3');
+    expect(row?.querySelector('[title]')?.getAttribute('title')).toBe('fin_01M1KANH0RZEABSD44RCEH6G9B');
+  });
+
+  it('clamps the summary headline to four lines, never through fleet-kit-prose-block', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    const row = el.querySelector('[data-testid="gardening-finding-row-fin_01M1KANH0RZEABSD44RCEH6G9B"]');
+    const headline = row?.querySelector('.fl-summary');
+    expect(headline).toBeTruthy();
+    expect(headline?.textContent).toContain('docstring narrates a removed parameter');
+    expect(row?.querySelector('fleet-kit-prose-block')).toBeNull();
+  });
+
+  it('right-aligns the compact ref beside the class, carrying the full id as its title', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    const row = el.querySelector('[data-testid="gardening-finding-row-fin_01M1KANH0RZEABSD44RCEH6G9B"]');
+    const ref = row?.querySelector('.fl-ref');
+    expect(ref?.textContent?.trim()).toBe('F-6G9B');
+    expect(ref?.getAttribute('title')).toBe('fin_01M1KANH0RZEABSD44RCEH6G9B');
+  });
+
+  it('renders the most recent observation via fleet-when', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    const row = el.querySelector('[data-testid="gardening-finding-row-fin_01M1KANH0RZEABSD44RCEH6G9B"]');
+    expect(row?.querySelector('.fl-seen fleet-when')).toBeTruthy();
+  });
+
+  it('renders a dash when a row carries no last-seen instant', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    const row = el.querySelector('[data-testid="gardening-finding-row-fin_3"]');
+    expect(row?.querySelector('.fl-seen fleet-when')).toBeNull();
+    expect(row?.querySelector('.fl-seen')?.textContent?.trim()).toBe('—');
+  });
+
+  it('drops observed count and introduced from the row — those stay on the panel', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    const row = el.querySelector('[data-testid="gardening-finding-row-fin_01M1KANH0RZEABSD44RCEH6G9B"]');
+    expect(row?.textContent).not.toContain('observed');
+    expect(row?.textContent).not.toContain('introduced');
   });
 
   it('renders a gone-flagged row tinted, and still as a normal, present row', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
-    const live = el.querySelector('[data-testid="gardening-finding-row-fnd_1"]');
-    const gone = el.querySelector('[data-testid="gardening-finding-row-fnd_2"]');
-    expect(live?.classList.contains('fl-row--gone')).toBe(false);
-    expect(gone?.classList.contains('fl-row--gone')).toBe(true);
-    expect(gone?.classList.contains('fl-row--exited')).toBe(false);
+    const live = el.querySelector('[data-testid="gardening-finding-row-fin_01M1KANH0RZEABSD44RCEH6G9B"]');
+    const gone = el.querySelector('[data-testid="gardening-finding-row-fin_2"]');
+    expect(live?.querySelector('.fl-body--gone')).toBeNull();
+    expect(gone?.querySelector('.fl-body--gone')).toBeTruthy();
+    expect(gone?.querySelector('.fl-body--exited')).toBeNull();
     expect(gone?.textContent).toContain('unused-import');
   });
 
-  it("renders a note on a gone row, visible on the row itself", async () => {
+  it('renders an exited row dimmed but present, never removed', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
-    const gone = el.querySelector('[data-testid="gardening-finding-row-fnd_2"]');
-    expect(gone?.querySelector('[data-testid="fl-note"]')?.textContent).toContain('not seen in the last sweep');
-  });
-
-  it('renders an exited row dimmed but present, never removed, with its own note', async () => {
-    const fixture = await mount({});
-    const el = fixture.nativeElement as HTMLElement;
-
-    const resolved = el.querySelector('[data-testid="gardening-finding-row-fnd_3"]');
+    const resolved = el.querySelector('[data-testid="gardening-finding-row-fin_3"]');
     expect(resolved).toBeTruthy();
-    expect(resolved?.classList.contains('fl-row--exited')).toBe(true);
-    expect(resolved?.classList.contains('fl-row--gone')).toBe(false);
-    expect(resolved?.querySelector('[data-testid="fl-note"]')?.textContent).toContain('fixed in the same pass');
-  });
-
-  it('renders a work item beside a finding, still rendered with its own live state', async () => {
-    const fixture = await mount({
-      rows: [{ ...LIVE_ROW, workItem: { label: 'hub#42', webUrl: '/board/chunk/ch_1' } }],
-    });
-    const el = fixture.nativeElement as HTMLElement;
-
-    const row = el.querySelector('[data-testid="gardening-finding-row-fnd_1"]');
-    const link = row?.querySelector<HTMLAnchorElement>('[data-testid="fl-work-item-link"]');
-    expect(link?.textContent).toBe('hub#42');
-    expect(link?.getAttribute('href')).toBe('/board/chunk/ch_1');
-    expect(row?.textContent).toContain('live');
+    expect(resolved?.querySelector('.fl-body--exited')).toBeTruthy();
+    expect(resolved?.querySelector('.fl-body--gone')).toBeNull();
   });
 
   it('names the finding list CLI verb', async () => {
@@ -134,110 +146,39 @@ describe('FleetFindingList', () => {
     expect(el.querySelector('[data-testid="gardening-findings-empty"]')).toBeTruthy();
   });
 
-  describe('multi-select and the bulk bar (D9)', () => {
-    it('renders no checkbox and no bulk bar at all when canControl is false', async () => {
-      const fixture = await mount({ canControl: false });
-      const el = fixture.nativeElement as HTMLElement;
+  it('renders no checkbox and no bulk bar — triage is single-finding only, dispatched from the panel a row opens', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
 
-      expect(el.querySelector('[data-testid="gardening-findings-select-all"]')).toBeNull();
-      expect(el.querySelector('[data-testid="gardening-finding-select-fnd_1"]')).toBeNull();
-      expect(el.querySelector('[data-testid="gardening-findings-bulk-bar"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-findings-select-all"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-finding-select-fin_01M1KANH0RZEABSD44RCEH6G9B"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-findings-bulk-bar"]')).toBeNull();
+  });
+
+  describe('opening a finding in the right-hand panel', () => {
+    it('emits findingPick with the row id on click', async () => {
+      const fixture = await mount({});
+      const el = fixture.nativeElement as HTMLElement;
+      let emitted: string | undefined;
+      fixture.componentInstance.findingPick.subscribe((findingId) => (emitted = findingId));
+
+      el.querySelector<HTMLButtonElement>('[data-testid="gardening-finding-row-fin_2"]')!.click();
+
+      expect(emitted).toBe('fin_2');
     });
 
-    it('selects and clears every visible row via the select-all checkbox', async () => {
-      const fixture = await mount({ canControl: true });
+    it('reflects selectedId onto the kit row', async () => {
+      const fixture = await mount({ selectedId: 'fin_2' });
       const el = fixture.nativeElement as HTMLElement;
 
-      const selectAll = el.querySelector<HTMLInputElement>('[data-testid="gardening-findings-select-all"]')!;
-      expect(selectAll.checked).toBe(false);
-
-      selectAll.click();
-      await fixture.whenStable();
-
-      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.checked).toBe(
+      expect(el.querySelector('[data-testid="gardening-finding-row-fin_2"]')?.classList.contains('selected')).toBe(
         true,
       );
-      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_2"]')!.checked).toBe(
-        true,
-      );
-      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_3"]')!.checked).toBe(
-        true,
-      );
-      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-findings-select-all"]')!.checked).toBe(
-        true,
-      );
-
-      el.querySelector<HTMLInputElement>('[data-testid="gardening-findings-select-all"]')!.click();
-      await fixture.whenStable();
-
-      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.checked).toBe(
-        false,
-      );
-      expect(el.querySelector('[data-testid="gardening-findings-bulk-bar"]')).toBeNull();
-    });
-
-    it('marks the select-all checkbox indeterminate when only some visible rows are selected', async () => {
-      const fixture = await mount({ canControl: true });
-      const el = fixture.nativeElement as HTMLElement;
-
-      el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.click();
-      await fixture.whenStable();
-
-      const selectAll = el.querySelector<HTMLInputElement>('[data-testid="gardening-findings-select-all"]')!;
-      expect(selectAll.indeterminate).toBe(true);
-      expect(selectAll.checked).toBe(false);
-    });
-
-    it('emits bulkTriage with the right verb and the ordered selected ids', async () => {
-      const fixture = await mount({ canControl: true });
-      const el = fixture.nativeElement as HTMLElement;
-      let emitted: { verb: string; findingIds: readonly string[] } | undefined;
-      fixture.componentInstance.bulkTriage.subscribe((event) => (emitted = event));
-
-      el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_2"]')!.click();
-      await fixture.whenStable();
-      el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.click();
-      await fixture.whenStable();
-
-      el.querySelector<HTMLButtonElement>('[data-testid="gardening-finding-bulk-resolve"]')!.click();
-      await fixture.whenStable();
-
-      expect(emitted).toEqual({ verb: 'resolve', findingIds: ['fnd_1', 'fnd_2'] });
-    });
-
-    it('offers the Reopen button only when every selected row is exited', async () => {
-      const fixture = await mount({ canControl: true });
-      const el = fixture.nativeElement as HTMLElement;
-
-      el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.click();
-      await fixture.whenStable();
-      expect(el.querySelector('[data-testid="gardening-finding-bulk-reopen"]')).toBeNull();
-
-      el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.click();
-      el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_3"]')!.click();
-      await fixture.whenStable();
-      expect(el.querySelector('[data-testid="gardening-finding-bulk-reopen"]')).toBeTruthy();
-
-      el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.click();
-      await fixture.whenStable();
-      expect(el.querySelector('[data-testid="gardening-finding-bulk-reopen"]')).toBeNull();
-    });
-
-    it('clears the selection when clearSelectionOn changes, but not on a mere re-render (F1)', async () => {
-      const fixture = await mount({ canControl: true, clearSelectionOn: 0 });
-      const el = fixture.nativeElement as HTMLElement;
-
-      el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.click();
-      await fixture.whenStable();
-      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.checked).toBe(true);
-
-      fixture.componentRef.setInput('rows', ROWS);
-      await fixture.whenStable();
-      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.checked).toBe(true);
-
-      fixture.componentRef.setInput('clearSelectionOn', 1);
-      await fixture.whenStable();
-      expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-finding-select-fnd_1"]')!.checked).toBe(false);
+      expect(
+        el.querySelector('[data-testid="gardening-finding-row-fin_01M1KANH0RZEABSD44RCEH6G9B"]')?.classList.contains(
+          'selected',
+        ),
+      ).toBe(false);
     });
   });
 });

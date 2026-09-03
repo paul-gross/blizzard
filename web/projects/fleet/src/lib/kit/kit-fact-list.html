@@ -1,0 +1,14 @@
+<dl class="kv" [attr.data-testid]="testid()">
+  @for (row of checkedRows(); track row.label) {
+    <dt>{{ row.label }}</dt>
+    <!-- Two whole `<dd>`s rather than one holding the branch: a block inside the
+         element would wrap the interpolated value in the template's own indentation
+         whitespace, so a text row's rendered value would gain leading and trailing
+         spaces it does not have today. -->
+    @if (row.template; as valueTemplate) {
+      <dd [attr.data-testid]="row.testid ?? null"><ng-container *ngTemplateOutlet="valueTemplate" /></dd>
+    } @else {
+      <dd [attr.data-testid]="row.testid ?? null">{{ row.value }}</dd>
+    }
+  }
+</dl>

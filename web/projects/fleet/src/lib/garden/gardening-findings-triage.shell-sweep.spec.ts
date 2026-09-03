@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { commands, page, userEvent } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 
 import { FleetFindingList, type FindingListRowVm } from './finding-list';
 
@@ -20,15 +20,23 @@ async function loadDesignTokens(): Promise<void> {
 
 /**
  * The findings triage list's own half of `web:shell-sweep` — a real,
- * headless-Chromium proof of the two classes of claim jsdom cannot make: the
- * bulk bar's own buttons, driven into view exactly the way an operator reaches them
- * (through the select-all checkbox, not by poking component internals), must stay
- * inside the viewport and never overlap each other or the list itself at the phone
- * widths gardening is actually reached at, and a `gone`-flagged row (D8) must carry a
- * genuinely different computed style from a plain row — not merely a different class
- * name jsdom would accept without evaluating it against `finding-list.css`. Gardening
- * sits in the hub's mobile bottom tab bar, so the narrow widths bind
- * (`bzh:narrow-viewport-tier-rule`).
+ * headless-Chromium proof of the three classes of claim jsdom cannot make: the
+ * list itself must stay unclipped at the phone widths gardening is actually
+ * reached at (`bzh:narrow-viewport-tier-rule`); a `gone`-flagged row (D8) must
+ * carry a genuinely different computed style from a plain row — not merely a
+ * different class name jsdom would accept without evaluating it against
+ * `finding-list.css`; and the row's own summary headline must genuinely clamp to
+ * four lines rather than merely carrying the `-webkit-line-clamp` declaration —
+ * jsdom performs no layout, so it cannot tell a clamped headline from an
+ * unclamped one.
+ *
+ * Multi-select and the bulk action bar were removed from `FleetFindingList`:
+ * triage now dispatches one finding at a time, from `fleet-finding-panel`'s own
+ * `triage` output, opened by a row click. This file's own bulk-bar-in-viewport
+ * sweep went with it — there is nothing left of that concern to sweep. A later
+ * `shell-sweep` pass owns deciding whether a narrow-viewport claim belongs on the
+ * finding panel's own triage affordance instead; this file stays scoped to
+ * `FleetFindingList`.
  *
  * Excluded from the default `ng test fleet` run (`angular.json`'s `test.exclude`)
  * because it needs `--browsers=ChromiumHeadless`, not jsdom — run it via
@@ -40,112 +48,57 @@ const ROWS: readonly FindingListRowVm[] = [
     findingClass: 'style',
     locus: 'a.py:1',
     summary: 'unused import',
-    introduced: '2026-01-01T00:00:00Z',
-    lastSeenAt: '2026-01-10T00:00:00Z',
-    observedCount: 3,
     state: 'live',
-    note: null,
-    workItem: null,
+    lastSeenAt: '2026-01-05T00:00:00Z',
   },
   {
     findingId: 'fin_2',
     findingClass: 'lint',
     locus: 'b.py:9',
     summary: 'unused variable',
-    introduced: '2026-01-02T00:00:00Z',
-    lastSeenAt: '2026-01-09T00:00:00Z',
-    observedCount: 2,
     state: 'gone',
-    note: 'not observed in the last sweep',
-    workItem: null,
+    lastSeenAt: '2026-01-06T00:00:00Z',
   },
   {
     findingId: 'fin_3',
     findingClass: 'style',
     locus: 'c.py:4',
     summary: 'missing docstring',
-    introduced: null,
-    lastSeenAt: '2026-01-08T00:00:00Z',
-    observedCount: 1,
     state: 'live',
-    note: null,
-    workItem: null,
+    lastSeenAt: '2026-01-04T00:00:00Z',
   },
   {
     findingId: 'fin_4',
     findingClass: 'lint',
     locus: 'd.py:12',
     summary: 'unreachable code',
-    introduced: '2026-01-03T00:00:00Z',
-    lastSeenAt: '2026-01-07T00:00:00Z',
-    observedCount: 4,
     state: 'resolved',
-    note: 'fixed upstream',
-    workItem: null,
+    lastSeenAt: null,
   },
 ];
 
-async function mount() {
+async function mount(rows: readonly FindingListRowVm[] = ROWS) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [FleetFindingList],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(FleetFindingList);
-  fixture.componentRef.setInput('rows', ROWS);
+  fixture.componentRef.setInput('rows', rows);
   fixture.componentRef.setInput('state', 'ready');
-  fixture.componentRef.setInput('canControl', true);
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
   return { fixture, root };
 }
 
-describe('FleetFindingList bulk-bar/table shell sweep (web:shell-sweep)', () => {
-  it('keeps the bulk bar’s buttons inside the viewport, non-overlapping, and the list itself unclipped at 1400/390/320px', async () => {
-    const { fixture, root } = await mount();
+describe('FleetFindingList list-layout shell sweep (web:shell-sweep)', () => {
+  it('keeps the list itself unclipped at 1400/390/320px', async () => {
+    const { root } = await mount();
     try {
-      // Drive selection through the DOM exactly the way an operator would — the
-      // select-all header checkbox — rather than poking `FleetFindingList`'s own
-      // private selection signal.
-      const selectAll = root.querySelector<HTMLInputElement>('[data-testid="gardening-findings-select-all"]')!;
-      await userEvent.click(selectAll);
-      await fixture.whenStable();
-
-      const bulkBarInitial = root.querySelector<HTMLElement>('[data-testid="gardening-findings-bulk-bar"]');
-      expect(bulkBarInitial, 'the bulk bar did not render once every row was selected').not.toBeNull();
-
       for (const width of [1400, 390, 320]) {
         await page.viewport(width, 800);
         await new Promise((resolve) => requestAnimationFrame(resolve));
-
-        const bulkBar = root.querySelector<HTMLElement>('[data-testid="gardening-findings-bulk-bar"]')!;
-        const buttons = Array.from(bulkBar.querySelectorAll<HTMLElement>('button[data-testid^="gardening-finding-bulk-"]'));
-        expect(buttons.length, `${width}px: no bulk-bar buttons rendered`).toBeGreaterThan(0);
-
-        for (const button of buttons) {
-          const rect = button.getBoundingClientRect();
-          expect(
-            rect.left,
-            `${width}px: bulk-bar button ${button.dataset['testid']} sits left of the viewport`,
-          ).toBeGreaterThanOrEqual(0);
-          expect(
-            rect.right,
-            `${width}px: bulk-bar button ${button.dataset['testid']} overflows the ${width}px viewport`,
-          ).toBeLessThanOrEqual(width + 1);
-        }
-
-        for (let i = 0; i < buttons.length; i++) {
-          for (let j = i + 1; j < buttons.length; j++) {
-            const a = buttons[i].getBoundingClientRect();
-            const b = buttons[j].getBoundingClientRect();
-            const overlap = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-            expect(
-              overlap,
-              `${width}px: bulk-bar buttons ${buttons[i].dataset['testid']} and ${buttons[j].dataset['testid']} overlap`,
-            ).toBe(false);
-          }
-        }
 
         expect(
           root.scrollWidth,
@@ -159,27 +112,85 @@ describe('FleetFindingList bulk-bar/table shell sweep (web:shell-sweep)', () => 
 });
 
 describe('FleetFindingList gone-row tint shell sweep (web:shell-sweep)', () => {
-  it('gives a gone-flagged row (D8) a genuinely different computed style than a plain, untinted row', async () => {
+  it('gives a gone-flagged row’s body a genuinely different computed background than a plain row’s, leaving the selection edge alone', async () => {
     await loadDesignTokens();
     const { root } = await mount();
     try {
       await page.viewport(1400, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      const plain = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_1"]')!;
-      const gone = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_2"]')!;
-      const plainBg = getComputedStyle(plain).backgroundColor;
-      const goneBg = getComputedStyle(gone).backgroundColor;
+      // The gone tint rides `.fl-body`, the projected content inside
+      // `fleet-kit-select-row`'s own encapsulated `<button>` — `run-list.ts`'s own
+      // `.rl-body` shape, compared here where each background is actually drawn
+      // rather than on the outer button (`kit-select-row.css`'s own `.selected`).
+      const plainBody = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_1"] .fl-body')!;
+      const goneBody = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_2"] .fl-body')!;
+      const plainBg = getComputedStyle(plainBody).backgroundColor;
+      const goneBg = getComputedStyle(goneBody).backgroundColor;
       expect(goneBg, `a gone-flagged row's background (${goneBg}) must not read as a plain row's (${plainBg})`).not.toBe(
         plainBg,
       );
 
-      const plainBorder = getComputedStyle(plain).borderLeftColor;
-      const goneBorder = getComputedStyle(gone).borderLeftColor;
+      // The left edge belongs to selection unconditionally — an unselected
+      // gone-flagged row must not claim it.
+      const plainRow = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_1"]')!;
+      const goneRow = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_2"]')!;
       expect(
-        goneBorder,
-        `a gone-flagged row's border-left (${goneBorder}) must not read as a plain row's (${plainBorder})`,
-      ).not.toBe(plainBorder);
+        getComputedStyle(goneRow).borderLeftColor,
+        'an unselected gone-flagged row must not claim the selection edge',
+      ).toBe(getComputedStyle(plainRow).borderLeftColor);
+    } finally {
+      root.remove();
+    }
+  });
+});
+
+describe('FleetFindingList summary headline clamp shell sweep (web:shell-sweep)', () => {
+  it('genuinely clamps a long summary to four lines rather than letting it grow the row', async () => {
+    const LONG_SUMMARY = Array.from(
+      { length: 20 },
+      (_, i) => `Sentence number ${i} of a long agent-written summary that runs on and on.`,
+    ).join(' ');
+    const { root } = await mount([
+      {
+        findingId: 'fin_short',
+        findingClass: 'style',
+        locus: 'a.py:1',
+        summary: 'one short line',
+        state: 'live',
+        lastSeenAt: '2026-01-05T00:00:00Z',
+      },
+      {
+        findingId: 'fin_long',
+        findingClass: 'style',
+        locus: 'a.py:1',
+        summary: LONG_SUMMARY,
+        state: 'live',
+        lastSeenAt: '2026-01-05T00:00:00Z',
+      },
+    ]);
+    try {
+      await page.viewport(1400, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      // A genuine one-line reference measured in the same rendered tree — not
+      // `getComputedStyle().lineHeight`, which Chromium reports as the literal
+      // keyword `normal` (unparseable) when no `line-height` is set.
+      const oneLine = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_short"] .fl-summary')!;
+      const headline = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_long"] .fl-summary')!;
+      const oneLineHeight = oneLine.getBoundingClientRect().height;
+      const clampedHeight = headline.getBoundingClientRect().height;
+
+      // A genuinely clamped headline renders at (at most, allowing for rounding)
+      // four lines tall regardless of how much text it carries — the twenty
+      // sentences above run to well beyond four lines unclamped, so a
+      // `-webkit-line-clamp: 4` declaration that jsdom would accept without
+      // evaluating is not enough; this only passes if the browser actually clips
+      // the box.
+      expect(
+        clampedHeight,
+        `the clamped headline's rendered height (${clampedHeight}px) exceeds four lines (${oneLineHeight * 4}px) — the summary is not actually clamping`,
+      ).toBeLessThanOrEqual(oneLineHeight * 4 + 1);
     } finally {
       root.remove();
     }

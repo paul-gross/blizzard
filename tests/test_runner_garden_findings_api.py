@@ -33,6 +33,8 @@ _BUCKET = [
         "locus": "a.py:1",
         "summary": "s",
         "introduced": None,
+        "introduced_at": None,
+        "first_observed_at": None,
         "live": True,
         "state": "live",
         "note": None,

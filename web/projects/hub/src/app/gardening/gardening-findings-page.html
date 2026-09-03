@@ -1,0 +1,44 @@
+<div class="gf-filters">
+  <span class="gf-filter-label" data-testid="gardening-findings-filter-label-routine">Routine</span>
+  <fleet-kit-chips
+    [options]="filters.routineChips()"
+    [selectedValue]="filters.selectedRoutine()"
+    (choose)="filters.onRoutineChoose($event)"
+  />
+
+  <span class="gf-filter-label" data-testid="gardening-findings-filter-label-scope">Scope</span>
+  <fleet-kit-chips
+    [options]="filters.scopeChips()"
+    [selectedValue]="filters.selectedScope()"
+    (choose)="filters.onScopeChoose($event)"
+  />
+
+  <span class="gf-filter-label" data-testid="gardening-findings-filter-label-class">Class</span>
+  <fleet-kit-chips
+    [options]="filters.classChips()"
+    [selectedValue]="filters.classChipValue()"
+    (choose)="filters.onClassChoose($event)"
+  />
+
+  <span class="gf-filter-label" data-testid="gardening-findings-filter-label-state">State</span>
+  <fleet-kit-chips
+    [options]="filters.stateChips"
+    [selectedValue]="filters.stateFilter() ?? 'all'"
+    (choose)="filters.onStateChoose($event)"
+  />
+</div>
+
+<div class="gf-layout">
+  <fleet-kit-panel class="gf-list" label="Findings">
+    <fleet-finding-list
+      [rows]="findingListRows()"
+      [state]="bucketState()"
+      [selectedId]="findingId()"
+      (findingPick)="selectFinding($event)"
+    />
+  </fleet-kit-panel>
+
+  <fleet-kit-panel class="gf-detail" label="Finding">
+    <router-outlet />
+  </fleet-kit-panel>
+</div>

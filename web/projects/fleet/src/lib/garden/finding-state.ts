@@ -39,16 +39,6 @@ export function isFindingExited(state: string): boolean {
   return FINDING_EXIT_STATES.includes(state);
 }
 
-/** Whether `state` is one of {@link FINDING_OUTFLOW_STATES}. */
-export function isFindingOutflow(state: string): boolean {
-  return FINDING_OUTFLOW_STATES.includes(state);
-}
-
-/** Whether `state` is one of {@link FINDING_WITHDRAWN_STATES}. */
-export function isFindingWithdrawn(state: string): boolean {
-  return FINDING_WITHDRAWN_STATES.includes(state);
-}
-
 /** Whether `state` is `'gone'` — still open (D8: not counted as exited anywhere),
  * but flagged for review and rendered tinted. */
 export function isFindingGoneFlagged(state: string): boolean {

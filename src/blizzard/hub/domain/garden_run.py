@@ -13,6 +13,7 @@ fabricated one."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -20,19 +21,29 @@ from typing import Protocol
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
+from blizzard.hub.domain.findings import Finding, IReadFindingRepository
 from blizzard.hub.domain.garden_delivery import parse_delta
 from blizzard.hub.domain.work import Chunk, ChunkFacts
-from blizzard.wire.finding import AddFindingOp, GoneFindingOp, ObservedFindingOp
+from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp
 
 
 @dataclass(frozen=True)
 class DeliveredSet:
     """One `finding_sets` row a run delivered — the list read's own per-set shape
-    (D4: reported one entry per set, several sets from one run never merged into one)."""
+    (D4: reported one entry per set, several sets from one run never merged into one).
+
+    `added_count`/`observed_count`/`gone_count` are how many `add`/`observed`/`gone`
+    facts *this delivery* recorded on `finding_facts.finding_set_id` — this delivery's
+    own act, never a finding's whole life history, and never merged across sets. Named
+    with the `_count` suffix so a reader cannot mistake them for `DeliveredSetDelta`'s
+    own full `added`/`observed`/`gone` lists; `0`, never `None`, when a kind is absent."""
 
     finding_set_id: str
     revisions: dict[str, str]
     measurement: str | None
+    added_count: int
+    observed_count: int
+    gone_count: int
 
 
 @dataclass(frozen=True)
@@ -75,6 +86,19 @@ class AddedFinding:
 
 
 @dataclass(frozen=True)
+class ObservedFinding:
+    """One `observed` op a delivered set's artifact named. The artifact repeats no
+    descriptive field for a finding it is merely re-observing, so `class_`/`locus`/
+    `summary` are read back from the finding row the id names — each `None` when the id
+    names no row, so an observed entry still renders by id rather than being dropped."""
+
+    finding_id: str
+    class_: str | None
+    locus: str | None
+    summary: str | None
+
+
+@dataclass(frozen=True)
 class GoneFinding:
     """One `gone` op a delivered set's artifact named."""
 
@@ -91,7 +115,7 @@ class DeliveredSetDelta:
     revisions: dict[str, str]
     measurement: str | None
     added: list[AddedFinding]
-    observed: list[str]
+    observed: list[ObservedFinding]
     gone: list[GoneFinding]
 
 
@@ -210,16 +234,22 @@ def _outcome_and_escalation(chunk_graph_id: str, facts: ChunkFacts) -> tuple[Chu
     return outcome, _escalation(chunk_graph_id, facts)
 
 
-def _set_delta(raw: DeliveredSetRaw) -> DeliveredSetDelta:
-    """Fold one delivered set's raw artifact into its own added/observed/gone groups —
+def _observed_ids(delta: FindingDelta) -> list[str]:
+    """Every finding id one parsed artifact's `observed` ops name, in artifact order."""
+    return [op.id for op in delta.findings if isinstance(op, ObservedFindingOp)]
+
+
+def _set_delta(raw: DeliveredSetRaw, delta: FindingDelta, findings: Mapping[str, Finding]) -> DeliveredSetDelta:
+    """Fold one delivered set's parsed artifact into its own added/observed/gone groups —
     an add op is zipped positionally against `raw.add_finding_ids` (D1), never
     `strict`: a set predating the `finding_facts.finding_set_id` linkage carries no add
     ids at all, and every add on it degrades to an unmatched `finding_id=None` rather
-    than raising or fabricating one."""
-    delta = parse_delta(raw.finding_set_id, raw.artifact_data)
+    than raising or fabricating one. An observed op degrades the same way in the other
+    direction: an id `findings` holds no row for keeps its descriptive fields `None`,
+    rather than dropping the entry or inventing text for it."""
     add_ids = iter(raw.add_finding_ids)
     added: list[AddedFinding] = []
-    observed: list[str] = []
+    observed: list[ObservedFinding] = []
     gone: list[GoneFinding] = []
     for op in delta.findings:
         if isinstance(op, AddFindingOp):
@@ -233,7 +263,15 @@ def _set_delta(raw: DeliveredSetRaw) -> DeliveredSetDelta:
                 )
             )
         elif isinstance(op, ObservedFindingOp):
-            observed.append(op.id)
+            row = findings.get(op.id)
+            observed.append(
+                ObservedFinding(
+                    finding_id=op.id,
+                    class_=row.class_ if row is not None else None,
+                    locus=row.locus if row is not None else None,
+                    summary=row.summary if row is not None else None,
+                )
+            )
         elif isinstance(op, GoneFindingOp):
             gone.append(GoneFinding(finding_id=op.id, note=op.note))
     return DeliveredSetDelta(
@@ -256,10 +294,12 @@ class GardenRunService:
         repo: IReadGardenRunRepository,
         chunk_records: IReadChunkRecordRepository,
         chunk_facts: IReadChunkFactsRepository,
+        findings: IReadFindingRepository,
     ) -> None:
         self._repo = repo
         self._chunk_records = chunk_records
         self._chunk_facts = chunk_facts
+        self._findings = findings
 
     def list_runs(self, *, since: datetime, until: datetime) -> list[RunRow]:
         """`chunk_records`/`chunk_facts` are read one chunk at a time — `records` is
@@ -298,7 +338,15 @@ class GardenRunService:
             return None
         facts = self._chunk_facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
         outcome, escalation = _outcome_and_escalation(chunk.graph_id, facts)
-        sets = [_set_delta(raw) for raw in self._repo.delivered_sets(chunk.chunk_id)]
+        parsed = [
+            (raw, parse_delta(raw.finding_set_id, raw.artifact_data))
+            for raw in self._repo.delivered_sets(chunk.chunk_id)
+        ]
+        # Every observed id the run named, across all its sets, is read in one batched
+        # lookup: the descriptive fields an observed op omits live on the finding row,
+        # and a per-id read would cost one query pair per re-observed finding.
+        rows = self._findings.get_many([fid for _, delta in parsed for fid in _observed_ids(delta)])
+        sets = [_set_delta(raw, delta, rows) for raw, delta in parsed]
         return RunDelta(
             chunk_id=chunk.chunk_id,
             routine_name=identity.routine_name,

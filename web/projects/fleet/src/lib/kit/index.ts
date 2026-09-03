@@ -4,7 +4,9 @@
  */
 
 export { KitAccordionSection } from './kit-accordion-section';
+export { KitCountBadge } from './kit-count-badge';
 export { KitDialog } from './kit-dialog';
+export { KitFactList, type KitFact } from './kit-fact-list';
 export { KitPanel, KitPanelHeader } from './kit-panel';
 export { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';
 export { KitAvatar } from './kit-avatar';
@@ -18,6 +20,8 @@ export { KitMenu, KitMenuPanel } from './kit-menu';
 export { KitMenuItem, KitMenuItemRadio } from './kit-menu-item';
 export { KitOption } from './kit-option';
 export { KitPaceBar } from './kit-pace-bar';
+export { KitProseBlock } from './kit-prose-block';
+export { KitSelectRow } from './kit-select-row';
 export { KitSkeleton } from './kit-skeleton';
 export { KitSlotBar } from './kit-slot-bar';
 export { KitTab, KitTabStrip } from './kit-tab';

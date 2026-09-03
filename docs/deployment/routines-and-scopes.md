@@ -12,6 +12,10 @@ untouched — `edit` is the only verb that changes it. `retire`/`enable` are the
 append-only brake: retiring a scope appends `scope.retired`, `enable` appends `scope.enabled`, and neither touches the
 stored slug or description.
 
+The hub board's Gardening tab renders the same reads from its own Scopes sub-tab: every scope beside the selected one's
+own panel, which names the routines defaulting to it, edits the description in place, and retires or re-enables it.
+Every one of those writes is gated on `graph:edit`; without it the panel reads, and offers nothing.
+
 ## Routines
 
 `blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort]`, `list`,
@@ -39,13 +43,14 @@ defaults to `full`; a requested `delta` against a routine/scope pair with no rec
 rather than refusing — the CLI names the downgrade in its output, and the item's own charge does too. A retired
 effective scope, or a routine whose graph has lost every enabled mint, refuses the run rather than running it anyway.
 
-The hub board's gardening tab offers the same act as a dialog, reachable from the selected routine's own panel. It
-resolves the delta baseline *before* the operator submits, through `GET /api/routines/{routine_id}/baselines` — one
-entry per scope this routine has ever swept, each carrying its finding-set id, the instant it was recorded, and, per
-repo the sweep touched, how many `delivery_repo_landed` events that repo has recorded since. A scope absent from the
-list has never been swept by this routine; the dialog steers those pairs to full rather than offering a delta with
-nothing to run against. A new scope is minted through `POST /api/scopes`, with its description, before the run is ever
-submitted — never left to the run route's own empty-description mint.
+The hub board's Gardening tab offers the same act as a dialog on its Routines sub-tab, reachable from the selected
+routine's own panel. It resolves the delta baseline *before* the operator submits, through
+`GET /api/routines/{routine_id}/baselines` — one entry per scope this routine has ever swept, each carrying its
+finding-set id, the instant it was recorded, and, per repo the sweep touched, how many `delivery_repo_landed` events
+that repo has recorded since. A scope absent from the list has never been swept by this routine; the dialog steers those
+pairs to full rather than offering a delta with nothing to run against. A new scope is minted through
+`POST /api/scopes`, with its description, before the run is ever submitted — never left to the run route's own
+empty-description mint.
 
 ## Reading a routine's health
 
@@ -59,9 +64,9 @@ and per-repository revisions, or `never` when the pair has recorded none — and
 each delivered set records, cut to `--since`/`--until`. Unlike the last-swept table, the measurement series is windowed:
 a scope swept months ago still reads its true last-swept instant, never "never".
 
-The hub board's Gardening tab renders both reads, plus a routine's stored record and the effective graph's own node
-prompts, as read-only prose, and the Run action above it. A routine whose graph has lost every enabled mint shows as
-blocked there instead of offering a run.
+The hub board's Gardening tab renders both reads on that same Routines sub-tab, plus a routine's stored record and the
+effective graph's own node prompts, as read-only prose, and the Run action above it. A routine whose graph has lost
+every enabled mint shows as blocked there instead of offering a run.
 
 ## Reading runs
 
@@ -76,7 +81,14 @@ own identity, not from what it delivered. A run whose chunk was later grouped aw
 is absent from both reads, since neither has a live chunk left to read outcome and identity from.
 
 `run show <chunk_id>` reads one run's full detail: the same identity and outcome, plus, per finding-set it delivered,
-the delta that set actually published — added, observed, and gone, kept as three separate groups. An added entry that
-predates the finding-id-linkage this read relies on renders with no matched finding id rather than a guessed one. A run
-whose outcome is `needs_human` also carries the escalating node's name and its takeover command(s) — the hub records no
-reason an escalated run stopped, only where it stopped and how to resume it.
+the delta that set actually published — added, observed, and gone, kept as three separate groups. Each entry is
+described from the finding row its id names: an added entry that predates the finding-id-linkage this read relies on
+renders with no matched finding id rather than a guessed one, and an observed entry whose id names no row renders by
+that id alone rather than with blank class, locus and summary fields. A run whose outcome is `needs_human` also carries
+the escalating node's name and its takeover command(s) — the hub records no reason an escalated run stopped, only where
+it stopped and how to resume it.
+
+The hub board's Gardening tab renders both reads from its own Runs sub-tab: the run list beside the selected run's own
+delta, the selection riding the URL. Each row states its routine, scope, mode, outcome and the counts its sets summed
+to; the delta beside it reads each finding set in full — its revisions and measurement, then the added, observed and
+gone groups, each entry linking to the finding it names. Reading a run needs no permission of its own.

@@ -39,6 +39,10 @@ def finding_view(finding: Finding) -> FindingView:
             "locus": finding.locus,
             "summary": finding.summary,
             "introduced": finding.introduced,
+            "introduced_at": iso_utc(finding.introduced_at) if finding.introduced_at is not None else None,
+            "first_observed_at": (
+                iso_utc(finding.first_observed_at) if finding.first_observed_at is not None else None
+            ),
             "live": finding.live,
             "state": finding.state,
             "note": finding.note,

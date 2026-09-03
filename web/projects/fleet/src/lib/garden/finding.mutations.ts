@@ -10,7 +10,7 @@ import {
   wontFixFindingsApiFindingsWontFixPost,
   type FindingView,
 } from '../api/hub';
-import { hubFindingsBucketPrefixKey, hubFindingsKey } from '../query-keys';
+import { hubFindingPrefixKey, hubFindingsBucketPrefixKey, hubFindingsKey } from '../query-keys';
 
 /** `POST /api/findings/{verb}` — the shared vars shape every human-driven exit and
  * `reopen` take (`FindingExitRequest`'s own D7 note: every finding named exits, or
@@ -26,7 +26,7 @@ export interface FindingSupersedeVars extends FindingExitVars {
   readonly supersededBy: string;
 }
 
-/** Both surfaces that cache a finding's own record — the triage bucket
+/** Every surface that caches a finding's own record — the triage bucket
  * ({@link hubFindingsBucketPrefixKey}) and the docket detail's evidence table
  * ({@link hubFindingsKey}, which caches the same findings under its own by-id key,
  * `finding.query.ts`'s own `injectHubFindingsQuery`) — invalidated together on every
@@ -37,10 +37,15 @@ export interface FindingSupersedeVars extends FindingExitVars {
  * key prefix rather than one selection's own key (`hubFindingsBucketPrefixKey`'s own
  * doc comment); it likewise invalidates `hubFindingsKey`'s bare prefix rather than one
  * proposal's own id list, since it doesn't know which ids the currently-open docket
- * detail is reading either. */
+ * detail is reading either. The detail pane's single-finding read
+ * ({@link hubFindingPrefixKey}) is a third cache of the same record and goes with
+ * them — triaging a finding from its own pane is the commonest way to change one,
+ * and leaving that key alone would leave the pane you acted in showing the state you
+ * just left behind. */
 function invalidateFindingCaches(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: hubFindingsBucketPrefixKey });
   void queryClient.invalidateQueries({ queryKey: hubFindingsKey([]) });
+  void queryClient.invalidateQueries({ queryKey: hubFindingPrefixKey });
 }
 
 /**

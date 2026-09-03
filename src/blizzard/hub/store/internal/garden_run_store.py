@@ -51,6 +51,11 @@ _IDENTITY_COLUMNS = (
     work_item_runs.c.mode,
 )
 
+# The three fact kinds `DeliveredSet.added_count`/`observed_count`/`gone_count` fold
+# over — `finding_facts.finding_set_id` (schema.py) is written only for these on the
+# delivery path; a person's own exit verb or `reopened` carries no `finding_set_id`.
+_SET_COUNT_KINDS = ("add", "observed", "gone")
+
 # A chunk that absorbed another's work refs (`GroupService.group`) carries more than one
 # `chunk_work_refs` row — a run's own identity is always the lowest-id one, its mint-time row.
 _CANONICAL_WORK_REF = chunk_work_refs.c.id == (
@@ -136,16 +141,44 @@ class GardenRunStore:
             .where(finding_sets.c.chunk_id.in_(chunk_ids))
             .order_by(finding_sets.c.finding_set_id)
         ).all()
+        counts_by_set = self._fact_counts_by_set(conn, [row.finding_set_id for row in rows])
         grouped: dict[str, list[DeliveredSet]] = defaultdict(list)
         for row in rows:
+            counts = counts_by_set[row.finding_set_id]
             grouped[row.chunk_id].append(
                 DeliveredSet(
                     finding_set_id=row.finding_set_id,
                     revisions=json.loads(row.revisions),
                     measurement=row.measurement,
+                    added_count=counts["add"],
+                    observed_count=counts["observed"],
+                    gone_count=counts["gone"],
                 )
             )
         return dict(grouped)
+
+    @staticmethod
+    def _fact_counts_by_set(conn, finding_set_ids: list[str]) -> dict[str, dict[str, int]]:  # type: ignore[no-untyped-def]
+        """How many `add`/`observed`/`gone` facts each delivered set's own delivery
+        recorded — one `GROUP BY` query for every id in `finding_set_ids`
+        (index-backed on `ix_finding_facts_finding_set_id`), the `FindingStore._facts_for_many`
+        shape, so the list read never issues one count query per row. `add`/`observed`/`gone`
+        are named explicitly rather than left to whatever `finding_set_id` happens to
+        carry, so an exit or `reopened` fact — which schema.py records with no
+        `finding_set_id` at all — could never be miscounted here even if that changed."""
+        counts: dict[str, dict[str, int]] = {
+            finding_set_id: dict.fromkeys(_SET_COUNT_KINDS, 0) for finding_set_id in finding_set_ids
+        }
+        if not finding_set_ids:
+            return counts
+        rows = conn.execute(
+            select(finding_facts.c.finding_set_id, finding_facts.c.kind, func.count().label("n"))
+            .where(finding_facts.c.finding_set_id.in_(finding_set_ids), finding_facts.c.kind.in_(_SET_COUNT_KINDS))
+            .group_by(finding_facts.c.finding_set_id, finding_facts.c.kind)
+        ).all()
+        for row in rows:
+            counts[row.finding_set_id][row.kind] = row.n
+        return counts
 
     @staticmethod
     def _add_finding_ids(conn, finding_set_id: str) -> list[str]:  # type: ignore[no-untyped-def]

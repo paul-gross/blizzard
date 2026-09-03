@@ -66,6 +66,7 @@ def _finding(
         summary="s",
         introduced=None,
         introduced_at=None,
+        first_observed_at=_T0,
         live=live,
         state=resolved_state,
         note=None,
