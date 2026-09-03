@@ -3950,9 +3950,9 @@
    "total": 190
   },
   "e2e/test_event_log_e2e.py": {
-   "comments": 33,
-   "docstrings": 21,
-   "total": 411
+   "comments": 34,
+   "docstrings": 23,
+   "total": 419
   },
   "e2e/test_forge_status_e2e.py": {
    "comments": 9,
@@ -3977,12 +3977,12 @@
   "e2e/test_glance_board_e2e.py": {
    "comments": 9,
    "docstrings": 9,
-   "total": 160
+   "total": 161
   },
   "e2e/test_graphs_diagram_browser_e2e.py": {
    "comments": 36,
-   "docstrings": 31,
-   "total": 454
+   "docstrings": 32,
+   "total": 456
   },
   "e2e/test_login_session_e2e.py": {
    "comments": 14,
@@ -4895,9 +4895,9 @@
    "total": 120
   },
   "test_garden_routine_graph.py": {
-   "comments": 18,
-   "docstrings": 17,
-   "total": 164
+   "comments": 21,
+   "docstrings": 20,
+   "total": 173
   },
   "test_garden_routine_graph_mint.py": {
    "comments": 0,
