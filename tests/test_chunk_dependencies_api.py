@@ -46,6 +46,16 @@ def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str, *, by: st
     return hub.client.post(f"/api/chunks/{dependent_id}/dependencies/release", json=body)
 
 
+def _group_away(hub: HubHarness, chunk_id: str) -> None:
+    """Group ``chunk_id`` away into a fresh survivor chunk. Deletion can no longer make a
+    chunk with a standing outgoing edge ephemeral this way — issue #460 refuses deleting a
+    chunk while it stands as another's prerequisite — so grouping, not yet dependency-aware
+    (Phase 2), is the remaining lever a test reaches for that state."""
+    survivor_id = ingest(hub, [{"source": "default", "ref": f"survivor-for-{chunk_id}"}], promote=False)
+    resp = hub.client.post(f"/api/chunks/{survivor_id}/group", json={"merge_chunk_ids": [chunk_id]})
+    assert resp.status_code == 200, resp.text
+
+
 def _rows(hub: HubHarness) -> list[dict[str, Any]]:
     """Every ``chunk_dependencies`` row, every column — the whole table's state, so a
     refusal that inserted *or* updated a row shows up as an inequality, not just a count
@@ -170,7 +180,7 @@ def test_release_is_admitted_when_the_prerequisite_was_since_deleted(tmp_path: P
     dependent_id = ingest(hub, [_DEPENDENT], promote=False)
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
     assert _declare(hub, dependent_id, prerequisite_id).status_code == 202
-    assert hub.client.request("DELETE", f"/api/chunks/{prerequisite_id}", json={}).status_code == 202
+    _group_away(hub, prerequisite_id)
 
     resp = _release(hub, dependent_id, prerequisite_id, by="user:bob")
 
@@ -278,7 +288,7 @@ def test_declare_of_a_standing_edge_is_idempotent_even_once_the_prerequisite_is_
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
     first = _declare(hub, dependent_id, prerequisite_id)
     assert first.status_code == 202, first.text
-    assert hub.client.request("DELETE", f"/api/chunks/{prerequisite_id}", json={}).status_code == 202
+    _group_away(hub, prerequisite_id)
     before = _rows(hub)
 
     resp = _declare(hub, dependent_id, prerequisite_id)

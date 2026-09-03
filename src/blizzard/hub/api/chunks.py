@@ -26,7 +26,7 @@ from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.decisions import NotEscalated
-from blizzard.hub.domain.delete import ChunkNotDeletable
+from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable
 from blizzard.hub.domain.dependencies import derive_blocked_markings
 from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.edit import (
@@ -590,8 +590,9 @@ def delete_chunk(
     """Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
     in the same write (issue #364). 404 for an unknown chunk, or one a race deletes
     between resolving it and this write; 409 for one a runner or a human holds, or one
-    terminal — deletion needs a chunk at the same statuses grouping does. Irreversible:
-    CHUNK is gone from every read the instant this returns."""
+    terminal — deletion needs a chunk at the same statuses grouping does; 409 also when
+    CHUNK is a standing prerequisite for another chunk (issue #460), naming the
+    dependents. Irreversible: CHUNK is gone from every read the instant this returns."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -601,6 +602,8 @@ def delete_chunk(
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ChunkNotDeletable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ChunkHasDependents as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     change.publish(cause="deleted", key=f"chunk_deleted:{deleted_id}", by=request.by, status=change.prev_status)
     services.events.publish_queue_changed()  # a deleted chunk is never offered for claim again

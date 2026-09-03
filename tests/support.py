@@ -65,6 +65,7 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
+from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -568,7 +569,11 @@ def build_hub(
     store_connections = hub_store_connections(engine)
     work_item_store = WorkItemStore(store_connections)
     delete_service = DeleteService(
-        facts=ChunkFactsStore(store_connections, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
+        facts=ChunkFactsStore(store_connections, clock),
+        items=work_item_store,
+        clock=clock,
+        claim_lock=claim_lock,
+        dependencies=ChunkDependenciesStore(store_connections, clock),
     )
     finding_store = FindingStore(store_connections)
     finding_exit = FindingExitService(repo=finding_store, clock=clock)

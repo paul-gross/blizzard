@@ -404,7 +404,9 @@ def chunk_delete(cli: CliContext, chunk_id: str, by: str, yes: bool) -> None:
 
     A pure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless
     ``--yes``. 409 when a runner or a human holds CHUNK, or it is terminal — deletion
-    needs CHUNK at the same statuses ``group`` does; 404 only when CHUNK is unknown."""
+    needs CHUNK at the same statuses ``group`` does; 409 also when CHUNK is a standing
+    prerequisite for another chunk, which the response names; 404 only when CHUNK is
+    unknown."""
     if not yes and not click.confirm(f"delete {chunk_id}? this withdraws its hub item(s) too"):
         raise click.Abort()
     resp = cli.delete(

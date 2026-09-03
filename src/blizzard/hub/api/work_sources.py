@@ -26,7 +26,12 @@ from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import WorkItemAuthor, WorkItemPriority, WorkItemRecord, WorkRef
-from blizzard.hub.domain.work_items import WorkItemEdit, WorkItemHeldByLiveChunk, WorkItemNotEditable
+from blizzard.hub.domain.work_items import (
+    WorkItemEdit,
+    WorkItemHeldByDependents,
+    WorkItemHeldByLiveChunk,
+    WorkItemNotEditable,
+)
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import IWorkSource, resolve_author_view
 from blizzard.wire.chunk import ChunkIngestConflict
@@ -233,7 +238,9 @@ def withdraw_work_item(
     (D9), or a chunk a race deletes between resolving it and this write; 409 for a known
     source with no editor (D4), an item that already carries a closure, or one an
     *acquired* live chunk still holds (D5, D10) — an unacquired holder deletes instead,
-    publishing the same ``chunk-changed``/``queue-changed`` pair a direct delete does."""
+    publishing the same ``chunk-changed``/``queue-changed`` pair a direct delete does;
+    409 also when the unacquired holder is a standing prerequisite for another chunk
+    (issue #460)."""
     source_obj, editor = _require_editor(source, services)
     pointer = WorkRef(source=source, ref=ref)
     try:
@@ -242,7 +249,7 @@ def withdraw_work_item(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except (WorkItemNotEditable, WorkItemHeldByLiveChunk) as exc:
+    except (WorkItemNotEditable, WorkItemHeldByLiveChunk, WorkItemHeldByDependents) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if withdrawn.deleted_chunk_id is not None:
         chunk_events.ChunkChanged.of(

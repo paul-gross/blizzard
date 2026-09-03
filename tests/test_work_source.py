@@ -22,6 +22,7 @@ from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
@@ -61,7 +62,11 @@ def _work_deps(engine):  # type: ignore[no-untyped-def]
     store = hub_store_connections(engine)
     work_item_store = WorkItemStore(store)
     delete = DeleteService(
-        facts=ChunkFactsStore(store, _clock()), items=work_item_store, clock=_clock(), claim_lock=threading.Lock()
+        facts=ChunkFactsStore(store, _clock()),
+        items=work_item_store,
+        clock=_clock(),
+        claim_lock=threading.Lock(),
+        dependencies=ChunkDependenciesStore(store, _clock()),
     )
     return work_item_store, delete
 

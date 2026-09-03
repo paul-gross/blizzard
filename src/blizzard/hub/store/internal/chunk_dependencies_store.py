@@ -117,5 +117,21 @@ def _edge(row) -> DependencyEdge:  # type: ignore[no-untyped-def]
     )
 
 
+def release_outgoing_edges_conn(conn: Connection, chunk_id: str, *, by: str, at: datetime) -> None:
+    """Release every standing edge naming ``chunk_id`` as the dependent, on a
+    caller-supplied ``conn`` (issue #460) — folded into the delete transaction so a
+    deleted dependent's own edges never survive it, mirroring
+    :func:`~blizzard.hub.store.internal.chunk_rows.record_deleted_row`'s shared-connection
+    shape."""
+    conn.execute(
+        update(s.chunk_dependencies)
+        .where(
+            (s.chunk_dependencies.c.dependent_chunk_id == chunk_id)
+            & (s.chunk_dependencies.c.released_at.is_(None))
+        )
+        .values(released_at=at, released_by=by)
+    )
+
+
 def _conforms_dependencies(x: ChunkDependenciesStore) -> IWriteChunkDependenciesRepository:
     return x

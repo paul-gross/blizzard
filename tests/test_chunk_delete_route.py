@@ -166,6 +166,23 @@ def test_delete_chunk_changed_frame_carries_the_chunks_pre_delete_status(tmp_pat
     assert frames[0]["status"] == "not_ready"
 
 
+def test_delete_refuses_a_chunk_that_is_a_standing_prerequisite(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    prerequisite_id = ingest(hub, [_POINTER])
+    dependent_id = ingest(hub, [{"source": "default", "ref": "364d"}])
+    declare = hub.client.post(
+        f"/api/chunks/{dependent_id}/dependencies",
+        json={"prerequisite_chunk_id": prerequisite_id},
+    )
+    assert declare.status_code == 202, declare.text
+
+    resp = _delete_chunk(hub, prerequisite_id)
+
+    assert resp.status_code == 409, resp.text
+    assert dependent_id in resp.json()["detail"]
+    assert hub.client.get(f"/api/chunks/{prerequisite_id}").status_code == 200
+
+
 def test_every_other_mutating_chunk_route_frame_is_unchanged_by_the_widened_degraded_branch(
     tmp_path: Path,
 ) -> None:

@@ -406,7 +406,7 @@
     "chunk": {
       "commands": {
         "delete": {
-          "help": "Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364).\n\nA pure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless\n``--yes``. 409 when a runner or a human holds CHUNK, or it is terminal \u2014 deletion\nneeds CHUNK at the same statuses ``group`` does; 404 only when CHUNK is unknown.",
+          "help": "Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364).\n\nA pure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless\n``--yes``. 409 when a runner or a human holds CHUNK, or it is terminal \u2014 deletion\nneeds CHUNK at the same statuses ``group`` does; 409 also when CHUNK is a standing\nprerequisite for another chunk, which the response names; 404 only when CHUNK is\nunknown.",
           "params": [
             {
               "hidden": false,

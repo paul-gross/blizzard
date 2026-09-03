@@ -139,19 +139,6 @@ def test_marking_clears_once_the_edge_is_released(tmp_path: Path) -> None:
     assert _detail(hub, dependent_id)["blocked"] is None
 
 
-def test_a_prerequisite_absent_from_the_status_map_still_blocks(tmp_path: Path) -> None:
-    """D3: a standing edge onto a since-deleted prerequisite is unresolvable, and the
-    conservative read still names it blocked rather than silently clearing."""
-    hub = build_hub(tmp_path)
-    dependent_id = ingest(hub, [_DEPENDENT], promote=False)
-    prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
-    _declare(hub, dependent_id, prerequisite_id)
-    assert hub.client.request("DELETE", f"/api/chunks/{prerequisite_id}", json={}).status_code == 202
-
-    assert _list_entry(hub, dependent_id)["blocked"] == {"prerequisite_chunk_id": prerequisite_id}
-    assert _detail(hub, dependent_id)["blocked"] == {"prerequisite_chunk_id": prerequisite_id}
-
-
 def test_a_blocked_prerequisite_is_named_without_walking_its_own_chain(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_a = ingest(hub, [{"source": "default", "ref": "a"}])
@@ -181,6 +168,7 @@ def test_grouping_deletion_and_the_pre_claim_edit_still_admit_a_blocked_chunk(tm
 
     delete_resp = hub.client.request("DELETE", f"/api/chunks/{dependent_id}", json={})
     assert delete_resp.status_code == 202, delete_resp.text
+    assert hub.services.chunks.dependencies.standing_edge(dependent_id, prerequisite_id) is None
 
 
 def test_a_completed_dependent_derives_no_marking_despite_its_standing_edge(tmp_path: Path) -> None:

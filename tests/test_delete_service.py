@@ -16,13 +16,15 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
+from blizzard.hub.domain.chunks.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.delete import ChunkNotDeletable, DeleteService
+from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
+    DependencyEdge,
     EscalationFact,
     IWriteWorkItemRepository,
     PauseFact,
@@ -72,16 +74,35 @@ class _FakeItemsRepo:
         raise NotImplementedError(f"DeleteService should not touch items.{name!r}")
 
 
+@dataclass
+class _FakeDependenciesRepo:
+    """Only ``list_standing_edges`` is live — see module docstring."""
+
+    edges: list[DependencyEdge] = field(default_factory=list)
+
+    def list_standing_edges(self) -> list[DependencyEdge]:
+        return self.edges
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"DeleteService should not touch dependencies.{name!r}")
+
+
 def _service(
-    chunk: Chunk | None, facts: ChunkFacts | None, *, clock: FixedClock | None = None
+    chunk: Chunk | None,
+    facts: ChunkFacts | None,
+    *,
+    clock: FixedClock | None = None,
+    standing_edges: list[DependencyEdge] | None = None,
 ) -> tuple[DeleteService, _FakeItemsRepo]:
     items = _FakeItemsRepo()
     facts_repo = cast(IReadChunkFactsRepository, _FakeChunkRepo(chunk=chunk, facts=facts))
+    dependencies_repo = cast(IReadChunkDependenciesRepository, _FakeDependenciesRepo(edges=standing_edges or []))
     service = DeleteService(
         facts=facts_repo,
         items=cast(IWriteWorkItemRepository, items),
         clock=clock or FixedClock(instant=_T0),
         claim_lock=threading.Lock(),
+        dependencies=dependencies_repo,
     )
     return service, items
 
@@ -214,3 +235,53 @@ def test_delete_uses_the_injected_clock_not_the_wall_clock() -> None:
     service.delete(_CHUNK, by="operator")
 
     assert items.deleted == [("chk_1", "operator", later)]
+
+
+def _edge(dependent_chunk_id: str, prerequisite_chunk_id: str) -> DependencyEdge:
+    return DependencyEdge(
+        dependency_id=f"dep_{dependent_chunk_id}_{prerequisite_chunk_id}",
+        dependent_chunk_id=dependent_chunk_id,
+        prerequisite_chunk_id=prerequisite_chunk_id,
+        declared_at=_T0,
+        declared_by="operator",
+    )
+
+
+def test_delete_refuses_a_chunk_that_is_a_standing_prerequisite() -> None:
+    """A chunk named as another's prerequisite by a standing edge cannot be deleted
+    (issue #460) — refused rather than orphaning the dependent's marking."""
+    edges = [_edge("chk_dependent", "chk_1")]
+    service, items = _service(_CHUNK, _not_ready_facts(), standing_edges=edges)
+
+    with pytest.raises(ChunkHasDependents) as excinfo:
+        service.delete(_CHUNK, by="operator")
+
+    assert "chk_1" in str(excinfo.value)
+    assert "chk_dependent" in str(excinfo.value)
+    assert items.deleted == []
+
+
+def test_delete_names_every_dependent_in_its_refusal() -> None:
+    edges = [_edge("chk_dependent_a", "chk_1"), _edge("chk_dependent_b", "chk_1")]
+    service, items = _service(_CHUNK, _not_ready_facts(), standing_edges=edges)
+
+    with pytest.raises(ChunkHasDependents) as excinfo:
+        service.delete(_CHUNK, by="operator")
+
+    assert excinfo.value.dependent_chunk_ids == ["chk_dependent_a", "chk_dependent_b"]
+    assert "chk_dependent_a" in str(excinfo.value)
+    assert "chk_dependent_b" in str(excinfo.value)
+    assert items.deleted == []
+
+
+def test_delete_succeeds_for_a_chunk_that_is_itself_a_dependent() -> None:
+    """``chk_1`` holds its own outgoing edge (it is the dependent, not the
+    prerequisite) — deletion is not refused on an outgoing edge; the release of that
+    edge is proven at component tier, against the real store."""
+    edges = [_edge("chk_1", "chk_prerequisite")]
+    service, items = _service(_CHUNK, _not_ready_facts(), standing_edges=edges)
+
+    fact_id = service.delete(_CHUNK, by="operator")
+
+    assert fact_id == 1
+    assert items.deleted == [("chk_1", "operator", _T0)]

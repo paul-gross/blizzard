@@ -142,7 +142,9 @@ def derive_blocked_markings(
     :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.list_standing_edges`'s
     own ``(declared_at, dependency_id)`` order: the first unmet edge per dependent wins, one hop,
     with no chain walk (D4). A prerequisite absent from ``statuses`` still blocks (D3) — deletion
-    does not yet refuse a standing edge onto a vanished prerequisite.
+    now refuses a standing edge onto a live prerequisite (issue #460), so this only guards the
+    accepted residual race between a status read and a concurrent write, not an ordinary
+    reachable path.
 
     Only a dependent read at :data:`PRE_CLAIM_STATUSES` derives a marking (review round 1 F1):
     the marking answers why a chunk cannot yet be claimed, and that question stops applying once
