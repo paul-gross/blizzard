@@ -476,4 +476,92 @@ describe('ChunkDetailHeader', () => {
 
     expect(emitted).toBe('ch_01prereq00000000000000000');
   });
+
+  it('offers declare/release with chunk:control, withholds both without it', async () => {
+    const withControl = TestBed.createComponent(ChunkDetailHeader);
+    withControl.componentRef.setInput('detail', ISSUE_DETAIL);
+    withControl.componentRef.setInput('canControl', true);
+    await withControl.whenStable();
+    const withEl = withControl.nativeElement as HTMLElement;
+    expect(withEl.querySelector('[data-testid="declare-dependency"]')).not.toBeNull();
+    expect(withEl.querySelector('[data-testid="release-dependency"]')).not.toBeNull();
+
+    const withoutControl = TestBed.createComponent(ChunkDetailHeader);
+    withoutControl.componentRef.setInput('detail', ISSUE_DETAIL);
+    withoutControl.componentRef.setInput('canControl', false);
+    await withoutControl.whenStable();
+    const withoutEl = withoutControl.nativeElement as HTMLElement;
+    expect(withoutEl.querySelector('[data-testid="declare-dependency"]')).toBeNull();
+    expect(withoutEl.querySelector('[data-testid="release-dependency"]')).toBeNull();
+  });
+
+  it('prefills the prerequisite field from the marking when one stands, empty otherwise', async () => {
+    const blocked = TestBed.createComponent(ChunkDetailHeader);
+    blocked.componentRef.setInput('detail', {
+      ...ISSUE_DETAIL,
+      blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000' },
+    });
+    blocked.componentRef.setInput('canControl', true);
+    await blocked.whenStable();
+    const blockedEl = blocked.nativeElement as HTMLElement;
+    const blockedInput = blockedEl.querySelector<HTMLInputElement>('[data-testid="dependency-prerequisite-input"]');
+    expect(blockedInput?.value).toBe('ch_01prereq00000000000000000');
+
+    const plain = TestBed.createComponent(ChunkDetailHeader);
+    plain.componentRef.setInput('detail', ISSUE_DETAIL);
+    plain.componentRef.setInput('canControl', true);
+    await plain.whenStable();
+    const plainEl = plain.nativeElement as HTMLElement;
+    const plainInput = plainEl.querySelector<HTMLInputElement>('[data-testid="dependency-prerequisite-input"]');
+    expect(plainInput?.value).toBe('');
+  });
+
+  it('emits declareDependency with the field value on Declare', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    let emitted: { chunkId: string; prerequisiteChunkId: string } | undefined;
+    fixture.componentInstance.declareDependency.subscribe((event) => (emitted = event));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const input = el.querySelector<HTMLInputElement>('[data-testid="dependency-prerequisite-input"]')!;
+    input.value = 'ch_01prereq00000000000000000';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+
+    expect(emitted).toEqual({ chunkId: ISSUE_DETAIL.chunk_id, prerequisiteChunkId: 'ch_01prereq00000000000000000' });
+  });
+
+  it('emits releaseDependency with the field value on Release', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', {
+      ...ISSUE_DETAIL,
+      blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000' },
+    });
+    fixture.componentRef.setInput('canControl', true);
+    let emitted: { chunkId: string; prerequisiteChunkId: string } | undefined;
+    fixture.componentInstance.releaseDependency.subscribe((event) => (emitted = event));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="release-dependency"]')?.click();
+
+    expect(emitted).toEqual({ chunkId: ISSUE_DETAIL.chunk_id, prerequisiteChunkId: 'ch_01prereq00000000000000000' });
+  });
+
+  it('emits nothing when Declare is clicked with a blank field', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    let emitted = false;
+    fixture.componentInstance.declareDependency.subscribe(() => (emitted = true));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+
+    expect(emitted).toBe(false);
+  });
 });

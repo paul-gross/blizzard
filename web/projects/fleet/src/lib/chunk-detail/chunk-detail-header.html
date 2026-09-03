@@ -73,6 +73,32 @@
             Complete
           </fleet-kit-button>
         }
+        <!-- Declare/release (issue #461): one free-text field serves both, prefilled
+             from the marking when one stands (D5) — the board has no read that lists
+             a chunk's standing edges for a picker to offer instead. -->
+        <input
+          type="text"
+          class="dep-input"
+          data-testid="dependency-prerequisite-input"
+          [attr.aria-label]="'Prerequisite chunk id for ' + detail().chunk_id"
+          [value]="prerequisiteInput()"
+          (input)="prerequisiteInput.set($any($event.target).value)"
+          placeholder="prerequisite chunk id"
+        />
+        <fleet-kit-button
+          testid="declare-dependency"
+          [ariaLabel]="'Declare a dependency for chunk ' + detail().chunk_id"
+          (click)="onDeclareDependency()"
+        >
+          Declare
+        </fleet-kit-button>
+        <fleet-kit-button
+          testid="release-dependency"
+          [ariaLabel]="'Release a dependency for chunk ' + detail().chunk_id"
+          (click)="onReleaseDependency()"
+        >
+          Release
+        </fleet-kit-button>
       }
     </div>
     <!-- The route rides in the header beside Detach, not down in the facts, because

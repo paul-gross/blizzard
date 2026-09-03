@@ -90,6 +90,20 @@ a.iss:focus-visible {
   align-items: center;
   gap: 6px;
 }
+.dep-input {
+  background: var(--surface-resting);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-xs);
+  padding: 2px 4px;
+  width: 12ch;
+  min-width: 0;
+}
+.dep-input:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 1px;
+}
 .d-route .rn {
   color: var(--cyan);
   font-size: var(--fs-xs);

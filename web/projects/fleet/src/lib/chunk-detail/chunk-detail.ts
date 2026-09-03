@@ -4,6 +4,7 @@ import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkWorkItemsQuery } from '../chunks/chunk-work-items.query';
 import { injectCompleteChunkMutation } from '../chunks/complete.mutations';
+import { injectDeclareDependencyMutation, injectReleaseDependencyMutation } from '../chunks/dependency.mutations';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
 import {
@@ -19,6 +20,7 @@ import { deriveWorkItemsState, type WorkItemsState } from './work-items-state';
 import {
   type AnswerQuestionEvent,
   ChunkDetailPanel,
+  type DependencyEvent,
   type EditGraphEvent,
   type ResolveDecisionEvent,
 } from './chunk-detail-panel';
@@ -77,6 +79,8 @@ export class ChunkDetail {
   private readonly pauseMutation = injectChunkPauseMutation();
   private readonly completeMutation = injectCompleteChunkMutation();
   private readonly editGraphMutation = injectSetChunkGraphMutation();
+  private readonly declareDependencyMutation = injectDeclareDependencyMutation();
+  private readonly releaseDependencyMutation = injectReleaseDependencyMutation();
   private readonly meQuery = injectMeQuery();
 
   /** Whether the current identity may pause/resume/detach or set the chunk's graph
@@ -211,5 +215,19 @@ export class ChunkDetail {
       { chunkId: event.chunkId, graphId: event.graphId },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Set graph failed.')) },
     );
+  }
+
+  protected onDeclareDependency(event: DependencyEvent): void {
+    this.beginAction();
+    this.declareDependencyMutation.mutate(event, {
+      onError: (error) => this.actionError.set(errorMessage(error, 'Declare dependency failed.')),
+    });
+  }
+
+  protected onReleaseDependency(event: DependencyEvent): void {
+    this.beginAction();
+    this.releaseDependencyMutation.mutate(event, {
+      onError: (error) => this.actionError.set(errorMessage(error, 'Release dependency failed.')),
+    });
   }
 }

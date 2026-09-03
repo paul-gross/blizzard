@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, ChunkStatus, PauseView, WorkRefView, RouteView } from '../api/hub';
@@ -21,6 +21,14 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
  * including `stopped` — unlike Pause/Detach, Complete does not hang off a live route,
  * and unlike Stop there is no un-complete verb, so this set has exactly one member. */
 const NOT_COMPLETABLE = new Set<ChunkStatus>(['done']);
+
+/** A declare or release, addressed by the ordered pair the hub itself takes (issue
+ * #461) — the dock's only source for either, so both `declareDependency` and
+ * `releaseDependency` share this one shape rather than two near-identical ones. */
+export interface DependencyEvent {
+  readonly chunkId: string;
+  readonly prerequisiteChunkId: string;
+}
 
 /**
  * The chunk detail dock's header (issue #79) — the chunk's identity in the
@@ -88,6 +96,16 @@ export class ChunkDetailHeader {
    * makes, not a navigation. */
   readonly selectChunk = output<string>();
 
+  /** Emitted when the operator declares a dependency on {@link prerequisiteInput}
+   * (issue #461). Not confirm-guarded like Detach/Pause/Complete: declaring an edge is
+   * reversible by releasing it, not a route-releasing, worker-killing, or terminal
+   * verb. */
+  readonly declareDependency = output<DependencyEvent>();
+
+  /** Emitted when the operator releases the standing dependency on
+   * {@link prerequisiteInput} (issue #461). Reversible the same way, by re-declaring. */
+  readonly releaseDependency = output<DependencyEvent>();
+
   /** The chunk's work refs, for the header — each linked out to its source's web
    * address when the configured binding rendered one (a null `web_url` degrades to
    * plain text, no broken link). */
@@ -120,6 +138,22 @@ export class ChunkDetailHeader {
   /** The unmet prerequisite's chunk id, from `ChunkDetail.blocked` (issue #461) — null
    * when the chunk carries no marking. */
   protected readonly blockedOn = computed<string | null>(() => this.detail().blocked?.prerequisite_chunk_id ?? null);
+
+  /** The declare/release field's free-text value (D5, issue #461) — one field serves
+   * both controls, since the board has no read that lists a chunk's standing edges for
+   * a picker to offer. Prefilled from {@link blockedOn} when a marking stands; editable
+   * from there, since Release may need to name an edge past the pre-claim window (no
+   * marking) and Declare always names a chunk the marking never carries. */
+  protected readonly prerequisiteInput = signal('');
+
+  constructor() {
+    effect(() => {
+      // Reads `chunk_id` to key the reset on which chunk is open, not just its
+      // identity object — a re-fetched `ChunkDetail` is a new object every poll.
+      void this.detail().chunk_id;
+      this.prerequisiteInput.set(this.blockedOn() ?? '');
+    });
+  }
 
   /** Confirm, then emit `detach` for the container's mutation to fire. */
   protected onDetach(): void {
@@ -166,5 +200,20 @@ export class ChunkDetailHeader {
     );
     if (!confirmed) return;
     this.complete.emit(this.detail().chunk_id);
+  }
+
+  /** Emit `declareDependency` for the container's mutation to fire (issue #461). A blank
+   * field emits nothing — the hub has no chunk id to resolve. */
+  protected onDeclareDependency(): void {
+    const prerequisiteChunkId = this.prerequisiteInput().trim();
+    if (!prerequisiteChunkId) return;
+    this.declareDependency.emit({ chunkId: this.detail().chunk_id, prerequisiteChunkId });
+  }
+
+  /** Emit `releaseDependency` for the container's mutation to fire (issue #461). */
+  protected onReleaseDependency(): void {
+    const prerequisiteChunkId = this.prerequisiteInput().trim();
+    if (!prerequisiteChunkId) return;
+    this.releaseDependency.emit({ chunkId: this.detail().chunk_id, prerequisiteChunkId });
   }
 }

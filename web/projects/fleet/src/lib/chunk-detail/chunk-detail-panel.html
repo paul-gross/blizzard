@@ -8,6 +8,8 @@
     (resumeChunk)="resumeChunk.emit($event)"
     (complete)="complete.emit($event)"
     (selectChunk)="selectChunk.emit($event)"
+    (declareDependency)="declareDependency.emit($event)"
+    (releaseDependency)="releaseDependency.emit($event)"
   />
 
   @if (actionError(); as err) {
