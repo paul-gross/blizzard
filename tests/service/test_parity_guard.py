@@ -117,6 +117,10 @@ _EXPECTED_DRIVE_VERBS: dict[str, str] = {
     "register": "IHubClient.register_runner — POST /api/fleet/runners",
     "peek": "IHubClient.peek_queue — GET /api/fleet/queue/peek",
     "claim": "IHubClient.claim_route — POST /api/fleet/routes (+ report_lease's /events push)",
+    "claim-next": (
+        "IHubClient.peek_queue + IHubClient.claim_route (blizzard#459) — peek, select, and "
+        "claim in one call, taking strictness per call so one driver exercises both policies"
+    ),
     "complete": "IHubClient.submit_completion — POST /api/fleet/chunks/{id}/completions",
     "get-chunk": "IHubClient.get_chunk — GET /api/fleet/chunks/{id}",
     "reset": "test-only control — clears held state + levers, no IHubClient operation",
