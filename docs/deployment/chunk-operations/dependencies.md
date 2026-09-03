@@ -43,8 +43,17 @@ prerequisite that has not reached `done`. What the marking means, its one-hop sc
 it is confined to are `blizzard-context:/domain/work/statuses.md`'s to say. Satisfaction is not stored: an edge is met
 when its prerequisite reads `done`, read fresh at the point something consults it rather than cached on the edge
 itself, so declaring onto an already-`done` prerequisite is an ordinary accepted edge that names no marking. A
-prerequisite absent from the fleet's statuses — a standing edge onto a since-deleted id — still blocks, the
-conservative read.
+prerequisite absent from the fleet's statuses still blocks, the conservative read — but deletion now refuses a
+standing edge onto a live prerequisite (issue #460), so this conservative read only guards the accepted residual race
+between a status read and a concurrent write, not an ordinary reachable path.
+
+A chunk currently named as another's prerequisite cannot itself be deleted while that edge stands: deletion is refused
+409, naming the dependents. Deleting the *dependent* chunk instead is unaffected — it succeeds, and releases that
+chunk's own outgoing standing edges as part of the same delete, rather than refusing.
+
+Grouping a chunk away carries its standing edges onto the survivor rather than dropping them: each edge naming the
+folded chunk, in either role, is released and re-minted, remapped onto the survivor — never updated in place. The whole
+fold is refused 409 if carrying its edges would close a cycle in the resulting standing graph.
 
 ## What a standing edge does to claiming
 

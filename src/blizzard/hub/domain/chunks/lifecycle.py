@@ -44,9 +44,3 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
         caller has already checked the chunk is not already ``done``. Returns the freshly-written
         ``chunk_completed.id``."""
         ...
-
-    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> int:
-        """Record ``chunk.grouped`` — the merged-away chunk becomes ephemeral.
-
-        Returns the freshly-written ``chunk_grouped.id`` (issue #213's activity-feed key)."""
-        ...

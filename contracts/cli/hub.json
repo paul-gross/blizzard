@@ -406,7 +406,7 @@
     "chunk": {
       "commands": {
         "delete": {
-          "help": "Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364).\n\nA pure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless\n``--yes``. 409 when a runner or a human holds CHUNK, or it is terminal \u2014 deletion\nneeds CHUNK at the same statuses ``group`` does; 404 only when CHUNK is unknown.",
+          "help": "Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364) \u2014 a\npure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless\n``--yes``. 409 when CHUNK is held, terminal, or a standing prerequisite for another\nchunk, which the response names; 404 only when CHUNK is unknown.",
           "params": [
             {
               "hidden": false,
@@ -465,7 +465,7 @@
             }
           ],
           "path": "hub chunk delete",
-          "short_help": "Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364)."
+          "short_help": "Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364) \u2014 a pure client of ``DELETE /api/chunks/{id}``."
         },
         "detach": {
           "help": "Forcibly release CHUNK from its runner.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/detach``. The chunk re-derives\nready and is re-claimable at its current node; the holding runner releases it on its\nnext tick. 409 when the chunk has no live route to release.",
@@ -559,7 +559,7 @@
           "short_help": "Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294)."
         },
         "group": {
-          "help": "Merge MERGE_IDS into CHUNK_ID, the survivor.\n\nA pure client of ``POST /api/chunks/{id}/group``: the survivor and every merge id\nmust currently be **unacquired** \u2014 ``not_ready`` or ``ready``, in any mix (409\notherwise). The survivor absorbs the union of work refs and keeps its own status.",
+          "help": "Merge MERGE_IDS into CHUNK_ID, the survivor \u2014 a pure client of\n``POST /api/chunks/{id}/group``. Every id must be **unacquired** (409 otherwise); the\nsurvivor absorbs the union of work refs, keeps its own status, and absorbs each\nmerged chunk's standing dependency edges, refused 409 if that would close a cycle.",
           "params": [
             {
               "hidden": false,
@@ -607,7 +607,7 @@
             }
           ],
           "path": "hub chunk group",
-          "short_help": "Merge MERGE_IDS into CHUNK_ID, the survivor."
+          "short_help": "Merge MERGE_IDS into CHUNK_ID, the survivor \u2014 a pure client of ``POST /api/chunks/{id}/group``."
         },
         "ingest": {
           "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is a source-native token \u2014 ``source:ref``, ``source#ref``, or a pasted\nwork item URL; a batch mints one chunk carrying every pointer. 422 when no\nconfigured work source claims a token; 409 when a pointer is already held.",

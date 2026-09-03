@@ -17,6 +17,12 @@ from tests.support import HubHarness, build_hub, pointer_token, write_chunk_paus
 pytestmark = pytest.mark.component
 
 
+def _declare(hub: HubHarness, dependent_id: str, prerequisite_id: str):  # type: ignore[no-untyped-def]
+    resp = hub.client.post(f"/api/chunks/{dependent_id}/dependencies", json={"prerequisite_chunk_id": prerequisite_id})
+    assert resp.status_code == 202, resp.text
+    return resp.json()
+
+
 def _ingest_backlog(hub: HubHarness, n: int) -> str:
     """Ingest one chunk holding a distinct pointer and leave it ``not_ready``.
 
@@ -281,3 +287,104 @@ def test_group_refuses_a_paused_backlog_chunk_without_claiming_a_runner_holds_it
     assert "is paused" in detail
     assert "no runner holds it" not in detail  # would be false: nothing ever claimed it
     assert "not_ready or ready" in detail
+
+
+def test_group_carries_a_folded_chunks_incoming_edge_onto_the_survivor(tmp_path: Path) -> None:
+    """Something depends on the folded target; after the fold, that edge stands from the
+    dependent onto the survivor instead, never left naming the now-ephemeral target."""
+    hub = build_hub(tmp_path)
+    survivor, target = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    x = _ingest_backlog(hub, 3)
+    _declare(hub, x, target)
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+    assert resp.status_code == 200, resp.text
+
+    deps = hub.services.chunks.dependencies
+    assert deps.standing_edge(x, survivor) is not None
+    assert deps.standing_edge(x, target) is None
+
+
+def test_group_carries_a_folded_chunks_outgoing_edge_onto_the_survivor(tmp_path: Path) -> None:
+    """The folded target depends on something; after the fold, the survivor depends on
+    it instead."""
+    hub = build_hub(tmp_path)
+    survivor, target = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    y = _ingest_backlog(hub, 3)
+    _declare(hub, target, y)
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+    assert resp.status_code == 200, resp.text
+
+    deps = hub.services.chunks.dependencies
+    assert deps.standing_edge(survivor, y) is not None
+    assert deps.standing_edge(target, y) is None
+
+
+def test_group_of_a_fold_internal_edge_mints_no_self_edge(tmp_path: Path) -> None:
+    """The survivor already depends on the chunk being folded into it — both endpoints
+    collapse to the survivor, released with no self-referencing edge minted."""
+    hub = build_hub(tmp_path)
+    survivor, target = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    _declare(hub, survivor, target)
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+    assert resp.status_code == 200, resp.text
+
+    standing = hub.services.chunks.dependencies.list_standing_edges()
+    assert not any(e.dependent_chunk_id == survivor and e.prerequisite_chunk_id == survivor for e in standing)
+
+
+def test_group_carrying_a_duplicate_of_a_standing_survivor_edge_mints_nothing_extra(tmp_path: Path) -> None:
+    """The target's edge to an outside chunk duplicates one the survivor already holds
+    directly — exactly one edge stands for that pair afterward, not two."""
+    hub = build_hub(tmp_path)
+    survivor, target = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    outside = _ingest_backlog(hub, 3)
+    _declare(hub, survivor, outside)
+    _declare(hub, target, outside)
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+    assert resp.status_code == 200, resp.text
+
+    standing = hub.services.chunks.dependencies.list_standing_edges()
+    matching = [e for e in standing if e.dependent_chunk_id == survivor and e.prerequisite_chunk_id == outside]
+    assert len(matching) == 1
+
+
+def test_group_refuses_a_fold_that_would_close_a_cycle_and_writes_nothing(tmp_path: Path) -> None:
+    """The survivor depends (via an intermediate) on the chunk being folded in — carrying
+    that chunk's own edge back onto the survivor would close the loop, so the whole fold
+    is refused, the targets are still live, and no edge changed."""
+    hub = build_hub(tmp_path)
+    survivor, target, mid = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2), _ingest_backlog(hub, 3)
+    _declare(hub, survivor, mid)
+    _declare(hub, mid, target)
+    before = hub.services.chunks.dependencies.list_standing_edges()
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+
+    assert resp.status_code == 409, resp.text
+    assert hub.services.chunks.dependencies.list_standing_edges() == before
+    assert hub.client.get(f"/api/chunks/{target}").status_code == 200
+    assert hub.client.get(f"/api/chunks/{survivor}").status_code == 200
+
+
+def test_no_standing_edge_names_a_grouped_away_chunk_after_any_fold(tmp_path: Path) -> None:
+    """A general sweep across several folds, each carrying edges: no standing edge is
+    ever left naming a chunk that grouping has folded away, in either role."""
+    hub = build_hub(tmp_path)
+    survivor, target = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    x, y, outside = _ingest_backlog(hub, 3), _ingest_backlog(hub, 4), _ingest_backlog(hub, 5)
+    _declare(hub, x, target)
+    _declare(hub, target, y)
+    _declare(hub, survivor, outside)
+    _declare(hub, target, outside)
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [target]})
+    assert resp.status_code == 200, resp.text
+
+    grouped_away = {target}
+    for edge in hub.services.chunks.dependencies.list_standing_edges():
+        assert edge.dependent_chunk_id not in grouped_away
+        assert edge.prerequisite_chunk_id not in grouped_away

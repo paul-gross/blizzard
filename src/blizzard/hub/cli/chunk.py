@@ -379,11 +379,10 @@ def chunk_migrate(cli: CliContext, chunk_id: str, to_graph: str | None, node: st
 @click.argument("chunk_id")
 @click.argument("merge_ids", nargs=-1, required=True)
 def chunk_group_cmd(cli: CliContext, chunk_id: str, merge_ids: tuple[str, ...]) -> None:
-    """Merge MERGE_IDS into CHUNK_ID, the survivor.
-
-    A pure client of ``POST /api/chunks/{id}/group``: the survivor and every merge id
-    must currently be **unacquired** — ``not_ready`` or ``ready``, in any mix (409
-    otherwise). The survivor absorbs the union of work refs and keeps its own status."""
+    """Merge MERGE_IDS into CHUNK_ID, the survivor — a pure client of
+    ``POST /api/chunks/{id}/group``. Every id must be **unacquired** (409 otherwise); the
+    survivor absorbs the union of work refs, keeps its own status, and absorbs each
+    merged chunk's standing dependency edges, refused 409 if that would close a cycle."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/group",
         "POST /chunks/{id}/group",
@@ -400,11 +399,10 @@ def chunk_group_cmd(cli: CliContext, chunk_id: str, merge_ids: tuple[str, ...]) 
 @click.option("--by", "by", default="operator", help="Who is deleting (recorded on the fact).")
 @click.option("--yes", is_flag=True, default=False, help="Skip the confirmation prompt.")
 def chunk_delete(cli: CliContext, chunk_id: str, by: str, yes: bool) -> None:
-    """Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364).
-
-    A pure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless
-    ``--yes``. 409 when a runner or a human holds CHUNK, or it is terminal — deletion
-    needs CHUNK at the same statuses ``group`` does; 404 only when CHUNK is unknown."""
+    """Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364) — a
+    pure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless
+    ``--yes``. 409 when CHUNK is held, terminal, or a standing prerequisite for another
+    chunk, which the response names; 404 only when CHUNK is unknown."""
     if not yes and not click.confirm(f"delete {chunk_id}? this withdraws its hub item(s) too"):
         raise click.Abort()
     resp = cli.delete(

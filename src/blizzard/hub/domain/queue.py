@@ -8,6 +8,7 @@ differ (issue #141): grouping needs only an unheld chunk, while reordering ranks
 from __future__ import annotations
 
 import math
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -16,14 +17,20 @@ from enum import Enum
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
+from blizzard.hub.domain.dependencies import plan_fold, would_close_a_cycle
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.work import Chunk
 
 _log = get_logger("blizzard.hub.queue")
+
+# The fold's own fixed dependency-edge actor (D5, issue #460) — grouping stays
+# actor-less on the wire; every edge a fold carries is stamped with this constant.
+FOLD_ACTOR = "fold"
 
 
 class QueueList(Enum):
@@ -32,14 +39,6 @@ class QueueList(Enum):
 
     READY = "ready"
     NOT_READY = "not_ready"
-
-
-class ChunkNotFound(LookupError):
-    """A named chunk does not exist (or was grouped or deleted away)."""
-
-    def __init__(self, chunk_id: str) -> None:
-        super().__init__(f"unknown chunk {chunk_id}")
-        self.chunk_id = chunk_id
 
 
 class ChunkNotGroupable(ValueError):
@@ -54,6 +53,20 @@ class ChunkNotGroupable(ValueError):
         )
         self.chunk_id = chunk_id
         self.status = status
+
+
+class FoldWouldCloseCycle(Exception):
+    """Folding ``merge_ids`` into ``survivor_id`` would close a cycle in the resulting
+    standing dependency graph (issue #460) — refused before any write, a set-level
+    question over the whole fold rather than per edge."""
+
+    def __init__(self, survivor_id: str, folded_chunk_ids: list[str]) -> None:
+        super().__init__(
+            f"folding {', '.join(folded_chunk_ids)} into {survivor_id} would close a cycle "
+            "in the standing dependency graph"
+        )
+        self.survivor_id = survivor_id
+        self.folded_chunk_ids = folded_chunk_ids
 
 
 class QueueService:
@@ -175,42 +188,70 @@ class GroupResult:
 
 
 class GroupService:
-    """Merge unacquired chunks — ``not_ready`` or ``ready`` — into one surviving chunk."""
+    """Merge unacquired chunks — ``not_ready`` or ``ready`` — into one surviving chunk,
+    carrying each folded chunk's standing dependency edges onto the survivor (D1-D4,
+    issue #460)."""
 
     def __init__(
         self,
         *,
         work_refs: IWriteChunkWorkRefsRepository,
-        lifecycle: IWriteChunkLifecycleRepository,
+        dependencies: IWriteChunkDependenciesRepository,
         record: IReadChunkRecordRepository,
         facts: IReadChunkFactsRepository,
         clock: IClock,
+        claim_lock: threading.Lock,
     ) -> None:
         self._work_refs = work_refs
-        self._lifecycle = lifecycle
+        self._dependencies = dependencies
         self._record = record
         self._facts = facts
         self._clock = clock
+        # The same lock ClaimService/EditService/RestartService/DependencyService/DeleteService already share — closes
+        # the residual GroupService previously left open against a racing declare (D2).
+        self._claim_lock = claim_lock
 
     def group(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
-        """Fold ``merge_ids`` into ``survivor_id``; the survivor absorbs their pointers.
+        """Fold ``merge_ids`` into ``survivor_id``; the survivor absorbs their pointers
+        and each folded chunk's standing dependency edges (D1-D3). Refused before any
+        write when the result would close a cycle (:class:`FoldWouldCloseCycle`)."""
+        with self._claim_lock:
+            return self._group_locked(survivor_id, merge_ids)
 
-        The survivor and every merged chunk must be **unacquired** (:data:`PRE_CLAIM_STATUSES`);
-        ``ready`` is not required (issue #141). Merged work refs union into the survivor,
-        whose own status is unchanged."""
+    def _group_locked(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
         survivor, survivor_status = self._require_unacquired_chunk(survivor_id)
         targets = self._resolve_targets(survivor_id, merge_ids)
+        folded_ids = [t.chunk_id for t in targets]
+
+        standing = self._dependencies.list_standing_edges()
+        plan = plan_fold(standing, survivor_id, folded_ids)
+        minted_pairs = [pair for cid in folded_ids for pair in plan.mint_by_target[cid]]
+        if would_close_a_cycle(plan.remaining, minted_pairs):
+            raise FoldWouldCloseCycle(survivor_id, folded_ids)
 
         now = self._clock.now()
-        grouped_id: int | None = None
         for target in targets:
             self._work_refs.add_work_refs(survivor_id, target.work_refs, at=now)
-            grouped_id = self._lifecycle.record_grouped(target.chunk_id, grouped_into=survivor_id, at=now)
+
+        grouped_id: int | None = None
+        if targets:
+            fold_targets = [
+                FoldTarget(
+                    chunk_id=target.chunk_id,
+                    release=plan.release_by_target[target.chunk_id],
+                    mint=plan.mint_by_target[target.chunk_id],
+                )
+                for target in targets
+            ]
+            # One call, one transaction across every target (D4, issue #460) — a target's
+            # own row can never commit ahead of a sibling's edge release/mint.
+            grouped_ids = self._dependencies.record_fold(fold_targets, grouped_into=survivor_id, by=FOLD_ACTOR, at=now)
+            grouped_id = grouped_ids[targets[-1].chunk_id]
         _log.info(
             "chunks grouped",
             survivor=survivor_id,
             status=survivor_status.value,
-            merged=[t.chunk_id for t in targets],
+            merged=folded_ids,
             count=len(targets),
         )
         merged = self._record.get(survivor_id)

@@ -476,7 +476,12 @@ def build_services(
         questions=QuestionService(questions=chunk_questions, clock=clock),
         queue=QueueService(queue=chunk_queue, record=chunk_record, clock=clock),
         group=GroupService(
-            work_refs=chunk_work_refs, lifecycle=chunk_lifecycle, record=chunk_record, facts=chunk_facts, clock=clock
+            work_refs=chunk_work_refs,
+            dependencies=chunk_dependencies,
+            record=chunk_record,
+            facts=chunk_facts,
+            clock=clock,
+            claim_lock=claim_lock,
         ),
         fleet=fleet,
         enrollment=enrollment,

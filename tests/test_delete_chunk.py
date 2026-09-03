@@ -16,7 +16,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.delete import ChunkNotDeletable, DeleteService
+from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import (
@@ -26,6 +26,7 @@ from blizzard.hub.domain.work import (
     WorkItemClosure,
     WorkRef,
 )
+from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
     build_hub,
@@ -54,7 +55,9 @@ def _stores(tmp_path: Path) -> tuple[ChunkStores, WorkItemStore, DeleteService, 
     store = hub_store_connections(engine)
     chunks = chunk_stores(engine, clock)
     items = WorkItemStore(store)
-    delete = DeleteService(facts=chunks.facts, items=items, clock=clock, claim_lock=threading.Lock())
+    delete = DeleteService(
+        facts=chunks.facts, items=items, clock=clock, claim_lock=threading.Lock(), dependencies=chunks.dependencies
+    )
     return chunks, items, delete, engine
 
 
@@ -192,10 +195,11 @@ def test_activity_feed_shows_the_deletion_with_its_actor_and_no_other_row(tmp_pa
 def test_activity_feed_leaves_a_grouped_chunks_history_showing(tmp_path: Path) -> None:
     """D6: only ``deleted`` chunk ids are excluded from the feed's other blocks — a
     grouped chunk's history is existing, unchanged behavior."""
-    chunks, _, _, _ = _stores(tmp_path)
+    chunks, _, _, engine = _stores(tmp_path)
     _mint(chunks, "ch_1")
     _mint(chunks, "ch_2")
-    chunks.lifecycle.record_grouped("ch_2", grouped_into="ch_1", at=_at(1))
+    with engine.begin() as conn:
+        record_grouped_row_conn(conn, "ch_2", grouped_into="ch_1", at=_at(1))
 
     rows = [r for r in chunks.events.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_2"]
     causes = {r.cause for r in rows}
@@ -252,7 +256,13 @@ def test_reingest_after_delete_a_forge_pointer_mints_a_fresh_chunk_reading_norma
     hub_store = hub_store_connections(hub.engine)
     chunks = chunk_stores(hub.engine, hub.clock)
     items = WorkItemStore(hub_store)
-    delete = DeleteService(facts=chunks.facts, items=items, clock=hub.clock, claim_lock=threading.Lock())
+    delete = DeleteService(
+        facts=chunks.facts,
+        items=items,
+        clock=hub.clock,
+        claim_lock=threading.Lock(),
+        dependencies=chunks.dependencies,
+    )
     chunk = chunks.record.get(first["chunk_id"])
     assert chunk is not None
     delete.delete(chunk, by="operator")
@@ -266,6 +276,46 @@ def test_reingest_after_delete_a_forge_pointer_mints_a_fresh_chunk_reading_norma
     assert len(entries) == 1
     assert entries[0]["error"] is None
     assert entries[0]["title"] == "issue title"
+
+
+# --- issue #460: a standing dependency edge and delete -----------------------------
+
+
+def test_delete_refuses_a_chunk_that_is_a_standing_prerequisite(tmp_path: Path) -> None:
+    chunks, _, delete, _ = _stores(tmp_path)
+    prerequisite = _mint(chunks, "ch_prereq")
+    _mint(chunks, "ch_dependent")
+    chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0)
+
+    with pytest.raises(ChunkHasDependents) as excinfo:
+        delete.delete(prerequisite, by="operator")
+
+    assert excinfo.value.dependent_chunk_ids == ["ch_dependent"]
+    assert chunks.record.get("ch_prereq") is not None
+
+
+def test_delete_the_dependent_instead_succeeds_and_releases_its_outgoing_edge(tmp_path: Path) -> None:
+    chunks, _, delete, _ = _stores(tmp_path)
+    _mint(chunks, "ch_prereq")
+    dependent = _mint(chunks, "ch_dependent")
+    chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0)
+
+    delete.delete(dependent, by="operator")
+
+    assert chunks.record.get("ch_dependent") is None
+    assert chunks.dependencies.standing_edge("ch_dependent", "ch_prereq") is None
+
+
+def test_delete_succeeds_once_the_blocking_edge_is_released_first(tmp_path: Path) -> None:
+    chunks, _, delete, _ = _stores(tmp_path)
+    prerequisite = _mint(chunks, "ch_prereq")
+    _mint(chunks, "ch_dependent")
+    chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0)
+    chunks.dependencies.release("ch_dependent", "ch_prereq", by="operator", at=_at(1))
+
+    delete.delete(prerequisite, by="operator")
+
+    assert chunks.record.get("ch_prereq") is None
 
 
 def test_reingest_after_delete_a_withdrawn_hub_ref_degrades_to_an_error_entry(tmp_path: Path) -> None:

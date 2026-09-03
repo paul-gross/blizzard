@@ -21,7 +21,7 @@ from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.work import ActivityRow, DecisionChoice, MigrationSource
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.store.internal.chunk_rows import record_deleted_row
+from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
 
@@ -82,7 +82,8 @@ def test_promoted_reads_off_chunk_promoted(tmp_path: Path) -> None:
 def test_grouped_reads_off_chunk_grouped(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
     _seed_second_chunk(engine, "ch_2")
-    store.lifecycle.record_grouped("ch_1", grouped_into="ch_2", at=_at(1))
+    with engine.begin() as conn:
+        record_grouped_row_conn(conn, "ch_1", grouped_into="ch_2", at=_at(1))
     row = _row_for(store, "grouped")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -349,7 +350,8 @@ def test_grouped_chunks_history_is_unaffected_by_the_deleted_exclusion(tmp_path:
     store, engine = _store(tmp_path)
     _seed_second_chunk(engine, "ch_2")
     store.queue.record_promote("ch_1", at=_at(1))
-    store.lifecycle.record_grouped("ch_1", grouped_into="ch_2", at=_at(2))
+    with engine.begin() as conn:
+        record_grouped_row_conn(conn, "ch_1", grouped_into="ch_2", at=_at(2))
 
     causes = {r.cause for r in store.events.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"}
 

@@ -171,6 +171,16 @@ def record_deleted_row(conn: Connection, chunk_id: str, *, by: str, at: datetime
     return int(key[0]) if key is not None else 0
 
 
+def record_grouped_row_conn(conn: Connection, chunk_id: str, *, grouped_into: str, at: datetime) -> int:
+    """Insert one ``chunk_grouped`` row on a caller-supplied ``conn`` (issue #460) —
+    mirrors :func:`record_deleted_row`'s shared-connection shape, so the fold's own
+    composite write can fold every target's row into one transaction. Returns the
+    freshly-inserted ``chunk_grouped.id``."""
+    result = conn.execute(insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at))
+    key = result.inserted_primary_key
+    return int(key[0]) if key is not None else 0
+
+
 def insert_materialization_row(
     conn: Connection,
     *,

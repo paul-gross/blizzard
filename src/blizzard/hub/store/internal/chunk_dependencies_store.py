@@ -13,10 +13,11 @@ from sqlalchemy import Connection, select, update
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import DEPENDENCY_EDGE_PREFIX, Id
-from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.work import DependencyEdge
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 
 
 class ChunkDependenciesStore:
@@ -91,6 +92,45 @@ class ChunkDependenciesStore:
             released_by=by,
         )
 
+    def record_fold(
+        self,
+        targets: list[FoldTarget],
+        *,
+        grouped_into: str,
+        by: str,
+        at: datetime,
+    ) -> dict[str, int]:
+        """Record every target's ``chunk.grouped`` row and rewrite its own release/mint
+        edges, all targets in one transaction (D1, D4, issue #460) so no target's row can
+        commit ahead of another's. ``mint`` never revives a released row, always a fresh
+        insert. Returns each target chunk id's freshly-inserted ``chunk_grouped.id``."""
+        grouped_ids: dict[str, int] = {}
+        with self._store.write("record_fold") as conn:
+            for target in targets:
+                grouped_ids[target.chunk_id] = record_grouped_row_conn(
+                    conn, target.chunk_id, grouped_into=grouped_into, at=at
+                )
+                if target.release:
+                    conn.execute(
+                        update(s.chunk_dependencies)
+                        .where(s.chunk_dependencies.c.dependency_id.in_(target.release))
+                        .values(released_at=at, released_by=by)
+                    )
+                for dependent_chunk_id, prerequisite_chunk_id in target.mint:
+                    dependency_id = Id.mint_at(DEPENDENCY_EDGE_PREFIX, at).value
+                    conn.execute(
+                        s.chunk_dependencies.insert().values(
+                            dependency_id=dependency_id,
+                            dependent_chunk_id=dependent_chunk_id,
+                            prerequisite_chunk_id=prerequisite_chunk_id,
+                            declared_at=at,
+                            declared_by=by,
+                            released_at=None,
+                            released_by=None,
+                        )
+                    )
+        return grouped_ids
+
 
 def _standing_row(conn: Connection, dependent_chunk_id: str, prerequisite_chunk_id: str):  # type: ignore[no-untyped-def]
     return conn.execute(
@@ -114,6 +154,19 @@ def _edge(row) -> DependencyEdge:  # type: ignore[no-untyped-def]
         declared_by=row.declared_by,
         released_at=row.released_at,
         released_by=row.released_by,
+    )
+
+
+def release_outgoing_edges_conn(conn: Connection, chunk_id: str, *, by: str, at: datetime) -> None:
+    """Release every standing edge naming ``chunk_id`` as the dependent, on a
+    caller-supplied ``conn`` (issue #460) — folded into the delete transaction so a
+    deleted dependent's own edges never survive it, mirroring
+    :func:`~blizzard.hub.store.internal.chunk_rows.record_deleted_row`'s shared-connection
+    shape."""
+    conn.execute(
+        update(s.chunk_dependencies)
+        .where((s.chunk_dependencies.c.dependent_chunk_id == chunk_id) & (s.chunk_dependencies.c.released_at.is_(None)))
+        .values(released_at=at, released_by=by)
     )
 
 

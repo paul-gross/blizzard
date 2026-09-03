@@ -22,7 +22,7 @@ from blizzard.hub.domain.dependencies import (
     NoStandingDependencyToRelease,
     PrerequisiteIsEphemeral,
 )
-from blizzard.hub.domain.queue import ChunkNotFound
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.work import Chunk, DependencyEdge
 from blizzard.wire.chunk import (
     ChunkDependencyDeclareRequest,

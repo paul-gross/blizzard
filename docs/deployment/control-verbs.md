@@ -150,6 +150,10 @@ differs from pause or stop's own guards: delete never asks whether a runner hold
 own status sits in that unacquired set — a still-unclaimed chunk that has been paused is refused all the same, on status
 alone.
 
+Delete is also refused (409) when the chunk is a standing prerequisite for another chunk (issue #460) — the refusal
+names the dependents. Deleting a *dependent* chunk instead is unaffected: it still succeeds, and releases that chunk's
+own outgoing standing edges as part of the same delete write.
+
 A hub item and its chunk live and die together: deleting a chunk withdraws every open `hub:`-source pointer it holds —
 any `forge:`-source pointer on the same chunk survives untouched — and withdrawing a hub item deletes its unacquired
 holder chunk in the same stroke rather than refusing the withdrawal ([work-sources.md](./work-sources.md) owns the

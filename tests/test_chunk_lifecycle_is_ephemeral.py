@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.store.internal.chunk_rows import record_deleted_row
+from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from tests.support import chunk_stores, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
@@ -34,8 +34,8 @@ def test_is_ephemeral_is_true_for_a_grouped_away_chunk(tmp_path: Path) -> None:
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_survivor", graph_id="gr_1", at=_NOW)
         seed_chunk(conn, "ch_grouped", graph_id="gr_1", at=_NOW)
+        record_grouped_row_conn(conn, "ch_grouped", grouped_into="ch_survivor", at=_NOW)
     lifecycle = chunk_stores(engine, FixedClock(instant=_NOW)).lifecycle
-    lifecycle.record_grouped("ch_grouped", grouped_into="ch_survivor", at=_NOW)
 
     assert lifecycle.is_ephemeral("ch_grouped") is True
 

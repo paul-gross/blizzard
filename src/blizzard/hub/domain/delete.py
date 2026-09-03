@@ -11,8 +11,9 @@ import threading
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.chunks.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.queue import ChunkNotFound
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.work import Chunk, IWriteWorkItemRepository
 
 
@@ -29,6 +30,19 @@ class ChunkNotDeletable(ValueError):
         self.status = status
 
 
+class ChunkHasDependents(Exception):
+    """A delete targeted a chunk that is a standing prerequisite for other chunks
+    (issue #460) — refused, naming the dependents, rather than orphaning their edges."""
+
+    def __init__(self, chunk_id: str, dependent_chunk_ids: list[str]) -> None:
+        super().__init__(
+            f"chunk {chunk_id} is a standing prerequisite for "
+            f"{', '.join(dependent_chunk_ids)} and cannot be deleted while depended on"
+        )
+        self.chunk_id = chunk_id
+        self.dependent_chunk_ids = dependent_chunk_ids
+
+
 class DeleteService:
     """Delete an unacquired chunk, withdrawing the hub items it holds — the one pairing
     behind both a direct chunk delete and ``WorkItemEditService.withdraw``'s own
@@ -41,6 +55,7 @@ class DeleteService:
         items: IWriteWorkItemRepository,
         clock: IClock,
         claim_lock: threading.Lock,
+        dependencies: IReadChunkDependenciesRepository,
     ) -> None:
         self._facts = facts
         self._items = items
@@ -48,13 +63,14 @@ class DeleteService:
         # Shared with ClaimService/EditService/RestartService (issue #120), so a claim
         # can't land on a chunk this write is mid-way through deleting.
         self._claim_lock = claim_lock
+        self._dependencies = dependencies
 
     def delete(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.deleted`` and withdraw every open ``hub:``-source item
-        ``chunk`` holds, atomically. Raises :class:`ChunkNotFound` for a chunk already
-        grouped or deleted away, :class:`ChunkNotDeletable` for one a runner or a human
-        holds, or one terminal. Derives the guard's status fresh under the lock from a
-        single ``load_facts`` call, exactly as ``EditService.edit`` does."""
+        ``chunk`` holds, atomically. Raises :class:`ChunkNotFound` for one already
+        grouped or deleted, :class:`ChunkNotDeletable` for one held or terminal, and
+        :class:`ChunkHasDependents` for one a standing prerequisite for another chunk
+        (issue #460) — every guard read taken fresh under the lock."""
         with self._claim_lock:
             facts = self._facts.load_facts(chunk.chunk_id)
             if facts is None:
@@ -62,4 +78,11 @@ class DeleteService:
             status = facts.status()
             if status not in PRE_CLAIM_STATUSES:
                 raise ChunkNotDeletable(chunk.chunk_id, status)
+            dependent_chunk_ids = sorted(
+                edge.dependent_chunk_id
+                for edge in self._dependencies.list_standing_edges()
+                if edge.prerequisite_chunk_id == chunk.chunk_id
+            )
+            if dependent_chunk_ids:
+                raise ChunkHasDependents(chunk.chunk_id, dependent_chunk_ids)
             return self._items.delete_chunk_and_withdraw_hub_items(chunk, by=by, at=self._clock.now())

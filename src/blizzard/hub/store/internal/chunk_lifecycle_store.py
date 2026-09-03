@@ -14,7 +14,12 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, ephemeral_ids, next_route_seq, route_of_conn
+from blizzard.hub.store.internal.chunk_rows import (
+    enqueue_close_intents,
+    ephemeral_ids,
+    next_route_seq,
+    route_of_conn,
+)
 
 
 class ChunkLifecycleStore:
@@ -81,15 +86,6 @@ class ChunkLifecycleStore:
                 .values(released_at=at)
             )
             enqueue_close_intents(conn, chunk_id, at=at)
-            key = result.inserted_primary_key
-            return int(key[0]) if key is not None else 0
-
-    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> int:
-        """Record ``chunk.grouped`` — the merged-away chunk is ephemeral now."""
-        with self._store.write("record_grouped") as conn:
-            result = conn.execute(
-                s.chunk_grouped.insert().values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at)
-            )
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
 

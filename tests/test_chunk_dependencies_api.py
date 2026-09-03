@@ -46,6 +46,17 @@ def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str, *, by: st
     return hub.client.post(f"/api/chunks/{dependent_id}/dependencies/release", json=body)
 
 
+def _strand_by_direct_delete(hub: HubHarness, chunk_id: str) -> None:
+    """Insert a ``chunk_deleted`` row directly, bypassing ``DeleteService``'s own standing-prerequisite guard. Once
+    delete and group are both dependency-aware, no API path can strand a standing edge onto an ephemeral prerequisite
+    any more — this reaches that state the only way left, to prove release/declare still answer the accepted residual
+    race (``bzh:invariant-checker``'s ``NoStandingDependencyOntoEphemeralChunk``) the same way."""
+    with hub.engine.begin() as conn:
+        conn.execute(
+            s.chunk_deleted.insert().values(chunk_id=chunk_id, deleted_at=hub.clock.now(), deleted_by="operator")
+        )
+
+
 def _rows(hub: HubHarness) -> list[dict[str, Any]]:
     """Every ``chunk_dependencies`` row, every column — the whole table's state, so a
     refusal that inserted *or* updated a row shows up as an inequality, not just a count
@@ -170,7 +181,7 @@ def test_release_is_admitted_when_the_prerequisite_was_since_deleted(tmp_path: P
     dependent_id = ingest(hub, [_DEPENDENT], promote=False)
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
     assert _declare(hub, dependent_id, prerequisite_id).status_code == 202
-    assert hub.client.request("DELETE", f"/api/chunks/{prerequisite_id}", json={}).status_code == 202
+    _strand_by_direct_delete(hub, prerequisite_id)
 
     resp = _release(hub, dependent_id, prerequisite_id, by="user:bob")
 
@@ -278,7 +289,7 @@ def test_declare_of_a_standing_edge_is_idempotent_even_once_the_prerequisite_is_
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
     first = _declare(hub, dependent_id, prerequisite_id)
     assert first.status_code == 202, first.text
-    assert hub.client.request("DELETE", f"/api/chunks/{prerequisite_id}", json={}).status_code == 202
+    _strand_by_direct_delete(hub, prerequisite_id)
     before = _rows(hub)
 
     resp = _declare(hub, dependent_id, prerequisite_id)

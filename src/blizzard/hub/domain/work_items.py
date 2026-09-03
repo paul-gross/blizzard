@@ -15,11 +15,11 @@ from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
-from blizzard.hub.domain.delete import ChunkNotDeletable, DeleteService
+from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.edit import UNSET, UnsetType
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import require_no_live_holder
-from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -110,6 +110,21 @@ class WorkItemHeldByLiveChunk(Exception):
         super().__init__(f"{pointer.source}:{pointer.ref} is held by live chunk {chunk_id}")
         self.pointer = pointer
         self.chunk_id = chunk_id
+
+
+class WorkItemHeldByDependents(Exception):
+    """Withdrawal cascaded into deleting an unacquired holder, but that holder is a
+    standing prerequisite for other chunks (issue #460) — names the edge, distinct from
+    :class:`WorkItemHeldByLiveChunk`, which names a live holder instead."""
+
+    def __init__(self, pointer: WorkRef, chunk_id: str, dependent_chunk_ids: list[str]) -> None:
+        super().__init__(
+            f"{pointer.source}:{pointer.ref}'s holder {chunk_id} is a standing prerequisite "
+            f"for {', '.join(dependent_chunk_ids)}"
+        )
+        self.pointer = pointer
+        self.chunk_id = chunk_id
+        self.dependent_chunk_ids = dependent_chunk_ids
 
 
 class WorkItemEditService:
@@ -266,6 +281,8 @@ class WorkItemEditService:
             deleted_id = self._delete.delete(chunk, by=by)
         except ChunkNotDeletable as exc:
             raise WorkItemHeldByLiveChunk(item.pointer, holder) from exc
+        except ChunkHasDependents as exc:
+            raise WorkItemHeldByDependents(item.pointer, holder, exc.dependent_chunk_ids) from exc
         updated = self._items.get(item.source, item.ref)
         assert updated is not None
         return WithdrawnWorkItem(

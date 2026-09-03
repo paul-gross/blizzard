@@ -14,7 +14,7 @@ from typing import cast
 import pytest
 
 from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
-from blizzard.hub.domain.dependencies import DependencyWouldCloseCycle
+from blizzard.hub.domain.dependencies import DependencyWouldCloseCycle, PrerequisiteIsEphemeral
 from tests.support import HubHarness, build_hub, ingest
 
 pytestmark = pytest.mark.component
@@ -134,3 +134,62 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
             if e.dependent_chunk_id in (chunk_x, chunk_y) and e.prerequisite_chunk_id in (chunk_x, chunk_y)
         ]
         assert len(standing) == 1, f"pair {i}: {standing}"
+
+
+def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_shared_lock(tmp_path: Path) -> None:
+    """D2: ``GroupService`` now holds the shared lock for its whole fold, so a declaration naming the folded-away
+    chunk as prerequisite blocks mid-fold until the fold's write releases the lock — reached (and paused) almost
+    immediately, since this fold carries no edges of its own."""
+    hub = build_hub(tmp_path)
+    survivor_id = ingest(hub, [{"source": "default", "ref": "survivor"}], promote=False)
+    target_id = ingest(hub, [{"source": "default", "ref": "target"}], promote=False)
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
+    dependent = hub.services.chunks.record.get(dependent_id)
+    target = hub.services.chunks.record.get(target_id)
+    assert dependent is not None
+    assert target is not None
+
+    entered_write = threading.Event()
+    release_write = threading.Event()
+    real_record_fold = _writable_dependencies(hub).record_fold
+
+    def _blocking_record_fold(targets, **kwargs):  # type: ignore[no-untyped-def]
+        entered_write.set()
+        assert release_write.wait(timeout=5), "test never released the fold's write"
+        return real_record_fold(targets, **kwargs)
+
+    _writable_dependencies(hub).record_fold = _blocking_record_fold  # type: ignore[method-assign]
+
+    fold_result: dict[str, object] = {}
+
+    def _fold_target_into_survivor() -> None:
+        fold_result["result"] = hub.services.group.group(survivor_id, [target_id])
+
+    fold_thread = threading.Thread(target=_fold_target_into_survivor)
+    fold_thread.start()
+    assert entered_write.wait(timeout=5), "the fold never reached its (patched) write"
+
+    declare_result: dict[str, object] = {}
+
+    def _declare_dependent_on_target() -> None:
+        try:
+            declare_result["edge"] = hub.services.dependencies.declare(dependent, target, by="user:alice")
+        except PrerequisiteIsEphemeral as exc:
+            declare_result["refused"] = exc
+
+    declare_thread = threading.Thread(target=_declare_dependent_on_target)
+    declare_thread.start()
+    declare_thread.join(timeout=0.3)
+    assert declare_thread.is_alive(), (
+        "the racing declaration completed while the fold still held the shared lock — not atomic"
+    )
+
+    release_write.set()
+    fold_thread.join(timeout=5)
+    declare_thread.join(timeout=5)
+
+    assert "result" in fold_result, fold_result
+    # Serialized, not merely blocked-then-stale: the declaration resumes only once the fold has fully landed, so it
+    # sees `target` already ephemeral and is refused — never a standing edge naming a chunk just grouped away.
+    assert "refused" in declare_result, declare_result
+    assert isinstance(declare_result["refused"], PrerequisiteIsEphemeral)
