@@ -126,6 +126,7 @@ class LoopWiring:
             transcripts_ship=config.transcripts_ship,
             transcript_record_max_bytes=config.transcript_record_max_bytes,
             transcript_chunk_max_bytes=config.transcript_chunk_max_bytes,
+            queue_strict=config.queue_strict,
         )
         _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), stores.liveness)
         _elicitation_files = ElicitationFiles(str(elicitation_output_dir))
