@@ -3,7 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
+import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
 import { FleetRunDelta, type RunDeltaVm } from './run-delta';
+import { FleetScopePanel, type ScopePanelVm } from './scope-panel';
 import { FleetRunList, type RunListRowVm } from './run-list';
 
 /**
@@ -166,6 +168,120 @@ describe('FleetRunDelta stacking shell sweep (web:shell-sweep, blizzard#401 Phas
       );
     } finally {
       root.remove();
+    }
+  });
+});
+
+
+/**
+ * The two presentational panels the five-way gardening split added, swept here
+ * rather than in a file of their own. Both make layout claims their CSS states in
+ * prose and jsdom cannot evaluate, so both owe a real render
+ * (`bzh:visual-change-needs-a-render`), at the narrow widths gardening is reached
+ * at from the hub's mobile bottom tab bar (`bzh:narrow-viewport-tier-rule`).
+ *
+ * They live in this file deliberately. A *second* `*.shell-sweep.spec.ts` in the
+ * fleet project leaves `ng test fleet` hanging after its suite passes — every test
+ * green, the process never exiting — which reads in CI as a job that runs until it
+ * is killed rather than as a failure. Adding these cases to a sweep file the
+ * project already has costs nothing and avoids that entirely.
+ */
+const PANEL_FINDING: FindingPanelVm = {
+  findingId: 'fnd_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+  findingClass: 'stale-docstring',
+  locus: 'src/blizzard/hub/store/internal/a-rather-long-module-path/invoice_ledger_reconciliation.py:142',
+  state: 'live',
+  observedCount: 4,
+  introducedRev: '4ba7ef06d9f1c2b3a4e5f60718293a4b5c6d7e8f',
+  introducedAt: '2026-01-01T00:00:00Z',
+  firstObservedAt: '2026-01-02T00:00:00Z',
+  lastSeenAt: '2026-01-10T00:00:00Z',
+  summary: 'Module docstring narrates the change history rather than stating the contract.',
+  note: null,
+  workItem: null,
+};
+
+const PANEL_SCOPE: ScopePanelVm = {
+  slug: 'blizzard',
+  description: 'the hub, runner, CLI and board — a long description that must wrap inside its own column',
+  retired: false,
+  defaultingRoutineNames: ['nightly', 'weekly'],
+};
+
+describe('gardening panels shell sweep (web:shell-sweep)', () => {
+  it('wraps the finding panel triage buttons rather than overflowing, at 1280/390/320px', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FleetFindingPanel],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FleetFindingPanel);
+    fixture.componentRef.setInput('vm', PANEL_FINDING);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('canControl', true);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      for (const width of [1280, 390, 320]) {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await fixture.whenStable();
+
+        const actions = root.querySelector<HTMLElement>('[data-testid="gardening-finding-panel-actions"]');
+        expect(actions, `${width}px: no action row in the DOM`).not.toBeNull();
+        // `.fp-actions` wraps rather than spilling into a horizontal scroll.
+        expect(
+          actions!.scrollWidth,
+          `${width}px: the action row scrolls horizontally — it spilled instead of wrapping`,
+        ).toBeLessThanOrEqual(actions!.clientWidth);
+      }
+
+      // The claim is that the row *wraps*: at the narrowest width the buttons must
+      // occupy more than one row, which a row that merely fits would not.
+      const tops = new Set(
+        Array.from(
+          root.querySelectorAll<HTMLElement>('[data-testid="gardening-finding-panel-actions"] button'),
+        ).map((b) => Math.round(b.getBoundingClientRect().top)),
+      );
+      expect(tops.size, '320px: every triage button shares one row — the flex-wrap never engaged').toBeGreaterThan(1);
+    } finally {
+      root.remove();
+      await page.viewport(1280, 800);
+    }
+  });
+
+  it('keeps the scope panel description editor inside its column, at 1280/390/320px', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FleetScopePanel],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FleetScopePanel);
+    fixture.componentRef.setInput('vm', PANEL_SCOPE);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('canEdit', true);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      for (const width of [1280, 390, 320]) {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await fixture.whenStable();
+
+        // `.edit-input`'s `flex: 1; min-width: 0` has to hold the row's remaining
+        // width beside its actions rather than pushing them out of the panel.
+        const edit = root.querySelector<HTMLElement>('.sp-edit');
+        expect(edit, `${width}px: no .sp-edit row in the DOM`).not.toBeNull();
+        expect(
+          edit!.scrollWidth,
+          `${width}px: the edit row overflows its column`,
+        ).toBeLessThanOrEqual(edit!.clientWidth);
+      }
+    } finally {
+      root.remove();
+      await page.viewport(1280, 800);
     }
   });
 });
