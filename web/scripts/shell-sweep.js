@@ -83,10 +83,6 @@
  *     `--kv-label-col`/`--chunk-facts-pad`): their value columns genuinely land
  *     at the same horizontal position under a long runner identity that wraps
  *     — a real CSS grid layout claim jsdom cannot make.
- *   - projects/fleet/src/lib/board-card/board-card-control-row.shell-sweep.spec.ts —
- *     `BoardCardComponent`'s control row (D8, issue #364): PROMOTE and DELETE
- *     genuinely sit side by side with no overlap or overflow at the board right
- *     rail's narrow widths — a real CSS flex-row layout claim jsdom cannot make.
  *   - projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts — the
  *     graphs container/presentational split's two Phase-2 children
  *     (`GraphDetailHeader`, `GraphDetailEdges`): the header's identity row,
@@ -106,7 +102,12 @@
  *     genuinely different computed background/border-left color from a
  *     normal row at 390px, and `FleetRunDelta` genuinely stacks its
  *     finding-set blocks, and each set's added/observed/gone groups, with no
- *     overlap or horizontal overflow at 390px.
+ *     overlap or horizontal overflow at 390px. Carries the two gardening panels
+ *     too — `FleetFindingPanel`'s four CTA-sized triage buttons genuinely wrap
+ *     onto more than one row at 320px rather than spilling into a horizontal
+ *     scroll, and `FleetScopePanel`'s description editor holds the row's
+ *     remaining width beside its actions — rather than a second sweep file of
+ *     their own, which leaves `ng test fleet` hanging after a green suite.
  *   - projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts —
  *     the gardening routines container's own list-beside-panel grid
  *     (blizzard#397): the list and panel sit side by side at 1280px, and
@@ -158,13 +159,6 @@
  *     with no horizontal overflow — the same `@media (max-width: 720px)` claim
  *     Routines and Proposals each carry, driven from one table rather than three
  *     copied files.
- *   - projects/fleet/src/lib/garden/garden-panels.shell-sweep.spec.ts — the two
- *     presentational panels the same split added: `FleetFindingPanel`'s four
- *     CTA-sized triage buttons genuinely wrap onto more than one row at 320px
- *     rather than spilling into a horizontal scroll (`.fp-actions`'s own
- *     `flex-wrap`), and `FleetScopePanel`'s description editor holds the row's
- *     remaining width beside its actions rather than pushing them out of the
- *     panel (`.sp-edit`/`.edit-input`'s `flex: 1; min-width: 0`).
  *   - projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts —
  *     the blocked marking's adjacency to a card's status: it renders directly below the
  *     status row without moving the status's own position or overflowing the card, at
@@ -186,7 +180,6 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-detail-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/design/hover-tint.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-control-row.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/garden-runs.shell-sweep.spec.ts' },
@@ -199,7 +192,6 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/gardening-findings-triage.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-finding-triage-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-page-grids.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/garden-panels.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts' },
 ];
 
