@@ -122,6 +122,15 @@ describe('chunk neighborhood shell sweep (web:shell-sweep, issue #462)', () => {
             `width ${width}: a neighbor row's right edge (${rect.right}) overflows the panel's own (${panelRect.right})`,
           ).toBeLessThanOrEqual(panelRect.right + 0.5);
         }
+
+        // The fixture's four prerequisites must genuinely wrap onto more than one line at
+        // this width, not merely avoid overflowing — distinct row tops, not just contained
+        // right edges, is what "wraps" actually claims.
+        const prerequisiteRows = root.querySelectorAll<HTMLElement>(
+          '[data-testid="neighborhood-prerequisites"] [data-testid="neighbor"]',
+        );
+        const rowTops = new Set(Array.from(prerequisiteRows).map((r) => Math.round(r.getBoundingClientRect().top)));
+        expect(rowTops.size, `width ${width}: prerequisites rendered on only one row top`).toBeGreaterThan(1);
       } finally {
         root.remove();
       }

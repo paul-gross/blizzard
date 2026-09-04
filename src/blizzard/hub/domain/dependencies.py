@@ -178,16 +178,11 @@ class ChunkNeighborhood:
 def derive_chunk_neighborhood(
     chunk_id: str, edges: Iterable[DependencyEdge], statuses: Mapping[str, ChunkStatus]
 ) -> ChunkNeighborhood:
-    """``chunk_id``'s standing edges in both directions, with per-edge satisfaction (D3) —
-    a sibling of :func:`derive_blocked_markings` answering a different question: every
-    edge naming ``chunk_id``, for a chunk at any status, rather than one earliest unmet
-    prerequisite confined to :data:`PRE_CLAIM_STATUSES`. ``edges`` must already be
-    :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.standing_edges_for`'s
-    own order. Satisfaction is never stored (D4): a prerequisite edge is satisfied when the
-    prerequisite reads ``done``; a dependent edge is satisfied when ``chunk_id`` itself
-    reads ``done``, so ``statuses`` must carry ``chunk_id``'s own status whenever a
-    dependent edge is present. A neighbor absent from ``statuses`` draws unsatisfied with
-    a null status rather than being dropped."""
+    """A sibling of :func:`derive_blocked_markings` (D3, D4), answering a different question: every edge naming
+    ``chunk_id``, for a chunk at any status. ``edges`` must already be
+    :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.standing_edges_for`'s own order,
+    and ``statuses`` must carry ``chunk_id``'s own status. Full rule: `blizzard-context:/domain/work/statuses.md` §The
+    neighborhood."""
     prerequisites: list[ChunkNeighbor] = []
     dependents: list[ChunkNeighbor] = []
     subject_done = statuses.get(chunk_id) is ChunkStatus.DONE

@@ -57,15 +57,10 @@ fold is refused 409 if carrying its edges would close a cycle in the resulting s
 
 ## The neighborhood
 
-`GET /api/chunks/{chunk_id}` also carries a `neighborhood` field: the chunk's own standing dependency edges one hop in
-each direction, `prerequisites` and `dependents`, always present as two lists rather than null — a chunk with neither
-reads back two empty ones. Each entry is `{chunk_id, status, satisfied}`: `status` is the neighbor's own derived status,
-null only for the residual race a neighbor's facts fail to resolve — the edge is still drawn, unsatisfied, rather than
-dropped. `satisfied` is derived the same way the blocked marking is, never stored: true when the edge's prerequisite
-reads `done`, so a dependent edge is satisfied exactly when the chunk itself reads `done`. Unlike the blocked marking,
-the neighborhood is not confined to a pre-claim dependent — it is present, and possibly non-empty in either direction,
-for a chunk at any status — and it takes no further hop past its own edges, the same one-hop scope the blocked marking
-holds.
+`GET /api/chunks/{chunk_id}` also carries a `neighborhood` field: `prerequisites` and `dependents`, each a list of
+`{chunk_id, status, satisfied}`, empty rather than null when a chunk names neither. What the two directions mean,
+`status`'s one residual-race null case, and how `satisfied` is derived are `blizzard-context:/domain/work/statuses.md`'s
+to say, §The neighborhood.
 
 ## What a standing edge does to claiming
 

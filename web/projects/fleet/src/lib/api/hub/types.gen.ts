@@ -990,19 +990,20 @@ export type ChunkNeighborView = {
 /**
  * ChunkNeighborhoodView
  *
- * A chunk's standing dependency edges one hop each way (issue #462) — always present,
- * with two possibly-empty lists, unlike ``blocked``'s null-or-a-marking shape: a chunk
- * with no edges still carries this field, empty both ways.
+ * A chunk's standing dependency edges one hop each way (issue #462), unlike
+ * ``blocked``'s null-or-a-marking shape: a chunk with no edges still carries two
+ * lists, empty rather than null — both required here, never omitted, so a generated
+ * client can rely on that without its own fallback.
  */
 export type ChunkNeighborhoodView = {
     /**
      * Dependents
      */
-    dependents?: Array<ChunkNeighborView>;
+    dependents: Array<ChunkNeighborView>;
     /**
      * Prerequisites
      */
-    prerequisites?: Array<ChunkNeighborView>;
+    prerequisites: Array<ChunkNeighborView>;
 };
 
 /**

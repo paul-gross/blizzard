@@ -16,7 +16,8 @@ fleet-kit-panel.section {
 /* The two-column General tab, at the same 720px breakpoint the hub's
    Artifacts tab's nav-beside-viewer split uses — work item and issues
    stacked in the left column, node history beside them spanning both
-   rows, asks · decisions spanning the full width below. */
+   rows, then dependencies and asks · decisions each spanning the full
+   width below, dependencies first. */
 @media (min-width: 720px) {
   .general {
     display: grid;

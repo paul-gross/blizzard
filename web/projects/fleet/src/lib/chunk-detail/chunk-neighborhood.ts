@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
@@ -7,13 +8,12 @@ import { compactRef } from '../compact-ref';
 import { KitBadge } from '../kit/kit-badge';
 import type { Tone } from '../kit/tone';
 
-/** {@link ChunkNeighborhood.neighborhood}'s own normalized shape — the generated
- * `ChunkNeighborhoodView`'s two list fields are themselves optional on the wire type
- * (the same `default_factory`-is-not-required schema quirk as the field itself), so this
- * is where the `?? []` happens once rather than at every read site. */
-interface Neighborhood {
-  readonly prerequisites: readonly ChunkNeighborView[];
-  readonly dependents: readonly ChunkNeighborView[];
+/** One rendered group of {@link ChunkNeighborhood.groups} — `prerequisites` or
+ * `dependents`, each its own section with its own empty state. */
+interface NeighborGroup {
+  readonly label: string;
+  readonly testid: string;
+  readonly list: readonly ChunkNeighborView[];
 }
 
 /**
@@ -37,11 +37,17 @@ interface Neighborhood {
  * `selectChunk` shape: the dock's one-hop select-into-dock button (the
  * default) or, for a caller with no dock to select into, a `routerLink` under
  * `linkBase`.
+ *
+ * Deliberately alongside {@link ChunkBlocked} in the dock, not a replacement for it:
+ * that marking is a compact, always-visible alert naming one earliest-unmet
+ * prerequisite, confined to the pre-claim window `blocked` itself is; this panel is
+ * the full one-hop map, both directions, at any status — a chunk mid-run still shows
+ * what it depends on and what depends on it, which `blocked` never renders at all.
  */
 @Component({
   selector: 'fleet-chunk-neighborhood',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge, RouterLink],
+  imports: [KitBadge, NgTemplateOutlet, RouterLink],
   templateUrl: './chunk-neighborhood.html',
   styleUrl: './chunk-neighborhood.css',
 })
@@ -62,13 +68,15 @@ export class ChunkNeighborhood {
    * clicked (`asLink` is `false`). */
   readonly selectChunk = output<string>();
 
-  /** `ChunkDetail.neighborhood`, normalized to two real arrays (D5) — the field, and its
-   * own two list fields, are optional on the wire type only because pydantic's
-   * `default_factory` marks them not-required in the OpenAPI schema; the hub always sends
-   * all three. */
-  protected readonly neighborhood = computed<Neighborhood>(() => {
-    const raw = this.detail().neighborhood;
-    return { prerequisites: raw?.prerequisites ?? [], dependents: raw?.dependents ?? [] };
+  /** `ChunkDetail.neighborhood`'s two directions as one rendered list, each with its own
+   * label and empty state — `?? []` at the read site the same way every other optional
+   * list field on `ChunkDetail` is handled (`chunk-awaiting-human.ts`'s `openQuestions`). */
+  protected readonly groups = computed<readonly NeighborGroup[]>(() => {
+    const neighborhood = this.detail().neighborhood;
+    return [
+      { label: 'Depends on', testid: 'neighborhood-prerequisites', list: neighborhood?.prerequisites ?? [] },
+      { label: 'Blocks', testid: 'neighborhood-dependents', list: neighborhood?.dependents ?? [] },
+    ];
   });
 
   /** Every neighbor's compact ref — every surface that names an entity

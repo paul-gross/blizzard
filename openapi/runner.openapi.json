@@ -661,10 +661,9 @@
         "type": "object"
       },
       "ChunkNeighborhoodView": {
-        "description": "A chunk's standing dependency edges one hop each way (issue #462) \u2014 always present,\nwith two possibly-empty lists, unlike ``blocked``'s null-or-a-marking shape: a chunk\nwith no edges still carries this field, empty both ways.",
+        "description": "A chunk's standing dependency edges one hop each way (issue #462), unlike\n``blocked``'s null-or-a-marking shape: a chunk with no edges still carries two\nlists, empty rather than null \u2014 both required here, never omitted, so a generated\nclient can rely on that without its own fallback.",
         "properties": {
           "dependents": {
-            "default": [],
             "items": {
               "$ref": "#/components/schemas/ChunkNeighborView"
             },
@@ -672,7 +671,6 @@
             "type": "array"
           },
           "prerequisites": {
-            "default": [],
             "items": {
               "$ref": "#/components/schemas/ChunkNeighborView"
             },
@@ -680,6 +678,10 @@
             "type": "array"
           }
         },
+        "required": [
+          "prerequisites",
+          "dependents"
+        ],
         "title": "ChunkNeighborhoodView",
         "type": "object"
       },

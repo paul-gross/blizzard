@@ -77,8 +77,7 @@ class ChunkView:
     #: response but the list and detail reads) pays nothing for it.
     blocked: BlockedView | None = None
     #: The chunk's standing-edge neighborhood (issue #462) — the caller's own
-    #: already-derived value, the same shape ``blocked`` takes; only the detail read
-    #: derives one, so every other caller pays nothing for it.
+    #: already-derived value, the same shape ``blocked`` takes.
     neighborhood: ChunkNeighborhoodView | None = None
 
     @classmethod
@@ -217,7 +216,9 @@ class ChunkView:
             escalation=self._escalation(),
             pause=self._pause(),
             blocked=self.blocked,
-            neighborhood=self.neighborhood if self.neighborhood is not None else ChunkNeighborhoodView(),
+            neighborhood=self.neighborhood
+            if self.neighborhood is not None
+            else ChunkNeighborhoodView(prerequisites=[], dependents=[]),
             decision=self._decision(),
             history=history.transitions(),
             migrations=history.migrations(),

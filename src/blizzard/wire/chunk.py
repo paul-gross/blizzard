@@ -418,12 +418,13 @@ class ChunkNeighborView(BaseModel):
 
 
 class ChunkNeighborhoodView(BaseModel):
-    """A chunk's standing dependency edges one hop each way (issue #462) — always present,
-    with two possibly-empty lists, unlike ``blocked``'s null-or-a-marking shape: a chunk
-    with no edges still carries this field, empty both ways."""
+    """A chunk's standing dependency edges one hop each way (issue #462), unlike
+    ``blocked``'s null-or-a-marking shape: a chunk with no edges still carries two
+    lists, empty rather than null — both required here, never omitted, so a generated
+    client can rely on that without its own fallback."""
 
-    prerequisites: list[ChunkNeighborView] = []
-    dependents: list[ChunkNeighborView] = []
+    prerequisites: list[ChunkNeighborView]
+    dependents: list[ChunkNeighborView]
 
 
 class ChunkDetail(BaseModel):
@@ -459,7 +460,9 @@ class ChunkDetail(BaseModel):
     blocked: BlockedView | None = None
     # The chunk's standing dependency edges one hop each way (issue #462) — always present,
     # unlike ``blocked``; see ChunkNeighborhoodView.
-    neighborhood: ChunkNeighborhoodView = Field(default_factory=ChunkNeighborhoodView)
+    neighborhood: ChunkNeighborhoodView = Field(
+        default_factory=lambda: ChunkNeighborhoodView(prerequisites=[], dependents=[])
+    )
     # The chunk's live gate decision — the open (waiting_on_human) or resolved-but-not-
     # yet-transitioned one.
     decision: DecisionView | None = None

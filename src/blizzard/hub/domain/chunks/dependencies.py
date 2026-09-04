@@ -37,10 +37,8 @@ class IReadChunkDependenciesRepository(Protocol):
 
     def standing_edges_for(self, chunk_id: str) -> list[DependencyEdge]:
         """Every standing edge naming ``chunk_id``, as dependent or as prerequisite alike
-        (D2, issue #462) — the one-hop-each-way read the neighborhood view is built from,
-        bounded by ``chunk_id``'s own edge count rather than the fleet's, via the two
-        indexes ``schema.py`` already declares. Same order as
-        :meth:`list_standing_edges`."""
+        (D2, issue #462), bounded by ``chunk_id``'s own edge count rather than the
+        fleet's. Same order as :meth:`list_standing_edges`."""
         ...
 
 

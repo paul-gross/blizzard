@@ -166,41 +166,21 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
     ]
 
 
-def _blocked_view_for_chunk(
-    services: HubServices, chunk_id: str, *, dependent_status: ChunkStatus
-) -> BlockedView | None:
-    """``GET /api/chunks/{chunk_id}``'s bounded blocked-marking read (issue #457, D7): unlike
-    the fleet-wide listing's `load_all_facts`, this reads only the facts of the prerequisites
-    this chunk's own edges name, so this route's facts reads are bounded by its own edge count
-    rather than scaling with the fleet — the standing edges read is still one fleet-wide bulk
-    query, exactly as it is for a declare (issue #456). ``dependent_status`` is the caller's own
-    already-derived status for `chunk_id` (the pre-claim gate, review round 1 F1), so this need
-    not reload facts this route's caller has already loaded (F5)."""
-    edges = [e for e in services.chunks.dependencies.list_standing_edges() if e.dependent_chunk_id == chunk_id]
-    if not edges:
-        return None
-    statuses: dict[str, ChunkStatus] = {chunk_id: dependent_status}
-    for edge in edges:
-        prerequisite_facts = services.chunks.facts.load_facts(edge.prerequisite_chunk_id)
-        if prerequisite_facts is not None:
-            statuses[edge.prerequisite_chunk_id] = prerequisite_facts.status()
-    return blocked_view(derive_blocked_markings(edges, statuses).get(chunk_id))
-
-
 def _neighbor_view(neighbor: ChunkNeighbor) -> ChunkNeighborView:
     return ChunkNeighborView(chunk_id=neighbor.chunk_id, status=neighbor.status, satisfied=neighbor.satisfied)
 
 
-def _neighborhood_view_for_chunk(services: HubServices, chunk_id: str, *, status: ChunkStatus) -> ChunkNeighborhoodView:
-    """``GET /api/chunks/{chunk_id}``'s neighborhood read (D2, D5, issue #462): one query
-    of the chunk's own standing edges — bounded by its own edge count via
-    :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.standing_edges_for` —
-    then one facts read per distinct neighbor, the blocked-marking route's own shape (issue
-    #457) extended to both directions. ``status`` is the caller's own already-derived value
-    for ``chunk_id``, so this need not reload its facts a second time."""
+def _dependency_views_for_chunk(
+    services: HubServices, chunk_id: str, *, status: ChunkStatus
+) -> tuple[BlockedView | None, ChunkNeighborhoodView]:
+    """``GET /api/chunks/{chunk_id}``'s blocked marking and neighborhood (D2, D5, issues #457, #462) — both derived
+    from the one standing-edges read and one statuses map, since a chunk's dependent edges are a subset of its own
+    neighborhood edges and reading them separately would risk a release or completion landing between the two reads.
+    ``status`` is the caller's own already-derived value for ``chunk_id``, so this need not reload its facts a second
+    time."""
     edges = services.chunks.dependencies.standing_edges_for(chunk_id)
     if not edges:
-        return ChunkNeighborhoodView()
+        return None, ChunkNeighborhoodView(prerequisites=[], dependents=[])
     statuses: dict[str, ChunkStatus] = {chunk_id: status}
     neighbor_ids = {
         edge.prerequisite_chunk_id if edge.dependent_chunk_id == chunk_id else edge.dependent_chunk_id for edge in edges
@@ -209,8 +189,10 @@ def _neighborhood_view_for_chunk(services: HubServices, chunk_id: str, *, status
         neighbor_facts = services.chunks.facts.load_facts(neighbor_id)
         if neighbor_facts is not None:
             statuses[neighbor_id] = neighbor_facts.status()
+    dependent_edges = [e for e in edges if e.dependent_chunk_id == chunk_id]
+    blocked = blocked_view(derive_blocked_markings(dependent_edges, statuses).get(chunk_id))
     neighborhood = derive_chunk_neighborhood(chunk_id, edges, statuses)
-    return ChunkNeighborhoodView(
+    return blocked, ChunkNeighborhoodView(
         prerequisites=[_neighbor_view(n) for n in neighborhood.prerequisites],
         dependents=[_neighbor_view(n) for n in neighborhood.dependents],
     )
@@ -244,8 +226,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
     chunk_status = facts.status()
-    blocked = _blocked_view_for_chunk(services, chunk_id, dependent_status=chunk_status)
-    neighborhood = _neighborhood_view_for_chunk(services, chunk_id, status=chunk_status)
+    blocked, neighborhood = _dependency_views_for_chunk(services, chunk_id, status=chunk_status)
     return ChunkView.of(services, chunk, blocked=blocked, facts=facts, neighborhood=neighborhood).detail()
 
 
