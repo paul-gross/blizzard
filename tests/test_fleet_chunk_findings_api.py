@@ -138,6 +138,11 @@ def test_get_on_an_unknown_chunk_is_404(tmp_path: Path) -> None:
 
 def test_get_on_a_chunk_answering_no_proposal_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    # `fin_1` genuinely exists and answers a different chunk's proposal, pinning that
+    # "this chunk answers no proposal" outranks "id not in this chunk's set" (D3) — a
+    # never-seeded id would 404 the same way for either reason and prove nothing.
+    _seed_proposal(hub, findings=["fin_1"])
+    _accept(hub)
     chunk_id = _seed_chunk_answering_no_proposal(hub)
 
     resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/findings/fin_1")

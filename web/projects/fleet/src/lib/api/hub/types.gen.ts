@@ -2024,8 +2024,9 @@ export type GardenDeliveryResponse = {
  *
  * `POST /api/garden-proposals/{proposal_id}/accept` (blizzard#395). `mint_work_item`
  * defaults to `True`: minting a linked hub work item is the default, and declining it
- * is the deliberate act. `body` carries the minted item's body when the proposal's own
- * body should not be used verbatim; ignored when `mint_work_item` is `False`.
+ * is the deliberate act. `body` replaces the proposal's own body as the prose the
+ * minted item's "Related findings" template wraps, when the proposal's own body should
+ * not be used; ignored when `mint_work_item` is `False` (blizzard#397).
  */
 export type GardenProposalAcceptRequest = {
     /**

@@ -105,7 +105,7 @@ def test_a_second_pass_is_409_naming_the_existing_closure(tmp_path: Path) -> Non
 # POST /garden-proposals/{id}/accept
 
 
-def test_accept_with_no_body_override_mints_carrying_the_proposals_body(tmp_path: Path) -> None:
+def test_accept_with_no_body_override_mints_the_proposals_body_wrapped_in_the_template(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed(hub, body="the proposal's own body")
 
@@ -130,7 +130,7 @@ def test_accept_with_no_body_override_mints_carrying_the_proposals_body(tmp_path
     assert chunk["status"] == "not_ready"  # rests behind the ordinary promote gate
 
 
-def test_accept_with_a_body_override_mints_with_that_body(tmp_path: Path) -> None:
+def test_accept_with_a_body_override_mints_that_body_wrapped_in_the_template(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed(hub, body="the proposal's own body")
 

@@ -116,15 +116,18 @@ class IWriteGardenProposalClosureRepository(IReadGardenProposalClosureRepository
 
 def _compose_minted_body(body: str, findings: Sequence[Finding]) -> str:
     """Wrap ``body`` with a "Related findings" section — one bullet per ``findings``
-    entry, each carrying finding id, class, locus, and state, in that order — and the
-    two lease-scoped verbs a worker holding the minted item's own lease reads them with
-    (blizzard#397)."""
+    entry, each carrying finding id, class, locus, and state as of this accept, in that
+    order — and the two lease-scoped verbs a worker holding the minted item's own lease
+    reads their current state with (blizzard#397). The bullet's state is a snapshot, not
+    a live value: it does not update as the finding's own state changes after mint."""
     bullets = "\n".join(f"- `{f.finding_id}` — {f.class_} — {f.locus} — {f.state}" for f in findings)
     return (
         f"{body}\n\n"
         "## Related findings\n\n"
-        f"{bullets}\n\n"
-        "Read these with `blizzard runner finding list` / `blizzard runner finding get <finding-id>`."
+        "These are the findings this work item answers, with each one's state as of this "
+        "accept — read them for their current state with `blizzard runner finding list`, or "
+        "one in full with `blizzard runner finding get <finding-id>`.\n\n"
+        f"{bullets}"
     )
 
 

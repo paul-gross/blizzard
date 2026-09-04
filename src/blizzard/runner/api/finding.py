@@ -6,6 +6,8 @@ hub-proxied read (``bzh:pluggable-seams``)."""
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Request
 
 from blizzard.runner.api.hub_proxy import HubProxy
@@ -34,6 +36,8 @@ def get_finding(lease_id: str, finding_id: str, request: Request) -> FindingView
     hub's own refusal, forwarded verbatim."""
     lease = authorized_lease(lease_id, request)
     upstream = HubProxy.of(request, "finding").get(
-        f"/api/fleet/chunks/{lease.chunk_id}/findings/{finding_id}", chunk_id=lease.chunk_id, finding_id=finding_id
+        f"/api/fleet/chunks/{lease.chunk_id}/findings/{quote(finding_id, safe='')}",
+        chunk_id=lease.chunk_id,
+        finding_id=finding_id,
     )
     return FindingView.model_validate(upstream.json())

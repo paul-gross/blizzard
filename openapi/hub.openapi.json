@@ -3066,7 +3066,7 @@
       },
       "GardenProposalAcceptRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/garden-proposals/{proposal_id}/accept` (blizzard#395). `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` carries the minted item's body when the proposal's own\nbody should not be used verbatim; ignored when `mint_work_item` is `False`.",
+        "description": "`POST /api/garden-proposals/{proposal_id}/accept` (blizzard#395). `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` replaces the proposal's own body as the prose the\nminted item's \"Related findings\" template wraps, when the proposal's own body should\nnot be used; ignored when `mint_work_item` is `False` (blizzard#397).",
         "properties": {
           "body": {
             "anyOf": [
@@ -13243,7 +13243,7 @@
     },
     "/api/garden-proposals/{proposal_id}/accept": {
       "post": {
-        "description": "Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default (the\nproposal's own body unless overridden), or records the decline when\n`mint_work_item` is false \u2014 never inferred from an absent link. Promotes nothing and\nchanges no finding's state. 404 unknown proposal, 409 already closed or a raced\ningest, 503 the packaged default graph retired.",
+        "description": "Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default,\nwrapping `body` (or the proposal's own, when none is given) in the \"Related\nfindings\" template, or records the decline when `mint_work_item` is false \u2014 never\ninferred from an absent link. Promotes nothing and changes no finding's state. 404\nunknown proposal, 409 already closed or a raced ingest, 503 the packaged default\ngraph retired.",
         "operationId": "accept_garden_proposal_api_garden_proposals__proposal_id__accept_post",
         "parameters": [
           {

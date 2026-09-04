@@ -64,7 +64,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosureService,
     IReadGardenProposalClosureRepository,
 )
-from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsResolution
+from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader
 from blizzard.hub.domain.garden_proposals import GardenProposalAuthoring, IReadGardenProposalRepository
 from blizzard.hub.domain.garden_run import GardenRunService
 from blizzard.hub.domain.garden_sweeps import GardenSweepsService
@@ -248,7 +248,7 @@ class HubServices:
     #: The findings a chunk's own accepted, minted garden proposal answers (blizzard#397
     #: Phase 1) — the worker's per-chunk read, distinct from the routine-bucket read
     #: `findings`/`run_context` back.
-    answered_findings: AnsweredFindingsResolution
+    answered_findings: AnsweredFindingsReader
     #: Materialize a validated delivery in one transaction (blizzard#393 Phase 3).
     garden_delivery: GardenDelivery
     #: Resolves a cited commit against the configured forge (blizzard#393 D2).
@@ -555,7 +555,7 @@ def build_services(
             closures=garden_proposal_closure_store, items=materialization_edits, clock=clock
         ),
         run_context=run_context_store,
-        answered_findings=AnsweredFindingsResolution(
+        answered_findings=AnsweredFindingsReader(
             closures=garden_proposal_closure_store, proposals=garden_proposal_store, findings=finding_store
         ),
         garden_delivery=GardenDelivery(delivery=garden_delivery_store, clock=clock),

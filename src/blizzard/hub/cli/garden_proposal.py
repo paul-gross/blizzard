@@ -120,7 +120,10 @@ def garden_proposal_pass(cli: CliContext, proposal_id: str, reason: str) -> None
     "--body-file",
     "body_file",
     default=None,
-    help="Replace the minted work item's body from a path, or '-' for stdin (default: the proposal's own body).",
+    help=(
+        "Replace the proposal's own body, from a path or '-' for stdin, as the prose the minted "
+        "item's 'Related findings' template wraps (default: the proposal's own body)."
+    ),
 )
 @click.option("--no-work-item", "no_work_item", is_flag=True, default=False, help="Decline to mint a linked work item.")
 def garden_proposal_accept(
@@ -128,9 +131,10 @@ def garden_proposal_accept(
 ) -> None:
     """Accept PROPOSAL_ID.
 
-    Mints a linked hub work item by default, carrying the proposal's own body unless
-    --body-file supplies another; --no-work-item declines to mint, and the decline is
-    recorded rather than left to read as an absent link."""
+    Mints a linked hub work item by default, wrapping the proposal's own body unless
+    --body-file supplies another in the "Related findings" template; --no-work-item
+    declines to mint, and the decline is recorded rather than left to read as an absent
+    link."""
     json_body: dict[str, object] = {"mint_work_item": not no_work_item}
     if reason is not None:
         json_body["reason"] = reason

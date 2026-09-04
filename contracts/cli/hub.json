@@ -1785,7 +1785,7 @@
     "garden-proposal": {
       "commands": {
         "accept": {
-          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, carrying the proposal's own body unless\n--body-file supplies another; --no-work-item declines to mint, and the decline is\nrecorded rather than left to read as an absent link.",
+          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, wrapping the proposal's own body unless\n--body-file supplies another in the \"Related findings\" template; --no-work-item\ndeclines to mint, and the decline is recorded rather than left to read as an absent\nlink.",
           "params": [
             {
               "hidden": false,

@@ -1,5 +1,5 @@
 """``GardenProposalDeliveryResolution`` (unit tier, blizzard#394 Phase 3) and
-``AnsweredFindingsResolution`` (blizzard#397 Phase 1): the write-side delivery resolution
+``AnsweredFindingsReader`` (blizzard#397 Phase 1): the write-side delivery resolution
 resolves a proposal's still-live findings only when its own closure is an accepted,
 minting one naming the delivered pointer — a pass, a decline, an absent closure, an
 absent proposal, or an already-exited finding all resolve nothing. The read-side
@@ -23,7 +23,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosureKind,
     GardenProposalItemOutcome,
 )
-from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsResolution, GardenProposalDeliveryResolution
+from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
 from blizzard.hub.domain.garden_proposals import GardenProposal
 from blizzard.hub.domain.work import Chunk, WorkRef
 
@@ -296,8 +296,8 @@ def test_a_proposal_already_resolved_once_is_never_resolved_again_even_after_a_r
 
 def _answered_findings_resolution(
     *, closures: _FakeClosures, proposals: _FakeProposals, findings: _FakeFindings
-) -> AnsweredFindingsResolution:
-    return AnsweredFindingsResolution(closures=closures, proposals=proposals, findings=findings)
+) -> AnsweredFindingsReader:
+    return AnsweredFindingsReader(closures=closures, proposals=proposals, findings=findings)
 
 
 def test_a_chunk_with_no_work_refs_resolves_none() -> None:
