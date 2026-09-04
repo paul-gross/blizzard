@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import type { ChunkStatus } from '../api/hub';
-import { ChunkBlocked } from '../chunk-blocked/chunk-blocked';
+import { ChunkBlocked } from '../chunk-blocked';
 import { STATUS_LANE } from '../chunk-lanes';
 import { formatCost } from '../cost-format';
 import { KitButton } from '../kit/kit-button';

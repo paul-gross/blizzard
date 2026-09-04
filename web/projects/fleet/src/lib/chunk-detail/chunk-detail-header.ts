@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, ChunkStatus, PauseView, WorkRefView, RouteView } from '../api/hub';
-import { ChunkBlocked } from '../chunk-blocked/chunk-blocked';
+import { ChunkBlocked } from '../chunk-blocked';
 import { KitButton } from '../kit/kit-button';
 import { KitTextInput } from '../kit/kit-text-input';
 
@@ -22,6 +22,14 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
  * including `stopped` — unlike Pause/Detach, Complete does not hang off a live route,
  * and unlike Stop there is no un-complete verb, so this set has exactly one member. */
 const NOT_COMPLETABLE = new Set<ChunkStatus>(['done']);
+
+/** Statuses the hub's dependency service admits a declare against
+ * (`PRE_CLAIM_STATUSES`, `dependencies.py`), mirrored here so the dock never offers a
+ * Declare the server would answer with a 409 (issue #461) — the same reason
+ * {@link pausable}/{@link completable} exist. Release carries no such check on the hub
+ * side (any standing edge may be released regardless of the dependent's status), so it
+ * stays gated on {@link canControl} alone. */
+const DECLARABLE = new Set<ChunkStatus>(['not_ready', 'ready']);
 
 /** A declare or release, addressed by the ordered pair the hub itself takes (issue
  * #461) — the dock's only source for either, so both `declareDependency` and
@@ -138,6 +146,12 @@ export class ChunkDetailHeader {
    * when the chunk carries no marking. */
   protected readonly blockedOn = computed<string | null>(() => this.detail().blocked?.prerequisite_chunk_id ?? null);
 
+  /** Whether Declare has anything the hub would accept (issue #461) — mirrors the hub
+   * dependency service's own `PRE_CLAIM_STATUSES` check so the dock never offers a
+   * click the server would answer with a 409, exactly as {@link pausable} does for
+   * Pause. Release carries no such gate (see {@link DECLARABLE}). */
+  protected readonly declarable = computed<boolean>(() => DECLARABLE.has(this.detail().status));
+
   /** The declare/release field's free-text value (D5, issue #461) — one field serves
    * both controls, since the board has no read that lists a chunk's standing edges for
    * a picker to offer. Prefilled from {@link blockedOn} when a marking stands; editable
@@ -154,7 +168,11 @@ export class ChunkDetailHeader {
   constructor() {
     effect(() => {
       this.openChunkId();
-      this.prerequisiteInput.set(this.blockedOn() ?? '');
+      // `blockedOn` is read `untracked`: the prefill is keyed on the chunk switch
+      // alone, so a same-chunk change to the marking (the prerequisite completing, or
+      // another operator declaring/releasing) must not re-run this and overwrite an
+      // in-progress edit (issue #461 round 3 F1).
+      this.prerequisiteInput.set(untracked(this.blockedOn) ?? '');
     });
   }
 

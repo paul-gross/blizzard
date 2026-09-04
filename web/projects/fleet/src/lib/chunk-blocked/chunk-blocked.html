@@ -1,8 +1,8 @@
-@if (linkBase(); as base) {
+@if (asLink()) {
   <a
     class="blocked-link"
     data-testid="chunk-blocked"
-    [routerLink]="[...base, prerequisiteChunkId()]"
+    [routerLink]="[...linkBase(), prerequisiteChunkId()]"
     [attr.title]="'Blocked on ' + prerequisiteChunkId()"
   >
     <fleet-kit-badge tone="waiting" variant="soft">blocked on {{ shortId() }}</fleet-kit-badge>

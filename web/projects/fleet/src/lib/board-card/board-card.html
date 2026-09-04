@@ -57,7 +57,6 @@
        into the dock, the same one-hop move a card click already does. -->
   @if (card().blockedOn; as prerequisiteId) {
     <fleet-chunk-blocked
-      class="card-blocked"
       [prerequisiteChunkId]="prerequisiteId"
       (selectChunk)="selectChunk.emit($event)"
     />

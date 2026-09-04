@@ -175,6 +175,7 @@ describe('ChunkDetail container', () => {
       if (method === 'POST' && path === '/api/chunks/ch_routed/detach') return detachResponse;
       if (method === 'POST' && path === '/api/chunks/ch_routed/complete') return completeResponse;
       if (method === 'POST' && path === '/api/chunks/ch_routed/dependencies') return declareResponse;
+      if (method === 'POST' && path === '/api/chunks/ch_ready/dependencies') return declareResponse;
       if (method === 'POST' && path === '/api/chunks/ch_routed/dependencies/release') return releaseResponse;
       return {};
     });
@@ -357,14 +358,14 @@ describe('ChunkDetail container', () => {
   it('fires the declare client call once the operator confirms', async () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
-    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    fixture.componentRef.setInput('chunkId', 'ch_ready'); // not_ready — a status Declare is actually offered on
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
     await settle(fixture);
 
-    const calls = stub.forRoute('/api/chunks/ch_routed/dependencies', 'POST');
+    const calls = stub.forRoute('/api/chunks/ch_ready/dependencies', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ prerequisite_chunk_id: 'ch_prereq', by: 'operator' });
     confirmSpy.mockRestore();
@@ -373,14 +374,14 @@ describe('ChunkDetail container', () => {
   it('emits nothing when the operator declines the declare confirm', async () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetail);
-    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
     await settle(fixture);
 
-    expect(stub.forRoute('/api/chunks/ch_routed/dependencies', 'POST')).toHaveLength(0);
+    expect(stub.forRoute('/api/chunks/ch_ready/dependencies', 'POST')).toHaveLength(0);
     confirmSpy.mockRestore();
   });
 
@@ -404,7 +405,7 @@ describe('ChunkDetail container', () => {
     declareResponse = stubError(409, { detail: 'dependent chunk is not editable at this status' });
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
-    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
@@ -421,7 +422,7 @@ describe('ChunkDetail container', () => {
     });
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
-    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
@@ -438,7 +439,7 @@ describe('ChunkDetail container', () => {
     });
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
-    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
@@ -453,7 +454,7 @@ describe('ChunkDetail container', () => {
     declareResponse = stubError(404, { detail: 'unknown chunk ch_prereq' });
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
-    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 

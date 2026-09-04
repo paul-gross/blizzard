@@ -6,14 +6,14 @@ import { ChunkBlocked } from './chunk-blocked';
 
 const PREREQUISITE_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 
-async function render(linkBase: readonly string[] | null = null): Promise<{ fixture: ComponentFixture<ChunkBlocked>; el: HTMLElement }> {
+async function render(asLink = false): Promise<{ fixture: ComponentFixture<ChunkBlocked>; el: HTMLElement }> {
   await TestBed.configureTestingModule({
     imports: [ChunkBlocked],
     providers: [provideZonelessChangeDetection(), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(ChunkBlocked);
   fixture.componentRef.setInput('prerequisiteChunkId', PREREQUISITE_ID);
-  if (linkBase !== null) fixture.componentRef.setInput('linkBase', linkBase);
+  if (asLink) fixture.componentRef.setInput('asLink', true);
   await fixture.whenStable();
   return { fixture, el: fixture.nativeElement as HTMLElement };
 }
@@ -27,7 +27,7 @@ describe('ChunkBlocked', () => {
     expect(marking?.textContent).not.toContain(PREREQUISITE_ID);
   });
 
-  it('renders a dock-select button, not a link, when linkBase is null', async () => {
+  it('renders a dock-select button, not a link, when asLink is false (the default)', async () => {
     const { el } = await render();
 
     expect(el.querySelector('button[data-testid="chunk-blocked"]')).not.toBeNull();
@@ -44,8 +44,8 @@ describe('ChunkBlocked', () => {
     expect(emitted).toBe(PREREQUISITE_ID);
   });
 
-  it('renders a routerLink, not a button, when linkBase is set', async () => {
-    const { el } = await render(['/board', 'chunk']);
+  it('renders a routerLink under linkBase, not a button, when asLink is true', async () => {
+    const { el } = await render(true);
 
     const marking = el.querySelector('a[data-testid="chunk-blocked"]');
     expect(marking).not.toBeNull();

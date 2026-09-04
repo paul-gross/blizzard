@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { ChunkBlocked } from '../chunk-blocked/chunk-blocked';
+import { ChunkBlocked } from '../chunk-blocked';
 import { KitBadge } from '../kit/kit-badge';
 import type { Tone } from '../kit/tone';
 

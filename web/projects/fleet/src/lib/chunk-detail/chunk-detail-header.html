@@ -84,13 +84,15 @@
           (valueChange)="prerequisiteInput.set($event)"
           placeholder="prerequisite chunk id"
         />
-        <fleet-kit-button
-          testid="declare-dependency"
-          [ariaLabel]="'Declare a dependency for chunk ' + detail().chunk_id"
-          (click)="onDeclareDependency()"
-        >
-          Declare
-        </fleet-kit-button>
+        @if (declarable()) {
+          <fleet-kit-button
+            testid="declare-dependency"
+            [ariaLabel]="'Declare a dependency for chunk ' + detail().chunk_id"
+            (click)="onDeclareDependency()"
+          >
+            Declare
+          </fleet-kit-button>
+        }
         <fleet-kit-button
           testid="release-dependency"
           [ariaLabel]="'Release a dependency for chunk ' + detail().chunk_id"

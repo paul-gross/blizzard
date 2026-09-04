@@ -10,11 +10,10 @@ export interface DependencyVars {
 }
 
 /** Both the declared edge and its release change what a peek/board read derives for
- * every chunk that names or is named by it (`bzh:frontend-formatters`'s own reasoning
- * doesn't apply here — this is state, not a fold), so both mutations invalidate the
- * same set `promote.mutations.ts` does: both ranked lists and the chunk itself. Neither
- * emits an SSE frame of its own (`chunk_dependencies.py`), so this invalidation is the
- * acting client's only path to freshness. */
+ * every chunk that names or is named by it, so both mutations invalidate the same set
+ * `promote.mutations.ts` does: both ranked lists and the chunk itself. Neither emits an
+ * SSE frame of its own (`chunk_dependencies.py`), so this invalidation is the acting
+ * client's only path to freshness. */
 function invalidateDependencyQueries(queryClient: QueryClient, vars: DependencyVars): void {
   void queryClient.invalidateQueries({ queryKey: hubChunksKey });
   void queryClient.invalidateQueries({ queryKey: hubQueueKey });

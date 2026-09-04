@@ -19,6 +19,20 @@ const ISSUE_DETAIL: ChunkDetail = {
   artifacts: [],
 };
 
+/** A chunk in a status the hub's dependency service actually admits a declare
+ * against (`PRE_CLAIM_STATUSES`) — `ISSUE_DETAIL`/`ROUTED_DETAIL` are deliberately
+ * `running` so Declare's own gating (round 3 F3) has a fixture to prove itself off. */
+const DECLARABLE_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01declarable000000000000000',
+  graph_id: 'gr_1',
+  status: 'ready',
+  current_node_id: 'nd_build',
+  latest_epoch: 1,
+  work_refs: [],
+  history: [],
+  artifacts: [],
+};
+
 const ROUTED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
@@ -479,7 +493,7 @@ describe('ChunkDetailHeader', () => {
 
   it('offers declare/release with chunk:control, withholds both without it', async () => {
     const withControl = TestBed.createComponent(ChunkDetailHeader);
-    withControl.componentRef.setInput('detail', ISSUE_DETAIL);
+    withControl.componentRef.setInput('detail', DECLARABLE_DETAIL);
     withControl.componentRef.setInput('canControl', true);
     await withControl.whenStable();
     const withEl = withControl.nativeElement as HTMLElement;
@@ -487,12 +501,35 @@ describe('ChunkDetailHeader', () => {
     expect(withEl.querySelector('[data-testid="release-dependency"]')).not.toBeNull();
 
     const withoutControl = TestBed.createComponent(ChunkDetailHeader);
-    withoutControl.componentRef.setInput('detail', ISSUE_DETAIL);
+    withoutControl.componentRef.setInput('detail', DECLARABLE_DETAIL);
     withoutControl.componentRef.setInput('canControl', false);
     await withoutControl.whenStable();
     const withoutEl = withoutControl.nativeElement as HTMLElement;
     expect(withoutEl.querySelector('[data-testid="declare-dependency"]')).toBeNull();
     expect(withoutEl.querySelector('[data-testid="release-dependency"]')).toBeNull();
+  });
+
+  it('withholds Declare for a status the hub refuses (round 3 F3), but still offers Release', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ISSUE_DETAIL); // status: 'running', outside PRE_CLAIM_STATUSES
+    fixture.componentRef.setInput('canControl', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="declare-dependency"]')).toBeNull();
+    expect(el.querySelector('[data-testid="release-dependency"]')).not.toBeNull();
+  });
+
+  it('offers Declare for both statuses the hub actually admits it against', async () => {
+    for (const status of ['not_ready', 'ready'] as const) {
+      const fixture = TestBed.createComponent(ChunkDetailHeader);
+      fixture.componentRef.setInput('detail', { ...DECLARABLE_DETAIL, status });
+      fixture.componentRef.setInput('canControl', true);
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="declare-dependency"]'), status).not.toBeNull();
+    }
   });
 
   it('prefills the prerequisite field from the marking when one stands, empty otherwise', async () => {
@@ -519,7 +556,7 @@ describe('ChunkDetailHeader', () => {
   it('emits declareDependency with the field value once the operator confirms', async () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('detail', DECLARABLE_DETAIL);
     fixture.componentRef.setInput('canControl', true);
     let emitted: { chunkId: string; prerequisiteChunkId: string } | undefined;
     fixture.componentInstance.declareDependency.subscribe((event) => (emitted = event));
@@ -532,14 +569,17 @@ describe('ChunkDetailHeader', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
 
-    expect(emitted).toEqual({ chunkId: ISSUE_DETAIL.chunk_id, prerequisiteChunkId: 'ch_01prereq00000000000000000' });
+    expect(emitted).toEqual({
+      chunkId: DECLARABLE_DETAIL.chunk_id,
+      prerequisiteChunkId: 'ch_01prereq00000000000000000',
+    });
     confirmSpy.mockRestore();
   });
 
   it('emits nothing when the operator declines the declare confirm', async () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('detail', DECLARABLE_DETAIL);
     fixture.componentRef.setInput('canControl', true);
     let emitted = false;
     fixture.componentInstance.declareDependency.subscribe(() => (emitted = true));
@@ -579,7 +619,7 @@ describe('ChunkDetailHeader', () => {
   it('emits nothing when Declare is clicked with a blank field, without prompting to confirm', async () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('detail', DECLARABLE_DETAIL);
     fixture.componentRef.setInput('canControl', true);
     let emitted = false;
     fixture.componentInstance.declareDependency.subscribe(() => (emitted = true));
@@ -591,5 +631,40 @@ describe('ChunkDetailHeader', () => {
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(emitted).toBe(false);
     confirmSpy.mockRestore();
+  });
+
+  it('keeps an in-progress edit through a same-chunk marking change, but resets on an actual chunk switch (round 3 F1)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', {
+      ...DECLARABLE_DETAIL,
+      blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000' },
+    });
+    fixture.componentRef.setInput('canControl', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const input = el.querySelector<HTMLInputElement>('[data-testid="dependency-prerequisite-input"]')!;
+    expect(input.value).toBe('ch_01prereq00000000000000000');
+
+    // The operator starts typing a different prerequisite.
+    input.value = 'ch_01unsaved0000000000000000';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+
+    // The marking changes on the *same* chunk — a poll or SSE refresh, or another
+    // operator declaring/releasing — must not wipe the in-progress edit.
+    fixture.componentRef.setInput('detail', {
+      ...DECLARABLE_DETAIL,
+      blocked: { prerequisite_chunk_id: 'ch_01different000000000000000' },
+    });
+    await fixture.whenStable();
+    expect(input.value).toBe('ch_01unsaved0000000000000000');
+
+    // An actual chunk switch still re-prefills from the new chunk's own marking.
+    fixture.componentRef.setInput('detail', {
+      ...ISSUE_DETAIL,
+      blocked: { prerequisite_chunk_id: 'ch_01other00000000000000000' },
+    });
+    await fixture.whenStable();
+    expect(input.value).toBe('ch_01other00000000000000000');
   });
 });
