@@ -23,7 +23,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.adapter import WorkerHandle
-from tests.runner_fakes import FakeHarness, make_store, make_stores
+from tests.runner_fakes import FakeHarness, make_store, make_stores, no_retry_delay
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _HUB_URL = "http://hub.local:8421"
@@ -46,7 +46,13 @@ def _app_with_status(
         hub_url=config.hub_url,
         env_pool=("e1",),
     )
-    app = create_app(config, runner_stores=make_stores(store), runner_status=service, hub_proxy_client=hub_proxy_client)
+    app = create_app(
+        config,
+        runner_stores=make_stores(store),
+        runner_status=service,
+        hub_proxy_client=hub_proxy_client,
+        hub_retry_delay=no_retry_delay,
+    )
     return TestClient(app), store
 
 

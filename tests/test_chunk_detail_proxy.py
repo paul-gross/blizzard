@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from tests.runner_fakes import no_retry_delay
 
 _HUB_URL = "http://hub.local:8421"
 _CHUNK = "ch_pass"
@@ -64,7 +65,7 @@ _SUMMARY: dict[str, object] = {
 
 def _runner_app(tmp_path: Path, *, hub_proxy_client: httpx.Client | None = None) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
-    return TestClient(create_app(config, hub_proxy_client=hub_proxy_client))
+    return TestClient(create_app(config, hub_proxy_client=hub_proxy_client, hub_retry_delay=no_retry_delay))
 
 
 @pytest.mark.component

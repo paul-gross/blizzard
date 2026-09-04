@@ -51,3 +51,7 @@ down, then flushes once the hub answers, losing nothing and double-sending nothi
 A chunk a runner is mid-node on stays claimed across the outage, and the runner's recovery pass — the same one that
 survives a `kill -9` ([`docs/deployment.md`](./deployment.md#the-colocated-topology)) — re-reads state when the hub
 returns instead of assuming the work was lost.
+
+A worker's hub-proxied read — the runner-local routes that forward to the hub on a worker's behalf — rides the
+restart out too: the forward retries with bounded backoff instead of surfacing the restart window's `502` straight
+to the worker, so a call landing mid-swap still answers once the hub comes back.

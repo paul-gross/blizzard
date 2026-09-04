@@ -15,6 +15,7 @@ from structlog.testing import capture_logs
 
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from tests.runner_fakes import no_retry_delay
 
 _HUB_URL = "http://hub.local:8421"
 _COUNTS: dict[str, object] = {"ready": 4, "running": 3, "waiting": 2, "needs": 1}
@@ -24,7 +25,7 @@ def _runner_app(
     tmp_path: Path, *, hub_url: str | None = _HUB_URL, hub_token: str = "", hub_proxy_client: httpx.Client | None = None
 ) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=hub_url or "", hub_token=hub_token)
-    return TestClient(create_app(config, hub_proxy_client=hub_proxy_client))
+    return TestClient(create_app(config, hub_proxy_client=hub_proxy_client, hub_retry_delay=no_retry_delay))
 
 
 @pytest.mark.component

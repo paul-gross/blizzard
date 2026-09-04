@@ -18,9 +18,11 @@ from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
+from blizzard.runner.api.hub_proxy import _HUB_RETRY_CEILING
 from blizzard.runner.app import create_app
 from blizzard.runner.auth.session import RunnerSession, SessionCookie
 from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.cli.worker_call import READ_TIMEOUT
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
 
@@ -148,6 +150,23 @@ def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: P
     assert status != 401
     assert proxy_status == 404  # the hermetic double's own answer, never the real hub's
     assert server.seen == []  # type: ignore[attr-defined]
+
+
+# --- runner/api/hub_proxy.py: the retry ceiling stays inside the worker's read timeout -----
+
+
+@pytest.mark.unit
+def test_the_hub_retry_ceiling_leaves_the_worker_read_timeout_room() -> None:
+    """The observed hosted-hub restart the retry ceiling exists to ride out ran a ``502``
+    from ``16:33:37Z`` through ``16:33:47Z`` (10s), with the hub answering again by
+    ``16:33:55Z`` — an 18s window from first failure to recovery. ``_HUB_RETRY_CEILING``
+    must span at least that window, and it must sit strictly inside ``READ_TIMEOUT`` — the
+    worker's own client waits out the runner's whole retrying forward, not just one
+    attempt — so a ceiling wide enough for the window still leaves the worker's read some
+    margin past it rather than the two racing to the same instant."""
+    observed_restart_window_seconds = 18.0
+    assert observed_restart_window_seconds <= _HUB_RETRY_CEILING
+    assert _HUB_RETRY_CEILING < READ_TIMEOUT
 
 
 # --- runner/cli.py: the deprecated `pm-items` alias ----------------------------------

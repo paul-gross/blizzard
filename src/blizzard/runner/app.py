@@ -9,7 +9,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import secrets
-from collections.abc import AsyncIterator, Sequence
+import time
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -185,6 +186,7 @@ def create_app(
     workspace_prompts: WorkspacePromptService | None = None,
     hub_http_client: httpx.Client | None = None,
     hub_proxy_client: httpx.Client | None = None,
+    hub_retry_delay: Callable[[float], None] | None = None,
     jti_cache: IJtiCache | None = None,
     events: EventBroker | None = None,
 ) -> FastAPI:
@@ -260,6 +262,8 @@ def create_app(
         transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
         base_url="http://runner-hub-proxy-client-hermetic-default.invalid",
     )
+    # A test binds a recording no-op here to prove the retry schedule without sleeping.
+    app.state.hub_retry_delay = hub_retry_delay or time.sleep
     app.state.jti_cache = jti_cache
     # The reverse-proxy trust set (issue #130), empty by default — so
     # `X-Forwarded-Proto` is ignored from every peer.
