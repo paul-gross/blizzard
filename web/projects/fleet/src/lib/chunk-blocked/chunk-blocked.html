@@ -1,0 +1,20 @@
+@if (asLink()) {
+  <a
+    class="blocked-link"
+    data-testid="chunk-blocked"
+    [routerLink]="[...linkBase(), prerequisiteChunkId()]"
+    [attr.title]="'Blocked on ' + prerequisiteChunkId()"
+  >
+    <fleet-kit-badge tone="waiting" variant="soft">blocked on {{ shortId() }}</fleet-kit-badge>
+  </a>
+} @else {
+  <button
+    type="button"
+    class="blocked-btn"
+    data-testid="chunk-blocked"
+    [attr.title]="'Blocked on ' + prerequisiteChunkId()"
+    (click)="selectChunk.emit(prerequisiteChunkId())"
+  >
+    <fleet-kit-badge tone="waiting" variant="soft">blocked on {{ shortId() }}</fleet-kit-badge>
+  </button>
+}

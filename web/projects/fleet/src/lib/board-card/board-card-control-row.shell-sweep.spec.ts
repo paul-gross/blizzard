@@ -44,6 +44,7 @@ const CARD: BoardCard = {
   costUsd: 0,
   costPartial: false,
   completedAt: null,
+  blockedOn: null,
 };
 
 // 390 (a typical phone) and 320 (the narrowest common phone) — viewport widths, not

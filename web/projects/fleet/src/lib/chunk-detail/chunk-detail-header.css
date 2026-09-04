@@ -67,9 +67,16 @@ a.iss:focus-visible {
 }
 .d-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  flex: none;
+  /* Must be allowed to shrink (not `flex: none`) — a flex item that refuses to shrink
+   * never narrows below its content's single-line width, so its own `flex-wrap` never
+   * gets a chance to fire and the row silently overflows `.d-head` instead (round 3
+   * F4). `min-width: 0` lets it shrink past its children's combined intrinsic width,
+   * same as `.d-title` beside it. */
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .d-meta .nd {
   color: var(--label);
@@ -87,8 +94,17 @@ a.iss:focus-visible {
 .d-route,
 .d-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+}
+/* `fleet-kit-text-input` owns its own chrome (`bzh:frontend-kit-floor`) — this only
+   sizes the host within the `.d-actions` flex row, the way `.answer-input` sizes the
+   same component in `chunk-awaiting-human.css`. */
+.dep-input {
+  flex: 0 0 12ch;
+  min-width: 0;
 }
 .d-route .rn {
   color: var(--cyan);

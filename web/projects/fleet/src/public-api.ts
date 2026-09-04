@@ -27,6 +27,7 @@ export * from './lib/now-signal';
 export * from './lib/board-card';
 export * from './lib/board-header';
 export * from './lib/board-shell';
+export * from './lib/chunk-blocked';
 export * from './lib/chunk-detail';
 export * from './lib/chunk-artifacts-panel';
 export * from './lib/chunk-issue-list';

@@ -15,6 +15,7 @@ const BASE: BoardCard = {
   costUsd: 0,
   costPartial: false,
   completedAt: '2026-07-13T00:00:01+00:00',
+  blockedOn: null,
 };
 
 async function render(card: BoardCard) {
@@ -26,6 +27,25 @@ async function render(card: BoardCard) {
   fixture.componentRef.setInput('card', card);
   await fixture.whenStable();
   return fixture.nativeElement as HTMLElement;
+}
+
+/** Render with an explicit `canControl`, returning the fixture itself (not just its
+ * element) — a test that needs one of {@link BoardCardComponent}'s output subscriptions
+ * (`delete`, `selectChunk`) needs the fixture, which the module-level `render` above
+ * does not expose. */
+async function renderWithControl(card: BoardCard, canControl: boolean | null) {
+  TestBed.resetTestingModule();
+  await TestBed.configureTestingModule({
+    imports: [BoardCardComponent],
+    providers: [provideZonelessChangeDetection()],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(BoardCardComponent);
+  fixture.componentRef.setInput('card', card);
+  // `null`/pending resolves to `false` (hidden until confirmed) — the same convention
+  // every other board control follows; a `null` input here stands in for "pending".
+  if (canControl !== null) fixture.componentRef.setInput('canControl', canControl);
+  await fixture.whenStable();
+  return fixture;
 }
 
 describe('BoardCardComponent completion stamp (issue #173)', () => {
@@ -117,24 +137,6 @@ describe('BoardCardComponent work-ref chips (issue #176)', () => {
 });
 
 describe('BoardCardComponent Delete (D8, issue #364)', () => {
-  /** Render with an explicit `canControl`, returning the fixture itself (not just its
-   * element) — the confirm-gating cases below need {@link BoardCardComponent.delete}'s
-   * subscription, which the module-level `render` above does not expose. */
-  async function renderWithControl(card: BoardCard, canControl: boolean | null) {
-    TestBed.resetTestingModule();
-    await TestBed.configureTestingModule({
-      imports: [BoardCardComponent],
-      providers: [provideZonelessChangeDetection()],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(BoardCardComponent);
-    fixture.componentRef.setInput('card', card);
-    // `null`/pending resolves to `false` (hidden until confirmed) — the same convention
-    // every other board control follows; a `null` input here stands in for "pending".
-    if (canControl !== null) fixture.componentRef.setInput('canControl', canControl);
-    await fixture.whenStable();
-    return fixture;
-  }
-
   it('renders Delete for an unacquired card (not_ready, ready) with chunk:control', async () => {
     for (const status of ['not_ready', 'ready'] as const) {
       const fixture = await renderWithControl({ ...BASE, status }, true);
@@ -209,5 +211,42 @@ describe('BoardCardComponent Delete (D8, issue #364)', () => {
 
     expect(el.querySelector('[data-testid="promote-chunk"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="delete-chunk"]')).not.toBeNull();
+  });
+});
+
+describe('BoardCardComponent blocked marking (issue #461)', () => {
+  it('renders nothing when the card carries no blockedOn', async () => {
+    const el = await render({ ...BASE, status: 'ready', blockedOn: null });
+
+    expect(el.querySelector('[data-testid="chunk-blocked"]')).toBeNull();
+  });
+
+  it('renders the marking naming the prerequisite when the card is blocked', async () => {
+    const el = await render({ ...BASE, status: 'ready', blockedOn: 'ch_01prereq00000000000000000' });
+
+    const marking = el.querySelector('[data-testid="chunk-blocked"]');
+    expect(marking).not.toBeNull();
+    expect(marking?.textContent).toContain('C-0000');
+  });
+
+  it('keeps every other control and the status unaffected by carrying a blockedOn', async () => {
+    const el = await render({ ...BASE, status: 'running', node: 'build', blockedOn: 'ch_01prereq00000000000000000' });
+
+    expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('running');
+    expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('build');
+  });
+
+  it('emits selectChunk with the prerequisite id when the marking is clicked', async () => {
+    const fixture = await renderWithControl(
+      { ...BASE, status: 'ready', blockedOn: 'ch_01prereq00000000000000000' },
+      null,
+    );
+    let emitted: string | undefined;
+    fixture.componentInstance.selectChunk.subscribe((chunkId) => (emitted = chunkId));
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="chunk-blocked"]')?.click();
+
+    expect(emitted).toBe('ch_01prereq00000000000000000');
   });
 });

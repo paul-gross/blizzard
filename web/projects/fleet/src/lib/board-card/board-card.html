@@ -50,6 +50,17 @@
       </span>
     </span>
   </button>
+  <!-- The blocked marking (issue #461) sits outside the open button on purpose:
+       `.card-open` is one button spanning the whole identity/status area, and a
+       nested interactive element inside it is invalid HTML — the same reason the
+       pointer labels above stay plain text. Clicking it selects the prerequisite
+       into the dock, the same one-hop move a card click already does. -->
+  @if (card().blockedOn; as prerequisiteId) {
+    <fleet-chunk-blocked
+      [prerequisiteChunkId]="prerequisiteId"
+      (selectChunk)="selectChunk.emit($event)"
+    />
+  }
   <!-- The card's control row: Promote (not_ready only) and Delete (not_ready and
        ready alike, D8) render side by side when both apply, rather than each
        claiming its own stacked row. -->

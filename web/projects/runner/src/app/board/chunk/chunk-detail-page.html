@@ -7,7 +7,13 @@
        projectable node can leave slot-selector matching unresolved
        (NG8011); a solo root per block is unambiguous. -->
   @if (detail(); as d) {
-    <fleet-chunk-page-header chunk-page-header [chunkId]="chunkId() ?? ''" [status]="d.status" [tone]="tone()" />
+    <fleet-chunk-page-header
+      chunk-page-header
+      [chunkId]="chunkId() ?? ''"
+      [status]="d.status"
+      [tone]="tone()"
+      [blockedOn]="blockedOn()"
+    />
   }
   @if (detail()) {
     <fleet-kit-tabs chunk-page-tabs [options]="tabOptions" [activeValue]="tab()" (choose)="onChooseTab($event)" />

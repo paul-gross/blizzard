@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
+import { ChunkBlocked } from '../chunk-blocked';
 import { KitBadge } from '../kit/kit-badge';
 import type { Tone } from '../kit/tone';
 
@@ -25,7 +26,7 @@ import type { Tone } from '../kit/tone';
 @Component({
   selector: 'fleet-chunk-page-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge],
+  imports: [ChunkBlocked, KitBadge],
   templateUrl: './chunk-page-header.html',
   styleUrl: './chunk-page-header.css',
 })
@@ -39,4 +40,13 @@ export class ChunkPageHeader {
   /** The derived {@link Tone} the badge colors by — each caller's own
    * `STATUS_TONE`/`deriveMachineChunkStatus` fold (`bzh:frontend-formatters`). */
   readonly tone = input.required<Tone>();
+
+  /** The unmet prerequisite's chunk id, from `ChunkDetail.blocked` (issue #461) — null
+   * when the chunk carries no marking. */
+  readonly blockedOn = input<string | null>(null);
+
+  /** The chunk detail route's own path segments, before the chunk id — this routed
+   * page has no dock to select a chunk into, so its own blocked marking navigates
+   * instead ({@link ChunkDetailHeader}'s own `linkBase` follows the same convention). */
+  readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 }

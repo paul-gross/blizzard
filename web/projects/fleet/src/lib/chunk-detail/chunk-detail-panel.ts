@@ -7,7 +7,7 @@ import {
   ChunkAwaitingHuman,
   type ResolveDecisionEvent,
 } from './chunk-awaiting-human';
-import { ChunkDetailHeader } from './chunk-detail-header';
+import { ChunkDetailHeader, type DependencyEvent } from './chunk-detail-header';
 import { ChunkFacts, type EditGraphEvent } from './chunk-facts';
 import { ChunkIssuePane } from './chunk-issue-pane';
 import { ChunkTimeline } from './chunk-timeline';
@@ -15,6 +15,7 @@ import { ChunkTokenBreakdown } from './chunk-token-breakdown';
 import type { WorkItemsState } from './work-items-state';
 
 export type { AnswerQuestionEvent, ResolveDecisionEvent } from './chunk-awaiting-human';
+export type { DependencyEvent } from './chunk-detail-header';
 // The container (`chunk-detail.ts`) imports these three event types from here too —
 // re-exported so it needs no edit for the split (issue #79's container-unchanged
 // invariant). `WorkItemsState` is not among them: the container takes it straight
@@ -95,6 +96,10 @@ export class ChunkDetailPanel {
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
+  /** Emitted with a chunk id when the blocked marking's dock-select button is clicked
+   * (issue #461) — forwarded up unchanged from {@link ChunkDetailHeader}. */
+  readonly selectChunk = output<string>();
+
   /** Emitted when the operator answers an open question (MVP criterion 7). */
   readonly answerQuestion = output<AnswerQuestionEvent>();
 
@@ -114,6 +119,14 @@ export class ChunkDetailPanel {
 
   /** Emitted with the chunk id when the operator confirms Complete (issue #294). */
   readonly complete = output<string>();
+
+  /** Emitted when the operator declares a dependency (issue #461) — forwarded up
+   * unchanged from {@link ChunkDetailHeader}. */
+  readonly declareDependency = output<DependencyEvent>();
+
+  /** Emitted when the operator releases a standing dependency (issue #461) —
+   * forwarded up unchanged from {@link ChunkDetailHeader}. */
+  readonly releaseDependency = output<DependencyEvent>();
 
   /** Emitted when the operator sets a not-ready chunk's graph from the facts column
    * (issue #27). */

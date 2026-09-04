@@ -15,4 +15,6 @@ export { injectChunkPauseMutation } from './pause.mutations';
 export type { ChunkPauseVars } from './pause.mutations';
 export { injectSetChunkGraphMutation } from './edit.mutations';
 export type { ChunkGraphEditVars } from './edit.mutations';
+export { injectDeclareDependencyMutation, injectReleaseDependencyMutation } from './dependency.mutations';
+export type { DependencyVars } from './dependency.mutations';
 export type { ChunkSummary, ChunkStatus, ChunkDetail as ChunkDetailModel } from '../api/hub';

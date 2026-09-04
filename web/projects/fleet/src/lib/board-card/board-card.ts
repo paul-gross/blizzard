@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import type { ChunkStatus } from '../api/hub';
+import { ChunkBlocked } from '../chunk-blocked';
 import { STATUS_LANE } from '../chunk-lanes';
 import { formatCost } from '../cost-format';
 import { KitButton } from '../kit/kit-button';
@@ -35,6 +36,10 @@ export interface BoardCard {
    * ({@link BoardCardComponent.isDoneLane}): a status this field's own null-ness doesn't
    * already rule out, but the lane a defensive belt-and-suspenders check still asks for. */
   readonly completedAt: string | null;
+  /** The unmet prerequisite's chunk id, from `ChunkSummary.blocked` (issue #461) — null
+   * for every card outside `not_ready`/`ready` (`blizzard-context:/domain/work/statuses.md`),
+   * and for one inside it with no standing edge. Names the immediate prerequisite only. */
+  readonly blockedOn: string | null;
 }
 
 /**
@@ -68,7 +73,7 @@ export interface BoardCard {
 @Component({
   selector: 'fleet-board-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitButton],
+  imports: [ChunkBlocked, FleetWhen, KitButton],
   templateUrl: './board-card.html',
   styleUrl: './board-card.css',
 })

@@ -19,12 +19,15 @@
         [canResolve]="canResolve()"
         [graphLinkBase]="graphLinkBase()"
         (dismiss)="dismiss.emit()"
+        (selectChunk)="selectChunk.emit($event)"
         (answerQuestion)="onAnswer($event)"
         (resolveDecision)="onResolve($event)"
         (detach)="onDetach($event)"
         (pauseChunk)="onPause($event)"
         (resumeChunk)="onResume($event)"
         (complete)="onComplete($event)"
+        (declareDependency)="onDeclareDependency($event)"
+        (releaseDependency)="onReleaseDependency($event)"
         (editGraph)="onEditGraph($event)"
       />
     }

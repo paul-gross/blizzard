@@ -1,0 +1,15 @@
+:host {
+  display: contents;
+}
+.blocked-link,
+.blocked-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  min-width: 0;
+}
+.blocked-link:focus-visible,
+.blocked-btn:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 1px;
+}
