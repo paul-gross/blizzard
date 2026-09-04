@@ -1,21 +1,22 @@
 """``GET /api/leases/{id}/artifacts`` and ``.../artifacts/{name}``.
 
-Exercised over a real store via TestClient, hub reached through a stubbed ``httpx.request``
+Exercised over a real store via TestClient, hub reached through a stubbed ``httpx.Client``
 so the forward, status pass-through, and 502-on-unreachable are asserted for real. Layered
 like the attach write — lease-scoped, token-authorized, then proxied; a ``--scope graph``
 read resolves from the store's own pinned mirror and never reaches the stub."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote
 
 import httpx
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import blizzard.runner.api.hub_proxy as hub_proxy
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
@@ -67,23 +68,43 @@ _ENVELOPE: dict[str, object] = {
 
 
 class _FakeHubResponse:
-    """A stand-in for the hub's ``httpx.Response`` on the proxy's outbound edge."""
+    """A status/payload pair for ``_stub_hub`` to answer with — converted to a real
+    ``httpx.Response`` at dispatch time, never duck-typed for ``hub_proxy`` itself."""
 
     def __init__(self, status_code: int, payload: object | None = None, text: str = "") -> None:
         self.status_code = status_code
-        self._payload = payload
+        self.payload = payload
         self.text = text
 
-    def json(self) -> object:
-        if self._payload is None:
-            raise ValueError("no JSON body")
-        return self._payload
+    def to_httpx_response(self) -> httpx.Response:
+        if self.payload is None:
+            return httpx.Response(self.status_code, text=self.text)
+        return httpx.Response(self.status_code, json=self.payload)
+
+
+class _HubRouter:
+    """A late-bound handler behind the proxy's ``httpx.Client`` — ``_app_with_store`` builds
+    the client (and the app wired to it) before a test knows how the hub should answer, so
+    ``_stub_hub`` arms this after the fact instead of monkeypatching a module-level function."""
+
+    def __init__(self) -> None:
+        self.handler: Callable[[httpx.Request], httpx.Response] = lambda request: httpx.Response(
+            500, json={"detail": f"hub not stubbed for {request.url}"}
+        )
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        return self.handler(request)
 
 
 def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url)
-    return create_app(config, runner_stores=make_stores(store)), store
+    router = _HubRouter()
+    app = create_app(
+        config, runner_stores=make_stores(store), hub_proxy_client=httpx.Client(transport=httpx.MockTransport(router))
+    )
+    app.state.hub_router = router
+    return app, store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -107,27 +128,30 @@ _SYSTEM_ARTIFACTS_PATH = f"{_HUB_URL}/api/fleet/system-artifacts"
 
 
 def _stub_hub(
-    monkeypatch: pytest.MonkeyPatch,
+    app: FastAPI,
     response: _FakeHubResponse,
     seen: list[str] | None = None,
     *,
     system_list: _FakeHubResponse | None = None,
     system_get: _FakeHubResponse | None = None,
 ) -> None:
-    """Every hub call returns ``response``, except one under ``/system-artifacts``, which
+    """Every hub call answers with ``response``, except one under ``/system-artifacts``, which
     defaults to "nothing published" (an empty list / a 404) — so a test not exercising
     system scope needs no shape for it; ``system_list``/``system_get`` override either."""
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
         if seen is not None:
             seen.append(url)
         if url == _SYSTEM_ARTIFACTS_PATH:
-            return system_list if system_list is not None else _FakeHubResponse(200, [])
-        if url.startswith(f"{_SYSTEM_ARTIFACTS_PATH}/"):
-            return system_get if system_get is not None else _FakeHubResponse(404, {"detail": "no system artifact"})
-        return response
+            picked = system_list if system_list is not None else _FakeHubResponse(200, [])
+        elif url.startswith(f"{_SYSTEM_ARTIFACTS_PATH}/"):
+            picked = system_get if system_get is not None else _FakeHubResponse(404, {"detail": "no system artifact"})
+        else:
+            picked = response
+        return picked.to_httpx_response()
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    app.state.hub_router.handler = handler
 
 
 # Auth + wiring status map (no hub reached — resolved before the forward)
@@ -180,7 +204,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) -> None:
     """The worker-authorization resolver's other half (issue #291): once an open
     takeover names the (now closed) reference lease, its re-minted token reaches
     this route the same as an ordinary active lease would."""
@@ -198,7 +222,7 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path, mo
         opened_at=_NOW,
     )
     store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
 
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": takeover_token})
@@ -222,13 +246,11 @@ def test_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path) -> No
 
 
 @pytest.mark.component
-def test_list_forwards_to_the_hub_envelope_and_returns_both_kinds(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_forwards_to_the_hub_envelope_and_returns_both_kinds(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     seen: list[str] = []
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen)
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
@@ -244,9 +266,7 @@ def test_list_forwards_to_the_hub_envelope_and_returns_both_kinds(
 
 
 @pytest.mark.component
-def test_list_forwards_the_runner_bearer_when_a_token_is_configured(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -> None:
     """The forward rides the runner principal's bearer (issue #86b) — the worker's own
     lease token never leaves the runner."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -254,27 +274,27 @@ def test_list_forwards_the_runner_bearer_when_a_token_is_configured(
         root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL, hub_token="hub-tok"
     )
     _seed_lease(store)
-    seen_headers: list[dict[str, str]] = []
+    seen_headers: list[str] = []
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
-        seen_headers.append(dict(headers))
-        if url == _SYSTEM_ARTIFACTS_PATH:
-            return _FakeHubResponse(200, [])
-        return _FakeHubResponse(200, _ENVELOPE)
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_headers.append(request.headers["authorization"])
+        if str(request.url) == _SYSTEM_ARTIFACTS_PATH:
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, json=_ENVELOPE)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    with TestClient(create_app(config, runner_stores=make_stores(store))) as client:
+    hub_proxy_client = httpx.Client(transport=httpx.MockTransport(handler))
+    with TestClient(create_app(config, runner_stores=make_stores(store), hub_proxy_client=hub_proxy_client)) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     # Two forwards — envelope, then the system-artifact set — both riding the same bearer.
-    assert seen_headers == [{"Authorization": "Bearer hub-tok"}, {"Authorization": "Bearer hub-tok"}]
+    assert seen_headers == ["Bearer hub-tok", "Bearer hub-tok"]
 
 
 @pytest.mark.component
-def test_get_returns_one_artifact_by_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_returns_one_artifact_by_name(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts/plan", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
@@ -292,7 +312,7 @@ def test_get_returns_one_artifact_by_name(tmp_path: Path, monkeypatch: pytest.Mo
 
 
 @pytest.mark.component
-def test_get_resolves_a_slash_containing_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_resolves_a_slash_containing_name(tmp_path: Path) -> None:
     """A ``merged/<repo>`` delivery marker (issue #233) — the route's ``{name:path}``
     converter must capture the slash rather than treating it as a path boundary."""
     envelope = {
@@ -303,7 +323,7 @@ def test_get_resolves_a_slash_containing_name(tmp_path: Path, monkeypatch: pytes
     }
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, envelope))
+    _stub_hub(app, _FakeHubResponse(200, envelope))
     with TestClient(app) as client:
         resp = client.get(
             f"/api/leases/lease_1/artifacts/{quote('merged/blizzard', safe='/')}",
@@ -314,10 +334,10 @@ def test_get_resolves_a_slash_containing_name(tmp_path: Path, monkeypatch: pytes
 
 
 @pytest.mark.component
-def test_get_404_for_an_unknown_artifact_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_404_for_an_unknown_artifact_name(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts/ghost", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
@@ -336,12 +356,10 @@ _ENVELOPE_WITH_DUPLICATE_NAME: dict[str, object] = {
 
 
 @pytest.mark.component
-def test_get_409_when_a_bare_name_resolves_to_more_than_one_node(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_409_when_a_bare_name_resolves_to_more_than_one_node(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts/retrospective", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 409, resp.text
@@ -351,10 +369,10 @@ def test_get_409_when_a_bare_name_resolves_to_more_than_one_node(
 
 
 @pytest.mark.component
-def test_get_node_query_param_disambiguates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_node_query_param_disambiguates(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/retrospective",
@@ -367,12 +385,10 @@ def test_get_node_query_param_disambiguates(tmp_path: Path, monkeypatch: pytest.
 
 
 @pytest.mark.component
-def test_get_node_query_param_404_when_that_node_never_produced_the_name(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_node_query_param_404_when_that_node_never_produced_the_name(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/retrospective",
@@ -384,11 +400,11 @@ def test_get_node_query_param_404_when_that_node_never_produced_the_name(
 
 
 @pytest.mark.component
-def test_passes_through_the_hub_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_passes_through_the_hub_status(tmp_path: Path) -> None:
     """A hub 404 (unknown chunk) surfaces as a 404 with the hub's detail."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(404, {"detail": "unknown chunk ch_1"}))
+    _stub_hub(app, _FakeHubResponse(404, {"detail": "unknown chunk ch_1"}))
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
@@ -396,14 +412,14 @@ def test_passes_through_the_hub_status(tmp_path: Path, monkeypatch: pytest.Monke
 
 
 @pytest.mark.component
-def test_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    app.state.hub_router.handler = handler
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 502
@@ -422,13 +438,11 @@ def _seed_graph_artifacts(store, graph_id: str = "gr_1") -> None:  # type: ignor
 
 
 @pytest.mark.component
-def test_list_with_no_scope_combines_node_and_graph_rows_each_carrying_its_scope(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_with_no_scope_combines_node_and_graph_rows_each_carrying_its_scope(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _seed_graph_artifacts(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
@@ -444,11 +458,11 @@ def test_list_with_no_scope_combines_node_and_graph_rows_each_carrying_its_scope
 
 
 @pytest.mark.component
-def test_list_scope_node_excludes_graph_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_scope_node_excludes_graph_rows(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _seed_graph_artifacts(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts", params={"scope": "node"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
@@ -458,9 +472,7 @@ def test_list_scope_node_excludes_graph_rows(tmp_path: Path, monkeypatch: pytest
 
 
 @pytest.mark.component
-def test_list_scope_graph_returns_only_graph_rows_and_never_calls_the_hub(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_scope_graph_returns_only_graph_rows_and_never_calls_the_hub(tmp_path: Path) -> None:
     """The scoped read is the property under test, asserted independently of ``get``'s
     own version below — a filter applied after an unconditional proxy call would satisfy
     the row-shape assertion above while still round-tripping to the hub."""
@@ -468,7 +480,7 @@ def test_list_scope_graph_returns_only_graph_rows_and_never_calls_the_hub(
     _seed_lease(store)
     _seed_graph_artifacts(store)
     seen: list[str] = []
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen)
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts", params={"scope": "graph"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
@@ -479,14 +491,12 @@ def test_list_scope_graph_returns_only_graph_rows_and_never_calls_the_hub(
 
 
 @pytest.mark.component
-def test_get_scope_graph_resolves_from_the_store_and_never_calls_the_hub(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_scope_graph_resolves_from_the_store_and_never_calls_the_hub(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _seed_graph_artifacts(store)
     seen: list[str] = []
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen)
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/docket",
@@ -509,14 +519,12 @@ def test_get_scope_graph_resolves_from_the_store_and_never_calls_the_hub(
 
 
 @pytest.mark.component
-def test_get_scope_graph_404s_naming_the_pinned_mint_without_falling_back_to_node(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_scope_graph_404s_naming_the_pinned_mint_without_falling_back_to_node(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _seed_graph_artifacts(store)
     seen: list[str] = []
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen)
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/plan",
@@ -529,16 +537,14 @@ def test_get_scope_graph_404s_naming_the_pinned_mint_without_falling_back_to_nod
 
 
 @pytest.mark.component
-def test_get_node_under_scope_graph_is_refused_not_silently_dropped(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_node_under_scope_graph_is_refused_not_silently_dropped(tmp_path: Path) -> None:
     """``node`` narrows to node scope and ``scope=graph`` excludes node scope, so the pair names
     two different searches — answering either discards a flag the caller passed."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _seed_graph_artifacts(store)
     seen: list[str] = []
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen)
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/docket",
@@ -560,14 +566,14 @@ _ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME: dict[str, object] = {
 
 
 @pytest.mark.component
-def test_get_bare_name_ambiguous_across_both_scopes_names_them(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_bare_name_ambiguous_across_both_scopes_names_them(tmp_path: Path) -> None:
     """A cross-graph migration can leave a node artifact colliding with a graph
     declaration — the mint-time collision check only protects the same-graph case, so this
     route owns its own 409 rather than assuming the collision was already impossible."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _seed_graph_artifacts(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME))
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts/docket", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 409, resp.text
@@ -577,14 +583,14 @@ def test_get_bare_name_ambiguous_across_both_scopes_names_them(tmp_path: Path, m
 
 
 @pytest.mark.component
-def test_get_node_alone_settles_a_cross_scope_collision(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_node_alone_settles_a_cross_scope_collision(tmp_path: Path) -> None:
     """``node`` names a *producing* node, and a graph declaration has none — so supplying it
     is already a narrowing to node scope, and must resolve the collision above without the
     caller also having to pass ``scope``."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _seed_graph_artifacts(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME))
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/docket",
@@ -597,7 +603,7 @@ def test_get_node_alone_settles_a_cross_scope_collision(tmp_path: Path, monkeypa
 
 
 @pytest.mark.component
-def test_get_409_across_graph_and_system_never_advises_node(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_409_across_graph_and_system_never_advises_node(tmp_path: Path) -> None:
     """A graph declaration and a system artifact can collide with no node candidate in the
     mix at all — neither scope has a producing node, so advising ``--node`` would send the
     caller toward an unrelated 404 rather than a resolution; only ``--scope`` remains."""
@@ -605,7 +611,7 @@ def test_get_409_across_graph_and_system_never_advises_node(tmp_path: Path, monk
     _seed_lease(store)
     _seed_graph_artifacts(store)
     _stub_hub(
-        monkeypatch,
+        app,
         _FakeHubResponse(200, _ENVELOPE),
         system_get=_FakeHubResponse(200, {"name": "docket", "content": "blizzard's own docket"}),
     )
@@ -619,12 +625,12 @@ def test_get_409_across_graph_and_system_never_advises_node(tmp_path: Path, monk
 
 
 @pytest.mark.component
-def test_get_409_names_only_the_levers_the_caller_has_left(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_409_names_only_the_levers_the_caller_has_left(tmp_path: Path) -> None:
     """A caller who already passed ``scope=node`` and still hit several producing nodes has
     only ``--node`` left; naming ``--scope`` again is advice they cannot act on."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/retrospective",
@@ -638,13 +644,13 @@ def test_get_409_names_only_the_levers_the_caller_has_left(tmp_path: Path, monke
 
 
 @pytest.mark.component
-def test_get_404_after_searching_both_scopes_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_404_after_searching_both_scopes_says_so(tmp_path: Path) -> None:
     """A bare miss searched the mint's declarations too, so the detail names that mint —
     rather than reporting only the node-step it also failed to find the name in."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _seed_graph_artifacts(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
     with TestClient(app) as client:
         bare = client.get("/api/leases/lease_1/artifacts/ghost", headers={"X-Blizzard-Lease-Token": _TOKEN})
         narrowed = client.get(
@@ -665,15 +671,11 @@ _SYSTEM_ARTIFACT = {"name": "garden/finding-format", "content": "the format text
 
 
 @pytest.mark.component
-def test_list_scope_system_forwards_to_the_hub_and_returns_the_set(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_scope_system_forwards_to_the_hub_and_returns_the_set(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     seen: list[str] = []
-    _stub_hub(
-        monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen, system_list=_FakeHubResponse(200, [_SYSTEM_ARTIFACT])
-    )
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen, system_list=_FakeHubResponse(200, [_SYSTEM_ARTIFACT]))
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts", params={"scope": "system"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
@@ -697,12 +699,12 @@ def test_list_scope_system_forwards_to_the_hub_and_returns_the_set(
 
 
 @pytest.mark.component
-def test_get_scope_system_returns_the_named_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_scope_system_returns_the_named_artifact(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     seen: list[str] = []
     _stub_hub(
-        monkeypatch,
+        app,
         _FakeHubResponse(200, _ENVELOPE),
         seen,
         system_get=_FakeHubResponse(200, _SYSTEM_ARTIFACT),
@@ -720,10 +722,10 @@ def test_get_scope_system_returns_the_named_artifact(tmp_path: Path, monkeypatch
 
 
 @pytest.mark.component
-def test_get_scope_system_404_for_an_unpublished_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_scope_system_404_for_an_unpublished_name(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE))
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/ghost",
@@ -735,13 +737,11 @@ def test_get_scope_system_404_for_an_unpublished_name(tmp_path: Path, monkeypatc
 
 
 @pytest.mark.component
-def test_get_node_under_scope_system_is_refused_not_silently_dropped(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_node_under_scope_system_is_refused_not_silently_dropped(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     seen: list[str] = []
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen)
+    _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
     with TestClient(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/docket",
@@ -763,16 +763,14 @@ _ENVELOPE_WITH_A_SYSTEM_COLLIDING_NAME: dict[str, object] = {
 
 
 @pytest.mark.component
-def test_get_bare_name_ambiguous_across_node_and_system_names_both(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_bare_name_ambiguous_across_node_and_system_names_both(tmp_path: Path) -> None:
     """The same read-time collision D3 resolves for a graph declaration applies to a
     system artifact's global name — a node's own ``produces:`` output can collide with it,
     and the route owns the 409 rather than assuming it away."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(
-        monkeypatch,
+        app,
         _FakeHubResponse(200, _ENVELOPE_WITH_A_SYSTEM_COLLIDING_NAME),
         system_get=_FakeHubResponse(200, {"name": "docket", "content": "blizzard's own docket"}),
     )
@@ -785,13 +783,13 @@ def test_get_bare_name_ambiguous_across_node_and_system_names_both(
 
 
 @pytest.mark.component
-def test_get_node_alone_settles_a_system_collision(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_node_alone_settles_a_system_collision(tmp_path: Path) -> None:
     """``node`` names a *producing* node, and a system artifact has none — so supplying it
     is already a narrowing to node scope, resolving the collision above on its own."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(
-        monkeypatch,
+        app,
         _FakeHubResponse(200, _ENVELOPE_WITH_A_SYSTEM_COLLIDING_NAME),
         system_get=_FakeHubResponse(200, {"name": "docket", "content": "blizzard's own docket"}),
     )

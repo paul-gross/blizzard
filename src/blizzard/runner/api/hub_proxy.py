@@ -26,6 +26,7 @@ class HubProxy:
 
     config: RunnerConfig
     what: str
+    client: httpx.Client
 
     @classmethod
     def of(cls, request: Request, what: str) -> HubProxy:
@@ -37,7 +38,8 @@ class HubProxy:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="runner not wired to a hub — start via `blizzard runner host`",
             )
-        return cls(config, what)
+        client = RunnerWiring.of(request).hub_proxy_client()
+        return cls(config, what, client)
 
     def get(
         self,
@@ -80,7 +82,7 @@ class HubProxy:
         subject to the transport-failure log line."""
         url = f"{self.config.hub_url.rstrip('/')}{path}"
         try:
-            upstream = httpx.request(
+            upstream = self.client.request(
                 method,
                 url,
                 headers=self.config.auth_headers(),

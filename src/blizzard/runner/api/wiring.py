@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import NoReturn
 
+import httpx
 from fastapi import Request, status
 from fastapi.exceptions import HTTPException
 from starlette.datastructures import State
@@ -54,6 +55,10 @@ class RunnerWiring:
     def clock(self) -> IClock:
         clock: IClock | None = getattr(self.state, "clock", None)
         return clock if clock is not None else self._refuse(_STORE)
+
+    def hub_proxy_client(self) -> httpx.Client:
+        client: httpx.Client | None = getattr(self.state, "hub_proxy_client", None)
+        return client if client is not None else self._refuse("hub proxy client")
 
     def read_stores(self) -> RunnerReadStores:
         stores = self.maybe_read_stores()

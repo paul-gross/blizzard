@@ -123,7 +123,8 @@ class _CountingHubHandler(BaseHTTPRequestHandler):
 def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: Path) -> None:
     """``create_app``'s own default must be a transport-level double answering 404, not
     a real client against ``config.hub_url``, so a coincidental live listener there
-    cannot flip the human lane's gating outside the composition root's control."""
+    cannot flip the human lane's gating outside the composition root's control — and the
+    same holds for ``hub_proxy_client``, the ``HubProxy``-forward seam's own default."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), _CountingHubHandler)
     server.seen: list[str] = []  # type: ignore[attr-defined]
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -135,14 +136,17 @@ def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: P
             hub_url=f"http://127.0.0.1:{server.server_address[1]}",
             public_urls=("http://runner-hermetic.example",),
         )
-        client = TestClient(create_app(config))  # no hub_http_client: the default is under test
+        # No hub_http_client, no hub_proxy_client: both defaults are under test.
+        client = TestClient(create_app(config))
 
         status = client.get("/api/runner").status_code
+        proxy_status = client.get("/api/chunks/ch_hermetic").status_code
     finally:
         server.shutdown()
         server.server_close()
 
     assert status != 401
+    assert proxy_status == 404  # the hermetic double's own answer, never the real hub's
     assert server.seen == []  # type: ignore[attr-defined]
 
 

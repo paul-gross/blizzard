@@ -15,7 +15,6 @@ import pytest
 from fastapi.testclient import TestClient
 from structlog.testing import capture_logs
 
-import blizzard.runner.api.hub_proxy as hub_proxy
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.api.dashboard import _DASHBOARD_HUB_TIMEOUT
 from blizzard.runner.api.hub_proxy import _HUB_TIMEOUT
@@ -31,19 +30,9 @@ _HUB_URL = "http://hub.local:8421"
 _COUNTS: dict[str, object] = {"ready": 4, "running": 3, "waiting": 2, "needs": 1}
 
 
-class _FakeHubResponse:
-    def __init__(self, status_code: int, payload: dict[str, object] | None = None, text: str = "") -> None:
-        self.status_code = status_code
-        self._payload = payload
-        self.text = text
-
-    def json(self) -> object:
-        if self._payload is None:
-            raise ValueError("no JSON body")
-        return self._payload
-
-
-def _app_with_status(tmp_path: Path, *, hub_url: str | None = _HUB_URL) -> tuple[TestClient, object]:  # type: ignore[type-arg]
+def _app_with_status(
+    tmp_path: Path, *, hub_url: str | None = _HUB_URL, hub_proxy_client: httpx.Client | None = None
+) -> tuple[TestClient, object]:  # type: ignore[type-arg]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url or "")
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1"), verdict=None)
@@ -57,7 +46,7 @@ def _app_with_status(tmp_path: Path, *, hub_url: str | None = _HUB_URL) -> tuple
         hub_url=config.hub_url,
         env_pool=("e1",),
     )
-    app = create_app(config, runner_stores=make_stores(store), runner_status=service)
+    app = create_app(config, runner_stores=make_stores(store), runner_status=service, hub_proxy_client=hub_proxy_client)
     return TestClient(app), store
 
 
@@ -113,17 +102,15 @@ def _seed_all_sections(store) -> None:  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.component
-def test_the_composed_payload_includes_all_seven_sections_with_real_data(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    client, store = _app_with_status(tmp_path)
+def test_the_composed_payload_includes_all_seven_sections_with_real_data(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_COUNTS)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    test_client, store = _app_with_status(tmp_path, hub_proxy_client=client)
     _seed_all_sections(store)
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
-        return _FakeHubResponse(200, _COUNTS)
-
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = client.get("/api/dashboard")
+    resp = test_client.get("/api/dashboard")
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -137,17 +124,15 @@ def test_the_composed_payload_includes_all_seven_sections_with_real_data(
 
 
 @pytest.mark.component
-def test_fleet_summary_is_none_on_a_hub_outage_and_the_six_local_sections_still_populate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    client, store = _app_with_status(tmp_path)
-    _seed_all_sections(store)
-
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+def test_fleet_summary_is_none_on_a_hub_outage_and_the_six_local_sections_still_populate(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = client.get("/api/dashboard")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    test_client, store = _app_with_status(tmp_path, hub_proxy_client=client)
+    _seed_all_sections(store)
+
+    resp = test_client.get("/api/dashboard")
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -161,19 +146,20 @@ def test_fleet_summary_is_none_on_a_hub_outage_and_the_six_local_sections_still_
 
 @pytest.mark.component
 def test_fleet_summary_is_none_when_the_runner_is_unwired_to_a_hub_and_the_six_local_sections_still_populate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
-    client, store = _app_with_status(tmp_path, hub_url=None)
-    _seed_all_sections(store)
     attempted = False
 
-    def fake_request(*args: object, **kwargs: object) -> _FakeHubResponse:
+    def handler(request: httpx.Request) -> httpx.Response:
         nonlocal attempted
         attempted = True
-        return _FakeHubResponse(200, _COUNTS)
+        return httpx.Response(200, json=_COUNTS)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = client.get("/api/dashboard")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    test_client, store = _app_with_status(tmp_path, hub_url=None, hub_proxy_client=client)
+    _seed_all_sections(store)
+
+    resp = test_client.get("/api/dashboard")
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -187,22 +173,21 @@ def test_fleet_summary_is_none_when_the_runner_is_unwired_to_a_hub_and_the_six_l
 
 
 @pytest.mark.component
-def test_the_dashboards_own_hub_call_carries_the_bounded_timeout(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_the_dashboards_own_hub_call_carries_the_bounded_timeout(tmp_path: Path) -> None:
     """The composed route's own outbound call is bounded well below a human-tolerable
     read latency — distinct from ``/api/fleet-summary``'s own call, which keeps the
     module default (proven by ``test_fleet_summary_proxy.py``)."""
-    client, store = _app_with_status(tmp_path)
-    _seed_all_sections(store)
     seen_timeouts: list[float] = []
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
-        seen_timeouts.append(timeout)
-        return _FakeHubResponse(200, _COUNTS)
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_timeouts.append(request.extensions.get("timeout", {}).get("pool"))
+        return httpx.Response(200, json=_COUNTS)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = client.get("/api/dashboard")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    test_client, store = _app_with_status(tmp_path, hub_proxy_client=client)
+    _seed_all_sections(store)
+
+    resp = test_client.get("/api/dashboard")
 
     assert resp.status_code == 200, resp.text
     assert seen_timeouts == [_DASHBOARD_HUB_TIMEOUT]
@@ -211,22 +196,21 @@ def test_the_dashboards_own_hub_call_carries_the_bounded_timeout(
 
 
 @pytest.mark.component
-def test_the_dashboards_own_unreachable_hub_line_logs_below_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_the_dashboards_own_unreachable_hub_line_logs_below_error(tmp_path: Path) -> None:
     """A hub outage here is tolerated degradation — the six local sections still stand
     (issue #374) — so this route's own unreachable-hub line logs below the module
     default ``error``, distinct from ``/api/fleet-summary``'s own call, which keeps it
     (proven by ``test_fleet_summary_proxy.py``)."""
-    client, store = _app_with_status(tmp_path)
-    _seed_all_sections(store)
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    test_client, store = _app_with_status(tmp_path, hub_proxy_client=client)
+    _seed_all_sections(store)
+
     with capture_logs() as logs:
-        resp = client.get("/api/dashboard")
+        resp = test_client.get("/api/dashboard")
 
     assert resp.status_code == 200, resp.text
     unreachable = [entry for entry in logs if entry["event"] == "dashboard proxy could not reach the hub"]

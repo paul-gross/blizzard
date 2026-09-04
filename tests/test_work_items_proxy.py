@@ -13,7 +13,6 @@ import pytest
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
-import blizzard.runner.api.hub_proxy as hub_proxy
 from blizzard.runner.app import create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
@@ -39,43 +38,27 @@ _ITEMS: dict[str, object] = {
 }
 
 
-class _FakeHubResponse:
-    """A stand-in for the hub's ``httpx.Response`` on the proxy's outbound edge."""
-
-    def __init__(self, status_code: int, payload: dict[str, object] | None = None, text: str = "") -> None:
-        self.status_code = status_code
-        self._payload = payload
-        self.text = text
-
-    def json(self) -> object:
-        if self._payload is None:
-            raise ValueError("no JSON body")
-        return self._payload
-
-
-def _runner_app(tmp_path: Path) -> TestClient:
+def _runner_app(tmp_path: Path, *, hub_proxy_client: httpx.Client | None = None) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
-    return TestClient(create_app(config))
+    return TestClient(create_app(config, hub_proxy_client=hub_proxy_client))
 
 
 # The proxy route (component tier)
 
 
 @pytest.mark.component
-def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path) -> None:
     """The route forwards to the hub's work-items route and returns the items verbatim
     — ``title`` rides through the shared ``WorkItemsView`` wire model's pass-through
     point untouched, with no proxy-side code change."""
     seen: list[str] = []
 
-    def fake_request(
-        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
-    ) -> _FakeHubResponse:
-        seen.append(url)
-        return _FakeHubResponse(200, _ITEMS)
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, json=_ITEMS)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == _ITEMS
@@ -85,22 +68,20 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.
 
 
 @pytest.mark.component
-def test_the_deprecated_pm_items_alias_serves_the_same_view(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_deprecated_pm_items_alias_serves_the_same_view(tmp_path: Path) -> None:
     """Issue #55's runner-side alias — one handler, two routes. It answers identically to
     the canonical path *and* forwards to the hub's canonical `/work-items`: this runner is
     the newer half of any skew it is party to, so it never proxies the old path onward."""
     seen: list[str] = []
 
-    def fake_request(
-        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
-    ) -> _FakeHubResponse:
-        seen.append(url)
-        return _FakeHubResponse(200, _ITEMS)
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, json=_ITEMS)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    client = _runner_app(tmp_path)
-    canonical = client.get(f"/api/chunks/{_CHUNK}/work-items")
-    alias = client.get(f"/api/chunks/{_CHUNK}/pm-items")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    test_client = _runner_app(tmp_path, hub_proxy_client=client)
+    canonical = test_client.get(f"/api/chunks/{_CHUNK}/work-items")
+    alias = test_client.get(f"/api/chunks/{_CHUNK}/pm-items")
 
     assert alias.status_code == 200, alias.text
     assert alias.json() == canonical.json() == _ITEMS
@@ -108,50 +89,40 @@ def test_the_deprecated_pm_items_alias_serves_the_same_view(tmp_path: Path, monk
 
 
 @pytest.mark.component
-def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_path: Path) -> None:
     """The forward carries the same bearer credential as the loop's own hub client (issue #86b)."""
-    seen_headers: list[dict[str, str]] = []
+    seen_headers: list[httpx.Headers] = []
 
-    def fake_request(
-        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
-    ) -> _FakeHubResponse:
-        seen_headers.append(dict(headers))
-        return _FakeHubResponse(200, _ITEMS)
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_headers.append(request.headers)
+        return httpx.Response(200, json=_ITEMS)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    client = httpx.Client(transport=httpx.MockTransport(handler))
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL, hub_token="proxy-token")
-    resp = TestClient(create_app(config)).get(f"/api/chunks/{_CHUNK}/work-items")
+    resp = TestClient(create_app(config, hub_proxy_client=client)).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
-    assert seen_headers == [{"Authorization": "Bearer proxy-token"}]
+    assert seen_headers[0]["Authorization"] == "Bearer proxy-token"
 
 
 @pytest.mark.component
-def test_proxy_sends_no_authorization_header_when_no_token_is_configured(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_proxy_sends_no_authorization_header_when_no_token_is_configured(tmp_path: Path) -> None:
     """No ``hub_token`` (unenrolled runner) is a valid, warn-mode-only state: no header at all."""
-    seen_headers: list[dict[str, str]] = []
+    seen_headers: list[httpx.Headers] = []
 
-    def fake_request(
-        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
-    ) -> _FakeHubResponse:
-        seen_headers.append(dict(headers))
-        return _FakeHubResponse(200, _ITEMS)
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_headers.append(request.headers)
+        return httpx.Response(200, json=_ITEMS)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
-    assert seen_headers == [{}]
+    assert "Authorization" not in seen_headers[0]
 
 
 @pytest.mark.component
-def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(tmp_path: Path) -> None:
     """A hub-degraded entry (null ``title``/``body`` + ``error``) rides through as a 200 —
     the proxy re-validates the payload through ``WorkItemsView``, which must accept the
     null fields rather than 500ing on a harmless degrade."""
@@ -171,13 +142,11 @@ def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(
         ]
     }
 
-    def fake_request(
-        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
-    ) -> _FakeHubResponse:
-        return _FakeHubResponse(200, degraded)
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=degraded)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
     entry = resp.json()["items"][0]
@@ -186,32 +155,28 @@ def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(
 
 
 @pytest.mark.component
-def test_proxy_passes_through_the_hub_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_proxy_passes_through_the_hub_status(tmp_path: Path) -> None:
     """A hub 404 (unknown chunk / no pointer) surfaces as a 404 with the hub's detail."""
 
-    def fake_request(
-        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
-    ) -> _FakeHubResponse:
-        return _FakeHubResponse(404, {"detail": "unknown chunk ch_pass"})
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"detail": "unknown chunk ch_pass"})
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 404
     assert resp.json()["detail"] == "unknown chunk ch_pass"
 
 
 @pytest.mark.component
-def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
     """A transport failure to the hub is a 502 — never a pretend answer."""
 
-    def fake_request(
-        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
-    ) -> _FakeHubResponse:
+    def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 502
     assert "unreachable" in resp.json()["detail"]

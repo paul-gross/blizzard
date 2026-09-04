@@ -3,17 +3,19 @@
 Unit tier: ``ChunkHistoryView.rows`` over a fixture — a bounced attempt
 that produced no artifact still becomes a row, a migration becomes its own row, and
 everything merges oldest-first. Component tier: exercised over a real store via
-``TestClient``, the hub reached through a stubbed ``httpx.get``."""
+``TestClient``, the hub reached through a stubbed ``httpx.Client``."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import blizzard.runner.api.hub_proxy as hub_proxy
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
@@ -181,24 +183,29 @@ def test_a_transition_row_carries_epoch_and_choice() -> None:
 # --------------------------------------------------------------------------- #
 
 
-class _FakeHubResponse:
-    """A stand-in for the hub's ``httpx.Response`` on the proxy's outbound edge."""
+class _HubRouter:
+    """A late-bound handler behind the proxy's ``httpx.Client`` — ``_app_with_store`` builds
+    the client (and the app wired to it) before a test knows how the hub should answer, so
+    ``_stub_hub`` arms this after the fact instead of monkeypatching a module-level function."""
 
-    def __init__(self, status_code: int, payload: dict[str, object] | None = None, text: str = "") -> None:
-        self.status_code = status_code
-        self._payload = payload
-        self.text = text
+    def __init__(self) -> None:
+        self.handler: Callable[[httpx.Request], httpx.Response] = lambda request: httpx.Response(
+            500, json={"detail": f"hub not stubbed for {request.url}"}
+        )
 
-    def json(self) -> object:
-        if self._payload is None:
-            raise ValueError("no JSON body")
-        return self._payload
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        return self.handler(request)
 
 
 def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url)
-    return create_app(config, runner_stores=make_stores(store)), store
+    router = _HubRouter()
+    app = create_app(
+        config, runner_stores=make_stores(store), hub_proxy_client=httpx.Client(transport=httpx.MockTransport(router))
+    )
+    app.state.hub_router = router
+    return app, store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -218,13 +225,13 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
     store.record_lease_token(str(fields["lease_id"]), TokenHash(_TOKEN).hex, _NOW)
 
 
-def _stub_hub(monkeypatch: pytest.MonkeyPatch, response: _FakeHubResponse, seen: list[str] | None = None) -> None:
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+def _stub_hub(app: FastAPI, status_code: int, payload: object, seen: list[str] | None = None) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
         if seen is not None:
-            seen.append(url)
-        return response
+            seen.append(str(request.url))
+        return httpx.Response(status_code, json=payload)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    app.state.hub_router.handler = handler
 
 
 @pytest.mark.component
@@ -272,7 +279,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) -> None:
     """The worker-authorization resolver's other half (issue #291): once an open
     takeover names the (now closed) reference lease, its re-minted token reaches
     this route the same as an ordinary active lease would."""
@@ -290,7 +297,7 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path, mo
         opened_at=_NOW,
     )
     store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _DETAIL))
+    _stub_hub(app, 200, _DETAIL)
 
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": takeover_token})
@@ -311,13 +318,11 @@ def test_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path) -> No
 
 
 @pytest.mark.component
-def test_forwards_to_the_hub_chunk_detail_route_and_returns_merged_rows(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_forwards_to_the_hub_chunk_detail_route_and_returns_merged_rows(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     seen: list[str] = []
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _DETAIL), seen)
+    _stub_hub(app, 200, _DETAIL, seen)
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
@@ -327,7 +332,7 @@ def test_forwards_to_the_hub_chunk_detail_route_and_returns_merged_rows(
 
 
 @pytest.mark.component
-def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -> None:
     """The forward rides the runner principal's bearer (issue #86b) — the worker's own
     lease token never leaves the runner."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -335,40 +340,38 @@ def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path, m
         root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL, hub_token="hub-tok"
     )
     _seed_lease(store)
-    seen_headers: list[dict[str, str]] = []
+    seen_headers: list[httpx.Headers] = []
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
-        seen_headers.append(dict(headers))
-        return _FakeHubResponse(200, _DETAIL)
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_headers.append(request.headers)
+        return httpx.Response(200, json=_DETAIL)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    with TestClient(create_app(config, runner_stores=make_stores(store))) as client:
+    hub_proxy_client = httpx.Client(transport=httpx.MockTransport(handler))
+    with TestClient(create_app(config, runner_stores=make_stores(store), hub_proxy_client=hub_proxy_client)) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
-    assert seen_headers == [{"Authorization": "Bearer hub-tok"}]
+    assert seen_headers[0]["Authorization"] == "Bearer hub-tok"
 
 
 @pytest.mark.component
-def test_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import httpx
-
+def test_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("refused")
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    app.state.hub_router.handler = handler
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 502
 
 
 @pytest.mark.component
-def test_hub_status_passes_through_verbatim(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_hub_status_passes_through_verbatim(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(404, {"detail": "no such chunk"}))
+    _stub_hub(app, 404, {"detail": "no such chunk"})
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
@@ -418,9 +421,7 @@ def _step(node_id: str, *, epoch: int, choice: str) -> dict:
 
 
 @pytest.mark.component
-def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(tmp_path: Path) -> None:
     """#237 AC5: drive a chunk through a bounce loop against a real hub app, then read
     its history through the runner's proxy and assert row-for-row equality with the
     hub's own recorded ``ChunkDetail.history``."""
@@ -463,10 +464,10 @@ def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(
     assert len(hub_detail["history"]) == 4
     assert hub_detail["artifacts"] == []  # the review-fail attempt produced no artifact anywhere
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> object:
-        return hub.client.get(url.replace(_HUB_URL, ""))
+    def handler(request: httpx.Request) -> httpx.Response:
+        return hub.client.get(str(request.url).replace(_HUB_URL, ""))
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    hub_proxy_client = httpx.Client(transport=httpx.MockTransport(handler))
     runner_store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     runner_store.record_lease(
         NewLease(
@@ -483,7 +484,9 @@ def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(
     )
     runner_store.record_lease_token("lease_1", TokenHash(_TOKEN).hex, _NOW)
     runner_config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL)
-    with TestClient(create_app(runner_config, runner_stores=make_stores(runner_store))) as client:
+    with TestClient(
+        create_app(runner_config, runner_stores=make_stores(runner_store), hub_proxy_client=hub_proxy_client)
+    ) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     worker_rows = resp.json()
