@@ -35,8 +35,15 @@ fleet-kit-panel.section {
     grid-column: 2;
     grid-row: 1 / 3;
   }
-  fleet-kit-panel[data-testid='section-asks'] {
+  /* Explicit placement (D7, issue #462) — an unplaced section falls into the grid's next
+     auto-flow slot, which would land it in the work-item/issues column rather than the
+     full-width row it needs, and could displace node history's own explicit span. */
+  fleet-kit-panel[data-testid='section-neighborhood'] {
     grid-column: 1 / -1;
     grid-row: 3;
+  }
+  fleet-kit-panel[data-testid='section-asks'] {
+    grid-column: 1 / -1;
+    grid-row: 4;
   }
 }

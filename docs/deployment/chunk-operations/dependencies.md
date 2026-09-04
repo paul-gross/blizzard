@@ -41,11 +41,11 @@ A standing, unsatisfied dependency derives a **blocked marking** — a nullable 
 `GET /api/chunks`, `GET /api/chunks/{chunk_id}`, `GET /api/queue`, and `GET /api/backlog`, naming the earliest-declared
 prerequisite that has not reached `done`. What the marking means, its one-hop scope, and the `not_ready`/`ready` window
 it is confined to are `blizzard-context:/domain/work/statuses.md`'s to say. Satisfaction is not stored: an edge is met
-when its prerequisite reads `done`, read fresh at the point something consults it rather than cached on the edge
-itself, so declaring onto an already-`done` prerequisite is an ordinary accepted edge that names no marking. A
-prerequisite absent from the fleet's statuses still blocks, the conservative read — but deletion now refuses a
-standing edge onto a live prerequisite (issue #460), so this conservative read only guards the accepted residual race
-between a status read and a concurrent write, not an ordinary reachable path.
+when its prerequisite reads `done`, read fresh at the point something consults it rather than cached on the edge itself,
+so declaring onto an already-`done` prerequisite is an ordinary accepted edge that names no marking. A prerequisite
+absent from the fleet's statuses still blocks, the conservative read — but deletion now refuses a standing edge onto a
+live prerequisite (issue #460), so this conservative read only guards the accepted residual race between a status read
+and a concurrent write, not an ordinary reachable path.
 
 A chunk currently named as another's prerequisite cannot itself be deleted while that edge stands: deletion is refused
 409, naming the dependents. Deleting the *dependent* chunk instead is unaffected — it succeeds, and releases that
@@ -55,19 +55,31 @@ Grouping a chunk away carries its standing edges onto the survivor rather than d
 folded chunk, in either role, is released and re-minted, remapped onto the survivor — never updated in place. The whole
 fold is refused 409 if carrying its edges would close a cycle in the resulting standing graph.
 
+## The neighborhood
+
+`GET /api/chunks/{chunk_id}` also carries a `neighborhood` field: the chunk's own standing dependency edges one hop in
+each direction, `prerequisites` and `dependents`, always present as two lists rather than null — a chunk with neither
+reads back two empty ones. Each entry is `{chunk_id, status, satisfied}`: `status` is the neighbor's own derived status,
+null only for the residual race a neighbor's facts fail to resolve — the edge is still drawn, unsatisfied, rather than
+dropped. `satisfied` is derived the same way the blocked marking is, never stored: true when the edge's prerequisite
+reads `done`, so a dependent edge is satisfied exactly when the chunk itself reads `done`. Unlike the blocked marking,
+the neighborhood is not confined to a pre-claim dependent — it is present, and possibly non-empty in either direction,
+for a chunk at any status — and it takes no further hop past its own edges, the same one-hop scope the blocked marking
+holds.
+
 ## What a standing edge does to claiming
 
-A standing, unsatisfied dependency denies a claim on its dependent outright: `POST /api/fleet/routes` answers `409`
-with the marking's own body shape — `chunk_id` and `prerequisite_chunk_id`, distinct from the conflict and terminal
-`409`s a claim can otherwise answer with — re-derived fresh under the claim lock rather than trusted from an earlier
-read, so a peek-then-claim race can never slip a blocked chunk through.
+A standing, unsatisfied dependency denies a claim on its dependent outright: `POST /api/fleet/routes` answers `409` with
+the marking's own body shape — `chunk_id` and `prerequisite_chunk_id`, distinct from the conflict and terminal `409`s a
+claim can otherwise answer with — re-derived fresh under the claim lock rather than trusted from an earlier read, so a
+peek-then-claim race can never slip a blocked chunk through.
 
 A runner's own FILL step does not have to run into that denial to make progress: `GET /api/fleet/queue/peek` already
-carries the marking on every entry it returns, and a runner reaches past a marked head for the first unmarked entry
-in the peeked list by default, rather than spending a claim attempt it already knows will be refused. An operator who
-sets `[queue] strict = true` in that runner's config opts out of reaching ahead — a marked head yields no entry and
-FILL idles for the tick rather than trying a later one. Either way the claim-time denial above still stands as the
-structural guarantee: reach-ahead is an efficiency over the peek, never a replacement for it.
+carries the marking on every entry it returns, and a runner reaches past a marked head for the first unmarked entry in
+the peeked list by default, rather than spending a claim attempt it already knows will be refused. An operator who sets
+`[queue] strict = true` in that runner's config opts out of reaching ahead — a marked head yields no entry and FILL
+idles for the tick rather than trying a later one. Either way the claim-time denial above still stands as the structural
+guarantee: reach-ahead is an efficiency over the peek, never a replacement for it.
 
 ## On the board
 
@@ -78,6 +90,6 @@ which has no dock to select into, it links there instead. `blizzard-context:/dom
 marking means and which chunks can carry one.
 
 The dock header carries the declare and release controls beside Complete, gated the same way (`CHUNK_CONTROL`). One
-free-text field serves both — there is no read that lists a chunk's standing edges for a picker to offer — prefilled
-with the marked prerequisite when one stands. Every refusal above renders in the dock's action notice, naming the
-chunk id or ids the way the API itself does, rather than a generic failure.
+free-text field serves both — the neighborhood read above exists, but nothing wires it to a picker for this field —
+prefilled with the marked prerequisite when one stands. Every refusal above renders in the dock's action notice, naming
+the chunk id or ids the way the API itself does, rather than a generic failure.

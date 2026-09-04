@@ -11,7 +11,12 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.hub.domain.dependencies import derive_blocked_markings
+from blizzard.hub.domain.dependencies import (
+    ChunkNeighbor,
+    ChunkNeighborhood,
+    derive_blocked_markings,
+    derive_chunk_neighborhood,
+)
 from blizzard.hub.domain.work import DependencyEdge
 
 pytestmark = pytest.mark.unit
@@ -140,3 +145,84 @@ def test_a_stopped_prerequisite_still_blocks() -> None:
     statuses = {"chk_a": ChunkStatus.READY, "chk_b": ChunkStatus.STOPPED}
 
     assert derive_blocked_markings(edges, statuses) == {"chk_a": "chk_b"}
+
+
+class TestDeriveChunkNeighborhood:
+    """``derive_chunk_neighborhood`` (unit tier) — the one-hop-each-way sibling of
+    ``derive_blocked_markings`` (D3, issue #462): every standing edge naming a chunk in
+    either role, with per-edge satisfaction (D4), for a chunk at any status."""
+
+    def test_a_chunk_with_no_edges_has_two_empty_lists(self) -> None:
+        assert derive_chunk_neighborhood("chk_a", [], {}) == ChunkNeighborhood(prerequisites=[], dependents=[])
+
+    def test_a_prerequisite_edge_is_satisfied_when_the_prerequisite_is_done(self) -> None:
+        edges = [_edge("dep_1", "chk_a", "chk_b")]
+        statuses = {"chk_b": ChunkStatus.DONE}
+
+        neighborhood = derive_chunk_neighborhood("chk_a", edges, statuses)
+
+        assert neighborhood == ChunkNeighborhood(
+            prerequisites=[ChunkNeighbor(chunk_id="chk_b", status=ChunkStatus.DONE, satisfied=True)], dependents=[]
+        )
+
+    def test_a_prerequisite_edge_is_unsatisfied_when_the_prerequisite_is_not_done(self) -> None:
+        edges = [_edge("dep_1", "chk_a", "chk_b")]
+        statuses = {"chk_b": ChunkStatus.NOT_READY}
+
+        neighborhood = derive_chunk_neighborhood("chk_a", edges, statuses)
+
+        assert neighborhood.prerequisites == [
+            ChunkNeighbor(chunk_id="chk_b", status=ChunkStatus.NOT_READY, satisfied=False)
+        ]
+
+    def test_a_dependent_edge_is_satisfied_exactly_when_the_subject_itself_is_done(self) -> None:
+        """D4: a dependent edge's satisfaction reads the *subject* chunk's own status, not
+        the dependent neighbor's — the subject is the prerequisite in that relationship."""
+        edges = [_edge("dep_1", "chk_dependent", "chk_a")]
+        statuses = {"chk_a": ChunkStatus.DONE, "chk_dependent": ChunkStatus.READY}
+
+        neighborhood = derive_chunk_neighborhood("chk_a", edges, statuses)
+
+        assert neighborhood == ChunkNeighborhood(
+            prerequisites=[],
+            dependents=[ChunkNeighbor(chunk_id="chk_dependent", status=ChunkStatus.READY, satisfied=True)],
+        )
+
+    def test_a_neighbor_absent_from_statuses_is_drawn_unsatisfied_with_a_null_status(self) -> None:
+        """A neighbor whose facts do not resolve — the residual race deletion's 409 refusal
+        leaves (D4) — is still drawn, never a silently dropped edge."""
+        edges = [_edge("dep_1", "chk_a", "chk_ghost")]
+
+        neighborhood = derive_chunk_neighborhood("chk_a", edges, {})
+
+        assert neighborhood.prerequisites == [ChunkNeighbor(chunk_id="chk_ghost", status=None, satisfied=False)]
+
+    def test_both_directions_are_reported_at_once(self) -> None:
+        edges = [
+            _edge("dep_1", "chk_a", "chk_prereq"),
+            _edge("dep_2", "chk_dependent", "chk_a"),
+        ]
+        statuses = {"chk_a": ChunkStatus.NOT_READY, "chk_prereq": ChunkStatus.DONE, "chk_dependent": ChunkStatus.READY}
+
+        neighborhood = derive_chunk_neighborhood("chk_a", edges, statuses)
+
+        assert neighborhood == ChunkNeighborhood(
+            prerequisites=[ChunkNeighbor(chunk_id="chk_prereq", status=ChunkStatus.DONE, satisfied=True)],
+            dependents=[ChunkNeighbor(chunk_id="chk_dependent", status=ChunkStatus.READY, satisfied=False)],
+        )
+
+    def test_no_transitive_walk_past_one_hop(self) -> None:
+        """chk_a's prerequisite is chk_b, chk_b's own prerequisite is chk_c: chk_a's
+        neighborhood names chk_b only, unaffected by chk_c (D1/D4 scope boundary)."""
+        edges = [
+            _edge("dep_1", "chk_a", "chk_b"),
+            _edge("dep_2", "chk_b", "chk_c"),
+        ]
+        statuses = {"chk_b": ChunkStatus.NOT_READY, "chk_c": ChunkStatus.NOT_READY}
+
+        neighborhood = derive_chunk_neighborhood("chk_a", edges, statuses)
+
+        assert neighborhood == ChunkNeighborhood(
+            prerequisites=[ChunkNeighbor(chunk_id="chk_b", status=ChunkStatus.NOT_READY, satisfied=False)],
+            dependents=[],
+        )

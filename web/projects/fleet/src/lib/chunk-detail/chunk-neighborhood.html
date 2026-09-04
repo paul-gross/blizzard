@@ -1,0 +1,58 @@
+<div class="nbh" data-testid="chunk-neighborhood">
+  <section class="nbh-group" data-testid="neighborhood-prerequisites">
+    <h3 class="nbh-label">Depends on</h3>
+    @if (neighborhood().prerequisites.length) {
+      <ul class="nbh-list">
+        @for (n of neighborhood().prerequisites; track n.chunk_id) {
+          <li>
+            @if (asLink()) {
+              <a class="nbh-link" data-testid="neighbor" [routerLink]="[...linkBase(), n.chunk_id]" [attr.title]="n.chunk_id">
+                <fleet-kit-badge class="satisfied" [tone]="satisfiedTone(n)" variant="soft" data-testid="neighbor-satisfied">{{
+                  n.satisfied ? 'satisfied' : 'unmet'
+                }}</fleet-kit-badge>
+                <fleet-kit-badge [tone]="statusTone(n)">{{ shortId(n.chunk_id) }} · {{ statusLabel(n) }}</fleet-kit-badge>
+              </a>
+            } @else {
+              <button type="button" class="nbh-btn" data-testid="neighbor" [attr.title]="n.chunk_id" (click)="selectChunk.emit(n.chunk_id)">
+                <fleet-kit-badge class="satisfied" [tone]="satisfiedTone(n)" variant="soft" data-testid="neighbor-satisfied">{{
+                  n.satisfied ? 'satisfied' : 'unmet'
+                }}</fleet-kit-badge>
+                <fleet-kit-badge [tone]="statusTone(n)">{{ shortId(n.chunk_id) }} · {{ statusLabel(n) }}</fleet-kit-badge>
+              </button>
+            }
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="nbh-empty" data-testid="neighborhood-prerequisites-empty">None</p>
+    }
+  </section>
+  <section class="nbh-group" data-testid="neighborhood-dependents">
+    <h3 class="nbh-label">Blocks</h3>
+    @if (neighborhood().dependents.length) {
+      <ul class="nbh-list">
+        @for (n of neighborhood().dependents; track n.chunk_id) {
+          <li>
+            @if (asLink()) {
+              <a class="nbh-link" data-testid="neighbor" [routerLink]="[...linkBase(), n.chunk_id]" [attr.title]="n.chunk_id">
+                <fleet-kit-badge class="satisfied" [tone]="satisfiedTone(n)" variant="soft" data-testid="neighbor-satisfied">{{
+                  n.satisfied ? 'satisfied' : 'unmet'
+                }}</fleet-kit-badge>
+                <fleet-kit-badge [tone]="statusTone(n)">{{ shortId(n.chunk_id) }} · {{ statusLabel(n) }}</fleet-kit-badge>
+              </a>
+            } @else {
+              <button type="button" class="nbh-btn" data-testid="neighbor" [attr.title]="n.chunk_id" (click)="selectChunk.emit(n.chunk_id)">
+                <fleet-kit-badge class="satisfied" [tone]="satisfiedTone(n)" variant="soft" data-testid="neighbor-satisfied">{{
+                  n.satisfied ? 'satisfied' : 'unmet'
+                }}</fleet-kit-badge>
+                <fleet-kit-badge [tone]="statusTone(n)">{{ shortId(n.chunk_id) }} · {{ statusLabel(n) }}</fleet-kit-badge>
+              </button>
+            }
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="nbh-empty" data-testid="neighborhood-dependents-empty">None</p>
+    }
+  </section>
+</div>

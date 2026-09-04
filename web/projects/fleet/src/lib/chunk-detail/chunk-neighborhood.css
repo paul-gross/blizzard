@@ -1,0 +1,56 @@
+:host {
+  display: block;
+}
+.nbh {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.nbh-label {
+  margin: 0 0 4px;
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: normal;
+}
+.nbh-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.nbh-list li {
+  min-width: 0;
+  max-width: 100%;
+}
+.nbh-empty {
+  margin: 0;
+  color: var(--label-dim);
+  font-size: var(--fs-sm);
+}
+.nbh-link,
+.nbh-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.nbh-link:focus-visible,
+.nbh-btn:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 1px;
+}
+/* The satisfied/unmet indicator reads distinctly from the neighbor's own
+   status badge beside it — two separate `fleet-kit-badge`s rather than one,
+   since a dependent edge's satisfaction (D4) tracks the *subject* chunk, not
+   the dependent neighbor's own status, so the two can disagree within one row. */
+.satisfied {
+  flex: none;
+}

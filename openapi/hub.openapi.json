@@ -1285,6 +1285,9 @@
             "title": "Migrations",
             "type": "array"
           },
+          "neighborhood": {
+            "$ref": "#/components/schemas/ChunkNeighborhoodView"
+          },
           "open_prs": {
             "default": [],
             "items": {
@@ -1469,6 +1472,58 @@
           "chunk_id"
         ],
         "title": "ChunkIngestResponse",
+        "type": "object"
+      },
+      "ChunkNeighborView": {
+        "description": "One standing-edge neighbor, one hop away (issue #462). ``status`` is null only for\nthe residual race a neighbor's facts fail to resolve \u2014 the edge is still drawn,\nunsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive\nscope this shares.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "satisfied": {
+            "title": "Satisfied",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChunkStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "chunk_id",
+          "satisfied"
+        ],
+        "title": "ChunkNeighborView",
+        "type": "object"
+      },
+      "ChunkNeighborhoodView": {
+        "description": "A chunk's standing dependency edges one hop each way (issue #462) \u2014 always present,\nwith two possibly-empty lists, unlike ``blocked``'s null-or-a-marking shape: a chunk\nwith no edges still carries this field, empty both ways.",
+        "properties": {
+          "dependents": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChunkNeighborView"
+            },
+            "title": "Dependents",
+            "type": "array"
+          },
+          "prerequisites": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChunkNeighborView"
+            },
+            "title": "Prerequisites",
+            "type": "array"
+          }
+        },
+        "title": "ChunkNeighborhoodView",
         "type": "object"
       },
       "ChunkPatchRequest": {

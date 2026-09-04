@@ -155,6 +155,63 @@ def derive_blocked_markings(
     return markings
 
 
+@dataclass(frozen=True)
+class ChunkNeighbor:
+    """One neighbor at one hop of :func:`derive_chunk_neighborhood` (D3, D4, issue #462) —
+    the neighbor's own id, its status where it resolved, and the edge's own satisfaction.
+    ``status`` is ``None`` only for the residual race a neighbor's facts fail to resolve
+    (D4); the edge is still drawn, unsatisfied, rather than dropped."""
+
+    chunk_id: str
+    status: ChunkStatus | None
+    satisfied: bool
+
+
+@dataclass(frozen=True)
+class ChunkNeighborhood:
+    """A chunk's standing edges one hop each way (issue #462)."""
+
+    prerequisites: list[ChunkNeighbor]
+    dependents: list[ChunkNeighbor]
+
+
+def derive_chunk_neighborhood(
+    chunk_id: str, edges: Iterable[DependencyEdge], statuses: Mapping[str, ChunkStatus]
+) -> ChunkNeighborhood:
+    """``chunk_id``'s standing edges in both directions, with per-edge satisfaction (D3) —
+    a sibling of :func:`derive_blocked_markings` answering a different question: every
+    edge naming ``chunk_id``, for a chunk at any status, rather than one earliest unmet
+    prerequisite confined to :data:`PRE_CLAIM_STATUSES`. ``edges`` must already be
+    :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.standing_edges_for`'s
+    own order. Satisfaction is never stored (D4): a prerequisite edge is satisfied when the
+    prerequisite reads ``done``; a dependent edge is satisfied when ``chunk_id`` itself
+    reads ``done``, so ``statuses`` must carry ``chunk_id``'s own status whenever a
+    dependent edge is present. A neighbor absent from ``statuses`` draws unsatisfied with
+    a null status rather than being dropped."""
+    prerequisites: list[ChunkNeighbor] = []
+    dependents: list[ChunkNeighbor] = []
+    subject_done = statuses.get(chunk_id) is ChunkStatus.DONE
+    for edge in edges:
+        if edge.dependent_chunk_id == chunk_id:
+            neighbor_status = statuses.get(edge.prerequisite_chunk_id)
+            prerequisites.append(
+                ChunkNeighbor(
+                    chunk_id=edge.prerequisite_chunk_id,
+                    status=neighbor_status,
+                    satisfied=neighbor_status is ChunkStatus.DONE,
+                )
+            )
+        if edge.prerequisite_chunk_id == chunk_id:
+            dependents.append(
+                ChunkNeighbor(
+                    chunk_id=edge.dependent_chunk_id,
+                    status=statuses.get(edge.dependent_chunk_id),
+                    satisfied=subject_done,
+                )
+            )
+    return ChunkNeighborhood(prerequisites=prerequisites, dependents=dependents)
+
+
 def would_close_a_cycle(standing: list[DependencyEdge], added: list[tuple[str, str]]) -> bool:
     """Would folding ``added``'s ordered ``(dependent, prerequisite)`` pairs into ``standing``'s edges close a cycle
     in the resulting graph? ``standing`` is assumed acyclic already, so a cycle can only pass through one of

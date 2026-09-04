@@ -857,6 +857,7 @@ export type ChunkDetail = {
      * Migrations
      */
     migrations?: Array<MigrationView>;
+    neighborhood?: ChunkNeighborhoodView;
     /**
      * Open Prs
      */
@@ -964,6 +965,44 @@ export type ChunkIngestResponse = {
      * Chunk Id
      */
     chunk_id: string;
+};
+
+/**
+ * ChunkNeighborView
+ *
+ * One standing-edge neighbor, one hop away (issue #462). ``status`` is null only for
+ * the residual race a neighbor's facts fail to resolve — the edge is still drawn,
+ * unsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive
+ * scope this shares.
+ */
+export type ChunkNeighborView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Satisfied
+     */
+    satisfied: boolean;
+    status?: ChunkStatus | null;
+};
+
+/**
+ * ChunkNeighborhoodView
+ *
+ * A chunk's standing dependency edges one hop each way (issue #462) — always present,
+ * with two possibly-empty lists, unlike ``blocked``'s null-or-a-marking shape: a chunk
+ * with no edges still carries this field, empty both ways.
+ */
+export type ChunkNeighborhoodView = {
+    /**
+     * Dependents
+     */
+    dependents?: Array<ChunkNeighborView>;
+    /**
+     * Prerequisites
+     */
+    prerequisites?: Array<ChunkNeighborView>;
 };
 
 /**

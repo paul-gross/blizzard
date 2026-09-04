@@ -213,7 +213,9 @@ class _CountingFactsStore(ChunkFactsStore):
 def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path: Path) -> None:
     """Review round 1 F5: ``GET /api/chunks/{id}``'s blocked-marking derivation must never
     reach the bulk `load_all_facts` seam — only bounded per-chunk `load_facts` calls, one
-    for the dependent and one per prerequisite its own edges name."""
+    for the dependent and one per prerequisite its own edges name. The neighborhood field
+    (issue #462) reads the same one prerequisite's facts again through its own bounded
+    seam, one further call."""
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [_DEPENDENT], promote=False)
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
@@ -228,7 +230,9 @@ def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path:
     assert resp.status_code == 200, resp.text
     assert resp.json()["blocked"] == {"prerequisite_chunk_id": prerequisite_id}
     assert counting.load_all_facts_calls == 0
-    assert counting.load_facts_calls == 2  # the dependent's own facts, and the one prerequisite's
+    # the dependent's own facts, the blocked-marking's one prerequisite, and the
+    # neighborhood's own bounded read of the same prerequisite.
+    assert counting.load_facts_calls == 3
 
 
 def test_detail_routes_facts_reads_are_bounded_by_its_own_edges_not_fleet_size(tmp_path: Path) -> None:

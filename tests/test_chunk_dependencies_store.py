@@ -110,6 +110,39 @@ def test_list_standing_edges_orders_by_declared_at_ascending(tmp_path: Path) -> 
     assert [e.dependency_id for e in ordered] == [earlier.dependency_id, later.dependency_id]
 
 
+def test_standing_edges_for_names_a_chunk_in_either_role(tmp_path: Path) -> None:
+    """``standing_edges_for`` (D2, issue #462) — the one-hop-each-way bounded read: every
+    standing edge naming the chunk as dependent or as prerequisite, in one list."""
+    dependencies, engine = _dependencies(tmp_path)
+    with engine.begin() as conn:
+        seed_chunk(conn, "ch_dependent_2", graph_id="gr_1", at=_NOW)
+    as_dependent = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
+    as_prerequisite = dependencies.declare(
+        "ch_dependent_2", "ch_dependent", by="user:alice", at=_NOW + timedelta(hours=1)
+    )
+
+    edges = dependencies.standing_edges_for("ch_dependent")
+
+    assert [e.dependency_id for e in edges] == [as_dependent.dependency_id, as_prerequisite.dependency_id]
+
+
+def test_standing_edges_for_excludes_edges_naming_other_chunks(tmp_path: Path) -> None:
+    dependencies, engine = _dependencies(tmp_path)
+    with engine.begin() as conn:
+        seed_chunk(conn, "ch_other", graph_id="gr_1", at=_NOW)
+    dependencies.declare("ch_other", "ch_prereq", by="user:alice", at=_NOW)
+
+    assert dependencies.standing_edges_for("ch_dependent") == []
+
+
+def test_standing_edges_for_excludes_a_released_edge(tmp_path: Path) -> None:
+    dependencies, _ = _dependencies(tmp_path)
+    dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
+    dependencies.release("ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=1))
+
+    assert dependencies.standing_edges_for("ch_dependent") == []
+
+
 def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Path) -> None:
     """``ChunkDependenciesStore.record_fold`` — the fold's own composite write (issue
     #460): a chunk's own ``chunk_grouped`` row, one release, and one mint, all in one

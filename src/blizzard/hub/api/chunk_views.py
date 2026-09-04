@@ -23,6 +23,7 @@ from blizzard.wire.chunk import (
     BounceView,
     ChunkDetail,
     ChunkEscalationView,
+    ChunkNeighborhoodView,
     ChunkSummary,
     ChunkUsageTotalView,
     ChunkUsageView,
@@ -75,6 +76,10 @@ class ChunkView:
     #: neither constructor derives it itself, so a caller that has no use for it (every verb
     #: response but the list and detail reads) pays nothing for it.
     blocked: BlockedView | None = None
+    #: The chunk's standing-edge neighborhood (issue #462) — the caller's own
+    #: already-derived value, the same shape ``blocked`` takes; only the detail read
+    #: derives one, so every other caller pays nothing for it.
+    neighborhood: ChunkNeighborhoodView | None = None
 
     @classmethod
     def of(
@@ -84,6 +89,7 @@ class ChunkView:
         names: GraphNames | None = None,
         blocked: BlockedView | None = None,
         facts: ChunkFacts | None = None,
+        neighborhood: ChunkNeighborhoodView | None = None,
     ) -> ChunkView:
         """``facts`` lets a caller that already loaded the chunk's own facts for another
         reason (the detail route's blocked-marking gate, issue #457 F5) hand it in rather
@@ -96,6 +102,7 @@ class ChunkView:
             else (services.chunks.facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)),
             names=names or GraphNames(services.graphs.get),
             blocked=blocked,
+            neighborhood=neighborhood,
         )
 
     @classmethod
@@ -210,6 +217,7 @@ class ChunkView:
             escalation=self._escalation(),
             pause=self._pause(),
             blocked=self.blocked,
+            neighborhood=self.neighborhood if self.neighborhood is not None else ChunkNeighborhoodView(),
             decision=self._decision(),
             history=history.transitions(),
             migrations=history.migrations(),

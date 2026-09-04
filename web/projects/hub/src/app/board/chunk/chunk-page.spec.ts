@@ -136,7 +136,13 @@ describe('Mobile chunk drill-down', () => {
     const sections = Array.from(el.querySelectorAll('[data-testid^="section-"]')).map((node) =>
       node.getAttribute('data-testid'),
     );
-    expect(sections).toEqual(['section-work-item', 'section-issues', 'section-node-history', 'section-asks']);
+    expect(sections).toEqual([
+      'section-work-item',
+      'section-issues',
+      'section-node-history',
+      'section-neighborhood',
+      'section-asks',
+    ]);
   });
 
   it('names the chunk by its full id in the identity header, not the compact ref', async () => {

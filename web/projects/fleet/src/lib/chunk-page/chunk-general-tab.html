@@ -25,6 +25,9 @@
       (pickStep)="pickStep.emit($event)"
     />
   </fleet-kit-panel>
+  <fleet-kit-panel class="section" data-testid="section-neighborhood" label="dependencies">
+    <fleet-chunk-neighborhood [detail]="detail()" [asLink]="true" />
+  </fleet-kit-panel>
   <fleet-kit-panel class="section" data-testid="section-asks" label="asks · decisions">
     <fleet-chunk-detail-awaiting-human
       [detail]="detail()"

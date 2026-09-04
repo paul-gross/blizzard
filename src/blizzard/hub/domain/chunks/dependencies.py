@@ -21,8 +21,9 @@ class FoldTarget:
 
 
 class IReadChunkDependenciesRepository(Protocol):
-    """Read-only chunk-dependencies access. Answers two questions and no more: the
-    fleet's standing edges, and the standing edge for one ordered pair."""
+    """Read-only chunk-dependencies access. Answers three questions and no more: the
+    fleet's standing edges, the standing edge for one ordered pair, and one chunk's own
+    standing edges in either role (issue #462)."""
 
     def list_standing_edges(self) -> list[DependencyEdge]:
         """Every currently-unreleased edge across the fleet."""
@@ -32,6 +33,14 @@ class IReadChunkDependenciesRepository(Protocol):
         """The standing (unreleased) edge for this ordered pair, or ``None`` — at most
         one holds at a time, a domain-held invariant with no database constraint
         behind it (a released pair may carry other, released rows)."""
+        ...
+
+    def standing_edges_for(self, chunk_id: str) -> list[DependencyEdge]:
+        """Every standing edge naming ``chunk_id``, as dependent or as prerequisite alike
+        (D2, issue #462) — the one-hop-each-way read the neighborhood view is built from,
+        bounded by ``chunk_id``'s own edge count rather than the fleet's, via the two
+        indexes ``schema.py`` already declares. Same order as
+        :meth:`list_standing_edges`."""
         ...
 
 

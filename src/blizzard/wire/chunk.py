@@ -406,6 +406,26 @@ class BlockedView(BaseModel):
     prerequisite_chunk_id: str
 
 
+class ChunkNeighborView(BaseModel):
+    """One standing-edge neighbor, one hop away (issue #462). ``status`` is null only for
+    the residual race a neighbor's facts fail to resolve — the edge is still drawn,
+    unsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive
+    scope this shares."""
+
+    chunk_id: str
+    status: ChunkStatus | None = None
+    satisfied: bool
+
+
+class ChunkNeighborhoodView(BaseModel):
+    """A chunk's standing dependency edges one hop each way (issue #462) — always present,
+    with two possibly-empty lists, unlike ``blocked``'s null-or-a-marking shape: a chunk
+    with no edges still carries this field, empty both ways."""
+
+    prerequisites: list[ChunkNeighborView] = []
+    dependents: list[ChunkNeighborView] = []
+
+
 class ChunkDetail(BaseModel):
     """The whole chunk aggregate — one response model behind both the hub's own detail read and the
     runner's pass-through proxy of it (issue #314): transition history, inline artifact store, and the
@@ -437,6 +457,9 @@ class ChunkDetail(BaseModel):
     # route returning this model (the operator verbs) does not derive it and reads null even on a
     # blocked chunk. Carried independently of ``status``; see BlockedView.
     blocked: BlockedView | None = None
+    # The chunk's standing dependency edges one hop each way (issue #462) — always present,
+    # unlike ``blocked``; see ChunkNeighborhoodView.
+    neighborhood: ChunkNeighborhoodView = Field(default_factory=ChunkNeighborhoodView)
     # The chunk's live gate decision — the open (waiting_on_human) or resolved-but-not-
     # yet-transitioned one.
     decision: DecisionView | None = None
