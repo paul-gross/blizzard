@@ -626,7 +626,10 @@ def test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unrea
         config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
 
         with _runner_api(config):
-            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            # 40s, not 10s: the node-scope read below now rides HubProxy's bounded-backoff
+            # retry (blizzard#467) before its 503 surfaces, so the client must outwait the
+            # retry ceiling rather than the old single-attempt latency.
+            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=40.0)
             try:
 
                 def _lease_minted() -> bool:
