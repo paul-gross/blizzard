@@ -211,9 +211,10 @@ class _CountingFactsStore(ChunkFactsStore):
 
 
 def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path: Path) -> None:
-    """Review round 1 F5: ``GET /api/chunks/{id}``'s blocked-marking derivation must never
-    reach the bulk `load_all_facts` seam — only bounded per-chunk `load_facts` calls, one
-    for the dependent and one per prerequisite its own edges name."""
+    """Review round 1 F5, round 2 F1: ``GET /api/chunks/{id}``'s blocked-marking and
+    neighborhood (issue #462) share one standing-edges read and one resulting statuses map,
+    so a prerequisite named by both costs one `load_facts` call, not two — only bounded
+    per-chunk reads, never the bulk `load_all_facts` seam."""
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [_DEPENDENT], promote=False)
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
@@ -228,7 +229,8 @@ def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path:
     assert resp.status_code == 200, resp.text
     assert resp.json()["blocked"] == {"prerequisite_chunk_id": prerequisite_id}
     assert counting.load_all_facts_calls == 0
-    assert counting.load_facts_calls == 2  # the dependent's own facts, and the one prerequisite's
+    # the dependent's own facts, and the one shared read of its one prerequisite's facts.
+    assert counting.load_facts_calls == 2
 
 
 def test_detail_routes_facts_reads_are_bounded_by_its_own_edges_not_fleet_size(tmp_path: Path) -> None:

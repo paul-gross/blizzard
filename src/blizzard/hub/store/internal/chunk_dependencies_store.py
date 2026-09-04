@@ -42,6 +42,22 @@ class ChunkDependenciesStore:
             row = _standing_row(conn, dependent_chunk_id, prerequisite_chunk_id)
         return _edge(row) if row is not None else None
 
+    def standing_edges_for(self, chunk_id: str) -> list[DependencyEdge]:
+        with self._store.read("standing_edges_for") as conn:
+            rows = conn.execute(
+                select(s.chunk_dependencies)
+                .where(
+                    s.chunk_dependencies.c.released_at.is_(None)
+                    & (
+                        (s.chunk_dependencies.c.dependent_chunk_id == chunk_id)
+                        | (s.chunk_dependencies.c.prerequisite_chunk_id == chunk_id)
+                    )
+                )
+                # (declared_at, dependency_id) — an explicit total order (`bzh:sql-portable`).
+                .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
+            ).all()
+        return [_edge(row) for row in rows]
+
     def declare(self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime) -> DependencyEdge:
         """Mint a fresh standing edge — always a new row, never a revive of a released
         one; see
