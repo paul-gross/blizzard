@@ -1,9 +1,14 @@
 import dagre from '@dagrejs/dagre';
 
 import type { GraphView } from '../api/hub';
-import { LABEL_HEIGHT, type TextMeasurer, labelBoxWidth, nodeBox } from './graph-box-sizing';
+import { LABEL_HEIGHT, type TextMeasurer, labelBoxWidth, migrationBox, nodeBox } from './graph-box-sizing';
+import { DONE_TERMINAL, GRAPH_TARGET_PREFIX, type EdgeKind, type EdgeTarget, type ResolvedEdge, resolveEdges } from './graph-edge-target';
 
 export { type TextMeasurer };
+// Re-exported so no consumer outside this module pair has to know the discriminated
+// target type and its structural-kind sibling actually live in `graph-edge-target.ts`
+// (split out for the `web:lint` line cap — see that module's own doc comment).
+export { type EdgeKind, type EdgeTarget };
 
 /**
  * The pure DAG-layout core for the graph diagram (`bzh:generated-client` — this
@@ -22,19 +27,20 @@ export { type TextMeasurer };
  * edges; self-loops are filtered out of the dagre input and drawn separately by
  * {@link LaidOutGraph.selfLoops} as manual side arcs, per the spike.
  *
+ * A choice's `to:` also names a **third** kind of target beyond a node or the
+ * `done` terminal: `graph:<name>`, a cross-graph migration (`bzh:migration-not-transition`,
+ * `src/blizzard/hub/domain/graph.py`'s `GRAPH_TARGET_PREFIX`) that re-pins the chunk to
+ * another graph entirely rather than transitioning it within this one. Each distinct
+ * target graph name gets its own synthetic dagre sink, laid out alongside `done` —
+ * {@link LaidOutGraph.migrations}.
+ *
  * `LaidOutEdge` and `LaidOutSelfLoop` carry identity — endpoints and `choiceId` —
  * alongside their geometry: the component's selection feature needs to highlight a
  * node's incident edges and render an edge's source/target, and `resolveEdges`
- * already computes exactly that internally. Surfacing it as additive readonly
- * fields keeps this module the single owner of edge resolution (`canon:one-owner`)
- * instead of forking the rule into the component.
+ * (`graph-edge-target.ts`) already computes exactly that internally. Surfacing it
+ * as additive readonly fields keeps this module pair the single owner of edge
+ * resolution (`canon:one-owner`) instead of forking the rule into the component.
  */
-
-/** A node's declaration in `graph.nodes` names the terminal a choice can point at
- * instead of a node — the domain's `RESERVED_TERMINAL`
- * (`src/blizzard/hub/domain/graph.py`). Duplicated here (not a backend import) since
- * the wire model carries it as a plain string, not a discriminated value. */
-const DONE_TERMINAL = 'done';
 
 const DONE_RADIUS = 24;
 /** The synthetic source dagre lays out above the entry node (blizzard#207) — sized
@@ -44,14 +50,15 @@ const START_RADIUS = DONE_RADIUS;
  * (those come from the domain as `n_<name>`), so it can't collide with one. */
 const START_TERMINAL = '__start__';
 const START_EDGE_NAME = 'start';
+/** Dagre graph-lib id namespace for a migration sink — `graph:<name>` targets are
+ * already namespaced by {@link GRAPH_TARGET_PREFIX} on the wire, so reusing it as
+ * the dagre id can't collide with a real `node_id` (those come from the domain as
+ * `n_<name>`) or with {@link DONE_TERMINAL}/{@link START_TERMINAL}. */
+function migrationSinkId(targetGraph: string): string {
+  return `${GRAPH_TARGET_PREFIX}${targetGraph}`;
+}
 /** Horizontal margin reserved so a self-loop's side arc doesn't clip the viewBox. */
 const SELF_LOOP_MARGIN = 60;
-
-/** An edge's derived semantic kind — purely structural, since the wire model
- * carries no `kind` field: an edge to the reserved `done` terminal (or any
- * forward-pointing edge) is `advance`; a self-loop or a back edge (target
- * declared no later than its source) is `retry`. */
-export type EdgeKind = 'advance' | 'retry';
 
 export interface LaidOutNode {
   readonly id: string;
@@ -81,8 +88,7 @@ export interface LaidOutEdge {
   readonly path: string;
   readonly label: LaidOutLabel | null;
   readonly fromNodeId: string;
-  /** `null` when the edge targets the reserved `done` terminal. */
-  readonly toNodeId: string | null;
+  readonly target: EdgeTarget;
   readonly choiceId: string;
 }
 
@@ -111,6 +117,17 @@ export interface LaidOutStart {
   readonly path: string;
 }
 
+/** A migration sink's box — one per distinct `graph:<name>` target in `graph.edges`,
+ * laid out by dagre like a node but rendered as a labelled exit pill, never a node
+ * box. */
+export interface LaidOutMigration {
+  readonly targetGraph: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface LaidOutGraph {
   readonly width: number;
   readonly height: number;
@@ -122,55 +139,12 @@ export interface LaidOutGraph {
   /** `null` only when `entry_node_id` names no node in `graph` — a degenerate graph
    * the component simply renders without a start indicator. */
   readonly start: LaidOutStart | null;
+  /** One entry per distinct `graph:<name>` target among `graph.edges`, in first-seen
+   * order — empty when the graph carries no migration edges. */
+  readonly migrations: readonly LaidOutMigration[];
 }
 
 export type LayoutOutcome = { readonly ok: true; readonly graph: LaidOutGraph } | { readonly ok: false };
-
-interface ResolvedEdge {
-  readonly id: string;
-  readonly fromId: string;
-  /** `null` when the edge targets the reserved `done` terminal. */
-  readonly toId: string | null;
-  readonly kind: EdgeKind;
-  readonly label: string;
-  readonly choiceId: string;
-}
-
-/** Resolves every edge's target node id (or `null` for the reserved `done`
- * terminal) and its structural kind. Returns `null` if an edge names a target that
- * matches no node and isn't the reserved terminal — a degenerate graph the caller
- * falls back on rather than mis-render.
- *
- * Only edges actually present in `graph.edges` are laid out here — the runtime's
- * machinery-default edges (e.g. a `deliver` node's implicit `landed→done` /
- * `conflict→entry`) are never part of the wire `GraphView` and are intentionally
- * *not* synthesized for the diagram, so the `done` sink (and any edge into it)
- * only renders when a real authored edge targets `done`. */
-function resolveEdges(graph: GraphView, nameToId: ReadonlyMap<string, string>): ResolvedEdge[] | null {
-  const indexById = new Map(graph.nodes?.map((n, i) => [n.node_id, i]) ?? []);
-  const nodeById = new Map(graph.nodes?.map((n) => [n.node_id, n]) ?? []);
-  const resolved: ResolvedEdge[] = [];
-  for (const [i, edge] of (graph.edges ?? []).entries()) {
-    // The choice's name lives on the *source* node's `choices`, not the edge — the
-    // edge only carries `choice_id` (mirrors `graph-detail.ts`'s `resolvedEdges`).
-    const choice = nodeById.get(edge.from_node_id)?.choices?.find((c) => c.choice_id === edge.choice_id);
-    const label = choice?.name ?? edge.choice_id;
-    if (edge.to_node_name === DONE_TERMINAL) {
-      resolved.push({ id: `e${i}`, fromId: edge.from_node_id, toId: null, kind: 'advance', label, choiceId: edge.choice_id });
-      continue;
-    }
-    const toId = nameToId.get(edge.to_node_name);
-    if (toId === undefined) return null;
-    const fromIndex = indexById.get(edge.from_node_id);
-    const toIndex = indexById.get(toId);
-    if (fromIndex === undefined || toIndex === undefined) return null;
-    const isSelfLoop = toId === edge.from_node_id;
-    const isBackEdge = !isSelfLoop && toIndex <= fromIndex;
-    const kind: EdgeKind = isSelfLoop || isBackEdge ? 'retry' : 'advance';
-    resolved.push({ id: `e${i}`, fromId: edge.from_node_id, toId, kind, label, choiceId: edge.choice_id });
-  }
-  return resolved;
-}
 
 function selfLoopPath(x0: number, y0: number, y1: number, bulge: number): string {
   return `M ${x0} ${y0} C ${x0 + bulge} ${y0 - 10}, ${x0 + bulge} ${y1 + 10}, ${x0 + 4} ${y1}`;
@@ -188,6 +162,19 @@ function curvedPath(points: readonly { x: number; y: number }[]): string {
   const last = points[points.length - 1];
   d += ` L ${last.x} ${last.y}`;
   return d;
+}
+
+/** The dagre graph-lib id `target` routes through — a real node id, the shared
+ * `done` sink, or a migration's own sink, one per distinct target graph name. */
+function dagreTargetId(target: EdgeTarget): string {
+  switch (target.kind) {
+    case 'node':
+      return target.nodeId;
+    case 'done':
+      return DONE_TERMINAL;
+    case 'graph':
+      return migrationSinkId(target.targetGraph);
+  }
 }
 
 /**
@@ -208,15 +195,27 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
 
   const selfLoopsByNode = new Map<string, ResolvedEdge>();
   for (const edge of resolved) {
-    if (edge.toId === edge.fromId) {
+    if (edge.target.kind === 'node' && edge.target.nodeId === edge.fromId) {
       if (selfLoopsByNode.has(edge.fromId)) return { ok: false }; // >1 self-loop per node: unsupported
       selfLoopsByNode.set(edge.fromId, edge);
     }
   }
 
-  const usesDone = resolved.some((e) => e.toId === null);
+  const usesDone = resolved.some((e) => e.target.kind === 'done');
+  // First-seen order, one sink per distinct target graph name — mirrors the `done`
+  // sink's "shared by every edge into it" shape, just keyed by name instead of a
+  // single reserved terminal.
+  const migrationNames: string[] = [];
+  const seenMigrations = new Set<string>();
+  for (const edge of resolved) {
+    if (edge.target.kind === 'graph' && !seenMigrations.has(edge.target.targetGraph)) {
+      seenMigrations.add(edge.target.targetGraph);
+      migrationNames.push(edge.target.targetGraph);
+    }
+  }
   const hasEntry = nodes.some((n) => n.node_id === graph.entry_node_id);
   const boxes = new Map(nodes.map((n) => [n.node_id, nodeBox(n, measure)]));
+  const migrationBoxes = new Map(migrationNames.map((name) => [name, migrationBox(name, measure)]));
 
   try {
     const g = new dagre.graphlib.Graph({ multigraph: true });
@@ -228,14 +227,18 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
       g.setNode(n.node_id, { width: box.width, height: box.height });
     }
     if (usesDone) g.setNode(DONE_TERMINAL, { width: DONE_RADIUS * 2, height: DONE_RADIUS * 2 });
+    for (const name of migrationNames) {
+      const box = migrationBoxes.get(name)!;
+      g.setNode(migrationSinkId(name), { width: box.width, height: box.height });
+    }
     if (hasEntry) {
       g.setNode(START_TERMINAL, { width: START_RADIUS * 2, height: START_RADIUS * 2 });
       g.setEdge(START_TERMINAL, graph.entry_node_id, {}, START_EDGE_NAME);
     }
 
-    const forwardEdges = resolved.filter((e) => e.toId !== e.fromId);
+    const forwardEdges = resolved.filter((e) => !(e.target.kind === 'node' && e.target.nodeId === e.fromId));
     for (const edge of forwardEdges) {
-      const target = edge.toId ?? DONE_TERMINAL;
+      const target = dagreTargetId(edge.target);
       const labelW = labelBoxWidth(edge.label, measure);
       g.setEdge(edge.fromId, target, { width: labelW, height: LABEL_HEIGHT, labelpos: 'c' }, edge.id);
     }
@@ -258,7 +261,7 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
     });
 
     const laidOutEdges: LaidOutEdge[] = forwardEdges.map((edge) => {
-      const target = edge.toId ?? DONE_TERMINAL;
+      const target = dagreTargetId(edge.target);
       const e = g.edge(edge.fromId, target, edge.id);
       const d = curvedPath(e.points);
       const labelX = e['x'] as number | undefined;
@@ -267,7 +270,7 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
         labelX !== undefined && labelY !== undefined
           ? { text: edge.label, x: labelX, y: labelY, width: labelBoxWidth(edge.label, measure), height: LABEL_HEIGHT }
           : null;
-      return { id: edge.id, kind: edge.kind, path: d, label, fromNodeId: edge.fromId, toNodeId: edge.toId, choiceId: edge.choiceId };
+      return { id: edge.id, kind: edge.kind, path: d, label, fromNodeId: edge.fromId, target: edge.target, choiceId: edge.choiceId };
     });
 
     const selfLoops: LaidOutSelfLoop[] = [...selfLoopsByNode.values()].map((edge) => {
@@ -292,6 +295,12 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
           return { x: dn.x, y: dn.y, r: DONE_RADIUS };
         })()
       : null;
+
+    const migrations: LaidOutMigration[] = migrationNames.map((name) => {
+      const pos = g.node(migrationSinkId(name));
+      const box = migrationBoxes.get(name)!;
+      return { targetGraph: name, x: pos.x - box.width / 2, y: pos.y - box.height / 2, width: box.width, height: box.height };
+    });
 
     const start: LaidOutStart | null = hasEntry
       ? (() => {
@@ -323,6 +332,7 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
         selfLoops,
         done,
         start,
+        migrations,
       },
     };
   } catch {

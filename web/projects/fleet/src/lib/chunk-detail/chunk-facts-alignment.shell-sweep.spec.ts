@@ -21,7 +21,7 @@ import { ChunkTokenBreakdown } from './chunk-token-breakdown';
  * the first — since that sibling relationship, not either component alone, is
  * what the shared custom properties are proving stays aligned. The fixture
  * carries a long runner identity that wraps the facts table's Runner value
- * across more than one line: the failure mode a fixed `74px`/`8px 6px` literal
+ * across more than one line: the failure mode a fixed `112px`/`8px 6px` literal
  * (in place of `var(--kv-label-col)`/`var(--chunk-facts-pad)`) would not show
  * on a short value, since both tables still happen to compute the same
  * default — only differing *content* widths expose independently-sized grid

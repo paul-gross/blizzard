@@ -84,13 +84,10 @@
  *     at the same horizontal position under a long runner identity that wraps
  *     — a real CSS grid layout claim jsdom cannot make.
  *   - projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts — the
- *     graphs container/presentational split's two Phase-2 children
- *     (`GraphDetailHeader`, `GraphDetailEdges`): the header's identity row,
- *     lifecycle actions, error line, and entry line genuinely stack with the
- *     real gap `:host`'s flex column has to reproduce now that they moved out
- *     from under `.body`'s own flex column, and the edges section's per-node
- *     blocks and prompt addendum genuinely stack too — real CSS layout claims
- *     jsdom cannot make.
+ *     graphs container/presentational split's `GraphDetailLifecycle`: its
+ *     error line and entry line genuinely stack with the real gap `:host`'s
+ *     flex column has to reproduce now that they moved out from under
+ *     `.body`'s own flex column — a real CSS layout claim jsdom cannot make.
  *   - projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts — the
  *     gardening routine panel (blizzard#397): the record, strategy, trend,
  *     measurement, and last-swept blocks genuinely stack at 1280/390/320px
@@ -164,12 +161,24 @@
  *     status row without moving the status's own position or overflowing the card, at
  *     800px and at 390/320px.
  *   - projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts — the
- *     dock header's action row with every control live at once (Pause, Complete, the
- *     prerequisite field, Declare, Release, the route/Detach group, close): none of
- *     them overflows the header's own edge, at 800px and at 390/320px.
+ *     dock header's action row with every control live at once (Pause, Complete,
+ *     Delete, the prerequisite field, Declare, Release, the route/Detach group,
+ *     close): none of them overflows the header's own edge, at 800px and at
+ *     390/320px.
+ *   - projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts —
+ *     the two structured artifact readings (`FindingDelta`, `FindingSurvey`) inside a
+ *     height-capped page: each genuinely bounds itself at the cap and scrolls its own
+ *     overflow rather than growing to its content — a flex/`min-height: 0` chain four
+ *     components deep that jsdom parses and never resolves.
+ *   - projects/fleet/src/lib/graphs/graph-explorer-list.shell-sweep.spec.ts — the
+ *     explorer's two row levels once rebuilt on `KitSelectRow`, their content now
+ *     projected into another component's button: a long graph name, its version count,
+ *     and its right-anchored short id stay inside the list's own edge at 520/390/320px.
  */
 
 const { spawnSync } = require('node:child_process');
+const { readdirSync } = require('node:fs');
+const { join, relative, sep } = require('node:path');
 
 const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts' },
@@ -198,7 +207,41 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-page-grids.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-explorer-list.shell-sweep.spec.ts' },
 ];
+
+/** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.
+ * `__screenshots__/` holds the browser runner's own captured artifacts, whose filenames
+ * mirror the spec that produced them — they are images, not specs, and must not be
+ * mistaken for roster candidates. */
+function specsOnDisk(dir, found = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules' || entry.name === '__screenshots__') continue;
+      specsOnDisk(join(dir, entry.name), found);
+    } else if (entry.name.endsWith('.shell-sweep.spec.ts')) {
+      found.push(relative(__dirname + '/..', join(dir, entry.name)).split(sep).join('/'));
+    }
+  }
+  return found;
+}
+
+/** `SWEEPS` is the only thing that runs these specs — `angular.json`'s per-project
+ * `test.exclude` keeps them out of `ng test` — so a spec on disk but off the roster is
+ * one no gate, no runner, and no drift check ever executes, and it stays green for
+ * exactly as long as nobody notices. A roster entry with no file is the same failure
+ * read from the other end. Both fail here, before any browser starts. */
+function checkRoster() {
+  const onDisk = new Set(specsOnDisk(join(__dirname, '..', 'projects')));
+  const registered = new Set(SWEEPS.map((s) => s.spec));
+  const unregistered = [...onDisk].filter((s) => !registered.has(s)).sort();
+  const dangling = [...registered].filter((s) => !onDisk.has(s)).sort();
+
+  for (const spec of unregistered) console.error(`shell-sweep: ${spec} is on disk but not in SWEEPS — nothing runs it.`);
+  for (const spec of dangling) console.error(`shell-sweep: ${spec} is in SWEEPS but not on disk.`);
+  return unregistered.length === 0 && dangling.length === 0;
+}
 
 function runSweep({ project, spec }) {
   console.log(`\nshell-sweep: ${project} (${spec})\n`);
@@ -211,6 +254,12 @@ function runSweep({ project, spec }) {
 }
 
 function main() {
+  if (!checkRoster()) {
+    console.error('\nshell-sweep: FAILED — roster and disk disagree (see above)\n');
+    process.exitCode = 1;
+    return;
+  }
+
   const results = SWEEPS.map((sweep) => ({ ...sweep, ok: runSweep(sweep) }));
   const failed = results.filter((r) => !r.ok);
 

@@ -1,0 +1,15 @@
+.migration-box {
+  fill: var(--cyan-dim);
+  stroke: var(--cyan);
+  stroke-width: 1.5;
+  /* Dashed, not solid like the done sink's circle — this exit does not close the
+     chunk, it hands it to another graph entirely, so its box reads as a boundary
+     rather than a terminal. */
+  stroke-dasharray: 5 4;
+}
+.migration-label {
+  fill: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+}

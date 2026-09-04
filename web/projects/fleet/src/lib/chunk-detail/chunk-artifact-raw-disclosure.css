@@ -1,0 +1,49 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+}
+.rd-toggle {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--label);
+  font: inherit;
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.rd-toggle:hover,
+.rd-toggle:focus-visible {
+  color: var(--text);
+  border-color: var(--label);
+  outline: none;
+}
+.rd-raw {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--overlay-30);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+/* The structured reading's own column — several stacked blocks (the fact grid, the
+   measurement, one group per op or the candidate list) with the scroll region a long
+   one needs. */
+.rd-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+}

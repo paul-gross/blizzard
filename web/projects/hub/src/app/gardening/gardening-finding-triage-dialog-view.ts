@@ -9,14 +9,6 @@ export interface FindingTriageSubmission {
   readonly supersededBy?: string;
 }
 
-/** Escapes a value for safe interpolation inside a double-quoted shell argument —
- * backslashes first, then double quotes — so {@link GardeningFindingTriageDialogView.cliVerb}'s
- * `--note "..."` mirror stays a command that actually runs if copy-pasted even when
- * the note itself contains a `"` (F11). */
-function shellDoubleQuoted(value: string): string {
-  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-}
-
 /** Every verb's human-readable dialog heading label. */
 const VERB_LABELS: Record<FindingTriageVerb, string> = {
   resolve: 'Resolve',
@@ -25,6 +17,26 @@ const VERB_LABELS: Record<FindingTriageVerb, string> = {
   'not-a-finding': 'Not a finding',
   supersede: 'Supersede',
   reopen: 'Reopen',
+};
+
+/** What each verb actually does to the finding, stated before the operator writes
+ * the note that justifies it — these are exit verbs and most of them are one-way, so
+ * the dialog says which bucket the finding lands in rather than leaving the
+ * distinction to the verb's name alone. Wording follows the hub CLI's own help for
+ * the matching verb (`src/blizzard/hub/cli/finding.py`) and
+ * `finding-state.ts`'s outflow/withdrawn split: an *outflow* exit means the ground
+ * itself moved, a *withdrawn* one means it didn't and a person decided the finding
+ * doesn't merit standing regardless. */
+const VERB_BLURBS: Record<FindingTriageVerb, string> = {
+  resolve: 'The work that answers this finding has landed. It leaves the live bucket as resolved.',
+  'confirm-gone':
+    'A run reported this finding no longer reproduces, and you are confirming that by hand. It leaves the live bucket as gone-confirmed.',
+  'wont-fix':
+    "The finding stands, but it doesn't merit acting on. Nothing about the ground changed — this is a judgment call, and it withdraws the finding.",
+  'not-a-finding': 'This should not have been recorded as a finding at all. It withdraws the finding.',
+  supersede:
+    'Another finding absorbs this one and carries it forward. It withdraws the finding, pointing at the absorbing id named below.',
+  reopen: 'Puts this finding back in the live bucket, undoing whichever exit or gone fact was newest.',
 };
 
 /**
@@ -38,11 +50,11 @@ const VERB_LABELS: Record<FindingTriageVerb, string> = {
  * matching mutation and maps its async state into `submitting()`/`submitError()`
  * (`bzh:frontend-container-presentational`).
  *
- * The CLI-verb mirror line (D1) is built from the real CLI
- * (`src/blizzard/hub/cli/finding.py`) — every finding id space-joined, matching
- * the CLI's own `nargs=-1` positional-args shape, with `--note "..."` appended
- * only once the note is non-blank (`gardening-proposal-pass-dialog-view.ts`'s
- * own conditional-flag shape), and `supersede` alone also carrying `--by`.
+ * Opens on a short statement of what the chosen verb does ({@link VERB_BLURBS}):
+ * every verb here is an exit, most are one-way, and the note the operator is about
+ * to write is the record of why — so the consequence belongs above the field, not
+ * behind the verb's name. The dialog dispatches one finding at a time (the list
+ * carries no multi-select), which is why the heading names no count.
  *
  * Owns the note/`supersededBy` fields as local signals — the host page renders
  * this component (and its container) with `@if`, tearing it down between opens,
@@ -57,7 +69,6 @@ const VERB_LABELS: Record<FindingTriageVerb, string> = {
 })
 export class GardeningFindingTriageDialogView {
   readonly verb = input.required<FindingTriageVerb>();
-  readonly findingIds = input.required<readonly string[]>();
 
   readonly submitting = input(false);
   readonly submitError = input<string | null>(null);
@@ -68,25 +79,15 @@ export class GardeningFindingTriageDialogView {
   protected readonly note = signal('');
   protected readonly supersededBy = signal('');
 
-  protected readonly heading = computed(() => {
-    const count = this.findingIds().length;
-    return `${VERB_LABELS[this.verb()]} ${count} ${count === 1 ? 'finding' : 'findings'}`;
-  });
+  protected readonly heading = computed(() => `${VERB_LABELS[this.verb()]} finding`);
+
+  /** {@link VERB_BLURBS}'s lookup for the verb this dialog was opened under. */
+  protected readonly blurb = computed(() => VERB_BLURBS[this.verb()]);
 
   protected readonly canSubmit = computed(() => {
     if (this.submitting()) return false;
     if (this.note().trim().length === 0) return false;
     return this.verb() !== 'supersede' || this.supersededBy().trim().length > 0;
-  });
-
-  protected readonly cliVerb = computed(() => {
-    const verb = this.verb();
-    const ids = this.findingIds().join(' ');
-    const parts = [`blizzard hub finding ${verb} ${ids}`];
-    if (verb === 'supersede') parts.push(`--by ${this.supersededBy().trim()}`);
-    const note = this.note().trim();
-    if (note) parts.push(`--note ${shellDoubleQuoted(note)}`);
-    return parts.join(' ');
   });
 
   protected onSubmitClick(): void {

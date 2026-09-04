@@ -6,7 +6,14 @@
   [canControl]="canControl()"
   (pass)="openPass()"
   (accept)="openAccept()"
+  (evidenceTriage)="onEvidenceTriage($event)"
 />
+
+<!-- An inline triage has no dialog to report into, so its failure surfaces here
+     rather than vanishing while the row's state silently stays put. -->
+@if (evidenceError(); as error) {
+  <p class="evidence-error" data-testid="gardening-proposal-evidence-error">{{ error }}</p>
+}
 
 @if (passingProposal(); as proposal) {
   <app-gardening-proposal-pass-dialog

@@ -90,7 +90,29 @@
   display: block;
   margin-top: 4px;
 }
-.pp-finding-gone {
-  color: var(--red, #c33);
-  font-style: italic;
+/* The separator between the row's three facts — the finding panel heading's own
+   `.fp-sep` treatment (`finding-panel.css`), so the two surfaces punctuate a finding
+   the same way. `aria-hidden` in the template: it is punctuation, not content. */
+.pp-sep {
+  color: var(--label-dim);
+}
+
+/* `variant="text"`, matching the finding panel's title badge rather than the list
+   row's pill: this sits in a line that already has the reader's attention, and a
+   pill would fight the two plain facts beside it. */
+.pp-finding-state {
+  font-weight: normal;
+}
+
+/* Pushed to the row's trailing edge, wrapping as a block when the head runs out of
+   width rather than squeezing the locus. */
+/* Roomier than the hairline default: these are four adjacent targets in a dense row,
+   and at the default padding they read as one undifferentiated strip. */
+.pp-finding-actions {
+  --kit-button-pad: 5px 12px;
+  --kit-button-fs: var(--fs-sm);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
 }

@@ -1,0 +1,95 @@
+/* A flex column, not a block: `chunk-artifact-body.css` hands this host a bounded
+   height, and a block box would hand its child content height instead — leaving the
+   scroll region below inert. */
+:host {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.fd {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+/* Same reason one level down: the disclosure shell owns the scroll region, so it
+   has to receive the height rather than size to its content. */
+.fd > fleet-chunk-artifact-raw-disclosure {
+  flex: 1;
+  min-height: 0;
+}
+/* `garden/run-delta.css`'s own `.rd-ref` reference-link color, matched here so a
+   finding id reads the same whether it is seen through the gardening tabs or
+   through this raw-artifact reading of the same data — this component links
+   nowhere (an artifact predates the finding-set delivery this id might not have
+   settled into yet), so the color alone carries the "this is a reference" signal. */
+.fd-ref {
+  color: var(--amber-hi);
+}
+.fd-facts {
+  flex: none;
+}
+.fd-revisions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fd-repo {
+  color: var(--label);
+}
+/* Each op group's own left-border color — `run-delta.css`'s own scheme, matched
+   here so the two surfaces agree: a new finding is bad news (red), a finding that
+   stopped reproducing is good news (green), and an `observed` re-confirmation is
+   neither (the neutral line color). */
+.fd-group {
+  border-left: 2px solid var(--line);
+  padding-left: 8px;
+}
+.fd-group--added {
+  border-left-color: var(--red);
+}
+.fd-group--observed {
+  border-left-color: var(--line);
+}
+.fd-group--gone {
+  border-left-color: var(--green);
+}
+.fd-group h5 {
+  margin: 0 0 6px;
+  font-size: var(--fs-sm);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--snow);
+  text-shadow: 0 1px 0 var(--overlay-90);
+}
+.fd-count {
+  color: var(--label-dim);
+  font-weight: normal;
+  margin-left: 2px;
+}
+.fd-group ul,
+.fd-id-list {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.fd-group ul {
+  gap: 6px;
+}
+/* The Observed group's own list — bare ids only, no prose block beneath each, so
+   it packs tighter than `.fd-entry`'s own gap above. */
+.fd-id-list {
+  gap: 2px;
+}
+/* The Gone group's own entries, which render as one inline line (an id and its
+   note) rather than through `fleet-chunk-finding-entry`. */
+.fd-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

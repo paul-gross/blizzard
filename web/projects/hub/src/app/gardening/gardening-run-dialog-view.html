@@ -20,7 +20,12 @@
           <span data-testid="run-confirmation-downgraded">Downgraded to full — the pair had no recorded baseline.</span>
         }
       </p>
-      <a [routerLink]="['/board', 'chunk', run.chunk_id]" data-testid="run-confirmation-board-link">View on the board</a>
+      <a
+        class="board-link"
+        [routerLink]="['/board', 'chunk', run.chunk_id]"
+        data-testid="run-confirmation-board-link"
+        >View on the board</a
+      >
     </div>
   } @else {
     <fleet-kit-async-state
@@ -94,20 +99,19 @@
           />
         </div>
       </fleet-kit-panel>
-
-      <p class="cli-verb" data-testid="run-cli-verb">{{ cliVerb() }}</p>
     }
   }
 
   <div fleetKitDialogFooter class="footer">
     @if (confirmedRun()) {
-      <fleet-kit-button variant="primary" (click)="closed.emit()" testid="run-dialog-done">Done</fleet-kit-button>
+      <fleet-kit-button size="cta" variant="primary" (click)="closed.emit()" testid="run-dialog-done">Done</fleet-kit-button>
     } @else {
       @if (submitError(); as error) {
         <p class="submit-error" data-testid="run-submit-error">{{ error }}</p>
       }
-      <fleet-kit-button [disabled]="submitting()" (click)="onClosed()" testid="run-dialog-cancel">Cancel</fleet-kit-button>
+      <fleet-kit-button size="cta" [disabled]="submitting()" (click)="onClosed()" testid="run-dialog-cancel">Cancel</fleet-kit-button>
       <fleet-kit-button
+      size="cta"
         variant="primary"
         [disabled]="!canSubmit()"
         (click)="onSubmitClick()"

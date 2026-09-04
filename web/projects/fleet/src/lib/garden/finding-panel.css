@@ -22,6 +22,20 @@
   color: var(--label-dim);
   font-weight: normal;
 }
+/* The title's own separators — `chunk-artifact-body.html`'s `.a-sep` idiom, dimmer
+   than either side so the three facts read as one line rather than three labels.
+   `aria-hidden` in the template: it is punctuation, not content a reader needs. */
+.fp-sep {
+  color: var(--label-dim);
+  font-weight: normal;
+}
+/* `variant="text"` (plain colored text, not a pill) — the pill shape belongs to the
+   list row, where it has to catch the eye across many rows; here it sits inside a
+   heading that already has the reader's attention, and a pill would fight the two
+   plain facts beside it. */
+.fp-state {
+  font-weight: normal;
+}
 .fp-locus {
   margin: 4px 0 0;
   color: var(--label);

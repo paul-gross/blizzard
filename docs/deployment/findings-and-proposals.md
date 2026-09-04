@@ -61,6 +61,14 @@ reason and the mint/decline choice exposed the same way the CLI takes them; an a
 once one exists, is read through the closure's own pointer and shown beside every finding it answers. Neither dialog is
 offered without `chunk:control`.**
 
+**Each evidence row also dispatches four of the exit verbs inline — `resolve`, `confirm-gone`, `wont-fix`,
+`not-a-finding` — so the findings a proposal names can be triaged from the docket without leaving it. These are the one
+place a note is not collected: the board writes one naming the proposal the row was triaged from, because the verbs
+require a note server-side and a one-click action has nowhere to ask for one. `supersede` and `reopen` are not offered
+here — the first needs an absorbing finding this row cannot name, and the second is not a way to clear a row off a
+docket. The buttons are withheld on a row that has already exited, and withheld entirely without `chunk:control`; a
+`gone`-flagged row still carries them, since it has not exited and confirming it is exactly what it is waiting for.**
+
 ## Trend
 
 `blizzard hub routine trend <name>` reads a routine's finding inflow-against-outflow over a window, taking `--since`,

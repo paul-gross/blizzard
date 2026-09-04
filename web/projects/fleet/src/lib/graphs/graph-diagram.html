@@ -136,6 +136,10 @@
             />
             <text class="done-label" [attr.x]="done.x" [attr.y]="done.y + 4" text-anchor="middle">DONE</text>
           }
+
+          @for (migration of o.graph.migrations; track migration.targetGraph) {
+            <g fleetGraphDiagramMigration [migration]="migration"></g>
+          }
         </svg>
       </div>
     } @else {

@@ -49,7 +49,7 @@ const LAID_OUT: LaidOutGraph = {
       path: 'M 95 80 L 95 120',
       label: { text: 'pass', x: 95, y: 100, width: 40, height: 20 },
       fromNodeId: 'n_build',
-      toNodeId: 'n_deliver',
+      target: { kind: 'node', nodeId: 'n_deliver' },
       choiceId: 'c_pass',
     },
   ],
@@ -64,6 +64,7 @@ const LAID_OUT: LaidOutGraph = {
   ],
   done: { x: 95, y: 220, r: 24 },
   start: { x: 95, y: -20, r: 24, path: 'M 95 -20 L 95 20' },
+  migrations: [],
 };
 
 function mount(outcome: LayoutOutcome, selection?: DiagramSelection | null) {
@@ -109,6 +110,37 @@ describe('GraphDiagram', () => {
     expect(el.querySelector('[data-testid="graph-diagram-done"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="graph-diagram-start"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="graph-diagram-start-path"]')).toBeTruthy();
+  });
+
+  it('renders a migration sink as a labelled pill, distinct from a node box and the done circle', () => {
+    const withMigration: LaidOutGraph = {
+      ...LAID_OUT,
+      edges: [
+        ...LAID_OUT.edges,
+        {
+          id: 'e2',
+          kind: 'advance',
+          path: 'M 95 80 L 260 80',
+          label: { text: 'basic', x: 180, y: 80, width: 40, height: 20 },
+          fromNodeId: 'n_build',
+          target: { kind: 'graph', targetGraph: 'bas-dwf' },
+          choiceId: 'c_basic',
+        },
+      ],
+      migrations: [{ targetGraph: 'bas-dwf', x: 260, y: 60, width: 100, height: 32 }],
+    };
+    const fixture = mount({ ok: true, graph: withMigration });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const migrations = el.querySelectorAll('[data-testid="graph-diagram-migration"]');
+    expect(migrations).toHaveLength(1);
+    expect(migrations[0].getAttribute('data-target-graph')).toBe('bas-dwf');
+    expect(migrations[0].querySelector('[data-testid="graph-diagram-migration-label"]')?.textContent?.trim()).toBe(
+      'bas-dwf',
+    );
+
+    const edges = el.querySelectorAll('[data-testid="graph-diagram-edge"]');
+    expect(edges).toHaveLength(2);
   });
 
   it('renders no start indicator when the layout carries none (a degenerate entry_node_id)', () => {
@@ -185,7 +217,7 @@ describe('GraphDiagram', () => {
         kind: 'edge',
         edgeId: 'e0',
         fromNodeId: 'n_build',
-        toNodeId: 'n_deliver',
+        target: { kind: 'node', nodeId: 'n_deliver' },
         choiceId: 'c_pass',
         edgeKind: 'advance',
       });
@@ -204,7 +236,7 @@ describe('GraphDiagram', () => {
         kind: 'edge',
         edgeId: 'e0',
         fromNodeId: 'n_build',
-        toNodeId: 'n_deliver',
+        target: { kind: 'node', nodeId: 'n_deliver' },
         choiceId: 'c_pass',
         edgeKind: 'advance',
       });
@@ -223,9 +255,45 @@ describe('GraphDiagram', () => {
         kind: 'edge',
         edgeId: 'e1',
         fromNodeId: 'n_build',
-        toNodeId: 'n_build',
+        target: { kind: 'node', nodeId: 'n_build' },
         choiceId: 'c_fail',
         edgeKind: 'retry',
+      });
+    });
+
+    it('emits an edge selection carrying a graph target for a migration edge', () => {
+      const withMigration: LaidOutGraph = {
+        ...LAID_OUT,
+        edges: [
+          ...LAID_OUT.edges,
+          {
+            id: 'e2',
+            kind: 'advance',
+            path: 'M 95 80 L 260 80',
+            label: { text: 'basic', x: 180, y: 80, width: 40, height: 20 },
+            fromNodeId: 'n_build',
+            target: { kind: 'graph', targetGraph: 'bas-dwf' },
+            choiceId: 'c_basic',
+          },
+        ],
+        migrations: [{ targetGraph: 'bas-dwf', x: 260, y: 60, width: 100, height: 32 }],
+      };
+      const fixture = mount({ ok: true, graph: withMigration });
+      const el = fixture.nativeElement as HTMLElement;
+      const edges = el.querySelectorAll('[data-testid="graph-diagram-edge"]');
+      const hitPath = edges[1].querySelector('[data-testid="graph-diagram-edge-hit"]') as HTMLElement;
+
+      let received: DiagramSelection | null | undefined;
+      fixture.componentInstance.selectionChange.subscribe((v) => (received = v));
+      hitPath.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(received).toEqual({
+        kind: 'edge',
+        edgeId: 'e2',
+        fromNodeId: 'n_build',
+        target: { kind: 'graph', targetGraph: 'bas-dwf' },
+        choiceId: 'c_basic',
+        edgeKind: 'advance',
       });
     });
 
@@ -262,7 +330,7 @@ describe('GraphDiagram', () => {
     it('renders a selection passed in from outside highlighted with no click at all (the controlled contract)', () => {
       const fixture = mount(
         { ok: true, graph: LAID_OUT },
-        { kind: 'edge', edgeId: 'e0', fromNodeId: 'n_build', toNodeId: 'n_deliver', choiceId: 'c_pass', edgeKind: 'advance' },
+        { kind: 'edge', edgeId: 'e0', fromNodeId: 'n_build', target: { kind: 'node', nodeId: 'n_deliver' }, choiceId: 'c_pass', edgeKind: 'advance' },
       );
       const el = fixture.nativeElement as HTMLElement;
 

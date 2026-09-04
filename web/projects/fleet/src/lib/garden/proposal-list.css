@@ -12,7 +12,9 @@
 }
 .pl-title {
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  /* Three lines, matching `finding-list.css`'s own `.fl-summary` clamp so the two
+     docket lists read alike. */
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   color: var(--text);

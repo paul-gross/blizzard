@@ -2,9 +2,11 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 
 import { compactRef } from '../compact-ref';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitBadge } from '../kit/kit-badge';
 import { KitSelectRow } from '../kit/kit-select-row';
 import { FleetWhen } from '../when-display';
-import { isFindingExited, isFindingGoneFlagged } from './finding-state';
+import type { Tone } from '../kit/tone';
+import { findingStateTone, isFindingExited, isFindingGoneFlagged } from './finding-state';
 
 /** One row of the findings triage bucket list (`hub finding list`'s own read),
  * pared to what a 320px master-column row actually shows — the summary as the
@@ -56,8 +58,16 @@ export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a
  * `finding-state.ts`'s `FINDING_EXIT_STATES`) renders dimmed (`.fl-body--exited`)
  * but never leaves the DOM.
  *
+ * The row's state rides the last-seen line, pushed to that line's right edge — the
+ * row is otherwise silent about whether a finding is still open, resolved, or
+ * withdrawn, and that is the first thing a triage pass needs to see. It renders as
+ * `fleet-kit-badge`'s soft pill (`bzh:frontend-kit-floor`), the board's own pill
+ * vocabulary, tinted by `finding-state.ts`'s shared mapping. The row's own
+ * gone/exited *tint* stays alongside it rather than being replaced by it: the tint
+ * classifies three broad buckets at a glance, the badge names the exact state.
+ *
  * The row's own headline (`.fl-summary`) is the finding's summary itself, clamped
- * to four lines — `proposal-list.ts`'s own `.pl-title` shape, so the two lists read
+ * to three lines — `proposal-list.ts`'s own `.pl-title` shape, so the two lists read
  * alike. It renders as plain clamped text, never through `fleet-kit-prose-block`:
  * that kit's transcript rail and `pre-wrap` body fight a line clamp, and the full
  * prose already has a home once a row is picked — `finding-panel.ts`'s own
@@ -66,7 +76,7 @@ export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a
 @Component({
   selector: 'fleet-finding-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitSelectRow, FleetWhen],
+  imports: [KitAsyncState, KitBadge, KitSelectRow, FleetWhen],
   templateUrl: './finding-list.html',
   styleUrl: './finding-list.css',
 })
@@ -89,5 +99,11 @@ export class FleetFindingList {
 
   protected isExited(row: FindingListRowVm): boolean {
     return isFindingExited(row.state);
+  }
+
+  /** The row's state badge tone — `finding-state.ts`'s own mapping, so this row and
+   * `finding-panel.ts`'s own title badge cannot disagree on a state's color. */
+  protected stateTone(row: FindingListRowVm): Tone {
+    return findingStateTone(row.state);
   }
 }

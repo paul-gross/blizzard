@@ -1,0 +1,17 @@
+<svg:rect
+  class="migration-box"
+  [attr.x]="migration().x"
+  [attr.y]="migration().y"
+  [attr.width]="migration().width"
+  [attr.height]="migration().height"
+  [attr.rx]="cornerRadius"
+/>
+<svg:text
+  class="migration-label"
+  [attr.x]="migration().x + migration().width / 2"
+  [attr.y]="migration().y + migration().height / 2 + 4"
+  text-anchor="middle"
+  data-testid="graph-diagram-migration-label"
+>
+  {{ migration().targetGraph }}
+</svg:text>

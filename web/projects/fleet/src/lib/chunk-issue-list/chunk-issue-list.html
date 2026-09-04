@@ -7,7 +7,7 @@
       data-testid="issue-item"
     >
       <div accordionHeader class="i-head" data-testid="issue-row">
-        <span class="i-name" data-testid="issue-name" [attr.title]="nameText(item)">{{ nameText(item) }}</span>
+        <span class="i-name" data-testid="issue-name">{{ nameText(item) }}</span>
       </div>
       <!-- Projected beside the accordion trigger, not inside it
            (`kit-accordion-section.ts`'s own doc comment): a real anchor inside the

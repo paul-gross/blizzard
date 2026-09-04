@@ -1,57 +1,54 @@
 <fleet-kit-panel label="Detail" data-testid="graph-diagram-detail">
   @if (selectedNode(); as node) {
     <div class="fields" data-testid="graph-diagram-detail-node">
-      <dl class="fact-list">
-        <dt>Node</dt>
-        <dd>{{ node.name }}</dd>
-        <dt>Executor</dt>
-        <dd>{{ node.executor }}</dd>
-        <dt>Session</dt>
-        <dd>{{ sessionLabel(node) }}</dd>
-        <dt>Judged by</dt>
-        <dd>{{ node.judged_by }}</dd>
-        <dt>Mode</dt>
-        <dd>{{ node.mode ?? '—' }}</dd>
-        <dt>Retries</dt>
-        <dd>{{ retriesLabel(node) }}</dd>
-        <dt>Checks</dt>
-        <dd>{{ listOrDash(node.checks) }}</dd>
-        <dt>Produces</dt>
-        <dd>{{ listOrDash(producesNames(node)) }}</dd>
-      </dl>
+      <fleet-kit-fact-list [rows]="nodeFactRows(node)" testid="graph-diagram-detail-node-facts" />
       @if (node.prompt) {
-        <div class="text-block">
-          <span class="section-lbl">Prompt</span>
-          <pre class="text-body" data-testid="graph-diagram-detail-prompt">{{ node.prompt }}</pre>
-        </div>
+        <fleet-kit-prose-block kind="context" label="Prompt" [text]="node.prompt" testid="graph-diagram-detail-prompt" />
       }
       @if (node.judgement_prompt) {
-        <div class="text-block">
-          <span class="section-lbl">Judgement prompt</span>
-          <pre class="text-body" data-testid="graph-diagram-detail-judgement-prompt">{{ node.judgement_prompt }}</pre>
-        </div>
+        <fleet-kit-prose-block
+          kind="context"
+          label="Judgement prompt"
+          [text]="node.judgement_prompt"
+          testid="graph-diagram-detail-judgement-prompt"
+        />
+      }
+      @if (incomingAddenda().length > 0) {
+        <section class="addenda" data-testid="graph-diagram-detail-incoming-addenda">
+          <!-- A section head, not just another label, deliberately: these are
+               conditional fragments appended on arrival, not part of the node's own
+               base prompt above, and a node commonly has several — one per inbound
+               route (the "arriving from build" case). -->
+          <h4>Inbound prompt addenda</h4>
+          @for (addendum of incomingAddenda(); track addendum.fromNodeName + '::' + addendum.choiceName) {
+            <fleet-kit-prose-block
+              kind="context"
+              [label]="'Arriving from ' + addendum.fromNodeName + ' · ' + addendum.choiceName"
+              [text]="addendum.promptAddendum"
+              testid="graph-diagram-detail-incoming-addendum"
+            />
+          }
+        </section>
       }
     </div>
   } @else if (selectedChoice(); as choice) {
     <div class="fields" data-testid="graph-diagram-detail-edge">
-      <dl class="fact-list">
-        <dt>Choice</dt>
-        <dd>{{ choice.name }}</dd>
-        <dt>Source</dt>
-        <dd>{{ nodeName(choice.fromNodeId) }}</dd>
-        <dt>Target</dt>
-        <dd data-testid="graph-diagram-detail-target">{{ choice.toNodeId === null ? 'done' : nodeName(choice.toNodeId) }}</dd>
-        <dt>Kind</dt>
-        <dd>{{ choice.edgeKind }}</dd>
-      </dl>
+      <fleet-kit-fact-list [rows]="edgeFactRows(choice)" testid="graph-diagram-detail-edge-facts" />
       @if (choice.description) {
-        <p class="choice-description" data-testid="graph-diagram-detail-choice-description">{{ choice.description }}</p>
+        <fleet-kit-prose-block
+          kind="context"
+          label="Description"
+          [text]="choice.description"
+          testid="graph-diagram-detail-choice-description"
+        />
       }
       @if (choice.promptAddendum) {
-        <div class="text-block">
-          <span class="section-lbl">Prompt addendum</span>
-          <pre class="text-body" data-testid="graph-diagram-detail-prompt-addendum">{{ choice.promptAddendum }}</pre>
-        </div>
+        <fleet-kit-prose-block
+          kind="context"
+          label="Prompt addendum"
+          [text]="choice.promptAddendum"
+          testid="graph-diagram-detail-prompt-addendum"
+        />
       }
     </div>
   } @else {

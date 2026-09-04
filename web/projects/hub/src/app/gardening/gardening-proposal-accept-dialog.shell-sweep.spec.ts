@@ -25,7 +25,6 @@ async function mount(width: number) {
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(GardeningProposalAcceptDialogView);
-  fixture.componentRef.setInput('proposalId', 'gp_1');
   fixture.componentRef.setInput('proposalTitle', 'Author a docstring standard covering change-history narration');
   fixture.componentRef.setInput('proposalBody', 'Seventeen modules narrate their own change history.');
   await fixture.whenStable();

@@ -3,11 +3,15 @@ import { RouterLink } from '@angular/router';
 
 import { compactRef } from '../compact-ref';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitBadge } from '../kit/kit-badge';
 import { KitButton } from '../kit/kit-button';
 import { KitFactList, type KitFact } from '../kit/kit-fact-list';
 import { KitPanel } from '../kit/kit-panel';
 import { KitProseBlock } from '../kit/kit-prose-block';
+import type { Tone } from '../kit/tone';
 import { FleetWhen } from '../when-display';
+import type { FindingTriageVerb } from './finding-list';
+import { findingStateTone, isFindingExited } from './finding-state';
 
 /** A linked hub work item, legible for display — `label`/`webUrl` come straight off
  * `WorkItemView` rather than being guessed; `webUrl` is `null` once the chunk is
@@ -20,14 +24,44 @@ export interface ProposalWorkItemVm {
 
 /** One evidence row — a live-read finding, never a copy the proposal itself
  * carries (Decision 3). `workItem` repeats the same accepted-and-minted proposal's
- * work item on every one of its finding rows, `null` otherwise. */
+ * work item on every one of its finding rows, `null` otherwise.
+ *
+ * `state` is the row's whole classification: `FindingView.live` is deliberately not
+ * carried, because it answers a different question than any of this row's callers
+ * ask (`finding-state.ts` says why) and a row holding both invites the gate being
+ * written against the wrong one. */
 export interface ProposalEvidenceRowVm {
   readonly findingId: string;
   readonly locus: string;
   readonly summary: string;
-  readonly live: boolean;
+  readonly state: string;
   readonly workItem: ProposalWorkItemVm | null;
 }
+
+/** The exit verbs the evidence table dispatches inline — {@link FindingTriageVerb}
+ * minus `supersede`, which needs an absorbing finding this row has no way to name,
+ * and minus `reopen`, which is not a way to clear a row off a docket. */
+export type ProposalEvidenceVerb = Extract<
+  FindingTriageVerb,
+  'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a-finding'
+>;
+
+/** One inline triage the evidence table asks for. The panel names the finding and
+ * the verb and stops there: the mutation, the note it carries, and the permission
+ * re-check are the container's (`bzh:frontend-container-presentational`). */
+export interface ProposalEvidenceTriage {
+  readonly findingId: string;
+  readonly verb: ProposalEvidenceVerb;
+}
+
+/** The inline actions, in the order they render. Labels match the triage dialog's own
+ * `VERB_LABELS` so one verb is not two different words across two surfaces. */
+export const PROPOSAL_EVIDENCE_ACTIONS: readonly { readonly verb: ProposalEvidenceVerb; readonly label: string }[] = [
+  { verb: 'resolve', label: 'Resolve' },
+  { verb: 'confirm-gone', label: 'Confirm gone' },
+  { verb: 'wont-fix', label: "Won't fix" },
+  { verb: 'not-a-finding', label: 'Not a finding' },
+];
 
 /** How a proposal closed, rendered as the record it is (the docket's two closing
  * verbs) — `'accepted'` with a `null` `workItem` is the acceptance that says on the
@@ -76,7 +110,7 @@ export interface ProposalPanelVm {
 @Component({
   selector: 'fleet-proposal-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitButton, KitFactList, KitPanel, KitProseBlock, RouterLink],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitFactList, KitPanel, KitProseBlock, RouterLink],
   templateUrl: './proposal-panel.html',
   styleUrl: './proposal-panel.css',
 })
@@ -94,7 +128,22 @@ export class FleetProposalPanel {
   readonly pass = output<void>();
   readonly accept = output<void>();
 
+  /** An inline exit verb asked for on one evidence row. */
+  readonly evidenceTriage = output<ProposalEvidenceTriage>();
+
   protected readonly compactRef = compactRef;
+  protected readonly actions = PROPOSAL_EVIDENCE_ACTIONS;
+
+  /** Whether the row has already exited, classified off `state` through the shared
+   * predicate — the same one `finding-panel.ts` gates its own verbs on, so the two
+   * surfaces never disagree about what a given state may still be triaged into. */
+  protected readonly isExited = isFindingExited;
+
+  /** The shared finding-state palette (`finding-state.ts`), so an evidence row and
+   * the finding's own panel never colour the same state differently. */
+  protected stateTone(row: ProposalEvidenceRowVm): Tone {
+    return findingStateTone(row.state);
+  }
 
   /** The pass/accept CLI hints as an aligned fact grid, above the action bar
    * (`fleet-kit-fact-list`, `KitFact`'s own shape) — a method, not a stored

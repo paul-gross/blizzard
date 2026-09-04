@@ -1,26 +1,41 @@
+/* Widened from `fleet-kit-dialog`'s own defaults: this is a form an operator fills
+   in, not a confirmation to skim, and the default panel left its fields in a column
+   narrower than the prose they hold. Height is left to the kit — this dialog's own
+   fields are what make it, so a floor here would only add space below them. */
+:host {
+  --kit-dialog-width: 700px;
+}
+
 h2 {
   margin: 0;
   font-size: var(--fs-md);
   color: var(--text);
 }
 
-.cli-verb {
-  font-family: var(--mono);
-  font-size: var(--fs-xs);
-  color: var(--label);
-  word-break: break-all;
-}
-
+/* `stretch`, not `center`: at the narrow widths the dialog is still reachable at, a
+   `cta`-sized button's label wraps to a second line rather than overflowing the
+   panel, and centering two buttons of unequal height leaves their tops offset by
+   half the difference. Stretching gives both the row's height, so the action row
+   reads as one row however either label wraps. */
 .footer {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-end;
   gap: 8px;
 }
 
 .submit-error {
   flex: 1;
+  align-self: center;
   margin: 0;
   font-size: var(--fs-sm);
   color: var(--red);
+}
+
+/* The verb's consequence, stated above the note field it justifies — dimmer than the
+   heading it sits under, since it is orienting text rather than a field label. */
+.blurb {
+  margin: 0 0 12px;
+  color: var(--label);
+  font-size: var(--fs-sm);
 }

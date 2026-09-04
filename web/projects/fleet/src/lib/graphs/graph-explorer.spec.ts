@@ -68,12 +68,17 @@ describe('GraphExplorer', () => {
     expect(el.querySelector('[data-testid="graph-explorer-groups"]')).toBeTruthy();
     expect(el.querySelectorAll('[data-testid="graph-explorer-group"]')).toHaveLength(1);
     // The forwarded selectedGraphId reached the list: its group is expanded and the
-    // matching row is selected, without a click.
-    expect(el.querySelector('[data-graph-id="gr_build_v1"]')?.classList).toContain('selected');
+    // matching row is selected, without a click. `data-graph-id` rides the row's
+    // wrapping `<li>`, while `selected` lands on the nested `fleet-kit-select-row`
+    // button (`graph-explorer-list.ts`'s own shape) — `graph-explorer-list.spec.ts`
+    // proves the wiring in full; this only proves the container forwards it.
+    expect(
+      el.querySelector('[data-graph-id="gr_build_v1"] [data-testid="graph-explorer-row"]')?.classList,
+    ).toContain('selected');
 
     const emitted: string[] = [];
     fixture.componentInstance.selectGraph.subscribe((id: string) => emitted.push(id));
-    el.querySelector<HTMLButtonElement>('[data-graph-id="gr_build_v2"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-graph-id="gr_build_v2"] [data-testid="graph-explorer-row"]')?.click();
     await settle(fixture);
 
     expect(emitted).toEqual(['gr_build_v2']);

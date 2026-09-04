@@ -1,0 +1,61 @@
+@let d = delta();
+<div class="fd" [attr.data-testid]="testid() + '-delta'">
+  <fleet-chunk-artifact-raw-disclosure [raw]="raw()" [testid]="testid() + '-delta'">
+    <ng-template #revisionsValue>
+      <ul class="fd-revisions">
+        @for (rev of revisionEntries(); track rev[0]) {
+          <li><span class="fd-repo">{{ rev[0] }}</span>@<span [title]="rev[1]">{{ shortSha(rev[1]) }}</span></li>
+        }
+      </ul>
+    </ng-template>
+    <fleet-kit-fact-list class="fd-facts" [rows]="factRows(d, revisionsValue)" [testid]="testid() + '-delta-facts'" />
+
+    @if (d.measurement) {
+      <fleet-kit-prose-block
+        label="Measurement"
+        [text]="d.measurement"
+        [testid]="testid() + '-delta-measurement'"
+      />
+    }
+
+    @if (added().length) {
+      <section class="fd-group fd-group--added" [attr.data-testid]="testid() + '-delta-added'">
+        <h5>Added <span class="fd-count">{{ added().length }}</span></h5>
+        <ul>
+          @for (op of added(); track $index) {
+            <li>
+              <fleet-chunk-finding-entry
+                [entry]="op"
+                [summaryTestid]="testid() + '-delta-added-summary-' + $index"
+              />
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (observed().length) {
+      <section class="fd-group fd-group--observed" [attr.data-testid]="testid() + '-delta-observed'">
+        <h5>Observed <span class="fd-count">{{ observed().length }}</span></h5>
+        <ul class="fd-id-list">
+          @for (op of observed(); track op.id) {
+            <li><span class="fd-ref" [title]="op.id">{{ compactRef(op.id) }}</span></li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (gone().length) {
+      <section class="fd-group fd-group--gone" [attr.data-testid]="testid() + '-delta-gone'">
+        <h5>Gone <span class="fd-count">{{ gone().length }}</span></h5>
+        <ul>
+          @for (op of gone(); track op.id) {
+            <li class="fd-entry">
+              <span class="fd-ref" [title]="op.id">{{ compactRef(op.id) }}</span>: {{ op.note }}
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  </fleet-chunk-artifact-raw-disclosure>
+</div>

@@ -20,7 +20,12 @@
       (click)="onPanelClick($event)"
     >
       <div class="p-hdr"><ng-content select="[fleetKitDialogHeader]" /></div>
-      <div class="p-body"><ng-content /></div>
+      <!-- The inner wrapper is what `.p-body`'s centering places, and it exists
+           because emulated encapsulation cannot style projected children: a
+           `.p-body > *` rule here is scoped to this component's attribute, which
+           projected nodes never carry. Owning one element instead keeps the
+           content's own height out of the flex sizing. -->
+      <div class="p-body"><div class="p-body-inner"><ng-content /></div></div>
       <div class="p-ftr"><ng-content select="[fleetKitDialogFooter]" /></div>
     </div>
   </div>

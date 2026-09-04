@@ -26,14 +26,11 @@ describe('GardeningProposalPassDialog', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  it('names the pass CLI verb and disables submit until a reason is entered', async () => {
+  it('disables submit until a reason is entered', async () => {
     const mounted = await mount(() => ({}));
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
-    expect(el.querySelector('[data-testid="proposal-pass-cli-verb"]')?.textContent).toContain(
-      'hub garden-proposal pass gp_1',
-    );
     expect(el.querySelector<HTMLButtonElement>('[data-testid="proposal-pass-dialog-submit"]')!.disabled).toBe(true);
 
     const input = el.querySelector<HTMLTextAreaElement>('[data-testid="proposal-pass-reason-input"]')!;
@@ -42,9 +39,6 @@ describe('GardeningProposalPassDialog', () => {
     await settle(fixture);
 
     expect(el.querySelector<HTMLButtonElement>('[data-testid="proposal-pass-dialog-submit"]')!.disabled).toBe(false);
-    expect(el.querySelector('[data-testid="proposal-pass-cli-verb"]')?.textContent).toContain(
-      '--reason "not worth it yet"',
-    );
   });
 
   it('submits only with the entered reason, closing on success', async () => {

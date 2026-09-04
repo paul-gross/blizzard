@@ -15,7 +15,9 @@ export {
   type LaidOutLabel,
   type LaidOutDone,
   type LaidOutStart,
+  type LaidOutMigration,
   type EdgeKind,
+  type EdgeTarget,
   type TextMeasurer,
 } from './graph-layout';
 export { type TextKind } from './graph-box-sizing';

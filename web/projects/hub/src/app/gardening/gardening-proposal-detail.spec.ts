@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient, type MeResponse } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
 
 import { GardeningProposalDetail } from './gardening-proposal-detail';
@@ -251,5 +251,45 @@ describe('GardeningProposalDetail', () => {
     expect(el.querySelector<HTMLTextAreaElement>('[data-testid="proposal-accept-body-input"]')?.value).toBe(
       WAITING_A.body,
     );
+  });
+
+  describe('inline evidence triage', () => {
+    it('posts the exit verb for the one row, carrying a note it generates itself', async () => {
+      const { fixture, el } = await render([WAITING_A], OPERATOR_ME_RESPONSE, WAITING_A.proposal_id);
+
+      el.querySelector<HTMLButtonElement>(
+        `[data-testid="gardening-proposal-finding-wont-fix-${WAITING_A.findings[0]}"]`,
+      )!.click();
+      await settle(fixture, 4);
+
+      const posted = stub.forRoute('/api/findings/wont-fix', 'POST');
+      expect(posted.length).toBe(1);
+      const body = posted[0].body as { finding_ids: string[]; note: string };
+      expect(body.finding_ids).toEqual([WAITING_A.findings[0]]);
+      // Every exit route 422s a blank note, so the quick action writes one rather
+      // than asking for it — naming the verb and the docket it was chosen from.
+      expect(body.note).toContain("won't fix");
+      expect(body.note).toContain("evidence");
+      expect(body.note.trim().length).toBeGreaterThan(0);
+    });
+
+    it('reports a failed inline triage instead of leaving the row silently unchanged', async () => {
+      const { fixture, el } = await render([WAITING_A], OPERATOR_ME_RESPONSE, WAITING_A.proposal_id);
+      stub.restore();
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'GET' && path === '/api/garden-proposals') return [WAITING_A];
+        if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+        if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
+        if (method === 'POST' && path === '/api/findings/resolve') return stubError(422, { detail: 'note required' });
+        return {};
+      });
+
+      el.querySelector<HTMLButtonElement>(
+        `[data-testid="gardening-proposal-finding-resolve-${WAITING_A.findings[0]}"]`,
+      )!.click();
+      await settle(fixture, 4);
+
+      expect(el.querySelector('[data-testid="gardening-proposal-evidence-error"]')).toBeTruthy();
+    });
   });
 });

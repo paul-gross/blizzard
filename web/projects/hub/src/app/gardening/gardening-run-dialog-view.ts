@@ -113,14 +113,6 @@ export class GardeningRunDialogView {
     return sel.slug.trim().length > 0;
   });
 
-  protected readonly cliVerb = computed(() => {
-    const sel = this.scopeSelection();
-    const parts = [`blizzard hub routine run ${this.routineName()}`];
-    if (sel.slug.trim()) parts.push(`--scope ${sel.slug.trim()}`);
-    parts.push(`--mode ${this.mode()}`);
-    return parts.join(' ');
-  });
-
   constructor() {
     // Defaults the picker to the first (previously-swept-first-ordered) scope the
     // instant the read resolves — a bare empty selection otherwise leaves nothing
@@ -144,9 +136,9 @@ export class GardeningRunDialogView {
     if (!this.canSubmit()) return;
     const sel = this.scopeSelection();
     // Trim once here, at the one place the container's create-then-run submission
-    // actually reads from — `canSubmit`/`cliVerb` above already trim for their own
-    // display/gating purposes, but the value they compute is never the one the
-    // mutations read, so trimming only there would still let e.g. `" web "` reach
+    // actually reads from — `canSubmit` above already trims for its own gating
+    // purposes, but the value it computes is never the one the mutations read, so
+    // trimming only there would still let e.g. `" web "` reach
     // `POST /api/scopes` with its surrounding whitespace intact.
     const selection: ScopeSelection = sel.isNew
       ? { ...sel, slug: sel.slug.trim(), newDescription: sel.newDescription.trim() }

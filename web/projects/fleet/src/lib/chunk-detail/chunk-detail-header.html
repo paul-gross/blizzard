@@ -100,6 +100,16 @@
         >
           Release
         </fleet-kit-button>
+        @if (deletable()) {
+          <fleet-kit-button
+            variant="danger"
+            testid="delete-chunk"
+            [ariaLabel]="'Delete chunk ' + detail().chunk_id"
+            (click)="onDelete()"
+          >
+            Delete
+          </fleet-kit-button>
+        }
       }
     </div>
     <!-- The route rides in the header beside Detach, not down in the facts, because

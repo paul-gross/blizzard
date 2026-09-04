@@ -19,7 +19,7 @@ import { GardeningFindingTriageDialogView } from './gardening-finding-triage-dia
  * Excluded from the default `ng test hub` run — run it via `npm run shell-sweep`
  * (`web/scripts/shell-sweep.js`).
  */
-async function mount(width: number, verb: 'resolve' | 'supersede', findingIds: readonly string[]) {
+async function mount(width: number, verb: 'resolve' | 'supersede') {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [GardeningFindingTriageDialogView],
@@ -27,7 +27,6 @@ async function mount(width: number, verb: 'resolve' | 'supersede', findingIds: r
   }).compileComponents();
   const fixture = TestBed.createComponent(GardeningFindingTriageDialogView);
   fixture.componentRef.setInput('verb', verb);
-  fixture.componentRef.setInput('findingIds', findingIds);
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
@@ -39,7 +38,7 @@ async function mount(width: number, verb: 'resolve' | 'supersede', findingIds: r
 describe('GardeningFindingTriageDialogView shell sweep (web:shell-sweep)', () => {
   for (const width of [1400, 390, 320]) {
     it(`renders the note field without overflowing the panel, and sits Cancel/submit side by side, at ${width}px (resolve)`, async () => {
-      const { root } = await mount(width, 'resolve', ['fin_1', 'fin_2']);
+      const { root } = await mount(width, 'resolve');
       try {
         const panel = root.querySelector<HTMLElement>('[data-testid="gardening-finding-triage-dialog"]')!;
         const panelRect = panel.getBoundingClientRect();
@@ -71,7 +70,7 @@ describe('GardeningFindingTriageDialogView shell sweep (web:shell-sweep)', () =>
     });
 
     it(`renders the absorbing-finding field below/beside the note field with no overlap, and sits Cancel/submit side by side, at ${width}px (supersede)`, async () => {
-      const { root } = await mount(width, 'supersede', ['fin_1']);
+      const { root } = await mount(width, 'supersede');
       try {
         const panel = root.querySelector<HTMLElement>('[data-testid="gardening-finding-triage-dialog"]')!;
         const panelRect = panel.getBoundingClientRect();

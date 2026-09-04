@@ -15,9 +15,9 @@ import { BoardCardComponent } from './board-card';
  * card, at a wide width (800px — wider than any real board column, a generous upper
  * bound) and at 390px/320px (`bzh:narrow-viewport-tier-rule`).
  *
- * Follows `board-card-control-row.shell-sweep.spec.ts`'s own shape (a plain `for` loop
- * over {@link WIDTHS}, one `it` per width) rather than a parameterized-test helper this
- * codebase does not otherwise use.
+ * Shaped as a plain `for` loop over {@link WIDTHS}, one `it` per width, the way every
+ * other sweep in the roster is, rather than a parameterized-test helper this codebase
+ * does not otherwise use.
  *
  * Excluded from the default `ng test` run the same way every other
  * `*.shell-sweep.spec.ts` is — run it via `npm run shell-sweep`
@@ -37,8 +37,8 @@ const BASE: BoardCard = {
 };
 
 // 800 (wider than any real board column) and 390/320 (the phone pair
-// `board-card-control-row.shell-sweep.spec.ts` and `local-panel-mobile.shell-sweep.spec.ts`
-// already sweep) — not a board column's own narrower fractional share of either.
+// `local-panel-mobile.shell-sweep.spec.ts` already sweeps) — not a board column's own
+// narrower fractional share of either.
 const WIDTHS = [800, 390, 320];
 
 async function renderCard(width: number, blockedOn: string | null): Promise<HTMLElement> {

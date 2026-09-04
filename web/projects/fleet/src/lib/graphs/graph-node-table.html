@@ -17,7 +17,9 @@
         <td class="nid">
           {{ node.name }}
           @if (node.node_id === entryNodeId()) {
-            <span class="entry-badge" data-testid="graph-detail-entry-badge">entry</span>
+            <fleet-kit-badge class="entry-badge" data-testid="graph-detail-entry-badge" tone="waiting" variant="soft"
+              >entry</fleet-kit-badge
+            >
           }
         </td>
         <td>{{ node.executor }}</td>

@@ -112,3 +112,23 @@ export function nodeBox(node: GraphNodeView, measure: TextMeasurer): NodeBox {
 export function labelBoxWidth(text: string, measure: TextMeasurer): number {
   return Math.ceil(measure(text, 'label') + LABEL_PAD_X * 2);
 }
+
+const MIGRATION_HEIGHT = 32;
+const MIGRATION_PAD_X = 14;
+const MIGRATION_MIN_WIDTH = 90;
+
+export interface MigrationBox {
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Sizes a migration sink's pill to its measured target-graph name — the same
+ * "measured text, not char-count estimate" contract as {@link nodeBox}, sized with
+ * the `name` text kind since the pill's text plays the same visual role a node's
+ * name row does (it is, after all, the label the diagram gives that exit). */
+export function migrationBox(targetGraph: string, measure: TextMeasurer): MigrationBox {
+  return {
+    width: Math.max(MIGRATION_MIN_WIDTH, Math.ceil(MIGRATION_PAD_X * 2 + measure(targetGraph, 'name'))),
+    height: MIGRATION_HEIGHT,
+  };
+}

@@ -12,10 +12,14 @@ import { ChunkDetailHeader } from './chunk-detail-header';
  * flex row, so `web:unit-test` cannot see a control pushed past the dock's own edge.
  * This mounts the header with every control live at once — a routed, pausable,
  * blocked chunk with a long runner identity — the worst case the row can carry
- * (Pause, Complete, the prerequisite field, Declare, Release, plus the route/Detach
- * group and the close button), and sweeps that nothing overflows the dock's own
- * right edge, at 800px (wider than any real dock share) and at 390/320px
+ * (Pause, Complete, Delete, the prerequisite field, Declare, Release, plus the
+ * route/Detach group and the close button), and sweeps that nothing overflows the
+ * dock's own right edge, at 800px (wider than any real dock share) and at 390/320px
  * (`bzh:narrow-viewport-tier-rule`).
+ *
+ * The selector list below is asserted against an exact count, not merely non-empty:
+ * a hard-coded list that silently misses a newly added control is a sweep that stays
+ * green over the very control it exists to measure.
  *
  * Excluded from the default `ng test` run the same way every other
  * `*.shell-sweep.spec.ts` is — run it via `npm run shell-sweep`
@@ -35,6 +39,21 @@ const DETAIL: ChunkDetail = {
 };
 
 const WIDTHS = [800, 390, 320];
+
+/** Every control the fixture above makes live at once. `status: 'ready'` with
+ * `canControl: true` is exactly `deletable()`, so Delete renders here and is the
+ * widest trailing item in `.d-actions` — the one this row's `margin-left: auto`
+ * anchoring is most likely to push past the edge. */
+const SWEPT = [
+  'pause-chunk',
+  'complete-chunk',
+  'delete-chunk',
+  'dependency-prerequisite-input',
+  'declare-dependency',
+  'release-dependency',
+  'detach-chunk',
+  'detail-close',
+] as const;
 
 async function renderHeader(width: number): Promise<HTMLElement> {
   TestBed.resetTestingModule();
@@ -60,12 +79,14 @@ describe('chunk detail header action row shell sweep (web:shell-sweep, issue #46
         // The host is `display: contents` (no box of its own) — `.d-head` is the
         // actual header element every control's edge is measured against.
         const headerRect = root.querySelector('.d-head')!.getBoundingClientRect();
-        const controls = root.querySelectorAll<HTMLElement>(
-          '[data-testid="pause-chunk"], [data-testid="complete-chunk"], ' +
-            '[data-testid="dependency-prerequisite-input"], [data-testid="declare-dependency"], ' +
-            '[data-testid="release-dependency"], [data-testid="detach-chunk"], [data-testid="detail-close"]',
-        );
-        expect(controls.length, `width ${width}: fixture defect — not every control rendered`).toBeGreaterThan(0);
+        const controls = root.querySelectorAll<HTMLElement>(SWEPT.map((t) => `[data-testid="${t}"]`).join(', '));
+        expect(
+          controls.length,
+          `width ${width}: fixture defect — expected every control in SWEPT to render, got ` +
+            Array.from(controls)
+              .map((c) => c.dataset['testid'])
+              .join(', '),
+        ).toBe(SWEPT.length);
         for (const control of Array.from(controls)) {
           const rect = control.getBoundingClientRect();
           expect(

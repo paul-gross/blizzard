@@ -2,11 +2,13 @@ import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, outpu
 
 import { compactRef } from '../compact-ref';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitBadge } from '../kit/kit-badge';
 import { KitButton } from '../kit/kit-button';
 import { KitFactList, type KitFact } from '../kit/kit-fact-list';
 import { KitProseBlock } from '../kit/kit-prose-block';
 import { FleetWhen } from '../when-display';
-import { isFindingExited } from './finding-state';
+import type { Tone } from '../kit/tone';
+import { findingStateTone, isFindingExited } from './finding-state';
 import type { FindingTriageVerb } from './finding-list';
 import type { ProposalWorkItemVm } from './proposal-panel';
 
@@ -59,7 +61,7 @@ export interface FindingPanelVm {
 @Component({
   selector: 'fleet-finding-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitButton, KitFactList, KitProseBlock, FleetWhen],
+  imports: [KitAsyncState, KitBadge, KitButton, KitFactList, KitProseBlock, FleetWhen],
   templateUrl: './finding-panel.html',
   styleUrl: './finding-panel.css',
 })
@@ -102,5 +104,14 @@ export class FleetFindingPanel {
   protected readonly exited = computed<boolean>(() => {
     const panel = this.vm();
     return panel !== null && isFindingExited(panel.state);
+  });
+
+  /** The title's state badge tone — `finding-state.ts`'s own mapping, shared with
+   * `finding-list.ts`'s row badge so the two never disagree on a state's color.
+   * `idle` while nothing is selected; the badge only renders inside the `@if` that
+   * already proved the view model is there. */
+  protected readonly stateTone = computed<Tone>(() => {
+    const panel = this.vm();
+    return panel === null ? 'idle' : findingStateTone(panel.state);
   });
 }

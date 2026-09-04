@@ -99,9 +99,6 @@ def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) 
                 expect(submit).to_be_disabled()
                 page.get_by_test_id("run-new-scope-description").fill("a fresh weed patch, minted from the browser")
                 expect(submit).to_be_enabled()
-                expect(page.get_by_test_id("run-cli-verb")).to_contain_text(
-                    "blizzard hub routine run gardening-e2e-routine --scope gardening-e2e-fresh --mode full"
-                )
 
                 submit.click()
 

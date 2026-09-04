@@ -2,8 +2,6 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { page } from 'vitest/browser';
 
-import type { GraphEdgeView, GraphNodeView } from '../api/hub';
-import { GraphDetailEdges } from './graph-detail-edges';
 import { GraphDetailLifecycle } from './graph-detail-lifecycle';
 
 /**
@@ -12,26 +10,25 @@ import { GraphDetailLifecycle } from './graph-detail-lifecycle';
  * decision the split actually changed: before it, the identity row, lifecycle
  * actions, action-error line, and entry line were direct children of `.body`'s own
  * `flex-direction: column; gap: 10px` (`graph-detail.css`); after it (and after the
- * identity row moved into `fleet-kit-panel`'s own header bar,
- * `graph-detail-header.ts`), `GraphDetailLifecycle` holds the three remaining
- * blocks in a single flex slot, so `graph-detail-lifecycle.css`'s `:host` has to
- * reproduce that same column/gap internally or they would render pressed flush
- * together with no gap at all — a regression jsdom's unevaluated `@` rules and
- * non-laid-out flexbox can't see (`web:unit-test` only asserts *which* blocks
- * render, never their real position).
- * `GraphDetailEdges`'s own `.section` column was already self-contained before the
- * move (`graph-detail.css` never laid it out), so it carries no analogous risk, but is
- * swept alongside it as the split's other Phase-2 child.
+ * identity row — and, later, the retire/re-enable control itself — moved into
+ * `fleet-kit-panel`'s own header bar, `graph-detail-header.ts`),
+ * `GraphDetailLifecycle` holds the two remaining blocks in a single flex slot, so
+ * `graph-detail-lifecycle.css`'s `:host` has to reproduce that same column/gap
+ * internally or they would render pressed flush together with no gap at all — a
+ * regression jsdom's unevaluated `@` rules and non-laid-out flexbox can't see
+ * (`web:unit-test` only asserts *which* blocks render, never their real position).
  *
- * Mounts both components directly with plain inputs — no query double, matching how
- * each is actually used (`bzh:frontend-container-presentational`; `GraphDetail`
- * forwards resolved data into both). `GraphDetailHeader` (the identity supplement)
- * carries no analogous risk of its own to sweep: `:host { display: contents }`
- * leaves it no internal layout to prove — its geometry is `fleet-kit-panel`'s own
- * `.p-hdr` flex row, not this split's concern.
+ * Mounts the component directly with plain inputs — no query double, matching how it
+ * is actually used (`bzh:frontend-container-presentational`; `GraphDetail` forwards
+ * resolved data into it). `GraphDetailHeader` (the identity supplement,
+ * plus the retire/re-enable control it now also carries) has no internal layout of
+ * its own to sweep: `:host { display: contents }` leaves every span and button a
+ * direct flex item of `fleet-kit-panel`'s own `.p-hdr` row, so its geometry —
+ * including the `margin-left: auto` that right-aligns its trailing cluster — is
+ * `KitPanel`'s own flex row, not this split's concern.
  *
  * Proven able to fail by setting `graph-detail-lifecycle.css`'s `:host` `gap` to `0`:
- * the three blocks then sit within a few pixels of each other instead of the ~10px
+ * the two blocks then sit within a few pixels of each other instead of the ~10px
  * this spec pins.
  *
  * Excluded from the default `ng test` run the same way every other
@@ -45,9 +42,6 @@ async function mountLifecycle(): Promise<HTMLElement> {
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(GraphDetailLifecycle);
-  fixture.componentRef.setInput('graphId', 'gr_shellsweep0000000000000000');
-  fixture.componentRef.setInput('retired', false);
-  fixture.componentRef.setInput('canEdit', true);
   fixture.componentRef.setInput('actionError', 'Retire failed.');
   fixture.componentRef.setInput('entryNodeName', 'build');
   await fixture.whenStable();
@@ -57,62 +51,17 @@ async function mountLifecycle(): Promise<HTMLElement> {
   return root;
 }
 
-const EDGES_NODES: GraphNodeView[] = [
-  {
-    node_id: 'n_build',
-    name: 'build',
-    executor: 'claude',
-    session: 'fresh',
-    judged_by: 'reviewer',
-    choices: [{ choice_id: 'c_pass', name: 'pass', description: 'Build succeeded' }],
-  },
-  {
-    node_id: 'n_review',
-    name: 'review',
-    executor: 'claude',
-    session: 'fresh',
-    judged_by: 'reviewer',
-    choices: [{ choice_id: 'c_done', name: 'done', description: 'Review passed' }],
-  },
-];
-
-const EDGES: GraphEdgeView[] = [
-  { from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'review', prompt_addendum: 'Focus on tests.' },
-  { from_node_id: 'n_review', choice_id: 'c_done', to_node_name: 'done' },
-];
-
-async function mountEdges(): Promise<HTMLElement> {
-  TestBed.resetTestingModule();
-  await TestBed.configureTestingModule({
-    imports: [GraphDetailEdges],
-    providers: [provideZonelessChangeDetection()],
-  }).compileComponents();
-  const fixture = TestBed.createComponent(GraphDetailEdges);
-  fixture.componentRef.setInput('nodes', EDGES_NODES);
-  fixture.componentRef.setInput('edges', EDGES);
-  await fixture.whenStable();
-  const root = fixture.nativeElement as HTMLElement;
-  document.body.appendChild(root);
-  await page.viewport(800, 600);
-  return root;
-}
-
-describe('graph-detail-lifecycle / graph-detail-edges shell sweep (web:shell-sweep)', () => {
-  it("keeps GraphDetailLifecycle's lifecycle actions, error line, and entry line genuinely stacked with a real gap", async () => {
+describe('graph-detail-lifecycle shell sweep (web:shell-sweep)', () => {
+  it("keeps GraphDetailLifecycle's error line and entry line genuinely stacked with a real gap", async () => {
     const root = await mountLifecycle();
     try {
-      const actions = root.querySelector<HTMLElement>('[data-testid="graph-detail-retire"]')!;
       const error = root.querySelector<HTMLElement>('[data-testid="graph-detail-lifecycle-error"]')!;
       const entry = root.querySelector<HTMLElement>('[data-testid="graph-detail-entry"]')!;
 
-      const actionsRect = actions.getBoundingClientRect();
       const errorRect = error.getBoundingClientRect();
       const entryRect = entry.getBoundingClientRect();
 
-      // Genuinely a column: each block sits below the previous one, not overlapping.
-      expect(errorRect.top, 'the error line did not land below lifecycle actions').toBeGreaterThanOrEqual(
-        actionsRect.bottom,
-      );
+      // Genuinely a column: the entry line sits below the error line, not overlapping.
       expect(entryRect.top, 'the entry line did not land below the error line').toBeGreaterThanOrEqual(
         errorRect.bottom,
       );
@@ -120,38 +69,9 @@ describe('graph-detail-lifecycle / graph-detail-edges shell sweep (web:shell-swe
       // A real gap survives the move — not the flush-together layout a `:host` with no
       // `gap` (or `display: block`'s default) would produce.
       expect(
-        errorRect.top - actionsRect.bottom,
-        `the gap between lifecycle actions and the error line (${errorRect.top - actionsRect.bottom}px) collapsed — :host's flex gap did not survive the split`,
-      ).toBeGreaterThan(4);
-      expect(
         entryRect.top - errorRect.bottom,
         `the gap between the error line and the entry line (${entryRect.top - errorRect.bottom}px) collapsed`,
       ).toBeGreaterThan(4);
-    } finally {
-      root.remove();
-    }
-  });
-
-  it("keeps GraphDetailEdges's per-node edge blocks genuinely stacked, with the prompt addendum resolving below its own edge row", async () => {
-    const root = await mountEdges();
-    try {
-      const blocks = root.querySelectorAll<HTMLElement>('[data-testid="graph-detail-node-edges"]');
-      expect(blocks, 'fixture defect: expected one node-edges block per node with outgoing edges').toHaveLength(2);
-
-      const firstRect = blocks[0].getBoundingClientRect();
-      const secondRect = blocks[1].getBoundingClientRect();
-      expect(
-        secondRect.top,
-        'the second node-edges block did not land below the first — the section column collapsed',
-      ).toBeGreaterThanOrEqual(firstRect.bottom);
-
-      // The addendum genuinely renders in flow below its own edge row, not overlapping it.
-      const edgeRow = blocks[0].querySelector<HTMLElement>('[data-testid="graph-detail-edge-to"]')!;
-      const addendum = blocks[0].querySelector<HTMLElement>('[data-testid="graph-detail-edge-addendum"]')!;
-      expect(
-        addendum.getBoundingClientRect().top,
-        'the addendum did not land below its own edge row',
-      ).toBeGreaterThanOrEqual(edgeRow.getBoundingClientRect().bottom);
     } finally {
       root.remove();
     }

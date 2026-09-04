@@ -124,11 +124,11 @@ describe('layoutGraph', () => {
     const byId = (id: string) => outcome.graph.edges.find((e) => e.id === id);
 
     // e0: build -c_pass-> review (forward edge)
-    expect(byId('e0')).toMatchObject({ fromNodeId: 'n_build', toNodeId: 'n_review', choiceId: 'c_pass' });
+    expect(byId('e0')).toMatchObject({ fromNodeId: 'n_build', target: { kind: 'node', nodeId: 'n_review' }, choiceId: 'c_pass' });
     // e3: review -c_fail2-> build (back edge)
-    expect(byId('e3')).toMatchObject({ fromNodeId: 'n_review', toNodeId: 'n_build', choiceId: 'c_fail2' });
+    expect(byId('e3')).toMatchObject({ fromNodeId: 'n_review', target: { kind: 'node', nodeId: 'n_build' }, choiceId: 'c_fail2' });
     // e4: deliver -c_landed-> done (done-terminal edge)
-    expect(byId('e4')).toMatchObject({ fromNodeId: 'n_deliver', toNodeId: null, choiceId: 'c_landed' });
+    expect(byId('e4')).toMatchObject({ fromNodeId: 'n_deliver', target: { kind: 'done' }, choiceId: 'c_landed' });
   });
 
   it("carries the self-loop's id in the same `e<i>` space as `edges`, plus its choiceId", () => {
@@ -212,6 +212,110 @@ describe('layoutGraph', () => {
       warnings: [],
     };
     expect(layoutGraph(broken, measure)).toEqual({ ok: false });
+  });
+
+  describe('migration targets', () => {
+    /** Mirrors `default-delivery`'s `triage` node — one node, an edge to `done`, and
+     * several edges to `graph:<name>` (issue #90's cross-graph migration): the shape
+     * that used to fall back to `{ ok: false }` before `resolveEdges` learned the
+     * `graph:` prefix. */
+    const TRIAGE_LIKE: GraphView = {
+      graph_id: 'gr_triage',
+      name: 'default-delivery',
+      enabled: true,
+      entry_node_id: 'n_triage',
+      nodes: [
+        {
+          node_id: 'n_triage',
+          name: 'triage',
+          executor: 'runner',
+          session: 'fresh',
+          judged_by: 'worker',
+          choices: [
+            { choice_id: 'c_already_done', name: 'already-done', description: '' },
+            { choice_id: 'c_basic', name: 'basic', description: '' },
+            { choice_id: 'c_advanced', name: 'advanced', description: '' },
+            { choice_id: 'c_harness', name: 'harness', description: '' },
+          ],
+        },
+      ],
+      edges: [
+        { from_node_id: 'n_triage', choice_id: 'c_already_done', to_node_name: 'done' },
+        { from_node_id: 'n_triage', choice_id: 'c_basic', to_node_name: 'graph:bas-dwf' },
+        { from_node_id: 'n_triage', choice_id: 'c_advanced', to_node_name: 'graph:adv-dwf' },
+        { from_node_id: 'n_triage', choice_id: 'c_harness', to_node_name: 'graph:bas-hwf' },
+      ],
+      warnings: [],
+    };
+
+    it('lays out ok: true for a default-delivery-shaped graph with done and migration edges', () => {
+      const outcome = layoutGraph(TRIAGE_LIKE, measure);
+      expect(outcome.ok).toBe(true);
+    });
+
+    it('resolves a `graph:<name>` edge to a graph-kind target carrying the parsed name, distinct from done', () => {
+      const outcome = layoutGraph(TRIAGE_LIKE, measure);
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) return;
+
+      const byId = (id: string) => outcome.graph.edges.find((e) => e.id === id);
+      expect(byId('e0')?.target).toEqual({ kind: 'done' });
+      expect(byId('e1')?.target).toEqual({ kind: 'graph', targetGraph: 'bas-dwf' });
+      expect(byId('e2')?.target).toEqual({ kind: 'graph', targetGraph: 'adv-dwf' });
+      expect(byId('e3')?.target).toEqual({ kind: 'graph', targetGraph: 'bas-hwf' });
+      // A migration always leaves the graph forward — it can never be a self-loop or
+      // back edge, since it names no node index in this graph at all.
+      expect(byId('e1')?.kind).toBe('advance');
+    });
+
+    it('lays out one migration sink per distinct target graph name, positioned like a node', () => {
+      const outcome = layoutGraph(TRIAGE_LIKE, measure);
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) return;
+
+      expect(outcome.graph.migrations).toHaveLength(3);
+      expect(outcome.graph.migrations.map((m) => m.targetGraph).sort()).toEqual(['adv-dwf', 'bas-dwf', 'bas-hwf']);
+      for (const migration of outcome.graph.migrations) {
+        expect(migration.width).toBeGreaterThan(0);
+        expect(migration.height).toBeGreaterThan(0);
+      }
+    });
+
+    it('collapses two edges into the same target graph name onto a single migration sink', () => {
+      const shared: GraphView = {
+        ...TRIAGE_LIKE,
+        nodes: [
+          {
+            ...TRIAGE_LIKE.nodes![0],
+            choices: [
+              ...TRIAGE_LIKE.nodes![0].choices!,
+              { choice_id: 'c_basic_2', name: 'basic-again', description: '' },
+            ],
+          },
+        ],
+        edges: [...TRIAGE_LIKE.edges!, { from_node_id: 'n_triage', choice_id: 'c_basic_2', to_node_name: 'graph:bas-dwf' }],
+      };
+      const outcome = layoutGraph(shared, measure);
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) return;
+
+      expect(outcome.graph.migrations.filter((m) => m.targetGraph === 'bas-dwf')).toHaveLength(1);
+      expect(outcome.graph.edges.filter((e) => e.target.kind === 'graph' && e.target.targetGraph === 'bas-dwf')).toHaveLength(2);
+    });
+
+    it('falls back to { ok: false } for a malformed `graph:` target — empty name or a further colon', () => {
+      const emptyName: GraphView = {
+        ...TRIAGE_LIKE,
+        edges: [{ from_node_id: 'n_triage', choice_id: 'c_basic', to_node_name: 'graph:' }],
+      };
+      expect(layoutGraph(emptyName, measure)).toEqual({ ok: false });
+
+      const extraColon: GraphView = {
+        ...TRIAGE_LIKE,
+        edges: [{ from_node_id: 'n_triage', choice_id: 'c_basic', to_node_name: 'graph:bas:dwf' }],
+      };
+      expect(layoutGraph(extraColon, measure)).toEqual({ ok: false });
+    });
   });
 
   it('widens the overall bounding box to fit a self-loop arc + label even with a long node id/label', () => {

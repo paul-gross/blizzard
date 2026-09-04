@@ -23,9 +23,8 @@ type AcceptMode = 'mint' | 'decline';
  * into `submitting()`/`submitError()` (`bzh:frontend-container-presentational`).
  *
  * One `reason` signal backs both modes' text field — mint's optional reason and
- * decline's required one are the same conceptual field, never two, so gating and the
- * CLI-verb preview each branch on {@link mode} alone rather than on which signal
- * carries the text.
+ * decline's required one are the same conceptual field, never two, so submission
+ * gating branches on {@link mode} alone rather than on which signal carries the text.
  *
  * Copy states that acceptance neither promotes the minted item nor changes any
  * finding's state — the surface's own answer to the two things acceptance does not
@@ -39,7 +38,6 @@ type AcceptMode = 'mint' | 'decline';
   styleUrl: './gardening-proposal-accept-dialog-view.css',
 })
 export class GardeningProposalAcceptDialogView {
-  readonly proposalId = input.required<string>();
   readonly proposalTitle = input.required<string>();
   readonly proposalBody = input.required<string>();
 
@@ -64,14 +62,6 @@ export class GardeningProposalAcceptDialogView {
   protected readonly canSubmit = computed(() => {
     if (this.submitting()) return false;
     return this.mode() === 'mint' || this.reason().trim().length > 0;
-  });
-
-  protected readonly cliVerb = computed(() => {
-    const parts = [`blizzard hub garden-proposal accept ${this.proposalId()}`];
-    if (this.mode() === 'decline') parts.push('--no-work-item');
-    const reason = this.reason().trim();
-    if (reason) parts.push(`--reason "${reason}"`);
-    return parts.join(' ');
   });
 
   protected onSubmitClick(): void {

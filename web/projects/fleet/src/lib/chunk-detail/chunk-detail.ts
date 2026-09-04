@@ -4,6 +4,7 @@ import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkWorkItemsQuery } from '../chunks/chunk-work-items.query';
 import { injectCompleteChunkMutation } from '../chunks/complete.mutations';
+import { injectDeleteChunkMutation } from '../chunks/delete.mutations';
 import { injectDeclareDependencyMutation, injectReleaseDependencyMutation } from '../chunks/dependency.mutations';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
@@ -45,6 +46,12 @@ import {
  * `actionOutcome` (issue #165): a lost first-write-wins race is not a failure to retry
  * but news — someone else's answer landed — so it reads as an outcome naming the winner.
  * Both clear together in `beginAction`.
+ *
+ * **Delete** (D8, issue #364) breaks that shape: it makes the chunk cease to exist, so
+ * `onDelete` doesn't just fold a failure into `actionError` — on success it emits
+ * `dismiss` too, the same event the header's close button fires. The board binds
+ * `dismiss` to clearing its own selection, so the dock closes instead of sitting on a
+ * chunk id its own detail query would otherwise re-read into a 404.
  */
 @Component({
   selector: 'fleet-chunk-detail',
@@ -78,6 +85,7 @@ export class ChunkDetail {
   private readonly detachMutation = injectDetachChunkMutation();
   private readonly pauseMutation = injectChunkPauseMutation();
   private readonly completeMutation = injectCompleteChunkMutation();
+  private readonly deleteMutation = injectDeleteChunkMutation();
   private readonly editGraphMutation = injectSetChunkGraphMutation();
   private readonly declareDependencyMutation = injectDeclareDependencyMutation();
   private readonly releaseDependencyMutation = injectReleaseDependencyMutation();
@@ -206,6 +214,26 @@ export class ChunkDetail {
     this.completeMutation.mutate(
       { chunkId },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Complete failed.')) },
+    );
+  }
+
+  /** Delete an unacquired chunk (D8, issue #364) — withdraws its hub item(s); there is
+   * no undo. Unlike every other action here, success dismisses the dock: the chunk this
+   * query is keyed to no longer exists, and `deleteMutation`'s own `onSuccess` already
+   * invalidates the fleet list, the ready queue, the backlog, and this chunk's own detail
+   * query, so leaving the dock open would have it re-read straight into a 404. Emitting
+   * `dismiss` before that re-read can render clears the board's selection (`chunkId()`
+   * flows to `null`), which disables the detail query for this component's next render
+   * — the same `enabled: false` gate the empty-dock rest state already leans on — rather
+   * than reacting to the now-orphaned response. */
+  protected onDelete(chunkId: string): void {
+    this.beginAction();
+    this.deleteMutation.mutate(
+      { chunkId },
+      {
+        onSuccess: () => this.dismiss.emit(),
+        onError: (error) => this.actionError.set(errorMessage(error, 'Delete failed.')),
+      },
     );
   }
 

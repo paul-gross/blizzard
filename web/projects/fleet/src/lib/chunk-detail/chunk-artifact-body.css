@@ -46,6 +46,22 @@
   color: var(--text);
   font-size: var(--fs-sm);
 }
+/* `.a-content`'s own flex/scroll shape, given to both structured renderers' host
+   tags — a component tag used in this template still carries this file's own
+   scoping attribute, so this selector matches even though it targets another
+   component's host rather than plain markup (`kit-fact-list.ts`'s own doc comment
+   on the boundary this does *not* cross: styling a child's host tag from the
+   parent, as opposed to styling content projected into it).
+
+   One rule for both, never one per component: they render in the same slot and a
+   long one has to scroll for the same reason, so a rule naming only one of them is
+   a claim the other silently fails. */
+fleet-chunk-artifact-delta,
+fleet-chunk-artifact-survey {
+  flex: 1;
+  min-height: 0;
+  margin-top: 4px;
+}
 .a-ref {
   flex: none;
   margin-top: 4px;

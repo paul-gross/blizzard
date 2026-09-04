@@ -10,7 +10,12 @@
       <header class="fp-hdr">
         <h3>
           <span class="fp-class">{{ panel.findingClass }}</span>
+          <span class="fp-sep" aria-hidden="true">·</span>
           <span class="fp-ref" [title]="panel.findingId">{{ compactRef(panel.findingId) }}</span>
+          <span class="fp-sep" aria-hidden="true">·</span>
+          <fleet-kit-badge class="fp-state" data-testid="fp-title-state" [tone]="stateTone()" variant="text">{{
+            panel.state
+          }}</fleet-kit-badge>
         </h3>
         <p class="fp-locus">{{ panel.locus }}</p>
         <ng-template #introducedValue>

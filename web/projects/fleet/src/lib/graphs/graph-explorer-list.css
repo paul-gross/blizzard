@@ -1,4 +1,24 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  font-family: var(--mono);
+  color: var(--text);
+}
+/* The filter sits above the scroll region, not inside it, so it stays reachable
+   however far down a long lineage list is scrolled. */
+.ge-filter {
+  flex: none;
+  display: flex;
+  padding: 4px 4px 0;
+}
+.ge-filter-count {
+  margin-left: 6px;
+  color: var(--label-dim);
+}
 .groups {
+  flex: 1;
+  min-height: 0;
   list-style: none;
   margin: 0;
   padding: 4px;
@@ -7,37 +27,55 @@
   gap: 3px;
   overflow-y: auto;
 }
-.group-head {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 6px;
-  border: 1px solid var(--line);
-  background: var(--overlay-20);
+.group {
+  display: block;
+}
+/* The group header's two lines — `run-list.css`'s own three-tier scale, used here
+ * for the top two tiers only: the name is the row's headline (`--fs-base`/`--text`),
+ * the count/created-at/ref line steps down to the meta tier (`--fs-xs`/`--label`). */
+.ge-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ge-name {
+  margin: 0;
   color: var(--text);
-  font-family: inherit;
-  font-size: var(--fs-sm);
-  cursor: pointer;
-  text-align: left;
-}
-.group-head:hover {
-  border-color: var(--cyan);
-}
-.name {
-  color: var(--cyan);
-}
-.count {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-}
-.summary {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-base);
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-align: right;
+  white-space: nowrap;
+}
+.ge-group-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 2px;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--label);
+}
+.ge-group-left {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.ge-count {
+  color: var(--label-dim);
+  flex: none;
+}
+/* The trailing element — `finding-list.css`'s own `.fl-ref` shape: right-aligned via
+ * `margin-left: auto`, never wrapping under the left slot. */
+.ge-group-ref {
+  flex: none;
+  margin-left: auto;
+  color: var(--label-dim);
+  white-space: nowrap;
 }
 .lineage {
   list-style: none;
@@ -47,49 +85,40 @@
   flex-direction: column;
   gap: 2px;
 }
-.row {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 6px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text);
-  font-family: inherit;
-  cursor: pointer;
+.row-item {
+  display: block;
+}
+/* A lineage row's two lines, stepped down one tier from the group header above it —
+ * the id/badge line at the meta tier (`--fs-xs`/`--text`), the timestamp line at the
+ * bottom tier (`--fs-label`/`--label-dim`), `run-list.css`'s own `.rl-meta`/`.rl-seen`
+ * shape. */
+.ge-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: var(--fs-xs);
-  text-align: left;
 }
-.row:hover {
-  border-color: var(--cyan);
+.ge-row-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
 }
-.row.selected {
-  border-color: var(--amber-hi);
-}
-.gid {
+.ge-gid {
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
-.created {
+.ge-badge {
+  flex: none;
+  margin-left: auto;
+}
+.ge-row-meta {
+  margin-top: 2px;
+  font-size: var(--fs-label);
   color: var(--label-dim);
-}
-.badge {
-  padding: 1px 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.85em;
-}
-.badge.effective {
-  color: var(--cyan);
-  border: 1px solid var(--cyan);
-}
-.badge.superseded {
-  color: var(--label-dim);
-  border: 1px solid var(--line);
-}
-.badge.retired {
-  color: var(--red);
-  border: 1px solid var(--red);
 }

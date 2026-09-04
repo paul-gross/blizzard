@@ -1,3 +1,5 @@
+import type { Tone } from '../kit/tone';
+
 /**
  * The findings triage surface's own state classification
  * (`plans/garden/user-interface.md`'s "Triaging what's left" section) — shared here
@@ -43,4 +45,29 @@ export function isFindingExited(state: string): boolean {
  * but flagged for review and rendered tinted. */
 export function isFindingGoneFlagged(state: string): boolean {
   return state === 'gone';
+}
+
+/** A finding state → badge tone, so every surface that shows the state shows it the
+ * same color — the list row and the detail title today. Borrows the shared `Tone`
+ * ladder rather than inventing a findings-specific one (`graph-explorer-list.ts`'s
+ * own `LIFECYCLE_TONE` shape), and follows the outflow/withdrawn split above rather
+ * than a per-state opinion: a still-open finding reads amber (`live`, the work left
+ * to do) or amber-hi (`gone`, flagged and literally waiting on a person to confirm);
+ * an outflow exit reads green, the ground having actually moved; a withdrawn exit
+ * reads dim, since nothing changed but somebody's judgment. */
+const STATE_TONE: Readonly<Record<string, Tone>> = {
+  live: 'running',
+  gone: 'waiting',
+  resolved: 'done',
+  'gone-confirmed': 'done',
+  'wont-fix': 'idle',
+  'not-a-finding': 'idle',
+  superseded: 'idle',
+};
+
+/** {@link STATE_TONE}'s lookup, falling back to `idle` for a state this build does
+ * not know — the wire's own set can grow ahead of this file, and an unknown state
+ * should render plainly rather than crash the row it rides on. */
+export function findingStateTone(state: string): Tone {
+  return STATE_TONE[state] ?? 'idle';
 }

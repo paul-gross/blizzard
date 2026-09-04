@@ -7,7 +7,7 @@
      each fitting its own longest label and drifting apart. Fixed rather than
      `auto`-sized for the same reason: an `auto` column tracks its own table's
      content, which is exactly the drift this is solving. */
-  --kv-label-col: 74px;
+  --kv-label-col: 112px;
 }
 /* The chunk's own facts, above the work item it serves — the fixed-height glance
    before the arbitrarily long issue body.
@@ -25,7 +25,7 @@
    that dock context. */
 .kv {
   display: grid;
-  grid-template-columns: var(--kv-label-col, 74px) 1fr;
+  grid-template-columns: var(--kv-label-col, 112px) 1fr;
   gap: 2px 8px;
   margin: 0 0 8px;
   padding: var(--chunk-facts-pad, 8px);

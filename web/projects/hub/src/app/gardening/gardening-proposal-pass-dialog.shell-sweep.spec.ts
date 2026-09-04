@@ -24,7 +24,6 @@ async function mount(width: number) {
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(GardeningProposalPassDialogView);
-  fixture.componentRef.setInput('proposalId', 'gp_1');
   fixture.componentRef.setInput('proposalTitle', 'Author a docstring standard covering change-history narration');
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;

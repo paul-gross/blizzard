@@ -109,6 +109,20 @@ const NOT_READY_DETAIL: ChunkDetailModel = {
   artifacts: [],
 };
 
+// An unacquired chunk Delete reaches (D8, issue #364) — distinct from
+// NOT_READY_DETAIL so the graph-edit and delete specs don't share a fixture
+// (and so a test can tell their client calls apart by chunk id).
+const DELETABLE_DETAIL: ChunkDetailModel = {
+  chunk_id: 'ch_deletable',
+  graph_id: 'gr_default',
+  status: 'not_ready',
+  current_node_id: null,
+  latest_epoch: null,
+  work_refs: [],
+  history: [],
+  artifacts: [],
+};
+
 describe('ChunkDetail container', () => {
   let stub: RequestClientStub;
   // Mutated per-test to drive the detach mutation's response (200/404/409); the stub
@@ -118,6 +132,8 @@ describe('ChunkDetail container', () => {
   let pauseResponse: unknown = {};
   // The same, for the complete verb (issue #294).
   let completeResponse: unknown = {};
+  // The same, for the delete verb (D8, issue #364).
+  let deleteResponse: unknown = {};
   // The same, for the graph edit (issue #27) — it collapses onto the one
   // `PATCH /api/chunks/{id}` call (issue #104), so one variable drives it.
   let editPatchResponse: unknown = {};
@@ -134,6 +150,7 @@ describe('ChunkDetail container', () => {
     detachResponse = {};
     pauseResponse = {};
     completeResponse = {};
+    deleteResponse = {};
     editPatchResponse = {};
     answerResponse = {};
     declareResponse = {};
@@ -146,6 +163,7 @@ describe('ChunkDetail container', () => {
       if (method === 'GET' && path === '/api/chunks/ch_routed') return ROUTED_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_paused') return PAUSED_ASKING_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_ready') return NOT_READY_DETAIL;
+      if (method === 'GET' && path === '/api/chunks/ch_deletable') return DELETABLE_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_ask') return askAnswered ? ASK_ANSWERED_DETAIL : ASK_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_missing') return stubError(404, { detail: 'unknown chunk' });
       if (method === 'POST' && path === '/api/questions/qn_77/answers') return answerResponse;
@@ -174,6 +192,7 @@ describe('ChunkDetail container', () => {
       }
       if (method === 'POST' && path === '/api/chunks/ch_routed/detach') return detachResponse;
       if (method === 'POST' && path === '/api/chunks/ch_routed/complete') return completeResponse;
+      if (method === 'DELETE' && path === '/api/chunks/ch_deletable') return deleteResponse;
       if (method === 'POST' && path === '/api/chunks/ch_routed/dependencies') return declareResponse;
       if (method === 'POST' && path === '/api/chunks/ch_ready/dependencies') return declareResponse;
       if (method === 'POST' && path === '/api/chunks/ch_routed/dependencies/release') return releaseResponse;
@@ -477,6 +496,58 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('no standing dependency');
+    confirmSpy.mockRestore();
+  });
+
+  // --- Delete (D8, issue #364) ------------------------------------------
+
+  it('fires the delete client call for an unacquired chunk once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_deletable');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
+    confirmSpy.mockRestore();
+  });
+
+  it('dismisses the dock on a successful delete, rather than sitting on the now-gone chunk', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_deletable');
+    let dismissed = false;
+    fixture.componentInstance.dismiss.subscribe(() => (dismissed = true));
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
+    expect(dismissed).toBe(true);
+    confirmSpy.mockRestore();
+  });
+
+  it('surfaces a delete failure rather than swallowing it, and does not dismiss', async () => {
+    deleteResponse = stubError(409, { detail: 'chunk ch_deletable is already acquired' });
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_deletable');
+    let dismissed = false;
+    fixture.componentInstance.dismiss.subscribe(() => (dismissed = true));
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already acquired');
+    expect(dismissed).toBe(false);
     confirmSpy.mockRestore();
   });
 

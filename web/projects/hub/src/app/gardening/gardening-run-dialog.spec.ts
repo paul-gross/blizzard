@@ -194,15 +194,6 @@ describe('GardeningRunDialog', () => {
     expect(el.querySelector('[data-testid="run-scope-near-match-warning"]')?.textContent).toContain('retired-scope');
   });
 
-  it('names the CLI verb behind it', async () => {
-    const mounted = await mount(defaultRoute);
-    stub = mounted.stub;
-
-    expect(mounted.el.querySelector('[data-testid="run-cli-verb"]')?.textContent).toContain(
-      'blizzard hub routine run gardening',
-    );
-  });
-
   it('mints a new scope before running (D3), then confirms the chunk id and links to the board — no board of its own', async () => {
     const mounted = await mount(defaultRoute);
     stub = mounted.stub;

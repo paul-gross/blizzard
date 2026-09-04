@@ -120,6 +120,9 @@ export class ChunkDetailPanel {
   /** Emitted with the chunk id when the operator confirms Complete (issue #294). */
   readonly complete = output<string>();
 
+  /** Emitted with the chunk id when the operator confirms Delete (D8, issue #364). */
+  readonly delete = output<string>();
+
   /** Emitted when the operator declares a dependency (issue #461) — forwarded up
    * unchanged from {@link ChunkDetailHeader}. */
   readonly declareDependency = output<DependencyEvent>();

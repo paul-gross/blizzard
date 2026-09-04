@@ -63,7 +63,7 @@ describe('FleetFindingList', () => {
     expect(row?.querySelector('[title]')?.getAttribute('title')).toBe('fin_01M1KANH0RZEABSD44RCEH6G9B');
   });
 
-  it('clamps the summary headline to four lines, never through fleet-kit-prose-block', async () => {
+  it('clamps the summary headline to three lines, never through fleet-kit-prose-block', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
@@ -98,7 +98,41 @@ describe('FleetFindingList', () => {
 
     const row = el.querySelector('[data-testid="gardening-finding-row-fin_3"]');
     expect(row?.querySelector('.fl-seen fleet-when')).toBeNull();
-    expect(row?.querySelector('.fl-seen')?.textContent?.trim()).toBe('—');
+    expect(row?.querySelector('.fl-seen-when')?.textContent?.trim()).toBe('—');
+  });
+
+  it("names each row's own state, right-aligned on the last-seen line", async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    for (const [findingId, state] of [
+      ['fin_01M1KANH0RZEABSD44RCEH6G9B', 'live'],
+      ['fin_2', 'gone'],
+      ['fin_3', 'resolved'],
+    ] as const) {
+      const badge = el.querySelector(`[data-testid="gardening-finding-state-${findingId}"]`);
+      expect(badge?.textContent?.trim(), findingId).toBe(state);
+      // On the last-seen line, not a line of its own.
+      expect(badge?.closest('.fl-seen'), findingId).toBeTruthy();
+    }
+  });
+
+  it('colors an open, a flagged, and an exited state differently, off the shared mapping', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    const toneOf = (findingId: string) =>
+      el
+        .querySelector(`[data-testid="gardening-finding-state-${findingId}"] .badge`)
+        ?.getAttribute('style');
+
+    const live = toneOf('fin_01M1KANH0RZEABSD44RCEH6G9B');
+    const gone = toneOf('fin_2');
+    const resolved = toneOf('fin_3');
+    expect(live).toBeTruthy();
+    expect(live).not.toBe(gone);
+    expect(live).not.toBe(resolved);
+    expect(gone).not.toBe(resolved);
   });
 
   it('drops observed count and introduced from the row — those stay on the panel', async () => {

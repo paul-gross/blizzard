@@ -10,7 +10,6 @@ import {
   asyncState,
   hasPermission,
   type KitAsyncStateValue,
-  injectDeleteChunkMutation,
   injectGroupChunksMutation,
   injectHubBacklogQuery,
   injectHubChunksQuery,
@@ -99,9 +98,6 @@ export class BoardPage {
 
   /** Promote a backlog chunk to ready from its board card. */
   protected readonly promoteChunk = injectPromoteChunkMutation();
-
-  /** Delete an unacquired chunk from its board card (D8, issue #364). */
-  protected readonly deleteChunk = injectDeleteChunkMutation();
 
   /** The live fleet chunk list; empty until the first read resolves. */
   protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);

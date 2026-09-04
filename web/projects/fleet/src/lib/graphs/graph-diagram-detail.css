@@ -9,50 +9,23 @@
   gap: 8px;
   padding: 8px;
 }
-.fact-list {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 10px;
-  margin: 0;
-  font-size: var(--fs-xs);
-}
-.fact-list dt {
-  color: var(--label-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: var(--fs-label);
-}
-.fact-list dd {
-  margin: 0;
-  color: var(--text);
-}
-.text-block {
+.addenda {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.section-lbl {
+/* The inbound-addenda group's own head, distinct from the node's Prompt/Judgement
+ * prompt above it (each of those already carries its own label from
+ * `fleet-kit-prose-block` itself) — the kit's engraved treatment
+ * (`kit-panel.css`'s own `.lbl`), matching `run-delta.css`'s `.rd-group h5` for the
+ * same reason: it needs to read as a header over several stacked prose blocks,
+ * not one more dim label lost among them. */
+.addenda h4 {
+  margin: 0;
   font-size: var(--fs-label);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--label);
-}
-.text-body {
-  margin: 0;
-  max-height: 220px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  font-family: var(--mono);
-  font-size: var(--fs-xs);
-  color: var(--text);
-  border: 1px solid var(--line);
-  padding: 6px;
-}
-.choice-description {
-  margin: 0;
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-  white-space: pre-wrap;
 }
 .hint {
   margin: 0;

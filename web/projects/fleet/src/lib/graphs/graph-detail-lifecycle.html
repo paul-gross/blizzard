@@ -1,14 +1,3 @@
-<!-- Retire/re-enable are graph authoring — gated on graph:edit (admin-tier,
-     issue #93): a contributor reads the entry line but not the controls. -->
-@if (canEdit()) {
-  <div class="lifecycle-actions">
-    @if (retired()) {
-      <fleet-kit-button testid="graph-detail-enable" (click)="onEnable()">Re-enable</fleet-kit-button>
-    } @else {
-      <fleet-kit-button testid="graph-detail-retire" variant="danger" (click)="onRetire()">Retire</fleet-kit-button>
-    }
-  </div>
-}
 @if (actionError(); as err) {
   <p class="lifecycle-error" data-testid="graph-detail-lifecycle-error">{{ err }}</p>
 }

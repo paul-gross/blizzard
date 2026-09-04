@@ -19,11 +19,9 @@ table.nodes th {
 .nid {
   color: var(--cyan);
 }
+/* Placement only — the pill's own chrome (fill, border, radius, case) is
+   `fleet-kit-badge`'s `soft` variant, the same one the graph explorer's
+   effective/superseded pills use, so the two read as one vocabulary. */
 .entry-badge {
   margin-left: 6px;
-  padding: 0 4px;
-  border: 1px solid var(--amber-hi);
-  color: var(--amber-hi);
-  font-size: 0.85em;
-  text-transform: uppercase;
 }

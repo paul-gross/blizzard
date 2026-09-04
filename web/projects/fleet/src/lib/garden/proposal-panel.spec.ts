@@ -21,8 +21,11 @@ const BASE_VM: ProposalPanelVm = {
 };
 
 const EVIDENCE: readonly ProposalEvidenceRowVm[] = [
-  { findingId: 'fin_1', locus: 'src/a.py:1', summary: 'stale docstring', live: true, workItem: null },
-  { findingId: 'fin_2', locus: 'src/b.py:9', summary: 'another one', live: false, workItem: null },
+  { findingId: 'fin_1', locus: 'src/a.py:1', summary: 'stale docstring', state: 'live', workItem: null },
+  { findingId: 'fin_2', locus: 'src/b.py:9', summary: 'another one', state: 'resolved', workItem: null },
+  // `gone` is the state that separates "has exited" from the wire's `live` boolean:
+  // still open, still triageable, and the only row Confirm gone is actually for.
+  { findingId: 'fin_3', locus: 'src/c.py:4', summary: 'ground moved', state: 'gone', workItem: null },
 ];
 
 describe('FleetProposalPanel', () => {
@@ -112,14 +115,84 @@ describe('FleetProposalPanel', () => {
     const live = el.querySelector('[data-testid="gardening-proposal-finding-fin_1"]');
     expect(live?.textContent).toContain('src/a.py:1');
     expect(live?.textContent).toContain('stale docstring');
-    expect(live?.querySelector('[data-testid="gardening-proposal-finding-not-live"]')).toBeNull();
 
     const link = live?.querySelector<HTMLAnchorElement>('[data-testid="gardening-proposal-finding-link-fin_1"]');
     expect(link?.textContent).toBe('F-1');
     expect(link?.getAttribute('href')).toBe('/gardening/findings/fin_1');
+  });
 
-    const gone = el.querySelector('[data-testid="gardening-proposal-finding-fin_2"]');
-    expect(gone?.querySelector('[data-testid="gardening-proposal-finding-not-live"]')).toBeTruthy();
+  it("names each evidence row's own state inline, off the shared mapping", async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(
+      el.querySelector('[data-testid="gardening-proposal-finding-state-fin_1"]')?.textContent?.trim(),
+    ).toBe('live');
+    expect(
+      el.querySelector('[data-testid="gardening-proposal-finding-state-fin_2"]')?.textContent?.trim(),
+    ).toBe('resolved');
+
+    // Distinct tones, so a live row and an exited one never read alike.
+    const toneOf = (id: string) =>
+      el.querySelector(`[data-testid="gardening-proposal-finding-state-${id}"] .badge`)?.getAttribute('style');
+    expect(toneOf('fin_1')).toBeTruthy();
+    expect(toneOf('fin_1')).not.toBe(toneOf('fin_2'));
+  });
+
+  describe('inline evidence triage', () => {
+    it('offers every exit verb on a live row', async () => {
+      const fixture = await mount({ canControl: true });
+      const el = fixture.nativeElement as HTMLElement;
+
+      for (const verb of ['resolve', 'confirm-gone', 'wont-fix', 'not-a-finding']) {
+        expect(
+          el.querySelector(`[data-testid="gardening-proposal-finding-${verb}-fin_1"]`),
+          verb,
+        ).toBeTruthy();
+      }
+    });
+
+    it('withholds them entirely without chunk:control, rather than offering a button that 403s', async () => {
+      const fixture = await mount({ canControl: false });
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="gardening-proposal-finding-resolve-fin_1"]')).toBeNull();
+    });
+
+    it('withholds the actions on a row that already left the bucket', async () => {
+      const fixture = await mount({ canControl: true });
+      const el = fixture.nativeElement as HTMLElement;
+
+      // `fin_2` is resolved — an exit verb has nothing left to do to it.
+      expect(el.querySelector('[data-testid="gardening-proposal-finding-resolve-fin_2"]')).toBeNull();
+      expect(el.querySelector('[data-testid="gardening-proposal-finding-state-fin_2"]')).toBeTruthy();
+    });
+
+    it('still offers every verb on a gone-flagged row, which has not exited', async () => {
+      const fixture = await mount({ canControl: true });
+      const el = fixture.nativeElement as HTMLElement;
+
+      // `fin_3` is `gone`: `FindingView.live` would read `false` here, but the row is
+      // still open (D8) and Confirm gone is the verb it exists to receive. Gating off
+      // `live` rather than `state` would withhold exactly this row's own verb.
+      for (const verb of ['resolve', 'confirm-gone', 'wont-fix', 'not-a-finding']) {
+        expect(
+          el.querySelector(`[data-testid="gardening-proposal-finding-${verb}-fin_3"]`),
+          verb,
+        ).toBeTruthy();
+      }
+    });
+
+    it('emits the finding and the verb, dispatching nothing itself', async () => {
+      const fixture = await mount({ canControl: true });
+      const el = fixture.nativeElement as HTMLElement;
+      const emitted: { findingId: string; verb: string }[] = [];
+      fixture.componentInstance.evidenceTriage.subscribe((e) => emitted.push({ ...e }));
+
+      el.querySelector<HTMLButtonElement>('[data-testid="gardening-proposal-finding-wont-fix-fin_1"]')!.click();
+
+      expect(emitted).toEqual([{ findingId: 'fin_1', verb: 'wont-fix' }]);
+    });
   });
 
   it('renders a passed closure with its reason', async () => {
@@ -242,7 +315,7 @@ describe('FleetProposalPanel', () => {
 
   it("renders each evidence row's summary through a prose block, formatting preserved", async () => {
     const evidence: readonly ProposalEvidenceRowVm[] = [
-      { findingId: 'fin_1', locus: 'src/a.py:1', summary: 'line one\nline two', live: true, workItem: null },
+      { findingId: 'fin_1', locus: 'src/a.py:1', summary: 'line one\nline two', state: 'live', workItem: null },
     ];
     const fixture = await mount({ evidence });
     const el = fixture.nativeElement as HTMLElement;

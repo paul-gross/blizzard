@@ -19,7 +19,6 @@ import { KitButton, KitDialog, KitTextInput } from 'fleet';
   styleUrl: './gardening-proposal-pass-dialog-view.css',
 })
 export class GardeningProposalPassDialogView {
-  readonly proposalId = input.required<string>();
   readonly proposalTitle = input.required<string>();
 
   readonly submitting = input(false);
@@ -31,13 +30,6 @@ export class GardeningProposalPassDialogView {
   protected readonly reason = signal('');
 
   protected readonly canSubmit = computed(() => this.reason().trim().length > 0 && !this.submitting());
-
-  protected readonly cliVerb = computed(() => {
-    const parts = [`blizzard hub garden-proposal pass ${this.proposalId()}`];
-    const reason = this.reason().trim();
-    if (reason) parts.push(`--reason "${reason}"`);
-    return parts.join(' ');
-  });
 
   protected onSubmitClick(): void {
     if (!this.canSubmit()) return;

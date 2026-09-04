@@ -1,41 +1,66 @@
+<div class="ge-filter">
+  <fleet-kit-chip
+    [selected]="showRetired()"
+    testid="graph-explorer-show-retired"
+    (click)="toggleShowRetired()"
+  >
+    Retired
+    @if (!showRetired() && hiddenRetiredCount() > 0) {
+      <span class="ge-filter-count">{{ hiddenRetiredCount() }} hidden</span>
+    }
+  </fleet-kit-chip>
+</div>
 <ul class="groups" data-testid="graph-explorer-groups">
   @for (group of groups(); track group.name) {
     <li class="group" data-testid="graph-explorer-group" [attr.data-name]="group.name">
-      <button
-        type="button"
-        class="group-head"
-        data-testid="graph-explorer-group-toggle"
-        (click)="toggle(group)"
+      <fleet-kit-select-row
+        [selected]="group.effective.graph_id === selectedGraphId()"
+        [testid]="'graph-explorer-group-toggle'"
+        (picked)="toggle(group)"
       >
-        <span class="name">{{ group.name }}</span>
-        <span class="count" data-testid="graph-explorer-group-count">({{ group.versions.length }})</span>
-        <span class="summary" data-testid="graph-explorer-group-effective">{{
-          shortId(group.effective.graph_id)
-        }}</span>
-      </button>
+        <div class="ge-group-body">
+          <p class="ge-name">{{ group.name }}</p>
+          <div class="ge-group-line">
+            <span class="ge-group-left">
+              <span class="ge-count" data-testid="graph-explorer-group-count">({{ group.versions.length }})</span>
+              <fleet-when [iso]="group.effective.created_at" />
+            </span>
+            <span
+              class="ge-group-ref"
+              data-testid="graph-explorer-group-effective"
+              [title]="group.effective.graph_id"
+              >{{ shortId(group.effective.graph_id) }}</span
+            >
+          </div>
+        </div>
+      </fleet-kit-select-row>
       @if (isExpanded(group)) {
         <ol class="lineage" data-testid="graph-explorer-lineage">
           @for (version of group.versions; track version.graph_id) {
-            <li class="row-item">
-              <button
-                type="button"
-                class="row"
-                data-testid="graph-explorer-row"
-                [class.selected]="version.graph_id === selectedGraphId()"
-                [attr.data-graph-id]="version.graph_id"
-                (click)="selectGraph.emit(version.graph_id)"
+            <li class="row-item" [attr.data-graph-id]="version.graph_id">
+              <fleet-kit-select-row
+                [selected]="version.graph_id === selectedGraphId()"
+                [testid]="'graph-explorer-row'"
+                (picked)="selectGraph.emit(version.graph_id)"
               >
-                <span class="gid" data-testid="graph-explorer-graph-id">{{ shortId(version.graph_id) }}</span>
-                <fleet-when class="created" data-testid="graph-explorer-created-at" [iso]="version.created_at" />
-                <span
-                  class="badge"
-                  data-testid="graph-explorer-badge"
-                  [class.effective]="version.effective"
-                  [class.retired]="version.retired"
-                  [class.superseded]="!version.effective && !version.retired"
-                  >{{ versionLabel(version) }}</span
-                >
-              </button>
+                <div class="ge-row-body">
+                  <div class="ge-row-line">
+                    <span class="ge-gid" data-testid="graph-explorer-graph-id" [title]="version.graph_id">{{
+                      shortId(version.graph_id)
+                    }}</span>
+                    <fleet-kit-badge
+                      class="ge-badge"
+                      data-testid="graph-explorer-badge"
+                      [tone]="badgeTone(version)"
+                      variant="soft"
+                      >{{ versionLabel(version) }}</fleet-kit-badge
+                    >
+                  </div>
+                  <div class="ge-row-line ge-row-meta">
+                    <fleet-when data-testid="graph-explorer-created-at" [iso]="version.created_at" />
+                  </div>
+                </div>
+              </fleet-kit-select-row>
             </li>
           }
         </ol>

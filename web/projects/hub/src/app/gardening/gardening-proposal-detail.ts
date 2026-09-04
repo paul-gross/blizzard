@@ -9,12 +9,20 @@ import {
   injectHubGardenProposalsQuery,
   injectHubWorkItemQuery,
   injectMeQuery,
+  injectConfirmGoneFindingsMutation,
+  injectNotAFindingFindingsMutation,
+  injectResolveFindingsMutation,
+  injectWontFixFindingsMutation,
+  compactRef,
+  errorMessage,
   type FindingView,
   type GardenProposalClosureView,
   type GardenProposalView,
   type KitAsyncStateValue,
   type ProposalClosureVm,
   type ProposalEvidenceRowVm,
+  type ProposalEvidenceTriage,
+  type ProposalEvidenceVerb,
   type ProposalPanelVm,
   type ProposalWorkItemVm,
 } from 'fleet';
@@ -143,7 +151,7 @@ export class GardeningProposalDetail {
       findingId: f.finding_id,
       locus: f.locus,
       summary: f.summary,
-      live: f.live,
+      state: f.state,
       workItem,
     }));
   });
@@ -156,6 +164,65 @@ export class GardeningProposalDetail {
    * permission `garden_proposals.py`'s two closing routes require server-side);
    * `null`/pending resolves to `false`. */
   protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
+
+  private readonly resolveFindings = injectResolveFindingsMutation();
+  private readonly confirmGoneFindings = injectConfirmGoneFindingsMutation();
+  private readonly wontFixFindings = injectWontFixFindingsMutation();
+  private readonly notAFindingFindings = injectNotAFindingFindingsMutation();
+
+  /** One entry per verb the evidence table offers, each closing over its own injected
+   * mutation — the same by-verb dispatch table `gardening-finding-triage-dialog.ts`
+   * uses, since a mutation must be injected in a field initializer and cannot be
+   * picked inside the handler. `label` is what the generated note names the change
+   * as. */
+  private readonly evidenceMutations: Record<
+    ProposalEvidenceVerb,
+    {
+      readonly label: string;
+      readonly mutate: (
+        vars: { findingIds: string[]; note: string },
+        opts: { onError: (error: unknown) => void },
+      ) => void;
+    }
+  > = {
+    resolve: { label: 'resolved', mutate: (vars, opts) => this.resolveFindings.mutate(vars, opts) },
+    'confirm-gone': {
+      label: 'gone (confirmed)',
+      mutate: (vars, opts) => this.confirmGoneFindings.mutate(vars, opts),
+    },
+    'wont-fix': { label: "won't fix", mutate: (vars, opts) => this.wontFixFindings.mutate(vars, opts) },
+    'not-a-finding': {
+      label: 'not a finding',
+      mutate: (vars, opts) => this.notAFindingFindings.mutate(vars, opts),
+    },
+  };
+
+  /** The most recent inline triage failure, or `null` — surfaced on the panel rather
+   * than swallowed, since a quick action has no dialog left open to report into. */
+  protected readonly evidenceError = signal<string | null>(null);
+
+  /**
+   * Apply one inline exit verb to one evidence row. The note is generated rather than
+   * asked for: every exit route rejects a blank one (`hub/api/findings.py`'s
+   * `_exit_verb`, 422), and the point of these buttons is a decision made in one click
+   * — so the UI writes what it actually knows, which is the verb and the docket the
+   * operator was reading when they chose it. The mutations invalidate the evidence
+   * table's own cache (`finding.mutations.ts`), so the row's state re-renders itself
+   * with no local bookkeeping here.
+   */
+  protected onEvidenceTriage(triage: ProposalEvidenceTriage): void {
+    const proposal = this.selectedProposal();
+    if (proposal === null) return;
+    const entry = this.evidenceMutations[triage.verb];
+    this.evidenceError.set(null);
+    entry.mutate(
+      {
+        findingIds: [triage.findingId],
+        note: `Triaged as ${entry.label} from proposal ${compactRef(proposal.proposal_id)}'s evidence.`,
+      },
+      { onError: (error) => this.evidenceError.set(errorMessage(error, `${triage.verb} failed.`)) },
+    );
+  }
 
   /** The proposal the Pass dialog is open against — `null` closes it. Only the
    * panel's own `pass` output ever sets it, so it can only ever name the

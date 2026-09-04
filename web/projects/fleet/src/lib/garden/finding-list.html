@@ -20,11 +20,20 @@
             </div>
             <p class="fl-locus">{{ row.locus }}</p>
             <p class="fl-seen">
-              @if (row.lastSeenAt) {
-                <fleet-when [iso]="row.lastSeenAt" />
-              } @else {
-                —
-              }
+              <span class="fl-seen-when">
+                @if (row.lastSeenAt) {
+                  <fleet-when [iso]="row.lastSeenAt" />
+                } @else {
+                  —
+                }
+              </span>
+              <fleet-kit-badge
+                class="fl-state"
+                [attr.data-testid]="'gardening-finding-state-' + row.findingId"
+                [tone]="stateTone(row)"
+                variant="soft"
+                >{{ row.state }}</fleet-kit-badge
+              >
             </p>
           </div>
         </fleet-kit-select-row>

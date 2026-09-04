@@ -6,7 +6,14 @@
   [bodyScroll]="false"
 >
   @if (graph(); as g) {
-    <fleet-graph-detail-header fleetKitPanelHeader [graphId]="g.graph_id" [retired]="!!g.retired" />
+    <fleet-graph-detail-header
+      fleetKitPanelHeader
+      [graphId]="g.graph_id"
+      [retired]="!!g.retired"
+      [canEdit]="canEdit()"
+      (retire)="onRetire($event)"
+      (enable)="onEnable($event)"
+    />
   }
   <fleet-kit-async-state
     [state]="state()"
@@ -17,23 +24,13 @@
   >
   @if (graph(); as g) {
     <div class="body" data-testid="graph-detail-body">
-      <fleet-graph-detail-lifecycle
-        [graphId]="g.graph_id"
-        [retired]="!!g.retired"
-        [canEdit]="canEdit()"
-        [actionError]="actionError()"
-        [entryNodeName]="entryNodeName()"
-        (retire)="onRetire($event)"
-        (enable)="onEnable($event)"
-      />
+      <fleet-graph-detail-lifecycle [actionError]="actionError()" [entryNodeName]="entryNodeName()" />
 
       <fleet-graph-diagram-view [graph]="g" data-testid="graph-detail-diagram" />
 
       <fleet-graph-node-table [nodes]="nodes()" [entryNodeId]="g.entry_node_id" />
 
       <fleet-graph-session-table [sessions]="sessions()" />
-
-      <fleet-graph-detail-edges [nodes]="nodes()" [edges]="edges()" />
     </div>
   }
   </fleet-kit-async-state>

@@ -61,9 +61,9 @@
       (selectChunk)="selectChunk.emit($event)"
     />
   }
-  <!-- The card's control row: Promote (not_ready only) and Delete (not_ready and
-       ready alike, D8) render side by side when both apply, rather than each
-       claiming its own stacked row. -->
+  <!-- The card's control row: Promote (not_ready only) is its one occupant now
+       that Delete moved to the chunk detail dock's header, where it no longer
+       eats into the card's own space. -->
   <div class="card-controls">
     @if (card().status === 'not_ready' && canControl()) {
       <button
@@ -75,16 +75,6 @@
       >
         PROMOTE
       </button>
-    }
-    @if (isUnacquired(card().status) && canControl()) {
-      <fleet-kit-button
-        variant="danger"
-        testid="delete-chunk"
-        [ariaLabel]="'Delete chunk ' + card().shortId"
-        (click)="onDelete(card())"
-      >
-        DELETE
-      </fleet-kit-button>
     }
   </div>
 </div>

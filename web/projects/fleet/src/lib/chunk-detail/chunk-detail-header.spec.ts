@@ -667,4 +667,97 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
     expect(input.value).toBe('ch_01other00000000000000000');
   });
+
+  // --- Delete (D8, issue #364) -------------------------------------------
+
+  it('shows Delete for an unacquired chunk (not_ready, ready) with chunk:control', async () => {
+    for (const status of ['not_ready', 'ready'] as const) {
+      const fixture = TestBed.createComponent(ChunkDetailHeader);
+      fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status });
+      fixture.componentRef.setInput('canControl', true);
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="delete-chunk"]'), status).not.toBeNull();
+    }
+  });
+
+  it('shows no Delete for an acquired or terminal status, even with chunk:control', async () => {
+    for (const status of [
+      'running',
+      'delivering',
+      'waiting_on_human',
+      'needs_human',
+      'paused',
+      'stopped',
+      'done',
+    ] as const) {
+      const fixture = TestBed.createComponent(ChunkDetailHeader);
+      fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status });
+      fixture.componentRef.setInput('canControl', true);
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="delete-chunk"]'), status).toBeNull();
+    }
+  });
+
+  it('withholds Delete without chunk:control on an otherwise-eligible chunk', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready' });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="delete-chunk"]')).toBeNull();
+  });
+
+  it('emits delete with the chunk id once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'ready' });
+    fixture.componentRef.setInput('canControl', true);
+    let emitted: string | undefined;
+    fixture.componentInstance.delete.subscribe((chunkId) => (emitted = chunkId));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(ISSUE_DETAIL.chunk_id);
+    confirmSpy.mockRestore();
+  });
+
+  it('emits nothing when the operator declines the delete confirm', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready' });
+    fixture.componentRef.setInput('canControl', true);
+    let emitted = false;
+    fixture.componentInstance.delete.subscribe(() => (emitted = true));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(false);
+    confirmSpy.mockRestore();
+  });
+
+  it('withdraws the hub item(s) with no undo, in the delete confirm copy', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready' });
+    fixture.componentRef.setInput('canControl', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+
+    const message = confirmSpy.mock.calls[0][0];
+    expect(message).toContain('withdraws its hub item(s)');
+    expect(message).toContain('no undo');
+    confirmSpy.mockRestore();
+  });
 });

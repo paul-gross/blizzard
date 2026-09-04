@@ -1,5 +1,5 @@
 import type { GraphChoiceView, GraphNodeView, GraphView } from '../api/hub';
-import type { EdgeKind, LaidOutGraph } from './graph-layout';
+import type { EdgeKind, EdgeTarget, LaidOutGraph } from './graph-layout';
 
 /**
  * What is selected in the diagram — structural, not DOM: a node by id, or an edge
@@ -15,8 +15,7 @@ export type DiagramSelection =
       readonly kind: 'edge';
       readonly edgeId: string;
       readonly fromNodeId: string;
-      /** `null` when the edge targets the reserved `done` terminal. */
-      readonly toNodeId: string | null;
+      readonly target: EdgeTarget;
       readonly choiceId: string;
       readonly edgeKind: EdgeKind;
     };
@@ -34,7 +33,7 @@ export function selectionKey(selection: DiagramSelection | null): string | null 
 export function incidentEdgeIds(laidOut: LaidOutGraph, nodeId: string): readonly string[] {
   const ids: string[] = [];
   for (const edge of laidOut.edges) {
-    if (edge.fromNodeId === nodeId || edge.toNodeId === nodeId) ids.push(edge.id);
+    if (edge.fromNodeId === nodeId || (edge.target.kind === 'node' && edge.target.nodeId === nodeId)) ids.push(edge.id);
   }
   for (const loop of laidOut.selfLoops) {
     if (loop.nodeId === nodeId) ids.push(loop.id);
@@ -42,12 +41,13 @@ export function incidentEdgeIds(laidOut: LaidOutGraph, nodeId: string): readonly
   return ids;
 }
 
-/** The node ids an edge selection's endpoints highlight — one id for a self-loop or
- * an edge into `done` (`toNodeId === null` contributes nothing), two otherwise. */
+/** The node ids an edge selection's endpoints highlight — one id for a self-loop, an
+ * edge into `done`, or a migration (none of those name a second node in this graph),
+ * two for an edge between two real nodes. */
 export function endpointNodeIds(selection: DiagramSelection | null): readonly string[] {
   if (selection === null || selection.kind !== 'edge') return [];
   const ids = [selection.fromNodeId];
-  if (selection.toNodeId !== null && selection.toNodeId !== selection.fromNodeId) ids.push(selection.toNodeId);
+  if (selection.target.kind === 'node' && selection.target.nodeId !== selection.fromNodeId) ids.push(selection.target.nodeId);
   return ids;
 }
 
@@ -70,7 +70,7 @@ export interface ResolvedChoiceSelection {
   readonly name: string;
   readonly description: string;
   readonly fromNodeId: string;
-  readonly toNodeId: string | null;
+  readonly target: EdgeTarget;
   readonly edgeKind: EdgeKind;
   /** `GraphEdgeView.prompt_addendum` for this edge, `null` when the edge carries
    * none or matches no entry in `graph.edges` (mirrors `graph-detail.ts`'s
@@ -91,7 +91,7 @@ export function resolveSelectedChoice(graph: GraphView, selection: DiagramSelect
     name: choice?.name ?? selection.choiceId,
     description: choice?.description ?? '',
     fromNodeId: selection.fromNodeId,
-    toNodeId: selection.toNodeId,
+    target: selection.target,
     edgeKind: selection.edgeKind,
     promptAddendum: edge?.prompt_addendum ?? null,
   };

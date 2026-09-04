@@ -98,9 +98,33 @@
                       [routerLink]="['/gardening', 'findings', row.findingId]"
                       [attr.data-testid]="'gardening-proposal-finding-link-' + row.findingId"
                     >{{ compactRef(row.findingId) }}</a>
+                    <span class="pp-sep" aria-hidden="true">·</span>
                     <span class="pp-finding-locus">{{ row.locus }}</span>
-                    @if (!row.live) {
-                      <span class="pp-finding-gone" data-testid="gardening-proposal-finding-not-live">not live</span>
+                    <span class="pp-sep" aria-hidden="true">·</span>
+                    <fleet-kit-badge
+                      class="pp-finding-state"
+                      [attr.data-testid]="'gardening-proposal-finding-state-' + row.findingId"
+                      [tone]="stateTone(row)"
+                      variant="text"
+                      >{{ row.state }}</fleet-kit-badge
+                    >
+                    <!-- Offered on any row that has not exited: an exit verb has nothing
+                         to do to a finding already out of the bucket, and the state beside
+                         it already says so. That includes a `gone`-flagged row, which is
+                         still open and is precisely what Confirm gone is for — hence the
+                         classification off `state`, never off the wire's `live` boolean.
+                         Withheld without `chunk:control`, the same permission the exit
+                         routes require, rather than offering a button that 403s. -->
+                    @if (canControl() && !isExited(row.state)) {
+                      <span class="pp-finding-actions">
+                        @for (action of actions; track action.verb) {
+                          <fleet-kit-button
+                            [testid]="'gardening-proposal-finding-' + action.verb + '-' + row.findingId"
+                            (click)="evidenceTriage.emit({ findingId: row.findingId, verb: action.verb })"
+                            >{{ action.label }}</fleet-kit-button
+                          >
+                        }
+                      </span>
                     }
                   </p>
                   <fleet-kit-prose-block

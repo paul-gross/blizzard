@@ -23,6 +23,12 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
  * and unlike Stop there is no un-complete verb, so this set has exactly one member. */
 const NOT_COMPLETABLE = new Set<ChunkStatus>(['done']);
 
+/** Statuses with no acquiring runner — the only ones Delete reaches (D8, issue #364):
+ * a `not_ready`/`ready` chunk has no live route to release, unlike every status
+ * Detach guards. Owned right beside the control it gates, the same shape as
+ * {@link NOT_PAUSABLE}/{@link NOT_COMPLETABLE} above. */
+const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
+
 /** Statuses the hub's dependency service admits a declare against
  * (`PRE_CLAIM_STATUSES`, `dependencies.py`), mirrored here so the dock never offers a
  * Declare the server would answer with a 409 (issue #461) — the same reason
@@ -43,7 +49,8 @@ export interface DependencyEvent {
  * The chunk detail dock's header (issue #79) — the chunk's identity in the
  * board's own vocabulary (the short name, its work item, its state, and the
  * node it sits at), plus the operator actions that hang off it: the **route +
- * Detach** control (issue #42), **Pause/Resume** (issue #46), and dismiss.
+ * Detach** control (issue #42), **Pause/Resume** (issue #46), **Complete**
+ * (issue #294), **Delete** (D8, issue #364), and dismiss.
  *
  * Detach is deliberately **not** requeue — it supersedes no escalation and
  * bumps no epoch, so a `needs_human` chunk detached this way still derives
@@ -54,13 +61,18 @@ export interface DependencyEvent {
  * never offer Resume. **Complete** (issue #294) is the operator's manual
  * counterpart to landing: reachable from any non-`done` status, including
  * `stopped` — unlike Stop, there is no un-complete verb, so the dock offers
- * no way back once clicked.
+ * no way back once clicked. **Delete** (D8, issue #364) withdraws the
+ * chunk's hub item(s) outright, reachable only from `not_ready`/`ready`
+ * ({@link UNACQUIRED_STATUSES}) — a chunk with an acquiring runner has no
+ * live route to release, the same reasoning Detach's own route guard
+ * follows. It moved here from the board card, which had no room for a
+ * control that invasive.
  *
  * Presentational only: it holds the detail input and emits `dismiss`,
- * `detach`, `pauseChunk`, `resumeChunk`, `complete`, `declareDependency`, and
- * `releaseDependency` (every write but `dismiss` guarded by a `confirm()` —
- * the one browser affordance this dock reaches for); the mutations those
- * events drive live in the container.
+ * `detach`, `pauseChunk`, `resumeChunk`, `complete`, `delete`,
+ * `declareDependency`, and `releaseDependency` (every write but `dismiss`
+ * guarded by a `confirm()` — the one browser affordance this dock reaches
+ * for); the mutations those events drive live in the container.
  */
 @Component({
   selector: 'fleet-chunk-detail-header',
@@ -99,6 +111,9 @@ export class ChunkDetailHeader {
 
   /** Emitted with the chunk id when the operator confirms Complete (issue #294). */
   readonly complete = output<string>();
+
+  /** Emitted with the chunk id when the operator confirms Delete (D8, issue #364). */
+  readonly delete = output<string>();
 
   /** Emitted with the prerequisite's chunk id when the blocked marking's dock-select
    * button is clicked (issue #461) — the same one-hop move a board card click already
@@ -141,6 +156,11 @@ export class ChunkDetailHeader {
    * click that would write nothing. Every other status is completable, independent of
    * `pausable`/`route`: Complete does not hang off a live route the way Detach does. */
   protected readonly completable = computed<boolean>(() => !NOT_COMPLETABLE.has(this.detail().status));
+
+  /** Whether Delete reaches this chunk's status ({@link UNACQUIRED_STATUSES}, D8,
+   * issue #364) — a chunk with an acquiring runner has no live route to release,
+   * so Delete never offers a click the hub would refuse. */
+  protected readonly deletable = computed<boolean>(() => UNACQUIRED_STATUSES.has(this.detail().status));
 
   /** The unmet prerequisite's chunk id, from `ChunkDetail.blocked` (issue #461) — null
    * when the chunk carries no marking. */
@@ -221,6 +241,17 @@ export class ChunkDetailHeader {
     );
     if (!confirmed) return;
     this.complete.emit(this.detail().chunk_id);
+  }
+
+  /** Confirm, then emit `delete` for the container's mutation to fire (D8, issue
+   * #364). Withdraws the chunk's hub item(s); there is no undo. */
+  protected onDelete(): void {
+    if (!this.deletable()) return;
+    const confirmed = globalThis.confirm(
+      `Delete chunk ${this.detail().chunk_id}? This withdraws its hub item(s); there is no undo.`,
+    );
+    if (!confirmed) return;
+    this.delete.emit(this.detail().chunk_id);
   }
 
   /** Confirm, then emit `declareDependency` for the container's mutation to fire (issue

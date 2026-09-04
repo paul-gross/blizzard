@@ -7,3 +7,11 @@
 :host {
   display: contents;
 }
+
+/* An inline evidence triage's failure — the pane's only report channel for an action
+   that deliberately opens no dialog. */
+.evidence-error {
+  margin: 8px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--red);
+}

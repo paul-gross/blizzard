@@ -41,11 +41,11 @@
   min-width: 0;
   overflow-wrap: anywhere;
   /* The row's own headline — `proposal-list.css`'s own `.pl-title` shape, clamped
-   * to four lines so the two lists read alike: real summaries are long
+   * to three lines so the two lists read alike: real summaries are long
    * multi-sentence agent prose, and the clamp is load-bearing (the full text reads
    * in `fleet-finding-panel` once the row is picked). */
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -81,10 +81,19 @@
   overflow-wrap: anywhere;
   min-width: 0;
 }
+/* The date and the state share one line, the state pinned to its right edge
+   (`margin-left: auto`, the same shape `.fl-ref` uses on the header line above). */
 .fl-seen {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   margin: 0;
   color: var(--label-dim);
   font-size: var(--fs-label);
+  min-width: 0;
+}
+.fl-state {
+  margin-left: auto;
 }
 .fl-cli {
   margin: 8px 0 0;

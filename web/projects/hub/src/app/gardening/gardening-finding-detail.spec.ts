@@ -195,7 +195,11 @@ describe('GardeningFindingDetail', () => {
 
       const dialog = el.querySelector('[data-testid="gardening-finding-triage-dialog"]');
       expect(dialog).toBeTruthy();
-      expect(dialog?.textContent).toContain('Resolve 1 finding');
+      expect(dialog?.textContent).toContain('Resolve finding');
+      // The dialog opens on what the verb actually does, above the note field.
+      expect(dialog?.querySelector('[data-testid="finding-triage-blurb"]')?.textContent).toContain(
+        'has landed',
+      );
     });
 
     it('forwards chunk:control to the finding panel, withholding its triage actions for a read-only identity', async () => {

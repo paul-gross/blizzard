@@ -1,0 +1,41 @@
+@let s = survey();
+<div class="fs" [attr.data-testid]="testid() + '-survey'">
+  <fleet-chunk-artifact-raw-disclosure [raw]="raw()" [testid]="testid() + '-survey'">
+    <ng-template #revisionsValue>
+      <ul class="fs-revisions">
+        @for (rev of revisionEntries(); track rev[0]) {
+          <li><span class="fs-repo">{{ rev[0] }}</span>@<span [title]="rev[1]">{{ shortSha(rev[1]) }}</span></li>
+        }
+      </ul>
+    </ng-template>
+    <fleet-kit-fact-list class="fs-facts" [rows]="factRows(s, revisionsValue)" [testid]="testid() + '-survey-facts'" />
+
+    @if (s.measurement) {
+      <fleet-kit-prose-block
+        label="Measurement"
+        [text]="s.measurement"
+        [testid]="testid() + '-survey-measurement'"
+      />
+    }
+
+    <section class="fs-group" [attr.data-testid]="testid() + '-survey-candidates'">
+      <h5>Candidates <span class="fs-count">{{ s.candidates.length }}</span></h5>
+      @if (s.candidates.length) {
+        <ul>
+          @for (candidate of s.candidates; track $index) {
+            <li>
+              <fleet-chunk-finding-entry
+                [entry]="candidate"
+                [summaryTestid]="testid() + '-survey-candidate-summary-' + $index"
+              />
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="fs-clean" [attr.data-testid]="testid() + '-survey-clean'">
+          A clean sweep — the run observed nothing worth recording.
+        </p>
+      }
+    </section>
+  </fleet-chunk-artifact-raw-disclosure>
+</div>

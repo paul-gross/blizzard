@@ -17,16 +17,21 @@
   min-width: 0;
 }
 /* The ticket name carries the visual weight (`--fs-base`, a size up from the
-   list-row default `--fs-sm` the ref keeps) — it is the thing worth reading. `min-width: 0`
-   is what lets it shrink below its own content size once the trigger button is too narrow
-   for it (`kit-accordion-section.css`'s own `.acc-head-content` sets the same on the
-   wrapper this projects into) — the default `flex-shrink: 1` is what actually gives way,
-   so the name truncates rather than pushing the row wider. */
+   list-row default `--fs-sm` the ref keeps) — it is the thing worth reading, so it
+   wraps to as many lines as it needs rather than losing any of itself: the row's
+   height grows instead. `min-width: 0` is what lets the name shrink below its own
+   content width once the trigger button is too narrow for it on one line
+   (`kit-accordion-section.css`'s own `.acc-head-content` sets the same on the
+   wrapper this projects into), which is what makes the wrap happen at all —
+   without it the flex item refuses to shrink narrower than its unbroken content
+   and pushes the row wider instead. `overflow-wrap: anywhere` (the same pairing
+   `garden/finding-list.css`'s `.fl-summary` and `garden/run-list.css`'s
+   `.rl-routine` use) is what keeps a long unbroken token — a URL or path
+   dropped into a title — breaking within itself rather than forcing the row
+   wider anyway. */
 .i-name {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   color: var(--text);
   font-size: var(--fs-base);
 }

@@ -1,0 +1,14 @@
+<button
+  type="button"
+  class="rd-toggle"
+  [attr.data-testid]="testid() + '-raw-toggle'"
+  (click)="showRaw.set(!showRaw())"
+>
+  {{ showRaw() ? 'Show summary' : 'Show raw JSON' }}
+</button>
+
+@if (showRaw()) {
+  <pre class="rd-raw" [attr.data-testid]="testid() + '-raw'">{{ raw() }}</pre>
+} @else {
+  <div class="rd-body"><ng-content /></div>
+}

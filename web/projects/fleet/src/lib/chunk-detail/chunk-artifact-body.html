@@ -7,7 +7,13 @@
 </div>
 @if (artifact().kind === 'asset') {
   @if (body() === 'full') {
-    <pre class="a-content" [attr.data-testid]="contentTestid()">{{ artifact().content }}</pre>
+    @if (parsedDelta(); as delta) {
+      <fleet-chunk-artifact-delta [delta]="delta" [raw]="artifact().content ?? ''" [testid]="testid()" />
+    } @else if (parsedSurvey(); as survey) {
+      <fleet-chunk-artifact-survey [survey]="survey" [raw]="artifact().content ?? ''" [testid]="testid()" />
+    } @else {
+      <pre class="a-content" [attr.data-testid]="contentTestid()">{{ artifact().content }}</pre>
+    }
   }
 } @else {
   <div class="a-ref" [attr.data-testid]="refTestid()">

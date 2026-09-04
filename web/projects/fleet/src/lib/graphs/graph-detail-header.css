@@ -1,9 +1,9 @@
-/* Paints no chrome of its own — projected into KitPanel's own fleetKitPanelHeader
-   slot in supplement mode (kit-panel.ts's own declared contract), which already
-   supplies the bar's background, border, and label span; `display: contents`
-   (the same convention `machine-detail-header.css` uses for owns-the-bar mode)
-   puts this component's two spans directly alongside that label as `.p-hdr`'s
-   own flex items rather than wrapping them in a second box. */
+/* Paints no chrome of its own beyond its content — projected into KitPanel's own
+   fleetKitPanelHeader slot in supplement mode (kit-panel.ts's own declared
+   contract), which already supplies the bar's background, border, and label span;
+   `display: contents` (the same convention `machine-detail-header.css` uses for
+   owns-the-bar mode) puts this component's spans/button directly alongside that
+   label as `.p-hdr`'s own flex items rather than wrapping them in a second box. */
 :host {
   display: contents;
 }
@@ -11,17 +11,20 @@
   color: var(--label-dim);
   font-size: var(--fs-xs);
 }
-.lifecycle-badge {
-  padding: 1px 6px;
+/* Plain text, not a badge — no border. The graph id sits mid-row (next to the
+   panel's own name label); this span and the retire/re-enable control after it
+   are the row's trailing cluster, pushed hard right against `.p-hdr`'s
+   `justify-content: space-between` the same way `finding-list.css`'s `.fl-ref`
+   does one level down: `margin-left: auto` on the first item of the cluster. */
+.lifecycle {
+  margin-left: auto;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: var(--fs-xs);
 }
-.lifecycle-badge.enabled {
+.lifecycle.enabled {
   color: var(--cyan);
-  border: 1px solid var(--cyan);
 }
-.lifecycle-badge.retired {
+.lifecycle.retired {
   color: var(--red);
-  border: 1px solid var(--red);
 }

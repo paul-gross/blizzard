@@ -1,14 +1,30 @@
+/* This dialog carries the most of any in the app — a two-way response radiogroup and,
+   on the mint path, both a multi-line work-item body and a reason field. At
+   `fleet-kit-dialog`'s own defaults that left the body editor a few lines tall in a
+   narrow column, which is not enough surface to actually draft a work item in, so it
+   takes the kit's width hook, and its prose fields carry the tall `rows` that make
+   the surface. Height is left to the kit and follows those fields — on the decline
+   path, where only one short reason renders, the panel is correspondingly shorter
+   instead of holding the mint path's height open under it. */
+:host {
+  --kit-dialog-width: 1120px;
+}
+
 h2 {
   margin: 0;
   font-size: var(--fs-md);
   color: var(--text);
 }
 
-.mode-field,
-.body-field,
-.reason-field,
-.decline-reason-field {
-  margin: 0 0 12px;
+/* The fields stand at their own declared `rows`, not at a share of the panel's
+   height: `.panel` above them carries a `min-height`/`max-height` pair but no
+   `height`, so `.p-body`'s `flex: 1` never resolves to a definite height for a
+   percentage below it to divide. A stretch chain here silently fell back to `rows`
+   anyway — the `rows` on each field are the real height, and are set to be. */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .mode-field .body,
@@ -18,22 +34,21 @@ h2 {
   padding: 8px;
 }
 
-.cli-verb {
-  font-family: var(--mono);
-  font-size: var(--fs-xs);
-  color: var(--label);
-  word-break: break-all;
-}
-
+/* `stretch`, not `center`: at the narrow widths the dialog is still reachable at, a
+   `cta`-sized button's label wraps to a second line rather than overflowing the
+   panel, and centering two buttons of unequal height leaves their tops offset by
+   half the difference. Stretching gives both the row's height, so the action row
+   reads as one row however either label wraps. */
 .footer {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-end;
   gap: 8px;
 }
 
 .submit-error {
   flex: 1;
+  align-self: center;
   margin: 0;
   font-size: var(--fs-sm);
   color: var(--red);

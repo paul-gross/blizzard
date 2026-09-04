@@ -1,0 +1,12 @@
+@let e = entry();
+<p class="fe-head">
+  <span class="fe-class">{{ e.class }}</span>
+  <span class="fe-locus">{{ e.locus }}</span>
+  @if (e.ref) {
+    <span class="fe-ref" title="submission-local ref">{{ e.ref }}</span>
+  }
+</p>
+@if (e.introduced) {
+  <p class="fe-introduced">introduced <span [title]="e.introduced">{{ shortSha(e.introduced) }}</span></p>
+}
+<fleet-kit-prose-block [text]="e.summary" [testid]="summaryTestid()" />

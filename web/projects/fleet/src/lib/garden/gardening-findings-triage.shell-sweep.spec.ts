@@ -26,7 +26,7 @@ async function loadDesignTokens(): Promise<void> {
  * carry a genuinely different computed style from a plain row — not merely a
  * different class name jsdom would accept without evaluating it against
  * `finding-list.css`; and the row's own summary headline must genuinely clamp to
- * four lines rather than merely carrying the `-webkit-line-clamp` declaration —
+ * three lines rather than merely carrying the `-webkit-line-clamp` declaration —
  * jsdom performs no layout, so it cannot tell a clamped headline from an
  * unclamped one.
  *
@@ -146,7 +146,7 @@ describe('FleetFindingList gone-row tint shell sweep (web:shell-sweep)', () => {
 });
 
 describe('FleetFindingList summary headline clamp shell sweep (web:shell-sweep)', () => {
-  it('genuinely clamps a long summary to four lines rather than letting it grow the row', async () => {
+  it('genuinely clamps a long summary to three lines rather than letting it grow the row', async () => {
     const LONG_SUMMARY = Array.from(
       { length: 20 },
       (_, i) => `Sentence number ${i} of a long agent-written summary that runs on and on.`,
@@ -182,15 +182,15 @@ describe('FleetFindingList summary headline clamp shell sweep (web:shell-sweep)'
       const clampedHeight = headline.getBoundingClientRect().height;
 
       // A genuinely clamped headline renders at (at most, allowing for rounding)
-      // four lines tall regardless of how much text it carries — the twenty
-      // sentences above run to well beyond four lines unclamped, so a
-      // `-webkit-line-clamp: 4` declaration that jsdom would accept without
+      // three lines tall regardless of how much text it carries — the twenty
+      // sentences above run to well beyond three lines unclamped, so a
+      // `-webkit-line-clamp: 3` declaration that jsdom would accept without
       // evaluating is not enough; this only passes if the browser actually clips
       // the box.
       expect(
         clampedHeight,
-        `the clamped headline's rendered height (${clampedHeight}px) exceeds four lines (${oneLineHeight * 4}px) — the summary is not actually clamping`,
-      ).toBeLessThanOrEqual(oneLineHeight * 4 + 1);
+        `the clamped headline's rendered height (${clampedHeight}px) exceeds three lines (${oneLineHeight * 3}px) — the summary is not actually clamping`,
+      ).toBeLessThanOrEqual(oneLineHeight * 3 + 1);
     } finally {
       root.remove();
     }

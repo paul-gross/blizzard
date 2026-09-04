@@ -13,7 +13,7 @@
    longest label, which is what would let them drift apart. */
 .kv {
   display: grid;
-  grid-template-columns: var(--kv-label-col, 74px) 1fr;
+  grid-template-columns: var(--kv-label-col, 112px) 1fr;
   gap: 2px 8px;
   padding: var(--chunk-facts-pad, 8px);
   font-size: var(--fs-sm);

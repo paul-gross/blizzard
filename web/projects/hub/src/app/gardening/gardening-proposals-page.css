@@ -8,6 +8,15 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  /* These two screens carry the most per row of any master list in gardening — a
+     clamped multi-line headline over its own meta lines — and their detail panes
+     carry proportionally less, so the split is retuned here rather than in the
+     shared token (`design/tokens.css`'s `--master-list-col`, which the
+     routines/runs/scopes screens still take as-is). Overriding the token, not the
+     `grid-template-columns` line below, so anything else keyed to it on this page
+     stays one value. The narrow-viewport rule is unaffected: under 720px the layout
+     is a single stacked column and this width never applies. */
+  --master-list-col: 640px;
 }
 .gp-filters {
   display: flex;

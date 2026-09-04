@@ -69,14 +69,24 @@ a.iss:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  /* Must be allowed to shrink (not `flex: none`) — a flex item that refuses to shrink
-   * never narrows below its content's single-line width, so its own `flex-wrap` never
-   * gets a chance to fire and the row silently overflows `.d-head` instead (round 3
-   * F4). `min-width: 0` lets it shrink past its children's combined intrinsic width,
-   * same as `.d-title` beside it. */
-  flex: 1 1 auto;
+  /* Right-anchored: the action cluster belongs at the far end of the header, opposite
+   * the chunk's identity, and it stays there however wide it grows. `margin-left: auto`
+   * rather than leaning on `.d-head`'s `space-between`, so the anchor holds even when
+   * `.d-title` wraps or a third item ever joins the row.
+   *
+   * `flex-grow: 0` is what puts it there — growing to fill the free space would leave
+   * its contents starting immediately after the title. Shrinking stays on (not
+   * `flex: none`): a flex item that refuses to shrink never narrows below its content's
+   * single-line width, so its own `flex-wrap` never gets a chance to fire and the row
+   * silently overflows `.d-head` instead (round 3 F4). `min-width: 0` lets it shrink
+   * past its children's combined intrinsic width, same as `.d-title` beside it. */
+  flex: 0 1 auto;
+  margin-left: auto;
   min-width: 0;
+  /* Each wrapped row of the cluster stays flush with that right edge too, rather than
+   * a second row starting back at the cluster's left. */
+  justify-content: flex-end;
+  gap: 8px;
 }
 .d-meta .nd {
   color: var(--label);

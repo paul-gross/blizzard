@@ -124,7 +124,10 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
                 # version (issue #152); either navigates to /graphs/:graphId.
                 group.get_by_test_id("graph-explorer-group-toggle").click()
                 expect(page).to_have_url(f"http://127.0.0.1:{hub_port}/graphs/{graph_id}")
-                row = group.locator(f'[data-testid="graph-explorer-row"][data-graph-id="{graph_id}"]')
+                # `data-graph-id` rides the `<li>` wrapper, the testid the selectable row
+                # inside it (`kit-select-row` renders the button that carries it), so the
+                # two are a descendant pair rather than one element.
+                row = group.locator(f'[data-graph-id="{graph_id}"] [data-testid="graph-explorer-row"]')
                 expect(row).to_be_visible()
                 row.click()
 

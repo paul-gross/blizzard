@@ -132,46 +132,6 @@ describe('GardeningFindingTriageDialog', () => {
     );
   });
 
-  it('names the resolve CLI verb, joining every id with spaces', async () => {
-    const mounted = await mount('resolve', ['fnd_1', 'fnd_2'], () => [FINDING]);
-    stub = mounted.stub;
-    const { el, fixture } = mounted;
-
-    setNote(el, 'landed elsewhere');
-    await settle(fixture);
-
-    expect(el.querySelector('[data-testid="finding-triage-cli-verb"]')?.textContent).toContain(
-      'blizzard hub finding resolve fnd_1 fnd_2 --note "landed elsewhere"',
-    );
-  });
-
-  it('escapes a quote in the note so the CLI mirror stays a runnable command (F11)', async () => {
-    const mounted = await mount('resolve', ['fnd_1'], () => [FINDING]);
-    stub = mounted.stub;
-    const { el, fixture } = mounted;
-
-    setNote(el, 'the "real" fix landed');
-    await settle(fixture);
-
-    expect(el.querySelector('[data-testid="finding-triage-cli-verb"]')?.textContent).toContain(
-      String.raw`blizzard hub finding resolve fnd_1 --note "the \"real\" fix landed"`,
-    );
-  });
-
-  it('names the supersede CLI verb, carrying --by ahead of --note', async () => {
-    const mounted = await mount('supersede', ['fnd_1'], () => [FINDING]);
-    stub = mounted.stub;
-    const { el, fixture } = mounted;
-
-    setNote(el, 'folds into fnd_9');
-    setSupersededBy(el, 'fnd_9');
-    await settle(fixture);
-
-    expect(el.querySelector('[data-testid="finding-triage-cli-verb"]')?.textContent).toContain(
-      'blizzard hub finding supersede fnd_1 --by fnd_9 --note "folds into fnd_9"',
-    );
-  });
-
   it('surfaces a rejected batch as an error, keeping the dialog open and the selection intact', async () => {
     const mounted = await mount('resolve', ['fnd_1', 'fnd_2'], (method, path) =>
       method === 'POST' && path === '/api/findings/resolve'

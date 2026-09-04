@@ -1,8 +1,17 @@
+<span class="gid" data-testid="graph-detail-graph-id">{{ graphId() }}</span>
 <span
-  class="lifecycle-badge"
+  class="lifecycle"
   data-testid="graph-detail-lifecycle-badge"
   [class.retired]="retired()"
   [class.enabled]="!retired()"
   >{{ retired() ? 'retired' : 'enabled' }}</span
 >
-<span class="gid" data-testid="graph-detail-graph-id">{{ graphId() }}</span>
+<!-- Retire/re-enable are graph authoring — gated on graph:edit (admin-tier,
+     issue #93): a contributor sees the lifecycle text but not the control. -->
+@if (canEdit()) {
+  @if (retired()) {
+    <fleet-kit-button testid="graph-detail-enable" (click)="onEnable()">Re-enable</fleet-kit-button>
+  } @else {
+    <fleet-kit-button testid="graph-detail-retire" variant="danger" (click)="onRetire()">Retire</fleet-kit-button>
+  }
+}

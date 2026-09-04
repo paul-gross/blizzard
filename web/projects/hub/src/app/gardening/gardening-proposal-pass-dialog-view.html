@@ -10,22 +10,22 @@
 
   <fleet-kit-text-input
     multiline
-    [rows]="3"
+    [rows]="6"
     placeholder="Why the proposal is passed — required"
     [value]="reason()"
     (valueChange)="reason.set($event)"
     testid="proposal-pass-reason-input"
   />
-  <p class="cli-verb" data-testid="proposal-pass-cli-verb">{{ cliVerb() }}</p>
 
   <div fleetKitDialogFooter class="footer">
     @if (submitError(); as error) {
       <p class="submit-error" data-testid="proposal-pass-submit-error">{{ error }}</p>
     }
-    <fleet-kit-button [disabled]="submitting()" (click)="onClosed()" testid="proposal-pass-dialog-cancel">
+    <fleet-kit-button size="cta" [disabled]="submitting()" (click)="onClosed()" testid="proposal-pass-dialog-cancel">
       Cancel
     </fleet-kit-button>
     <fleet-kit-button
+      size="cta"
       variant="primary"
       [disabled]="!canSubmit()"
       (click)="onSubmitClick()"

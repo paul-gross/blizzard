@@ -1,0 +1,36 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.fe-head {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.fe-class {
+  font-weight: bold;
+  color: var(--text);
+}
+.fe-locus {
+  color: var(--label);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.fe-ref {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+.fe-introduced {
+  margin: 0;
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+fleet-kit-prose-block {
+  display: block;
+  margin-top: 2px;
+}

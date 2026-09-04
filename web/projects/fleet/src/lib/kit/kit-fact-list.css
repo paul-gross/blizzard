@@ -5,11 +5,11 @@
      label columns identically instead of each fitting its own longest label and
      drifting apart (`chunk-facts.css`'s own note on the same property, this
      grid's one owner now). */
-  --kv-label-col: 74px;
+  --kv-label-col: 112px;
 }
 .kv {
   display: grid;
-  grid-template-columns: var(--kv-label-col, 74px) 1fr;
+  grid-template-columns: var(--kv-label-col, 112px) 1fr;
   gap: 2px 8px;
   margin: 0;
   font-size: var(--fs-sm);

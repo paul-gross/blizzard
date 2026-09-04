@@ -6,87 +6,88 @@
 >
   <h2 fleetKitDialogHeader data-testid="proposal-accept-dialog-title">Accept {{ proposalTitle() }}</h2>
 
-  <p>
-    Acceptance itself neither promotes the minted item nor changes any finding's state — it only records agreement.
-  </p>
+  <div class="fields">
+    <p>
+      Acceptance itself neither promotes the minted item nor changes any finding's state — it only records agreement.
+    </p>
 
-  <fleet-kit-panel class="mode-field" data-testid="proposal-accept-mode-field" aria-label="Response" label="Response">
-    <div class="body">
-      <div role="radiogroup" aria-label="Response">
-        <fleet-kit-option
-          name="proposal-accept-mode"
-          [checked]="mode() === 'mint'"
-          (changed)="mode.set('mint')"
-          testid="proposal-accept-mode-mint"
-        >
-          Mint a linked work item
-        </fleet-kit-option>
-        <fleet-kit-option
-          name="proposal-accept-mode"
-          [checked]="mode() === 'decline'"
-          (changed)="mode.set('decline')"
-          testid="proposal-accept-mode-decline"
-        >
-          Agree, mint nothing
-        </fleet-kit-option>
-      </div>
-    </div>
-  </fleet-kit-panel>
-
-  @if (mode() === 'mint') {
-    <fleet-kit-panel class="body-field" data-testid="proposal-accept-body-field" aria-label="Work item body" label="Work item body">
+    <fleet-kit-panel class="mode-field" data-testid="proposal-accept-mode-field" aria-label="Response" label="Response">
       <div class="body">
-        <fleet-kit-text-input
-          multiline
-          [rows]="4"
-          [value]="body()"
-          (valueChange)="body.set($event)"
-          testid="proposal-accept-body-input"
-        />
+        <div role="radiogroup" aria-label="Response">
+          <fleet-kit-option
+            name="proposal-accept-mode"
+            [checked]="mode() === 'mint'"
+            (changed)="mode.set('mint')"
+            testid="proposal-accept-mode-mint"
+          >
+            Mint a linked work item
+          </fleet-kit-option>
+          <fleet-kit-option
+            name="proposal-accept-mode"
+            [checked]="mode() === 'decline'"
+            (changed)="mode.set('decline')"
+            testid="proposal-accept-mode-decline"
+          >
+            Agree, mint nothing
+          </fleet-kit-option>
+        </div>
       </div>
     </fleet-kit-panel>
-    <fleet-kit-panel class="reason-field" data-testid="proposal-accept-reason-field" aria-label="Reason" label="Reason (optional)">
-      <div class="body">
-        <fleet-kit-text-input
-          multiline
-          [rows]="2"
-          placeholder="optional — why the proposal is accepted"
-          [value]="reason()"
-          (valueChange)="reason.set($event)"
-          testid="proposal-accept-reason-input"
-        />
-      </div>
-    </fleet-kit-panel>
-  } @else {
-    <fleet-kit-panel
-      class="decline-reason-field"
-      data-testid="proposal-accept-decline-reason-field"
-      aria-label="Reason"
-      label="Reason — required"
-    >
-      <div class="body">
-        <fleet-kit-text-input
-          multiline
-          [rows]="3"
-          placeholder="Why no work item is minted — required"
-          [value]="reason()"
-          (valueChange)="reason.set($event)"
-          testid="proposal-accept-decline-reason-input"
-        />
-      </div>
-    </fleet-kit-panel>
-  }
 
-  <p class="cli-verb" data-testid="proposal-accept-cli-verb">{{ cliVerb() }}</p>
+    @if (mode() === 'mint') {
+      <fleet-kit-panel class="body-field" data-testid="proposal-accept-body-field" aria-label="Work item body" label="Work item body">
+        <div class="body">
+          <fleet-kit-text-input
+            multiline
+            [rows]="16"
+            [value]="body()"
+            (valueChange)="body.set($event)"
+            testid="proposal-accept-body-input"
+          />
+        </div>
+      </fleet-kit-panel>
+      <fleet-kit-panel class="reason-field" data-testid="proposal-accept-reason-field" aria-label="Reason" label="Reason (optional)">
+        <div class="body">
+          <fleet-kit-text-input
+            multiline
+            [rows]="4"
+            placeholder="optional — why the proposal is accepted"
+            [value]="reason()"
+            (valueChange)="reason.set($event)"
+            testid="proposal-accept-reason-input"
+          />
+        </div>
+      </fleet-kit-panel>
+    } @else {
+      <fleet-kit-panel
+        class="decline-reason-field"
+        data-testid="proposal-accept-decline-reason-field"
+        aria-label="Reason"
+        label="Reason — required"
+      >
+        <div class="body">
+          <fleet-kit-text-input
+            multiline
+            [rows]="6"
+            placeholder="Why no work item is minted — required"
+            [value]="reason()"
+            (valueChange)="reason.set($event)"
+            testid="proposal-accept-decline-reason-input"
+          />
+        </div>
+      </fleet-kit-panel>
+    }
+  </div>
 
   <div fleetKitDialogFooter class="footer">
     @if (submitError(); as error) {
       <p class="submit-error" data-testid="proposal-accept-submit-error">{{ error }}</p>
     }
-    <fleet-kit-button [disabled]="submitting()" (click)="onClosed()" testid="proposal-accept-dialog-cancel">
+    <fleet-kit-button size="cta" [disabled]="submitting()" (click)="onClosed()" testid="proposal-accept-dialog-cancel">
       Cancel
     </fleet-kit-button>
     <fleet-kit-button
+      size="cta"
       variant="primary"
       [disabled]="!canSubmit()"
       (click)="onSubmitClick()"

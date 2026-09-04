@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, InjectionToken, computed, inject, i
 
 import type { GraphView } from '../api/hub';
 import { type DiagramSelection, endpointNodeIds, incidentEdgeIds } from './graph-diagram-selection';
+import { GraphDiagramMigration } from './graph-diagram-migration';
 import { GraphDiagramNodeShape } from './graph-diagram-node-shape';
 import { GraphDiagramStart } from './graph-diagram-start';
 import { type LaidOutEdge, type LaidOutSelfLoop, type LayoutOutcome, type TextMeasurer, layoutGraph } from './graph-layout';
@@ -57,7 +58,7 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
 @Component({
   selector: 'fleet-graph-diagram',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GraphDiagramNodeShape, GraphDiagramStart],
+  imports: [GraphDiagramNodeShape, GraphDiagramStart, GraphDiagramMigration],
   templateUrl: './graph-diagram.html',
   styleUrl: './graph-diagram.css',
 })
@@ -114,7 +115,7 @@ export class GraphDiagram {
       kind: 'edge',
       edgeId: edge.id,
       fromNodeId: edge.fromNodeId,
-      toNodeId: edge.toNodeId,
+      target: edge.target,
       choiceId: edge.choiceId,
       edgeKind: edge.kind,
     });
@@ -129,7 +130,7 @@ export class GraphDiagram {
       kind: 'edge',
       edgeId: loop.id,
       fromNodeId: loop.nodeId,
-      toNodeId: loop.nodeId,
+      target: { kind: 'node', nodeId: loop.nodeId },
       choiceId: loop.choiceId,
       edgeKind: 'retry',
     });
