@@ -119,7 +119,7 @@ class HubProxy:
             try:
                 upstream = self.client.request(method, url, headers=self.config.auth_headers(), timeout=attempt_timeout)
             except httpx.HTTPError as exc:
-                if retryable and retries < _MAX_RETRIES and budget - (time.monotonic() - started) > 0:
+                if retryable and self._may_retry(retries, budget, started):
                     self.delay(_backoff(retries))
                     retries += 1
                     continue
@@ -135,11 +135,21 @@ class HubProxy:
             if not (retryable and upstream.status_code in _RETRYABLE_STATUSES):
                 raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
 
-            if retries < _MAX_RETRIES and budget - (time.monotonic() - started) > 0:
+            if self._may_retry(retries, budget, started):
                 self.delay(_backoff(retries))
                 retries += 1
                 continue
             raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
+
+    @staticmethod
+    def _may_retry(retries: int, budget: float, started: float) -> bool:
+        """Whether one more attempt is worth scheduling: under the retry-count cap, and the
+        *whole* backoff before it still lands inside the budget — not merely some slack.
+        Gating on any positive remainder let a backoff committed on a sliver of budget carry
+        the forward's real elapsed time past ``_HUB_RETRY_CEILING`` (and, worst case, past
+        ``READ_TIMEOUT``) before the next attempt ever fired, since the delay itself is not
+        charged against the budget check that authorized it."""
+        return retries < _MAX_RETRIES and budget - (time.monotonic() - started) > _backoff(retries)
 
     def _log(self) -> structlog.stdlib.BoundLogger:
         # The route module's own logger — `what` is its module name in hyphens.
