@@ -62,15 +62,17 @@ def _repo(root: Path, name: str, *, origin: str) -> Path:
 
 
 @pytest.mark.component
-def test_the_clean_sweeps_ignored_build_artifacts_out_with_the_outgoing_tenant(tmp_path: Path) -> None:
-    """``-fdx``, not ``-fd``: a previous tenant's ignored files (build output, installed
-    deps) leave with it, since the reprovision step that follows restores them. A tree
-    that kept them is not reset to base."""
+def test_the_clean_sweeps_untracked_scratch_but_leaves_the_ignored_dependency_trees(tmp_path: Path) -> None:
+    """``-fd``, not ``-fdx``: the outgoing tenant's untracked scratch goes, ignored files
+    stay. Rebuilding the dependency trees they hold exceeds the acquire tick's budget, so
+    resetting ignored state is a project's own provisioning concern."""
     env_workdir = tmp_path / "e1"
     repo = _repo(env_workdir, "toy", origin="file:///origins/toy.git")
-    (repo / ".gitignore").write_text("build/\n")
+    (repo / ".gitignore").write_text("build/\nnode_modules/\n")
     _git(repo, "add", ".gitignore")
     _git(repo, "commit", "-m", "baseline")
+    (repo / "node_modules").mkdir()
+    (repo / "node_modules" / "dep.js").write_text("an installed dependency tree")
     (repo / "build").mkdir()
     (repo / "build" / "artifact.o").write_text("previous tenant's build output")
     (repo / "junk.txt").write_text("previous tenant's untracked scratch file")
@@ -78,7 +80,8 @@ def test_the_clean_sweeps_ignored_build_artifacts_out_with_the_outgoing_tenant(t
     SubprocessEnvGit().clean_environment(env_workdir)
 
     assert not (repo / "junk.txt").exists()
-    assert not (repo / "build").exists()
+    assert (repo / "node_modules" / "dep.js").exists()
+    assert (repo / "build").exists()
     assert (repo / ".gitignore").exists()  # tracked state is winter's to reset, untouched here
 
 

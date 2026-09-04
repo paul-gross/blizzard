@@ -1,8 +1,8 @@
 """Git reset-on-acquire plumbing for the winter binding (package-private).
 
 Removes the previous tenant's **untracked** files — the one reset step winter has no verb
-for. ``-fdx``, not ``-fd``: build artifacts and installed deps go with the outgoing tenant
-(tests/test_pin_runner_misc.py). All ``subprocess`` usage is confined here.
+for. ``-fd``, not ``-fdx``: ignored files stay, since the dependency trees they hold cost more
+to rebuild than the tick allows (tests/test_pin_runner_misc.py). ``subprocess`` is confined here.
 """
 
 from __future__ import annotations
@@ -24,14 +24,14 @@ class EnvGitError(RuntimeError):
 
 
 class SubprocessEnvGit:
-    """Remove untracked/ignored files from each repo worktree in a feature env."""
+    """Remove untracked files from each repo worktree in a feature env."""
 
     def clean_environment(self, env_workdir: Path) -> None:
-        """``git clean -fdx`` every repo worktree under ``env_workdir``."""
+        """``git clean -fd`` every repo worktree under ``env_workdir``."""
         for child in sorted(env_workdir.iterdir()):
             if not (child / ".git").exists():
                 continue
-            self._git(child, "clean", "-fdx")
+            self._git(child, "clean", "-fd")
         _log.info("environment cleaned of untracked files", env_workdir=str(env_workdir))
 
     def origin_url(self, repo_workdir: Path) -> str:
