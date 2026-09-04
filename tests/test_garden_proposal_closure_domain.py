@@ -13,6 +13,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalAlreadyClosed,
     GardenProposalClosure,
@@ -21,6 +22,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalItemOutcome,
     GardenProposalPassReasonRequired,
     IWriteGardenProposalClosureRepository,
+    _compose_minted_body,
 )
 from blizzard.hub.domain.garden_proposals import GardenProposal
 from blizzard.hub.domain.work_items import WorkItemEditService
@@ -39,6 +41,25 @@ def _proposal(proposal_id: str = "gprop_1") -> GardenProposal:
         body="the case",
         created_at=_T0,
         findings=["fin_1"],
+    )
+
+
+def _finding(finding_id: str, *, class_: str = "c", locus: str = "l", state: str = "live") -> Finding:
+    return Finding(
+        finding_id=finding_id,
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_=class_,
+        locus=locus,
+        summary="s",
+        introduced=None,
+        introduced_at=None,
+        first_observed_at=_T0,
+        live=state == "live",
+        state=state,
+        note=None,
+        last_seen_at=_T0,
+        observed_count=0,
     )
 
 
@@ -152,7 +173,7 @@ def test_accept_on_an_already_closed_proposal_is_refused_naming_the_existing_clo
     service = _service(repo)
 
     with pytest.raises(GardenProposalAlreadyClosed) as excinfo:
-        service.accept(_proposal(), reason=None, by="u1", body=None, mint=False, graph=None)
+        service.accept(_proposal(), reason=None, by="u1", body=None, mint=False, graph=None, findings=[])
 
     assert excinfo.value.closure == existing
     assert repo.declined == []
@@ -162,7 +183,9 @@ def test_accept_declining_to_mint_records_declined_and_touches_no_item_service()
     repo = _FakeGardenProposalClosureRepo()
     service = _service(repo)
 
-    accepted = service.accept(_proposal(), reason="handled by hand", by="u1", body=None, mint=False, graph=None)
+    accepted = service.accept(
+        _proposal(), reason="handled by hand", by="u1", body=None, mint=False, graph=None, findings=[]
+    )
 
     assert repo.declined == [("gprop_1", "handled by hand", "u1", _T0)]
     assert accepted.chunk_id is None
@@ -176,3 +199,44 @@ def test_accept_declining_to_mint_records_declined_and_touches_no_item_service()
         source=None,
         ref=None,
     )
+
+
+# --- _compose_minted_body (blizzard#397 Phase 3) -------------------------------
+
+
+def test_compose_wraps_the_given_body_with_one_findings_bullet() -> None:
+    body = _compose_minted_body("the case", [_finding("fin_1", class_="stale-docstring", locus="a.py:1")])
+
+    assert body.startswith("the case\n\n## Related findings\n\n")
+    assert "- `fin_1` — stale-docstring — a.py:1 — live" in body
+    assert "blizzard runner finding list" in body
+    assert "blizzard runner finding get <finding-id>" in body
+
+
+def test_compose_carries_one_bullet_per_finding_in_order() -> None:
+    findings = [
+        _finding("fin_1", class_="c1", locus="a.py:1", state="live"),
+        _finding("fin_2", class_="c2", locus="b.py:2", state="resolved"),
+    ]
+
+    body = _compose_minted_body("the case", findings)
+
+    bullets = [line for line in body.splitlines() if line.startswith("- ")]
+    assert bullets == [
+        "- `fin_1` — c1 — a.py:1 — live",
+        "- `fin_2` — c2 — b.py:2 — resolved",
+    ]
+
+
+def test_compose_wraps_the_proposals_own_body_when_none_is_given() -> None:
+    """`accept()` passes ``body`` if given, else ``proposal.body`` — either way,
+    ``_compose_minted_body`` only ever sees the resolved string, never `None`."""
+    body = _compose_minted_body(_proposal().body, [_finding("fin_1")])
+
+    assert body.startswith("the case\n\n## Related findings\n\n")
+
+
+def test_compose_wraps_a_caller_supplied_override_body() -> None:
+    body = _compose_minted_body("a hand-drafted body", [_finding("fin_1")])
+
+    assert body.startswith("a hand-drafted body\n\n## Related findings\n\n")

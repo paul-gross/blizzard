@@ -3066,7 +3066,7 @@
       },
       "GardenProposalAcceptRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/garden-proposals/{proposal_id}/accept` (blizzard#395). `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` carries the minted item's body when the proposal's own\nbody should not be used verbatim; ignored when `mint_work_item` is `False`.",
+        "description": "`POST /api/garden-proposals/{proposal_id}/accept` (blizzard#395). `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` replaces the proposal's own body as the prose the\nminted item's \"Related findings\" template wraps, when the proposal's own body should\nnot be used; ignored when `mint_work_item` is `False` (blizzard#397).",
         "properties": {
           "body": {
             "anyOf": [
@@ -12246,6 +12246,105 @@
         ]
       }
     },
+    "/api/fleet/chunks/{chunk_id}/findings": {
+      "get": {
+        "description": "The findings the chunk's own accepted, minted garden proposal answers \u2014 a worker's\nper-chunk read, distinct from ``get_garden_findings``'s routine-run bucket. 404 both\nfor an unknown chunk and for one answering no such proposal.",
+        "operationId": "get_chunk_findings_api_fleet_chunks__chunk_id__findings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingView"
+                  },
+                  "title": "Response Get Chunk Findings Api Fleet Chunks  Chunk Id  Findings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk Findings",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/findings/{finding_id}": {
+      "get": {
+        "description": "One finding within the chunk's own answered set \u2014 ``get_chunk_findings`` narrowed\nto a single id. An id outside that set is structurally unreachable rather than\nfiltered after the fact, so it 404s the same as an id belonging to no proposal at\nall.",
+        "operationId": "get_chunk_finding_api_fleet_chunks__chunk_id__findings__finding_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "title": "Finding Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk Finding",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
     "/api/fleet/chunks/{chunk_id}/garden/findings": {
       "get": {
         "description": "A worker's own routine's live finding bucket (D5, D6) \u2014 the chunk's own run\ncontext derives the routine and the scope; no caller-supplied flag can name\nanother. 404 both for an unknown chunk and for one carrying no run context (not a\nroutine run): a chunk with nothing to read is refused rather than answered with an\nempty bucket.",
@@ -13144,7 +13243,7 @@
     },
     "/api/garden-proposals/{proposal_id}/accept": {
       "post": {
-        "description": "Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default (the\nproposal's own body unless overridden), or records the decline when\n`mint_work_item` is false \u2014 never inferred from an absent link. Promotes nothing and\nchanges no finding's state. 404 unknown proposal, 409 already closed or a raced\ningest, 503 the packaged default graph retired.",
+        "description": "Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default,\nwrapping `body` (or the proposal's own, when none is given) in the \"Related\nfindings\" template, or records the decline when `mint_work_item` is false \u2014 never\ninferred from an absent link. Promotes nothing and changes no finding's state. 404\nunknown proposal, 409 already closed or a raced ingest, 503 the packaged default\ngraph retired.",
         "operationId": "accept_garden_proposal_api_garden_proposals__proposal_id__accept_post",
         "parameters": [
           {

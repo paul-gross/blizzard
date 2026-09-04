@@ -23,6 +23,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosure,
     GardenProposalPassReasonRequired,
 )
+from blizzard.hub.domain.garden_proposal_resolution import resolve_proposal_findings
 from blizzard.hub.domain.garden_proposals import GardenProposal
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
@@ -123,11 +124,12 @@ def accept_garden_proposal(
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> object:
-    """Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default (the
-    proposal's own body unless overridden), or records the decline when
-    `mint_work_item` is false — never inferred from an absent link. Promotes nothing and
-    changes no finding's state. 404 unknown proposal, 409 already closed or a raced
-    ingest, 503 the packaged default graph retired."""
+    """Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default,
+    wrapping `body` (or the proposal's own, when none is given) in the "Related
+    findings" template, or records the decline when `mint_work_item` is false — never
+    inferred from an absent link. Promotes nothing and changes no finding's state. 404
+    unknown proposal, 409 already closed or a raced ingest, 503 the packaged default
+    graph retired."""
     proposal = _get_or_404(proposal_id, services)
     existing = services.garden_proposal_closures.get(proposal_id)
     if existing is not None:
@@ -141,6 +143,7 @@ def accept_garden_proposal(
             )
         except DefaultGraphRetired as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    proposal_findings = resolve_proposal_findings(services.findings, proposal.findings)
     try:
         accepted = services.garden_proposal_closure.accept(
             proposal,
@@ -149,6 +152,7 @@ def accept_garden_proposal(
             body=request.body,
             mint=request.mint_work_item,
             graph=graph,
+            findings=proposal_findings,
         )
     except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

@@ -20,6 +20,12 @@ local API, authorized by the spawn-injected lease identity, the same shape the `
 (see [artifacts.md](./artifacts.md)); [openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint
 shape.
 
+A worker whose own chunk an accepted garden-proposal accept minted reads a different bucket the same way:
+`blizzard runner finding list`, flagless, and `finding get <finding_id>` for one — the findings the chunk's own
+accepted, minted proposal answers, resolved server-side from the chunk itself, so neither verb can be pointed at
+another chunk's proposal. An id outside that set 404s the same as a chunk answering no such proposal at all. It needs
+no hub credential in its child environment either, and shares the same endpoint-shape home.
+
 A person takes a finding out of the live set for good with one of five exit verbs, each requiring `--note`:
 `blizzard hub finding resolve <finding_id>...`, `confirm-gone <finding_id>...`, `wont-fix <finding_id>...`,
 `not-a-finding <finding_id>...`, and `supersede <finding_id>... --by <finding_id>` (the absorbing finding). Each takes
@@ -46,13 +52,15 @@ it answers and the closure it carries once one exists. Neither takes a filter ye
 with a reason required.
 `blizzard hub garden-proposal accept <proposal_id> [--reason <text>]
 [--body-file <path>|-] [--no-work-item]` records
-agreement: by default it mints a linked hub work item carrying the proposal's own body, resting behind the ordinary
-promote gate; `--body-file` supplies a different body (`-` for stdin); `--no-work-item` declines to mint, and the
-decline is recorded rather than left to read as an absent link. Acceptance itself never promotes the minted item and
-never changes a finding's state — but delivering the item it minted does: once that item closes, every finding the
-proposal named that is still live is resolved, attributed to the proposal, the same as a hand
-`blizzard hub finding resolve` but requiring no verb of its own. Re-delivering the same item resolves nothing a second
-time. Either closing verb answers 409, naming the proposal's existing closure, when called again — closure is terminal.
+agreement: by default it mints a linked hub work item, resting behind the ordinary promote gate, whose body wraps the
+proposal's own — or `--body-file`'s override (`-` for stdin) — with a "Related findings" section listing every finding
+the proposal answers (id, class, locus, and state) and naming the worker's own `blizzard runner finding list`/
+`finding get <finding_id>` reads; `--no-work-item` declines to mint, and the decline is recorded rather than left to
+read as an absent link. Acceptance itself never promotes the minted item and never changes a finding's state — but
+delivering the item it minted does: once that item closes, every finding the proposal named that is still live is
+resolved, attributed to the proposal, the same as a hand `blizzard hub finding resolve` but requiring no verb of its
+own. Re-delivering the same item resolves nothing a second time. Either closing verb answers 409, naming the
+proposal's existing closure, when called again — closure is terminal.
 
 **The hub board's Gardening tab renders a docket sheet on its own Proposals sub-tab, over the same reads: every
 proposal, filtered by waiting state and by class, each read as prose beside its findings — read live, one finding at a

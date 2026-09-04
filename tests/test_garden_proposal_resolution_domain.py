@@ -1,7 +1,11 @@
-"""``GardenProposalDeliveryResolution`` (unit tier, blizzard#394 Phase 3): resolves a
-proposal's still-live findings only when its own closure is an accepted, minting one
-naming the delivered pointer — a pass, a decline, an absent closure, an absent proposal,
-or an already-exited finding all resolve nothing. Plain unit tests over fakes
+"""``GardenProposalDeliveryResolution`` (unit tier, blizzard#394 Phase 3) and
+``AnsweredFindingsReader`` (blizzard#397 Phase 1): the write-side delivery resolution
+resolves a proposal's still-live findings only when its own closure is an accepted,
+minting one naming the delivered pointer — a pass, a decline, an absent closure, an
+absent proposal, or an already-exited finding all resolve nothing. The read-side
+resolution answers the same accepted-mint closure's proposal findings for a chunk, or
+``None`` when the chunk carries no work ref, its item names no such closure, or the
+closure names a proposal that no longer resolves. Plain unit tests over fakes
 (``bzh:domain-takes-objects``), the ``tests/test_finding_exit_service.py`` shape."""
 
 from __future__ import annotations
@@ -19,9 +23,9 @@ from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosureKind,
     GardenProposalItemOutcome,
 )
-from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
+from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
 from blizzard.hub.domain.garden_proposals import GardenProposal
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.work import Chunk, WorkRef
 
 pytestmark = pytest.mark.unit
 
@@ -57,6 +61,15 @@ def _proposal(proposal_id: str = "gprop_1", *, findings: list[str] | None = None
         body="b",
         created_at=_T0,
         findings=findings if findings is not None else ["fin_1"],
+    )
+
+
+def _chunk(*, work_refs: list[WorkRef] | None = None) -> Chunk:
+    return Chunk(
+        chunk_id="ch_1",
+        graph_id="g_1",
+        work_refs=work_refs if work_refs is not None else [_POINTER],
+        minted_at=_T0,
     )
 
 
@@ -279,3 +292,109 @@ def test_a_proposal_already_resolved_once_is_never_resolved_again_even_after_a_r
     resolution.resolve_for_item(_POINTER)
 
     assert repo.batches == []
+
+
+def _answered_findings_resolution(
+    *, closures: _FakeClosures, proposals: _FakeProposals, findings: _FakeFindings
+) -> AnsweredFindingsReader:
+    return AnsweredFindingsReader(closures=closures, proposals=proposals, findings=findings)
+
+
+def test_a_chunk_with_no_work_refs_resolves_none() -> None:
+    resolution = _answered_findings_resolution(
+        closures=_FakeClosures(), proposals=_FakeProposals(), findings=_FakeFindings()
+    )
+
+    assert resolution.resolve_for_chunk(_chunk(work_refs=[])) is None
+
+
+def test_a_chunk_whose_item_names_no_closure_resolves_none() -> None:
+    resolution = _answered_findings_resolution(
+        closures=_FakeClosures(), proposals=_FakeProposals(), findings=_FakeFindings()
+    )
+
+    assert resolution.resolve_for_chunk(_chunk()) is None
+
+
+def test_a_chunk_whose_item_was_minted_by_a_passed_proposal_resolves_none() -> None:
+    closures = _FakeClosures(
+        by_item={
+            (_POINTER.source, _POINTER.ref): GardenProposalClosure(
+                proposal_id="gprop_1",
+                closure=GardenProposalClosureKind.PASSED,
+                reason="not worth it",
+                closed_by="u_1",
+                closed_at=_T0,
+                item_outcome=None,
+                source=_POINTER.source,
+                ref=_POINTER.ref,
+            )
+        }
+    )
+    resolution = _answered_findings_resolution(closures=closures, proposals=_FakeProposals(), findings=_FakeFindings())
+
+    assert resolution.resolve_for_chunk(_chunk()) is None
+
+
+def test_a_chunk_whose_accept_declined_to_mint_resolves_none() -> None:
+    closures = _FakeClosures(
+        by_item={
+            (_POINTER.source, _POINTER.ref): _closure(
+                kind=GardenProposalClosureKind.ACCEPTED, item_outcome=GardenProposalItemOutcome.DECLINED
+            )
+        }
+    )
+    resolution = _answered_findings_resolution(closures=closures, proposals=_FakeProposals(), findings=_FakeFindings())
+
+    assert resolution.resolve_for_chunk(_chunk()) is None
+
+
+def test_a_chunk_naming_a_missing_proposal_resolves_none() -> None:
+    closures = _FakeClosures(
+        by_item={
+            (_POINTER.source, _POINTER.ref): _closure(
+                kind=GardenProposalClosureKind.ACCEPTED, item_outcome=GardenProposalItemOutcome.MINTED
+            )
+        }
+    )
+    resolution = _answered_findings_resolution(closures=closures, proposals=_FakeProposals(), findings=_FakeFindings())
+
+    assert resolution.resolve_for_chunk(_chunk()) is None
+
+
+def test_a_minted_chunk_resolves_its_proposals_findings_in_order() -> None:
+    closures = _FakeClosures(
+        by_item={
+            (_POINTER.source, _POINTER.ref): _closure(
+                kind=GardenProposalClosureKind.ACCEPTED, item_outcome=GardenProposalItemOutcome.MINTED
+            )
+        }
+    )
+    proposals = _FakeProposals(by_id={"gprop_1": _proposal(findings=["fin_2", "fin_1"])})
+    findings = _FakeFindings(
+        by_id={"fin_1": _finding("fin_1", state="live"), "fin_2": _finding("fin_2", state="resolved")}
+    )
+    resolution = _answered_findings_resolution(closures=closures, proposals=proposals, findings=findings)
+
+    resolved = resolution.resolve_for_chunk(_chunk())
+
+    assert resolved is not None
+    assert [f.finding_id for f in resolved] == ["fin_2", "fin_1"]
+
+
+def test_a_proposal_finding_id_that_no_longer_resolves_is_skipped() -> None:
+    closures = _FakeClosures(
+        by_item={
+            (_POINTER.source, _POINTER.ref): _closure(
+                kind=GardenProposalClosureKind.ACCEPTED, item_outcome=GardenProposalItemOutcome.MINTED
+            )
+        }
+    )
+    proposals = _FakeProposals(by_id={"gprop_1": _proposal(findings=["fin_1", "fin_missing"])})
+    findings = _FakeFindings(by_id={"fin_1": _finding("fin_1")})
+    resolution = _answered_findings_resolution(closures=closures, proposals=proposals, findings=findings)
+
+    resolved = resolution.resolve_for_chunk(_chunk())
+
+    assert resolved is not None
+    assert [f.finding_id for f in resolved] == ["fin_1"]
