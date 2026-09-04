@@ -312,6 +312,44 @@ def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(
     return [finding_view(f) for f in services.findings.list_for(run.routine_name, run.scope_slug)]
 
 
+def _answered_findings_or_404(chunk_id: str, services: HubServices) -> list[FindingView]:
+    chunk = services.chunks.record.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    findings = services.answered_findings.resolve_for_chunk(chunk)
+    if findings is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"chunk {chunk_id} answers no accepted, minted garden proposal",
+        )
+    return [finding_view(f) for f in findings]
+
+
+@router.get("/chunks/{chunk_id}/findings", response_model=list[FindingView])
+def get_chunk_findings(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[FindingView]:
+    """The findings the chunk's own accepted, minted garden proposal answers — a worker's
+    per-chunk read, distinct from ``get_garden_findings``'s routine-run bucket. 404 both
+    for an unknown chunk and for one answering no such proposal."""
+    return _answered_findings_or_404(chunk_id, services)
+
+
+@router.get("/chunks/{chunk_id}/findings/{finding_id}", response_model=FindingView)
+def get_chunk_finding(
+    chunk_id: str, finding_id: str, services: Annotated[HubServices, Depends(get_services)]
+) -> FindingView:
+    """One finding within the chunk's own answered set — ``get_chunk_findings`` narrowed
+    to a single id. An id outside that set is structurally unreachable rather than
+    filtered after the fact, so it 404s the same as an id belonging to no proposal at
+    all."""
+    for finding in _answered_findings_or_404(chunk_id, services):
+        if finding.finding_id == finding_id:
+            return finding
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"finding {finding_id} is not among the findings chunk {chunk_id} answers",
+    )
+
+
 @router.post("/chunks/{chunk_id}/hub-advance", response_model=HubAdvanceResponse)
 def hub_advance(
     chunk_id: str,

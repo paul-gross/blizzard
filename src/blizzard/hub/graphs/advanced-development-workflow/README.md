@@ -18,6 +18,6 @@ an explanatory document:
 
 The runner's fleet-worker preamble tree (`src/blizzard/runner/harness/prompts/`) is bound the same way and inherits the
 4,000-byte bar; `blizzard_preamble.md` itself is frontloaded into every worker session in every deployment, so it is
-held within a tighter 2,252-byte bar — set just above the file's compressed size, so any growth there is a deliberate
+held within a tighter 2,367-byte bar — set just above the file's compressed size, so any growth there is a deliberate
 act rather than drift. Both trees' bars are asserted by `tests/test_prompt_byte_bars.py` (`blizzard:unit-test`), so an
 edit over a bar fails the suite rather than waiting on a hand-run `wc -c`.

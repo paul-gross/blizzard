@@ -26,6 +26,7 @@ are the operator's alone.
 | `work-items <chunk-id>` | The chunk's work items — read them, never guess                        | `--help`  |
 | `chunk history`         | The chunk's transition history                                         | `--help`  |
 | `artifact …`            | Read what your node-step consumes, write what it produces; lease-bound | `--help`  |
+| `finding …`             | The findings your chunk's accepted proposal answers                    | `--help`  |
 | `ask "<question>"`      | Ask a human an undecidable choice; ends your turn, resumed on answer   | `--help`  |
 
 `blizzard runner heartbeat` and `blizzard runner session-end` fire automatically from your hooks; never invoke either

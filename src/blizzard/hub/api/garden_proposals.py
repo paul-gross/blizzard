@@ -141,6 +141,8 @@ def accept_garden_proposal(
             )
         except DefaultGraphRetired as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    by_id = services.findings.get_many(proposal.findings)
+    proposal_findings = [f for fid in proposal.findings if (f := by_id.get(fid)) is not None]
     try:
         accepted = services.garden_proposal_closure.accept(
             proposal,
@@ -149,6 +151,7 @@ def accept_garden_proposal(
             body=request.body,
             mint=request.mint_work_item,
             graph=graph,
+            findings=proposal_findings,
         )
     except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

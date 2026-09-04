@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.findings import IReadFindingRepository
+from blizzard.hub.domain.garden_proposal_closure import _compose_minted_body
 from blizzard.hub.events.broker import CHUNK_CHANGED, QUEUE_CHANGED
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -119,7 +120,10 @@ def test_accept_with_no_body_override_mints_carrying_the_proposals_body(tmp_path
     assert source == "hub"
 
     item = hub.client.get(f"/api/work-sources/{source}/items/{ref}").json()
-    assert item["body"] == "the proposal's own body"
+    findings: IReadFindingRepository = hub.services.findings
+    fin_1 = findings.get("fin_1")
+    assert fin_1 is not None
+    assert item["body"] == _compose_minted_body("the proposal's own body", [fin_1])
     assert item["closure"] is None  # the item itself is open
 
     chunk = hub.client.get(f"/api/chunks/{body['chunk_id']}").json()
@@ -136,7 +140,10 @@ def test_accept_with_a_body_override_mints_with_that_body(tmp_path: Path) -> Non
     body = resp.json()
     source, ref = body["closure"]["source"], body["closure"]["ref"]
     item = hub.client.get(f"/api/work-sources/{source}/items/{ref}").json()
-    assert item["body"] == "a hand-drafted body"
+    findings: IReadFindingRepository = hub.services.findings
+    fin_1 = findings.get("fin_1")
+    assert fin_1 is not None
+    assert item["body"] == _compose_minted_body("a hand-drafted body", [fin_1])
 
 
 def test_accept_declining_to_mint_records_declined_and_no_chunk(tmp_path: Path) -> None:

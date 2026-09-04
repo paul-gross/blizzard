@@ -7344,6 +7344,72 @@ export type ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses = {
 
 export type ReportEscalationApiFleetChunksChunkIdEscalationsPostResponse = ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses[keyof ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses];
 
+export type GetChunkFindingsApiFleetChunksChunkIdFindingsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/findings';
+};
+
+export type GetChunkFindingsApiFleetChunksChunkIdFindingsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkFindingsApiFleetChunksChunkIdFindingsGetError = GetChunkFindingsApiFleetChunksChunkIdFindingsGetErrors[keyof GetChunkFindingsApiFleetChunksChunkIdFindingsGetErrors];
+
+export type GetChunkFindingsApiFleetChunksChunkIdFindingsGetResponses = {
+    /**
+     * Response Get Chunk Findings Api Fleet Chunks  Chunk Id  Findings Get
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type GetChunkFindingsApiFleetChunksChunkIdFindingsGetResponse = GetChunkFindingsApiFleetChunksChunkIdFindingsGetResponses[keyof GetChunkFindingsApiFleetChunksChunkIdFindingsGetResponses];
+
+export type GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Finding Id
+         */
+        finding_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/findings/{finding_id}';
+};
+
+export type GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetError = GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetErrors[keyof GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetErrors];
+
+export type GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FindingView;
+};
+
+export type GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetResponse = GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetResponses[keyof GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetResponses];
+
 export type GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetData = {
     body?: never;
     path: {

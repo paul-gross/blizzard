@@ -1,20 +1,22 @@
-"""Delivery-triggered finding resolution (blizzard#394 Phase 3): when the item an
-accepted garden proposal minted is delivered, its still-live findings resolve, attributed
-to it. Gated on `has_resolution_for_proposal`, not any one finding's current state, so a
-crash-retry (`blizzard-context:/architecture/crash-correctness/hub.md`) still completes
-an interrupted resolution and a later reopen is never silently redone."""
+"""Garden-proposal-closure-triggered finding resolutions: delivery-triggered exit
+(blizzard#394 Phase 3), when the item an accepted proposal minted is delivered, and the
+worker-facing read (blizzard#397 Phase 1), the findings a chunk's own accepted, minted
+proposal answers. Delivery resolution is gated on `has_resolution_for_proposal`, not any
+one finding's current state, so a crash-retry
+(`blizzard-context:/architecture/crash-correctness/hub.md`) still completes an
+interrupted resolution and a later reopen is never silently redone."""
 
 from __future__ import annotations
 
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.findings import IFindingExitResolver, IReadFindingRepository
+from blizzard.hub.domain.findings import Finding, IFindingExitResolver, IReadFindingRepository
 from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosureKind,
     GardenProposalItemOutcome,
     IReadGardenProposalClosureRepository,
 )
 from blizzard.hub.domain.garden_proposals import IReadGardenProposalRepository
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.work import Chunk, WorkRef
 
 _log = get_logger("blizzard.hub.garden_proposal_resolution")
 
@@ -69,3 +71,42 @@ class GardenProposalDeliveryResolution:
             ref=pointer.ref,
             resolved=len(live),
         )
+
+
+class AnsweredFindingsResolution:
+    """Resolves the findings `chunk`'s own accepted, minted garden proposal answers — the
+    worker-facing read a leased chunk's `finding list`/`finding get` verbs call, sibling
+    to :class:`GardenProposalDeliveryResolution`'s write-side walk but read-only and keyed
+    off the chunk itself rather than a delivered pointer."""
+
+    def __init__(
+        self,
+        *,
+        closures: IReadGardenProposalClosureRepository,
+        proposals: IReadGardenProposalRepository,
+        findings: IReadFindingRepository,
+    ) -> None:
+        self._closures = closures
+        self._proposals = proposals
+        self._findings = findings
+
+    def resolve_for_chunk(self, chunk: Chunk) -> list[Finding] | None:
+        """The findings `chunk`'s own proposal answers, in the proposal's own order —
+        `None` when `chunk` carries no work ref, its item names no closure, that closure
+        is a pass or a declined accept, or the closure names a proposal that no longer
+        resolves."""
+        if not chunk.work_refs:
+            return None
+        pointer = chunk.work_refs[0]
+        closure = self._closures.find_by_item(pointer.source, pointer.ref)
+        if closure is None:
+            return None
+        if closure.closure is not GardenProposalClosureKind.ACCEPTED:
+            return None
+        if closure.item_outcome is not GardenProposalItemOutcome.MINTED:
+            return None
+        proposal = self._proposals.get(closure.proposal_id)
+        if proposal is None:
+            return None
+        by_id = self._findings.get_many(proposal.findings)
+        return [f for fid in proposal.findings if (f := by_id.get(fid)) is not None]

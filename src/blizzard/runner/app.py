@@ -36,6 +36,7 @@ from blizzard.runner.api.environments import router as environments_router
 from blizzard.runner.api.escalations import router as escalations_router
 from blizzard.runner.api.events import router as events_router
 from blizzard.runner.api.facts import router as facts_router
+from blizzard.runner.api.finding import router as finding_router
 from blizzard.runner.api.fleet_summary import router as fleet_summary_router
 from blizzard.runner.api.garden import router as garden_router
 from blizzard.runner.api.git_commits import router as git_commits_router
@@ -128,6 +129,7 @@ _UNGATED = (
     history_router,
     work_items_router,
     garden_router,
+    finding_router,
 )
 # The human web lane: the local panel's own reads and writes (issue #51), the runner's own
 # pause brake reachable with the hub down (#43), and the pass-throughs proxied to the hub.

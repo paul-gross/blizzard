@@ -295,6 +295,38 @@
       "path": "runner external-usage",
       "short_help": "Diagnostics for the runner's own external-subscription usage sampling (issue #218)."
     },
+    "finding": {
+      "commands": {
+        "get": {
+          "help": "Worker: read one finding within this chunk's own answered set by FINDING_ID, as\nJSON \u2014 a key within the worker's own brief, the way ``artifact get NAME`` is a key\nwithin its own node-step.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "finding_id",
+              "opts": [
+                "finding_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner finding get",
+          "short_help": "Worker: read one finding within this chunk's own answered set by FINDING_ID, as JSON \u2014 a key within the worker's own brief, the way ``artifact get NAME`` is a key within its own node-step."
+        },
+        "list": {
+          "help": "Worker: list the findings this chunk's own accepted, minted garden proposal\nanswers, as JSON.",
+          "params": [],
+          "path": "runner finding list",
+          "short_help": "Worker: list the findings this chunk's own accepted, minted garden proposal answers, as JSON."
+        }
+      },
+      "help": "Worker: read the findings this chunk's own accepted, minted garden proposal\nanswers.\n\nThe lease binding is ambient, like ``artifact``: every verb acts on the worker's own\nlease, resolved from the spawn environment \u2014 no verb takes a flag naming another\nchunk, routine, or scope.",
+      "params": [],
+      "path": "runner finding",
+      "short_help": "Worker: read the findings this chunk's own accepted, minted garden proposal answers."
+    },
     "garden": {
       "commands": {
         "findings": {

@@ -13,6 +13,7 @@ from enum import StrEnum
 from typing import NoReturn, Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_proposals import GardenProposal
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import WorkItemAuthor
@@ -113,6 +114,20 @@ class IWriteGardenProposalClosureRepository(IReadGardenProposalClosureRepository
         ...
 
 
+def _compose_minted_body(body: str, findings: Sequence[Finding]) -> str:
+    """Wrap ``body`` with a "Related findings" section — one bullet per ``findings``
+    entry, each carrying finding id, class, locus, and state, in that order — and the
+    two lease-scoped verbs a worker holding the minted item's own lease reads them with
+    (blizzard#397)."""
+    bullets = "\n".join(f"- `{f.finding_id}` — {f.class_} — {f.locus} — {f.state}" for f in findings)
+    return (
+        f"{body}\n\n"
+        "## Related findings\n\n"
+        f"{bullets}\n\n"
+        "Read these with `blizzard runner finding list` / `blizzard runner finding get <finding-id>`."
+    )
+
+
 class GardenProposalClosureService:
     """Close a garden proposal — pass or accept. Holds the closure write seam and
     :class:`~blizzard.hub.domain.work_items.WorkItemEditService`, the mint-with-link
@@ -158,11 +173,15 @@ class GardenProposalClosureService:
         body: str | None,
         mint: bool,
         graph: Graph | None,
+        findings: Sequence[Finding],
     ) -> AcceptedGardenProposal:
         """Accept ``proposal``: minting is the default (``mint=True``, requiring
-        ``graph``), linking a hub work item carrying ``body`` or the proposal's own;
-        ``mint=False`` records the acceptance without minting. Raises
-        :class:`GardenProposalAlreadyClosed` when already closed, and
+        ``graph``), linking a hub work item whose body wraps ``body`` or the proposal's
+        own in the "Related findings" template (``_compose_minted_body``), built from
+        ``findings`` — already-loaded objects the caller resolves
+        (``bzh:domain-takes-objects``), never read from ``proposal.findings`` here;
+        ``mint=False`` records the acceptance without minting, or composing anything.
+        Raises :class:`GardenProposalAlreadyClosed` when already closed, and
         :class:`~blizzard.hub.domain.ingest.IngestConflict` on a raced ref."""
         self._refuse_if_closed(proposal.proposal_id)
         if not mint:
@@ -187,7 +206,7 @@ class GardenProposalClosureService:
         minted = self._items.accept_create(
             proposal.proposal_id,
             title=proposal.title,
-            body=body if body is not None else proposal.body,
+            body=_compose_minted_body(body if body is not None else proposal.body, findings),
             author=WorkItemAuthor.user(by),
             graph=graph,
             reason=reason,

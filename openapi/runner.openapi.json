@@ -4922,6 +4922,105 @@
         ]
       }
     },
+    "/api/leases/{lease_id}/findings": {
+      "get": {
+        "description": "Forward this lease's chunk's own answered-findings read to the hub \u2014 the layered\npass-through. A chunk answering no accepted, minted garden proposal reaches this only\nas the hub's own refusal, forwarded verbatim rather than answered as an empty list.",
+        "operationId": "list_findings_api_leases__lease_id__findings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingView"
+                  },
+                  "title": "Response List Findings Api Leases  Lease Id  Findings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Findings",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/findings/{finding_id}": {
+      "get": {
+        "description": "One finding within this lease's chunk's own answered set \u2014 forwarded the same\nway; an id outside that set (or a chunk answering no such proposal at all) is the\nhub's own refusal, forwarded verbatim.",
+        "operationId": "get_finding_api_leases__lease_id__findings__finding_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "title": "Finding Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Finding",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
     "/api/leases/{lease_id}/garden/findings": {
       "get": {
         "description": "Forward this lease's chunk's garden-findings read to the hub \u2014 the layered\npass-through. A chunk with no run context (not a routine run) reaches this only as\nthe hub's own refusal, forwarded verbatim rather than answered as an empty bucket.",

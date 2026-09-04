@@ -3125,6 +3125,72 @@ export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses = {
 
 export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponse = RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses[keyof RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses];
 
+export type ListFindingsApiLeasesLeaseIdFindingsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/findings';
+};
+
+export type ListFindingsApiLeasesLeaseIdFindingsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListFindingsApiLeasesLeaseIdFindingsGetError = ListFindingsApiLeasesLeaseIdFindingsGetErrors[keyof ListFindingsApiLeasesLeaseIdFindingsGetErrors];
+
+export type ListFindingsApiLeasesLeaseIdFindingsGetResponses = {
+    /**
+     * Response List Findings Api Leases  Lease Id  Findings Get
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type ListFindingsApiLeasesLeaseIdFindingsGetResponse = ListFindingsApiLeasesLeaseIdFindingsGetResponses[keyof ListFindingsApiLeasesLeaseIdFindingsGetResponses];
+
+export type GetFindingApiLeasesLeaseIdFindingsFindingIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Finding Id
+         */
+        finding_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/findings/{finding_id}';
+};
+
+export type GetFindingApiLeasesLeaseIdFindingsFindingIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetFindingApiLeasesLeaseIdFindingsFindingIdGetError = GetFindingApiLeasesLeaseIdFindingsFindingIdGetErrors[keyof GetFindingApiLeasesLeaseIdFindingsFindingIdGetErrors];
+
+export type GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FindingView;
+};
+
+export type GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponse = GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponses[keyof GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponses];
+
 export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetData = {
     body?: never;
     path: {
