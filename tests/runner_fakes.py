@@ -757,9 +757,7 @@ class FakeHarness:
 
 class FakeSubscriptionSampler:
     """A scriptable :class:`ISubscriptionSampler` (blizzard#436): a canned snapshot reply,
-    or a scripted raise. ``sample_calls`` counts every call, for cadence asserts — the
-    same double the sampler's own scripted reply used to live on :class:`FakeHarness`
-    before the seam moved off the coding-harness adapter (issue #218)."""
+    or a scripted raise. ``sample_calls`` counts every call, for cadence asserts."""
 
     def __init__(
         self,

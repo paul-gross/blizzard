@@ -74,9 +74,7 @@ class Resumed(RunnerBrake):
 
 def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
     r = liveness.registration
-    # The legacy singular field derives from the legacy slug's row alone — never
-    # "whichever slug wrote last", which would make an upgraded reader's legacy field
-    # flap between subscriptions (blizzard#436 phase 3).
+    # The legacy field derives from the legacy slug's row alone, never whichever wrote last.
     usage = UsageSample.of(r, slug=LEGACY_ANTHROPIC_SLUG, now=now)
     return RunnerView(
         runner_id=r.runner_id,

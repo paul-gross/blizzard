@@ -1004,8 +1004,7 @@ runner_local_pause_facts = Table(
 )
 
 # The runner's latest sampled external-usage snapshot, one row per declared subscription
-# (issue #218, per-slug since blizzard#436 phase 3) — advisory, refreshed in place. No
-# ForeignKey: an orphan row is never read, but a raise would stall the rail.
+# (issue #218, per-slug since blizzard#436) — advisory. No ForeignKey: a raise would stall the rail.
 runner_external_usage = Table(
     "runner_external_usage",
     metadata,

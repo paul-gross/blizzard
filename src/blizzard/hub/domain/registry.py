@@ -16,6 +16,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.work import ActivityRow
+from blizzard.wire.facts import LEGACY_ANTHROPIC_SLUG as LEGACY_ANTHROPIC_SLUG
 
 _log = get_logger("blizzard.hub.registry")
 
@@ -25,13 +26,6 @@ STALE_AFTER = timedelta(minutes=5)
 #: External-subscription-usage staleness threshold (issue #218) — deliberately wider than
 #: :data:`STALE_AFTER`, since the sample rides a slower cadence than the liveness heartbeat.
 EXTERNAL_USAGE_STALE_AFTER = timedelta(minutes=15)
-
-#: Mirrors ``blizzard.runner.config.LEGACY_ANTHROPIC_SLUG`` — restated rather than
-#: imported (``bzh:domain-core``: the hub domain depends on nothing under
-#: ``blizzard.runner``). The one slug a runner with no ``[[subscription]]`` declared
-#: reports under, and the slug ``RunnerRegistration.legacy_subscription_usage`` derives
-#: the old singular ``RunnerView.external_subscription_usage`` field from.
-LEGACY_ANTHROPIC_SLUG = "anthropic"
 
 
 @dataclass(frozen=True)
@@ -153,9 +147,9 @@ class SubscriptionUsageView:
 
     @classmethod
     def every(cls, registration: RunnerRegistration, *, now: datetime) -> tuple[SubscriptionUsageView, ...]:
-        """Every declared subscription's non-stale view, in the registration's own
-        recorded order — one dead or stale subscription is simply absent from this
-        collection, never a reason to omit any other."""
+        """Every declared subscription's non-stale view, sorted by slug — a portable,
+        deterministic order (``bzh:sql-portable``) — one dead or stale subscription is
+        simply absent from this collection, never a reason to omit any other."""
         views: list[SubscriptionUsageView] = []
         for record in registration.subscription_usage:
             sampled_at = as_utc(record.sampled_at)

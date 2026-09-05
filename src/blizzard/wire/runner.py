@@ -92,13 +92,11 @@ class RunnerView(BaseModel):
     locally_paused_reason: str | None = None
     # The configured environment-pool size — ``None`` when none was reported, never zero.
     env_capacity: int | None = None
-    # The newest external-subscription-usage sample (issue #218) — absent when none was
-    # ever sampled, or the newest is stale; never a fabricated empty value. Derives from
-    # the legacy slug's row alone (blizzard#436 phase 3) — unchanged in name and shape.
+    # The newest external-subscription-usage sample (issue #218) — absent when never
+    # sampled or stale. Derives from the legacy slug's row alone (blizzard#436 phase 3).
     external_subscription_usage: ExternalSubscriptionUsageView | None = None
     # Every declared subscription's own non-stale usage, additive beside the field above
-    # (blizzard#436 phase 3) — one dead or stale subscription is simply absent, never a
-    # reason to omit any other. Empty for a runner that has never sampled anything.
+    # (blizzard#436 phase 3); empty for a runner that has never sampled anything.
     subscriptions: list[SubscriptionUsageView] = []
 
 

@@ -73,10 +73,8 @@ class LoopConfig:
     runner_ceiling_usd: float | None = None
     #: The runner ceiling's rolling window in hours; unused while the ceiling is ``None``.
     runner_ceiling_window_hours: float = 24.0
-    #: Every declared provider subscription, resolved (blizzard#436) — the tick samples
-    #: each one due against its own ``sample_interval_seconds`` and ``slug``-keyed anchor,
-    #: replacing the single runner-wide cadence this field used to carry. Empty means no
-    #: declared subscription: the sample step iterates nothing and samples nothing.
+    #: Every declared provider subscription, resolved (blizzard#436) — each sampled when
+    #: due against its own ``sample_interval_seconds`` and ``slug``-keyed anchor.
     subscriptions: tuple[SubscriptionDeclaration, ...] = ()
     #: The session-context warn line; ``None`` disables the lane, reading no transcript at all.
     context_warn_tokens: int | None = None
@@ -129,6 +127,5 @@ class LoopContext:
     #: (``bzh:dependency-inversion``); ``None`` on ``blizzard runner tick``, a no-op there.
     events: IRunnerEventPublisher | None = None
     #: The provider subscription-sampling seam (blizzard#436) — one binding per declared
-    #: subscription's ``slug``, selected once at composition; a slug absent here has no
-    #: known sampler binding for its provider (declared, but unsampled).
+    #: subscription's ``slug``; a slug absent here is declared but unsampled.
     subscription_samplers: Mapping[str, ISubscriptionSampler] = field(default_factory=dict)

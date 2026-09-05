@@ -340,10 +340,8 @@ def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Pat
 
 
 def test_external_usage_samples_slug_backfills_the_legacy_anthropic_slug(tmp_path: Path) -> None:
-    """``external_usage_samples.slug`` (blizzard#436 phase 2) — a row recorded before the
-    column existed backfills to the legacy Anthropic slug, and downgrading past the
-    reshape's own parent drops the column again rather than a no-op ``downgrade()``
-    silently passing."""
+    """``external_usage_samples.slug`` (blizzard#436 phase 2) backfills a pre-existing row
+    to the legacy Anthropic slug, and downgrading past it drops the column again."""
     config = runner_runtime.init_environment(tmp_path)  # upgrades to head
     runner = runner_runtime.migration_runner(config)
 
@@ -387,11 +385,9 @@ def test_external_usage_samples_slug_backfills_the_legacy_anthropic_slug(tmp_pat
 
 
 def test_runner_external_usage_slug_widens_the_primary_key_and_backfills_the_legacy_row(tmp_path: Path) -> None:
-    """``runner_external_usage``'s subscription join key (blizzard#436 phase 3) — a row
-    recorded before ``[[subscription]]`` declarations existed backfills to the legacy
-    Anthropic slug/name, the primary key widens from ``(runner_id,)`` to
-    ``(runner_id, slug)``, and downgrading past the reshape's own parent restores the
-    single-column primary key rather than a no-op ``downgrade()`` silently passing."""
+    """``runner_external_usage``'s join key (blizzard#436 phase 3) backfills a pre-existing
+    row to the legacy slug/name, widens the primary key to ``(runner_id, slug)``, and
+    downgrading past it restores the single-column key."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

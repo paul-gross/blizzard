@@ -92,9 +92,7 @@ class LoopWiring:
             transcript_source=harness_transcript_source,
         )
         # The subscription-sampling seam (blizzard#436) — one binding per declared
-        # subscription, keyed by its slug; an unknown provider selects `None`, so it is
-        # simply absent from the map (declared, unsampled). The tick's own per-slug cadence
-        # lives in `ExternalUsageSample`, which iterates `loop_config.subscriptions` below.
+        # subscription, keyed by slug; an unknown provider selects `None` (declared, unsampled).
         declared_subscriptions = config.resolved_subscriptions()
         subscription_samplers = {
             declaration.slug: sampler

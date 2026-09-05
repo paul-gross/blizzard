@@ -1,15 +1,9 @@
 """The provider subscription-sampling seam (blizzard#436, issue #218).
 
-Sampling a harness's own metered-plan rate-limit utilization is a **pluggable,
-provider-selected** external-system seam (``bzh:pluggable-seams``) — no longer folded onto
-the coding-harness adapter it used to ride on (:class:`~blizzard.runner.harness.adapter.
-IHarnessAdapter` carried it through issue #218's first landing). A runner may declare
-several provider subscriptions; each is sampled through its own binding, selected by
-``provider`` at composition (see ``internal/`` for the concrete Anthropic binding and the
-selection factory).
-
-:attr:`ExternalSubscriptionUsageWindow.utilization_pct` is **0-100, not 0-1**, despite the
-fraction-shaped name the source API gives it."""
+A **pluggable, provider-selected** external-system seam (``bzh:pluggable-seams``): each
+declared subscription is sampled through its own binding, selected by ``provider`` at
+composition. :attr:`ExternalSubscriptionUsageWindow.utilization_pct` is **0-100, not
+0-1**, despite the fraction-shaped name the source API gives it."""
 
 from __future__ import annotations
 

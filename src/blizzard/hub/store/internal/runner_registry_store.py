@@ -274,7 +274,9 @@ class RunnerRegistryStore:
                 s.runner_external_usage.c.name,
                 s.runner_external_usage.c.sampled_at,
                 s.runner_external_usage.c.windows,
-            ).where(s.runner_external_usage.c.runner_id == runner_id)
+            )
+            .where(s.runner_external_usage.c.runner_id == runner_id)
+            .order_by(s.runner_external_usage.c.slug)
         ).all()
         return [(row.slug, row.name, row.sampled_at, row.windows) for row in rows]
 

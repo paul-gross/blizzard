@@ -31,6 +31,7 @@ from blizzard.wire.facts import (
     EVENT_RECORDED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     LEASE_MINTED,
+    LEGACY_ANTHROPIC_NAME,
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
     RUNNER_LOCALLY_RESUMED,
@@ -285,17 +286,14 @@ class FactIngestService:
             )
             return True, None
         if kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
-            # Runner-scoped and hub-read-only: an advisory fact no status derives from. Refresh-in-place
-            # per (runner_id, slug) (`bzh:facts-not-status`'s stated exception) — only each
-            # subscription's latest sample is of interest. `slug` defaults to the legacy
-            # slug for a fact somehow missing it, though every fact carries one post-#436
-            # phase 2; `name` defaults to `slug` itself for a fact predating phase 3's
-            # additive `name` field.
+            # Advisory, refresh-in-place per (runner_id, slug); a fact missing `slug`
+            # defaults to the legacy one, and a missing `name` to that slug's own label.
             slug = fact.text("slug") or LEGACY_ANTHROPIC_SLUG
+            default_name = LEGACY_ANTHROPIC_NAME if slug == LEGACY_ANTHROPIC_SLUG else slug
             self._fleet.record_external_usage(
                 runner_id,
                 slug=slug,
-                name=fact.text("name") or slug,
+                name=fact.text("name") or default_name,
                 sampled_at=fact.instant("sampled_at", now),
                 windows_json=json.dumps(fact.get("windows", [])),
                 at=now,

@@ -1,12 +1,9 @@
-"""``sample_external_subscription_usage`` — the tick's last step (issue #218, phase 2).
+"""``ExternalUsageSample`` — the tick's last step (issue #218, blizzard#436).
 
-Unit-drives the step against a real (tmp sqlite) runner store and a scriptable
-``FakeSubscriptionSampler`` (blizzard#436 — the sampler no longer rides on the harness
-adapter), then a component tier running several full ``tick()`` passes across an
-advancing ``FixedClock`` to check the cadence gate and that the sampler never perturbs
-the other steps' behavior. A second component tier (blizzard#436 phase 2) drives several
-declared subscriptions at once: independent per-slug cadence, a failed sample isolated to
-its own slug, and a declared provider with no sampler binding staying unsampled."""
+Unit and component tiers against a real (tmp sqlite) store and a scriptable
+``FakeSubscriptionSampler``: the per-slug cadence gate, that a sample never perturbs other
+steps, and several declared subscriptions sampled independently — a failed one isolated to
+its own slug, an unbound provider staying declared and unsampled."""
 
 from __future__ import annotations
 

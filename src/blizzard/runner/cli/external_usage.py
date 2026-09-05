@@ -27,10 +27,8 @@ def external_usage_group() -> None:
 def external_usage_probe(slug: str, directory: str) -> None:
     """Sample one declared subscription's rate-limit usage, by SLUG, and print it.
 
-    Read-only: builds the same sampler seam the reconciliation loop uses and samples
-    through it directly (blizzard#436) — no store write, no tick, nothing enqueued or
-    delivered. A runner with no ``[[subscription]]`` entries declares exactly one,
-    under the reserved slug ``anthropic``."""
+    Read-only, through the same sampler seam the loop uses — no store write, no tick.
+    A runner with no ``[[subscription]]`` entries declares exactly one, ``anthropic``."""
     try:
         config = RunnerConfig.load(Path(directory))
     except ConfigError as exc:

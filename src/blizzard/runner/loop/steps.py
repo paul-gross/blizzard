@@ -604,11 +604,9 @@ class ExternalUsageSample(Step):
     def run(self) -> None:
         """Sample every declared subscription that is due.
 
-        Each declaration's own cadence anchor is derived as ``max(sampled_at)`` for its
-        ``slug``, never a stored "last sampled" column, and an attempt row is recorded
-        either way when a sampler is reached — a ``NULL`` payload when nothing was
-        produced. One declaration's failure (a raise, or a sampler reporting nothing)
-        never stops the next declaration from being sampled this same tick."""
+        Each declaration's cadence anchor is derived as ``max(sampled_at)`` for its own
+        ``slug``, and an attempt row is recorded either way — ``NULL`` payload on a miss.
+        One declaration's failure never stops the next one being sampled this same tick."""
         for declaration in self.ctx.config.subscriptions:
             try:
                 self._sample_one(declaration)
@@ -627,9 +625,8 @@ class ExternalUsageSample(Step):
             # Declared, but its provider names no known sampler binding — stays declared
             # and unsampled: no attempt row, since there is no sampler to have failed.
             return
-        # `None` is the sampler's own best-effort miss (a bad credential, an unreachable
-        # endpoint, anything) — still an attempt worth recording, so this slug's cadence
-        # advances and its last-good windows stay exactly what they were.
+        # `None` is the sampler's own best-effort miss — still an attempt worth recording,
+        # so this slug's cadence advances and its last-good windows stay untouched.
         snapshot = sampler.sample()
         if snapshot is None:
             ctx.stores.usage.record_external_usage_attempt(
@@ -657,11 +654,9 @@ class ExternalUsageSample(Step):
         declaration: SubscriptionDeclaration, snapshot: ExternalSubscriptionUsageSnapshot
     ) -> dict[str, object]:
         """The stable JSON shape for a sampled snapshot — both this attempt's stored
-        ``payload`` and its buffered outbound report use this exact shape. ``slug``
-        (blizzard#436) names which declared subscription this snapshot belongs to; a reader
-        ignorant of it still parses ``sampled_at``/``windows`` exactly as before. ``name``
-        (blizzard#436 phase 3) is the declaration's own operator-facing label, additive
-        alongside ``slug``; a reader ignorant of it still parses the rest exactly as before."""
+        ``payload`` and its buffered outbound report use this exact shape. ``slug`` and
+        ``name`` (blizzard#436) name the declared subscription and its operator-facing
+        label; a reader ignorant of either still parses ``sampled_at``/``windows``."""
         return {
             "slug": declaration.slug,
             "name": declaration.name,

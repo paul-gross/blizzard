@@ -278,11 +278,9 @@ def test_get_runners_renders_the_landed_sample_with_exact_wire_field_names(tmp_p
 def test_two_distinct_subscriptions_render_separately_and_the_legacy_field_tracks_only_the_legacy_slug(
     tmp_path: Path,
 ) -> None:
-    """A runner emitting both the pre-#436 legacy shape and a genuinely new slug
-    (blizzard#436 phase 3) — a reader consuming only ``external_subscription_usage``
-    still sees the migrated Anthropic subscription's windows, and the per-slug
-    ``subscriptions`` collection reports the *same* windows for that slug from the same
-    sample."""
+    """A reader consuming only ``external_subscription_usage`` still sees the Anthropic
+    subscription's windows, and ``subscriptions`` reports the *same* windows for that slug
+    from the same sample (blizzard#436 phase 3)."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
 
@@ -315,7 +313,7 @@ def test_two_distinct_subscriptions_render_separately_and_the_legacy_field_track
 
     subscriptions = {s["slug"]: s for s in detail["subscriptions"]}
     assert set(subscriptions) == {"anthropic", "openai"}
-    assert subscriptions["anthropic"]["name"] == "anthropic"  # no `name` on the legacy-shaped fact
+    assert subscriptions["anthropic"]["name"] == "Anthropic"  # no `name` on the legacy-shaped fact
     assert subscriptions["anthropic"]["windows"][0]["utilization_pct"] == 42.5
     assert subscriptions["openai"]["name"] == "OpenAI"
     assert subscriptions["openai"]["windows"][0]["utilization_pct"] == 17.0
