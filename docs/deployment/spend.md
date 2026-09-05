@@ -34,8 +34,10 @@ board's chunk cards and detail dock show the same figures live.
 
 A harness on a metered subscription tracks its own account's rate-limit window utilization independently of anything
 blizzard spends or caps; the runner samples it on the cadence `[external_subscription_usage]` `sample_interval_seconds`
-in `blizzard-runner.toml` sets (default 300 seconds when the table or key is absent). The sampled utilization is
-advisory only — it never throttles claiming, scheduling, or spawning, and no cost cap consults it.
+in `blizzard-runner.toml` sets (default 300 seconds when the table or key is absent), or the cadence a `[[subscription]]`
+declaration sets when a runner declares its subscriptions explicitly — a runner with none declared runs the single
+legacy table's own subscription unchanged. The sampled utilization is advisory only — it never throttles claiming,
+scheduling, or spawning, and no cost cap consults it.
 
 Claude Code's OAuth plan is the only subscription concept a shipping adapter has; a harness with none reports no sample,
 and no sample renders as an absent usage block on the board — never a fabricated zero. The runner panel renders a

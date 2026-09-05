@@ -21,6 +21,7 @@ from blizzard.runner.environments.internal.winter_provider import WinterWorkspac
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
+from blizzard.runner.harness.internal.subscription_sampler_factory import select_sampler
 from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -88,9 +89,14 @@ class LoopWiring:
             env_passthrough=config.worker_env_passthrough,
             model_aliases=config.model_aliases,
             effort_aliases=config.effort_aliases,
-            credentials_path=config.external_usage_credentials_path,
             transcript_source=harness_transcript_source,
         )
+        # The subscription-sampling seam (blizzard#436) — one binding per declared
+        # subscription; an unknown provider selects `None` (declared, unsampled). Phase 1
+        # wires the seam itself; per-slug loop-step cadence over several subscriptions is
+        # phase 2's concern, so only the first declaration is sampled for now.
+        declared_subscriptions = config.resolved_subscriptions()
+        subscription_sampler = select_sampler(declared_subscriptions[0])
         # The per-lease harness-stdout directory (issue #58), created once here so a worker's
         # stdout redirect target always exists by the time a spawn/resume opens it.
         worker_stdout_dir = config.root / "worker-stdout"
@@ -137,6 +143,7 @@ class LoopWiring:
             hub=hub,
             provider=provider,
             harness=harness,
+            subscription_sampler=subscription_sampler,
             process=LinuxProcessProbe(),
             worktree_git=SubprocessWorktreeGit(),
             # The check-runner seam (issue #114) — see `runner/loop/checks.py`.

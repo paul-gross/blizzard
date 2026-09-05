@@ -17,8 +17,8 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import LeaseRecord, Liveness, as_utc
-from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.harness.subscription_sampler import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.loop.attempt import (
     REAPED,
     Attempt,
@@ -612,7 +612,11 @@ class ExternalUsageSample(Step):
                 elapsed = ctx.clock.now() - anchor
                 if elapsed < timedelta(seconds=ctx.config.external_usage_sample_interval_seconds):
                     return
-            snapshot = ctx.harness.sample_external_subscription_usage()
+            # `None` covers both "no sampler wired" (no declared subscription, or one whose
+            # provider names no known binding) and a wired sampler's own best-effort miss
+            # (blizzard#436) — both read as "nothing produced this tick", same as before the
+            # sampler moved off the harness adapter (issue #218).
+            snapshot = ctx.subscription_sampler.sample() if ctx.subscription_sampler is not None else None
             if snapshot is None:
                 ctx.stores.usage.record_external_usage_attempt(
                     sampled_at=ctx.clock.now(), payload=None, report_kind="", report_payload=""

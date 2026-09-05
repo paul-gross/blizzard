@@ -73,6 +73,17 @@ DEFAULT_RUNNER_CEILING_WINDOW_HOURS = 24.0
 # How often the tick re-samples the harness's rate-limit windows (issue #218) — a
 # diagnostic, best-effort read, not a spend control.
 DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS = 300
+# The join key the legacy, single-subscription `[external_subscription_usage]` table
+# migrates to (blizzard#436): a runner with no `[[subscription]]` declarations gets exactly
+# one declaration synthesized under this slug. Declared once here — later phases' backfill
+# value and the argument an operator types at the probe both import it — so the legacy
+# wire field and every declared-vs-synthesized join key can never drift apart.
+LEGACY_ANTHROPIC_SLUG = "anthropic"
+# Structural-only: `[[subscription]]` required keys (blizzard#436) — `provider` is
+# deliberately unvalidated against a known set, unlike `[[work_source]]`'s: a runner may
+# declare a subscription before blizzard ships a sampler binding for its provider, and it
+# is simply unsampled rather than a config-load failure.
+_REQUIRED_SUBSCRIPTION_KEYS = ("slug", "name", "provider")
 # Well under the minutes a context takes to move; each read is a bounded tail read.
 DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS = 60
 DEFAULT_AUTH_HUB_ROLE = "mirror"
@@ -216,6 +227,76 @@ class ExternalUsage:
     @property
     def credentials_path(self) -> str | None:
         return self.table.text("credentials_path")
+
+
+@dataclass(frozen=True)
+class SubscriptionDeclaration:
+    """One declared provider subscription (blizzard#436) — the runner-unique, immutable
+    join key everything downstream keys on is ``slug``; ``name`` is operator-facing only.
+
+    Declarations win over the legacy ``[external_subscription_usage]`` table
+    deterministically: when any ``[[subscription]]`` is present, the legacy table is not
+    consulted; when none is, :meth:`synthesized_from_legacy` produces the sole runtime
+    entry, under :data:`LEGACY_ANTHROPIC_SLUG`."""
+
+    slug: str
+    name: str
+    provider: str
+    #: Reuses the legacy field's shape (issue #218) — ``None`` means the sampler
+    #: binding's own default.
+    credentials_path: str | None = None
+    sample_interval_seconds: int = DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
+
+    @classmethod
+    def declared(cls, raw_declarations: object) -> tuple[SubscriptionDeclaration, ...]:
+        """Validate and project ``[[subscription]]`` entries; each rejection names the
+        offending entry rather than failing generically. An absent or non-list value
+        (no ``[[subscription]]`` authored at all) is zero declarations, never an error —
+        that is exactly the state :meth:`synthesized_from_legacy` fills in for."""
+        if not isinstance(raw_declarations, list):
+            return ()
+        declarations: list[SubscriptionDeclaration] = []
+        seen_slugs: set[str] = set()
+        for entry in raw_declarations:
+            if not isinstance(entry, dict):
+                raise ConfigError(f"[[subscription]] entry must be a table, got {entry!r}")
+            missing = [key for key in _REQUIRED_SUBSCRIPTION_KEYS if key not in entry]
+            if missing:
+                raise ConfigError(f"[[subscription]] entry is missing required key(s) {missing}: {entry!r}")
+            slug = str(entry["slug"])
+            if not slug:
+                raise ConfigError(f"[[subscription]] slug must not be empty: {entry!r}")
+            if slug in seen_slugs:
+                raise ConfigError(f"duplicate [[subscription]] slug {slug!r}")
+            seen_slugs.add(slug)
+            credentials_path = str(entry["credentials_path"]) if entry.get("credentials_path") else None
+            declarations.append(
+                cls(
+                    slug=slug,
+                    name=str(entry["name"]),
+                    provider=str(entry["provider"]),
+                    credentials_path=credentials_path,
+                    sample_interval_seconds=int(
+                        entry.get("sample_interval_seconds", DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS)
+                    ),
+                )
+            )
+        return tuple(declarations)
+
+    @classmethod
+    def synthesized_from_legacy(
+        cls, *, credentials_path: str | None, sample_interval_seconds: int
+    ) -> SubscriptionDeclaration:
+        """The one declaration a runner with no ``[[subscription]]`` entries runs with —
+        carrying the legacy ``[external_subscription_usage]`` table's own cadence and
+        credential path forward unchanged."""
+        return cls(
+            slug=LEGACY_ANTHROPIC_SLUG,
+            name="Anthropic",
+            provider=LEGACY_ANTHROPIC_SLUG,
+            credentials_path=credentials_path,
+            sample_interval_seconds=sample_interval_seconds,
+        )
 
 
 @dataclass(frozen=True)
@@ -368,6 +449,11 @@ class RunnerConfig:
     #: An override for the credential file the external-usage sampler reads (issue #218);
     #: ``None`` means the adapter's own default.
     external_usage_credentials_path: str | None = None
+    #: Every authored ``[[subscription]]`` entry (blizzard#436), verbatim — empty when none
+    #: is declared. :meth:`resolved_subscriptions` is the runtime list every caller other
+    #: than the config layer itself should read: this field alone says nothing about the
+    #: legacy ``[external_subscription_usage]`` table's own implicit subscription.
+    subscriptions: tuple[SubscriptionDeclaration, ...] = ()
     #: The session-context warn line; ``None`` disables the lane — nothing is sampled, nothing gated.
     context_warn_tokens: int | None = None
     #: How often a running lease's context is re-read — unused while the lane is off.
@@ -499,6 +585,23 @@ class RunnerConfig:
                 raise ConfigError(f"runner_prompt_file does not exist: {path}")
             return path.read_text()
         return self.runner_prompt
+
+    def resolved_subscriptions(self) -> tuple[SubscriptionDeclaration, ...]:
+        """Every declared provider subscription, resolved (blizzard#436) — the runtime list
+        every caller but this config layer itself should read.
+
+        Mirrors :meth:`resolved_workspace_prompt`'s two-knobs-one-value shape: declarations
+        win, deterministically. Any authored ``[[subscription]]`` (:attr:`subscriptions`)
+        replaces the legacy ``[external_subscription_usage]`` table entirely; none present
+        synthesizes the sole legacy-Anthropic declaration from this config's own
+        already-resolved :attr:`external_usage_credentials_path` /
+        :attr:`external_usage_sample_interval_seconds` — never both, and never empty."""
+        return self.subscriptions or (
+            SubscriptionDeclaration.synthesized_from_legacy(
+                credentials_path=self.external_usage_credentials_path,
+                sample_interval_seconds=self.external_usage_sample_interval_seconds,
+            ),
+        )
 
     def auth_headers(self) -> dict[str, str]:
         """The outbound ``Authorization`` header every runner->hub call carries (issue #86b).
@@ -674,6 +777,23 @@ class RunnerConfig:
                 if self.external_usage_credentials_path is not None
                 else '# credentials_path = "/path/to/.credentials.json"  # defaults to ~/.claude/.credentials.json\n'
             )
+            + "\n# Declared provider subscriptions (blizzard#436) — the join key everything\n"
+            + "# downstream keys on is `slug`, runner-unique and immutable once observed. Absent\n"
+            + "# entirely (the default): the `[external_subscription_usage]` table above is the\n"
+            + '# sole subscription, synthesized under the reserved slug "'
+            + LEGACY_ANTHROPIC_SLUG
+            + '". Any\n'
+            + "# `[[subscription]]` present here instead takes over completely — the legacy table\n"
+            + "# is no longer consulted for the runtime list.\n"
+            + "".join(
+                "\n[[subscription]]\n"
+                f'slug = "{d.slug}"\n'
+                f'name = "{d.name}"\n'
+                f'provider = "{d.provider}"\n'
+                f"sample_interval_seconds = {d.sample_interval_seconds}\n"
+                + (f'credentials_path = "{d.credentials_path}"\n' if d.credentials_path is not None else "")
+                for d in self.subscriptions
+            )
             + "\n# The worker spawn-environment allowlist's operator extension (`bzh:worker-env-allowlist`).\n"
             + "# The base allowlist (PATH/HOME/USER/LANG/LC_*/TERM/TMPDIR) always reaches a worker;\n"
             + "# name additional vars here to forward them too. Empty = base allowlist only. The\n"
@@ -715,6 +835,10 @@ class RunnerConfig:
         auth = Auth.of(raw.get("auth"))
         transcripts = Transcripts.of(raw.get("transcripts"))
         queue = Queue.of(raw.get("queue"))
+        # Authored `[[subscription]]` entries, verbatim — never synthesized here;
+        # `resolved_subscriptions()` is where declarations-win-over-the-legacy-table
+        # (blizzard#436) actually happens, from this config's own resolved fields.
+        subscriptions = SubscriptionDeclaration.declared(raw.get("subscription", []))
         return cls(
             root=root,
             db_url=str(raw["db_url"]),
@@ -752,6 +876,7 @@ class RunnerConfig:
             runner_ceiling_window_hours=spend.window_hours,
             external_usage_sample_interval_seconds=usage.sample_interval_seconds,
             external_usage_credentials_path=usage.credentials_path,
+            subscriptions=subscriptions,
             context_warn_tokens=context.warn_tokens,
             context_sample_interval_seconds=context.sample_interval_seconds,
             worker_env_passthrough=Table.of(raw.get("worker")).names("env_passthrough"),

@@ -24,7 +24,10 @@ from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot, ExternalSubscriptionUsageWindow
+from blizzard.runner.harness.subscription_sampler import (
+    ExternalSubscriptionUsageSnapshot,
+    ExternalSubscriptionUsageWindow,
+)
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.dormant import DormantSession
@@ -45,6 +48,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    FakeSubscriptionSampler,
     FakeTranscriptSource,
     claimed_outcome,
     make_context,
@@ -752,10 +756,11 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
         store,
         hub=FakeHub(),
         provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict=None, external_usage_snapshot=snapshot),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
         events=events,
+        subscription_sampler=FakeSubscriptionSampler(snapshot=snapshot),
     )
 
     ExternalUsageSample(ctx).run()

@@ -272,7 +272,7 @@
     "external-usage": {
       "commands": {
         "probe": {
-          "help": "Sample the harness's own subscription rate-limit usage and print it. Read-only.\n\nBuilds the same adapter the reconciliation loop uses and samples through it directly \u2014 a diagnostic\nseam-check (issue #218): no store write, no tick, nothing enqueued or delivered.",
+          "help": "Sample the runner's first declared subscription's rate-limit usage and print it.\n\nRead-only: builds the same sampler seam the reconciliation loop uses and samples\nthrough it directly (blizzard#436) \u2014 no store write, no tick, nothing enqueued or\ndelivered. Naming which declared slug to probe is phase 2's CLI shape; a runner with\nno ``[[subscription]]`` entries probes the sole synthesized legacy Anthropic one.",
           "params": [
             {
               "hidden": false,
@@ -287,7 +287,7 @@
             }
           ],
           "path": "runner external-usage probe",
-          "short_help": "Sample the harness's own subscription rate-limit usage and print it."
+          "short_help": "Sample the runner's first declared subscription's rate-limit usage and print it."
         }
       },
       "help": "Diagnostics for the runner's own external-subscription usage sampling (issue #218).",

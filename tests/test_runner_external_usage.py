@@ -1,4 +1,5 @@
-"""``ClaudeCodeAdapter.sample_external_subscription_usage`` (issue #218, phase 1).
+"""``AnthropicSubscriptionSampler.sample`` (issue #218, phase 1; moved off the harness
+adapter in blizzard#436).
 
 Driven with an injected ``httpx.Client`` (an ``httpx.MockTransport``-backed fake) and
 an injected ``FixedClock`` — no real credential file location, no real network. Every
@@ -16,7 +17,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 
 _NOW = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
 
@@ -47,14 +48,14 @@ def _past_expiry_ms(clock: FixedClock, hours: float = 1) -> float:
     return (clock.instant - timedelta(hours=hours)).timestamp() * 1000
 
 
-def _adapter(
+def _sampler(
     credentials_path: Path,
     handler,  # type: ignore[no-untyped-def]
     *,
     clock: FixedClock | None = None,
-) -> ClaudeCodeAdapter:
+) -> AnthropicSubscriptionSampler:
     transport = httpx.MockTransport(handler)
-    return ClaudeCodeAdapter(
+    return AnthropicSubscriptionSampler(
         credentials_path=str(credentials_path),
         usage_api_base="https://api.anthropic.test",
         http_client=httpx.Client(transport=transport),
@@ -102,10 +103,10 @@ def test_happy_path_parses_both_windows_with_correct_scale_and_units(
             },
         )
 
-    adapter = _adapter(creds, handler, clock=clock)
+    sampler = _sampler(creds, handler, clock=clock)
     before_mtime = creds.stat().st_mtime_ns
 
-    snapshot = adapter.sample_external_subscription_usage()
+    snapshot = sampler.sample()
 
     assert snapshot is not None
     assert snapshot.sampled_at == _NOW
@@ -141,7 +142,7 @@ def test_a_window_absent_from_the_response_is_an_absent_entry_not_a_fabricated_z
             200, json={"five_hour": {"utilization": 10.0, "resets_at": "2026-08-01T18:00:00Z"}, "seven_day": None}
         )
 
-    snapshot = _adapter(creds, handler, clock=clock).sample_external_subscription_usage()
+    snapshot = _sampler(creds, handler, clock=clock).sample()
 
     assert snapshot is not None
     assert [w.window for w in snapshot.windows] == ["5h"]
@@ -165,8 +166,8 @@ def test_resets_at_epoch_seconds_and_iso_string_parse_to_the_same_instant(
     def handler_iso(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"five_hour": {"utilization": 1.0, "resets_at": instant.isoformat()}})
 
-    snap_epoch = _adapter(creds, handler_epoch, clock=clock).sample_external_subscription_usage()
-    snap_iso = _adapter(creds, handler_iso, clock=clock).sample_external_subscription_usage()
+    snap_epoch = _sampler(creds, handler_epoch, clock=clock).sample()
+    snap_iso = _sampler(creds, handler_iso, clock=clock).sample()
 
     assert snap_epoch is not None and snap_iso is not None
     assert snap_epoch.windows[0].resets_at == snap_iso.windows[0].resets_at == instant
@@ -177,10 +178,10 @@ def test_resets_at_epoch_seconds_and_iso_string_parse_to_the_same_instant(
 
 @pytest.mark.unit
 def test_missing_credentials_file_returns_none_and_warns_once(tmp_path: Path) -> None:
-    adapter = _adapter(tmp_path / "does-not-exist.json", _unreachable_handler)
+    sampler = _sampler(tmp_path / "does-not-exist.json", _unreachable_handler)
 
     with capture_logs() as logs:
-        result = adapter.sample_external_subscription_usage()
+        result = sampler.sample()
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
@@ -191,10 +192,10 @@ def test_malformed_json_returns_none_and_warns_once(tmp_path: Path, monkeypatch:
     creds = tmp_path / ".credentials.json"
     creds.write_text("{not json")
     _guard_against_writes(monkeypatch, creds)
-    adapter = _adapter(creds, _unreachable_handler)
+    sampler = _sampler(creds, _unreachable_handler)
 
     with capture_logs() as logs:
-        result = adapter.sample_external_subscription_usage()
+        result = sampler.sample()
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
@@ -207,10 +208,10 @@ def test_missing_access_token_returns_none_and_warns_once(tmp_path: Path, monkey
         tmp_path / ".credentials.json", access_token=None, expires_at_ms=_future_expiry_ms(clock)
     )
     _guard_against_writes(monkeypatch, creds)
-    adapter = _adapter(creds, _unreachable_handler, clock=clock)
+    sampler = _sampler(creds, _unreachable_handler, clock=clock)
 
     with capture_logs() as logs:
-        result = adapter.sample_external_subscription_usage()
+        result = sampler.sample()
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
@@ -224,10 +225,10 @@ def test_expired_token_returns_none_warns_once_and_never_writes_the_file(
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_past_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
     before_mtime = creds.stat().st_mtime_ns
-    adapter = _adapter(creds, _unreachable_handler, clock=clock)
+    sampler = _sampler(creds, _unreachable_handler, clock=clock)
 
     with capture_logs() as logs:
-        result = adapter.sample_external_subscription_usage()
+        result = sampler.sample()
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
@@ -243,10 +244,10 @@ def test_non_2xx_response_returns_none_and_warns_once(tmp_path: Path, monkeypatc
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(401, json={"error": "invalid token"})
 
-    adapter = _adapter(creds, handler, clock=clock)
+    sampler = _sampler(creds, handler, clock=clock)
 
     with capture_logs() as logs:
-        result = adapter.sample_external_subscription_usage()
+        result = sampler.sample()
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
@@ -261,10 +262,10 @@ def test_timeout_returns_none_and_warns_once(tmp_path: Path, monkeypatch: pytest
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.TimeoutException("timed out", request=request)
 
-    adapter = _adapter(creds, handler, clock=clock)
+    sampler = _sampler(creds, handler, clock=clock)
 
     with capture_logs() as logs:
-        result = adapter.sample_external_subscription_usage()
+        result = sampler.sample()
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
@@ -279,10 +280,10 @@ def test_connection_error_returns_none_and_warns_once(tmp_path: Path, monkeypatc
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused", request=request)
 
-    adapter = _adapter(creds, handler, clock=clock)
+    sampler = _sampler(creds, handler, clock=clock)
 
     with capture_logs() as logs:
-        result = adapter.sample_external_subscription_usage()
+        result = sampler.sample()
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
@@ -297,10 +298,10 @@ def test_unexpected_response_shape_returns_none_and_warns_once(tmp_path: Path, m
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=["not", "an", "object"])
 
-    adapter = _adapter(creds, handler, clock=clock)
+    sampler = _sampler(creds, handler, clock=clock)
 
     with capture_logs() as logs:
-        result = adapter.sample_external_subscription_usage()
+        result = sampler.sample()
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
@@ -315,10 +316,10 @@ def test_unparseable_response_body_returns_none_and_warns_once(tmp_path: Path, m
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=b"not json at all")
 
-    adapter = _adapter(creds, handler, clock=clock)
+    sampler = _sampler(creds, handler, clock=clock)
 
     with capture_logs() as logs:
-        result = adapter.sample_external_subscription_usage()
+        result = sampler.sample()
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
@@ -337,19 +338,18 @@ def test_zero_parseable_windows_returns_none_and_warns_once(tmp_path: Path, monk
             200, json={"five_hour": None, "seven_day": {"utilization": None, "resets_at": "2026-08-01T18:00:00Z"}}
         )
 
-    adapter = _adapter(creds, handler, clock=clock)
+    sampler = _sampler(creds, handler, clock=clock)
 
     with capture_logs() as logs:
-        result = adapter.sample_external_subscription_usage()
+        result = sampler.sample()
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
 
 
-# Every existing construction site keeps building an adapter unchanged.
+# The construction site keeps building the sampler unchanged.
 
 
 @pytest.mark.unit
 def test_default_construction_still_works_with_no_new_arguments() -> None:
-    ClaudeCodeAdapter()
-    ClaudeCodeAdapter(binary="claude", settings_path="/tmp/settings.json")
+    AnthropicSubscriptionSampler()

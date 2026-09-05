@@ -23,6 +23,7 @@ _NON_GATING = {"e2e", "journey", "crash", "service"}
 #: block (a `[[work_source]]`, an `[[auth.oauth.provider]]`) is as droppable as a root one.
 _CONFIGS = (
     ("runner", "RunnerConfig"),
+    ("runner", "SubscriptionDeclaration"),
     ("hub", "HubConfig"),
     ("hub", "WorkSourceConfig"),
     ("hub", "OAuthProviderConfig"),

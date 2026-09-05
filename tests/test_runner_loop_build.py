@@ -17,6 +17,7 @@ from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking
 from tests.runner_fakes import FakeHub, FakeProbe, make_store, make_stores
@@ -62,10 +63,12 @@ def test_loop_wiring_threads_worker_env_passthrough_into_the_adapter(tmp_path: P
 
 
 @pytest.mark.unit
-def test_loop_wiring_threads_external_usage_credentials_path_into_the_adapter(tmp_path: Path) -> None:
+def test_loop_wiring_threads_external_usage_credentials_path_into_the_sampler(tmp_path: Path) -> None:
     """An unthreaded override leaves every daemon this root builds reading the
-    adapter's own default credentials path and reaching the real Anthropic endpoint
-    (issue #218)."""
+    sampler's own default credentials path and reaching the real Anthropic endpoint
+    (issue #218). The sampler is a separate seam from the harness adapter (blizzard#436) —
+    selected from the config's resolved (declared-or-synthesized) subscription list, not
+    threaded through ``ClaudeCodeAdapter`` anymore."""
     scratch = str(tmp_path / "scratch-credentials.json")
     config = RunnerConfig(
         root=tmp_path,
@@ -77,7 +80,8 @@ def test_loop_wiring_threads_external_usage_credentials_path_into_the_adapter(tm
     ctx = LoopWiring(config, "", "").context(FakeHub())
 
     assert isinstance(ctx.harness, ClaudeCodeAdapter)
-    assert ctx.harness._credentials_path == scratch
+    assert isinstance(ctx.subscription_sampler, AnthropicSubscriptionSampler)
+    assert ctx.subscription_sampler._credentials_path == scratch
 
 
 @pytest.mark.unit
