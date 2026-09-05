@@ -27,11 +27,10 @@ from blizzard.runner.environments.provider import (
 )
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
-from blizzard.runner.harness.subscription_sampler import ExternalSubscriptionUsageSnapshot, ISubscriptionSampler
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
-from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
@@ -70,6 +69,7 @@ from blizzard.runner.stores import (
     RunnerReadStores,
     RunnerStores,
 )
+from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot, ISubscriptionSampler
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
@@ -846,7 +846,7 @@ def make_context(
     clock: FixedClock | None = None,
     config: LoopConfig | None = None,
     events: EventBroker | None = None,
-    subscription_samplers: dict[str, ISubscriptionSampler] | None = None,
+    subscriptions: tuple[ResolvedSubscription, ...] = (),
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes."""
     resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
@@ -874,7 +874,7 @@ def make_context(
         provider=_provider,
         harness=_harness,
         process=_probe,
-        subscription_samplers=subscription_samplers or {},
+        subscriptions=subscriptions,
         worktree_git=_wt,
         check_runner=_check_runner,
         config=resolved_config,

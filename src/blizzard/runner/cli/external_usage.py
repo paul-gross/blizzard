@@ -7,7 +7,8 @@ import click
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
-from blizzard.runner.harness.internal.subscription_sampler_factory import select_sampler
+from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
+from blizzard.wire.facts import LEGACY_ANTHROPIC_SLUG
 
 
 @click.group("external-usage")
@@ -16,7 +17,7 @@ def external_usage_group() -> None:
 
 
 @external_usage_group.command("probe")
-@click.argument("slug")
+@click.argument("slug", required=False, default=None)
 @click.option(
     "--dir",
     "directory",
@@ -24,11 +25,12 @@ def external_usage_group() -> None:
     envvar=ENV_RUNNER_DIR,
     help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
 )
-def external_usage_probe(slug: str, directory: str) -> None:
+def external_usage_probe(slug: str | None, directory: str) -> None:
     """Sample one declared subscription's rate-limit usage, by SLUG, and print it.
 
     Read-only, through the same sampler seam the loop uses — no store write, no tick.
-    A runner with no ``[[subscription]]`` entries declares exactly one, ``anthropic``."""
+    SLUG defaults to the legacy ``anthropic`` declaration every runner still carries."""
+    slug = slug or LEGACY_ANTHROPIC_SLUG
     try:
         config = RunnerConfig.load(Path(directory))
     except ConfigError as exc:

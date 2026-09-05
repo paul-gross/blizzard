@@ -19,8 +19,12 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.registry import LEGACY_ANTHROPIC_SLUG, RunnerLiveness, SubscriptionUsageView
-from blizzard.hub.domain.registry import ExternalSubscriptionUsageView as UsageSample
+from blizzard.hub.domain.registry import (
+    LEGACY_ANTHROPIC_SLUG,
+    LegacySubscriptionUsageView,
+    PerSubscriptionUsageView,
+    RunnerLiveness,
+)
 from blizzard.wire.runner import (
     ExternalSubscriptionUsageView,
     ExternalSubscriptionUsageWindowView,
@@ -74,8 +78,9 @@ class Resumed(RunnerBrake):
 
 def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
     r = liveness.registration
-    # The legacy field derives from the legacy slug's row alone, never whichever wrote last.
-    usage = UsageSample.of(r, slug=LEGACY_ANTHROPIC_SLUG, now=now)
+    # The legacy field derives from the legacy slug's row alone — null for a runner declaring
+    # no `anthropic` subscription, until blizzard#478's per-slug render reads `subscriptions`.
+    usage = LegacySubscriptionUsageView.of(r, slug=LEGACY_ANTHROPIC_SLUG, now=now)
     return RunnerView(
         runner_id=r.runner_id,
         workspace_id=r.workspace_id,
@@ -118,7 +123,7 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
                     for w in view.windows
                 ],
             )
-            for view in SubscriptionUsageView.every(r, now=now)
+            for view in PerSubscriptionUsageView.every(r, now=now)
         ],
     )
 

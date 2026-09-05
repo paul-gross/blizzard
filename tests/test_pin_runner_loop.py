@@ -14,12 +14,12 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.config import ConfigError, RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT, CheckOutcome
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.loop.tick import tick
@@ -291,9 +291,7 @@ def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None
     hub.claim_outcome = claimed_outcome("ch_1", envelope)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     sampler = _ClaimObservingSampler(hub=hub)
-    declaration = SubscriptionDeclaration(
-        slug="anthropic", name="Anthropic", provider="anthropic", sample_interval_seconds=300
-    )
+    resolved = ResolvedSubscription(slug="anthropic", name="Anthropic", sample_interval_seconds=300, sampler=sampler)
     ctx = make_context(
         store,
         hub=hub,
@@ -301,8 +299,8 @@ def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None
         harness=harness,
         probe=FakeProbe(alive={(_HANDLE.pid, _HANDLE.process_start_time)}),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, subscriptions=(declaration,)),
-        subscription_samplers={"anthropic": sampler},
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        subscriptions=(resolved,),
     )
 
     tick(ctx)

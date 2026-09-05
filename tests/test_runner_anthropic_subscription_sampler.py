@@ -1,10 +1,8 @@
-"""``AnthropicSubscriptionSampler.sample`` (issue #218, phase 1; moved off the harness
-adapter in blizzard#436).
+"""``AnthropicSubscriptionSampler.sample`` (issue #218).
 
-Driven with an injected ``httpx.Client`` (an ``httpx.MockTransport``-backed fake) and
-an injected ``FixedClock`` — no real credential file location, no real network. Every
-failure path returns ``None`` and logs exactly one warning, never raises; the
-credential file is asserted read-only throughout."""
+Driven with an injected ``httpx.Client`` (an ``httpx.MockTransport``-backed fake) and an injected
+``FixedClock`` — no real credential file location, no real network. Every failure path returns
+``None`` and logs exactly one warning, never raises; the credential file is asserted read-only."""
 
 from __future__ import annotations
 
@@ -17,7 +15,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.harness.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
+from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 
 _NOW = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
 

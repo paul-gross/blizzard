@@ -16,16 +16,14 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.domain.leases import LeaseRecord, Liveness, as_utc
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.harness.subscription_sampler import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.loop.attempt import (
     REAPED,
     Attempt,
 )
 from blizzard.runner.loop.claim import InterruptedClaims, ReadyQueue
-from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.context import LoopContext, ResolvedSubscription
 from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.held_chunk import HeldChunk
@@ -33,6 +31,7 @@ from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.stores import RunnerStores
+from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.facts import (
     EVENT_RECORDED,
@@ -607,35 +606,34 @@ class ExternalUsageSample(Step):
         Each declaration's cadence anchor is derived as ``max(sampled_at)`` for its own
         ``slug``, and an attempt row is recorded either way — ``NULL`` payload on a miss.
         One declaration's failure never stops the next one being sampled this same tick."""
-        for declaration in self.ctx.config.subscriptions:
+        for resolved in self.ctx.subscriptions:
             try:
-                self._sample_one(declaration)
+                self._sample_one(resolved)
             except Exception as exc:  # second line of defense — the sampler contract already promises this
-                _log.warning("external subscription usage sample step failed", slug=declaration.slug, detail=str(exc))
+                _log.warning("external subscription usage sample step failed", slug=resolved.slug, detail=str(exc))
 
-    def _sample_one(self, declaration: SubscriptionDeclaration) -> None:
+    def _sample_one(self, resolved: ResolvedSubscription) -> None:
         ctx = self.ctx
-        anchor = ctx.stores.usage.last_external_usage_attempt_at(declaration.slug)
+        anchor = ctx.stores.usage.last_external_usage_attempt_at(resolved.slug)
         if anchor is not None:
             elapsed = ctx.clock.now() - anchor
-            if elapsed < timedelta(seconds=declaration.sample_interval_seconds):
+            if elapsed < timedelta(seconds=resolved.sample_interval_seconds):
                 return
-        sampler = ctx.subscription_samplers.get(declaration.slug)
-        if sampler is None:
+        if resolved.sampler is None:
             # Declared, but its provider names no known sampler binding — stays declared
             # and unsampled: no attempt row, since there is no sampler to have failed.
             return
         # `None` is the sampler's own best-effort miss — still an attempt worth recording,
         # so this slug's cadence advances and its last-good windows stay untouched.
-        snapshot = sampler.sample()
+        snapshot = resolved.sampler.sample()
         if snapshot is None:
             ctx.stores.usage.record_external_usage_attempt(
-                slug=declaration.slug, sampled_at=ctx.clock.now(), payload=None, report_kind="", report_payload=""
+                slug=resolved.slug, sampled_at=ctx.clock.now(), payload=None, report_kind="", report_payload=""
             )
             return
-        payload = json.dumps(self._payload(declaration, snapshot))
+        payload = json.dumps(self._payload(resolved, snapshot))
         seq = ctx.stores.usage.record_external_usage_attempt(
-            slug=declaration.slug,
+            slug=resolved.slug,
             sampled_at=ctx.clock.now(),
             payload=payload,
             report_kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
@@ -650,16 +648,14 @@ class ExternalUsageSample(Step):
             )
 
     @staticmethod
-    def _payload(
-        declaration: SubscriptionDeclaration, snapshot: ExternalSubscriptionUsageSnapshot
-    ) -> dict[str, object]:
+    def _payload(resolved: ResolvedSubscription, snapshot: ExternalSubscriptionUsageSnapshot) -> dict[str, object]:
         """The stable JSON shape for a sampled snapshot — both this attempt's stored
         ``payload`` and its buffered outbound report use this exact shape. ``slug`` and
         ``name`` (blizzard#436) name the declared subscription and its operator-facing
         label; a reader ignorant of either still parses ``sampled_at``/``windows``."""
         return {
-            "slug": declaration.slug,
-            "name": declaration.name,
+            "slug": resolved.slug,
+            "name": resolved.name,
             "sampled_at": iso_utc(snapshot.sampled_at),
             "windows": [
                 {

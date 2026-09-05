@@ -2,9 +2,8 @@
 
 Three things derive over the registry rather than being stored: **liveness** (``last_seen_at`` against a
 staleness threshold, clock-relative so it is computed at read time), **paused** (the newest appended
-pause/resume fact), and **external subscription usage** (issue #218, each declared subscription's newest
-sample against its own wider threshold, independently by slug since blizzard#436 phase 3). ``token_hash``
-is the one exception to facts-only: the row is already a mutable upsert."""
+pause/resume fact), and **external subscription usage** (issue #218, independently by slug against its own
+wider threshold). ``token_hash`` is the one exception to facts-only: the row is already a mutable upsert."""
 
 from __future__ import annotations
 
@@ -26,6 +25,12 @@ STALE_AFTER = timedelta(minutes=5)
 #: External-subscription-usage staleness threshold (issue #218) — deliberately wider than
 #: :data:`STALE_AFTER`, since the sample rides a slower cadence than the liveness heartbeat.
 EXTERNAL_USAGE_STALE_AFTER = timedelta(minutes=15)
+
+
+def _usage_stale(sampled_at: datetime, *, now: datetime) -> bool:
+    """The one staleness gate :class:`LegacySubscriptionUsageView.of` and
+    :class:`PerSubscriptionUsageView.every` both apply, so they cannot silently disagree."""
+    return (as_utc(now) - as_utc(sampled_at)) > EXTERNAL_USAGE_STALE_AFTER
 
 
 @dataclass(frozen=True)
@@ -54,16 +59,12 @@ class RunnerRegistration:
     #: The runner's allowed redirect URIs (issue #95) — the open-redirect guard a presented
     #: ``redirect_uri`` is exact-matched against. Empty for a runner that has registered none.
     redirect_uris: tuple[str, ...] = ()
-    #: Every declared subscription's newest reported sample, raw, one per slug (issue #218,
-    #: blizzard#436 phase 3) — staleness is applied per slug at derive time
-    #: (:meth:`ExternalSubscriptionUsageView.of`, :meth:`SubscriptionUsageView.every`), not here.
-    #: Empty for a runner that has never sampled anything.
+    #: Every declared subscription's newest reported sample, raw, one per slug (issue #218) —
+    #: staleness is applied per slug at derive time, not here.
     subscription_usage: tuple[SubscriptionUsageRecord, ...] = ()
 
     def usage_record(self, slug: str) -> SubscriptionUsageRecord | None:
-        """This runner's newest raw sample for ``slug``, or ``None`` if it has never
-        reported one — the lookup :meth:`ExternalSubscriptionUsageView.of` and
-        :meth:`SubscriptionUsageView.every` both key off."""
+        """This runner's newest raw sample for ``slug``, or ``None`` if never reported."""
         return next((r for r in self.subscription_usage if r.slug == slug), None)
 
 
@@ -110,35 +111,29 @@ class SubscriptionUsageRecord:
 
 
 @dataclass(frozen=True)
-class ExternalSubscriptionUsageView:
+class LegacySubscriptionUsageView:
     """One subscription's usage sample, already past its own staleness gate."""
 
     sampled_at: datetime
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
 
     @classmethod
-    def of(cls, registration: RunnerRegistration, *, slug: str, now: datetime) -> ExternalSubscriptionUsageView | None:
-        """The renderable view (issue #218) for ``slug``, or ``None`` — never a fabricated
-        zero one.
+    def of(cls, registration: RunnerRegistration, *, slug: str, now: datetime) -> LegacySubscriptionUsageView | None:
+        """The renderable view (issue #218) for ``slug``, or ``None`` — never a fabricated zero one.
 
-        ``None`` for a runner that has never sampled ``slug``, or whose newest sample for
-        it is older than :data:`EXTERNAL_USAGE_STALE_AFTER` relative to ``now``. Evaluated
-        independently per ``slug`` (blizzard#436 phase 3): a stale or absent sibling never
-        affects this one."""
+        ``None`` for a runner that has never sampled ``slug``, or whose newest sample for it is older
+        than :data:`EXTERNAL_USAGE_STALE_AFTER` relative to ``now``, evaluated independently per slug."""
         record = registration.usage_record(slug)
-        if record is None:
+        if record is None or _usage_stale(record.sampled_at, now=now):
             return None
-        sampled_at = as_utc(record.sampled_at)
-        if (as_utc(now) - sampled_at) > EXTERNAL_USAGE_STALE_AFTER:
-            return None
-        return cls(sampled_at=sampled_at, windows=record.windows)
+        return cls(sampled_at=as_utc(record.sampled_at), windows=record.windows)
 
 
 @dataclass(frozen=True)
-class SubscriptionUsageView:
+class PerSubscriptionUsageView:
     """One subscription's usage, past its own staleness gate, carrying its identity
     (blizzard#436 phase 3) — the wire's additive per-subscription collection, beside the
-    single legacy :class:`ExternalSubscriptionUsageView`."""
+    single legacy :class:`LegacySubscriptionUsageView`."""
 
     slug: str
     name: str
@@ -146,16 +141,17 @@ class SubscriptionUsageView:
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
 
     @classmethod
-    def every(cls, registration: RunnerRegistration, *, now: datetime) -> tuple[SubscriptionUsageView, ...]:
+    def every(cls, registration: RunnerRegistration, *, now: datetime) -> tuple[PerSubscriptionUsageView, ...]:
         """Every declared subscription's non-stale view, sorted by slug — a portable,
         deterministic order (``bzh:sql-portable``) — one dead or stale subscription is
         simply absent from this collection, never a reason to omit any other."""
-        views: list[SubscriptionUsageView] = []
+        views: list[PerSubscriptionUsageView] = []
         for record in registration.subscription_usage:
-            sampled_at = as_utc(record.sampled_at)
-            if (as_utc(now) - sampled_at) > EXTERNAL_USAGE_STALE_AFTER:
+            if _usage_stale(record.sampled_at, now=now):
                 continue
-            views.append(cls(slug=record.slug, name=record.name, sampled_at=sampled_at, windows=record.windows))
+            views.append(
+                cls(slug=record.slug, name=record.name, sampled_at=as_utc(record.sampled_at), windows=record.windows)
+            )
         return tuple(views)
 
 
@@ -232,12 +228,10 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
     def record_external_usage(
         self, runner_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
     ) -> None:
-        """Upsert one declared subscription's newest sampled usage snapshot (issue #218,
-        keyed on ``(runner_id, slug)`` since blizzard#436 phase 3) — refresh-in-place, not
-        an append. ``sampled_at`` is the snapshot's own reported instant; ``at`` is the
-        landing time (``bzh:injected-clock``). Unlike ``upsert_registration``, never
-        requires a known runner: a fact for one the registry has not seen lands anyway,
-        and is read once it has."""
+        """Upsert one declared subscription's newest sampled usage snapshot (issue #218), keyed on
+        ``(runner_id, slug)`` — refresh-in-place, not an append. ``sampled_at`` is the snapshot's own
+        reported instant; ``at`` is the landing time (``bzh:injected-clock``). Never requires a known
+        runner: a fact for one the registry has not seen lands anyway, and is read once it has."""
         ...
 
 

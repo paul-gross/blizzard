@@ -1,8 +1,5 @@
 """runner external subscription usage (issue #218, hub store tree) — one refresh-in-place row per runner
-holding its newest sampled rate-limit windows. Creates that one table, ``checkfirst``.
-
-``(runner_id, slug)`` is a later reshape (blizzard#436 phase 3), so this revision's own
-shape is a frozen local literal rather than a ``schema.py`` import (``bzh:frozen-revisions``).
+holding its newest windows; frozen local literal, not a ``schema.py`` import (``bzh:frozen-revisions``).
 
 Revision ID: 20260801_1600_hub_runner_external_usage
 Revises: 20260801_1400_hub_work_item_closures

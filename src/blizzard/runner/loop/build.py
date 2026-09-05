@@ -21,9 +21,8 @@ from blizzard.runner.environments.internal.winter_provider import WinterWorkspac
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
-from blizzard.runner.harness.internal.subscription_sampler_factory import select_sampler
 from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
-from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import IHubClient
@@ -43,6 +42,7 @@ from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerStores
+from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -91,14 +91,17 @@ class LoopWiring:
             effort_aliases=config.effort_aliases,
             transcript_source=harness_transcript_source,
         )
-        # The subscription-sampling seam (blizzard#436) — one binding per declared
-        # subscription, keyed by slug; an unknown provider selects `None` (declared, unsampled).
-        declared_subscriptions = config.resolved_subscriptions()
-        subscription_samplers = {
-            declaration.slug: sampler
-            for declaration in declared_subscriptions
-            if (sampler := select_sampler(declaration)) is not None
-        }
+        # The subscription-sampling seam (blizzard#436) — each declaration paired with its
+        # resolved binding; an unknown provider selects `None` (declared, unsampled).
+        resolved_subscriptions = tuple(
+            ResolvedSubscription(
+                slug=declaration.slug,
+                name=declaration.name,
+                sample_interval_seconds=declaration.sample_interval_seconds,
+                sampler=select_sampler(declaration),
+            )
+            for declaration in config.resolved_subscriptions()
+        )
         # The per-lease harness-stdout directory (issue #58), created once here so a worker's
         # stdout redirect target always exists by the time a spawn/resume opens it.
         worker_stdout_dir = config.root / "worker-stdout"
@@ -127,7 +130,6 @@ class LoopWiring:
             chunk_cap_usd=config.chunk_cap_usd,
             runner_ceiling_usd=config.runner_ceiling_usd,
             runner_ceiling_window_hours=config.runner_ceiling_window_hours,
-            subscriptions=declared_subscriptions,
             context_warn_tokens=config.context_warn_tokens,
             context_sample_interval_seconds=config.context_sample_interval_seconds,
             runner_dir=str(config.root),
@@ -145,7 +147,7 @@ class LoopWiring:
             hub=hub,
             provider=provider,
             harness=harness,
-            subscription_samplers=subscription_samplers,
+            subscriptions=resolved_subscriptions,
             process=LinuxProcessProbe(),
             worktree_git=SubprocessWorktreeGit(),
             # The check-runner seam (issue #114) — see `runner/loop/checks.py`.
