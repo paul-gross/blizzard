@@ -1,34 +1,15 @@
 :host {
   display: block;
 }
-/* This table's own copy of `chunk-facts.css`'s `.kv` shape (grid, dt/dd colors) —
-   Angular's emulated style encapsulation does not reach across the component
-   boundary between this table and `ChunkFacts`'s own, even though both are
-   content-projected into the same panel and sit one after the other. Same
-   `--kv-label-col`/`--chunk-facts-pad` custom properties as `chunk-facts.css`
-   (set on `ChunkFacts`'s `:host`, inherited here since this component's rendered
-   DOM still lands inside that host's subtree) so the two tables' label and value
-   columns land at the same horizontal position regardless of either table's own
-   content — a fixed shared column width rather than each table sizing to its own
-   longest label, which is what would let them drift apart. */
-.kv {
-  display: grid;
-  grid-template-columns: var(--kv-label-col, 112px) 1fr;
-  gap: 2px 8px;
+/* Same `--chunk-facts-pad` override hook `chunk-facts.css` reads on its own
+   `fleet-kit-fact-list` — set on `ChunkFacts`'s `:host` and inherited here since
+   this component's rendered DOM lands inside that host's subtree — so the two
+   tables' padding stays identical regardless of context. Their label columns
+   already match with no override needed, since both render through the one
+   shared `KitFactList`. */
+.ctb-facts {
+  display: block;
   padding: var(--chunk-facts-pad, 8px);
-  font-size: var(--fs-sm);
-}
-.kv dt {
-  color: var(--label);
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  align-self: center;
-}
-.kv dd {
-  margin: 0;
-  color: var(--amber);
-  overflow-wrap: anywhere;
 }
 /* A zero count reads as noise next to a real figure at the same full-strength
    value color — muted rather than dropped, since "no tokens of this class" is
@@ -36,7 +17,7 @@
    which row it is: a non-zero Cache Read/Creation count is exactly as
    significant as a non-zero Input/Output one and stays at full strength, same
    as a genuinely zero Input or Output would mute the same way. */
-.kv dd.zero {
+.zero {
   color: var(--label-dim);
 }
 /* The "Usage" section header — the same small uppercase tag every other panel in

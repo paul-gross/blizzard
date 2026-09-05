@@ -1,0 +1,42 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.ask {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.a-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.chunk {
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
+}
+.asked {
+  color: var(--label);
+  font-size: var(--fs-label);
+}
+/* The ask renders as the agent wrote it — see fleet's .ask-q. This panel is
+   read-only, but it is still where an operator reads the question before going to
+   the hub to answer it, so it collapses the prose no more than the board does. */
+.q {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  margin-top: 2px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.route {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  margin-top: 3px;
+}
+.route code {
+  color: var(--label);
+}

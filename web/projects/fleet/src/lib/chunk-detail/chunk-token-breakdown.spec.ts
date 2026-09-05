@@ -90,11 +90,15 @@ describe('ChunkTokenBreakdown', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    // PARTIAL_COST_DETAIL: input/output non-zero, cache read/creation both zero.
-    expect(el.querySelector('[data-testid="fact-tokens-input"]')?.classList.contains('zero')).toBe(false);
-    expect(el.querySelector('[data-testid="fact-tokens-output"]')?.classList.contains('zero')).toBe(false);
-    expect(el.querySelector('[data-testid="fact-tokens-cache-read"]')?.classList.contains('zero')).toBe(true);
-    expect(el.querySelector('[data-testid="fact-tokens-cache-creation"]')?.classList.contains('zero')).toBe(true);
+    // PARTIAL_COST_DETAIL: input/output non-zero, cache read/creation both zero. The
+    // muted class lands on the value's own span, nested inside the fact row's `<dd>`
+    // (`KitFactList`'s templated-row contract puts the testid on the `<dd>`, not
+    // whatever markup a consumer's own `<ng-template>` renders inside it).
+    const zeroed = (testid: string) => el.querySelector(`[data-testid="${testid}"] span`)?.classList.contains('zero');
+    expect(zeroed('fact-tokens-input')).toBe(false);
+    expect(zeroed('fact-tokens-output')).toBe(false);
+    expect(zeroed('fact-tokens-cache-read')).toBe(true);
+    expect(zeroed('fact-tokens-cache-creation')).toBe(true);
   });
 
   it('does not mute a non-zero cache count — the rule is "zero", not "cache"', async () => {
@@ -106,7 +110,8 @@ describe('ChunkTokenBreakdown', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="fact-tokens-cache-read"]')?.classList.contains('zero')).toBe(false);
-    expect(el.querySelector('[data-testid="fact-tokens-cache-creation"]')?.classList.contains('zero')).toBe(false);
+    const zeroed = (testid: string) => el.querySelector(`[data-testid="${testid}"] span`)?.classList.contains('zero');
+    expect(zeroed('fact-tokens-cache-read')).toBe(false);
+    expect(zeroed('fact-tokens-cache-creation')).toBe(false);
   });
 });

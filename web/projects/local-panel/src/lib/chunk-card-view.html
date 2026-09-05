@@ -1,0 +1,38 @@
+<div
+  class="c-card"
+  data-testid="local-chunk-card"
+  [attr.data-chunk-id]="chunkId()"
+  [class.selected]="selected()"
+  role="button"
+  tabindex="0"
+  (click)="onSelect()"
+  (keydown.enter)="onSelect($event)"
+  (keydown.space)="onSelect($event)"
+>
+  <div class="line1">
+    <span class="cid">{{ chunkRef() }}</span>
+    <fleet-kit-badge
+      class="pill"
+      [tone]="status().tone"
+      variant="soft"
+      data-testid="local-chunk-card-status"
+    >
+      {{ status().label }}
+    </fleet-kit-badge>
+  </div>
+  <div class="line2" data-testid="local-chunk-card-title">
+    @for (item of linkedItems(); track item.ref) {
+      <div class="wi">
+        @if (item.web_url) {
+          <a class="chip" [href]="item.web_url" target="_blank" rel="noopener" (click)="$event.stopPropagation()">{{
+            item.label
+          }}</a>
+        } @else if (item.label) {
+          <span class="chip">{{ item.label }}</span>
+        }
+        {{ item.title }}
+      </div>
+    }
+  </div>
+  <div class="line3" data-testid="local-chunk-card-node">{{ lease().node_name }} · a{{ lease().epoch }}</div>
+</div>

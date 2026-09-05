@@ -1,42 +1,13 @@
 <div class="wrap" data-testid="local-info">
   <fleet-kit-async-state [state]="triadState()" loadingText="LOADING…" errorText="RUNNER STATUS UNAVAILABLE">
     @if (view(); as v) {
-      <dl class="kv">
-        <dt>endpoint</dt>
-        <dd class="path" data-testid="hub-endpoint">{{ v.hub.endpoint }}</dd>
-        <dt>link</dt>
-        <dd>
-          <span class="link" [class.up]="v.hub.reachable" [class.down]="!v.hub.reachable" data-testid="hub-link">
-            {{ v.hub.reachable ? 'CONNECTED' : 'UNREACHABLE' }}
-          </span>
-        </dd>
-        <dt>last flush</dt>
-        <dd data-testid="hub-last-flush">{{ lastFlushLabel() }}</dd>
-        <dt>buffered</dt>
-        <dd data-testid="hub-buffered">{{ v.hub.buffer_depth }} events</dd>
-        <dt>agents</dt>
-        <dd>{{ v.capacities.used }}/{{ v.capacities.max_agents }} slots</dd>
-        <dt>loop</dt>
-        <dd>
-          <span [class.paused]="v.pause.effective">{{ v.pause.effective ? 'PAUSED' : 'FILLING' }}</span>
-          <small class="tick">· tick {{ lastTickLabel() }}</small>
-        </dd>
-      </dl>
-      <div class="fleet-strip" [class.stale]="fleetStale()" data-testid="fleet-strip">
-        <div class="fs-head">
-          <span class="fs-lbl">Fleet</span>
-          <span class="fs-age" data-testid="fleet-age">{{ fleetStale() ? 'last known' : 'live' }}</span>
-        </div>
-        <div class="fleet-nums">
-          <span class="fn ready" data-testid="fleet-ready">{{ fleet()?.ready ?? '—' }}<small>ready</small></span>
-          <span class="fn running" data-testid="fleet-running">{{ fleet()?.running ?? '—' }}<small>running</small></span>
-          <span class="fn waiting" data-testid="fleet-waiting">{{ fleet()?.waiting ?? '—' }}<small>waiting</small></span>
-          <span class="fn needs" data-testid="fleet-needs">{{ fleet()?.needs ?? '—' }}<small>needs</small></span>
-        </div>
-      </div>
-      <a class="board-link" [href]="v.hub.endpoint" target="_blank" rel="noopener" data-testid="board-link">
-        open fleet board — hub serving →
-      </a>
+      <local-info-view
+        [view]="v"
+        [fleet]="fleet()"
+        [fleetStale]="fleetStale()"
+        [lastFlushLabel]="lastFlushLabel()"
+        [lastTickLabel]="lastTickLabel()"
+      />
     }
   </fleet-kit-async-state>
 </div>

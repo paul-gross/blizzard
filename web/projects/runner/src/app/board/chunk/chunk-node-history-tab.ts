@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { type ArtifactView, ChunkArtifactBody, ChunkTimelineSelection, type hubApi } from 'fleet';
+import { type ArtifactView, ChunkArtifactBody, ChunkTimelineSelection, KitAsyncState, type hubApi } from 'fleet';
 
 /**
  * The runner chunk detail page's Node history tab — the shared
@@ -21,7 +21,7 @@ import { type ArtifactView, ChunkArtifactBody, ChunkTimelineSelection, type hubA
 @Component({
   selector: 'app-chunk-node-history-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactBody, ChunkTimelineSelection],
+  imports: [ChunkArtifactBody, ChunkTimelineSelection, KitAsyncState],
   templateUrl: './chunk-node-history-tab.html',
   styleUrl: './chunk-node-history-tab.css',
 })

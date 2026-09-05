@@ -8,7 +8,7 @@ import { KitTab, KitTabStrip } from 'fleet';
  * `routerLink` each, wearing the same {@link KitTabStrip}/{@link KitTab}
  * chrome the hub's own `app-nav.ts` wears (blizzard#203) — one tab
  * treatment, not two. `queryParamsHandling="preserve"` carries the board's
- * `?chunk=` selection (`panel-selection.ts`, issue #99) across a
+ * `?chunk=` selection (the shared `injectChunkUrlSelection`) across a
  * Board → Events → Board round trip rather than dropping it on navigation.
  */
 @Component({

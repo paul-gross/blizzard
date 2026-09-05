@@ -2,7 +2,12 @@
   <div class="s-head"><span class="tag" id="chunk-timeline-heading">Node history</span></div>
 }
 @if (historyRows().length === 0 && !activeRow()) {
-  <p class="none" data-testid="history-empty">No transitions yet — waiting on the first node-step.</p>
+  <fleet-kit-async-state
+    state="empty"
+    placement="inline"
+    emptyText="No transitions yet — waiting on the first node-step."
+    emptyTestid="history-empty"
+  />
 } @else {
   <ol class="timeline" data-testid="history">
     @for (row of historyRows(); track $index) {

@@ -75,7 +75,12 @@
           <div class="i-messages">
             <div class="s-head"><span class="tag">Messages · {{ (item.comments ?? []).length }}</span></div>
             @if ((item.comments ?? []).length === 0) {
-              <p class="none" data-testid="issue-no-messages">No messages.</p>
+              <fleet-kit-async-state
+                state="empty"
+                placement="inline"
+                emptyText="No messages."
+                emptyTestid="issue-no-messages"
+              />
             } @else {
               <ul class="messages" data-testid="issue-messages">
                 @for (c of item.comments ?? []; track $index) {

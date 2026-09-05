@@ -1,74 +1,58 @@
-<dl class="kv" data-testid="chunk-facts">
-  <dt>Status</dt>
-  <dd data-testid="fact-status">{{ detail().status }}</dd>
-  <dt>Node</dt>
-  <dd data-testid="fact-node">{{ detail().current_node_name ?? detail().current_node_id ?? '—' }}</dd>
-  <dt>Runner</dt>
-  <dd data-testid="fact-runner">{{ runner() }}</dd>
-  <dt>Attempts</dt>
-  <dd data-testid="fact-attempts">{{ attempts() }}</dd>
-  <!-- Graph is always shown; the edit row only while the chunk is still
-       not_ready (issue #27) — the same shape as the open-question answer
-       control, gated on the fact rather than confirmed. -->
-  <dt>Graph</dt>
-  <dd data-testid="fact-graph">
-    @if (graphLinkBase(); as linkBase) {
-      <a
-        class="graph-link"
-        data-testid="graph-value"
-        [routerLink]="[...linkBase, detail().graph_id]"
-        [title]="detail().graph_id"
-        >{{ graphLabel() }}</a
-      >
-    } @else {
-      <span data-testid="graph-value" [title]="detail().graph_id">{{ graphLabel() }}</span>
-    }
-    @if (editable() && canControl()) {
-      <span class="edit-row">
-        <input
-          #graphInput
-          class="edit-input"
-          type="text"
-          data-testid="graph-input"
-          placeholder="New graph id…"
-          [attr.aria-label]="'Set graph for chunk ' + detail().chunk_id"
-        />
-        <fleet-kit-button testid="graph-submit" (click)="submitGraph(graphInput.value); graphInput.value = ''">
-          Set
-        </fleet-kit-button>
-      </span>
-    }
-  </dd>
-  <!-- The chunk's standing edges, each direction its own row. Only the neighbor's ref
-       is the link — a plain anchor, underlined, so it reads as one; its status sits
-       beside it as text rather than being swallowed into the same target. -->
-  @if (prerequisites().length) {
-    <dt>Depends on</dt>
-    <dd data-testid="fact-depends-on">
-      @for (n of prerequisites(); track n.chunk_id) {
-        <span class="edge">
-          <a class="edge-ref" data-testid="depends-on-neighbor" [routerLink]="[...chunkLinkBase(), n.chunk_id]" [title]="n.chunk_id">{{
-            shortId(n.chunk_id)
-          }}</a>
-          <span class="edge-status">{{ statusLabel(n) }}</span>
-        </span>
-      }
-    </dd>
+<!-- Graph is always shown; the edit row only while the chunk is still
+     not_ready (issue #27) — the same shape as the open-question answer
+     control, gated on the fact rather than confirmed. -->
+<ng-template #graphValue>
+  @if (graphLinkBase(); as linkBase) {
+    <a
+      class="graph-link"
+      data-testid="graph-value"
+      [routerLink]="[...linkBase, detail().graph_id]"
+      [title]="detail().graph_id"
+      >{{ graphLabel() }}</a
+    >
+  } @else {
+    <span data-testid="graph-value" [title]="detail().graph_id">{{ graphLabel() }}</span>
   }
-  @if (dependents().length) {
-    <dt>Blocks</dt>
-    <dd data-testid="fact-blocks">
-      @for (n of dependents(); track n.chunk_id) {
-        <span class="edge">
-          <a class="edge-ref" data-testid="blocks-neighbor" [routerLink]="[...chunkLinkBase(), n.chunk_id]" [title]="n.chunk_id">{{
-            shortId(n.chunk_id)
-          }}</a>
-          <span class="edge-status">{{ statusLabel(n) }}</span>
-        </span>
-      }
-    </dd>
+  @if (editable() && canControl()) {
+    <span class="edit-row">
+      <input
+        #graphInput
+        class="edit-input"
+        type="text"
+        data-testid="graph-input"
+        placeholder="New graph id…"
+        [attr.aria-label]="'Set graph for chunk ' + detail().chunk_id"
+      />
+      <fleet-kit-button testid="graph-submit" (click)="submitGraph(graphInput.value); graphInput.value = ''">
+        Set
+      </fleet-kit-button>
+    </span>
   }
-</dl>
+</ng-template>
+<!-- The chunk's standing edges, each direction its own row. Only the neighbor's ref
+     is the link — a plain anchor, underlined, so it reads as one; its status sits
+     beside it as text rather than being swallowed into the same target. -->
+<ng-template #dependsOnValue>
+  @for (n of prerequisites(); track n.chunk_id) {
+    <span class="edge">
+      <a class="edge-ref" data-testid="depends-on-neighbor" [routerLink]="[...chunkLinkBase(), n.chunk_id]" [title]="n.chunk_id">{{
+        shortId(n.chunk_id)
+      }}</a>
+      <span class="edge-status">{{ statusLabel(n) }}</span>
+    </span>
+  }
+</ng-template>
+<ng-template #blocksValue>
+  @for (n of dependents(); track n.chunk_id) {
+    <span class="edge">
+      <a class="edge-ref" data-testid="blocks-neighbor" [routerLink]="[...chunkLinkBase(), n.chunk_id]" [title]="n.chunk_id">{{
+        shortId(n.chunk_id)
+      }}</a>
+      <span class="edge-status">{{ statusLabel(n) }}</span>
+    </span>
+  }
+</ng-template>
+<fleet-kit-fact-list class="cf-facts" testid="chunk-facts" [rows]="factRows(graphValue, dependsOnValue, blocksValue)" />
 <!-- The usage/cost breakdown — its own labelled section below the chunk
      facts, not a sixth-and-seventh row folded into the identity table above: cost and
      token counts are a different kind of information (derived usage, not chunk

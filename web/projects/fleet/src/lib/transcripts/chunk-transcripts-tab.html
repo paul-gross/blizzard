@@ -26,7 +26,7 @@
             }
           </div>
           @if (step.segments.length === 0) {
-            <p class="none">No segments.</p>
+            <fleet-kit-async-state state="empty" placement="inline" emptyText="No segments." />
           } @else {
             <ul class="seg-list">
               @for (seg of step.segments; track seg.segment_id) {

@@ -1,16 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@angular/core';
-import { ageMs, formatAge, injectNowSignal, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
+import { ageMs, asyncState, formatAge, injectNowSignal, KitAsyncState, type runnerApi } from 'fleet';
 
+import { LocalInfoView } from './local-info-view';
 import { injectRunnerDashboardQuery } from './status.query';
 
 /**
- * The hub-link panel — the discovery mock's "hub · outbound only, nothing
- * dials in": the configured hub endpoint, derived reachability, last flush
- * (last successful PULL contact), the outbound buffer depth, and this runner's
- * own capacities/pause state. All off `GET /api/dashboard`'s `runner` section
- * — the runner's *own* facts about its hub link, not a live hub read; the
- * board link is the one hand-off to the hub app, minted from the endpoint the
- * wire now carries.
+ * The hub-link panel **container** — the discovery mock's "hub · outbound only,
+ * nothing dials in": owns `GET /api/dashboard`'s `runner` section read, the
+ * resolved async-state triad, the fleet-strip latch, and the ticking clock the
+ * last-flush/tick labels derive from; the presentational {@link LocalInfoView}
+ * owns the facts template (`bzh:frontend-container-presentational`).
  *
  * Below the link facts is the discovery mock's fleet counts strip
  * (ready/running/waiting/needs) — a fleet-level pulse. Those counts *are* a
@@ -26,7 +25,7 @@ import { injectRunnerDashboardQuery } from './status.query';
 @Component({
   selector: 'local-info',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState],
+  imports: [KitAsyncState, LocalInfoView],
   templateUrl: './local-info.html',
   styleUrl: './local-info.css',
 })
@@ -68,11 +67,7 @@ export class LocalInfo {
   /** The async triad's resolved state — no `'empty'` case: a resolved read
    * with a malformed body renders nothing (the `view()` null-guard in the
    * projected content), the same degraded-blank behavior as before. */
-  protected readonly triadState = computed<KitAsyncStateValue>(() => {
-    if (this.query.isPending()) return 'loading';
-    if (this.query.isError()) return 'error';
-    return 'ready';
-  });
+  protected readonly triadState = computed(() => asyncState(this.query, false));
 
   /** Ticks once a second (issue #178) so `lastFlushLabel`/`lastTickLabel` advance
    * between polls instead of sitting frozen at whatever age the last read carried —

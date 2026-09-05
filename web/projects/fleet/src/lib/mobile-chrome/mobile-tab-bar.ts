@@ -28,7 +28,7 @@ export interface MobileTabItem {
   /** How this tab's link handles the current query params on navigation —
    * `''` (default) drops them, right for a shell with no cross-route
    * selection state. A consumer whose routes share one (the runner's
-   * `?chunk=`, `panel-selection.ts`) sets `'preserve'` per tab
+   * `?chunk=`, `injectChunkUrlSelection`) sets `'preserve'` per tab
    * that needs it — each consumer's own route wiring stays theirs, never a
    * bar-wide default that would also reach an unrelated consumer's routes
    * (e.g. the hub's, whose chunk-detail selection params `/board`/`/events`

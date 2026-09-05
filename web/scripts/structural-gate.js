@@ -12,6 +12,12 @@
  * `web:shell-sweep`'s method); a genuinely time-driven spec is named in
  * `REAL_TIMER_EXEMPT_FILES` with its reason.
  *
+ * Also the kit floor (`blizzard-context:/architecture/frontend-structure/kit.md`
+ * `bzh:frontend-kit-floor`): a component `.css` outside `fleet/lib/kit/` declaring
+ * one of the kit's own retired chrome classes as a standalone rule, or a component
+ * `.html` outside the kit hand-rolling `KitFactList`'s own `<dl class="kv">` grid.
+ * A site that should not convert is named in `KIT_FLOOR_EXEMPT_SITES` with its reason.
+ *
  * Run from `web/`: `npm run structural-gate` (`node scripts/structural-gate.js`).
  */
 
@@ -83,15 +89,18 @@ function isGatingSpec(relPath) {
  */
 const REAL_TIMER_EXEMPT_FILES = [path.join('hub', 'src', 'app', 'demo', 'demo-director.spec.ts')];
 
-/** @param {string} dir */
-function walk(dir) {
+/** Every file below `dir` whose name ends in one of `extensions`.
+ * @param {string} dir
+ * @param {readonly string[]} extensions
+ */
+function walk(dir, extensions) {
   /** @type {string[]} */
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...walk(full));
-    else if (entry.isFile() && entry.name.endsWith('.ts')) out.push(full);
+    if (entry.isDirectory()) out.push(...walk(full, extensions));
+    else if (entry.isFile() && extensions.some((ext) => entry.name.endsWith(ext))) out.push(full);
   }
   return out;
 }
@@ -135,14 +144,98 @@ function assertRealTimerDetectorWorks() {
   }
 }
 
+// The kit's own retired chrome classes — `KitPanel`'s panel shell
+// (`.panel`/`.p-hdr`/`.p-body`/`.lbl`), `KitAsyncState`'s loading/error/empty triad
+// (`.status`, and its own hand-rolled precursors `.none`/`.hint`/`.rest`). A component
+// outside `fleet/lib/kit/` declaring one of these as a standalone rule has re-typed
+// chrome the kit already owns (`bzh:frontend-kit-floor`).
+const RETIRED_KIT_CLASSES = ['panel', 'p-hdr', 'p-body', 'lbl', 'status', 'none', 'hint', 'rest'];
+const RETIRED_CLASS_RULE = new RegExp(`^\\s*\\.(${RETIRED_KIT_CLASSES.join('|')})\\s*\\{`, 'gm');
+
+// `KitFactList`'s own two-column `<dl>` (`kit-fact-list.html`) — a hand-rolled
+// `<dl class="kv">` outside the kit re-types the same grid.
+const KV_FACT_GRID = /<dl[^>]*\bclass="kv"/;
+
+const KIT_DIR_SEGMENT = path.join('fleet', 'src', 'lib', 'kit') + path.sep;
+
+/**
+ * A site that should not convert — a reasoned exemption per entry, the
+ * `REAL_TIMER_EXEMPT_FILES` idiom:
+ *
+ * - `chunk-detail.css`'s `.rest` is the dock's always-mounted, full-height rest
+ *   cover (flex-centered, its own gradient background and top border) — a
+ *   different visual shape than any `KitAsyncState` placement renders, not a
+ *   status line with a class name attached.
+ * - `graph-diagram-detail.css`'s `.hint` is not an async state at all: nothing
+ *   selected in the diagram viewer is local selection state, not a query's
+ *   loading/error/empty.
+ */
+const KIT_FLOOR_EXEMPT_SITES = [
+  { file: path.join('fleet', 'src', 'lib', 'chunk-detail', 'chunk-detail.css'), class: 'rest' },
+  { file: path.join('fleet', 'src', 'lib', 'graphs', 'graph-diagram-detail.css'), class: 'hint' },
+];
+
+/**
+ * Prove the kit-floor detectors can still fail, before trusting them over the tree —
+ * the same reasoning `assertRealTimerDetectorWorks` follows.
+ */
+function assertKitFloorDetectorWorks() {
+  const mustCatchClasses = [
+    ['.panel {', 'panel'],
+    ['.p-hdr {', 'p-hdr'],
+    ['.p-body {', 'p-body'],
+    ['.lbl {', 'lbl'],
+    ['.status {', 'status'],
+    ['.none {', 'none'],
+    ['.hint {', 'hint'],
+    ['.rest {', 'rest'],
+    ['  .none {', 'none'], // indented, as every real rule is
+  ];
+  const mustPassClasses = [
+    '.not-none {', // a different class name, not the retired one
+    '.statusbar {', // ditto
+    '.kv dd.zero {', // a compound/descendant selector, not a standalone retired class
+    '.status.inline {', // the kit's own compound variant selector
+  ];
+  for (const [source, expected] of mustCatchClasses) {
+    RETIRED_CLASS_RULE.lastIndex = 0;
+    const match = RETIRED_CLASS_RULE.exec(source);
+    if (match?.[1] !== expected) {
+      throw new Error(`kit-floor class detector missed \`${source}\` (read ${match?.[1]}, expected ${expected})`);
+    }
+  }
+  for (const source of mustPassClasses) {
+    RETIRED_CLASS_RULE.lastIndex = 0;
+    const match = RETIRED_CLASS_RULE.exec(source);
+    if (match !== null) throw new Error(`kit-floor class detector false-positived on \`${source}\``);
+  }
+
+  const mustCatchGrids = ['<dl class="kv">', '<dl data-testid="x" class="kv" [attr.data-x]="y">'];
+  const mustPassGrids = ['<dl class="kv-other">', '<dl class="other">', '<fleet-kit-fact-list class="kv" />'];
+  for (const source of mustCatchGrids) {
+    if (!KV_FACT_GRID.test(source)) throw new Error(`kit-floor fact-grid detector missed \`${source}\``);
+  }
+  for (const source of mustPassGrids) {
+    if (KV_FACT_GRID.test(source)) throw new Error(`kit-floor fact-grid detector false-positived on \`${source}\``);
+  }
+}
+
+/** Whether `relPath` (relative to `PROJECTS_DIR`) sits inside `fleet/lib/kit/` — the
+ * kit's own sources are exempt from its own floor. */
+function isInsideKit(relPath) {
+  return relPath.startsWith(KIT_DIR_SEGMENT);
+}
+
 function main() {
   assertRealTimerDetectorWorks();
-  const files = walk(PROJECTS_DIR);
+  assertKitFloorDetectorWorks();
+
+  const specFiles = walk(PROJECTS_DIR, ['.ts']);
 
   /** @type {{ file: string, timer: string, delay: string }[]} */
   const realTimerViolations = [];
 
-  for (const file of files) {
+  for (const file of specFiles) {
     const rel = path.relative(PROJECTS_DIR, file);
     if (!rel.endsWith('.spec.ts') || !isGatingSpec(rel) || REAL_TIMER_EXEMPT_FILES.includes(rel)) continue;
 
@@ -155,19 +248,52 @@ function main() {
     }
   }
 
-  if (realTimerViolations.length > 0) {
-    console.error('structural-gate: real timers in merge-gating specs:\n');
-    for (const v of realTimerViolations) console.error(`  ${v.file}: ${v.timer}(…, ${v.delay})`);
-    console.error(
-      '\nDrive the wait on fake timers (vi.useFakeTimers + vi.advanceTimersByTimeAsync) so the gating job spends ' +
-        'no real seconds and the window is chosen rather than guessed; a `setTimeout(…, 0)` macrotask flush is ' +
-        'fine, and a genuinely time-driven spec goes in REAL_TIMER_EXEMPT_FILES with a one-line reason.',
-    );
+  /** @type {{ file: string, class: string }[]} */
+  const kitFloorViolations = [];
+
+  for (const file of walk(PROJECTS_DIR, ['.css'])) {
+    const rel = path.relative(PROJECTS_DIR, file);
+    if (isInsideKit(rel)) continue;
+    const source = fs.readFileSync(file, 'utf8');
+    RETIRED_CLASS_RULE.lastIndex = 0;
+    let match;
+    while ((match = RETIRED_CLASS_RULE.exec(source)) !== null) {
+      const cls = match[1];
+      if (KIT_FLOOR_EXEMPT_SITES.some((e) => e.file === rel && e.class === cls)) continue;
+      kitFloorViolations.push({ file: rel, class: cls });
+    }
+  }
+  for (const file of walk(PROJECTS_DIR, ['.html'])) {
+    const rel = path.relative(PROJECTS_DIR, file);
+    if (isInsideKit(rel)) continue;
+    const source = fs.readFileSync(file, 'utf8');
+    if (KV_FACT_GRID.test(source)) kitFloorViolations.push({ file: rel, class: '<dl class="kv">' });
+  }
+
+  if (realTimerViolations.length > 0 || kitFloorViolations.length > 0) {
+    if (realTimerViolations.length > 0) {
+      console.error('structural-gate: real timers in merge-gating specs:\n');
+      for (const v of realTimerViolations) console.error(`  ${v.file}: ${v.timer}(…, ${v.delay})`);
+      console.error(
+        '\nDrive the wait on fake timers (vi.useFakeTimers + vi.advanceTimersByTimeAsync) so the gating job spends ' +
+          'no real seconds and the window is chosen rather than guessed; a `setTimeout(…, 0)` macrotask flush is ' +
+          'fine, and a genuinely time-driven spec goes in REAL_TIMER_EXEMPT_FILES with a one-line reason.',
+      );
+    }
+    if (kitFloorViolations.length > 0) {
+      console.error('structural-gate: retired kit chrome outside fleet/lib/kit/:\n');
+      for (const v of kitFloorViolations) console.error(`  ${v.file}: ${v.class}`);
+      console.error(
+        '\nCompose the shared kit (`KitPanel`/`KitAsyncState`/`KitFactList`, from `fleet`) instead of a re-typed ' +
+          'copy; a site that genuinely should not convert goes in KIT_FLOOR_EXEMPT_SITES with a one-line reason.',
+      );
+    }
     process.exitCode = 1;
     return;
   }
 
   console.log('structural-gate: real-timer sweep clean.');
+  console.log('structural-gate: kit floor clean.');
 }
 
 main();

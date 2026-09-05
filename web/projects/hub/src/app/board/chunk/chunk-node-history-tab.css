@@ -19,12 +19,6 @@
   min-height: 0;
   padding: 8px;
 }
-.hint {
-  margin: 0;
-  padding: 8px;
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-}
 .s-head {
   padding: 6px 8px 0;
 }
@@ -33,12 +27,6 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--label);
-}
-.none {
-  margin: 0;
-  padding: 4px 8px 8px;
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
 }
 .art {
   display: block;

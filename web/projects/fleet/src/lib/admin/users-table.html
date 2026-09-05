@@ -1,6 +1,6 @@
 <fleet-kit-panel class="users-table" aria-label="Users" data-testid="users-table" label="Users">
   @if (users().length === 0) {
-    <p class="none" data-testid="users-table-empty">No users yet.</p>
+    <fleet-kit-async-state state="empty" placement="inline" emptyText="No users yet." emptyTestid="users-table-empty" />
   } @else {
     <table>
       <thead>

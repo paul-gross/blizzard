@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { type KitAsyncStateValue, type runnerApi, ViewportService } from 'fleet';
+import { asyncState, injectChunkUrlSelection, type runnerApi, ViewportService } from 'fleet';
 
 import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-status';
 import { injectRunnerLeasesQuery } from './leases.query';
 import { LocalPanelLayout } from './local-panel-layout';
 import { LocalPanelMobile } from './local-panel-mobile';
-import { injectPanelSelection } from './panel-selection';
 import { injectRunnerDashboardQuery } from './status.query';
 
 /** One row in the machine-chunks list: a chunk's newest lease plus its derived
@@ -88,31 +87,19 @@ export class LocalPanel {
 
   /** The leases rail's async triad state — loading/error take precedence, then
    * no active leases, else the agent rows render. */
-  protected readonly leasesTriadState = computed<KitAsyncStateValue>(() => {
-    if (this.leasesQuery.isPending()) return 'loading';
-    if (this.leasesQuery.isError()) return 'error';
-    return this.activeLeases().length === 0 ? 'empty' : 'ready';
-  });
+  protected readonly leasesTriadState = computed(() => asyncState(this.leasesQuery, this.activeLeases().length === 0));
 
   /** The mobile chunks pane's async triad state — mobile renders the
    * unfiltered {@link machineChunks} (issue #134 left mobile's own filter out
    * of scope), so this reads that list's emptiness, sharing the leases
    * query's loading/error state. */
-  protected readonly chunksTriadState = computed<KitAsyncStateValue>(() => {
-    if (this.leasesQuery.isPending()) return 'loading';
-    if (this.leasesQuery.isError()) return 'error';
-    return this.machineChunks().length === 0 ? 'empty' : 'ready';
-  });
+  protected readonly chunksTriadState = computed(() => asyncState(this.leasesQuery, this.machineChunks().length === 0));
 
   /** The desktop chunks pane's own triad state — derived from {@link visibleChunks},
    * the filtered list {@link LocalPanelLayout} renders, not the unfiltered
    * {@link machineChunks} the shared {@link chunksTriadState} above reads. Keeps
    * "ready" and "has rows to show" in sync when the filter hides everything. */
-  protected readonly visibleChunksTriadState = computed<KitAsyncStateValue>(() => {
-    if (this.leasesQuery.isPending()) return 'loading';
-    if (this.leasesQuery.isError()) return 'error';
-    return this.visibleChunks().length === 0 ? 'empty' : 'ready';
-  });
+  protected readonly visibleChunksTriadState = computed(() => asyncState(this.leasesQuery, this.visibleChunks().length === 0));
 
   /** The desktop chunks pane's empty-state text — distinguishes "nothing on this
    * machine" from "the filter hid everything", naming the hidden count so the
@@ -182,9 +169,15 @@ export class LocalPanel {
    * query, folded independently there rather than through this component. */
   protected readonly openAskCount = computed(() => (this.dashboardQuery.data()?.asks?.items ?? []).length);
 
-  /** What is open in the panel, held in the URL (issue #99) — see
-   * `panel-selection.ts` for why the router coupling lives there. */
-  private readonly selection = injectPanelSelection();
+  /** What is open in the panel, held in the URL's `?chunk=` via the shared
+   * {@link injectChunkUrlSelection} — the router coupling lives there, not
+   * here. Carries no `attempt` selection: per-attempt selection lives on the
+   * chunk detail route, whose own `chunk-detail-page.ts` is the single owner
+   * of `?attempt=` — the only site that reads it and the only one that writes
+   * it. This panel neither reads nor clears it; the one link into that route
+   * carries no query params at all (`machine-detail-header.ts`), so a stale
+   * `attempt` cannot reach it either. */
+  private readonly selection = injectChunkUrlSelection();
 
   /**
    * The `chunk_id` currently selected. A lease row selects its chunk too

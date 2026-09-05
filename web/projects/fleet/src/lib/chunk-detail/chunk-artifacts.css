@@ -19,10 +19,6 @@
 .s-head {
   margin-bottom: 6px;
 }
-.none {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-}
 .artifacts {
   list-style: none;
   margin: 0;

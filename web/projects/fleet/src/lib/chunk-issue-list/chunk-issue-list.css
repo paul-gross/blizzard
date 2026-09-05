@@ -63,10 +63,6 @@
 .s-head {
   margin-bottom: 6px;
 }
-.none {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-}
 .notice {
   margin: 0;
   padding: 6px 8px;

@@ -11,7 +11,7 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
  * chunk detail route (issue #318) — the operator's way into the shared
  * `fleet` sections and the transcript, both of which moved out of this dock.
  * The link carries the chunk in the route's own path and no query params at
- * all: `?chunk=` is the board's selection (`panel-selection.ts`) and means
+ * all: `?chunk=` is the board's selection (the shared `injectChunkUrlSelection`) and means
  * nothing on the detail route, and `?attempt=` is that route's own, written
  * there once an attempt is picked.
  *

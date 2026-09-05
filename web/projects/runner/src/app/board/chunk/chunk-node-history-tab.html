@@ -9,12 +9,22 @@
   </div>
   <section class="nh-step">
     @if (selectedKey() === null) {
-      <p class="hint" data-testid="node-history-select-hint">Select a step above.</p>
+      <fleet-kit-async-state
+        state="empty"
+        placement="inline"
+        emptyText="Select a step above."
+        emptyTestid="node-history-select-hint"
+      />
     } @else {
       <div class="nh-artifacts">
         <div class="s-head"><span class="tag">Artifacts</span></div>
         @if (stepArtifacts().length === 0) {
-          <p class="none" data-testid="node-history-artifacts-empty">No artifacts for this step.</p>
+          <fleet-kit-async-state
+            state="empty"
+            placement="inline"
+            emptyText="No artifacts for this step."
+            emptyTestid="node-history-artifacts-empty"
+          />
         } @else {
           @for (art of stepArtifacts(); track art.key) {
             <fleet-chunk-detail-artifact-body class="art" [artifact]="art" body="full" testid="node-history-artifact" />
