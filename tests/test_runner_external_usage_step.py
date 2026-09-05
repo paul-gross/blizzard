@@ -4,7 +4,9 @@ Unit-drives the step against a real (tmp sqlite) runner store and a scriptable
 ``FakeSubscriptionSampler`` (blizzard#436 — the sampler no longer rides on the harness
 adapter), then a component tier running several full ``tick()`` passes across an
 advancing ``FixedClock`` to check the cadence gate and that the sampler never perturbs
-the other steps' behavior."""
+the other steps' behavior. A second component tier (blizzard#436 phase 2) drives several
+declared subscriptions at once: independent per-slug cadence, a failed sample isolated to
+its own slug, and a declared provider with no sampler binding staying unsampled."""
 
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
@@ -42,10 +45,19 @@ _NOW = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 _SAMPLED_KIND = "external_subscription_usage.sampled"
+_SLUG = "anthropic"
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+
+
+def _declaration(
+    slug: str = _SLUG, *, interval_seconds: int = 300, provider: str = "anthropic"
+) -> SubscriptionDeclaration:
+    return SubscriptionDeclaration(
+        slug=slug, name=slug.title(), provider=provider, sample_interval_seconds=interval_seconds
+    )
 
 
 def _snapshot(*, sampled_at: datetime = _NOW) -> ExternalSubscriptionUsageSnapshot:
@@ -74,9 +86,12 @@ def _ctx(store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval
         probe=FakeProbe(),
         clock=clock,
         config=LoopConfig(
-            runner_id="r1", workspace_id="ws1", max_agents=1, external_usage_sample_interval_seconds=interval_seconds
+            runner_id="r1",
+            workspace_id="ws1",
+            max_agents=1,
+            subscriptions=(_declaration(interval_seconds=interval_seconds),),
         ),
-        subscription_sampler=sampler,
+        subscription_samplers={_SLUG: sampler},
     )
 
 
@@ -98,9 +113,12 @@ def _ctx_with_a_claimable_chunk(
         probe=probe,
         clock=clock,
         config=LoopConfig(
-            runner_id="r1", workspace_id="ws1", max_agents=1, external_usage_sample_interval_seconds=interval_seconds
+            runner_id="r1",
+            workspace_id="ws1",
+            max_agents=1,
+            subscriptions=(_declaration(interval_seconds=interval_seconds),),
         ),
-        subscription_sampler=sampler,
+        subscription_samplers={_SLUG: sampler},
     )
     return ctx, hub
 
@@ -115,11 +133,11 @@ def test_first_ever_attempt_samples_immediately(tmp_path) -> None:  # type: igno
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
-    assert store.last_external_usage_attempt_at() is None
+    assert store.last_external_usage_attempt_at(_SLUG) is None
     ExternalUsageSample(ctx).run()
 
     assert sampler.sample_calls == 1
-    assert store.last_external_usage_attempt_at() == _NOW
+    assert store.last_external_usage_attempt_at(_SLUG) == _NOW
 
 
 @pytest.mark.unit
@@ -179,7 +197,7 @@ def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_
 
     ExternalUsageSample(ctx).run()
 
-    assert store.last_external_usage_attempt_at() == _NOW
+    assert store.last_external_usage_attempt_at(_SLUG) == _NOW
 
     pending = [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND]
     assert len(pending) == 1
@@ -189,6 +207,7 @@ def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_
     assert fact.lease_id is None
 
     payload = json.loads(fact.payload)
+    assert payload["slug"] == _SLUG
     assert payload["sampled_at"] == "2026-08-01T12:00:00+00:00"
     assert {w["window"] for w in payload["windows"]} == {"5h", "7d"}
     five_hour = next(w for w in payload["windows"] if w["window"] == "5h")
@@ -210,7 +229,7 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path)
 
     ExternalUsageSample(ctx).run()
 
-    assert store.last_external_usage_attempt_at() == _NOW
+    assert store.last_external_usage_attempt_at(_SLUG) == _NOW
     assert [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND] == []
 
     # The next tick, still within the interval, must not re-sample — the NULL-payload
@@ -218,7 +237,7 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path)
     clock.advance(timedelta(seconds=100))
     ExternalUsageSample(ctx).run()
     assert sampler.sample_calls == 1
-    assert store.last_external_usage_attempt_at() == _NOW  # unchanged — no new attempt
+    assert store.last_external_usage_attempt_at(_SLUG) == _NOW  # unchanged — no new attempt
 
 
 # AC 4 — a raising adapter leaves the tick completing normally, other steps intact.
@@ -243,7 +262,7 @@ def test_a_raising_adapter_still_lets_the_tick_complete_and_fill_spawn(tmp_path)
     warnings = [e for e in logs if "external subscription usage sample step failed" in e["event"]]
     assert len(warnings) == 1
     # No attempt row survives a raise inside the try (the store write never ran).
-    assert store.last_external_usage_attempt_at() is None
+    assert store.last_external_usage_attempt_at(_SLUG) is None
 
 
 @pytest.mark.unit
@@ -254,7 +273,7 @@ def test_a_raising_step_called_directly_returns_without_raising(tmp_path) -> Non
 
     ExternalUsageSample(ctx).run()  # must not raise
 
-    assert store.last_external_usage_attempt_at() is None
+    assert store.last_external_usage_attempt_at(_SLUG) is None
 
 
 # AC 5 — component: several ticks across a virtual clock match the adapter-call count.
@@ -306,3 +325,157 @@ def test_a_very_large_interval_never_resamples_and_every_other_step_behaves_iden
     assert len(store_a.list_active_leases()) == len(store_b.list_active_leases()) == 1
     assert sampler_a.sample_calls >= 1
     assert sampler_b.sample_calls == 1  # the very first, never-attempted-before sample only
+
+
+# AC 6 (blizzard#436 phase 2) — several declared subscriptions, sampled independently.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_two_declarations_with_different_cadences_only_the_due_one_samples(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A short-interval and a long-interval declaration both sample on the first ever
+    tick (neither has an anchor yet), but only the short one is due on the second."""
+    store = _store(tmp_path)
+    fast = FakeSubscriptionSampler(snapshot=_snapshot())
+    slow = FakeSubscriptionSampler(snapshot=_snapshot())
+    clock = FixedClock(_NOW)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        clock=clock,
+        config=LoopConfig(
+            runner_id="r1",
+            workspace_id="ws1",
+            max_agents=1,
+            subscriptions=(
+                _declaration("fast", interval_seconds=100),
+                _declaration("slow", interval_seconds=10_000),
+            ),
+        ),
+        subscription_samplers={"fast": fast, "slow": slow},
+    )
+
+    ExternalUsageSample(ctx).run()
+    assert fast.sample_calls == 1
+    assert slow.sample_calls == 1
+
+    clock.advance(timedelta(seconds=200))
+    ExternalUsageSample(ctx).run()
+
+    assert fast.sample_calls == 2  # due again — 200s > its 100s interval
+    assert slow.sample_calls == 1  # not due — 200s < its 10_000s interval
+
+
+@pytest.mark.unit
+def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_other_readable(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A slug whose sample this tick failed (``None``) still gets a NULL-payload attempt
+    row, advancing only ITS anchor — the other slug's last successful sample and cadence
+    anchor are untouched."""
+    store = _store(tmp_path)
+    ok = FakeSubscriptionSampler(snapshot=_snapshot(sampled_at=_NOW))
+    failing = FakeSubscriptionSampler(snapshot=_snapshot())
+    clock = FixedClock(_NOW)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        clock=clock,
+        config=LoopConfig(
+            runner_id="r1",
+            workspace_id="ws1",
+            max_agents=1,
+            subscriptions=(
+                _declaration("good", interval_seconds=100),
+                _declaration("bad", interval_seconds=100),
+            ),
+        ),
+        subscription_samplers={"good": ok, "bad": failing},
+    )
+
+    ExternalUsageSample(ctx).run()  # both sample cleanly the first time
+    assert store.last_external_usage_attempt_at("good") == _NOW
+    assert store.last_external_usage_attempt_at("bad") == _NOW
+    good_reports_after_first = [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND]
+    assert len(good_reports_after_first) == 2
+
+    clock.advance(timedelta(seconds=200))
+    failing.snapshot = None  # "bad" now fails this tick; "good" still produces a snapshot
+    ExternalUsageSample(ctx).run()
+
+    later = _NOW + timedelta(seconds=200)
+    # "bad"'s cadence advanced (a NULL-payload attempt was still recorded for it)...
+    assert store.last_external_usage_attempt_at("bad") == later
+    # ...but "good"'s own anchor and its last successful report are untouched by "bad"'s
+    # failure — a fresh, successful report from "good" this same tick.
+    assert store.last_external_usage_attempt_at("good") == later
+    reports_after_second = [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND]
+    # Only "good" enqueued a NEW report this tick (2 total from the first tick, +1 now).
+    assert len(reports_after_second) == 3
+    newest = json.loads(reports_after_second[-1].payload)
+    assert newest["slug"] == "good"
+
+
+@pytest.mark.unit
+def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A slug whose provider names no known sampler binding is simply absent from
+    ``subscription_samplers`` (blizzard#436) — no crash, no attempt row for it, and the
+    other declared subscription is sampled normally in the same tick."""
+    store = _store(tmp_path)
+    known = FakeSubscriptionSampler(snapshot=_snapshot())
+    clock = FixedClock(_NOW)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        clock=clock,
+        config=LoopConfig(
+            runner_id="r1",
+            workspace_id="ws1",
+            max_agents=1,
+            subscriptions=(
+                _declaration("known", interval_seconds=100),
+                _declaration("no-binding", interval_seconds=100, provider="some-unbound-provider"),
+            ),
+        ),
+        subscription_samplers={"known": known},  # "no-binding" has no entry — no binding
+    )
+
+    ExternalUsageSample(ctx).run()  # must not raise
+
+    assert known.sample_calls == 1
+    assert store.last_external_usage_attempt_at("known") == _NOW
+    assert store.last_external_usage_attempt_at("no-binding") is None  # never attempted
+
+
+# Parse-contract stability — `slug` is additive JSON (blizzard#436 phase 2).
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_the_payload_is_still_parseable_by_a_reader_ignorant_of_slug(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The wire fact gained ``slug`` additively — a reader written against the pre-slug
+    shape, which only ever projected ``sampled_at`` and ``windows``, must still parse
+    everything it always did, unaware the field was ever added."""
+    store = _store(tmp_path)
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
+
+    ExternalUsageSample(ctx).run()
+
+    fact = next(f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND)
+    payload = json.loads(fact.payload)
+
+    def _read_pre_slug_shape(raw: dict[str, object]) -> tuple[str, list[dict[str, object]]]:
+        # Exactly what a reader written before `slug` existed would project — no `slug` key.
+        return raw["sampled_at"], raw["windows"]  # type: ignore[return-value]
+
+    sampled_at, windows = _read_pre_slug_shape(payload)
+    assert sampled_at == "2026-08-01T12:00:00+00:00"
+    assert {w["window"] for w in windows} == {"5h", "7d"}

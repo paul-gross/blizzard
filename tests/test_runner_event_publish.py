@@ -18,7 +18,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.environments.provider import AcquiredEnvironment
@@ -752,6 +752,7 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
             ),
         ),
     )
+    declaration = SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider="anthropic")
     ctx = make_context(
         store,
         hub=FakeHub(),
@@ -759,8 +760,9 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, subscriptions=(declaration,)),
         events=events,
-        subscription_sampler=FakeSubscriptionSampler(snapshot=snapshot),
+        subscription_samplers={"anthropic": FakeSubscriptionSampler(snapshot=snapshot)},
     )
 
     ExternalUsageSample(ctx).run()

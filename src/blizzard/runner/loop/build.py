@@ -92,11 +92,15 @@ class LoopWiring:
             transcript_source=harness_transcript_source,
         )
         # The subscription-sampling seam (blizzard#436) — one binding per declared
-        # subscription; an unknown provider selects `None` (declared, unsampled). Phase 1
-        # wires the seam itself; per-slug loop-step cadence over several subscriptions is
-        # phase 2's concern, so only the first declaration is sampled for now.
+        # subscription, keyed by its slug; an unknown provider selects `None`, so it is
+        # simply absent from the map (declared, unsampled). The tick's own per-slug cadence
+        # lives in `ExternalUsageSample`, which iterates `loop_config.subscriptions` below.
         declared_subscriptions = config.resolved_subscriptions()
-        subscription_sampler = select_sampler(declared_subscriptions[0])
+        subscription_samplers = {
+            declaration.slug: sampler
+            for declaration in declared_subscriptions
+            if (sampler := select_sampler(declaration)) is not None
+        }
         # The per-lease harness-stdout directory (issue #58), created once here so a worker's
         # stdout redirect target always exists by the time a spawn/resume opens it.
         worker_stdout_dir = config.root / "worker-stdout"
@@ -125,7 +129,7 @@ class LoopWiring:
             chunk_cap_usd=config.chunk_cap_usd,
             runner_ceiling_usd=config.runner_ceiling_usd,
             runner_ceiling_window_hours=config.runner_ceiling_window_hours,
-            external_usage_sample_interval_seconds=config.external_usage_sample_interval_seconds,
+            subscriptions=declared_subscriptions,
             context_warn_tokens=config.context_warn_tokens,
             context_sample_interval_seconds=config.context_sample_interval_seconds,
             runner_dir=str(config.root),
@@ -143,7 +147,7 @@ class LoopWiring:
             hub=hub,
             provider=provider,
             harness=harness,
-            subscription_sampler=subscription_sampler,
+            subscription_samplers=subscription_samplers,
             process=LinuxProcessProbe(),
             worktree_git=SubprocessWorktreeGit(),
             # The check-runner seam (issue #114) — see `runner/loop/checks.py`.

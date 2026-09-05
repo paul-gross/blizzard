@@ -203,9 +203,12 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "record_external_usage_attempt": Published(
         FACT_CHANGED,
-        "ExternalUsageSample.run (runner/loop/steps.py) — kind='external_subscription_usage.sampled', "
-        "only when the harness produced a sample (report_kind is empty otherwise, and nothing is "
-        "enqueued to announce then). D7's elapsed-time-derived reason covers the sampler's own "
+        "ExternalUsageSample._sample_one (runner/loop/steps.py), called once per declared "
+        "subscription per tick — kind='external_subscription_usage.sampled', only when that "
+        "declaration's sampler produced a sample (report_kind is empty otherwise, and nothing is "
+        "enqueued to announce then). `slug` (blizzard#436 phase 2) keys the row to its own "
+        "declaration, so one subscription's attempt never announces, or advances the cadence of, "
+        "another's. D7's elapsed-time-derived reason covers the sampler's own "
         "cadence, not this occasional fact-log row (blizzard#317 review round 4, F1 — same class as "
         "record_usage above).",
     ),

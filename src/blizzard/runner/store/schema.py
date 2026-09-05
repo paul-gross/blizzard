@@ -472,6 +472,8 @@ session_preamble_facts = Table(
 
 # --- External subscription usage samples (issue #218) ------------------------
 # One row per sampling *attempt*: a NULL payload still counts toward the cadence.
+# `slug` joins a row to its declared subscription (blizzard#436) — every pre-slug row is
+# backfilled to the legacy Anthropic slug by the reshape that added the column.
 
 external_usage_samples = Table(
     "external_usage_samples",
@@ -479,6 +481,7 @@ external_usage_samples = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("sampled_at", UtcDateTime, nullable=False),
     Column("payload", Text, nullable=True),  # NULL = this attempt sampled nothing
+    Column("slug", String, nullable=False),
 )
 
 # --- Live session-context samples (the warn lane) ----------------------------

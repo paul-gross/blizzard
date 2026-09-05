@@ -339,6 +339,53 @@ def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Pat
     assert _has_table()
 
 
+def test_external_usage_samples_slug_backfills_the_legacy_anthropic_slug(tmp_path: Path) -> None:
+    """``external_usage_samples.slug`` (blizzard#436 phase 2) — a row recorded before the
+    column existed backfills to the legacy Anthropic slug, and downgrading past the
+    reshape's own parent drops the column again rather than a no-op ``downgrade()``
+    silently passing."""
+    config = runner_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = runner_runtime.migration_runner(config)
+
+    def _columns() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return {c["name"] for c in sa.inspect(engine).get_columns("external_usage_samples")}
+        finally:
+            engine.dispose()
+
+    def _slugs() -> list[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            with engine.connect() as conn:
+                return [row[0] for row in conn.execute(sa.text("select slug from external_usage_samples")).all()]
+        finally:
+            engine.dispose()
+
+    # The pre-slug shape — this reshape's own parent, frozen by 20260801_1500.
+    runner.downgrade("20260801_1500_runner_external_usage_samples")
+    assert "slug" not in _columns()
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text("insert into external_usage_samples (sampled_at, payload) values (:sampled_at, :payload)"),
+                {"sampled_at": "2026-08-01 12:00:00", "payload": None},
+            )
+    finally:
+        engine.dispose()
+
+    runner.upgrade("head")
+    assert "slug" in _columns()
+    assert _slugs() == ["anthropic"]
+
+    runner.downgrade("20260801_1500_runner_external_usage_samples")
+    assert "slug" not in _columns()
+
+    runner.upgrade("head")
+    assert "slug" in _columns()
+
+
 _SCHEMA_METADATA = {"hub": hub_schema.metadata, "runner": runner_schema.metadata}
 
 # chunks.model carries a migration-only server_default with no schema.py counterpart —
@@ -430,6 +477,8 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     # runner tree — instance 7 (drop-and-recreate: environment_id added, forge dropped)
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("environment_id",)),
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("forge",), "removed"),
+    # runner tree — subscription-sampling's per-slug join key (blizzard#436 phase 2)
+    ("runner", "20260801_1500_runner_external_usage_samples", "external_usage_samples", ("slug",)),
 ]
 
 
