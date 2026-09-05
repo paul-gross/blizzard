@@ -40,8 +40,10 @@ legacy table's own subscription unchanged. The sampled utilization is advisory o
 scheduling, or spawning, and no cost cap consults it.
 
 Claude Code's OAuth plan is the only subscription concept a shipping adapter has; a harness with none reports no sample,
-and no sample renders as an absent usage block on the board — never a fabricated zero. The runner panel renders a
-paced-window bar per sampled window (5h and 7d for Claude Code), only when the runner has a non-stale sample to show.
+and no sample renders as an absent usage block on the board — never a fabricated zero. The hub tracks every declared
+subscription's own sample independently, keyed on slug: one subscription going stale or unsampled never blanks a
+sibling's. The runner panel renders a paced-window bar per sampled window (5h and 7d for Claude Code), only when the
+runner has a non-stale sample to show.
 
 Credentials never leave the runner machine: the sample reads the runner's own local OAuth credential file, and only
 derived utilization percentages, window labels, and reset times cross the wire to the hub — the bearer token is never

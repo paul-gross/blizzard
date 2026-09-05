@@ -1003,12 +1003,18 @@ runner_local_pause_facts = Table(
     Column("reason", Text, nullable=True),
 )
 
-# The runner's latest sampled external-usage snapshot (issue #218) — advisory, refreshed
-# in place. No ForeignKey: an orphan row is never read, but a raise would stall the rail.
+# The runner's latest sampled external-usage snapshot, one row per declared subscription
+# (issue #218, per-slug since blizzard#436 phase 3) — advisory, refreshed in place. No
+# ForeignKey: an orphan row is never read, but a raise would stall the rail.
 runner_external_usage = Table(
     "runner_external_usage",
     metadata,
     Column("runner_id", String, primary_key=True),
+    # The runner-unique join key within `runner_id` (blizzard#436) — a legacy row
+    # predating declared subscriptions backfills to the legacy Anthropic slug.
+    Column("slug", String, primary_key=True),
+    # The declaration's operator-facing label, reported alongside `slug`.
+    Column("name", String, nullable=False),
     Column("sampled_at", UtcDateTime, nullable=False),
     # JSON array of {window, utilization_pct, resets_at, window_seconds} — rewritten
     # wholesale on every sample, never queried by its members.

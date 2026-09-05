@@ -6122,6 +6122,14 @@
             "title": "Runner Id",
             "type": "string"
           },
+          "subscriptions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionUsageView"
+            },
+            "title": "Subscriptions",
+            "type": "array"
+          },
           "workspace_id": {
             "title": "Workspace Id",
             "type": "string"
@@ -6456,6 +6464,38 @@
           "kind"
         ],
         "title": "SubmittedArtifact",
+        "type": "object"
+      },
+      "SubscriptionUsageView": {
+        "description": "One declared subscription's newest sampled usage, carrying its identity\n(issue #218) \u2014 additive beside the single legacy usage snapshot. ``slug`` is the\nrunner-unique join key, ``name`` the operator-facing label.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sampled_at": {
+            "title": "Sampled At",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalSubscriptionUsageWindowView"
+            },
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "sampled_at",
+          "windows"
+        ],
+        "title": "SubscriptionUsageView",
         "type": "object"
       },
       "SystemArtifactView": {

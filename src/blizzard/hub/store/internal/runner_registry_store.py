@@ -16,6 +16,7 @@ from blizzard.hub.domain.registry import (
     ExternalSubscriptionUsageWindow,
     IWriteRunnerRegistry,
     RunnerRegistration,
+    SubscriptionUsageRecord,
 )
 from blizzard.hub.domain.work import ActivityRow
 from blizzard.hub.store import schema as s
@@ -186,24 +187,35 @@ class RunnerRegistryStore:
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
 
-    def record_external_usage(self, runner_id: str, *, sampled_at: datetime, windows_json: str, at: datetime) -> None:
+    def record_external_usage(
+        self, runner_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
+    ) -> None:
         # No FK, no known-runner requirement: the fact can legitimately arrive ahead of
         # the registration, and must not stall this runner's high-water mark waiting.
+        # Upserts on (runner_id, slug) — one row per declared subscription (blizzard#436
+        # phase 3), so a sibling slug's row is untouched by this one's write.
         with self._store.write("record_external_usage") as conn:
             existing = conn.execute(
-                select(s.runner_external_usage.c.runner_id).where(s.runner_external_usage.c.runner_id == runner_id)
+                select(s.runner_external_usage.c.runner_id).where(
+                    s.runner_external_usage.c.runner_id == runner_id, s.runner_external_usage.c.slug == slug
+                )
             ).one_or_none()
             if existing is None:
                 conn.execute(
                     insert(s.runner_external_usage).values(
-                        runner_id=runner_id, sampled_at=sampled_at, windows=windows_json, updated_at=at
+                        runner_id=runner_id,
+                        slug=slug,
+                        name=name,
+                        sampled_at=sampled_at,
+                        windows=windows_json,
+                        updated_at=at,
                     )
                 )
                 return
             conn.execute(
                 s.runner_external_usage.update()
-                .where(s.runner_external_usage.c.runner_id == runner_id)
-                .values(sampled_at=sampled_at, windows=windows_json, updated_at=at)
+                .where(s.runner_external_usage.c.runner_id == runner_id, s.runner_external_usage.c.slug == slug)
+                .values(name=name, sampled_at=sampled_at, windows=windows_json, updated_at=at)
             )
 
     def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
@@ -252,41 +264,45 @@ class RunnerRegistryStore:
         return bool(row.paused) if row is not None else False
 
     @staticmethod
-    def _external_usage(conn, runner_id: str) -> tuple[datetime, str] | None:  # type: ignore[no-untyped-def]
-        """The runner's newest external-subscription-usage sample, raw (issue #218) —
-        ``sampled_at`` plus its still-JSON-encoded ``windows`` array. ``None`` for a
-        runner that has never reported one."""
-        row = conn.execute(
-            select(s.runner_external_usage.c.sampled_at, s.runner_external_usage.c.windows).where(
-                s.runner_external_usage.c.runner_id == runner_id
-            )
-        ).one_or_none()
-        if row is None:
-            return None
-        return row.sampled_at, row.windows
+    def _external_usage(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:  # type: ignore[no-untyped-def]
+        """Every declared subscription's newest sample for this runner, raw (issue #218,
+        one row per slug since blizzard#436 phase 3) — ``(slug, name, sampled_at,
+        windows_json)`` tuples. Empty for a runner that has never reported one."""
+        rows = conn.execute(
+            select(
+                s.runner_external_usage.c.slug,
+                s.runner_external_usage.c.name,
+                s.runner_external_usage.c.sampled_at,
+                s.runner_external_usage.c.windows,
+            ).where(s.runner_external_usage.c.runner_id == runner_id)
+        ).all()
+        return [(row.slug, row.name, row.sampled_at, row.windows) for row in rows]
 
     @staticmethod
     def _registration(
         row,  # type: ignore[no-untyped-def]
         hub_paused: bool,
         local_pause_detail: tuple[bool, str | None, str | None],
-        external_usage: tuple[datetime, str] | None,
+        external_usage: list[tuple[str, str, datetime, str]],
     ) -> RunnerRegistration:
         locally_paused, locally_paused_by, locally_paused_reason = local_pause_detail
-        external_usage_sampled_at: datetime | None = None
-        external_usage_windows: tuple[ExternalSubscriptionUsageWindow, ...] = ()
-        if external_usage is not None:
-            sampled_at, windows_json = external_usage
-            external_usage_sampled_at = sampled_at
-            external_usage_windows = tuple(
-                ExternalSubscriptionUsageWindow(
-                    window=w["window"],
-                    utilization_pct=w["utilization_pct"],
-                    resets_at=datetime.fromisoformat(w["resets_at"]),
-                    window_seconds=w["window_seconds"],
-                )
-                for w in json.loads(windows_json)
+        subscription_usage = tuple(
+            SubscriptionUsageRecord(
+                slug=slug,
+                name=name,
+                sampled_at=sampled_at,
+                windows=tuple(
+                    ExternalSubscriptionUsageWindow(
+                        window=w["window"],
+                        utilization_pct=w["utilization_pct"],
+                        resets_at=datetime.fromisoformat(w["resets_at"]),
+                        window_seconds=w["window_seconds"],
+                    )
+                    for w in json.loads(windows_json)
+                ),
             )
+            for slug, name, sampled_at, windows_json in external_usage
+        )
         return RunnerRegistration(
             runner_id=row.runner_id,
             workspace_id=row.workspace_id,
@@ -300,8 +316,7 @@ class RunnerRegistryStore:
             env_capacity=row.env_capacity,
             public_url=row.public_url,
             redirect_uris=tuple(json.loads(row.redirect_uris)) if row.redirect_uris else (),
-            external_usage_sampled_at=external_usage_sampled_at,
-            external_usage_windows=external_usage_windows,
+            subscription_usage=subscription_usage,
         )
 
 

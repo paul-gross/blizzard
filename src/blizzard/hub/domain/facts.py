@@ -22,7 +22,7 @@ from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunks.usage import IWriteChunkUsageRepository
-from blizzard.hub.domain.registry import FleetService
+from blizzard.hub.domain.registry import LEGACY_ANTHROPIC_SLUG, FleetService
 from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import ChunkFacts
 from blizzard.wire.facts import (
@@ -286,9 +286,16 @@ class FactIngestService:
             return True, None
         if kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
             # Runner-scoped and hub-read-only: an advisory fact no status derives from. Refresh-in-place
-            # (`bzh:facts-not-status`'s stated exception) — only the latest sample is of interest.
+            # per (runner_id, slug) (`bzh:facts-not-status`'s stated exception) — only each
+            # subscription's latest sample is of interest. `slug` defaults to the legacy
+            # slug for a fact somehow missing it, though every fact carries one post-#436
+            # phase 2; `name` defaults to `slug` itself for a fact predating phase 3's
+            # additive `name` field.
+            slug = fact.text("slug") or LEGACY_ANTHROPIC_SLUG
             self._fleet.record_external_usage(
                 runner_id,
+                slug=slug,
+                name=fact.text("name") or slug,
                 sampled_at=fact.instant("sampled_at", now),
                 windows_json=json.dumps(fact.get("windows", [])),
                 at=now,

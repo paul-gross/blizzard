@@ -636,7 +636,7 @@ class ExternalUsageSample(Step):
                 slug=declaration.slug, sampled_at=ctx.clock.now(), payload=None, report_kind="", report_payload=""
             )
             return
-        payload = json.dumps(self._payload(declaration.slug, snapshot))
+        payload = json.dumps(self._payload(declaration, snapshot))
         seq = ctx.stores.usage.record_external_usage_attempt(
             slug=declaration.slug,
             sampled_at=ctx.clock.now(),
@@ -653,13 +653,18 @@ class ExternalUsageSample(Step):
             )
 
     @staticmethod
-    def _payload(slug: str, snapshot: ExternalSubscriptionUsageSnapshot) -> dict[str, object]:
+    def _payload(
+        declaration: SubscriptionDeclaration, snapshot: ExternalSubscriptionUsageSnapshot
+    ) -> dict[str, object]:
         """The stable JSON shape for a sampled snapshot — both this attempt's stored
         ``payload`` and its buffered outbound report use this exact shape. ``slug``
         (blizzard#436) names which declared subscription this snapshot belongs to; a reader
-        ignorant of it still parses ``sampled_at``/``windows`` exactly as before."""
+        ignorant of it still parses ``sampled_at``/``windows`` exactly as before. ``name``
+        (blizzard#436 phase 3) is the declaration's own operator-facing label, additive
+        alongside ``slug``; a reader ignorant of it still parses the rest exactly as before."""
         return {
-            "slug": slug,
+            "slug": declaration.slug,
+            "name": declaration.name,
             "sampled_at": iso_utc(snapshot.sampled_at),
             "windows": [
                 {

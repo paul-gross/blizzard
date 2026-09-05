@@ -208,6 +208,7 @@ def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_
 
     payload = json.loads(fact.payload)
     assert payload["slug"] == _SLUG
+    assert payload["name"] == _SLUG.title()
     assert payload["sampled_at"] == "2026-08-01T12:00:00+00:00"
     assert {w["window"] for w in payload["windows"]} == {"5h", "7d"}
     five_hour = next(w for w in payload["windows"] if w["window"] == "5h")
