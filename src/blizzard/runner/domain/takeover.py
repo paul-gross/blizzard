@@ -204,8 +204,9 @@ class OpenedTakeover:
 class TakeoverService:
     """Composition-root-wired: the clock, harness, and process probe (issue #52).
 
-    Spans six concepts (takeover, environments, leases, asks, outbound, tokens), so it
-    holds the :class:`~blizzard.runner.stores.RunnerStores` bundle (D4)."""
+    Spans five concepts (takeover, asks, outbound, tokens, elicitations), so it holds the
+    :class:`~blizzard.runner.stores.RunnerStores` bundle (D4) — the chunk-keyed reads
+    (environments, leases) are resolved at the edge instead (``bzh:domain-takes-objects``)."""
 
     def __init__(
         self,
