@@ -19,7 +19,9 @@
       [chunkId]="chunkId() ?? ''"
       [status]="d.status"
       [tone]="tone()"
-      [blockedOn]="blockedOn()"
+      [pointers]="d.work_refs ?? []"
+      [blockedBy]="blockedBy()"
+      [blocking]="blocking()"
     />
   }
   @if (detail()) {

@@ -14,11 +14,61 @@
 }
 .cp-hdr {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   margin: 8px;
   padding: 0 8px;
+}
+/* The dot-joined run under the id — the same shape as the dock's own `.d-sub`
+   (chunk-detail-header.css), wrapping rather than overflowing a phone-width page. */
+.cp-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.cp-sub .iss {
+  color: var(--cyan);
+  font-size: var(--fs-sm);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+a.iss {
+  text-decoration: none;
+}
+a.iss:hover,
+a.iss:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.cp-sub .st {
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.cp-sub .sep {
+  flex: none;
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+/* A dependency edge, reaching the chunk it names — the label engraved like the
+   status beside it, the neighbor's own ref gold, the pairing every surface uses. */
+.cp-sub .edge {
+  color: var(--label);
+  white-space: nowrap;
+}
+/* Only the ref is the link — a plain underlined anchor, the same shape the fact
+   table's own edge rows use. */
+a.edge-ref {
+  color: var(--amber);
+  text-decoration: underline;
+}
+a.edge-ref:hover,
+a.edge-ref:focus-visible {
+  color: var(--amber-hi);
+  outline: none;
 }
 .cid {
   color: var(--amber);

@@ -184,3 +184,32 @@
   border-color: var(--amber);
   outline: none;
 }
+/* The blocked marking beside the status: "BLOCKED BY" carries `.st`'s own engraved
+   label style, and the prerequisite it names reads gold against it — the one part of
+   the row that identifies another chunk. `.blk-ref` is `--amber` rather than the
+   `.card-id` cyan so it does not read as this card's own id. */
+/* The separator between the status and the marking — its own flex child rather than
+   a character inside `.blk`, so the marking's own text stays exactly what it says. */
+.sep {
+  flex: none;
+  letter-spacing: 0;
+}
+.blk {
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.blk-ref {
+  color: var(--amber);
+}
+/* A count stands in for the refs it replaces, so it is weighted to read as the
+   substantive word in the phrase rather than as one more label. */
+.blk-count {
+  font-weight: bold;
+}
+/* The blocker's own status beside its ref — the row's label grey, so the ref stays the
+   thing the eye lands on. */
+.blk-state {
+  color: var(--label);
+}

@@ -20,7 +20,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.chunk_views import blocked_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.dependencies import derive_blocked_markings
+from blizzard.hub.domain.dependencies import derive_blocked_prerequisites
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.queue import ChunkNotGroupable, FoldWouldCloseCycle, QueueList
 from blizzard.hub.domain.work import Chunk
@@ -55,8 +55,8 @@ def _other_list(list_: QueueList) -> QueueList:
     return QueueList.NOT_READY if list_ is QueueList.READY else QueueList.READY
 
 
-def _blocked_markings(services: HubServices) -> dict[str, str]:
-    """Every currently-blocked dependent's marking, from one bulk facts read and one bulk
+def _blocked_markings(services: HubServices) -> dict[str, list[str]]:
+    """Every currently-blocked dependent's unmet prerequisites, from one bulk facts read and one bulk
     standing-edges read, joined here rather than inside a store (``bzh:dependency-inversion``).
     A second bulk facts pass beside the one the ordering read already drives internally
     (``ChunkRecordStore._listed_with_status``) — the reviewed plan's own D2 directs
@@ -64,7 +64,7 @@ def _blocked_markings(services: HubServices) -> dict[str, str]:
     it", both still flat in fleet size regardless."""
     facts = services.chunks.facts.load_all_facts()
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
-    return derive_blocked_markings(services.chunks.dependencies.list_standing_edges(), statuses)
+    return derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
 
 
 def _refuse(chunk_id: str, *, expected: QueueList, services: HubServices) -> HTTPException:
@@ -121,7 +121,7 @@ class ReadyQueue:
     a pure projection over already-fetched state rather than an I/O-performing property."""
 
     chunks: list[Chunk]
-    markings: dict[str, str]
+    markings: dict[str, list[str]]
 
     @classmethod
     def of(cls, services: HubServices) -> ReadyQueue:
@@ -183,7 +183,7 @@ class Backlog:
     I/O-performing property."""
 
     chunks: list[Chunk]
-    markings: dict[str, str]
+    markings: dict[str, list[str]]
 
     @classmethod
     def of(cls, services: HubServices) -> Backlog:

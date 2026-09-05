@@ -105,6 +105,9 @@ export class BoardShell {
   /** Every chunk rendered as a board card, grouped into its status column. */
   private readonly cards = computed<Map<string, BoardCard[]>>(() => {
     const grouped = new Map<string, BoardCard[]>(LANES.map((lane) => [lane.key, []]));
+    // Every chunk's status by id, so a blocked card can name its blocker's state without
+    // a second read — the blocker is itself a chunk on this board.
+    const statusById = new Map(this.chunks().map((c) => [c.chunk_id, c.status]));
     for (const chunk of this.chunks()) {
       grouped.get(STATUS_LANE[chunk.status])?.push({
         chunkId: chunk.chunk_id,
@@ -119,6 +122,13 @@ export class BoardShell {
         costPartial: chunk.cost?.cost_partial ?? false,
         completedAt: chunk.completed_at ?? null,
         blockedOn: chunk.blocked?.prerequisite_chunk_id ?? null,
+        // `unmet_count` is optional on the wire (it defaults server-side), so an older
+        // payload carrying a marking without one still counts as the one it names.
+        blockedCount: chunk.blocked ? (chunk.blocked.unmet_count ?? 1) : 0,
+        // The blocker's status comes from the board's own chunk list — every chunk on
+        // the board is in it, so no extra read, and a blocker somehow absent from it
+        // degrades to naming the ref alone.
+        blockedOnStatus: chunk.blocked ? (statusById.get(chunk.blocked.prerequisite_chunk_id) ?? null) : null,
       });
     }
     // READY is ordered rather than listed: it is a queue, so its rank comes

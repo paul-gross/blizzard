@@ -140,7 +140,6 @@ describe('Mobile chunk drill-down', () => {
       'section-work-item',
       'section-issues',
       'section-node-history',
-      'section-neighborhood',
       'section-asks',
     ]);
   });

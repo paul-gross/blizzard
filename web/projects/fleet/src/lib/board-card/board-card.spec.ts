@@ -15,6 +15,8 @@ const BASE: BoardCard = {
   costPartial: false,
   completedAt: '2026-07-13T00:00:01+00:00',
   blockedOn: null,
+  blockedCount: 0,
+  blockedOnStatus: null,
 };
 
 async function render(card: BoardCard) {
@@ -28,24 +30,6 @@ async function render(card: BoardCard) {
   return fixture.nativeElement as HTMLElement;
 }
 
-/** Render with an explicit `canControl`, returning the fixture itself (not just its
- * element) — a test that needs {@link BoardCardComponent}'s `selectChunk` output
- * subscription needs the fixture, which the module-level `render` above does not
- * expose. */
-async function renderWithControl(card: BoardCard, canControl: boolean | null) {
-  TestBed.resetTestingModule();
-  await TestBed.configureTestingModule({
-    imports: [BoardCardComponent],
-    providers: [provideZonelessChangeDetection()],
-  }).compileComponents();
-  const fixture = TestBed.createComponent(BoardCardComponent);
-  fixture.componentRef.setInput('card', card);
-  // `null`/pending resolves to `false` (hidden until confirmed) — the same convention
-  // every other board control follows; a `null` input here stands in for "pending".
-  if (canControl !== null) fixture.componentRef.setInput('canControl', canControl);
-  await fixture.whenStable();
-  return fixture;
-}
 
 describe('BoardCardComponent completion stamp (issue #173)', () => {
   it('renders the completion time on a done-lane card', async () => {
@@ -137,37 +121,72 @@ describe('BoardCardComponent work-ref chips (issue #176)', () => {
 
 describe('BoardCardComponent blocked marking (issue #461)', () => {
   it('renders nothing when the card carries no blockedOn', async () => {
-    const el = await render({ ...BASE, status: 'ready', blockedOn: null });
+    const el = await render({ ...BASE, status: 'ready', blockedOn: null, blockedCount: 0 });
 
-    expect(el.querySelector('[data-testid="chunk-blocked"]')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-blocked-by"]')).toBeNull();
   });
 
-  it('renders the marking naming the prerequisite when the card is blocked', async () => {
-    const el = await render({ ...BASE, status: 'ready', blockedOn: 'ch_01prereq00000000000000000' });
+  it('names the one prerequisite by its compact ref when exactly one is unmet', async () => {
+    const el = await render({ ...BASE, status: 'ready', blockedOn: 'ch_01prereq00000000000000000', blockedCount: 1 });
 
-    const marking = el.querySelector('[data-testid="chunk-blocked"]');
-    expect(marking).not.toBeNull();
-    expect(marking?.textContent).toContain('C-0000');
+    const marking = el.querySelector('[data-testid="chunk-blocked-by"]');
+    expect(marking?.textContent?.replace(/\s+/g, ' ').trim()).toBe('blocked by C-0000');
+  });
+
+  it("qualifies a single blocker with that blocker's own state", async () => {
+    const el = await render({
+      ...BASE,
+      status: 'ready',
+      blockedOn: 'ch_01prereq00000000000000000',
+      blockedCount: 1,
+      blockedOnStatus: 'running',
+    });
+
+    const marking = el.querySelector('[data-testid="chunk-blocked-by"]');
+    expect(marking?.textContent?.replace(/\s+/g, ' ').trim()).toBe('blocked by C-0000 (running)');
+  });
+
+  it('withholds the state when several chunks block it — a count names no single state', async () => {
+    const el = await render({
+      ...BASE,
+      status: 'ready',
+      blockedOn: 'ch_01prereq00000000000000000',
+      blockedCount: 2,
+      blockedOnStatus: 'running',
+    });
+
+    expect(el.querySelector('[data-testid="chunk-blocked-by-state"]')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-blocked-by"]')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'blocked by 2 chunks',
+    );
+  });
+
+  it('counts the prerequisites instead of naming the first when more than one is unmet', async () => {
+    const el = await render({ ...BASE, status: 'ready', blockedOn: 'ch_01prereq00000000000000000', blockedCount: 2 });
+
+    const marking = el.querySelector('[data-testid="chunk-blocked-by"]');
+    expect(marking?.textContent?.replace(/\s+/g, ' ').trim()).toBe('blocked by 2 chunks');
+    expect(marking?.textContent).not.toContain('C-0000');
+  });
+
+  it('references the prerequisite rather than reaching it — no link, no nested control', async () => {
+    const el = await render({ ...BASE, status: 'ready', blockedOn: 'ch_01prereq00000000000000000', blockedCount: 1 });
+
+    const marking = el.querySelector('[data-testid="chunk-blocked-by"]')!;
+    expect(marking.querySelector('a, button')).toBeNull();
+    expect(marking.tagName).toBe('SPAN');
   });
 
   it('keeps every other control and the status unaffected by carrying a blockedOn', async () => {
-    const el = await render({ ...BASE, status: 'running', node: 'build', blockedOn: 'ch_01prereq00000000000000000' });
+    const el = await render({
+      ...BASE,
+      status: 'running',
+      node: 'build',
+      blockedOn: 'ch_01prereq00000000000000000',
+      blockedCount: 1,
+    });
 
     expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('running');
     expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('build');
-  });
-
-  it('emits selectChunk with the prerequisite id when the marking is clicked', async () => {
-    const fixture = await renderWithControl(
-      { ...BASE, status: 'ready', blockedOn: 'ch_01prereq00000000000000000' },
-      null,
-    );
-    let emitted: string | undefined;
-    fixture.componentInstance.selectChunk.subscribe((chunkId) => (emitted = chunkId));
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="chunk-blocked"]')?.click();
-
-    expect(emitted).toBe('ch_01prereq00000000000000000');
   });
 });

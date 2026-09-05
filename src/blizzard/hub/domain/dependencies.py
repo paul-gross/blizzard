@@ -134,25 +134,36 @@ class DependencyService:
             return released
 
 
-def derive_blocked_markings(
+def derive_blocked_prerequisites(
     standing_edges: Iterable[DependencyEdge], statuses: Mapping[str, ChunkStatus]
-) -> dict[str, str]:
-    """The blocked marking per dependent chunk id — never folded into :class:`ChunkFacts` (``bzh:facts-not-status``).
-    Only a dependent read at :data:`PRE_CLAIM_STATUSES` derives one; a dependent absent from ``statuses`` reads as its
-    default ``not_ready``. ``standing_edges`` must already carry
+) -> dict[str, list[str]]:
+    """Every unmet prerequisite per dependent chunk id, in declared order — never folded into
+    :class:`ChunkFacts` (``bzh:facts-not-status``). Only a dependent read at :data:`PRE_CLAIM_STATUSES` derives
+    any; a dependent absent from ``statuses`` reads as its default ``not_ready``. ``standing_edges`` must already
+    carry
     :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.list_standing_edges`'s own order.
+    A dependent with none is absent from the result rather than carrying an empty list.
     Full rule: `blizzard-context:/domain/work/statuses.md` §The blocked marking."""
-    markings: dict[str, str] = {}
+    unmet: dict[str, list[str]] = {}
     for edge in standing_edges:
-        if edge.dependent_chunk_id in markings:
-            continue
         dependent_status = statuses.get(edge.dependent_chunk_id)
         if dependent_status is not None and dependent_status not in PRE_CLAIM_STATUSES:
             continue
         if statuses.get(edge.prerequisite_chunk_id) is ChunkStatus.DONE:
             continue
-        markings[edge.dependent_chunk_id] = edge.prerequisite_chunk_id
-    return markings
+        unmet.setdefault(edge.dependent_chunk_id, []).append(edge.prerequisite_chunk_id)
+    return unmet
+
+
+def derive_blocked_markings(
+    standing_edges: Iterable[DependencyEdge], statuses: Mapping[str, ChunkStatus]
+) -> dict[str, str]:
+    """The blocked marking per dependent chunk id — :func:`derive_blocked_prerequisites` narrowed to the one
+    prerequisite the marking names, the earliest-declared of the unmet set."""
+    return {
+        dependent: prerequisites[0]
+        for dependent, prerequisites in derive_blocked_prerequisites(standing_edges, statuses).items()
+    }
 
 
 @dataclass(frozen=True)

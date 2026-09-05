@@ -1,7 +1,36 @@
 <header class="cp-hdr">
   <span class="cid" data-testid="mobile-chunk-ref">{{ chunkId() }}</span>
-  <fleet-kit-badge [tone]="tone()" variant="soft" data-testid="mobile-chunk-status">{{ status() }}</fleet-kit-badge>
-  @if (blockedOn(); as prerequisiteId) {
-    <fleet-chunk-blocked [prerequisiteChunkId]="prerequisiteId" [linkBase]="linkBase()" [asLink]="true" />
-  }
+  <!-- The same run the dock's own identity line carries (chunk-detail-header.html):
+       the work items it serves, its status, then every dependency edge it still has,
+       each item separated by a dot rather than each wearing its own pill. -->
+  <span class="cp-sub">
+    @for (p of pointers(); track p.source + ':' + p.ref) {
+      @if (!$first) {
+        <span class="sep" aria-hidden="true">·</span>
+      }
+      @if (p.web_url) {
+        <a class="iss" data-testid="mobile-chunk-pointer" [href]="p.web_url" target="_blank" rel="noreferrer" [attr.title]="p.web_url"
+          >{{ p.label ?? p.source + '#' + p.ref }}</a
+        >
+      } @else {
+        <span class="iss" data-testid="mobile-chunk-pointer">{{ p.label ?? p.source + '#' + p.ref }}</span>
+      }
+    }
+    @if (pointers().length) {
+      <span class="sep" aria-hidden="true">·</span>
+    }
+    <span class="st" data-testid="mobile-chunk-status" [style.color]="statusColor()">{{ status() }}</span>
+    @for (id of blockedBy(); track id) {
+      <span class="sep" aria-hidden="true">·</span>
+      <span class="st edge" data-testid="mobile-chunk-blocked-by"
+        >blocked by <a class="edge-ref" [routerLink]="[...linkBase(), id]" [attr.title]="id">{{ shortId(id) }}</a></span
+      >
+    }
+    @for (id of blocking(); track id) {
+      <span class="sep" aria-hidden="true">·</span>
+      <span class="st edge" data-testid="mobile-chunk-blocking"
+        >blocking <a class="edge-ref" [routerLink]="[...linkBase(), id]" [attr.title]="id">{{ shortId(id) }}</a></span
+      >
+    }
+  </span>
 </header>

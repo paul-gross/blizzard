@@ -682,14 +682,37 @@ describe('BoardShell', () => {
       const fixture = await render([blocked]);
       const el = fixture.nativeElement as HTMLElement;
 
-      expect(el.querySelector('[data-testid="chunk-blocked"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="chunk-blocked-by"]')?.textContent).toContain('C-0000');
+    });
+
+    it("names the blocker's own state, read off the board's own chunk list", async () => {
+      const prerequisite: ChunkSummary = { ...READY('prereq0000000000000000'), status: 'running' };
+      const blocked: ChunkSummary = {
+        ...READY('blocked00000000000000'),
+        blocked: { prerequisite_chunk_id: prerequisite.chunk_id, unmet_count: 1 },
+      };
+      const fixture = await render([blocked, prerequisite]);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="chunk-blocked-by"]')?.textContent).toContain('(running)');
+    });
+
+    it("carries the wire's unmet count onto the card, which counts rather than names", async () => {
+      const blocked: ChunkSummary = {
+        ...READY('blocked00000000000000'),
+        blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000', unmet_count: 3 },
+      };
+      const fixture = await render([blocked]);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="chunk-blocked-by"]')?.textContent).toContain('3 chunks');
     });
 
     it('renders no marking for a chunk carrying none', async () => {
       const fixture = await render([READY('plain0000000000000000')]);
       const el = fixture.nativeElement as HTMLElement;
 
-      expect(el.querySelector('[data-testid="chunk-blocked"]')).toBeNull();
+      expect(el.querySelector('[data-testid="chunk-blocked-by"]')).toBeNull();
     });
   });
 });

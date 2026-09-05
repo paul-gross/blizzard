@@ -27,7 +27,7 @@ from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable
-from blizzard.hub.domain.dependencies import ChunkNeighbor, derive_blocked_markings, derive_chunk_neighborhood
+from blizzard.hub.domain.dependencies import ChunkNeighbor, derive_blocked_prerequisites, derive_chunk_neighborhood
 from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.edit import (
     ChunkAlreadyMoved,
@@ -152,7 +152,7 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
     # The dependency edges join the same bulk facts pass at this call site rather than
     # inside a store (``bzh:dependency-inversion``, issue #457, D2).
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
-    markings = derive_blocked_markings(services.chunks.dependencies.list_standing_edges(), statuses)
+    markings = derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
     return [
         ChunkView.injected(
             services,
@@ -190,7 +190,7 @@ def _dependency_views_for_chunk(
         if neighbor_facts is not None:
             statuses[neighbor_id] = neighbor_facts.status()
     dependent_edges = [e for e in edges if e.dependent_chunk_id == chunk_id]
-    blocked = blocked_view(derive_blocked_markings(dependent_edges, statuses).get(chunk_id))
+    blocked = blocked_view(derive_blocked_prerequisites(dependent_edges, statuses).get(chunk_id))
     neighborhood = derive_chunk_neighborhood(chunk_id, edges, statuses)
     return blocked, ChunkNeighborhoodView(
         prerequisites=[_neighbor_view(n) for n in neighborhood.prerequisites],

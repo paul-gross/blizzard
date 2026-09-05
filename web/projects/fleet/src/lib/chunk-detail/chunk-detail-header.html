@@ -15,6 +15,9 @@
            cards stay plain click targets, so the anchor lives on this view only.
            No web_url (unconfigured source) degrades to plain text, no broken link. -->
       @for (p of pointers(); track p.source + ':' + p.ref) {
+        @if (!$first) {
+          <span class="sep" aria-hidden="true">·</span>
+        }
         @if (p.web_url) {
           <a
             class="iss"
@@ -28,9 +31,26 @@
           <span class="iss" data-testid="detail-pointer">{{ p.label ?? p.source + '#' + p.ref }}</span>
         }
       }
+      @if (pointers().length) {
+        <span class="sep" aria-hidden="true">·</span>
+      }
       <span class="st" data-testid="detail-status">{{ detail().status }}</span>
-      @if (blockedOn(); as prerequisiteId) {
-        <fleet-chunk-blocked [prerequisiteChunkId]="prerequisiteId" (selectChunk)="selectChunk.emit($event)" />
+      <!-- Every unmet prerequisite, then every chunk this one still holds up — the
+           whole edge set the line can name, not one representative of it. Plain text
+           like the pointers beside them: the dependency lists in the column below own
+           reaching a neighbor, and a second target in this line would compete with the
+           chunk id's own link. -->
+      @for (id of blockedBy(); track id) {
+        <span class="sep" aria-hidden="true">·</span>
+        <span class="st edge" data-testid="detail-blocked-by"
+          >blocked by <a class="edge-ref" [routerLink]="[...linkBase(), id]" [title]="id">{{ shortId(id) }}</a></span
+        >
+      }
+      @for (id of blocking(); track id) {
+        <span class="sep" aria-hidden="true">·</span>
+        <span class="st edge" data-testid="detail-blocking"
+          >blocking <a class="edge-ref" [routerLink]="[...linkBase(), id]" [title]="id">{{ shortId(id) }}</a></span
+        >
       }
     </span>
   </div>

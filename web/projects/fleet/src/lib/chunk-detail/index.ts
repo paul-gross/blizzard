@@ -11,7 +11,6 @@ export { ChunkAwaitingHuman } from './chunk-awaiting-human';
 export { ChunkFacts } from './chunk-facts';
 export type { EditGraphEvent } from './chunk-facts';
 export { ChunkIssuePane } from './chunk-issue-pane';
-export { ChunkNeighborhood } from './chunk-neighborhood';
 export { deriveWorkItemsState } from './work-items-state';
 export type { WorkItemsState, WorkItemsQuery } from './work-items-state';
 export { ChunkTimeline } from './chunk-timeline';

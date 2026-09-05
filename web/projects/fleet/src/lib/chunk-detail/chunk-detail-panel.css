@@ -53,8 +53,9 @@
   margin: 6px;
   flex: none;
 }
-/* Three columns of roughly equal weight: the work item, the path the chunk took,
-   and what that produced (plus anything it is waiting on a human for). */
+/* Three columns of roughly equal weight: the work item (its facts, the dependency
+   edges either way, and the issue body), the path the chunk took, and what that
+   produced. */
 .d-body {
   flex: 1;
   min-height: 0;
@@ -74,8 +75,7 @@
 /* The node-history and artifacts sections now pad their own host
    (chunk-timeline.ts, chunk-artifacts.ts) — a plain `.d-sec` here would
    double that padding. The work-item section keeps `.d-sec`'s padding for its
-   siblings (ChunkAwaitingHuman, ChunkIssuePane), which supply none of their
-   own; ChunkFacts now pads itself too (`chunk-facts.css`'s `--chunk-facts-pad`)
+   siblings (ChunkAwaitingHuman, ChunkIssuePane), which supply none of their own; ChunkFacts now pads itself too (`chunk-facts.css`'s `--chunk-facts-pad`)
    for its other consumer (the general tab's unpadded panel body), so it is
    zeroed out here to keep this column's existing rhythm rather than double it. */
 .d-sec--flush {

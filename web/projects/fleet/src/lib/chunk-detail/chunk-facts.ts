@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import type { ChunkDetail, RouteView } from '../api/hub';
+import type { ChunkDetail, ChunkNeighborView, RouteView } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { KitButton } from '../kit/kit-button';
 import { formatUtcYmd } from '../when';
@@ -58,6 +58,12 @@ export class ChunkFacts {
    * convention, for the same cross-app reason). */
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
+  /** The chunk detail route's own path segments, before a neighbor's chunk id — the
+   * Depends on / Blocks rows link each neighbor there. Non-nullable with a default, the
+   * same shape `ChunkDetailHeader.linkBase` carries: unlike `/graphs` both apps have
+   * this route. */
+  readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
+
   /** Emitted when the operator sets a not-ready chunk's graph (issue #27). No
    * confirm — repinning either before the chunk has run costs nothing to undo. */
   readonly editGraph = output<EditGraphEvent>();
@@ -105,6 +111,31 @@ export class ChunkFacts {
     const unclaimed = detail.status === 'not_ready' || detail.status === 'ready';
     return unclaimed && !detail.current_node_id;
   });
+
+  /** The chunk's standing dependency edges, each direction its own fact row — the
+   * fact table is where they read best: one shared label column, so the neighbors line
+   * up under the same right-hand edge as Status, Node, and Graph rather than sitting in
+   * a block of their own with its own alignment. A direction with no edges renders no
+   * row at all, the same way Model's retired row simply is not there. */
+  protected readonly prerequisites = computed<readonly ChunkNeighborView[]>(
+    () => this.detail().neighborhood?.prerequisites ?? [],
+  );
+
+  protected readonly dependents = computed<readonly ChunkNeighborView[]>(
+    () => this.detail().neighborhood?.dependents ?? [],
+  );
+
+  /** A neighbor's compact ref — every surface that names an entity compactly resolves
+   * through {@link compactRef} (`compact-ref.ts`). */
+  protected shortId(chunkId: string): string {
+    return compactRef(chunkId);
+  }
+
+  /** The neighbor's own derived status, or `unknown` for the residual race a neighbor's
+   * facts fail to resolve (`status: null`). */
+  protected statusLabel(neighbor: ChunkNeighborView): string {
+    return neighbor.status ?? 'unknown';
+  }
 
   /** Emit a graph repin — no-op on a blank id (issue #27). */
   protected submitGraph(graphId: string): void {

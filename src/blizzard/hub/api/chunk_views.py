@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Final
@@ -51,12 +52,17 @@ class _RouteNotInjected(Enum):
 _ROUTE_NOT_INJECTED: Final = _RouteNotInjected.TOKEN
 
 
-def blocked_view(prerequisite_chunk_id: str | None) -> BlockedView | None:
+def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedView | None:
     """A derived marking's wire wrapping (issue #457) — the one home every caller of
-    :func:`~blizzard.hub.domain.dependencies.derive_blocked_markings` reaches through,
+    :func:`~blizzard.hub.domain.dependencies.derive_blocked_prerequisites` reaches through,
     listing routes and ``ChunkView`` alike (review round 1 F6), rather than each
-    re-declaring the same ``str | None -> BlockedView | None`` wrap."""
-    return BlockedView(prerequisite_chunk_id=prerequisite_chunk_id) if prerequisite_chunk_id is not None else None
+    re-declaring the same wrap. Takes the dependent's whole unmet set, in declared order:
+    the marking names its first and counts them all. An absent or empty set is no marking."""
+    if not unmet_prerequisite_chunk_ids:
+        return None
+    return BlockedView(
+        prerequisite_chunk_id=unmet_prerequisite_chunk_ids[0], unmet_count=len(unmet_prerequisite_chunk_ids)
+    )
 
 
 @dataclass(frozen=True)

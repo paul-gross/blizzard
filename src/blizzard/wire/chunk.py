@@ -401,9 +401,12 @@ class BlockedView(BaseModel):
     ``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.
     Carried beside ``status``, never a status of its own; names the immediate prerequisite only, with
     no transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at
-    once, names the earliest-declared one."""
+    once, ``prerequisite_chunk_id`` names the earliest-declared one and ``unmet_count`` says how many
+    there are in total, so a surface too narrow to list them can say *how many* instead of naming one
+    and silently dropping the rest. Never below 1: the marking is absent when nothing is unmet."""
 
     prerequisite_chunk_id: str
+    unmet_count: int = 1
 
 
 class ChunkNeighborView(BaseModel):

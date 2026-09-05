@@ -96,6 +96,8 @@ const CARD: BoardCard = {
   costPartial: false,
   completedAt: null,
   blockedOn: null,
+  blockedCount: 0,
+  blockedOnStatus: null,
 };
 
 describe('board-card hover/selection tint shell sweep (web:shell-sweep)', () => {

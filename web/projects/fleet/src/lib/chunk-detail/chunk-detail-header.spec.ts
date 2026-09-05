@@ -452,43 +452,72 @@ describe('ChunkDetailHeader', () => {
     confirmSpy.mockRestore();
   });
 
-  it('renders no blocked marking for a chunk carrying none', async () => {
+  it('names no edge on the identity line for a chunk carrying none', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="chunk-blocked"]')).toBeNull();
+    expect(el.querySelector('[data-testid="detail-blocked-by"]')).toBeNull();
+    expect(el.querySelector('[data-testid="detail-blocking"]')).toBeNull();
   });
 
-  it('renders the blocked marking naming the prerequisite beside the status', async () => {
+  it('names every unmet prerequisite and every chunk it still blocks, beside the status', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', {
       ...ISSUE_DETAIL,
-      blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000' },
+      neighborhood: {
+        prerequisites: [
+          { chunk_id: 'ch_01prereq00000000000000aaa', status: 'ready', satisfied: false },
+          { chunk_id: 'ch_01prereq00000000000000bbb', status: 'running', satisfied: false },
+        ],
+        dependents: [{ chunk_id: 'ch_01dependent0000000000ccc', status: 'not_ready', satisfied: false }],
+      },
     });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const marking = el.querySelector('[data-testid="chunk-blocked"]');
-    expect(marking).not.toBeNull();
+    const blockedBy = [...el.querySelectorAll('[data-testid="detail-blocked-by"]')].map((n) =>
+      n.textContent?.replace(/\s+/g, ' ').trim(),
+    );
+    const blocking = [...el.querySelectorAll('[data-testid="detail-blocking"]')].map((n) =>
+      n.textContent?.replace(/\s+/g, ' ').trim(),
+    );
+    expect(blockedBy).toEqual(['blocked by C-0aaa', 'blocked by C-0bbb']);
+    expect(blocking).toEqual(['blocking C-0ccc']);
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('running');
   });
 
-  it('emits selectChunk with the prerequisite id when the marking is clicked', async () => {
+  it('leaves a satisfied edge off the line — it blocks nothing', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', {
       ...ISSUE_DETAIL,
-      blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000' },
+      neighborhood: {
+        prerequisites: [{ chunk_id: 'ch_01prereq00000000000000aaa', status: 'done', satisfied: true }],
+        dependents: [],
+      },
     });
-    let emitted: string | undefined;
-    fixture.componentInstance.selectChunk.subscribe((chunkId) => (emitted = chunkId));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="chunk-blocked"]')?.click();
+    expect(el.querySelector('[data-testid="detail-blocked-by"]')).toBeNull();
+  });
 
-    expect(emitted).toBe('ch_01prereq00000000000000000');
+  it('separates every item on the identity line with a dot', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', {
+      ...ISSUE_DETAIL,
+      neighborhood: {
+        prerequisites: [{ chunk_id: 'ch_01prereq00000000000000aaa', status: 'ready', satisfied: false }],
+        dependents: [],
+      },
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // One pointer, the status, one edge — two gaps between the three, so two dots.
+    expect(el.querySelectorAll('[data-testid="detail-pointer"]')).toHaveLength(1);
+    expect(el.querySelectorAll('.d-sub .sep')).toHaveLength(2);
   });
 
   it('offers declare/release with chunk:control, withholds both without it', async () => {

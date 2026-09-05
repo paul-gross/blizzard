@@ -65,6 +65,30 @@ a.iss:focus-visible {
   text-transform: uppercase;
   white-space: nowrap;
 }
+/* The dot between adjacent items on the identity line — its own child rather than a
+   pseudo-element on each item, so it never lands inside a pointer's anchor and become
+   part of that link's own click target. */
+.d-sub .sep {
+  flex: none;
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+/* A dependency edge named on the line: the label carries `.st`'s engraved style and the
+   neighbor it names reads gold, the same pairing the board card's own marking uses. */
+.d-sub .edge {
+  white-space: nowrap;
+}
+/* Only the ref is the link, and it reads as one — a plain underlined anchor, the same
+   shape the fact table's own edge rows use. */
+a.edge-ref {
+  color: var(--amber);
+  text-decoration: underline;
+}
+a.edge-ref:hover,
+a.edge-ref:focus-visible {
+  color: var(--amber-hi);
+  outline: none;
+}
 .d-meta {
   display: flex;
   flex-wrap: wrap;

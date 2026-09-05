@@ -79,3 +79,27 @@
   outline: 1px solid var(--cyan);
   outline-offset: 0;
 }
+/* One edge per line inside its fact cell — a wrapped run of chips made two neighbors
+   read as one string of text. */
+.edge {
+  display: block;
+}
+/* Only the ref is the link, and it reads as one: a plain underlined anchor in the same
+   gold every surface names a chunk in. The status beside it is the row's own amber
+   text, not part of the target. */
+.edge-ref {
+  color: var(--amber);
+  text-decoration: underline;
+}
+.edge-ref:hover,
+.edge-ref:focus-visible {
+  color: var(--amber-hi);
+  outline: none;
+}
+.edge-status {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-left: 6px;
+}

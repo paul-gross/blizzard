@@ -41,10 +41,6 @@
       />
       <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
     </section>
-    <section class="d-sec" aria-label="Dependencies">
-      <div class="s-head"><span class="tag">Dependencies</span></div>
-      <fleet-chunk-neighborhood [detail]="detail()" (selectChunk)="selectChunk.emit($event)" />
-    </section>
     <section class="d-sec d-sec--flush" aria-labelledby="chunk-timeline-heading">
       <fleet-chunk-detail-timeline [detail]="detail()" [graphLinkBase]="graphLinkBase()" />
     </section>

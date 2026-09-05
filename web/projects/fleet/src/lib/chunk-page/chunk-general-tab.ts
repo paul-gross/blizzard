@@ -6,7 +6,6 @@ import {
   ChunkAwaitingHuman,
   ChunkFacts,
   ChunkIssuePane,
-  ChunkNeighborhood,
   ChunkTimeline,
   ChunkTokenBreakdown,
   type EditGraphEvent,
@@ -23,12 +22,12 @@ import { KitPanel } from '../kit/kit-panel';
  *
  * Every section is the same `fleet` presentational sibling the desktop dock
  * composes (`bzh:frontend-kit`) — {@link ChunkFacts} + {@link ChunkTokenBreakdown},
- * {@link ChunkIssuePane}, {@link ChunkNeighborhood}, {@link ChunkTimeline},
+ * {@link ChunkIssuePane}, {@link ChunkTimeline},
  * {@link ChunkAwaitingHuman} — this component only picks the arrangement: a
- * two-column grid at ≥720px (blizzard#203) — work item and issues stacked in
- * the left column, node history beside them spanning both rows, dependencies
- * and asks · decisions each spanning the full width below (issue #462 D7) —
- * collapsing to one stacked column, DOM order, below it.
+ * two-column grid at ≥720px (blizzard#203) — work item (its facts and, when the
+ * chunk has any, its dependency edges either way) and issues stacked in the left
+ * column, node history beside them spanning both rows, asks · decisions spanning
+ * the full width below — collapsing to one stacked column, DOM order, below it.
  *
  * Presentational only, `bzh:frontend-container-presentational`: inputs in,
  * the three operator-action outputs plus {@link pickStep} back out, no
@@ -44,7 +43,7 @@ import { KitPanel } from '../kit/kit-panel';
 @Component({
   selector: 'fleet-chunk-general-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkNeighborhood, ChunkTimeline, ChunkTokenBreakdown, KitPanel],
+  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, KitPanel],
   templateUrl: './chunk-general-tab.html',
   styleUrl: './chunk-general-tab.css',
 })
@@ -93,4 +92,5 @@ export class ChunkGeneralTab {
   readonly pickStep = output<string | null>();
 
   protected readonly pointerCount = computed(() => this.detail().work_refs?.length ?? 0);
+
 }

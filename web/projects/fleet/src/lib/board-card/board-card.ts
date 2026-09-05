@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import type { ChunkStatus } from '../api/hub';
-import { ChunkBlocked } from '../chunk-blocked';
 import { STATUS_LANE } from '../chunk-lanes';
+import { compactRef } from '../compact-ref';
 import { formatCost } from '../cost-format';
 import { FleetWhen } from '../when-display';
 
@@ -33,6 +33,15 @@ export interface BoardCard {
    * for every card outside `not_ready`/`ready` (`blizzard-context:/domain/work/statuses.md`),
    * and for one inside it with no standing edge. Names the immediate prerequisite only. */
   readonly blockedOn: string | null;
+  /** How many prerequisites are unmet in total, from `BlockedView.unmet_count` — 0 whenever
+   * {@link blockedOn} is null. Above 1 the card counts them rather than naming the first and
+   * silently dropping the rest; there is no room on a card for a list. */
+  readonly blockedCount: number;
+  /** The blocking chunk's own derived status, when exactly one chunk blocks this one —
+   * null otherwise (nothing blocking, several blocking, or the blocker absent from the
+   * board's own chunk list). Read off the board's existing chunk list, not the wire:
+   * `BlockedView` names the prerequisite but not its status. */
+  readonly blockedOnStatus: ChunkStatus | null;
 }
 
 /**
@@ -66,7 +75,7 @@ export interface BoardCard {
 @Component({
   selector: 'fleet-board-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkBlocked, FleetWhen],
+  imports: [FleetWhen],
   templateUrl: './board-card.html',
   styleUrl: './board-card.css',
 })
@@ -106,5 +115,19 @@ export class BoardCardComponent {
    * so it's replaced rather than shown alongside. */
   protected nodeLabel(card: BoardCard): string {
     return card.status === 'stopped' ? 'stopped' : card.node;
+  }
+
+  /** What the blocked marking names, beside the status: the one unmet prerequisite's compact
+   * ref, or a count once there is more than one. A card has no room to list them, and naming
+   * only the first would read as the whole answer. */
+  protected blockedLabel(card: BoardCard): string {
+    return card.blockedCount > 1 ? `${card.blockedCount} chunks` : compactRef(card.blockedOn ?? '');
+  }
+
+  /** The blocker's own status, parenthesised beside its ref — only when exactly one
+   * chunk blocks this one. A count ("2 chunks") names no single chunk, so there is no
+   * one status to qualify it with. */
+  protected blockedOnStatus(card: BoardCard): string | null {
+    return card.blockedCount === 1 ? card.blockedOnStatus : null;
   }
 }

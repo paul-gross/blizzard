@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, input, output, si
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, ChunkStatus, PauseView, WorkRefView, RouteView } from '../api/hub';
-import { ChunkBlocked } from '../chunk-blocked';
+import { compactRef } from '../compact-ref';
 import { KitButton } from '../kit/kit-button';
 import { KitTextInput } from '../kit/kit-text-input';
 
@@ -77,7 +77,7 @@ export interface DependencyEvent {
 @Component({
   selector: 'fleet-chunk-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkBlocked, KitButton, KitTextInput, RouterLink],
+  imports: [KitButton, KitTextInput, RouterLink],
   templateUrl: './chunk-detail-header.html',
   styleUrl: './chunk-detail-header.css',
 })
@@ -163,8 +163,29 @@ export class ChunkDetailHeader {
   protected readonly deletable = computed<boolean>(() => UNACQUIRED_STATUSES.has(this.detail().status));
 
   /** The unmet prerequisite's chunk id, from `ChunkDetail.blocked` (issue #461) — null
-   * when the chunk carries no marking. */
+   * when the chunk carries no marking. Still the declare/release field's prefill; the
+   * header line itself names {@link blockedBy}'s whole set rather than this one. */
   protected readonly blockedOn = computed<string | null>(() => this.detail().blocked?.prerequisite_chunk_id ?? null);
+
+  /** Every prerequisite this chunk still waits on — `neighborhood.prerequisites` minus
+   * the satisfied ones, which by definition block nothing. Unlike `blocked`, which names
+   * one representative, this is the whole set the header line spells out. */
+  protected readonly blockedBy = computed<readonly string[]>(() =>
+    (this.detail().neighborhood?.prerequisites ?? []).filter((n) => !n.satisfied).map((n) => n.chunk_id),
+  );
+
+  /** Every chunk this one still holds up — `neighborhood.dependents` minus the satisfied
+   * ones. A dependent edge's `satisfied` tracks the *subject* chunk (D4), so a done chunk
+   * correctly reports blocking nothing. */
+  protected readonly blocking = computed<readonly string[]>(() =>
+    (this.detail().neighborhood?.dependents ?? []).filter((n) => !n.satisfied).map((n) => n.chunk_id),
+  );
+
+  /** A neighbor's compact ref — every surface that names an entity compactly resolves
+   * through {@link compactRef} (`compact-ref.ts`). */
+  protected shortId(chunkId: string): string {
+    return compactRef(chunkId);
+  }
 
   /** Whether Declare has anything the hub would accept (issue #461) — mirrors the hub
    * dependency service's own `PRE_CLAIM_STATUSES` check so the dock never offers a

@@ -34,6 +34,19 @@
       @if (!isDoneLane(card().status)) {
         <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
       }
+      <!-- The blocked marking (issue #461) reads beside the status, in the status's own
+           engraved style, and names its prerequisite rather than reaching it: a card is
+           already one button that opens this chunk, and a second target inside that row
+           competes with it. The dock and the chunk page own the navigable version. -->
+      @if (card().blockedOn) {
+        <span class="st sep" aria-hidden="true">·</span>
+        <span class="st blk" data-testid="chunk-blocked-by" [title]="card().blockedOn">
+          blocked by <span class="blk-ref" [class.blk-count]="card().blockedCount > 1">{{ blockedLabel(card()) }}</span
+          >@if (blockedOnStatus(card()); as blockerStatus) {
+            <span class="blk-state" data-testid="chunk-blocked-by-state"> ({{ blockerStatus }})</span>
+          }
+        </span>
+      }
       <!-- Pushed to the row's end via margin-left: auto rather than the row's
            own justify-content, so it lands right-aligned whether it's carrying
            one child or two (issue #215) instead of drifting to a centered gap
@@ -50,17 +63,6 @@
       </span>
     </span>
   </button>
-  <!-- The blocked marking (issue #461) sits outside the open button on purpose:
-       `.card-open` is one button spanning the whole identity/status area, and a
-       nested interactive element inside it is invalid HTML — the same reason the
-       pointer labels above stay plain text. Clicking it selects the prerequisite
-       into the dock, the same one-hop move a card click already does. -->
-  @if (card().blockedOn; as prerequisiteId) {
-    <fleet-chunk-blocked
-      [prerequisiteChunkId]="prerequisiteId"
-      (selectChunk)="selectChunk.emit($event)"
-    />
-  }
   <!-- The card's control row: Promote (not_ready only) is its one occupant now
        that Delete moved to the chunk detail dock's header, where it no longer
        eats into the card's own space. -->

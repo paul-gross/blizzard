@@ -50,7 +50,6 @@ describe('ChunkGeneralTab', () => {
       'section-work-item',
       'section-issues',
       'section-node-history',
-      'section-neighborhood',
       'section-asks',
     ]);
     expect(el.querySelector('[data-testid="issue-body"]')?.textContent).toContain('reproduces under load');

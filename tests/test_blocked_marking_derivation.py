@@ -15,6 +15,7 @@ from blizzard.hub.domain.dependencies import (
     ChunkNeighbor,
     ChunkNeighborhood,
     derive_blocked_markings,
+    derive_blocked_prerequisites,
     derive_chunk_neighborhood,
 )
 from blizzard.hub.domain.work import DependencyEdge
@@ -72,6 +73,34 @@ def test_earliest_declared_unmet_prerequisite_is_named_and_only_it() -> None:
     statuses = {"chk_first": ChunkStatus.NOT_READY, "chk_second": ChunkStatus.NOT_READY}
 
     assert derive_blocked_markings(edges, statuses) == {"chk_a": "chk_first"}
+
+
+def test_every_unmet_prerequisite_is_carried_in_declared_order() -> None:
+    """The marking names one prerequisite; the set behind it is what a surface too narrow to
+    list them counts instead ("blocked by 2 chunks"), so the whole set is derived, in order."""
+    edges = [
+        _edge("dep_1", "chk_a", "chk_first", declared_at=_T0),
+        _edge("dep_2", "chk_a", "chk_second", declared_at=_T0),
+    ]
+    statuses = {"chk_first": ChunkStatus.NOT_READY, "chk_second": ChunkStatus.NOT_READY}
+
+    assert derive_blocked_prerequisites(edges, statuses) == {"chk_a": ["chk_first", "chk_second"]}
+
+
+def test_a_met_prerequisite_is_left_out_of_the_unmet_set() -> None:
+    edges = [
+        _edge("dep_1", "chk_a", "chk_first", declared_at=_T0),
+        _edge("dep_2", "chk_a", "chk_second", declared_at=_T0),
+    ]
+    statuses = {"chk_first": ChunkStatus.DONE, "chk_second": ChunkStatus.NOT_READY}
+
+    assert derive_blocked_prerequisites(edges, statuses) == {"chk_a": ["chk_second"]}
+
+
+def test_a_dependent_with_nothing_unmet_is_absent_rather_than_carrying_an_empty_set() -> None:
+    edges = [_edge("dep_1", "chk_a", "chk_b")]
+
+    assert derive_blocked_prerequisites(edges, {"chk_b": ChunkStatus.DONE}) == {}
 
 
 def test_a_met_earlier_edge_falls_through_to_a_later_unmet_one() -> None:

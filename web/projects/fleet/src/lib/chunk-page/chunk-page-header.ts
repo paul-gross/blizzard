@@ -1,7 +1,9 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
-import { ChunkBlocked } from '../chunk-blocked';
-import { KitBadge } from '../kit/kit-badge';
+import type { WorkRefView } from '../api/hub';
+import { compactRef } from '../compact-ref';
+import { toneColor } from '../kit/kit-badge';
 import type { Tone } from '../kit/tone';
 
 /**
@@ -26,7 +28,7 @@ import type { Tone } from '../kit/tone';
 @Component({
   selector: 'fleet-chunk-page-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkBlocked, KitBadge],
+  imports: [RouterLink],
   templateUrl: './chunk-page-header.html',
   styleUrl: './chunk-page-header.css',
 })
@@ -37,16 +39,33 @@ export class ChunkPageHeader {
   /** The chunk's current status, rendered verbatim on the badge. */
   readonly status = input.required<string>();
 
-  /** The derived {@link Tone} the badge colors by — each caller's own
+  /** The derived {@link Tone} the status text colors by — each caller's own
    * `STATUS_TONE`/`deriveMachineChunkStatus` fold (`bzh:frontend-formatters`). */
   readonly tone = input.required<Tone>();
 
-  /** The unmet prerequisite's chunk id, from `ChunkDetail.blocked` (issue #461) — null
-   * when the chunk carries no marking. */
-  readonly blockedOn = input<string | null>(null);
+  /** The work items this chunk serves, rendered first on the line — the same pointers
+   * the dock's own identity line leads with. */
+  readonly pointers = input<readonly WorkRefView[]>([]);
+
+  /** Every prerequisite this chunk still waits on, as chunk ids — the whole set, not
+   * `blocked`'s one representative. */
+  readonly blockedBy = input<readonly string[]>([]);
+
+  /** Every chunk this one still holds up, as chunk ids. */
+  readonly blocking = input<readonly string[]>([]);
 
   /** The chunk detail route's own path segments, before the chunk id — this routed
    * page has no dock to select a chunk into, so its own blocked marking navigates
    * instead ({@link ChunkDetailHeader}'s own `linkBase` follows the same convention). */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
+
+  /** The status text's own color, resolved off {@link tone} — the badge's color ladder
+   * kept now that the badge itself is gone (`kit-badge.ts` owns the mapping). */
+  protected readonly statusColor = computed<string>(() => toneColor(this.tone()));
+
+  /** A neighbor's compact ref — every surface that names an entity compactly resolves
+   * through {@link compactRef} (`compact-ref.ts`). */
+  protected shortId(chunkId: string): string {
+    return compactRef(chunkId);
+  }
 }

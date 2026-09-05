@@ -67,9 +67,9 @@ def test_list_and_detail_carry_the_marking_beside_an_unchanged_status(tmp_path: 
     detail = _detail(hub, dependent_id)
 
     assert summary["status"] == "ready"
-    assert summary["blocked"] == {"prerequisite_chunk_id": prerequisite_id}
+    assert summary["blocked"] == {"prerequisite_chunk_id": prerequisite_id, "unmet_count": 1}
     assert detail["status"] == "ready"
-    assert detail["blocked"] == {"prerequisite_chunk_id": prerequisite_id}
+    assert detail["blocked"] == {"prerequisite_chunk_id": prerequisite_id, "unmet_count": 1}
 
 
 def test_unblocked_chunks_carry_no_marking(tmp_path: Path) -> None:
@@ -97,7 +97,7 @@ def test_queue_and_backlog_entries_carry_the_marking_and_keep_their_rank(tmp_pat
     assert entries[dependent_id]["position"] == 1
     assert entries[prerequisite_id]["position"] == 2
     assert entries[first_id]["blocked"] is None
-    assert entries[dependent_id]["blocked"] == {"prerequisite_chunk_id": prerequisite_id}
+    assert entries[dependent_id]["blocked"] == {"prerequisite_chunk_id": prerequisite_id, "unmet_count": 1}
     assert entries[prerequisite_id]["blocked"] is None
 
 
@@ -109,7 +109,7 @@ def test_backlog_entries_carry_the_marking(tmp_path: Path) -> None:
 
     entry = _backlog_entry(hub, dependent_id)
 
-    assert entry["blocked"] == {"prerequisite_chunk_id": prerequisite_id}
+    assert entry["blocked"] == {"prerequisite_chunk_id": prerequisite_id, "unmet_count": 1}
 
 
 def test_marking_clears_once_the_prerequisite_completes(tmp_path: Path) -> None:
@@ -147,8 +147,8 @@ def test_a_blocked_prerequisite_is_named_without_walking_its_own_chain(tmp_path:
     _declare(hub, chunk_a, chunk_b)
     _declare(hub, chunk_b, chunk_c)
 
-    assert _list_entry(hub, chunk_a)["blocked"] == {"prerequisite_chunk_id": chunk_b}
-    assert _list_entry(hub, chunk_b)["blocked"] == {"prerequisite_chunk_id": chunk_c}
+    assert _list_entry(hub, chunk_a)["blocked"] == {"prerequisite_chunk_id": chunk_b, "unmet_count": 1}
+    assert _list_entry(hub, chunk_b)["blocked"] == {"prerequisite_chunk_id": chunk_c, "unmet_count": 1}
 
 
 def test_grouping_deletion_and_the_pre_claim_edit_still_admit_a_blocked_chunk(tmp_path: Path) -> None:
@@ -227,7 +227,7 @@ def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path:
     resp = hub.client.get(f"/api/chunks/{dependent_id}")
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["blocked"] == {"prerequisite_chunk_id": prerequisite_id}
+    assert resp.json()["blocked"] == {"prerequisite_chunk_id": prerequisite_id, "unmet_count": 1}
     assert counting.load_all_facts_calls == 0
     # the dependent's own facts, and the one shared read of its one prerequisite's facts.
     assert counting.load_facts_calls == 2

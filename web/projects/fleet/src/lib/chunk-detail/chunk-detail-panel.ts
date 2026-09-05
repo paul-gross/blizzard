@@ -10,7 +10,6 @@ import {
 import { ChunkDetailHeader, type DependencyEvent } from './chunk-detail-header';
 import { ChunkFacts, type EditGraphEvent } from './chunk-facts';
 import { ChunkIssuePane } from './chunk-issue-pane';
-import { ChunkNeighborhood } from './chunk-neighborhood';
 import { ChunkTimeline } from './chunk-timeline';
 import { ChunkTokenBreakdown } from './chunk-token-breakdown';
 import type { WorkItemsState } from './work-items-state';
@@ -56,7 +55,6 @@ export type { EditGraphEvent } from './chunk-facts';
     ChunkFacts,
     ChunkTokenBreakdown,
     ChunkIssuePane,
-    ChunkNeighborhood,
     ChunkTimeline,
     ChunkAwaitingHuman,
     ChunkArtifacts,
@@ -106,9 +104,8 @@ export class ChunkDetailPanel {
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
-  /** Emitted with a chunk id when the blocked marking's or a neighbor's dock-select
-   * button is clicked (issue #461, #462) — forwarded up unchanged from
-   * {@link ChunkDetailHeader} and {@link ChunkNeighborhood} alike. */
+  /** Emitted with a chunk id when the blocked marking's dock-select button is clicked (issue #461, #462) — forwarded up unchanged from
+   * — {@link ChunkDetailHeader}'s. */
   readonly selectChunk = output<string>();
 
   /** Emitted when the operator answers an open question (MVP criterion 7). */
@@ -149,4 +146,5 @@ export class ChunkDetailPanel {
   /** The chunk's work ref count — legible before the forge read lands, for the
    * work-item column's own heading. */
   protected readonly pointerCount = computed<number>(() => this.detail().work_refs?.length ?? 0);
+
 }

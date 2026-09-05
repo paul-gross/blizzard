@@ -204,7 +204,16 @@ export class ChunkPage {
   protected readonly workItems = computed<WorkItemsState>(() => deriveWorkItemsState(this.workItemsQuery));
 
   protected readonly tone = computed(() => STATUS_TONE[this.detail()?.status ?? 'ready']);
-  protected readonly blockedOn = computed(() => this.detail()?.blocked?.prerequisite_chunk_id ?? null);
+  /** Every prerequisite this chunk still waits on, and every chunk it still holds up —
+   * the whole edge set the identity line names, rather than `blocked`'s one
+   * representative. A satisfied edge blocks nothing and is left off. */
+  protected readonly blockedBy = computed<readonly string[]>(() =>
+    (this.detail()?.neighborhood?.prerequisites ?? []).filter((n) => !n.satisfied).map((n) => n.chunk_id),
+  );
+
+  protected readonly blocking = computed<readonly string[]>(() =>
+    (this.detail()?.neighborhood?.dependents ?? []).filter((n) => !n.satisfied).map((n) => n.chunk_id),
+  );
 
   /** Clear both report channels — every action on this page starts here. Kept as one
    * method for the same reason the desktop container does: a stale outcome left up while
