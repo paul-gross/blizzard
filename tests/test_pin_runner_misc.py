@@ -18,9 +18,11 @@ from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
+from blizzard.runner.api.hub_proxy import _HUB_RETRY_CEILING
 from blizzard.runner.app import create_app
 from blizzard.runner.auth.session import RunnerSession, SessionCookie
 from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.cli.worker_call import READ_TIMEOUT
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
 
@@ -123,7 +125,8 @@ class _CountingHubHandler(BaseHTTPRequestHandler):
 def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: Path) -> None:
     """``create_app``'s own default must be a transport-level double answering 404, not
     a real client against ``config.hub_url``, so a coincidental live listener there
-    cannot flip the human lane's gating outside the composition root's control."""
+    cannot flip the human lane's gating outside the composition root's control — and the
+    same holds for ``hub_proxy_client``, the ``HubProxy``-forward seam's own default."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), _CountingHubHandler)
     server.seen: list[str] = []  # type: ignore[attr-defined]
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -135,15 +138,35 @@ def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: P
             hub_url=f"http://127.0.0.1:{server.server_address[1]}",
             public_urls=("http://runner-hermetic.example",),
         )
-        client = TestClient(create_app(config))  # no hub_http_client: the default is under test
+        # No hub_http_client, no hub_proxy_client: both defaults are under test.
+        client = TestClient(create_app(config))
 
         status = client.get("/api/runner").status_code
+        proxy_status = client.get("/api/chunks/ch_hermetic").status_code
     finally:
         server.shutdown()
         server.server_close()
 
     assert status != 401
+    assert proxy_status == 404  # the hermetic double's own answer, never the real hub's
     assert server.seen == []  # type: ignore[attr-defined]
+
+
+# --- runner/api/hub_proxy.py: the retry ceiling stays inside the worker's read timeout -----
+
+
+@pytest.mark.unit
+def test_the_hub_retry_ceiling_leaves_the_worker_read_timeout_room() -> None:
+    """The observed hosted-hub restart the retry ceiling exists to ride out ran a ``502``
+    from ``16:33:37Z`` through ``16:33:47Z`` (10s), with the hub answering again by
+    ``16:33:55Z`` — an 18s window from first failure to recovery. ``_HUB_RETRY_CEILING``
+    must span at least that window, and it must sit strictly inside ``READ_TIMEOUT`` — the
+    worker's own client waits out the runner's whole retrying forward, not just one
+    attempt — so a ceiling wide enough for the window still leaves the worker's read some
+    margin past it rather than the two racing to the same instant."""
+    observed_restart_window_seconds = 18.0
+    assert observed_restart_window_seconds <= _HUB_RETRY_CEILING
+    assert _HUB_RETRY_CEILING < READ_TIMEOUT
 
 
 # --- runner/cli.py: the deprecated `pm-items` alias ----------------------------------

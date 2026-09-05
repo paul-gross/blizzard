@@ -986,3 +986,9 @@ def claimed_outcome(
             route_token=route_token,
         )
     )
+
+
+def no_retry_delay(seconds: float) -> None:
+    """A ``HubProxy`` retry-delay double that never sleeps — every component test wiring a
+    hub double that can answer with a retryable failure injects this via ``create_app``'s
+    ``hub_retry_delay`` instead of riding the real ``time.sleep`` default."""

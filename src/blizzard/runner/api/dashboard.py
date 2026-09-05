@@ -29,7 +29,9 @@ from blizzard.wire.runner_status import DashboardView
 router = APIRouter(prefix="/api", tags=["runner"])
 
 #: A slow hub must not stall the six local sections behind it, so this route's own
-#: outbound call fails fast rather than riding the ``HubProxy`` module default (15s).
+#: outbound call fails fast rather than riding the ``HubProxy`` module default — the
+#: retry ceiling a caller-supplied ``timeout`` overrides is the whole-forward budget,
+#: so this stays a 3s degradation even under retry.
 _DASHBOARD_HUB_TIMEOUT = 3.0
 
 

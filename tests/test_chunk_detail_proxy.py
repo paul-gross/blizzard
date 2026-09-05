@@ -1,7 +1,7 @@
 """The runner-local chunk-detail pass-through proxy (issue #185) — route + forward shape.
 
 Proves the *runner's* half of pause/resume: the runner route over a real app, the hub
-reached through a stubbed ``httpx.request``, and the 202/404/409 + 502-on-unreachable
+reached through a stubbed ``httpx.Client``, and the 202/404/409 + 502-on-unreachable
 pass-through. The hub half (the domain refusal, the pause fact) is ``test_chunks_api.py``'s.
 """
 
@@ -13,9 +13,9 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-import blizzard.runner.api.hub_proxy as hub_proxy
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from tests.runner_fakes import no_retry_delay
 
 _HUB_URL = "http://hub.local:8421"
 _CHUNK = "ch_pass"
@@ -63,35 +63,21 @@ _SUMMARY: dict[str, object] = {
 }
 
 
-class _FakeHubResponse:
-    """A stand-in for the hub's ``httpx.Response`` on the proxy's outbound edge."""
-
-    def __init__(self, status_code: int, payload: dict[str, object] | None = None, text: str = "") -> None:
-        self.status_code = status_code
-        self._payload = payload
-        self.text = text
-
-    def json(self) -> object:
-        if self._payload is None:
-            raise ValueError("no JSON body")
-        return self._payload
-
-
-def _runner_app(tmp_path: Path) -> TestClient:
+def _runner_app(tmp_path: Path, *, hub_proxy_client: httpx.Client | None = None) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
-    return TestClient(create_app(config))
+    return TestClient(create_app(config, hub_proxy_client=hub_proxy_client, hub_retry_delay=no_retry_delay))
 
 
 @pytest.mark.component
-def test_get_chunk_forwards_to_the_fleet_route(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_chunk_forwards_to_the_fleet_route(tmp_path: Path) -> None:
     seen: list[tuple[str, str]] = []
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
-        seen.append((method, url))
-        return _FakeHubResponse(200, _DETAIL)
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, str(request.url)))
+        return httpx.Response(200, json=_DETAIL)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}")
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -104,24 +90,24 @@ def test_get_chunk_forwards_to_the_fleet_route(tmp_path: Path, monkeypatch: pyte
 
 
 @pytest.mark.component
-def test_get_chunk_passes_through_a_hub_404(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
-        return _FakeHubResponse(404, {"detail": "unknown chunk ch_pass"})
+def test_get_chunk_passes_through_a_hub_404(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"detail": "unknown chunk ch_pass"})
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}")
 
     assert resp.status_code == 404
     assert resp.json()["detail"] == "unknown chunk ch_pass"
 
 
 @pytest.mark.component
-def test_get_chunk_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+def test_get_chunk_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}")
 
     assert resp.status_code == 502
     assert "unreachable" in resp.json()["detail"]
@@ -129,17 +115,15 @@ def test_get_chunk_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: 
 
 @pytest.mark.component
 @pytest.mark.parametrize("verb", ["pause", "resume"])
-def test_pause_and_resume_forward_to_the_fleet_route(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, verb: str
-) -> None:
+def test_pause_and_resume_forward_to_the_fleet_route(tmp_path: Path, verb: str) -> None:
     seen: list[tuple[str, str]] = []
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
-        seen.append((method, url))
-        return _FakeHubResponse(202, _SUMMARY)
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, str(request.url)))
+        return httpx.Response(202, json=_SUMMARY)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = _runner_app(tmp_path).post(f"/api/chunks/{_CHUNK}/{verb}")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    resp = _runner_app(tmp_path, hub_proxy_client=client).post(f"/api/chunks/{_CHUNK}/{verb}")
 
     assert resp.status_code == 202, resp.text
     assert resp.json()["chunk_id"] == _CHUNK
@@ -147,33 +131,31 @@ def test_pause_and_resume_forward_to_the_fleet_route(
 
 
 @pytest.mark.component
-def test_pause_passes_through_a_hub_409(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
-        return _FakeHubResponse(409, {"detail": "chunk ch_pass is not pausable"})
+def test_pause_passes_through_a_hub_409(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(409, json={"detail": "chunk ch_pass is not pausable"})
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
-    resp = _runner_app(tmp_path).post(f"/api/chunks/{_CHUNK}/pause")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    resp = _runner_app(tmp_path, hub_proxy_client=client).post(f"/api/chunks/{_CHUNK}/pause")
 
     assert resp.status_code == 409
     assert resp.json()["detail"] == "chunk ch_pass is not pausable"
 
 
 @pytest.mark.component
-def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    seen_headers: list[dict[str, str]] = []
+def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_path: Path) -> None:
+    seen_headers: list[httpx.Headers] = []
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
-        seen_headers.append(dict(headers))
-        return _FakeHubResponse(200, _DETAIL)
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_headers.append(request.headers)
+        return httpx.Response(200, json=_DETAIL)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    client = httpx.Client(transport=httpx.MockTransport(handler))
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL, hub_token="proxy-token")
-    resp = TestClient(create_app(config)).get(f"/api/chunks/{_CHUNK}")
+    resp = TestClient(create_app(config, hub_proxy_client=client)).get(f"/api/chunks/{_CHUNK}")
 
     assert resp.status_code == 200, resp.text
-    assert seen_headers == [{"Authorization": "Bearer proxy-token"}]
+    assert seen_headers[0]["Authorization"] == "Bearer proxy-token"
 
 
 @pytest.mark.component

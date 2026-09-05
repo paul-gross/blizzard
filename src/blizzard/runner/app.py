@@ -9,7 +9,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import secrets
-from collections.abc import AsyncIterator, Sequence
+import time
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -184,6 +185,8 @@ def create_app(
     lease_sessions: LeaseSessionService | None = None,
     workspace_prompts: WorkspacePromptService | None = None,
     hub_http_client: httpx.Client | None = None,
+    hub_proxy_client: httpx.Client | None = None,
+    hub_retry_delay: Callable[[float], None] | None = None,
     jti_cache: IJtiCache | None = None,
     events: EventBroker | None = None,
 ) -> FastAPI:
@@ -253,6 +256,14 @@ def create_app(
     )
     app.state.hub_auth_mode = HubAuthModeCache(hub_http_client)
     app.state.jwks_cache = JwksCache(hub_http_client, "/api/auth/jwks.json")
+    # This default must **not** reach the network either — pinned alongside `hub_http_client`
+    # by tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
+    app.state.hub_proxy_client = hub_proxy_client or httpx.Client(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
+        base_url="http://runner-hub-proxy-client-hermetic-default.invalid",
+    )
+    # A test binds a recording no-op here to prove the retry schedule without sleeping.
+    app.state.hub_retry_delay = hub_retry_delay or time.sleep
     app.state.jti_cache = jti_cache
     # The reverse-proxy trust set (issue #130), empty by default — so
     # `X-Forwarded-Proto` is ignored from every peer.
@@ -326,6 +337,10 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     # `hub_http_client` below carries no auth headers (JWKS/hub-auth-mode reads only).
     archived_transcript_client = httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
     archived_transcripts = HttpArchivedTranscriptRepository(archived_transcript_client)
+    # The route-forward seam (`HubProxy`) needs its own authenticated client too — separate
+    # from `hub_http_client` (no auth headers) and from `archived_transcript_client` (its own
+    # lifetime/timeout concerns, blizzard#249).
+    hub_proxy_client = httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
     transcripts = TranscriptService(
         leases=runner_stores.lease_record,
         transcript_ledger=runner_stores.transcript_ledger,
@@ -386,6 +401,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         git_commit_declarations=git_commit_declarations,
         jti_cache=jti_cache,
         hub_http_client=hub_http_client,
+        hub_proxy_client=hub_proxy_client,
         events=events,
     )
 

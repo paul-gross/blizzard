@@ -8,9 +8,11 @@ mutation resolves its own single-concept service instead."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import NoReturn
 
+import httpx
 from fastapi import Request, status
 from fastapi.exceptions import HTTPException
 from starlette.datastructures import State
@@ -54,6 +56,14 @@ class RunnerWiring:
     def clock(self) -> IClock:
         clock: IClock | None = getattr(self.state, "clock", None)
         return clock if clock is not None else self._refuse(_STORE)
+
+    def hub_proxy_client(self) -> httpx.Client:
+        client: httpx.Client | None = getattr(self.state, "hub_proxy_client", None)
+        return client if client is not None else self._refuse("hub proxy client")
+
+    def hub_retry_delay(self) -> Callable[[float], None]:
+        delay: Callable[[float], None] | None = getattr(self.state, "hub_retry_delay", None)
+        return delay if delay is not None else self._refuse("hub proxy retry delay")
 
     def read_stores(self) -> RunnerReadStores:
         stores = self.maybe_read_stores()
