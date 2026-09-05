@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.transcript import (
     NullTranscriptSource,
@@ -53,12 +54,12 @@ def test_null_transcript_source_size_bytes_is_unknown_not_zero() -> None:
 
 @pytest.mark.unit
 def test_claude_code_adapter_defaults_to_the_null_transcript_source() -> None:
-    source = ClaudeCodeAdapter().transcript_source()
+    source = ClaudeCodeAdapter(clock=SystemClock()).transcript_source()
     assert isinstance(source, NullTranscriptSource)
 
 
 @pytest.mark.unit
 def test_claude_code_adapter_returns_the_injected_transcript_source() -> None:
     injected = NullTranscriptSource()
-    adapter = ClaudeCodeAdapter(transcript_source=injected)
+    adapter = ClaudeCodeAdapter(transcript_source=injected, clock=SystemClock())
     assert adapter.transcript_source() is injected

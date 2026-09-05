@@ -325,6 +325,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         permission_mode=config.harness_permission_mode,
         model_aliases=config.model_aliases,
         effort_aliases=config.effort_aliases,
+        clock=SystemClock(),
         transcript_source=harness_transcript_source,
     )
     # ``stale_after`` is left at its default so the two readers never desync (#28).

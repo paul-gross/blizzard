@@ -94,7 +94,7 @@ def _fake_binary(tmp_path: Path, source: str = _FAKE_HARNESS) -> str:
 
 def _app_with_harness(tmp_path: Path, binary: str) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    adapter = ClaudeCodeAdapter(binary=binary)
+    adapter = ClaudeCodeAdapter(binary=binary, clock=SystemClock())
     return TestClient(create_app(config, harness=adapter))
 
 

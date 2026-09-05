@@ -19,7 +19,7 @@ from typing import IO, Any
 
 import httpx
 
-from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.process import ProcStat
 from blizzard.foundation.store.utc import iso_utc
@@ -159,7 +159,7 @@ class ClaudeCodeAdapter:
         credentials_path: str | None = None,
         usage_api_base: str = DEFAULT_USAGE_API_BASE,
         http_client: httpx.Client | None = None,
-        clock: IClock | None = None,
+        clock: IClock,
         transcript_source: IHarnessTranscriptSource | None = None,
     ) -> None:
         self._binary = binary
@@ -183,7 +183,7 @@ class ClaudeCodeAdapter:
         self._credentials_path = credentials_path or DEFAULT_CREDENTIALS_PATH
         self._usage_api_base = usage_api_base
         self._http_client = http_client
-        self._clock: IClock = clock or SystemClock()
+        self._clock: IClock = clock
         # Injected, never self-constructed (`bzh:dependency-injection`); the null source
         # serves the construction sites that need no real one.
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()

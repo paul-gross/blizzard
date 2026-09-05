@@ -89,6 +89,7 @@ class LoopWiring:
             model_aliases=config.model_aliases,
             effort_aliases=config.effort_aliases,
             credentials_path=config.external_usage_credentials_path,
+            clock=SystemClock(),
             transcript_source=harness_transcript_source,
         )
         # The per-lease harness-stdout directory (issue #58), created once here so a worker's

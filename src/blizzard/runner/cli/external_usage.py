@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
@@ -39,6 +40,7 @@ def external_usage_probe(directory: str) -> None:
         model_aliases=config.model_aliases,
         effort_aliases=config.effort_aliases,
         credentials_path=config.external_usage_credentials_path,
+        clock=SystemClock(),
     )
     snapshot = harness.sample_external_subscription_usage()
     if snapshot is None:
