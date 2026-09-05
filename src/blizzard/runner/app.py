@@ -89,6 +89,7 @@ from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.stores import RunnerReadStores, RunnerStores
 from blizzard.runner.transcripts.internal.http_archived_transcript_repository import (
     HttpArchivedTranscriptRepository,
@@ -308,7 +309,8 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
-    runner_stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+    runner_stores = build_stores(engine, errors=errors)
     workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(
         workspace_root=config.workspace_root or str(config.root),
         env_pool=config.workspace_envs,
@@ -382,7 +384,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         tokens=runner_stores.tokens,
         environments=runner_stores.environments,
     )
-    jti_cache = JtiCacheRepository(engine, SystemClock())
+    jti_cache = JtiCacheRepository(RunnerStoreConnections(engine, errors), SystemClock())
     # The real, network-reaching hub client — only `host` wires one (issue #95).
     hub_http_client = httpx.Client(base_url=config.hub_url, timeout=5.0)
     return create_app(

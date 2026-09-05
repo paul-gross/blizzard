@@ -87,9 +87,11 @@ def test_moved_vocabulary_has_exactly_one_importable_home() -> None:
     assert not violations, f"D — imported from somewhere other than its declared foundation home: {violations}"
 
 
-def _bare_engine_accesses(root: Path) -> list[str]:
+def _bare_engine_accesses(root: Path, *, exempt: frozenset[Path] = frozenset()) -> list[str]:
     violations: list[str] = []
-    for path in sorted(root.glob("*.py")):
+    for path in sorted(root.rglob("*.py")):
+        if path in exempt:
+            continue
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.Attribute):
@@ -107,6 +109,18 @@ def test_hub_store_internal_acquires_no_connection_outside_the_seam() -> None:
     assert not violations, (
         f"E — hub/store/internal/ must route every connection through HubStoreConnections: {violations}"
     )
+
+
+_RUNNER_STORE_CONNECTIONS_FILE = _RUNNER_STORE_DIR / "internal" / "base.py"
+
+
+def test_runner_acquires_no_connection_outside_the_store_seam() -> None:
+    """D5 (plan: structural gates over runner wiring): every ``runner/`` module takes the
+    injected ``RunnerStoreConnections`` collaborator in place of a bare ``Engine`` — no
+    module outside the connections seam itself may reach past it to acquire a connection
+    directly and open its own transaction."""
+    violations = _bare_engine_accesses(_RUNNER_DIR, exempt=frozenset({_RUNNER_STORE_CONNECTIONS_FILE}))
+    assert not violations, f"K — runner/ must route every connection through RunnerStoreConnections: {violations}"
 
 
 def test_hub_store_internal_holds_no_http_client() -> None:
@@ -159,9 +173,10 @@ _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     # Engine only, for DI typing — shared with hub/composition.py, permanently out of
     # scope (plan's "Out of scope": "Engine in a composition root").
     _RUNNER_COMPOSITION_FILE: ("Engine",),
-    # A wholly separate, unrelated store (the JWT jti-seen cache) under its own
-    # package-private internal/ — never part of RunnerStore.
-    _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": None,
+    # IntegrityError only, for the replay-check catch (D6): the primary-key collision IS
+    # the replay check, business logic the adapter must see — statement construction is
+    # the table-bound form, so no other sqlalchemy name is needed here.
+    _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": ("IntegrityError",),
 }
 
 

@@ -23,6 +23,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepository
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.status import RunnerStatusService
+from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.store.schema import metadata
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_read_stores, make_stores, runner_store_errors
 
@@ -101,7 +102,7 @@ def _build_app(
         runner_stores=make_stores(store),
         runner_status=runner_status,
         hub_http_client=_hub_client(oauth_enabled=oauth_enabled, jwk=jwk),
-        jti_cache=JtiCacheRepository(engine, SystemClock()),
+        jti_cache=JtiCacheRepository(RunnerStoreConnections(engine, runner_store_errors()), SystemClock()),
     )
     kwargs: dict[str, object] = {}
     if client_host is not None:
