@@ -151,3 +151,17 @@ def test_status_names_both_brakes_with_the_local_reason_inline(monkeypatch: pyte
 
     assert result.exit_code == 0, result.output
     assert f"[paused: hub+local — {reason}]" in result.output
+
+
+def test_status_marks_a_blocked_chunk_naming_the_prerequisite(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`hub status` shares `ChunkRow` with `hub chunk list`, so the blocked marking
+    (issue #476) is proven once here to cover both."""
+    cost = _cost(0.0, partial=False)
+    responses = _responses(cost, cost)
+    responses[f"{DEFAULT_HUB_URL}/api/chunks"][0]["blocked"] = {"prerequisite_chunk_id": "ch_prereq"}
+    _install(monkeypatch, responses)
+
+    result = CliRunner().invoke(hub_group, ["status"])
+
+    assert result.exit_code == 0, result.output
+    assert "[blocked on ch_prereq]" in result.output

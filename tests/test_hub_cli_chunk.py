@@ -395,3 +395,288 @@ def test_show_dashes_a_chunk_expressing_no_preference(monkeypatch: pytest.Monkey
 
     assert result.exit_code == 0, result.output
     assert "default model: -   default effort: -" in result.output
+
+
+# `chunk show` — blocked marking and neighborhood (issue #476/#457/#462).
+# --------------------------------------------------------------------------- #
+
+
+def _detail(chunk_id: str, **extra: object) -> _FakeResponse:
+    return _FakeResponse(
+        200,
+        {
+            "chunk_id": chunk_id,
+            "status": "not_ready",
+            "graph_id": "gr_1",
+            "current_node_name": "build",
+            "default_model": [],
+            "default_effort": None,
+            "cost": {},
+            **extra,
+        },
+    )
+
+
+@pytest.mark.unit
+def test_show_renders_blocked_naming_the_prerequisite(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _detail("ch_1", blocked={"prerequisite_chunk_id": "ch_prereq"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "blocked: waiting on ch_prereq" in result.output
+
+
+@pytest.mark.unit
+def test_show_renders_neighborhood_marking_satisfied_and_unsatisfied(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _detail(
+            "ch_1",
+            neighborhood={
+                "prerequisites": [
+                    {"chunk_id": "ch_a", "status": "done", "satisfied": True},
+                    {"chunk_id": "ch_b", "status": "running", "satisfied": False},
+                ],
+                "dependents": [{"chunk_id": "ch_c", "status": "not_ready", "satisfied": False}],
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "prerequisites: ch_a (satisfied), ch_b (unsatisfied)" in result.output
+    assert "dependents: ch_c (unsatisfied)" in result.output
+
+
+@pytest.mark.unit
+def test_show_gains_no_lines_when_no_blocked_marking_or_edges(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _detail("ch_1", blocked=None, neighborhood={"prerequisites": [], "dependents": []})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "blocked" not in result.output
+    assert "prerequisites" not in result.output
+    assert "dependents" not in result.output
+
+
+# `chunk depend` / `chunk release-dependency` (issue #476) — pure clients of the two
+# existing dependency routes.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_depend_declares_and_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(
+            202,
+            {
+                "dependency_id": "dep_1",
+                "dependent_chunk_id": "ch_1",
+                "prerequisite_chunk_id": "ch_2",
+                "declared_at": "2026-01-01T00:00:00+00:00",
+                "declared_by": "operator",
+            },
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        hub_group, ["chunk", "depend", "ch_1", "ch_2"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        (
+            "http://hub.local:8421/api/chunks/ch_1/dependencies",
+            {"prerequisite_chunk_id": "ch_2", "by": "operator"},
+        )
+    ]
+    assert "ch_1" in result.output
+    assert "ch_2" in result.output
+
+
+@pytest.mark.unit
+def test_depend_sends_a_named_by(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[object] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append(json)
+        return _FakeResponse(
+            202,
+            {
+                "dependency_id": "dep_1",
+                "dependent_chunk_id": "ch_1",
+                "prerequisite_chunk_id": "ch_2",
+                "declared_at": "2026-01-01T00:00:00+00:00",
+                "declared_by": "ada",
+            },
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2", "--by", "ada"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"prerequisite_chunk_id": "ch_2", "by": "ada"}]
+
+
+@pytest.mark.unit
+def test_depend_refuses_a_dependent_not_editable(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(409, {"chunk_id": "ch_1", "status": "running", "detail": "not editable"})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
+
+    assert result.exit_code != 0
+    assert "ch_1" in result.output
+    assert "running" in result.output
+
+
+@pytest.mark.unit
+def test_depend_refuses_a_cycle_naming_the_pair(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            409,
+            {
+                "dependent_chunk_id": "ch_1",
+                "prerequisite_chunk_id": "ch_2",
+                "detail": "would close a cycle",
+            },
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
+
+    assert result.exit_code != 0
+    assert "ch_1" in result.output
+    assert "ch_2" in result.output
+    assert "cycle" in result.output
+
+
+@pytest.mark.unit
+def test_depend_refuses_an_ephemeral_prerequisite(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(409, {"chunk_id": "ch_2", "detail": "ephemeral"})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
+
+    assert result.exit_code != 0
+    assert "ch_2" in result.output
+    assert "ephemeral" in result.output
+
+
+@pytest.mark.unit
+def test_depend_maps_404_naming_both_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404, {})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
+
+    assert result.exit_code != 0
+    assert "ch_1" in result.output
+    assert "ch_2" in result.output
+
+
+@pytest.mark.unit
+def test_release_dependency_releases_and_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(
+            202,
+            {
+                "dependency_id": "dep_1",
+                "dependent_chunk_id": "ch_1",
+                "prerequisite_chunk_id": "ch_2",
+                "declared_at": "2026-01-01T00:00:00+00:00",
+                "declared_by": "operator",
+                "released_at": "2026-01-02T00:00:00+00:00",
+                "released_by": "operator",
+            },
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        hub_group,
+        ["chunk", "release-dependency", "ch_1", "ch_2"],
+        env={"BZ_HUB_URL": "http://hub.local:8421"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        (
+            "http://hub.local:8421/api/chunks/ch_1/dependencies/release",
+            {"prerequisite_chunk_id": "ch_2", "by": "operator"},
+        )
+    ]
+    assert "ch_1" in result.output
+    assert "ch_2" in result.output
+
+
+@pytest.mark.unit
+def test_release_dependency_refuses_when_no_edge_stands(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            409,
+            {
+                "dependent_chunk_id": "ch_1",
+                "prerequisite_chunk_id": "ch_2",
+                "detail": "no standing dependency to release",
+            },
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "release-dependency", "ch_1", "ch_2"])
+
+    assert result.exit_code != 0
+    assert "ch_1" in result.output
+    assert "ch_2" in result.output
+
+
+@pytest.mark.unit
+def test_release_dependency_maps_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404, {})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "release-dependency", "ch_1", "ch_2"])
+
+    assert result.exit_code != 0
+    assert "ch_1" in result.output
+
+
+@pytest.mark.unit
+def test_chunk_list_marks_a_blocked_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            [
+                {
+                    "chunk_id": "ch_1",
+                    "status": "not_ready",
+                    "current_node_id": "nd_1",
+                    "cost": {},
+                    "blocked": {"prerequisite_chunk_id": "ch_prereq"},
+                },
+                {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": {}},
+            ],
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["chunk", "list"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert "[blocked on ch_prereq]" in lines[0]
+    assert "[blocked" not in lines[1]

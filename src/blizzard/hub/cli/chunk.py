@@ -39,7 +39,22 @@ class ChunkDetail:
         route = body.get("route")
         if route:
             yield f"  runner: {route['runner_id']}  environments: {len(route.get('environment_ids', []))}"
+        blocked = body.get("blocked")
+        if blocked:
+            yield f"  blocked: waiting on {blocked['prerequisite_chunk_id']}"
+        neighborhood = body.get("neighborhood") or {}
+        prerequisites = neighborhood.get("prerequisites") or []
+        dependents = neighborhood.get("dependents") or []
+        if prerequisites:
+            yield f"  prerequisites: {', '.join(_neighbor_label(n) for n in prerequisites)}"
+        if dependents:
+            yield f"  dependents: {', '.join(_neighbor_label(n) for n in dependents)}"
         yield f"  cost: {Cost.of(body.get('cost')).rendered}"
+
+
+def _neighbor_label(neighbor: dict[str, Any]) -> str:
+    marker = "satisfied" if neighbor.get("satisfied") else "unsatisfied"
+    return f"{neighbor['chunk_id']} ({marker})"
 
 
 @dataclass(frozen=True)
@@ -248,6 +263,65 @@ def chunk_detach(cli: CliContext, chunk_id: str) -> None:
         on_status={409: "chunk has no live route", 404: f"no such chunk {chunk_id}"},
     )
     cli.finish(resp, f"detached {chunk_id} — released from its runner, re-claimable at its current node")
+
+
+@chunk_group.command("depend", cls=FleetCommand)
+@click.argument("chunk_id")
+@click.argument("prerequisite_chunk_id")
+@click.option("--by", "by", default="operator", help="Who is declaring (recorded on the fact).")
+def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by: str) -> None:
+    """Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID.
+
+    A pure client of ``POST /api/chunks/{id}/dependencies``. Idempotent — an
+    already-standing pair is reported back rather than refused. 404 for an unknown
+    dependent or prerequisite; 409 for a dependent past its declarable window, a
+    cycle the edge would close, or an ephemeral prerequisite."""
+    resp = cli.send(
+        "post",
+        f"/api/chunks/{chunk_id}/dependencies",
+        json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
+    )
+    if resp.status_code == httpx.codes.CONFLICT:
+        body = resp.json()
+        if "status" in body:
+            raise click.ClickException(
+                f"{body['chunk_id']} is not editable at status {body['status']} — cannot declare a dependency"
+            )
+        if "dependent_chunk_id" in body:
+            raise click.ClickException(
+                f"declaring {body['dependent_chunk_id']} → {body['prerequisite_chunk_id']} "
+                "would close a cycle in the standing dependency graph"
+            )
+        raise click.ClickException(f"{body['chunk_id']} is ephemeral and cannot be named as a prerequisite")
+    cli.check(
+        resp,
+        "POST /chunks/{id}/dependencies",
+        on_status={404: f"unknown chunk {chunk_id} or {prerequisite_chunk_id}"},
+    )
+    cli.finish(resp, f"{chunk_id} now depends on {prerequisite_chunk_id}")
+
+
+@chunk_group.command("release-dependency", cls=FleetCommand)
+@click.argument("chunk_id")
+@click.argument("prerequisite_chunk_id")
+@click.option("--by", "by", default="operator", help="Who is releasing (recorded on the fact).")
+def chunk_release_dependency(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by: str) -> None:
+    """Release CHUNK_ID's standing dependency on PREREQUISITE_CHUNK_ID.
+
+    A pure client of ``POST /api/chunks/{id}/dependencies/release``. 404 for an unknown
+    dependent; 409 when no edge stands."""
+    resp = cli.send(
+        "post",
+        f"/api/chunks/{chunk_id}/dependencies/release",
+        json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
+    )
+    if resp.status_code == httpx.codes.CONFLICT:
+        body = resp.json()
+        raise click.ClickException(
+            f"no standing dependency from {body['dependent_chunk_id']} to {body['prerequisite_chunk_id']}"
+        )
+    cli.check(resp, "POST /chunks/{id}/dependencies/release", on_status={404: f"unknown chunk {chunk_id}"})
+    cli.finish(resp, f"released {chunk_id}'s dependency on {prerequisite_chunk_id}")
 
 
 @chunk_group.command("requeue", cls=FleetCommand)

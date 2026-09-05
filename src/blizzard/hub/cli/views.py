@@ -39,7 +39,9 @@ class ChunkRow:
 
     def line(self) -> str:
         rendered = Cost.of(self.row.get("cost")).rendered
-        return f"{self.row['chunk_id']}  {self.row['status']:<16} @ {self.node}  {rendered:>10}"
+        blocked = self.row.get("blocked")
+        marking = f"  [blocked on {blocked['prerequisite_chunk_id']}]" if blocked else ""
+        return f"{self.row['chunk_id']}  {self.row['status']:<16} @ {self.node}  {rendered:>10}{marking}"
 
 
 @dataclass(frozen=True)

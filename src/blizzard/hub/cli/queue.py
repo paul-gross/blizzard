@@ -15,7 +15,9 @@ class QueueListing(Listing):
     empty = "queue is empty"
 
     def line(self, row: Any) -> str:
-        return f"{row['position']}  {row['chunk_id']}  graph={row.get('graph_id')}"
+        blocked = row.get("blocked")
+        marking = f"  [blocked on {blocked['prerequisite_chunk_id']}]" if blocked else ""
+        return f"{row['position']}  {row['chunk_id']}  graph={row.get('graph_id')}{marking}"
 
 
 @click.group("queue")

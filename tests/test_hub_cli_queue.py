@@ -154,3 +154,30 @@ def test_queue_set_falls_back_to_the_updated_both_lists_refusal_when_the_body_na
     assert result.exit_code != 0
     assert "not in the ready list" in result.output
     assert "not_ready backlog" in result.output
+
+
+@pytest.mark.unit
+def test_queue_show_marks_a_blocked_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            {
+                "entries": [
+                    {
+                        "chunk_id": "ch_1",
+                        "graph_id": "gr_1",
+                        "position": 0,
+                        "blocked": {"prerequisite_chunk_id": "ch_prereq"},
+                    },
+                    {"chunk_id": "ch_2", "graph_id": "gr_1", "position": 1},
+                ]
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["queue", "show"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert "[blocked on ch_prereq]" in lines[0]
+    assert "[blocked" not in lines[1]
