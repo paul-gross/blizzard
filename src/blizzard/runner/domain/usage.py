@@ -59,7 +59,7 @@ class IReadUsageRepository(Protocol):
 
     def last_external_usage_attempt_at(self, slug: str) -> datetime | None:
         """The derived cadence anchor for one declared subscription's sample step
-        (issue #218, slug-keyed since blizzard#436): ``max(sampled_at)`` across this
+        (issue #218), keyed by ``slug``: ``max(sampled_at)`` across this
         ``slug``'s own rows, or ``None``. A NULL-``payload`` attempt counts like a
         successful one, so one subscription's failed sample never masks its own windows."""
         ...

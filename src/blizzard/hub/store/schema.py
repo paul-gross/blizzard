@@ -1004,13 +1004,13 @@ runner_local_pause_facts = Table(
 )
 
 # The runner's latest sampled external-usage snapshot, one row per declared subscription
-# (issue #218, per-slug since blizzard#436) — advisory. No ForeignKey: a raise would stall the rail.
+# (issue #218) — advisory. No ForeignKey: a raise would stall the rail.
 runner_external_usage = Table(
     "runner_external_usage",
     metadata,
     Column("runner_id", String, primary_key=True),
-    # The runner-unique join key within `runner_id` (blizzard#436) — a legacy row
-    # predating declared subscriptions backfills to the legacy Anthropic slug.
+    # The runner-unique join key within `runner_id` — a row predating declared
+    # subscriptions backfills to the legacy Anthropic slug.
     Column("slug", String, primary_key=True),
     # The declaration's operator-facing label, reported alongside `slug`.
     Column("name", String, nullable=False),
