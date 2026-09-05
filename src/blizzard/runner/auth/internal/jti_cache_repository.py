@@ -1,7 +1,7 @@
-"""SQLAlchemy adapter for the jti replay-cache seam (package-private, issue #95).
+"""``jwt_jti_seen`` adapter over ``RunnerStoreConnections`` (package-private, issue #95).
 
-Confines all ``sqlalchemy`` usage here (``bzh:dependency-inversion``); the caller
-(``runner/auth/validate.py``) sees only :class:`~blizzard.runner.auth.jti_cache.IJtiCache`.
+The caller sees only :class:`~blizzard.runner.auth.jti_cache.IJtiCache`. ``IntegrityError``
+is the one ``sqlalchemy`` name held locally — that collision *is* the replay check (D6).
 """
 
 from __future__ import annotations

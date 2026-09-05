@@ -115,10 +115,9 @@ _RUNNER_STORE_CONNECTIONS_FILE = _RUNNER_STORE_DIR / "internal" / "base.py"
 
 
 def test_runner_acquires_no_connection_outside_the_store_seam() -> None:
-    """D5 (plan: structural gates over runner wiring): every ``runner/`` module takes the
-    injected ``RunnerStoreConnections`` collaborator in place of a bare ``Engine`` — no
-    module outside the connections seam itself may reach past it to acquire a connection
-    directly and open its own transaction."""
+    """D5 (plan: structural gates over runner wiring): every ``runner/`` module takes
+    ``RunnerStoreConnections`` in place of a bare ``Engine`` — none may acquire a
+    connection directly outside the connections seam itself."""
     violations = _bare_engine_accesses(_RUNNER_DIR, exempt=frozenset({_RUNNER_STORE_CONNECTIONS_FILE}))
     assert not violations, f"K — runner/ must route every connection through RunnerStoreConnections: {violations}"
 
@@ -173,9 +172,8 @@ _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     # Engine only, for DI typing — shared with hub/composition.py, permanently out of
     # scope (plan's "Out of scope": "Engine in a composition root").
     _RUNNER_COMPOSITION_FILE: ("Engine",),
-    # IntegrityError only, for the replay-check catch (D6): the primary-key collision IS
-    # the replay check, business logic the adapter must see — statement construction is
-    # the table-bound form, so no other sqlalchemy name is needed here.
+    # IntegrityError only, for the replay-check catch (D6): the collision itself IS the
+    # business-logic check, so this one name stays local instead of the table-bound form.
     _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": ("IntegrityError",),
 }
 
@@ -260,14 +258,13 @@ _COMPOSITION_ROOTS = frozenset(
     }
 )
 
-_GATED_COMPOSITION_NAMES = ("build_stores", "ClaudeCodeAdapter")
+_GATED_COMPOSITION_NAMES = ("build_stores", "build_stores_and_connections", "ClaudeCodeAdapter")
 
 
 def test_build_stores_and_claude_code_adapter_are_named_only_at_a_composition_root() -> None:
-    """L (plan: structural gates over runner wiring, D1, D2): bzh:dependency-injection's six
-    declared composition roots are the only modules that may import ``build_stores`` or
-    ``ClaudeCodeAdapter`` — every other collaborator takes ``RunnerStores``/``RunnerReadStores``
-    or ``IHarnessAdapter``."""
+    """L (plan: structural gates over runner wiring, D1, D2): only the six declared
+    composition roots may import ``build_stores``/``build_stores_and_connections``/
+    ``ClaudeCodeAdapter`` — every other collaborator takes the bundle or Protocol."""
     violations: list[str] = []
     for path in sorted(_SRC_DIR.rglob("*.py")):
         if path in _COMPOSITION_ROOTS:

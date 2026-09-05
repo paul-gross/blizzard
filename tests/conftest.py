@@ -66,12 +66,13 @@ class Daemon:
     def build_hosted_app(self, config: Any) -> Any:
         """The store-wired ``host`` composition root for this daemon.
 
-        The runner's composition root returns a ``HostedApp`` carrying the served app
-        alongside the restart-resume hook; the hub's returns the served app directly.
-        ``getattr`` uniforms the two for parametrized tests that only need the app.
+        The runner's returns a ``HostedApp`` carrying the served app; the hub's returns
+        the served app directly. `isinstance` distinguishes the two explicitly.
         """
         built = self.app.build_hosted_app(config)
-        return getattr(built, "app", built)
+        if isinstance(built, runner_app.HostedApp):
+            return built.app
+        return built
 
 
 DAEMONS = [

@@ -36,7 +36,21 @@ from blizzard.runner.stores import RunnerReadStores, RunnerStores
 
 def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerStores:
     """Construct and wire every extracted concept-store adapter over a migrated engine."""
+    return _build_stores(RunnerStoreConnections(engine, errors))
+
+
+def build_stores_and_connections(
+    engine: Engine, *, errors: RunnerStoreErrorFactory
+) -> tuple[RunnerStores, RunnerStoreConnections]:
+    """Build the store bundle and hand back the ``RunnerStoreConnections`` every adapter in it
+    shares — for the one caller (``build_hosted_app``) that wires a second ``store/internal/``-
+    style collaborator (``JtiCacheRepository``) over the same engine, so it reuses this instance
+    instead of building its own (D4)."""
     connections = RunnerStoreConnections(engine, errors)
+    return _build_stores(connections), connections
+
+
+def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
     return RunnerStores(
         lease_record=LeaseRecordStore(connections),
         session=LeaseSessionStore(connections),

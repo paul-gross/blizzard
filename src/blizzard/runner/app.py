@@ -64,7 +64,7 @@ from blizzard.runner.auth.federation import router as auth_router
 from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepository
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
-from blizzard.runner.composition import build_stores
+from blizzard.runner.composition import build_stores_and_connections
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.asks import AskService
 from blizzard.runner.domain.attachments import AttachmentService
@@ -90,7 +90,6 @@ from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.stores import RunnerReadStores, RunnerStores
 from blizzard.runner.transcripts.internal.http_archived_transcript_repository import (
     HttpArchivedTranscriptRepository,
@@ -321,7 +320,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
     errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
-    runner_stores = build_stores(engine, errors=errors)
+    runner_stores, connections = build_stores_and_connections(engine, errors=errors)
     workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(
         workspace_root=config.workspace_root or str(config.root),
         env_pool=config.workspace_envs,
@@ -395,7 +394,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         tokens=runner_stores.tokens,
         environments=runner_stores.environments,
     )
-    jti_cache = JtiCacheRepository(RunnerStoreConnections(engine, errors), SystemClock())
+    jti_cache = JtiCacheRepository(connections, SystemClock())
     # The real, network-reaching hub client — only `host` wires one (issue #95).
     hub_http_client = httpx.Client(base_url=config.hub_url, timeout=5.0)
     app = create_app(
