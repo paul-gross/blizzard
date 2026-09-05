@@ -597,8 +597,8 @@ class ContextSample(Step):
 
 
 class ExternalUsageSample(Step):
-    """Every declared subscription's own rate-limit utilization (issue #218, per-slug
-    cadence since blizzard#436) — last in the tick."""
+    """Every declared subscription's own rate-limit utilization (issue #218), each on
+    its own per-slug cadence — last in the tick."""
 
     def run(self) -> None:
         """Sample every declared subscription that is due.

@@ -265,9 +265,9 @@ class RunnerRegistryStore:
 
     @staticmethod
     def _external_usage(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:  # type: ignore[no-untyped-def]
-        """Every declared subscription's newest sample for this runner, raw (issue #218,
-        one row per slug since blizzard#436 phase 3) — ``(slug, name, sampled_at,
-        windows_json)`` tuples. Empty for a runner that has never reported one."""
+        """Every declared subscription's newest sample for this runner, raw (issue #218),
+        one row per slug — ``(slug, name, sampled_at, windows_json)`` tuples. Empty for a
+        runner that has never reported one."""
         rows = conn.execute(
             select(
                 s.runner_external_usage.c.slug,
