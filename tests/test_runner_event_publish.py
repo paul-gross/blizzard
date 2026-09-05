@@ -24,13 +24,16 @@ from blizzard.runner.domain.takeover import TakeoverCloseScope, TakeoverOpenScop
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot, ExternalSubscriptionUsageWindow
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.steps import Advance, ContextSample, ExternalUsageSample, Fill, Pull, SpendCeiling
+from blizzard.runner.subscriptions.subscription_sampler import (
+    ExternalSubscriptionUsageSnapshot,
+    ExternalSubscriptionUsageWindow,
+)
 from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
 from blizzard.wire.facts import (
     EVENT_RECORDED,
@@ -45,6 +48,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    FakeSubscriptionSampler,
     FakeTranscriptSource,
     claimed_outcome,
     make_context,
@@ -765,14 +769,22 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
             ),
         ),
     )
+    resolved = ResolvedSubscription(
+        slug="anthropic",
+        name="Anthropic",
+        sample_interval_seconds=300,
+        sampler=FakeSubscriptionSampler(snapshot=snapshot),
+    )
     ctx = make_context(
         store,
         hub=FakeHub(),
         provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict=None, external_usage_snapshot=snapshot),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
         events=events,
+        subscriptions=(resolved,),
     )
 
     ExternalUsageSample(ctx).run()

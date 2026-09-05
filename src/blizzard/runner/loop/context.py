@@ -24,6 +24,7 @@ from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.stores import RunnerStores
+from blizzard.runner.subscriptions.subscription_sampler import ISubscriptionSampler
 
 #: The retry budget a node with no ``retries.max`` falls back to — a chosen constant:
 #: two execution attempts before escalation to needs-human.
@@ -70,9 +71,6 @@ class LoopConfig:
     runner_ceiling_usd: float | None = None
     #: The runner ceiling's rolling window in hours; unused while the ceiling is ``None``.
     runner_ceiling_window_hours: float = 24.0
-    #: The external-subscription-usage sample step's cadence in seconds (issue #218) —
-    #: seconds that must elapse since the runner's last sampling attempt.
-    external_usage_sample_interval_seconds: int = 300
     #: The session-context warn line; ``None`` disables the lane, reading no transcript at all.
     context_warn_tokens: int | None = None
     #: The context sample step's per-lease cadence in seconds; unused while the lane is off.
@@ -95,6 +93,19 @@ class LoopConfig:
     #: blizzard#459); off by default reaches past a marked head for the first unmarked
     #: entry, ``True`` holds at a marked head and yields no entry instead.
     queue_strict: bool = False
+
+
+@dataclass(frozen=True)
+class ResolvedSubscription:
+    """One declared subscription, paired with its resolved sampler binding (blizzard#436)
+    — the loop step's own view, carrying only what it reads (``slug``/``name``/
+    ``sample_interval_seconds``); ``sampler`` is ``None`` for a provider with no binding,
+    declared but unsampled."""
+
+    slug: str
+    name: str
+    sample_interval_seconds: int
+    sampler: ISubscriptionSampler | None
 
 
 @dataclass(frozen=True)
@@ -123,3 +134,6 @@ class LoopContext:
     #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on ``blizzard runner tick``, a no-op there.
     events: IRunnerEventPublisher | None = None
+    #: Every declared provider subscription, resolved (blizzard#436) — each sampled when
+    #: due against its own ``sample_interval_seconds`` and ``slug``-keyed anchor.
+    subscriptions: tuple[ResolvedSubscription, ...] = ()

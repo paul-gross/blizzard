@@ -28,8 +28,24 @@ USAGE_RECORDED = "usage.recorded"
 # chunk_id|null, lease_id|null, node_name|null, message, detail|null}. Never token-gated.
 EVENT_RECORDED = "event.recorded"
 # An advisory sample of subscription rate-limit utilization (issue #218), never one a
-# status derives from. Payload: {sampled_at, windows: [...]}; upserted, not appended.
+# status derives from. Payload: {sampled_at, windows: [...], slug|null, name|null};
+# upserted per (runner_id, slug), not appended — a fact missing slug/name lands under
+# the legacy slug and its own name.
 EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED = "external_subscription_usage.sampled"
+
+# The join key a runner with no `[[subscription]]` declarations gets exactly one
+# declaration synthesized under. Declared once here, in the one module both daemons
+# already depend on, and imported everywhere else — a frozen migration restates it
+# instead, because a migration may import no live application code (`bzh:frozen-revisions`).
+LEGACY_ANTHROPIC_SLUG = "anthropic"
+# The legacy slug's operator-facing label — the synthesized declaration's own `name` and
+# the migration backfills' `name`, so an unupgraded runner's display label never flips case.
+LEGACY_ANTHROPIC_NAME = "Anthropic"
+
+# The Anthropic provider-sampler binding's own selector value (blizzard#436) — distinct from
+# `LEGACY_ANTHROPIC_SLUG`, which identifies a *declaration*, not a provider; the two happen
+# to share a literal today, but a config change to one must not silently unbind the other.
+PROVIDER_ANTHROPIC = "anthropic"
 
 
 class LeaseMintReport(BaseModel):

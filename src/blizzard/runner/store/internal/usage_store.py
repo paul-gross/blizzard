@@ -45,8 +45,8 @@ class UsageStore:
             cost_partial=bool(row[5]),
         )
 
-    def last_external_usage_attempt_at(self) -> datetime | None:
-        stmt = select(func.max(external_usage_samples.c.sampled_at))
+    def last_external_usage_attempt_at(self, slug: str) -> datetime | None:
+        stmt = select(func.max(external_usage_samples.c.sampled_at)).where(external_usage_samples.c.slug == slug)
         with self._store.connect() as conn:
             value = conn.execute(stmt).scalar_one_or_none()
         return value
@@ -192,13 +192,13 @@ class UsageStore:
         return seq
 
     def record_external_usage_attempt(
-        self, *, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
+        self, *, slug: str, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
     ) -> int | None:
         # The attempt row and its outbound report land in ONE transaction. Runner-scoped
         # (`chunk_id=None, lease_id=None`): a fact about the account, not a chunk or lease.
         seq: int | None = None
         with self._store.begin() as conn:
-            conn.execute(external_usage_samples.insert().values(sampled_at=sampled_at, payload=payload))
+            conn.execute(external_usage_samples.insert().values(slug=slug, sampled_at=sampled_at, payload=payload))
             if payload is not None:
                 result = conn.execute(
                     outbound_buffer.insert().values(
@@ -207,7 +207,7 @@ class UsageStore:
                 )
                 key = result.inserted_primary_key
                 seq = int(key[0]) if key is not None else 0
-        _log.info("external subscription usage attempt recorded", sampled=payload is not None)
+        _log.info("external subscription usage attempt recorded", slug=slug, sampled=payload is not None)
         return seq
 
 

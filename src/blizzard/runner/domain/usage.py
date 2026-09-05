@@ -57,12 +57,11 @@ class IReadUsageRepository(Protocol):
         already been crossed, so the warning fires once rather than every sample)."""
         ...
 
-    def last_external_usage_attempt_at(self) -> datetime | None:
-        """The derived cadence anchor for the external-subscription-usage sample step
-        (issue #218): ``max(sampled_at)`` across ``external_usage_samples``, or ``None``.
-
-        Derived, never a stored column (``bzh:facts-not-status``). A NULL-``payload``
-        attempt counts exactly like a successful one — this runner *tried* then."""
+    def last_external_usage_attempt_at(self, slug: str) -> datetime | None:
+        """The derived cadence anchor for one declared subscription's sample step
+        (issue #218), keyed by ``slug``: ``max(sampled_at)`` across this
+        ``slug``'s own rows, or ``None``. A NULL-``payload`` attempt counts like a
+        successful one, so one subscription's failed sample never masks its own windows."""
         ...
 
 
@@ -105,11 +104,10 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         ...
 
     def record_external_usage_attempt(
-        self, *, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
+        self, *, slug: str, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
     ) -> int | None:
-        """Append one external-subscription-usage sampling attempt **and**, only when it
-        produced a sample, buffer its outbound report — atomically (issue #218). The
-        attempt row is always appended, whether or not the harness had anything to
-        report; the outbound fact exists only when ``payload`` is not ``None``, its seq
-        returned then and ``None`` otherwise."""
+        """Append one declared subscription's sampling attempt **and**, only when it
+        produced a sample, buffer its outbound report — atomically (issue #218), returning
+        the buffered seq or ``None``. ``slug`` (blizzard#436) is the join key a later read
+        filters on, so one subscription's attempt never advances another's cadence."""
         ...

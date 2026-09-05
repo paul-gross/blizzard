@@ -272,8 +272,19 @@
     "external-usage": {
       "commands": {
         "probe": {
-          "help": "Sample the harness's own subscription rate-limit usage and print it. Read-only.\n\nBuilds the same adapter the reconciliation loop uses and samples through it directly \u2014 a diagnostic\nseam-check (issue #218): no store write, no tick, nothing enqueued or delivered.",
+          "help": "Sample one declared subscription's rate-limit usage, by SLUG, and print it.\n\nRead-only, through the same sampler seam the loop uses \u2014 no store write, no tick.\nSLUG defaults to the legacy ``anthropic`` declaration every runner still carries.",
           "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
             {
               "hidden": false,
               "kind": "option",
@@ -287,7 +298,7 @@
             }
           ],
           "path": "runner external-usage probe",
-          "short_help": "Sample the harness's own subscription rate-limit usage and print it."
+          "short_help": "Sample one declared subscription's rate-limit usage, by SLUG, and print it."
         }
       },
       "help": "Diagnostics for the runner's own external-subscription usage sampling (issue #218).",

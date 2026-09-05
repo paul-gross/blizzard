@@ -339,6 +339,117 @@ def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Pat
     assert _has_table()
 
 
+def test_external_usage_samples_slug_backfills_the_legacy_anthropic_slug(tmp_path: Path) -> None:
+    """``external_usage_samples.slug`` (blizzard#436 phase 2) backfills a pre-existing row
+    to the legacy Anthropic slug, and downgrading past it drops the column again."""
+    config = runner_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = runner_runtime.migration_runner(config)
+
+    def _columns() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return {c["name"] for c in sa.inspect(engine).get_columns("external_usage_samples")}
+        finally:
+            engine.dispose()
+
+    def _slugs() -> list[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            with engine.connect() as conn:
+                return [row[0] for row in conn.execute(sa.text("select slug from external_usage_samples")).all()]
+        finally:
+            engine.dispose()
+
+    # The pre-slug shape — this reshape's own parent, frozen by 20260801_1500.
+    runner.downgrade("20260801_1500_runner_external_usage_samples")
+    assert "slug" not in _columns()
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text("insert into external_usage_samples (sampled_at, payload) values (:sampled_at, :payload)"),
+                {"sampled_at": "2026-08-01 12:00:00", "payload": None},
+            )
+    finally:
+        engine.dispose()
+
+    runner.upgrade("head")
+    assert "slug" in _columns()
+    assert _slugs() == ["anthropic"]
+
+    runner.downgrade("20260801_1500_runner_external_usage_samples")
+    assert "slug" not in _columns()
+
+    runner.upgrade("head")
+    assert "slug" in _columns()
+
+
+def test_runner_external_usage_slug_widens_the_primary_key_and_backfills_the_legacy_row(tmp_path: Path) -> None:
+    """``runner_external_usage``'s join key (blizzard#436 phase 3) backfills a pre-existing
+    row to the legacy slug/name, widens the primary key to ``(runner_id, slug)``, and
+    downgrading past it restores the single-column key."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+
+    def _pk() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return set(sa.inspect(engine).get_pk_constraint("runner_external_usage")["constrained_columns"])
+        finally:
+            engine.dispose()
+
+    def _columns() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return {c["name"] for c in sa.inspect(engine).get_columns("runner_external_usage")}
+        finally:
+            engine.dispose()
+
+    def _rows() -> list[tuple[str, str | None]]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            with engine.connect() as conn:
+                cols = "runner_id, slug, name" if "slug" in _columns() else "runner_id"
+                return [tuple(row) for row in conn.execute(sa.text(f"select {cols} from runner_external_usage")).all()]
+        finally:
+            engine.dispose()
+
+    # The pre-slug shape — this reshape's own parent, frozen by 20260801_1600.
+    runner.downgrade("20260801_1600_hub_runner_external_usage")
+    assert _pk() == {"runner_id"}
+    assert "slug" not in _columns()
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "insert into runner_external_usage (runner_id, sampled_at, windows, updated_at) "
+                    "values (:runner_id, :sampled_at, :windows, :updated_at)"
+                ),
+                {
+                    "runner_id": "r1",
+                    "sampled_at": "2026-08-01 12:00:00",
+                    "windows": "[]",
+                    "updated_at": "2026-08-01 12:00:00",
+                },
+            )
+    finally:
+        engine.dispose()
+
+    runner.upgrade("head")
+    assert _pk() == {"runner_id", "slug"}
+    assert "name" in _columns()
+    assert _rows() == [("r1", "anthropic", "Anthropic")]
+
+    runner.downgrade("20260801_1600_hub_runner_external_usage")
+    assert _pk() == {"runner_id"}
+    assert "slug" not in _columns()
+
+    runner.upgrade("head")
+    assert _pk() == {"runner_id", "slug"}
+    assert "name" in _columns()
+
+
 _SCHEMA_METADATA = {"hub": hub_schema.metadata, "runner": runner_schema.metadata}
 
 # chunks.model carries a migration-only server_default with no schema.py counterpart —
@@ -430,6 +541,15 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     # runner tree — instance 7 (drop-and-recreate: environment_id added, forge dropped)
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("environment_id",)),
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("forge",), "removed"),
+    # runner tree — subscription-sampling's per-slug join key (blizzard#436 phase 2)
+    ("runner", "20260801_1500_runner_external_usage_samples", "external_usage_samples", ("slug",)),
+    # hub tree — subscription-sampling's per-slug join key (blizzard#436 phase 3)
+    (
+        "hub",
+        "20260801_1600_hub_runner_external_usage",
+        "runner_external_usage",
+        ("slug", "name"),
+    ),
 ]
 
 

@@ -19,8 +19,12 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.registry import ExternalSubscriptionUsageView as UsageSample
-from blizzard.hub.domain.registry import RunnerLiveness
+from blizzard.hub.domain.registry import (
+    LEGACY_ANTHROPIC_SLUG,
+    LegacySubscriptionUsageView,
+    PerSubscriptionUsageView,
+    RunnerLiveness,
+)
 from blizzard.wire.runner import (
     ExternalSubscriptionUsageView,
     ExternalSubscriptionUsageWindowView,
@@ -28,6 +32,9 @@ from blizzard.wire.runner import (
     RunnerListResponse,
     RunnerPauseRequest,
     RunnerView,
+)
+from blizzard.wire.runner import (
+    SubscriptionUsageView as SubscriptionUsageViewWire,
 )
 from blizzard.wire.sse import RunnerChangeKind
 
@@ -71,7 +78,9 @@ class Resumed(RunnerBrake):
 
 def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
     r = liveness.registration
-    usage = UsageSample.of(r, now=now)
+    # The legacy field derives from the legacy slug's row alone — null for a runner declaring
+    # no `anthropic` subscription, until blizzard#478's per-slug render reads `subscriptions`.
+    usage = LegacySubscriptionUsageView.of(r, slug=LEGACY_ANTHROPIC_SLUG, now=now)
     return RunnerView(
         runner_id=r.runner_id,
         workspace_id=r.workspace_id,
@@ -99,6 +108,23 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
             if usage is not None
             else None
         ),
+        subscriptions=[
+            SubscriptionUsageViewWire(
+                slug=view.slug,
+                name=view.name,
+                sampled_at=iso_utc(view.sampled_at),
+                windows=[
+                    ExternalSubscriptionUsageWindowView(
+                        window=w.window,
+                        utilization_pct=w.utilization_pct,
+                        resets_at=iso_utc(w.resets_at),
+                        window_seconds=w.window_seconds,
+                    )
+                    for w in view.windows
+                ],
+            )
+            for view in PerSubscriptionUsageView.every(r, now=now)
+        ],
     )
 
 

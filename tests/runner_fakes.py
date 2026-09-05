@@ -27,11 +27,10 @@ from blizzard.runner.environments.provider import (
 )
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
-from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
-from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
@@ -70,6 +69,7 @@ from blizzard.runner.stores import (
     RunnerReadStores,
     RunnerStores,
 )
+from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot, ISubscriptionSampler
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
@@ -548,8 +548,6 @@ class FakeHarness:
         usage: UsageSample | None = None,
         usage_by_kind: dict[str, UsageSample | None] | None = None,
         transcript_usage: UsageSample | None = None,
-        external_usage_snapshot: ExternalSubscriptionUsageSnapshot | None = None,
-        external_usage_raises: Exception | None = None,
         transcript_source: IHarnessTranscriptSource | None = None,
         judge_side_effect: Callable[[], None] | None = None,
         judge_pid: int = 8888,
@@ -609,11 +607,6 @@ class FakeHarness:
         self.resolved_model = "fake-model"
         self.resolved_effort: str | None = None
         self.resolved_compaction_window: str | None = None
-        # Scripted `sample_external_subscription_usage` reply (issue #218): snapshot
-        # returned verbatim, or `external_usage_raises` raised; calls counted for cadence asserts.
-        self.external_usage_snapshot = external_usage_snapshot
-        self.external_usage_raises = external_usage_raises
-        self.external_usage_calls = 0
         # Scriptable, not the null source (blizzard#245); defaults to an empty
         # `FakeTranscriptSource` (every session `not_found`, no lines, no size).
         self._transcript_source: IHarnessTranscriptSource = transcript_source or FakeTranscriptSource()
@@ -758,14 +751,33 @@ class FakeHarness:
             cost_usd=None,
         )
 
-    def sample_external_subscription_usage(self) -> ExternalSubscriptionUsageSnapshot | None:
-        self.external_usage_calls += 1
-        if self.external_usage_raises is not None:
-            raise self.external_usage_raises
-        return self.external_usage_snapshot
-
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source
+
+
+class FakeSubscriptionSampler:
+    """A scriptable :class:`ISubscriptionSampler` (blizzard#436): a canned snapshot reply,
+    or a scripted raise. ``sample_calls`` counts every call, for cadence asserts."""
+
+    def __init__(
+        self,
+        *,
+        snapshot: ExternalSubscriptionUsageSnapshot | None = None,
+        raises: Exception | None = None,
+    ) -> None:
+        self.snapshot = snapshot
+        self.raises = raises
+        self.sample_calls = 0
+
+    def sample(self) -> ExternalSubscriptionUsageSnapshot | None:
+        self.sample_calls += 1
+        if self.raises is not None:
+            raise self.raises
+        return self.snapshot
+
+
+def _conforms_fake_subscription_sampler(x: FakeSubscriptionSampler) -> ISubscriptionSampler:
+    return x
 
 
 class FakeProbe:
@@ -834,6 +846,7 @@ def make_context(
     clock: FixedClock | None = None,
     config: LoopConfig | None = None,
     events: EventBroker | None = None,
+    subscriptions: tuple[ResolvedSubscription, ...] = (),
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes."""
     resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
@@ -861,6 +874,7 @@ def make_context(
         provider=_provider,
         harness=_harness,
         process=_probe,
+        subscriptions=subscriptions,
         worktree_git=_wt,
         check_runner=_check_runner,
         config=resolved_config,

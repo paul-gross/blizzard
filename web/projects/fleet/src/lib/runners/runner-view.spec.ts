@@ -18,6 +18,7 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   claims: [],
   used: 0,
   paceBars: [],
+  subscriptionPaces: [],
   ...over,
 });
 

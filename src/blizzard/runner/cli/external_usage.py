@@ -8,7 +8,8 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
-from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
+from blizzard.wire.facts import LEGACY_ANTHROPIC_SLUG
 
 
 @click.group("external-usage")
@@ -17,6 +18,7 @@ def external_usage_group() -> None:
 
 
 @external_usage_group.command("probe")
+@click.argument("slug", required=False, default=None)
 @click.option(
     "--dir",
     "directory",
@@ -24,27 +26,27 @@ def external_usage_group() -> None:
     envvar=ENV_RUNNER_DIR,
     help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
 )
-def external_usage_probe(directory: str) -> None:
-    """Sample the harness's own subscription rate-limit usage and print it. Read-only.
+def external_usage_probe(slug: str | None, directory: str) -> None:
+    """Sample one declared subscription's rate-limit usage, by SLUG, and print it.
 
-    Builds the same adapter the reconciliation loop uses and samples through it directly — a diagnostic
-    seam-check (issue #218): no store write, no tick, nothing enqueued or delivered."""
+    Read-only, through the same sampler seam the loop uses — no store write, no tick.
+    SLUG defaults to the legacy ``anthropic`` declaration every runner still carries."""
+    slug = slug or LEGACY_ANTHROPIC_SLUG
     try:
         config = RunnerConfig.load(Path(directory))
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
-    harness = ClaudeCodeAdapter(
-        binary=config.harness_binary,
-        settings_path=config.worker_settings_path,
-        permission_mode=config.harness_permission_mode,
-        model_aliases=config.model_aliases,
-        effort_aliases=config.effort_aliases,
-        credentials_path=config.external_usage_credentials_path,
-        clock=SystemClock(),
-    )
-    snapshot = harness.sample_external_subscription_usage()
+    declared = {declaration.slug: declaration for declaration in config.resolved_subscriptions()}
+    if slug not in declared:
+        raise click.ClickException(f"no declared subscription with slug {slug!r} (declared: {sorted(declared)})")
+    declaration = declared[slug]
+    sampler = select_sampler(declaration, clock=SystemClock())
+    if sampler is None:
+        click.echo(f"no sample: {declaration.provider!r} (slug {declaration.slug!r}) has no known sampler binding")
+        return
+    snapshot = sampler.sample()
     if snapshot is None:
-        click.echo("no sample: the harness reported nothing (see the warning log for why)")
+        click.echo("no sample: the sampler reported nothing (see the warning log for why)")
         return
     click.echo(f"sampled at {iso_utc(snapshot.sampled_at)}")
     if not snapshot.windows:
