@@ -90,7 +90,7 @@ let navigateSpy: MockInstance<Router['navigate']>;
  * mounts so its first render already reflects a deep-linked URL. The catch-all
  * route is a no-op destination: `LocalPanel` is created directly rather than
  * through an outlet, so only the router's shared query-param state (what
- * `injectPanelSelection` reads/writes) matters here, never the matched path.
+ * `injectChunkUrlSelection` reads/writes) matters here, never the matched path.
  * `navigate` is spied (not replaced) so a write genuinely round-trips through
  * `ActivatedRoute.queryParamMap` the way it does in the app, and can still be
  * asserted or checked for a no-write.

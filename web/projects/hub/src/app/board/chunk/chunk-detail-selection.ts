@@ -18,8 +18,9 @@ export type ChunkDetailTab = 'general' | 'node-history' | 'artifacts' | 'transcr
  * the selection, and the board dock's artifact link is a plain `routerLink`
  * with no page-side wiring needed.
  *
- * The same contract `board-selection.ts` and `local-panel/panel-selection.ts`
- * establish, on this page's own params. Owned here rather than in
+ * The same contract fleet's shared `injectChunkUrlSelection` establishes for
+ * the board and runner-local panel's own `?chunk=`, on this page's own
+ * params. Owned here rather than in
  * {@link ChunkPage} so the container is left with what it is actually for —
  * the chunk reads and the operator mutations — and the router coupling lives
  * in one small, separately readable place.

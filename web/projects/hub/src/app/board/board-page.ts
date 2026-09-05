@@ -9,6 +9,7 @@ import {
   RunnerPanel,
   asyncState,
   hasPermission,
+  injectChunkUrlSelection,
   type KitAsyncStateValue,
   injectGroupChunksMutation,
   injectHubBacklogQuery,
@@ -19,8 +20,6 @@ import {
   injectRepositionBacklogMutation,
   injectRepositionQueueMutation,
 } from 'fleet';
-
-import { injectBoardSelection } from './board-selection';
 
 /**
  * The board route — the two-column mission-control surface:
@@ -52,8 +51,8 @@ import { injectBoardSelection } from './board-selection';
  * to `/board` never restarts the SSE stream or drops the query cache.
  *
  * Which card is open is **the URL's**, not this component's: `?chunk=…` on
- * `/board`, read and written through {@link injectBoardSelection} (issue #162,
- * the contract issue #99 set for the runner's local panel). Both selection
+ * `/board`, read and written through the shared {@link injectChunkUrlSelection}
+ * — the same contract the runner's local panel uses. Both selection
  * sources — a board card and an ask in the right rail — write the same param,
  * so a board is shareable, a reload keeps its place, and back/forward walk the
  * selection history.
@@ -71,7 +70,7 @@ export class BoardPage {
   private readonly repositionQueue = injectRepositionQueueMutation();
   private readonly repositionBacklog = injectRepositionBacklogMutation();
   private readonly groupChunks = injectGroupChunksMutation();
-  private readonly selection = injectBoardSelection();
+  private readonly selection = injectChunkUrlSelection();
   private readonly meQuery = injectMeQuery();
 
   /** Whether the current identity may promote a backlog chunk (`chunk:control` —

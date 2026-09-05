@@ -208,7 +208,7 @@ export class ChunkDetailPage {
   protected readonly workItems = computed<WorkItemsState>(() => deriveWorkItemsState(this.workItemsQuery));
 
   /** The back link's query params — restores `/board`'s own `?chunk=`
-   * selection (`panel-selection.ts`) to the chunk this page had open, rather
-   * than landing back on the board with nothing selected. */
+   * selection (the shared `injectChunkUrlSelection`) to the chunk this page
+   * had open, rather than landing back on the board with nothing selected. */
   protected readonly backQueryParams = computed(() => ({ chunk: this.chunkId() }));
 }
