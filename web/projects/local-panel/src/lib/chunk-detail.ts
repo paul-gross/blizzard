@@ -1,10 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output } from '@angular/core';
 import {
   ageMs,
   compactRef,
   formatAge,
   injectNowSignal,
   KitAsyncState,
+  type KitFact,
+  KitFactList,
   KitPanel,
   KitPanelHeader,
   type runnerApi,
@@ -61,7 +63,7 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
 @Component({
   selector: 'local-machine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness, KitAsyncState, KitPanel, KitPanelHeader, MachineDetailHeader],
+  imports: [HeartbeatFreshness, KitAsyncState, KitFactList, KitPanel, KitPanelHeader, MachineDetailHeader],
   templateUrl: './chunk-detail.html',
   styleUrl: './chunk-detail.css',
 })
@@ -137,4 +139,23 @@ export class MachineDetail {
     const age = ageMs(l.last_heartbeat_at, this.now());
     return age === null ? '—' : formatAge(age);
   });
+
+  /** The execution-facts table's rows — a method, not a stored computed, since the
+   * lease/workdir/heartbeat rows need the `<ng-template>`s the view declares for them
+   * (`KitFactList`'s own templated-row contract). */
+  protected factRows(
+    l: runnerApi.LeaseView,
+    leaseValue: TemplateRef<unknown>,
+    workdirValue: TemplateRef<unknown>,
+    heartbeatValue: TemplateRef<unknown>,
+  ): readonly KitFact[] {
+    return [
+      { label: 'lease', template: leaseValue },
+      { label: 'session', value: l.session_id ?? '—' },
+      { label: 'pid', value: l.pid !== null && l.pid !== undefined ? String(l.pid) : '—' },
+      { label: 'env', value: l.environment_id ?? 'released' },
+      { label: 'workdir', template: workdirValue },
+      { label: 'heartbeat', template: heartbeatValue },
+    ];
+  }
 }

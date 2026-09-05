@@ -1,5 +1,10 @@
 @if (historyRows().length === 0 && !activeRow()) {
-  <p class="none" data-testid="selection-empty">No transitions yet — waiting on the first node-step.</p>
+  <fleet-kit-async-state
+    state="empty"
+    placement="inline"
+    emptyText="No transitions yet — waiting on the first node-step."
+    emptyTestid="selection-empty"
+  />
 } @else {
   <ol class="timeline" data-testid="selection">
     @for (row of historyRows(); track $index) {

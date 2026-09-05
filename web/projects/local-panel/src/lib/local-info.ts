@@ -1,5 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@angular/core';
-import { ageMs, formatAge, injectNowSignal, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
+import { ChangeDetectionStrategy, Component, TemplateRef, computed, effect, signal } from '@angular/core';
+import {
+  ageMs,
+  formatAge,
+  injectNowSignal,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  type KitFact,
+  KitFactList,
+  type runnerApi,
+} from 'fleet';
 
 import { injectRunnerDashboardQuery } from './status.query';
 
@@ -26,7 +35,7 @@ import { injectRunnerDashboardQuery } from './status.query';
 @Component({
   selector: 'local-info',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState],
+  imports: [KitAsyncState, KitFactList],
   templateUrl: './local-info.html',
   styleUrl: './local-info.css',
 })
@@ -94,4 +103,23 @@ export class LocalInfo {
     const age = ageMs(tickAt, this.now());
     return age === null ? '—' : formatAge(age);
   });
+
+  /** The hub-link facts table's rows — a method, not a stored computed, since the
+   * endpoint/link/loop rows need the `<ng-template>`s the view declares for them
+   * (`KitFactList`'s own templated-row contract). */
+  protected factRows(
+    v: runnerApi.RunnerStatusView,
+    endpointValue: TemplateRef<unknown>,
+    linkValue: TemplateRef<unknown>,
+    loopValue: TemplateRef<unknown>,
+  ): readonly KitFact[] {
+    return [
+      { label: 'endpoint', template: endpointValue },
+      { label: 'link', template: linkValue },
+      { label: 'last flush', value: this.lastFlushLabel(), testid: 'hub-last-flush' },
+      { label: 'buffered', value: `${v.hub.buffer_depth} events`, testid: 'hub-buffered' },
+      { label: 'agents', value: `${v.capacities.used}/${v.capacities.max_agents} slots` },
+      { label: 'loop', template: loopValue },
+    ];
+  }
 }

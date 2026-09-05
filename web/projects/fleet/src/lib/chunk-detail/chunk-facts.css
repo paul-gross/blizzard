@@ -1,17 +1,7 @@
 :host {
   display: block;
-  /* The fact tables' shared label-column width — set once here so the chunk-facts
-     table and the usage table (`chunk-token-breakdown.css`, content-projected into
-     this component's own DOM subtree, so it inherits this custom property despite
-     being a different component) size their label columns identically instead of
-     each fitting its own longest label and drifting apart. Fixed rather than
-     `auto`-sized for the same reason: an `auto` column tracks its own table's
-     content, which is exactly the drift this is solving. */
-  --kv-label-col: 112px;
 }
-/* The chunk's own facts, above the work item it serves — the fixed-height glance
-   before the arbitrarily long issue body.
-   Self-padded on all four sides (matching `graph-diagram-detail.css`'s own
+/* Self-padded on all four sides (matching `graph-diagram-detail.css`'s own
    `.fields`, the app's other bare fact-list-in-a-panel) since this component is
    dropped straight into `fleet-kit-panel`'s unpadded body in the general tab
    (hub and runner alike) with no consumer wrapper of its own — a bottom margin
@@ -20,34 +10,20 @@
    is the same override-hook shape `KitPanel` itself uses for `--kit-panel-bg`
    (custom properties cascade through view encapsulation) — `chunk-detail-panel.css`
    sets it to `0` for the board dock's own `.d-sec`, which already pads that whole
-   column and would otherwise double up. The bottom margin below stays, on top of
-   the new padding, as the gap to whatever sibling sits below this component in
-   that dock context. */
-.kv {
-  display: grid;
-  grid-template-columns: var(--kv-label-col, 112px) 1fr;
-  gap: 2px 8px;
+   column and would otherwise double up. `chunk-token-breakdown.css`'s own
+   `fleet-kit-fact-list` rule reads the same property, so the two tables' padding
+   stays identical regardless of context; their label columns already match with no
+   override needed, since both render through the one shared `KitFactList`. */
+.cf-facts {
+  display: block;
   margin: 0 0 8px;
   padding: var(--chunk-facts-pad, 8px);
-  font-size: var(--fs-sm);
-}
-.kv dt {
-  color: var(--label);
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  align-self: center;
-}
-.kv dd {
-  margin: 0;
-  color: var(--amber);
-  overflow-wrap: anywhere;
 }
 /* The Graph value, linked — the same rest/hover-underline shape
    `chunk-detail-header.css`'s `.id` and `machine-detail-header.css`'s `.cid` use for
    an in-app routerLink, in the fact row's own amber rather than a bare browser blue.
-   `overflow-wrap` is repeated from `.kv dd` since the anchor is the wrapping box
-   `title`/text sit in now, not `.kv dd` itself. */
+   `overflow-wrap` is repeated from `KitFactList`'s own `.kv dd` since the anchor is the
+   wrapping box `title`/text sit in now, not that `dd` itself. */
 .graph-link {
   color: var(--amber);
   text-decoration: none;

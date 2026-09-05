@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import type { UserView } from '../api/hub';
+import { KitAsyncState } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
 import { FleetWhen } from '../when-display';
 
@@ -32,7 +33,7 @@ const ASSIGNABLE_ROLES: readonly string[] = ['pending', 'guest', 'contributor', 
 @Component({
   selector: 'fleet-users-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel, FleetWhen],
+  imports: [KitAsyncState, KitPanel, FleetWhen],
   templateUrl: './users-table.html',
   styleUrl: './users-table.css',
 })

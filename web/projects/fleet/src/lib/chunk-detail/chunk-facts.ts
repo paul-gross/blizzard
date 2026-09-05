@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, ChunkNeighborView, RouteView } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { KitButton } from '../kit/kit-button';
+import { KitFactList, type KitFact } from '../kit/kit-fact-list';
 import { formatUtcYmd } from '../when';
 
 /** Emitted when the operator repins a not-ready chunk's graph from the dock (issue #27). */
@@ -34,7 +35,7 @@ export interface EditGraphEvent {
 @Component({
   selector: 'fleet-chunk-detail-facts',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, RouterLink],
+  imports: [KitButton, KitFactList, RouterLink],
   templateUrl: './chunk-facts.html',
   styleUrl: './chunk-facts.css',
 })
@@ -142,5 +143,33 @@ export class ChunkFacts {
     const trimmed = graphId.trim();
     if (!trimmed) return;
     this.editGraph.emit({ chunkId: this.detail().chunk_id, graphId: trimmed });
+  }
+
+  /** The node fact's rendered value — the current node's name, falling back to its
+   * bare id, then `—` for a chunk that has not yet reached one. */
+  protected readonly nodeLabel = computed<string>(
+    () => this.detail().current_node_name ?? this.detail().current_node_id ?? '—',
+  );
+
+  /** The identity table's rows — a method, not a stored computed, since the Graph,
+   * Depends on, and Blocks rows' markup needs the `<ng-template>`s the view declares
+   * for them (`KitFactList`'s own templated-row contract). Depends on / Blocks are
+   * appended only when their direction has an edge — a direction with none renders no
+   * row at all, the same way Model's retired row simply is not there. */
+  protected factRows(
+    graphValue: TemplateRef<unknown>,
+    dependsOnValue: TemplateRef<unknown>,
+    blocksValue: TemplateRef<unknown>,
+  ): readonly KitFact[] {
+    const rows: KitFact[] = [
+      { label: 'Status', value: this.detail().status, testid: 'fact-status' },
+      { label: 'Node', value: this.nodeLabel(), testid: 'fact-node' },
+      { label: 'Runner', value: this.runner(), testid: 'fact-runner' },
+      { label: 'Attempts', value: this.attempts(), testid: 'fact-attempts' },
+      { label: 'Graph', template: graphValue, testid: 'fact-graph' },
+    ];
+    if (this.prerequisites().length) rows.push({ label: 'Depends on', template: dependsOnValue, testid: 'fact-depends-on' });
+    if (this.dependents().length) rows.push({ label: 'Blocks', template: blocksValue, testid: 'fact-blocks' });
+    return rows;
   }
 }

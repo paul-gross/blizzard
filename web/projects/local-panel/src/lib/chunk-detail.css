@@ -24,31 +24,20 @@
   padding: 6px 8px;
   border-bottom: 1px solid var(--bezel);
 }
-.kv {
-  display: grid;
-  grid-template-columns: 92px 1fr;
-  gap: 2px 10px;
-  margin: 0;
-  font-size: var(--fs-sm);
+/* This dock's own, narrower label column (92px vs `KitFactList`'s 112px
+   default) and tighter row gap — set on the fact list's own host, a plain CSS
+   custom property so it reaches inside regardless of view encapsulation. */
+.lp-facts {
+  display: block;
+  --kv-label-col: 92px;
 }
-.kv dt {
-  color: var(--label);
-  text-transform: uppercase;
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-  align-self: baseline;
-}
-.kv dd {
-  margin: 0;
-  color: var(--text);
-  min-width: 0;
-}
-.kv dd .full {
+.full {
   color: var(--label-dim);
   font-size: var(--fs-label);
   margin-left: 6px;
 }
-.kv dd.path {
+.path {
+  display: block;
   color: var(--cyan);
   overflow: hidden;
   text-overflow: ellipsis;

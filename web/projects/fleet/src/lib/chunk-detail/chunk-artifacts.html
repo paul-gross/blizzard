@@ -3,7 +3,7 @@
     <div class="s-head"><span class="tag" id="chunk-artifacts-heading">Artifacts</span></div>
   }
   @if (artifacts().length === 0) {
-    <p class="none" data-testid="artifacts-empty">No artifacts yet.</p>
+    <fleet-kit-async-state state="empty" placement="inline" emptyText="No artifacts yet." emptyTestid="artifacts-empty" />
   } @else {
     <ul class="artifacts" data-testid="artifacts">
       @for (art of artifacts(); track art.key) {

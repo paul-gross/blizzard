@@ -8,25 +8,15 @@
   min-height: 60px;
   padding: 6px 8px;
 }
-.kv {
-  display: grid;
-  grid-template-columns: 88px 1fr;
-  gap: 2px 10px;
-  margin: 0;
-  font-size: var(--fs-sm);
+/* This panel's own, narrower label column (88px vs `KitFactList`'s 112px
+   default) — set on the fact list's own host, a plain CSS custom property so
+   it reaches inside regardless of view encapsulation. */
+.li-facts {
+  display: block;
+  --kv-label-col: 88px;
 }
-.kv dt {
-  color: var(--label);
-  text-transform: uppercase;
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-}
-.kv dd {
-  margin: 0;
-  color: var(--text);
-  min-width: 0;
-}
-.kv dd.path {
+.path {
+  display: block;
   color: var(--cyan);
   overflow: hidden;
   text-overflow: ellipsis;

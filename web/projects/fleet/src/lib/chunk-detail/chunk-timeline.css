@@ -2,7 +2,7 @@
    pads itself vertically — `fleet-kit-panel`'s zero-padded `.p-body`
    (kit-panel.ts) means a panel-wrapped consumer isn't double-padded; the
    dock's own `.d-sec` (chunk-detail-panel.ts) drops its padding here to
-   match. Horizontal padding lives on `.step`/`.s-head`/`.none` instead of
+   match. Horizontal padding lives on `.step`/`.s-head` instead of
    here (below) — a row's own hover/selected background has to reach this
    host's full width to read as a band rather than a floating inset
    rectangle, which a horizontally-padded host would clip short of. */
@@ -19,11 +19,6 @@
 .s-head {
   padding: 0 8px;
   margin-bottom: 6px;
-}
-.none {
-  padding: 0 8px;
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
 }
 /* One row per judged node: the attempt, the node column, and the verdict.
    `<ol>` owns the track sizes; every `<li class="step-item">` adopts them via

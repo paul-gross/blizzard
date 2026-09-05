@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../api/hub';
 import { formatCost, formatTokens } from '../cost-format';
+import { KitAsyncState } from '../kit/kit-async-state';
 import {
   deriveActiveRow,
   deriveHistoryRows,
@@ -49,7 +50,7 @@ import {
 @Component({
   selector: 'fleet-chunk-detail-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink],
+  imports: [KitAsyncState, RouterLink],
   templateUrl: './chunk-timeline.html',
   styleUrl: './chunk-timeline.css',
 })

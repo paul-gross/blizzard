@@ -26,8 +26,8 @@
 /* Owns no horizontal padding (`design/tokens.css`'s `--surface-*` doc comment) — it
    wraps `.seg-item`, a full-bleed interactive row that carries its own, so that row's
    hover/active background reaches this container's full width rather than floating
-   inset from it. Only `.step-head`/`.none` — plain, non-interactive text — pad
-   themselves back in. */
+   inset from it. Only `.step-head` — plain, non-interactive text — pads itself back
+   in; the empty state (`fleet-kit-async-state[placement=inline]`) pads its own. */
 .step {
   padding: 6px 0;
   border-bottom: 1px solid var(--line);
@@ -54,12 +54,6 @@
 .tag.warn {
   color: var(--amber);
   border-color: var(--amber-dim);
-}
-.none {
-  margin: 0;
-  padding: 0 8px;
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
 }
 .seg-list {
   list-style: none;

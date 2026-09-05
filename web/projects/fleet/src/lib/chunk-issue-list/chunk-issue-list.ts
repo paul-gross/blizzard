@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core
 import { RouterLink } from '@angular/router';
 
 import type { WorkItemAuthorView, WorkItemEntry } from '../api/hub';
-import { KitAccordionSection, KitBadge, KitMarkdown } from '../kit';
+import { KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown } from '../kit';
 import type { Tone } from '../kit';
 
 /** A stated priority's badge tone (blizzard#362) — advice for the triaging human, never
@@ -50,7 +50,7 @@ const HUB_SOURCE_NAME = 'hub';
 @Component({
   selector: 'fleet-chunk-issue-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAccordionSection, KitBadge, KitMarkdown, RouterLink],
+  imports: [KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, RouterLink],
   templateUrl: './chunk-issue-list.html',
   styleUrl: './chunk-issue-list.css',
 })
