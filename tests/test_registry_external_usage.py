@@ -1,4 +1,4 @@
-""":meth:`ExternalSubscriptionUsageView.of`/:meth:`SubscriptionUsageView.every` — the
+""":meth:`LegacySubscriptionUsageView.of`/:meth:`PerSubscriptionUsageView.every` — the
 read-side per-subscription staleness gate (issue #218, blizzard#436 phase 3).
 
 Unit tier: the pure domain derivation in isolation, then its rendering through
@@ -14,12 +14,12 @@ from blizzard.hub.api.runners import runner_view
 from blizzard.hub.domain.registry import (
     EXTERNAL_USAGE_STALE_AFTER,
     LEGACY_ANTHROPIC_SLUG,
-    ExternalSubscriptionUsageView,
     ExternalSubscriptionUsageWindow,
+    LegacySubscriptionUsageView,
+    PerSubscriptionUsageView,
     RunnerLiveness,
     RunnerRegistration,
     SubscriptionUsageRecord,
-    SubscriptionUsageView,
 )
 from tests.support import assert_utc_iso
 
@@ -50,12 +50,12 @@ def test_a_sample_exactly_at_the_threshold_still_renders() -> None:
 
 
 def test_never_sampled_renders_none() -> None:
-    assert ExternalSubscriptionUsageView.of(_registration(records=()), slug=LEGACY_ANTHROPIC_SLUG, now=_NOW) is None
+    assert LegacySubscriptionUsageView.of(_registration(records=()), slug=LEGACY_ANTHROPIC_SLUG, now=_NOW) is None
 
 
 def test_an_unknown_slug_renders_none_even_with_other_subscriptions_present() -> None:
     registration = _registration(records=(_record(LEGACY_ANTHROPIC_SLUG, _NOW),))
-    assert ExternalSubscriptionUsageView.of(registration, slug="openai", now=_NOW) is None
+    assert LegacySubscriptionUsageView.of(registration, slug="openai", now=_NOW) is None
 
 
 def test_a_stale_or_failed_subscription_does_not_blank_a_healthy_sibling() -> None:
@@ -65,8 +65,8 @@ def test_a_stale_or_failed_subscription_does_not_blank_a_healthy_sibling() -> No
     stale = _record("openai", _NOW - timedelta(minutes=16))
     registration = _registration(records=(healthy, stale))
 
-    healthy_view = ExternalSubscriptionUsageView.of(registration, slug="anthropic", now=_NOW)
-    stale_view = ExternalSubscriptionUsageView.of(registration, slug="openai", now=_NOW)
+    healthy_view = LegacySubscriptionUsageView.of(registration, slug="anthropic", now=_NOW)
+    stale_view = LegacySubscriptionUsageView.of(registration, slug="openai", now=_NOW)
 
     assert healthy_view is not None
     assert healthy_view.windows == (_WINDOW,)
@@ -78,7 +78,7 @@ def test_every_renders_only_the_non_stale_subscriptions() -> None:
     stale = _record("openai", _NOW - timedelta(minutes=16))
     registration = _registration(records=(healthy, stale))
 
-    views = SubscriptionUsageView.every(registration, now=_NOW)
+    views = PerSubscriptionUsageView.every(registration, now=_NOW)
 
     assert [v.slug for v in views] == ["anthropic"]
     assert views[0].name == "Anthropic"
@@ -90,15 +90,15 @@ def test_every_renders_multiple_distinct_healthy_subscriptions() -> None:
     openai = _record("openai", _NOW - timedelta(minutes=2), name="OpenAI")
     registration = _registration(records=(anthropic, openai))
 
-    views = SubscriptionUsageView.every(registration, now=_NOW)
+    views = PerSubscriptionUsageView.every(registration, now=_NOW)
 
     assert {v.slug for v in views} == {"anthropic", "openai"}
     assert {v.name for v in views} == {"Anthropic", "OpenAI"}
 
 
-def _sample(sampled_at: datetime) -> ExternalSubscriptionUsageView | None:
+def _sample(sampled_at: datetime) -> LegacySubscriptionUsageView | None:
     registration = _registration(records=(_record(LEGACY_ANTHROPIC_SLUG, sampled_at),))
-    return ExternalSubscriptionUsageView.of(registration, slug=LEGACY_ANTHROPIC_SLUG, now=_NOW)
+    return LegacySubscriptionUsageView.of(registration, slug=LEGACY_ANTHROPIC_SLUG, now=_NOW)
 
 
 def _record(slug: str, sampled_at: datetime, *, name: str | None = None) -> SubscriptionUsageRecord:

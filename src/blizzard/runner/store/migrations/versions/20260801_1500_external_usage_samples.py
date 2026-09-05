@@ -1,7 +1,5 @@
-"""external usage samples — one append-only row per sampling attempt, ``payload`` NULL
-when the attempt produced nothing (runner store tree, issue #218); ``slug`` is a later
-reshape (blizzard#436), so this revision's own shape is a frozen local literal rather
-than a ``schema.py`` import (``bzh:frozen-revisions``)
+"""external usage samples — one append-only row per sampling attempt, ``payload`` NULL on failure
+(runner store tree, issue #218); frozen local literal, not a ``schema.py`` import (``bzh:frozen-revisions``).
 
 Revision ID: 20260801_1500_runner_external_usage_samples
 Revises: 20260728_1500_runner_lease_session_stamps

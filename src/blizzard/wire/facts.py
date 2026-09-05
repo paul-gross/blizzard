@@ -43,6 +43,11 @@ LEGACY_ANTHROPIC_SLUG = "anthropic"
 # the migration backfills' `name`, so an unupgraded runner's display label never flips case.
 LEGACY_ANTHROPIC_NAME = "Anthropic"
 
+# The Anthropic provider-sampler binding's own selector value (blizzard#436) — distinct from
+# `LEGACY_ANTHROPIC_SLUG`, which identifies a *declaration*, not a provider; the two happen
+# to share a literal today, but a config change to one must not silently unbind the other.
+PROVIDER_ANTHROPIC = "anthropic"
+
 
 class LeaseMintReport(BaseModel):
     """A runner's ``lease.minted`` — one node-step attempt's fencing epoch."""

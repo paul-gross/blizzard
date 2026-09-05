@@ -17,7 +17,7 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
-from blizzard.wire.facts import LEGACY_ANTHROPIC_NAME, LEGACY_ANTHROPIC_SLUG
+from blizzard.wire.facts import LEGACY_ANTHROPIC_NAME, LEGACY_ANTHROPIC_SLUG, PROVIDER_ANTHROPIC
 
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
@@ -289,7 +289,7 @@ class SubscriptionDeclaration:
         return cls(
             slug=LEGACY_ANTHROPIC_SLUG,
             name=LEGACY_ANTHROPIC_NAME,
-            provider=LEGACY_ANTHROPIC_SLUG,
+            provider=PROVIDER_ANTHROPIC,
             credentials_path=credentials_path,
             sample_interval_seconds=sample_interval_seconds,
         )

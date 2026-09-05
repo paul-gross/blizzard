@@ -17,9 +17,9 @@ from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.config import CONFIG_FILENAME, LEGACY_ANTHROPIC_SLUG, ConfigError, RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking
+from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from tests.runner_fakes import FakeHub, FakeProbe, make_store, make_stores
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -84,12 +84,11 @@ def test_loop_wiring_threads_external_usage_credentials_path_into_the_sampler(tm
     ctx = LoopWiring(config, "", "").context(FakeHub())
 
     assert isinstance(ctx.harness, ClaudeCodeAdapter)
-    assert [d.slug for d in ctx.config.subscriptions] == [LEGACY_ANTHROPIC_SLUG]
-    declaration = ctx.config.subscriptions[0]
-    assert declaration.sample_interval_seconds == 123
-    sampler = ctx.subscription_samplers[LEGACY_ANTHROPIC_SLUG]
-    assert isinstance(sampler, AnthropicSubscriptionSampler)
-    assert sampler._credentials_path == scratch
+    assert [s.slug for s in ctx.subscriptions] == [LEGACY_ANTHROPIC_SLUG]
+    resolved = ctx.subscriptions[0]
+    assert resolved.sample_interval_seconds == 123
+    assert isinstance(resolved.sampler, AnthropicSubscriptionSampler)
+    assert resolved.sampler._credentials_path == scratch
 
 
 @pytest.mark.unit

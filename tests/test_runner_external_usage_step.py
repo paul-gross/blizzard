@@ -14,15 +14,14 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.subscription_sampler import (
+from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
+from blizzard.runner.loop.steps import ExternalUsageSample
+from blizzard.runner.loop.tick import tick
+from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
 )
-from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.steps import ExternalUsageSample
-from blizzard.runner.loop.tick import tick
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeHarness,
@@ -49,12 +48,13 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _declaration(
-    slug: str = _SLUG, *, interval_seconds: int = 300, provider: str = "anthropic"
-) -> SubscriptionDeclaration:
-    return SubscriptionDeclaration(
-        slug=slug, name=slug.title(), provider=provider, sample_interval_seconds=interval_seconds
-    )
+def _resolved(
+    slug: str = _SLUG,
+    *,
+    interval_seconds: int = 300,
+    sampler: FakeSubscriptionSampler | None = None,
+) -> ResolvedSubscription:
+    return ResolvedSubscription(slug=slug, name=slug.title(), sample_interval_seconds=interval_seconds, sampler=sampler)
 
 
 def _snapshot(*, sampled_at: datetime = _NOW) -> ExternalSubscriptionUsageSnapshot:
@@ -82,13 +82,8 @@ def _ctx(store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         clock=clock,
-        config=LoopConfig(
-            runner_id="r1",
-            workspace_id="ws1",
-            max_agents=1,
-            subscriptions=(_declaration(interval_seconds=interval_seconds),),
-        ),
-        subscription_samplers={_SLUG: sampler},
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        subscriptions=(_resolved(interval_seconds=interval_seconds, sampler=sampler),),
     )
 
 
@@ -109,13 +104,8 @@ def _ctx_with_a_claimable_chunk(
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=probe,
         clock=clock,
-        config=LoopConfig(
-            runner_id="r1",
-            workspace_id="ws1",
-            max_agents=1,
-            subscriptions=(_declaration(interval_seconds=interval_seconds),),
-        ),
-        subscription_samplers={_SLUG: sampler},
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        subscriptions=(_resolved(interval_seconds=interval_seconds, sampler=sampler),),
     )
     return ctx, hub
 
@@ -344,16 +334,11 @@ def test_two_declarations_with_different_cadences_only_the_due_one_samples(tmp_p
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         clock=clock,
-        config=LoopConfig(
-            runner_id="r1",
-            workspace_id="ws1",
-            max_agents=1,
-            subscriptions=(
-                _declaration("fast", interval_seconds=100),
-                _declaration("slow", interval_seconds=10_000),
-            ),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        subscriptions=(
+            _resolved("fast", interval_seconds=100, sampler=fast),
+            _resolved("slow", interval_seconds=10_000, sampler=slow),
         ),
-        subscription_samplers={"fast": fast, "slow": slow},
     )
 
     ExternalUsageSample(ctx).run()
@@ -383,16 +368,11 @@ def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_othe
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         clock=clock,
-        config=LoopConfig(
-            runner_id="r1",
-            workspace_id="ws1",
-            max_agents=1,
-            subscriptions=(
-                _declaration("good", interval_seconds=100),
-                _declaration("bad", interval_seconds=100),
-            ),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        subscriptions=(
+            _resolved("good", interval_seconds=100, sampler=ok),
+            _resolved("bad", interval_seconds=100, sampler=failing),
         ),
-        subscription_samplers={"good": ok, "bad": failing},
     )
 
     ExternalUsageSample(ctx).run()  # both sample cleanly the first time
@@ -420,9 +400,9 @@ def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_othe
 
 @pytest.mark.unit
 def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A slug whose provider names no known sampler binding is simply absent from
-    ``subscription_samplers`` (blizzard#436) — no crash, no attempt row for it, and the
-    other declared subscription is sampled normally in the same tick."""
+    """A slug whose provider names no known sampler binding carries a ``None`` sampler
+    (blizzard#436) — no crash, no attempt row for it, and the other declared subscription
+    is sampled normally in the same tick."""
     store = _store(tmp_path)
     known = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
@@ -433,16 +413,11 @@ def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_pa
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         clock=clock,
-        config=LoopConfig(
-            runner_id="r1",
-            workspace_id="ws1",
-            max_agents=1,
-            subscriptions=(
-                _declaration("known", interval_seconds=100),
-                _declaration("no-binding", interval_seconds=100, provider="some-unbound-provider"),
-            ),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        subscriptions=(
+            _resolved("known", interval_seconds=100, sampler=known),
+            _resolved("no-binding", interval_seconds=100, sampler=None),
         ),
-        subscription_samplers={"known": known},  # "no-binding" has no entry — no binding
     )
 
     ExternalUsageSample(ctx).run()  # must not raise

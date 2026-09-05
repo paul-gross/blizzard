@@ -3,7 +3,7 @@
 Four operations cover every headless-run + persisted-session + resume harness: ``spawn``,
 ``resume_with_message``, ``resume_command``, and ``parse_verdict``. Usage translation and
 the transcript source ride alongside them. Provider subscription sampling is a separate,
-provider-selected seam (blizzard#436): see ``blizzard.runner.harness.subscription_sampler``.
+provider-selected seam (blizzard#436): see ``blizzard.runner.subscriptions.subscription_sampler``.
 Adapters stay dumb (``bzh:deterministic-shell``): they translate, they never decide."""
 
 from __future__ import annotations
