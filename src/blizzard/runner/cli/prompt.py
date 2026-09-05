@@ -9,7 +9,7 @@ import click
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.composition import build_stores
+from blizzard.runner.composition import build_read_stores
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness.workspace_prompts import (
     PACKAGED,
@@ -163,13 +163,14 @@ def _configured_source(config: RunnerConfig) -> str:
 
 def _stored_override(config: RunnerConfig) -> str | None:
     """The store's runtime override, or ``None``. A read-only query, so a live daemon is no bar."""
+    engine = create_engine_from_url(config.db_url)
     try:
-        stores = build_stores(
-            create_engine_from_url(config.db_url), errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
-        )
+        stores = build_read_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
         return stores.workspace_prompt.workspace_prompt_override(config.workspace_id)
     except RunnerStoreError as exc:
         raise click.ClickException(f"could not read the runner store at {config.db_url}: {exc}") from exc
+    finally:
+        engine.dispose()
 
 
 def _repoint_config(root: Path, *, file_path: str) -> None:

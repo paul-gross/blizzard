@@ -249,6 +249,39 @@ def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter()
     assert not violations, f"I — only runner/composition.py may name a concrete runner-store adapter: {violations}"
 
 
+_COMPOSITION_ROOTS = frozenset(
+    {
+        _HUB_DIR / "app.py",
+        _HUB_DIR / "composition.py",
+        _RUNNER_DIR / "app.py",
+        _RUNNER_DIR / "loop" / "build.py",
+        _RUNNER_DIR / "cli" / "runtime.py",
+        _RUNNER_DIR / "cli" / "external_usage.py",
+    }
+)
+
+_GATED_COMPOSITION_NAMES = ("build_stores", "ClaudeCodeAdapter")
+
+
+def test_build_stores_and_claude_code_adapter_are_named_only_at_a_composition_root() -> None:
+    """L (plan: structural gates over runner wiring, D1, D2): bzh:dependency-injection's six
+    declared composition roots are the only modules that may import ``build_stores`` or
+    ``ClaudeCodeAdapter`` — every other collaborator takes ``RunnerStores``/``RunnerReadStores``
+    or ``IHarnessAdapter``."""
+    violations: list[str] = []
+    for path in sorted(_SRC_DIR.rglob("*.py")):
+        if path in _COMPOSITION_ROOTS:
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            hit = set(_GATED_COMPOSITION_NAMES) & {alias.name for alias in node.names}
+            if hit:
+                violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
+    assert not violations, f"L — only a declared composition root may import {_GATED_COMPOSITION_NAMES}: {violations}"
+
+
 _RUNNER_API_DIR = _RUNNER_DIR / "api"
 
 

@@ -31,7 +31,7 @@ from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.internal.workspace_prompt_store import WorkspacePromptStore
-from blizzard.runner.stores import RunnerStores
+from blizzard.runner.stores import RunnerReadStores, RunnerStores
 
 
 def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerStores:
@@ -59,3 +59,9 @@ def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerSt
         graph_artifacts=GraphArtifactStore(connections),
         elicitations=ElicitationStore(connections),
     )
+
+
+def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerReadStores:
+    """The read-only bundle a controller-facing collaborator takes — narrows build_stores's
+    bundle over the same adapter instances, never a second one (D3)."""
+    return RunnerReadStores.of(build_stores(engine, errors=errors))
