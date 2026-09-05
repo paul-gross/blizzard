@@ -64,8 +64,15 @@ class Daemon:
     build_app: Any
 
     def build_hosted_app(self, config: Any) -> Any:
-        """The store-wired ``host`` composition root for this daemon."""
-        return self.app.build_hosted_app(config)
+        """The store-wired ``host`` composition root for this daemon.
+
+        The runner's returns a ``HostedApp`` carrying the served app; the hub's returns
+        the served app directly. `isinstance` distinguishes the two explicitly.
+        """
+        built = self.app.build_hosted_app(config)
+        if isinstance(built, runner_app.HostedApp):
+            return built.app
+        return built
 
 
 DAEMONS = [

@@ -31,12 +31,26 @@ from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.internal.workspace_prompt_store import WorkspacePromptStore
-from blizzard.runner.stores import RunnerStores
+from blizzard.runner.stores import RunnerReadStores, RunnerStores
 
 
 def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerStores:
     """Construct and wire every extracted concept-store adapter over a migrated engine."""
+    return _build_stores(RunnerStoreConnections(engine, errors))
+
+
+def build_stores_and_connections(
+    engine: Engine, *, errors: RunnerStoreErrorFactory
+) -> tuple[RunnerStores, RunnerStoreConnections]:
+    """Build the store bundle and hand back the ``RunnerStoreConnections`` every adapter in it
+    shares — for the one caller (``build_hosted_app``) that wires a second ``store/internal/``-
+    style collaborator (``JtiCacheRepository``) over the same engine, so it reuses this instance
+    instead of building its own (D4)."""
     connections = RunnerStoreConnections(engine, errors)
+    return _build_stores(connections), connections
+
+
+def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
     return RunnerStores(
         lease_record=LeaseRecordStore(connections),
         session=LeaseSessionStore(connections),
@@ -59,3 +73,9 @@ def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerSt
         graph_artifacts=GraphArtifactStore(connections),
         elicitations=ElicitationStore(connections),
     )
+
+
+def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerReadStores:
+    """The read-only bundle a controller-facing collaborator takes — narrows build_stores's
+    bundle over the same adapter instances, never a second one (D3)."""
+    return RunnerReadStores.of(build_stores(engine, errors=errors))

@@ -87,9 +87,11 @@ def test_moved_vocabulary_has_exactly_one_importable_home() -> None:
     assert not violations, f"D — imported from somewhere other than its declared foundation home: {violations}"
 
 
-def _bare_engine_accesses(root: Path) -> list[str]:
+def _bare_engine_accesses(root: Path, *, exempt: frozenset[Path] = frozenset()) -> list[str]:
     violations: list[str] = []
-    for path in sorted(root.glob("*.py")):
+    for path in sorted(root.rglob("*.py")):
+        if path in exempt:
+            continue
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.Attribute):
@@ -107,6 +109,17 @@ def test_hub_store_internal_acquires_no_connection_outside_the_seam() -> None:
     assert not violations, (
         f"E — hub/store/internal/ must route every connection through HubStoreConnections: {violations}"
     )
+
+
+_RUNNER_STORE_CONNECTIONS_FILE = _RUNNER_STORE_DIR / "internal" / "base.py"
+
+
+def test_runner_acquires_no_connection_outside_the_store_seam() -> None:
+    """D5 (plan: structural gates over runner wiring): every ``runner/`` module takes
+    ``RunnerStoreConnections`` in place of a bare ``Engine`` — none may acquire a
+    connection directly outside the connections seam itself."""
+    violations = _bare_engine_accesses(_RUNNER_DIR, exempt=frozenset({_RUNNER_STORE_CONNECTIONS_FILE}))
+    assert not violations, f"K — runner/ must route every connection through RunnerStoreConnections: {violations}"
 
 
 def test_hub_store_internal_holds_no_http_client() -> None:
@@ -159,9 +172,9 @@ _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     # Engine only, for DI typing — shared with hub/composition.py, permanently out of
     # scope (plan's "Out of scope": "Engine in a composition root").
     _RUNNER_COMPOSITION_FILE: ("Engine",),
-    # A wholly separate, unrelated store (the JWT jti-seen cache) under its own
-    # package-private internal/ — never part of RunnerStore.
-    _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": None,
+    # IntegrityError only, for the replay-check catch (D6): the collision itself IS the
+    # business-logic check, so this one name stays local instead of the table-bound form.
+    _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": ("IntegrityError",),
 }
 
 
@@ -232,6 +245,38 @@ def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter()
                 if hit:
                     violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
     assert not violations, f"I — only runner/composition.py may name a concrete runner-store adapter: {violations}"
+
+
+_COMPOSITION_ROOTS = frozenset(
+    {
+        _HUB_DIR / "app.py",
+        _HUB_DIR / "composition.py",
+        _RUNNER_DIR / "app.py",
+        _RUNNER_DIR / "loop" / "build.py",
+        _RUNNER_DIR / "cli" / "runtime.py",
+        _RUNNER_DIR / "cli" / "external_usage.py",
+    }
+)
+
+_GATED_COMPOSITION_NAMES = ("build_stores", "build_stores_and_connections", "ClaudeCodeAdapter")
+
+
+def test_build_stores_and_claude_code_adapter_are_named_only_at_a_composition_root() -> None:
+    """L (plan: structural gates over runner wiring, D1, D2): only the six declared
+    composition roots may import ``build_stores``/``build_stores_and_connections``/
+    ``ClaudeCodeAdapter`` — every other collaborator takes the bundle or Protocol."""
+    violations: list[str] = []
+    for path in sorted(_SRC_DIR.rglob("*.py")):
+        if path in _COMPOSITION_ROOTS:
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            hit = set(_GATED_COMPOSITION_NAMES) & {alias.name for alias in node.names}
+            if hit:
+                violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
+    assert not violations, f"L — only a declared composition root may import {_GATED_COMPOSITION_NAMES}: {violations}"
 
 
 _RUNNER_API_DIR = _RUNNER_DIR / "api"

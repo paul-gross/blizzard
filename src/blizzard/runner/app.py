@@ -64,7 +64,7 @@ from blizzard.runner.auth.federation import router as auth_router
 from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepository
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
-from blizzard.runner.composition import build_stores
+from blizzard.runner.composition import build_stores_and_connections
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.asks import AskService
 from blizzard.runner.domain.attachments import AttachmentService
@@ -84,6 +84,7 @@ from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapt
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
+from blizzard.runner.loop.build import ResumeMarking
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
@@ -298,7 +299,17 @@ def create_app(
     return app
 
 
-def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None) -> FastAPI:
+@dataclass(frozen=True)
+class HostedApp:
+    """The ``host`` composition root's return: the served app alongside the restart-resume
+    hook, both wired from the one object graph :func:`build_hosted_app` builds (D4) — no
+    caller wires a second engine, store bundle, clock, or process probe to reach either."""
+
+    app: FastAPI
+    resume: ResumeMarking
+
+
+def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None) -> HostedApp:
     """The ``host`` composition root: open the store and wire the readiness seam.
 
     Engine creation is connection-free, so this stays cheap; the connection is opened
@@ -308,7 +319,8 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
-    runner_stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+    runner_stores, connections = build_stores_and_connections(engine, errors=errors)
     workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(
         workspace_root=config.workspace_root or str(config.root),
         env_pool=config.workspace_envs,
@@ -382,10 +394,10 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         tokens=runner_stores.tokens,
         environments=runner_stores.environments,
     )
-    jti_cache = JtiCacheRepository(engine, SystemClock())
+    jti_cache = JtiCacheRepository(connections, SystemClock())
     # The real, network-reaching hub client — only `host` wires one (issue #95).
     hub_http_client = httpx.Client(base_url=config.hub_url, timeout=5.0)
-    return create_app(
+    app = create_app(
         config,
         readiness=readiness,
         workspace_provider=workspace_provider,
@@ -403,6 +415,8 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         hub_proxy_client=hub_proxy_client,
         events=events,
     )
+    resume = ResumeMarking(runner_stores, SystemClock(), LinuxProcessProbe())
+    return HostedApp(app=app, resume=resume)
 
 
 def create_app_for_export() -> FastAPI:

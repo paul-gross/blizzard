@@ -113,7 +113,7 @@ def test_hosted_app_threads_the_worker_settings_path_and_permission_mode(tmp_pat
         'harness_permission_mode = "acceptEdits"\n'
     )
 
-    app = build_hosted_app(RunnerConfig.load(tmp_path))
+    app = build_hosted_app(RunnerConfig.load(tmp_path)).app
 
     harness = app.state.harness
     assert isinstance(harness, ClaudeCodeAdapter)
@@ -195,7 +195,7 @@ def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path
     (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
     broker = EventBroker()
 
-    app = build_hosted_app(RunnerConfig.load(tmp_path), events=broker)
+    app = build_hosted_app(RunnerConfig.load(tmp_path), events=broker).app
 
     assert app.state.events is broker
 
@@ -206,7 +206,7 @@ def test_hosted_app_defaults_to_no_broker(tmp_path: Path) -> None:
     exists yet, but the default must stay absent so a future one degrades safely."""
     (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
 
-    app = build_hosted_app(RunnerConfig.load(tmp_path))
+    app = build_hosted_app(RunnerConfig.load(tmp_path)).app
 
     assert app.state.events is None
 
