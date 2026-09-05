@@ -60,12 +60,8 @@ class IReadUsageRepository(Protocol):
     def last_external_usage_attempt_at(self, slug: str) -> datetime | None:
         """The derived cadence anchor for one declared subscription's sample step
         (issue #218, slug-keyed since blizzard#436): ``max(sampled_at)`` across this
-        ``slug``'s own ``external_usage_samples`` rows, or ``None``.
-
-        Derived, never a stored column (``bzh:facts-not-status``). A NULL-``payload``
-        attempt counts exactly like a successful one — this subscription *tried* then.
-        Keyed on ``slug`` so one subscription's failed sample never stalls another's
-        cadence or masks its own last-good windows."""
+        ``slug``'s own rows, or ``None``. A NULL-``payload`` attempt counts like a
+        successful one, so one subscription's failed sample never masks its own windows."""
         ...
 
 
@@ -111,10 +107,7 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         self, *, slug: str, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
     ) -> int | None:
         """Append one declared subscription's sampling attempt **and**, only when it
-        produced a sample, buffer its outbound report — atomically (issue #218). The
-        attempt row is always appended, whether or not the sampler had anything to
-        report; the outbound fact exists only when ``payload`` is not ``None``, its seq
-        returned then and ``None`` otherwise. ``slug`` (blizzard#436) is the join key a
-        later read filters on — one subscription's attempt never advances another's
-        cadence anchor."""
+        produced a sample, buffer its outbound report — atomically (issue #218), returning
+        the buffered seq or ``None``. ``slug`` (blizzard#436) is the join key a later read
+        filters on, so one subscription's attempt never advances another's cadence."""
         ...

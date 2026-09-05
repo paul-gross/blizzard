@@ -1,8 +1,5 @@
-"""runner external usage's subscription join key — ``slug`` and its operator-facing
-``name``, widening the primary key to ``(runner_id, slug)`` (hub store tree, blizzard#436
-phase 3). Every existing row is backfilled to the legacy Anthropic slug/name: it was
-one-per-``runner_id`` before this reshape, so backfilling ``slug`` and widening the
-primary key to a strict superset key cannot violate uniqueness.
+"""runner_external_usage's subscription join key (blizzard#436 phase 3) — widens the
+primary key to ``(runner_id, slug)``, backfilling every existing row to the legacy slug/name.
 
 Revision ID: 20260905_1100_hub_runner_external_usage_slug
 Revises: 20260902_1000_finding_facts_ref
@@ -23,10 +20,8 @@ depends_on: str | Sequence[str] | None = None
 _TABLE = "runner_external_usage"
 _PK_NAME = "pk_runner_external_usage"
 
-# Mirrors `blizzard.runner.config.LEGACY_ANTHROPIC_SLUG`/its synthesized declaration's
-# `name` — restated rather than imported (``bzh:frozen-revisions``, ``bzh:domain-core``):
-# this backfill value is historical, fixed at the instant this revision ran, and must
-# never track whatever those constants say today.
+# Mirrors `blizzard.wire.facts.LEGACY_ANTHROPIC_SLUG` — restated, not imported
+# (``bzh:frozen-revisions``): this historical backfill value must never track it.
 _LEGACY_ANTHROPIC_SLUG = "anthropic"
 _LEGACY_ANTHROPIC_NAME = "Anthropic"
 
@@ -57,9 +52,8 @@ def upgrade() -> None:
         _RUNNER_EXTERNAL_USAGE.update().values(slug=_LEGACY_ANTHROPIC_SLUG, name=_LEGACY_ANTHROPIC_NAME)
     )
 
-    # `recreate="always"` is dialect-agnostic (``bzh:sql-portable``): the same copy-based
-    # rebuild widens the primary key on sqlite (which has no in-place ``ALTER`` for it)
-    # and on postgres alike, with no dialect branch in this script.
+    # `recreate="always"` is dialect-agnostic (``bzh:sql-portable``): one copy-based
+    # rebuild widens the primary key on both sqlite and postgres, no dialect branch.
     with op.batch_alter_table(_TABLE, recreate="always") as batch:
         batch.alter_column("slug", nullable=False)
         batch.alter_column("name", nullable=False)
@@ -71,10 +65,8 @@ def downgrade() -> None:
     if not _has_slug(bind):
         return  # already the pre-reshape shape
 
-    # Lossy: a runner_id with more than one slug's row keeps only its legacy-slug row
-    # (mirrors 20260716_2206's accepted duplicate-drop) — the pre-reshape shape had
-    # exactly one row per runner_id, so a multi-subscription runner can't downgrade
-    # without picking one.
+    # Lossy: a multi-subscription runner_id keeps only its legacy-slug row, the pre-reshape
+    # shape's one-row-per-runner_id (mirrors 20260716_2206's accepted duplicate-drop).
     bind.execute(_RUNNER_EXTERNAL_USAGE.delete().where(_RUNNER_EXTERNAL_USAGE.c.slug != _LEGACY_ANTHROPIC_SLUG))
 
     with op.batch_alter_table(_TABLE, recreate="always") as batch:

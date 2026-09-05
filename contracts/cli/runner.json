@@ -272,7 +272,7 @@
     "external-usage": {
       "commands": {
         "probe": {
-          "help": "Sample one declared subscription's rate-limit usage, by SLUG, and print it.\n\nRead-only: builds the same sampler seam the reconciliation loop uses and samples\nthrough it directly (blizzard#436) \u2014 no store write, no tick, nothing enqueued or\ndelivered. A runner with no ``[[subscription]]`` entries declares exactly one,\nunder the reserved slug ``anthropic``.",
+          "help": "Sample one declared subscription's rate-limit usage, by SLUG, and print it.\n\nRead-only, through the same sampler seam the loop uses \u2014 no store write, no tick.\nA runner with no ``[[subscription]]`` entries declares exactly one, ``anthropic``.",
           "params": [
             {
               "hidden": false,

@@ -1,9 +1,8 @@
 """The Anthropic (Claude Code) subscription-sampler binding (``bzh:pluggable-seams``).
 
 Implements :class:`~blizzard.runner.harness.subscription_sampler.ISubscriptionSampler`
-against Claude Code's own OAuth usage endpoint. Moved out of ``ClaudeCodeAdapter`` intact
-(blizzard#436) — same behavior, same log messages — so a provider subscription is sampled
-through its own binding rather than riding on the coding-harness adapter."""
+against Claude Code's own OAuth usage endpoint, independent of the coding-harness adapter
+(blizzard#436)."""
 
 from __future__ import annotations
 
@@ -24,9 +23,8 @@ from blizzard.runner.harness.subscription_sampler import (
 
 _log = get_logger("blizzard.runner.harness")
 
-# The provider name this binding answers to at selection (blizzard#436) — the only
-# grammar :func:`~blizzard.runner.harness.internal.subscription_sampler_factory.select_sampler`
-# recognizes today.
+# The provider name this binding answers to at selection (blizzard#436) — see
+# :func:`~blizzard.runner.harness.internal.subscription_sampler_factory.select_sampler`.
 PROVIDER_ANTHROPIC = "anthropic"
 
 # The subscription-usage seam (issue #218) — the API host and the shared credential file

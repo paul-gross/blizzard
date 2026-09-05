@@ -479,9 +479,9 @@ external_usage_samples = Table(
     "external_usage_samples",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("slug", String, nullable=False),
     Column("sampled_at", UtcDateTime, nullable=False),
     Column("payload", Text, nullable=True),  # NULL = this attempt sampled nothing
-    Column("slug", String, nullable=False),
 )
 
 # --- Live session-context samples (the warn lane) ----------------------------

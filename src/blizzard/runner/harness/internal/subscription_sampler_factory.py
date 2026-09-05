@@ -1,10 +1,8 @@
 """Selects the sampler binding for one declared provider subscription (blizzard#436).
 
-A ``provider -> binding`` map, mirroring ``blizzard.hub.work_sources.internal.factory``'s
-own selection shape; confined to ``internal/`` (``bzh:dependency-inversion``) so the seam
-root stays free of both ``httpx`` and any one provider's binding. A provider with no known
-binding selects ``None`` — declared, but unsampled, never a config-load failure: a runner
-may name a provider before blizzard ships a binding for it."""
+A ``provider -> binding`` map, confined to ``internal/`` (``bzh:dependency-inversion``) so
+the seam root stays free of both ``httpx`` and any one provider's binding. A provider with
+no known binding selects ``None`` — declared, but unsampled, never a config-load failure."""
 
 from __future__ import annotations
 

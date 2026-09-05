@@ -1,6 +1,5 @@
-"""external usage samples' subscription join key — ``slug``, backfilled to the legacy
-Anthropic slug for every row a runner recorded before ``[[subscription]]`` declarations
-existed (runner store tree, blizzard#436)
+"""external_usage_samples' subscription join key — ``slug``, backfilled to the legacy
+Anthropic slug for every existing row (blizzard#436).
 
 Revision ID: 20260905_1000_runner_external_usage_samples_slug
 Revises: 20260831_1000_runner_in_flight_elicitations
@@ -19,9 +18,8 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 _TABLE = "external_usage_samples"
-# Mirrors `blizzard.runner.config.LEGACY_ANTHROPIC_SLUG` — restated rather than imported
-# (``bzh:frozen-revisions``): this backfill value is historical, fixed at the instant this
-# revision ran, and must never track whatever that constant says today.
+# Mirrors `blizzard.wire.facts.LEGACY_ANTHROPIC_SLUG` — restated, not imported
+# (``bzh:frozen-revisions``): this historical backfill value must never track it.
 _LEGACY_ANTHROPIC_SLUG = "anthropic"
 
 # The reshaped shape — the one column the backfill's UPDATE names, added by this revision.

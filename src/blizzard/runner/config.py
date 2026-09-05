@@ -17,6 +17,7 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
+from blizzard.wire.facts import LEGACY_ANTHROPIC_NAME, LEGACY_ANTHROPIC_SLUG
 
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
@@ -73,16 +74,8 @@ DEFAULT_RUNNER_CEILING_WINDOW_HOURS = 24.0
 # How often the tick re-samples the harness's rate-limit windows (issue #218) — a
 # diagnostic, best-effort read, not a spend control.
 DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS = 300
-# The join key the legacy, single-subscription `[external_subscription_usage]` table
-# migrates to (blizzard#436): a runner with no `[[subscription]]` declarations gets exactly
-# one declaration synthesized under this slug. Declared once here — later phases' backfill
-# value and the argument an operator types at the probe both import it — so the legacy
-# wire field and every declared-vs-synthesized join key can never drift apart.
-LEGACY_ANTHROPIC_SLUG = "anthropic"
 # Structural-only: `[[subscription]]` required keys (blizzard#436) — `provider` is
-# deliberately unvalidated against a known set, unlike `[[work_source]]`'s: a runner may
-# declare a subscription before blizzard ships a sampler binding for its provider, and it
-# is simply unsampled rather than a config-load failure.
+# unvalidated, since an undeclared sampler binding is simply unsampled, not a load failure.
 _REQUIRED_SUBSCRIPTION_KEYS = ("slug", "name", "provider")
 # Well under the minutes a context takes to move; each read is a bounded tail read.
 DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS = 60
@@ -250,11 +243,14 @@ class SubscriptionDeclaration:
     @classmethod
     def declared(cls, raw_declarations: object) -> tuple[SubscriptionDeclaration, ...]:
         """Validate and project ``[[subscription]]`` entries; each rejection names the
-        offending entry rather than failing generically. An absent or non-list value
-        (no ``[[subscription]]`` authored at all) is zero declarations, never an error —
-        that is exactly the state :meth:`synthesized_from_legacy` fills in for."""
+        offending entry. An empty list (none authored) is zero declarations, filled in by
+        :meth:`synthesized_from_legacy`; anything else non-list (e.g. a singular
+        ``[subscription]`` table) is rejected rather than silently read as zero."""
         if not isinstance(raw_declarations, list):
-            return ()
+            raise ConfigError(
+                f"[[subscription]] must be an array of tables, got {type(raw_declarations).__name__}: "
+                f"{raw_declarations!r}"
+            )
         declarations: list[SubscriptionDeclaration] = []
         seen_slugs: set[str] = set()
         for entry in raw_declarations:
@@ -292,7 +288,7 @@ class SubscriptionDeclaration:
         credential path forward unchanged."""
         return cls(
             slug=LEGACY_ANTHROPIC_SLUG,
-            name="Anthropic",
+            name=LEGACY_ANTHROPIC_NAME,
             provider=LEGACY_ANTHROPIC_SLUG,
             credentials_path=credentials_path,
             sample_interval_seconds=sample_interval_seconds,

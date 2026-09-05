@@ -1562,9 +1562,8 @@ def test_declarations_present_win_over_the_legacy_table_entirely(tmp_path: Path)
 
     config = RunnerConfig.load(root)
 
-    # The legacy table's own credentials_path/sample_interval_seconds still parse onto
-    # the always-present `external_usage_*` fields (unchanged, phase 1) — but the resolved
-    # subscription list is the declared entry alone, never the legacy one too.
+    # The legacy table's credentials_path/sample_interval_seconds still parse onto the
+    # always-present `external_usage_*` fields, but resolve to the declared entry alone.
     expected = (
         SubscriptionDeclaration(
             slug="my-anthropic",
@@ -1631,4 +1630,17 @@ def test_an_empty_declaration_slug_raises(tmp_path: Path) -> None:
         f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[[subscription]]\nslug = ""\nname = "A"\nprovider = "anthropic"\n'
     )
     with pytest.raises(ConfigError, match="empty"):
+        RunnerConfig.load(root)
+
+
+@pytest.mark.unit
+def test_a_singular_subscription_table_raises_instead_of_silently_reading_as_zero(tmp_path: Path) -> None:
+    # `[subscription]` (no doubled brackets) parses as a dict, not a list — a plausible
+    # typo that must not silently fall back to the legacy table (blizzard#436).
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[subscription]\nslug = "a"\nname = "A"\nprovider = "anthropic"\n'
+    )
+    with pytest.raises(ConfigError, match="\\[\\[subscription\\]\\]"):
         RunnerConfig.load(root)
