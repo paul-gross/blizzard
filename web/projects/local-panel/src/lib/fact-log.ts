@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import {
+  asyncState,
   compactRef,
   formatAbsolute,
   formatLocalClockWithDay,
   KitAsyncState,
-  type KitAsyncStateValue,
   type LocalClockWithDay,
   type runnerApi,
 } from 'fleet';
@@ -32,11 +32,7 @@ export class FactLog {
 
   /** The async triad's resolved state — loading/error take precedence, then
    * an empty ledger, else the fact rows render. */
-  protected readonly triadState = computed<KitAsyncStateValue>(() => {
-    if (this.query.isPending()) return 'loading';
-    if (this.query.isError()) return 'error';
-    return this.facts().length === 0 ? 'empty' : 'ready';
-  });
+  protected readonly triadState = computed(() => asyncState(this.query, this.facts().length === 0));
 
   protected ref(id: string): string {
     return compactRef(id);

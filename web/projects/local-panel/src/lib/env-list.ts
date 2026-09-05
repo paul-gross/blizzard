@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { ageMs, compactRef, formatHeldFor, KitAsyncState, KitBeacon, type KitAsyncStateValue, type runnerApi } from 'fleet';
+import { ageMs, asyncState, compactRef, formatHeldFor, injectNowSignal, KitAsyncState, KitBeacon, type runnerApi } from 'fleet';
 
 import { injectRunnerDashboardQuery } from './status.query';
 
@@ -27,11 +27,11 @@ export class EnvList {
 
   /** The async triad's resolved state — loading/error take precedence, then
    * an empty pool (no environments configured at all), else the rows render. */
-  protected readonly triadState = computed<KitAsyncStateValue>(() => {
-    if (this.query.isPending()) return 'loading';
-    if (this.query.isError()) return 'error';
-    return this.envs().length === 0 ? 'empty' : 'ready';
-  });
+  protected readonly triadState = computed(() => asyncState(this.query, this.envs().length === 0));
+
+  /** Ticks once a second so {@link heldFor} advances between polls instead of
+   * sitting frozen at whatever age the last read carried. */
+  private readonly now = injectNowSignal(1000);
 
   protected isHeld(env: runnerApi.EnvironmentView): boolean {
     return env.chunk_id != null;
@@ -48,7 +48,7 @@ export class EnvList {
    */
   protected heldFor(env: runnerApi.EnvironmentView): string {
     if (env.held_since == null) return '';
-    const age = ageMs(env.held_since, Date.now());
+    const age = ageMs(env.held_since, this.now());
     return age === null ? '—' : formatHeldFor(age);
   }
 }

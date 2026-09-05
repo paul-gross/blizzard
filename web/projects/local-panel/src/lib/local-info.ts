@@ -1,14 +1,5 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, effect, signal } from '@angular/core';
-import {
-  ageMs,
-  formatAge,
-  injectNowSignal,
-  KitAsyncState,
-  type KitAsyncStateValue,
-  type KitFact,
-  KitFactList,
-  type runnerApi,
-} from 'fleet';
+import { ageMs, asyncState, formatAge, injectNowSignal, KitAsyncState, type KitFact, KitFactList, type runnerApi } from 'fleet';
 
 import { injectRunnerDashboardQuery } from './status.query';
 
@@ -77,11 +68,7 @@ export class LocalInfo {
   /** The async triad's resolved state — no `'empty'` case: a resolved read
    * with a malformed body renders nothing (the `view()` null-guard in the
    * projected content), the same degraded-blank behavior as before. */
-  protected readonly triadState = computed<KitAsyncStateValue>(() => {
-    if (this.query.isPending()) return 'loading';
-    if (this.query.isError()) return 'error';
-    return 'ready';
-  });
+  protected readonly triadState = computed(() => asyncState(this.query, false));
 
   /** Ticks once a second (issue #178) so `lastFlushLabel`/`lastTickLabel` advance
    * between polls instead of sitting frozen at whatever age the last read carried —

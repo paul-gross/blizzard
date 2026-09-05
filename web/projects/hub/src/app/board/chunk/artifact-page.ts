@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { type ArtifactView as ArtifactModel, type KitAsyncStateValue, compactRef, injectHubChunkDetailQuery } from 'fleet';
+import { type ArtifactView as ArtifactModel, asyncState, compactRef, injectHubChunkDetailQuery } from 'fleet';
 
 import { ArtifactView } from './artifact-view';
 
@@ -51,9 +51,5 @@ export class ArtifactPage {
   /** A resolved chunk whose store has no such key is a dead link (`empty`), not a
    * slow read (`loading`) and not a fault (`error`) — an operator following a
    * stale shared URL deserves to be told which. */
-  protected readonly state = computed<KitAsyncStateValue>(() => {
-    if (this.detailQuery.isError()) return 'error';
-    if (this.detailQuery.isPending()) return 'loading';
-    return this.artifact() === undefined ? 'empty' : 'ready';
-  });
+  protected readonly state = computed(() => asyncState(this.detailQuery, this.artifact() === undefined));
 }

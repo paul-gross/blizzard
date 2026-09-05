@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { ageMs, compactRef, formatHeldFor, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
+import { ageMs, asyncState, compactRef, formatHeldFor, injectNowSignal, KitAsyncState, type runnerApi } from 'fleet';
 
 import { injectRunnerDashboardQuery } from './status.query';
 
@@ -23,18 +23,18 @@ export class LocalAsks {
 
   /** The async triad's resolved state — loading/error take precedence, then
    * no open asks, else the ask rows render. */
-  protected readonly triadState = computed<KitAsyncStateValue>(() => {
-    if (this.query.isPending()) return 'loading';
-    if (this.query.isError()) return 'error';
-    return this.asks().length === 0 ? 'empty' : 'ready';
-  });
+  protected readonly triadState = computed(() => asyncState(this.query, this.asks().length === 0));
+
+  /** Ticks once a second so {@link askedFor} advances between polls instead of
+   * sitting frozen at whatever age the last read carried. */
+  private readonly now = injectNowSignal(1000);
 
   protected chunkRef(ask: runnerApi.AskView): string {
     return compactRef(ask.chunk_id);
   }
 
   protected askedFor(ask: runnerApi.AskView): string {
-    const age = ageMs(ask.asked_at, Date.now());
+    const age = ageMs(ask.asked_at, this.now());
     return age === null ? '—' : formatHeldFor(age);
   }
 }

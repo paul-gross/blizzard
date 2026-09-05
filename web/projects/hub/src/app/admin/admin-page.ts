@@ -1,12 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import {
-  UsersTable,
-  injectAssignRoleMutation,
-  injectMeQuery,
-  injectUsersQuery,
-  KitAsyncState,
-  type KitAsyncStateValue,
-} from 'fleet';
+import { UsersTable, asyncState, injectAssignRoleMutation, injectMeQuery, injectUsersQuery, KitAsyncState } from 'fleet';
 
 /**
  * The `/admin` route (issue #94) — the real admin page replacing #93's stub: a
@@ -52,11 +45,7 @@ export class AdminPage {
   /** `KitAsyncState`'s own triad — `empty` is never reached here (an empty user list
    * still renders {@link UsersTable}'s own empty state, a distinct message from "no
    * users administrable at all"), so this collapses to loading/error/ready. */
-  protected readonly triadState = computed<KitAsyncStateValue>(() => {
-    if (this.usersQuery.isPending()) return 'loading';
-    if (this.usersQuery.isError()) return 'error';
-    return 'ready';
-  });
+  protected readonly triadState = computed(() => asyncState(this.usersQuery, false));
 
   /** The last {@link assignRoleMutation} refusal's own `detail` (the hub's
    * `RoleAssignmentRefused` message), or `null` once a fresh `mutate()` call
