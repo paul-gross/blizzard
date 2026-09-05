@@ -352,7 +352,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     # The clock/probe instances below are per-service: both are stateless, so a second
     # instance is equivalent to sharing one.
     runner_status = RunnerStatusService(
-        stores=runner_stores,
+        stores=RunnerReadStores.of(runner_stores),
         clock=SystemClock(),
         harness=harness,
         runner_id=config.runner_id,

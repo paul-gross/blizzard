@@ -23,7 +23,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.adapter import WorkerHandle
-from tests.runner_fakes import FakeHarness, make_store, make_stores, no_retry_delay
+from tests.runner_fakes import FakeHarness, make_read_stores, make_store, make_stores, no_retry_delay
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _HUB_URL = "http://hub.local:8421"
@@ -37,7 +37,7 @@ def _app_with_status(
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url or "")
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1"), verdict=None)
     service = RunnerStatusService(
-        make_stores(store),
+        make_read_stores(store),
         FixedClock(_NOW),
         harness,
         runner_id=config.runner_id,

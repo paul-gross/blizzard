@@ -15,7 +15,7 @@ from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.outbound import OutboundFactRecord
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import IHarnessAdapter
-from blizzard.runner.stores import RunnerStores
+from blizzard.runner.stores import RunnerReadStores
 
 __all__ = [
     "HUB_CONTACT_STALENESS_THRESHOLD",
@@ -125,11 +125,13 @@ class RunnerStatusService:
     identity/config — everything ``blizzard runner status`` renders (issue #51).
 
     Reads across seven concepts (pause, leases, outbound, environments, asks, takeover,
-    escalations), so it holds the :class:`~blizzard.runner.stores.RunnerStores` bundle (D4)."""
+    escalations), so it holds the :class:`~blizzard.runner.stores.RunnerReadStores` bundle
+    (D4) — every one of its store calls is a query, so it takes the narrowed bundle
+    (blizzard#412)."""
 
     def __init__(
         self,
-        stores: RunnerStores,
+        stores: RunnerReadStores,
         clock: IClock,
         harness: IHarnessAdapter,
         *,

@@ -24,7 +24,7 @@ from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepositor
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.store.schema import metadata
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_stores, runner_store_errors
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_read_stores, make_stores, runner_store_errors
 
 pytestmark = pytest.mark.component
 
@@ -87,7 +87,7 @@ def _build_app(
     )
     store = SqlAlchemyRunnerStore(engine, runner_store_errors())
     runner_status = RunnerStatusService(
-        stores=make_stores(store),
+        stores=make_read_stores(store),
         clock=SystemClock(),
         harness=None,  # type: ignore[arg-type]  # unused by the two routes this test drives
         runner_id=_RUNNER_ID,
