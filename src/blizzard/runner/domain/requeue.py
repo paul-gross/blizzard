@@ -7,20 +7,35 @@ budget is **carried, not reset**: a requeue buys exactly one more try."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.runner.domain.escalations import IReadEscalationRepository
-from blizzard.runner.domain.takeover import IReadTakeoverRepository
+
+if TYPE_CHECKING:
+    from blizzard.runner.domain.escalations import EscalationRecord
+    from blizzard.runner.domain.takeover import TakeoverRecord
 
 __all__ = [
     "ChunkNotRequeueable",
     "IReadRequeueRepository",
     "IWriteRequeueRepository",
     "RequeueBlockedByOpenTakeover",
+    "RequeueScope",
     "RequeueService",
 ]
+
+
+@dataclass(frozen=True)
+class RequeueScope:
+    """The chunk-keyed facts :meth:`RequeueService.requeue` reads, resolved at the edge
+    (``bzh:domain-takes-objects``): the runner holds no chunk entity to load, so this
+    names exactly the two facts the rule checks rather than an aggregate."""
+
+    chunk_id: str
+    open_takeover: TakeoverRecord | None
+    open_escalation: EscalationRecord | None
 
 
 class IReadRequeueRepository(Protocol):
@@ -60,32 +75,23 @@ class ChunkNotRequeueable(RequeueError):
 
 
 class RequeueService:
-    """Composition-root-wired: the requeue store, plus its two read-only cross-concept
-    checks (takeover, escalations), and the clock (issue #53)."""
+    """Composition-root-wired: the requeue store and the clock (issue #53)."""
 
-    def __init__(
-        self,
-        store: IWriteRequeueRepository,
-        clock: IClock,
-        *,
-        takeover: IReadTakeoverRepository,
-        escalations: IReadEscalationRepository,
-    ) -> None:
+    def __init__(self, store: IWriteRequeueRepository, clock: IClock) -> None:
         self._store = store
         self._clock = clock
-        self._takeover = takeover
-        self._escalations = escalations
 
-    def requeue(self, chunk_id: str) -> None:
-        """Clear ``chunk_id``'s local needs_human hold, or raise a ``409``-mapped refusal.
+    def requeue(self, scope: RequeueScope) -> None:
+        """Clear ``scope.chunk_id``'s local needs_human hold, or raise a ``409``-mapped
+        refusal. ``scope`` is already resolved by the caller (``bzh:domain-takes-objects``).
 
         Checked in order: an **open takeover** refuses first, since a live interactive
         session must end before anything else touches the chunk; then the chunk must carry
         an **open escalation** — the needs_human shape this verb exists to clear."""
-        if self._takeover.open_takeover_for_chunk(chunk_id) is not None:
+        if scope.open_takeover is not None:
             raise RequeueBlockedByOpenTakeover(
-                f"chunk {chunk_id} has an open takeover — end the interactive session before requeuing"
+                f"chunk {scope.chunk_id} has an open takeover — end the interactive session before requeuing"
             )
-        if self._escalations.open_escalation_for_chunk(chunk_id) is None:
-            raise ChunkNotRequeueable(f"chunk {chunk_id} is not needs_human — nothing to requeue")
-        self._store.record_requeue(chunk_id=chunk_id, at=self._clock.now())
+        if scope.open_escalation is None:
+            raise ChunkNotRequeueable(f"chunk {scope.chunk_id} is not needs_human — nothing to requeue")
+        self._store.record_requeue(chunk_id=scope.chunk_id, at=self._clock.now())

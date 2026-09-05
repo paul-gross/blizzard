@@ -898,14 +898,14 @@
    "total": 87
   },
   "blizzard/hub/api/chunk_views.py": {
-   "comments": 6,
+   "comments": 8,
    "docstrings": 56,
-   "total": 420
+   "total": 429
   },
   "blizzard/hub/api/chunks.py": {
    "comments": 26,
-   "docstrings": 80,
-   "total": 701
+   "docstrings": 78,
+   "total": 715
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -1414,8 +1414,8 @@
   },
   "blizzard/hub/domain/chunks/dependencies.py": {
    "comments": 0,
-   "docstrings": 21,
-   "total": 67
+   "docstrings": 25,
+   "total": 74
   },
   "blizzard/hub/domain/chunks/escalations.py": {
    "comments": 0,
@@ -1504,8 +1504,8 @@
   },
   "blizzard/hub/domain/dependencies.py": {
    "comments": 5,
-   "docstrings": 44,
-   "total": 224
+   "docstrings": 54,
+   "total": 276
   },
   "blizzard/hub/domain/detach.py": {
    "comments": 0,
@@ -1838,9 +1838,9 @@
    "total": 212
   },
   "blizzard/hub/store/internal/chunk_dependencies_store.py": {
-   "comments": 4,
+   "comments": 5,
    "docstrings": 22,
-   "total": 174
+   "total": 190
   },
   "blizzard/hub/store/internal/chunk_escalations_store.py": {
    "comments": 2,
@@ -2507,15 +2507,20 @@
    "docstrings": 9,
    "total": 36
   },
+  "blizzard/runner/api/chunk_scope.py": {
+   "comments": 0,
+   "docstrings": 16,
+   "total": 50
+  },
   "blizzard/runner/api/control.py": {
    "comments": 4,
    "docstrings": 18,
    "total": 88
   },
   "blizzard/runner/api/dashboard.py": {
-   "comments": 7,
+   "comments": 9,
    "docstrings": 11,
-   "total": 67
+   "total": 69
   },
   "blizzard/runner/api/environments.py": {
    "comments": 0,
@@ -2565,7 +2570,7 @@
   "blizzard/runner/api/heartbeat.py": {
    "comments": 0,
    "docstrings": 8,
-   "total": 34
+   "total": 36
   },
   "blizzard/runner/api/history.py": {
    "comments": 0,
@@ -2573,14 +2578,14 @@
    "total": 28
   },
   "blizzard/runner/api/hub_proxy.py": {
-   "comments": 1,
-   "docstrings": 16,
-   "total": 110
+   "comments": 12,
+   "docstrings": 26,
+   "total": 167
   },
   "blizzard/runner/api/lease_scope.py": {
    "comments": 0,
-   "docstrings": 5,
-   "total": 27
+   "docstrings": 12,
+   "total": 41
   },
   "blizzard/runner/api/lease_token.py": {
    "comments": 0,
@@ -2600,7 +2605,7 @@
   "blizzard/runner/api/requeues.py": {
    "comments": 0,
    "docstrings": 8,
-   "total": 29
+   "total": 31
   },
   "blizzard/runner/api/selftests.py": {
    "comments": 0,
@@ -2609,13 +2614,13 @@
   },
   "blizzard/runner/api/session_end.py": {
    "comments": 0,
-   "docstrings": 7,
-   "total": 28
+   "docstrings": 8,
+   "total": 31
   },
   "blizzard/runner/api/takeovers.py": {
    "comments": 0,
    "docstrings": 11,
-   "total": 67
+   "total": 70
   },
   "blizzard/runner/api/transcript_rendering.py": {
    "comments": 0,
@@ -2635,7 +2640,7 @@
   "blizzard/runner/api/wiring.py": {
    "comments": 0,
    "docstrings": 17,
-   "total": 146
+   "total": 156
   },
   "blizzard/runner/api/work_items.py": {
    "comments": 2,
@@ -2648,9 +2653,9 @@
    "total": 71
   },
   "blizzard/runner/app.py": {
-   "comments": 43,
+   "comments": 49,
    "docstrings": 25,
-   "total": 395
+   "total": 409
   },
   "blizzard/runner/auth/__init__.py": {
    "comments": 0,
@@ -2819,8 +2824,8 @@
   },
   "blizzard/runner/domain/git_commit_declaration.py": {
    "comments": 2,
-   "docstrings": 37,
-   "total": 174
+   "docstrings": 38,
+   "total": 175
   },
   "blizzard/runner/domain/lease_auth.py": {
    "comments": 1,
@@ -2834,8 +2839,8 @@
   },
   "blizzard/runner/domain/leases/liveness.py": {
    "comments": 0,
-   "docstrings": 25,
-   "total": 67
+   "docstrings": 27,
+   "total": 72
   },
   "blizzard/runner/domain/leases/record.py": {
    "comments": 0,
@@ -2849,8 +2854,8 @@
   },
   "blizzard/runner/domain/leases/session.py": {
    "comments": 0,
-   "docstrings": 40,
-   "total": 93
+   "docstrings": 42,
+   "total": 95
   },
   "blizzard/runner/domain/outbound.py": {
    "comments": 0,
@@ -2864,8 +2869,8 @@
   },
   "blizzard/runner/domain/requeue.py": {
    "comments": 0,
-   "docstrings": 28,
-   "total": 91
+   "docstrings": 31,
+   "total": 97
   },
   "blizzard/runner/domain/status.py": {
    "comments": 4,
@@ -2874,8 +2879,8 @@
   },
   "blizzard/runner/domain/takeover.py": {
    "comments": 23,
-   "docstrings": 56,
-   "total": 316
+   "docstrings": 67,
+   "total": 348
   },
   "blizzard/runner/domain/usage.py": {
    "comments": 2,
@@ -3723,9 +3728,9 @@
    "total": 31
   },
   "blizzard/wire/chunk.py": {
-   "comments": 39,
-   "docstrings": 122,
-   "total": 563
+   "comments": 41,
+   "docstrings": 130,
+   "total": 589
   },
   "blizzard/wire/completion.py": {
    "comments": 15,
@@ -3982,7 +3987,7 @@
   "e2e/test_gardening_run_dialog_browser_e2e.py": {
    "comments": 9,
    "docstrings": 10,
-   "total": 131
+   "total": 128
   },
   "e2e/test_gate_decision_e2e.py": {
    "comments": 14,
@@ -3995,9 +4000,9 @@
    "total": 161
   },
   "e2e/test_graphs_diagram_browser_e2e.py": {
-   "comments": 36,
+   "comments": 39,
    "docstrings": 32,
-   "total": 456
+   "total": 459
   },
   "e2e/test_login_session_e2e.py": {
    "comments": 14,
@@ -4071,8 +4076,8 @@
   },
   "runner_fakes.py": {
    "comments": 74,
-   "docstrings": 66,
-   "total": 988
+   "docstrings": 69,
+   "total": 994
   },
   "service/__init__.py": {
    "comments": 0,
@@ -4175,9 +4180,9 @@
    "total": 119
   },
   "service/test_runner_service.py": {
-   "comments": 65,
+   "comments": 68,
    "docstrings": 65,
-   "total": 968
+   "total": 971
   },
   "service/test_system_artifacts_service.py": {
    "comments": 3,
@@ -4200,9 +4205,9 @@
    "total": 248
   },
   "service/test_work_items_service.py": {
-   "comments": 2,
-   "docstrings": 7,
-   "total": 53
+   "comments": 9,
+   "docstrings": 12,
+   "total": 105
   },
   "support.py": {
    "comments": 39,
@@ -4361,13 +4366,13 @@
   },
   "test_blocked_marking_api.py": {
    "comments": 8,
-   "docstrings": 15,
-   "total": 256
+   "docstrings": 16,
+   "total": 258
   },
   "test_blocked_marking_derivation.py": {
    "comments": 0,
-   "docstrings": 24,
-   "total": 142
+   "docstrings": 33,
+   "total": 228
   },
   "test_check_version_tag.py": {
    "comments": 0,
@@ -4416,8 +4421,8 @@
   },
   "test_chunk_dependencies_store.py": {
    "comments": 4,
-   "docstrings": 16,
-   "total": 183
+   "docstrings": 18,
+   "total": 216
   },
   "test_chunk_detail_aggregate.py": {
    "comments": 9,
@@ -4426,8 +4431,8 @@
   },
   "test_chunk_detail_proxy.py": {
    "comments": 0,
-   "docstrings": 7,
-   "total": 184
+   "docstrings": 6,
+   "total": 166
   },
   "test_chunk_edit_api.py": {
    "comments": 12,
@@ -4443,6 +4448,11 @@
    "comments": 0,
    "docstrings": 3,
    "total": 58
+  },
+  "test_chunk_neighborhood_api.py": {
+   "comments": 2,
+   "docstrings": 12,
+   "total": 179
   },
   "test_chunk_pause.py": {
    "comments": 103,
@@ -4627,7 +4637,7 @@
   "test_dashboard_route.py": {
    "comments": 4,
    "docstrings": 14,
-   "total": 234
+   "total": 224
   },
   "test_decision_strikes.py": {
    "comments": 0,
@@ -4831,8 +4841,8 @@
   },
   "test_fleet_summary_proxy.py": {
    "comments": 0,
-   "docstrings": 14,
-   "total": 156
+   "docstrings": 13,
+   "total": 140
   },
   "test_follow_latest_policy.py": {
    "comments": 36,
@@ -5055,9 +5065,9 @@
    "total": 296
   },
   "test_heartbeat.py": {
-   "comments": 6,
-   "docstrings": 11,
-   "total": 113
+   "comments": 7,
+   "docstrings": 13,
+   "total": 160
   },
   "test_hub_api_contract.py": {
    "comments": 7,
@@ -5163,6 +5173,11 @@
    "comments": 6,
    "docstrings": 29,
    "total": 288
+  },
+  "test_hub_proxy_retry.py": {
+   "comments": 5,
+   "docstrings": 32,
+   "total": 248
   },
   "test_hub_runner_seam.py": {
    "comments": 18,
@@ -5400,9 +5415,9 @@
    "total": 305
   },
   "test_pin_runner_misc.py": {
-   "comments": 10,
-   "docstrings": 21,
-   "total": 177
+   "comments": 12,
+   "docstrings": 29,
+   "total": 203
   },
   "test_pin_runner_store.py": {
    "comments": 9,
@@ -5626,8 +5641,8 @@
   },
   "test_runner_artifacts_api.py": {
    "comments": 16,
-   "docstrings": 45,
-   "total": 806
+   "docstrings": 49,
+   "total": 807
   },
   "test_runner_asks_api.py": {
    "comments": 3,
@@ -5651,8 +5666,8 @@
   },
   "test_runner_chunk_history_api.py": {
    "comments": 12,
-   "docstrings": 19,
-   "total": 496
+   "docstrings": 21,
+   "total": 502
   },
   "test_runner_chunk_history_cli.py": {
    "comments": 1,
@@ -5695,9 +5710,9 @@
    "total": 303
   },
   "test_runner_event_publish.py": {
-   "comments": 40,
-   "docstrings": 36,
-   "total": 825
+   "comments": 42,
+   "docstrings": 38,
+   "total": 842
   },
   "test_runner_events_stream.py": {
    "comments": 7,
@@ -5721,8 +5736,8 @@
   },
   "test_runner_finding_api.py": {
    "comments": 7,
-   "docstrings": 7,
-   "total": 212
+   "docstrings": 10,
+   "total": 213
   },
   "test_runner_finding_cli.py": {
    "comments": 1,
@@ -5731,8 +5746,8 @@
   },
   "test_runner_garden_findings_api.py": {
    "comments": 3,
-   "docstrings": 11,
-   "total": 205
+   "docstrings": 14,
+   "total": 210
   },
   "test_runner_garden_findings_cli.py": {
    "comments": 1,
@@ -5850,9 +5865,9 @@
    "total": 293
   },
   "test_runner_requeue.py": {
-   "comments": 25,
-   "docstrings": 11,
-   "total": 214
+   "comments": 26,
+   "docstrings": 12,
+   "total": 228
   },
   "test_runner_requeue_api.py": {
    "comments": 4,
@@ -5910,9 +5925,9 @@
    "total": 1135
   },
   "test_runner_takeover.py": {
-   "comments": 72,
-   "docstrings": 24,
-   "total": 456
+   "comments": 74,
+   "docstrings": 26,
+   "total": 475
   },
   "test_runner_takeover_api.py": {
    "comments": 6,
@@ -5990,9 +6005,9 @@
    "total": 131
   },
   "test_session_end.py": {
-   "comments": 10,
-   "docstrings": 13,
-   "total": 150
+   "comments": 11,
+   "docstrings": 15,
+   "total": 197
   },
   "test_session_store.py": {
    "comments": 1,
@@ -6221,8 +6236,8 @@
   },
   "test_work_items_proxy.py": {
    "comments": 3,
-   "docstrings": 21,
-   "total": 265
+   "docstrings": 20,
+   "total": 231
   },
   "test_work_ref_identity_migration.py": {
    "comments": 12,

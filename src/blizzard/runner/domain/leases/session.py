@@ -88,6 +88,8 @@ class LeaseSessionService:
         self._store = store
         self._clock = clock
 
-    def record_session_end(self, lease_id: str) -> None:
-        """Record a lease's session-end, stamped with the injected clock."""
-        self._store.record_session_end(lease_id=lease_id, ended_at=self._clock.now())
+    def record_session_end(self, lease: LeaseRecord) -> None:
+        """Record a lease's session-end, stamped with the injected clock.
+
+        ``lease`` is already resolved by the caller (``bzh:domain-takes-objects``)."""
+        self._store.record_session_end(lease_id=lease.lease_id, ended_at=self._clock.now())

@@ -14,7 +14,12 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.requeue import ChunkNotRequeueable, RequeueBlockedByOpenTakeover, RequeueService
+from blizzard.runner.domain.requeue import (
+    ChunkNotRequeueable,
+    RequeueBlockedByOpenTakeover,
+    RequeueScope,
+    RequeueService,
+)
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Fill
 from blizzard.wire.chunk import ChunkDetail, RouteView
@@ -33,7 +38,16 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
 
 
 def _service(store, *, clock=None):  # type: ignore[no-untyped-def]
-    return RequeueService(store, clock or FixedClock(_LATER), takeover=store, escalations=store)
+    return RequeueService(store, clock or FixedClock(_LATER))
+
+
+def _scope(store, chunk_id: str = "ch_1") -> RequeueScope:  # type: ignore[no-untyped-def]
+    """The edge resolution `chunk_scope.resolved_requeue_scope` performs in production."""
+    return RequeueScope(
+        chunk_id=chunk_id,
+        open_takeover=store.open_takeover_for_chunk(chunk_id),
+        open_escalation=store.open_escalation_for_chunk(chunk_id),
+    )
 
 
 def _seed_escalated_chunk(store, *, chunk="ch_1", lease="lease_1", node_id="nd_build", node_name="build", epoch=1):  # type: ignore[no-untyped-def]
@@ -63,7 +77,7 @@ def test_requeue_appends_a_clearing_fact_and_leaves_the_escalation_open(tmp_path
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
 
-    _service(store).requeue("ch_1")
+    _service(store).requeue(_scope(store))
 
     assert "ch_1" in store.pending_requeue_chunk_ids()
     # The mark alone supersedes nothing — only a later lease mint does (the hub's own
@@ -85,7 +99,7 @@ def test_requeue_refuses_while_a_takeover_is_open(tmp_path) -> None:  # type: ig
     )
 
     with pytest.raises(RequeueBlockedByOpenTakeover):
-        _service(store).requeue("ch_1")
+        _service(store).requeue(_scope(store))
 
     assert store.pending_requeue_chunk_ids() == set()
 
@@ -107,7 +121,7 @@ def test_requeue_refuses_a_chunk_that_is_not_needs_human(tmp_path) -> None:  # t
     )  # active — no closure at all, nothing needs_human
 
     with pytest.raises(ChunkNotRequeueable):
-        _service(store).requeue("ch_1")
+        _service(store).requeue(_scope(store))
 
     assert store.pending_requeue_chunk_ids() == set()
 
@@ -128,7 +142,7 @@ def test_requeue_works_after_an_ended_takeover_with_no_recorded_escalation_chang
     )
     store.record_takeover_end(takeover_id="tko_1", ended_at=_NOW)
 
-    _service(store).requeue("ch_1")
+    _service(store).requeue(_scope(store))
 
     assert "ch_1" in store.pending_requeue_chunk_ids()
 
@@ -139,7 +153,7 @@ def test_requeue_a_chunk_with_no_recorded_takeover_at_all(tmp_path) -> None:  # 
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
 
-    _service(store).requeue("ch_1")
+    _service(store).requeue(_scope(store))
 
     assert "ch_1" in store.pending_requeue_chunk_ids()
     assert store.open_takeover_for_chunk("ch_1") is None
@@ -151,7 +165,7 @@ def test_requeue_a_chunk_with_no_recorded_takeover_at_all(tmp_path) -> None:  # 
 def test_fill_spawns_a_fresh_attempt_after_requeue_and_consumes_the_mark(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
-    _service(store).requeue("ch_1")
+    _service(store).requeue(_scope(store))
 
     hub = FakeHub()
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok"), ("fail", "no")])
@@ -187,7 +201,7 @@ def test_fill_spawns_a_fresh_attempt_after_requeue_and_consumes_the_mark(tmp_pat
 def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_here(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
-    _service(store).requeue("ch_1")
+    _service(store).requeue(_scope(store))
 
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkDetail(

@@ -371,9 +371,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         local_api_url=config.local_api_url,
         events=events,
     )
-    requeue = RequeueService(
-        runner_stores.requeue, SystemClock(), takeover=runner_stores.takeover, escalations=runner_stores.escalations
-    )
+    requeue = RequeueService(runner_stores.requeue, SystemClock())
     attachments = AttachmentService(runner_stores.attachments, SystemClock(), tokens=runner_stores.tokens)
     # Takes the workspace provider too: a declaration is checked against the
     # environment's repo manifest, which is the provider's to declare (issue #143).

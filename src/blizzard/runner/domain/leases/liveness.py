@@ -4,9 +4,12 @@ baseline."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
+
+if TYPE_CHECKING:
+    from blizzard.runner.domain.leases import LeaseRecord
 
 __all__ = ["IReadLeaseLivenessRepository", "IWriteLeaseLivenessRepository", "LeaseLivenessService"]
 
@@ -62,6 +65,8 @@ class LeaseLivenessService:
         self._store = store
         self._clock = clock
 
-    def record_heartbeat(self, lease_id: str) -> None:
-        """Record a lease heartbeat, stamped with the injected clock."""
-        self._store.record_heartbeat(lease_id=lease_id, beat_at=self._clock.now())
+    def record_heartbeat(self, lease: LeaseRecord) -> None:
+        """Record a lease heartbeat, stamped with the injected clock.
+
+        ``lease`` is already resolved by the caller (``bzh:domain-takes-objects``)."""
+        self._store.record_heartbeat(lease_id=lease.lease_id, beat_at=self._clock.now())

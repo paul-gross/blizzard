@@ -125,7 +125,8 @@ class GitCommitDeclarationService:
         environment_id: str | None = None,
     ) -> str:
         """Record ``(env, repo, branch, commit)`` for ``lease`` and return the resolved environment id.
-        Raises :class:`GitCommitDeclarationRejected` on an unauthorizing token, or
+        ``lease`` is already resolved by the caller (``bzh:domain-takes-objects``). Raises
+        :class:`GitCommitDeclarationRejected` on an unauthorizing token, or
         :class:`GitCommitDeclarationUnknownRepo` when the env is unresolvable or does not list ``repo``.
         Append-and-read-newest (``bzh:facts-not-status``): a repeat call for the same ``(lease, env,
         repo)`` is a correction. The env is part of that key, so one env cannot overwrite another."""
