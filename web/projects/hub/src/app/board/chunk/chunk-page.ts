@@ -107,8 +107,8 @@ export class ChunkPage {
   private readonly params = toSignal(this.route.paramMap, { initialValue: this.route.snapshot.paramMap });
 
   /** Off the route's own `:chunkId` segment — the `?chunk` param the back link
-   * writes is a different, board-owned selection ({@link BoardSelection}),
-   * never read from here. */
+   * writes is a different, board-owned selection (`injectChunkUrlSelection`, in
+   * board-page.ts), never read from here. */
   protected readonly chunkId = computed<string | null>(() => this.params().get('chunkId'));
 
   protected readonly selection = injectChunkDetailSelection();
