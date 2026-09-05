@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
+from blizzard.runner.api.lease_scope import resolved_lease
 from blizzard.runner.api.wiring import RunnerWiring
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -30,5 +31,6 @@ class HeartbeatResponse(BaseModel):
 @router.post("/heartbeat", response_model=HeartbeatResponse)
 def heartbeat(request_body: HeartbeatRequest, request: Request) -> HeartbeatResponse:
     """Record a lease heartbeat, stamped with the injected clock."""
-    RunnerWiring.of(request).lease_liveness().record_heartbeat(request_body.lease_id)
+    lease = resolved_lease(request_body.lease_id, request)
+    RunnerWiring.of(request).lease_liveness().record_heartbeat(lease)
     return HeartbeatResponse(recorded=True, lease_id=request_body.lease_id)
