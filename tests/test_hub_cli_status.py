@@ -7,6 +7,8 @@ marker — without a running hub.
 
 from __future__ import annotations
 
+from typing import cast
+
 import httpx
 import pytest
 from click.testing import CliRunner
@@ -158,7 +160,8 @@ def test_status_marks_a_blocked_chunk_naming_the_prerequisite(monkeypatch: pytes
     (issue #476) is proven once here to cover both."""
     cost = _cost(0.0, partial=False)
     responses = _responses(cost, cost)
-    responses[f"{DEFAULT_HUB_URL}/api/chunks"][0]["blocked"] = {"prerequisite_chunk_id": "ch_prereq"}
+    chunks = cast("list[dict]", responses[f"{DEFAULT_HUB_URL}/api/chunks"])
+    chunks[0]["blocked"] = {"prerequisite_chunk_id": "ch_prereq"}
     _install(monkeypatch, responses)
 
     result = CliRunner().invoke(hub_group, ["status"])

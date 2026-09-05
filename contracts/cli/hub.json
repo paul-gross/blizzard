@@ -467,6 +467,68 @@
           "path": "hub chunk delete",
           "short_help": "Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364) \u2014 a pure client of ``DELETE /api/chunks/{id}``."
         },
+        "depend": {
+          "help": "Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID.\n\nA pure client of ``POST /api/chunks/{id}/dependencies``. Idempotent \u2014 an\nalready-standing pair is reported back rather than refused. 404 for an unknown\ndependent or prerequisite; 409 for a dependent past its declarable window, a\ncycle the edge would close, or an ephemeral prerequisite.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "chunk_id",
+              "opts": [
+                "chunk_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "prerequisite_chunk_id",
+              "opts": [
+                "prerequisite_chunk_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub chunk depend",
+          "short_help": "Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID."
+        },
         "detach": {
           "help": "Forcibly release CHUNK from its runner.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/detach``. The chunk re-derives\nready and is re-claimable at its current node; the holding runner releases it on its\nnext tick. 409 when the chunk has no live route to release.",
           "params": [
@@ -881,6 +943,68 @@
           ],
           "path": "hub chunk promote",
           "short_help": "Promote a not-ready CHUNK to ready so a runner may claim it."
+        },
+        "release-dependency": {
+          "help": "Release CHUNK_ID's standing dependency on PREREQUISITE_CHUNK_ID.\n\nA pure client of ``POST /api/chunks/{id}/dependencies/release``. 404 for an unknown\ndependent; 409 when no edge stands.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "chunk_id",
+              "opts": [
+                "chunk_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "prerequisite_chunk_id",
+              "opts": [
+                "prerequisite_chunk_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub chunk release-dependency",
+          "short_help": "Release CHUNK_ID's standing dependency on PREREQUISITE_CHUNK_ID."
         },
         "requeue": {
           "help": "Close an escalation by supersession: requeue CHUNK at its current node.",
