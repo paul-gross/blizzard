@@ -430,3 +430,86 @@ describe('RunnerPanel external-subscription pace bars (issue #218)', () => {
     expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="runner-pace-bars"]')).toBeNull();
   });
 });
+
+describe('RunnerPanel per-subscription data model (blizzard#436)', () => {
+  // Data model only — blizzard#478 owns rendering it, so these assert on the
+  // component's `rows` output directly rather than on any DOM the template does not
+  // yet grow.
+  let stub: RequestClientStub;
+
+  const RUNNERS_WITH_SUBSCRIPTIONS = {
+    runners: [
+      runner('rn_multi', {
+        // Both subscriptions report a "5h" window — grouping by slug is what keeps
+        // them from colliding into one bar list.
+        external_subscription_usage: {
+          sampled_at: NOW,
+          windows: [{ window: '5h', utilization_pct: 40, resets_at: '2026-07-16T17:00:00.000Z', window_seconds: 5 * 60 * 60 }],
+        },
+        subscriptions: [
+          {
+            slug: 'anthropic-default',
+            name: 'Anthropic (default)',
+            sampled_at: NOW,
+            windows: [{ window: '5h', utilization_pct: 40, resets_at: '2026-07-16T17:00:00.000Z', window_seconds: 5 * 60 * 60 }],
+          },
+          {
+            slug: 'anthropic-secondary',
+            name: 'Anthropic (secondary)',
+            sampled_at: NOW,
+            windows: [{ window: '5h', utilization_pct: 90, resets_at: '2026-07-16T18:00:00.000Z', window_seconds: 5 * 60 * 60 }],
+          },
+        ],
+      }),
+      // Legacy-only: reports the single-subscription field but no `subscriptions`
+      // collection at all — an unupgraded hub, or a runner with no declarations.
+      runner('rn_legacy', {
+        external_subscription_usage: {
+          sampled_at: NOW,
+          windows: [{ window: '5h', utilization_pct: 55, resets_at: '2026-07-16T17:00:00.000Z', window_seconds: 5 * 60 * 60 }],
+        },
+      }),
+    ],
+  };
+
+  beforeEach(async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path === '/api/runners') return RUNNERS_WITH_SUBSCRIPTIONS;
+      if (method === 'GET' && path === '/api/chunks') return [];
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [RunnerPanel],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    }).compileComponents();
+  });
+
+  afterEach(() => stub.restore());
+
+  it('keeps two subscriptions sharing an identical window label distinct, grouped by slug', async () => {
+    const fixture = TestBed.createComponent(RunnerPanel);
+    await settle(fixture);
+    const rows = fixture.componentInstance['rows']();
+    const row = rows.find((r) => r.runner_id === 'rn_multi');
+
+    expect(row?.subscriptionPaces).toHaveLength(2);
+    const bySlug = new Map(row?.subscriptionPaces.map((s) => [s.slug, s]));
+    expect(bySlug.get('anthropic-default')?.name).toBe('Anthropic (default)');
+    expect(bySlug.get('anthropic-default')?.paceBars).toEqual([expect.objectContaining({ window: '5h', utilizationPct: 40 })]);
+    expect(bySlug.get('anthropic-secondary')?.paceBars).toEqual([expect.objectContaining({ window: '5h', utilizationPct: 90 })]);
+  });
+
+  it('still yields the legacy paceBars for a runner reporting no subscriptions collection', async () => {
+    const fixture = TestBed.createComponent(RunnerPanel);
+    await settle(fixture);
+    const rows = fixture.componentInstance['rows']();
+    const row = rows.find((r) => r.runner_id === 'rn_legacy');
+
+    expect(row?.subscriptionPaces).toEqual([]);
+    expect(row?.paceBars).toEqual([expect.objectContaining({ window: '5h', utilizationPct: 55 })]);
+  });
+});
