@@ -26,7 +26,7 @@ _LATER = datetime(2026, 7, 17, 13, 0, 0, tzinfo=UTC)  # strictly after the seede
 def _app_with_requeue(tmp_path: Path, *, clock: FixedClock | None = None):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = RequeueService(store, clock or FixedClock(_LATER), takeover=store, escalations=store)
+    service = RequeueService(store, clock or FixedClock(_LATER))
     return create_app(config, runner_stores=make_stores(store), requeue=service), store
 
 

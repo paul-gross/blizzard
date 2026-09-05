@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
+from blizzard.runner.api.chunk_scope import resolved_requeue_scope
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.domain.requeue import ChunkNotRequeueable, RequeueBlockedByOpenTakeover
 from blizzard.wire.requeue import RequeueResponse
@@ -22,8 +23,9 @@ def requeue_chunk(chunk_id: str, request: Request) -> RequeueResponse:
     ``409`` while the chunk's takeover is still open (end the interactive session first),
     or while the chunk carries no open escalation (nothing needs_human to clear)."""
     service = RunnerWiring.of(request).requeue()
+    scope = resolved_requeue_scope(chunk_id, request)
     try:
-        service.requeue(chunk_id)
+        service.requeue(scope)
     except (RequeueBlockedByOpenTakeover, ChunkNotRequeueable) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return RequeueResponse(chunk_id=chunk_id, requeued=True)
