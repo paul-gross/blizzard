@@ -12,7 +12,7 @@ from pathlib import Path
 
 import httpx
 
-from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.subscriptions.subscription_sampler import (
@@ -50,13 +50,13 @@ class AnthropicSubscriptionSampler:
         credentials_path: str | None = None,
         usage_api_base: str = DEFAULT_USAGE_API_BASE,
         http_client: httpx.Client | None = None,
-        clock: IClock | None = None,
+        clock: IClock,
     ) -> None:
         # `credentials_path` is read-only here, and the client is constructed lazily.
         self._credentials_path = credentials_path or DEFAULT_CREDENTIALS_PATH
         self._usage_api_base = usage_api_base
         self._http_client = http_client
-        self._clock: IClock = clock or SystemClock()
+        self._clock: IClock = clock
 
     def sample(self) -> ExternalSubscriptionUsageSnapshot | None:
         access_token = self._read_access_token()

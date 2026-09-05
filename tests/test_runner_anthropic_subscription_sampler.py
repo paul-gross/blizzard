@@ -343,11 +343,3 @@ def test_zero_parseable_windows_returns_none_and_warns_once(tmp_path: Path, monk
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
-
-
-# The construction site keeps building the sampler unchanged.
-
-
-@pytest.mark.unit
-def test_default_construction_still_works_with_no_new_arguments() -> None:
-    AnthropicSubscriptionSampler()

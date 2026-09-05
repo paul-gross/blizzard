@@ -93,12 +93,13 @@ class LoopWiring:
         )
         # The subscription-sampling seam (blizzard#436) — each declaration paired with its
         # resolved binding; an unknown provider selects `None` (declared, unsampled).
+        _clock = SystemClock()
         resolved_subscriptions = tuple(
             ResolvedSubscription(
                 slug=declaration.slug,
                 name=declaration.name,
                 sample_interval_seconds=declaration.sample_interval_seconds,
-                sampler=select_sampler(declaration),
+                sampler=select_sampler(declaration, clock=_clock),
             )
             for declaration in config.resolved_subscriptions()
         )
@@ -140,7 +141,6 @@ class LoopWiring:
         )
         _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), stores.liveness)
         _elicitation_files = ElicitationFiles(str(elicitation_output_dir))
-        _clock = SystemClock()
         return LoopContext(
             stores=stores,
             clock=_clock,

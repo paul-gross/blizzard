@@ -18,8 +18,8 @@ from blizzard.wire.facts import PROVIDER_ANTHROPIC
 def select_sampler(
     declaration: SubscriptionDeclaration,
     *,
+    clock: IClock,
     http_client: httpx.Client | None = None,
-    clock: IClock | None = None,
 ) -> ISubscriptionSampler | None:
     """The sampler ``declaration.provider`` binds to, or ``None`` for an unknown provider."""
     if declaration.provider == PROVIDER_ANTHROPIC:

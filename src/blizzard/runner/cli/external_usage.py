@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
@@ -39,7 +40,7 @@ def external_usage_probe(slug: str | None, directory: str) -> None:
     if slug not in declared:
         raise click.ClickException(f"no declared subscription with slug {slug!r} (declared: {sorted(declared)})")
     declaration = declared[slug]
-    sampler = select_sampler(declaration)
+    sampler = select_sampler(declaration, clock=SystemClock())
     if sampler is None:
         click.echo(f"no sample: {declaration.provider!r} (slug {declaration.slug!r}) has no known sampler binding")
         return
