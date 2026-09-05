@@ -34,6 +34,7 @@ const ROW: RunnerRow = {
     { window: '5h', utilizationPct: 62, elapsedPct: 38 },
     { window: '7d', utilizationPct: 81, elapsedPct: 90 },
   ],
+  subscriptionPaces: [],
 };
 
 async function render() {

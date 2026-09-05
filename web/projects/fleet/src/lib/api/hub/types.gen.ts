@@ -4027,6 +4027,10 @@ export type RunnerView = {
      */
     runner_id: string;
     /**
+     * Subscriptions
+     */
+    subscriptions?: Array<SubscriptionUsageView>;
+    /**
      * Workspace Id
      */
     workspace_id: string;
@@ -4222,6 +4226,32 @@ export type SubmittedArtifact = {
      * Repo
      */
     repo?: string | null;
+};
+
+/**
+ * SubscriptionUsageView
+ *
+ * One declared subscription's newest sampled usage, carrying its identity
+ * (issue #218) — additive beside the single legacy usage snapshot. ``slug`` is the
+ * runner-unique join key, ``name`` the operator-facing label.
+ */
+export type SubscriptionUsageView = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Sampled At
+     */
+    sampled_at: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Windows
+     */
+    windows: Array<ExternalSubscriptionUsageWindowView>;
 };
 
 /**

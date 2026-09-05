@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 
-import type { ChunkStatus, RunnerView } from '../api/hub';
+import type { ChunkStatus, ExternalSubscriptionUsageWindowView, RunnerView } from '../api/hub';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { compactRef } from '../compact-ref';
 import { injectHubChunksQuery } from '../chunks/chunks.query';
@@ -30,16 +30,31 @@ export interface PaceBar {
   readonly elapsedPct: number;
 }
 
+/** One declared subscription's own pace bars, grouped under its slug and name
+ * (blizzard#436) — additive beside the legacy single-subscription {@link PaceBar}
+ * list, and not yet rendered (blizzard#478 owns the render; this issue owns only the
+ * data model). Two subscriptions can share a window label (both report a `"5h"`
+ * window), so grouping by slug is what keeps them distinct. */
+export interface SubscriptionPace {
+  readonly slug: string;
+  readonly name: string;
+  readonly paceBars: readonly PaceBar[];
+}
+
 /** A registry row: the runner plus the claims it holds, pre-folded so the
  * presentational sibling needs no second read to render them. `used` is the slot
  * bar's numerator — environments held by this runner's live routes (issue #69).
  * `paceBars` is empty when the runner has never sampled its external-subscription
  * usage, or the sample is stale — the hub already nulls `external_subscription_usage`
- * in that case (issue #218), so this row never needs to re-derive staleness itself. */
+ * in that case (issue #218), so this row never needs to re-derive staleness itself.
+ * `subscriptionPaces` is the per-slug grouping of the same windows (blizzard#436), derived
+ * from the wire's additive `subscriptions` collection — empty for a runner that has
+ * declared none, including one still on the legacy single-subscription shape alone. */
 export interface RunnerRow extends RunnerView {
   readonly claims: readonly ClaimLine[];
   readonly used: number;
   readonly paceBars: readonly PaceBar[];
+  readonly subscriptionPaces: readonly SubscriptionPace[];
 }
 
 /**
@@ -61,6 +76,16 @@ export function windowElapsedPct(nowMs: number, resetsAt: string, windowSeconds:
   const startMs = resetsAtMs - windowMs;
   const fraction = (nowMs - startMs) / windowMs;
   return Math.min(100, Math.max(0, fraction * 100));
+}
+
+/** A subscription's windows folded to pace bars against `now` — the shared step
+ * between the legacy single-subscription bars and the per-slug grouped ones. */
+function toPaceBars(now: number, windows: readonly ExternalSubscriptionUsageWindowView[]): readonly PaceBar[] {
+  return windows.map((w) => ({
+    window: w.window,
+    utilizationPct: w.utilization_pct,
+    elapsedPct: windowElapsedPct(now, w.resets_at, w.window_seconds),
+  }));
 }
 
 /**
@@ -152,16 +177,31 @@ export class RunnerPanel {
     for (const runner of this.runners()) {
       const usage = runner.external_subscription_usage;
       if (!usage) continue;
-      bars.set(
+      bars.set(runner.runner_id, toPaceBars(now, usage.windows));
+    }
+    return bars;
+  });
+
+  /** Each runner's declared subscriptions, grouped by slug (blizzard#436) — the
+   * per-slug counterpart to {@link paceBarsByRunner}'s legacy single-subscription
+   * bars. A runner that has declared no subscriptions, including one still reporting
+   * only through the legacy field, maps to an empty list. Recomputes on {@link now}
+   * for the same reason {@link paceBarsByRunner} does. */
+  private readonly subscriptionPacesByRunner = computed<Map<string, readonly SubscriptionPace[]>>(() => {
+    const now = this.now();
+    const grouped = new Map<string, readonly SubscriptionPace[]>();
+    for (const runner of this.runners()) {
+      const subscriptions = runner.subscriptions ?? [];
+      grouped.set(
         runner.runner_id,
-        usage.windows.map((w) => ({
-          window: w.window,
-          utilizationPct: w.utilization_pct,
-          elapsedPct: windowElapsedPct(now, w.resets_at, w.window_seconds),
+        subscriptions.map((s) => ({
+          slug: s.slug,
+          name: s.name,
+          paceBars: toPaceBars(now, s.windows),
         })),
       );
     }
-    return bars;
+    return grouped;
   });
 
   /** Each runner with its claims, slot-bar numerator, and pace bars folded on, for the
@@ -172,6 +212,7 @@ export class RunnerPanel {
       claims: this.claims().get(runner.runner_id) ?? [],
       used: this.usedByRunner().get(runner.runner_id) ?? 0,
       paceBars: this.paceBarsByRunner().get(runner.runner_id) ?? [],
+      subscriptionPaces: this.subscriptionPacesByRunner().get(runner.runner_id) ?? [],
     })),
   );
 
