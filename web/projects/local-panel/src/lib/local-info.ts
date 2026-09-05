@@ -1,16 +1,15 @@
-import { ChangeDetectionStrategy, Component, TemplateRef, computed, effect, signal } from '@angular/core';
-import { ageMs, asyncState, formatAge, injectNowSignal, KitAsyncState, type KitFact, KitFactList, type runnerApi } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@angular/core';
+import { ageMs, asyncState, formatAge, injectNowSignal, KitAsyncState, type runnerApi } from 'fleet';
 
+import { LocalInfoView } from './local-info-view';
 import { injectRunnerDashboardQuery } from './status.query';
 
 /**
- * The hub-link panel — the discovery mock's "hub · outbound only, nothing
- * dials in": the configured hub endpoint, derived reachability, last flush
- * (last successful PULL contact), the outbound buffer depth, and this runner's
- * own capacities/pause state. All off `GET /api/dashboard`'s `runner` section
- * — the runner's *own* facts about its hub link, not a live hub read; the
- * board link is the one hand-off to the hub app, minted from the endpoint the
- * wire now carries.
+ * The hub-link panel **container** — the discovery mock's "hub · outbound only,
+ * nothing dials in": owns `GET /api/dashboard`'s `runner` section read, the
+ * resolved async-state triad, the fleet-strip latch, and the ticking clock the
+ * last-flush/tick labels derive from; the presentational {@link LocalInfoView}
+ * owns the facts template (`bzh:frontend-container-presentational`).
  *
  * Below the link facts is the discovery mock's fleet counts strip
  * (ready/running/waiting/needs) — a fleet-level pulse. Those counts *are* a
@@ -26,7 +25,7 @@ import { injectRunnerDashboardQuery } from './status.query';
 @Component({
   selector: 'local-info',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitFactList],
+  imports: [KitAsyncState, LocalInfoView],
   templateUrl: './local-info.html',
   styleUrl: './local-info.css',
 })
@@ -90,23 +89,4 @@ export class LocalInfo {
     const age = ageMs(tickAt, this.now());
     return age === null ? '—' : formatAge(age);
   });
-
-  /** The hub-link facts table's rows — a method, not a stored computed, since the
-   * endpoint/link/loop rows need the `<ng-template>`s the view declares for them
-   * (`KitFactList`'s own templated-row contract). */
-  protected factRows(
-    v: runnerApi.RunnerStatusView,
-    endpointValue: TemplateRef<unknown>,
-    linkValue: TemplateRef<unknown>,
-    loopValue: TemplateRef<unknown>,
-  ): readonly KitFact[] {
-    return [
-      { label: 'endpoint', template: endpointValue },
-      { label: 'link', template: linkValue },
-      { label: 'last flush', value: this.lastFlushLabel(), testid: 'hub-last-flush' },
-      { label: 'buffered', value: `${v.hub.buffer_depth} events`, testid: 'hub-buffered' },
-      { label: 'agents', value: `${v.capacities.used}/${v.capacities.max_agents} slots` },
-      { label: 'loop', template: loopValue },
-    ];
-  }
 }

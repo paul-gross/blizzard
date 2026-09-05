@@ -1,21 +1,10 @@
-import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output } from '@angular/core';
-import {
-  ageMs,
-  compactRef,
-  formatAge,
-  injectNowSignal,
-  KitAsyncState,
-  type KitFact,
-  KitFactList,
-  KitPanel,
-  KitPanelHeader,
-  type runnerApi,
-} from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ageMs, compactRef, formatAge, injectNowSignal, KitPanel, KitPanelHeader, type runnerApi } from 'fleet';
 
 import { injectChunkDetailQuery } from './chunk-detail.query';
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
+import { MachineDetailView } from './chunk-detail-view';
 import type { MachineChunkStatus } from './chunk-status';
-import { HeartbeatFreshness } from './heartbeat-freshness';
 import { MachineDetailHeader } from './machine-detail-header';
 
 /** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
@@ -51,6 +40,11 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
  * carry), so Pause/Resume's own gating reads the fresh `pause`/`status` off that
  * read, never the machine-derived one.
  *
+ * The execution-facts template itself belongs to the presentational
+ * {@link MachineDetailView} (`bzh:frontend-container-presentational`) — this
+ * container keeps only what `fleet-kit-panel`'s header-slot projection requires
+ * of the template that mounts the panel, plus the query and the ticking clock.
+ *
  * The dock paints its own panel chrome via {@link KitPanel} (issue #307) — the
  * same bezel/background every sibling region in `local-panel-layout.ts` wears —
  * rather than mounting bare. `KitPanel`'s header slot can only be filled
@@ -63,7 +57,7 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
 @Component({
   selector: 'local-machine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness, KitAsyncState, KitFactList, KitPanel, KitPanelHeader, MachineDetailHeader],
+  imports: [KitPanel, KitPanelHeader, MachineDetailHeader, MachineDetailView],
   templateUrl: './chunk-detail.html',
   styleUrl: './chunk-detail.css',
 })
@@ -126,7 +120,7 @@ export class MachineDetail {
   });
 
   /** Ticks once a second so {@link heartbeatLabel} advances between polls, the
-   * same cadence {@link HeartbeatFreshness}'s own bar reads (`bzh:frontend-formatters`). */
+   * same cadence `HeartbeatFreshness`'s own bar reads (`bzh:frontend-formatters`). */
   private readonly now = injectNowSignal(1000);
 
   /**
@@ -139,23 +133,4 @@ export class MachineDetail {
     const age = ageMs(l.last_heartbeat_at, this.now());
     return age === null ? '—' : formatAge(age);
   });
-
-  /** The execution-facts table's rows — a method, not a stored computed, since the
-   * lease/workdir/heartbeat rows need the `<ng-template>`s the view declares for them
-   * (`KitFactList`'s own templated-row contract). */
-  protected factRows(
-    l: runnerApi.LeaseView,
-    leaseValue: TemplateRef<unknown>,
-    workdirValue: TemplateRef<unknown>,
-    heartbeatValue: TemplateRef<unknown>,
-  ): readonly KitFact[] {
-    return [
-      { label: 'lease', template: leaseValue },
-      { label: 'session', value: l.session_id ?? '—' },
-      { label: 'pid', value: l.pid !== null && l.pid !== undefined ? String(l.pid) : '—' },
-      { label: 'env', value: l.environment_id ?? 'released' },
-      { label: 'workdir', template: workdirValue },
-      { label: 'heartbeat', template: heartbeatValue },
-    ];
-  }
 }

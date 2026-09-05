@@ -1,0 +1,8 @@
+@for (row of rows(); track row.environmentId) {
+  <div class="row" data-testid="env-row" [attr.data-env-id]="row.environmentId" [attr.data-held]="row.isHeld">
+    <fleet-kit-beacon data-testid="env-beacon" [active]="row.isHeld" tone="amber" />
+    <span class="env">{{ row.environmentId }}</span>
+    <span class="chunk">{{ row.chunkRef }}</span>
+    <span class="held" data-testid="env-held-for">{{ row.heldFor }}</span>
+  </div>
+}

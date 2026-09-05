@@ -1,0 +1,46 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.ev {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-xs);
+}
+.t {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  color: var(--label-dim);
+  line-height: 1.2;
+}
+.t .day {
+  font-size: 0.85em;
+}
+.flush {
+  flex: none;
+  color: var(--label-dim);
+}
+.flush.acked {
+  color: var(--green);
+}
+.msg {
+  color: var(--label);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kind {
+  color: var(--text);
+  font-weight: normal;
+}
+.ref {
+  color: var(--amber);
+  font-weight: normal;
+  margin-left: 6px;
+}

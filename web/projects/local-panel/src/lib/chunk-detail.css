@@ -1,72 +1,7 @@
 :host {
   display: block;
   height: 100%;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
 }
 .dock {
   height: 100%;
-}
-.detail {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  position: relative;
-}
-.resume-tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
-.facts {
-  flex: none;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--bezel);
-}
-/* This dock's own, narrower label column (92px vs `KitFactList`'s 112px
-   default) and tighter row gap — set on the fact list's own host, a plain CSS
-   custom property so it reaches inside regardless of view encapsulation. */
-.lp-facts {
-  display: block;
-  --kv-label-col: 92px;
-}
-.full {
-  color: var(--label-dim);
-  font-size: var(--fs-label);
-  margin-left: 6px;
-}
-.path {
-  display: block;
-  color: var(--cyan);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.hb-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-/* Shrinkable, not fixed — 180px is the desktop width, but the bar gives it
-   up before the age label beside it is pushed out of a phone-width dock. */
-.hb-bar {
-  flex: 0 1 180px;
-  min-width: 0;
-}
-.resume-box {
-  margin-top: 8px;
-  padding: 6px 8px;
-  border: 1px solid var(--red-dim);
-  background: color-mix(in srgb, var(--red-dim) 12%, transparent);
-}
-.resume-box .resume-tag {
-  color: var(--red);
-  display: block;
-  margin-bottom: 4px;
-}
-.resume-box code {
-  color: var(--text);
-  font-size: var(--fs-sm);
-  user-select: all;
 }

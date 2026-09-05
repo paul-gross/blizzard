@@ -15,39 +15,10 @@
       (resumeChunk)="pauseMutation.mutate({ chunkId: $event, paused: false })"
     />
   }
-  <div class="detail">
-    @if (newestLease(); as l) {
-      <div class="facts">
-        <ng-template #leaseValue>
-          {{ leaseRef() }} · epoch {{ l.epoch }} <small class="full">{{ l.lease_id }}</small>
-        </ng-template>
-        <ng-template #workdirValue>
-          <span class="path">{{ l.workdir ?? '—' }}</span>
-        </ng-template>
-        <ng-template #heartbeatValue>
-          <span class="hb-line">
-            <span data-testid="heartbeat-label">{{ heartbeatLabel() }}</span>
-            <local-heartbeat-freshness
-              class="hb-bar"
-              [lastHeartbeatAt]="l.last_heartbeat_at"
-              [stale]="l.state === 'stale'"
-            />
-          </span>
-        </ng-template>
-        <fleet-kit-fact-list
-          class="lp-facts"
-          testid="detail-facts"
-          [rows]="factRows(l, leaseValue, workdirValue, heartbeatValue)"
-        />
-        @if (escalation(); as esc) {
-          <div class="resume-box" data-testid="detail-resume">
-            <span class="resume-tag">escalated — resume session</span>
-            <code>{{ esc.resume_command || '(no session to resume)' }}</code>
-          </div>
-        }
-      </div>
-    } @else {
-      <fleet-kit-async-state state="empty" emptyText="SELECT A CHUNK" emptyTestid="detail-empty" />
-    }
-  </div>
+  <local-machine-detail-view
+    [lease]="newestLease()"
+    [escalation]="escalation()"
+    [leaseRef]="leaseRef()"
+    [heartbeatLabel]="heartbeatLabel()"
+  />
 </fleet-kit-panel>

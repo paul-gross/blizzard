@@ -1,0 +1,10 @@
+@for (row of rows(); track row.questionId) {
+  <div class="ask" data-testid="ask-row" [attr.data-question-id]="row.questionId">
+    <div class="a-hdr">
+      <span class="chunk">{{ row.chunkRef }}</span>
+      <span class="asked">asked {{ row.askedFor }} ago</span>
+    </div>
+    <div class="q">{{ row.question }}</div>
+    <div class="route">answer is a hub write → <code>blizzard hub answer</code> or the fleet board</div>
+  </div>
+}

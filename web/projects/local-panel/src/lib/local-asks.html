@@ -6,15 +6,6 @@
     emptyText="NO OPEN ASKS ON THIS MACHINE"
     emptyTestid="asks-empty"
   >
-    @for (ask of asks(); track ask.question_id) {
-      <div class="ask" data-testid="ask-row" [attr.data-question-id]="ask.question_id">
-        <div class="a-hdr">
-          <span class="chunk">{{ chunkRef(ask) }}</span>
-          <span class="asked">asked {{ askedFor(ask) }} ago</span>
-        </div>
-        <div class="q">{{ ask.question }}</div>
-        <div class="route">answer is a hub write → <code>blizzard hub answer</code> or the fleet board</div>
-      </div>
-    }
+    <local-asks-view [rows]="rows()" />
   </fleet-kit-async-state>
 </div>
