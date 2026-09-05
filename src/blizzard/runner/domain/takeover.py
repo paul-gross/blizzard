@@ -25,6 +25,7 @@ from blizzard.wire.facts import LEASE_MINTED
 
 if TYPE_CHECKING:
     # Deferred: ``runner/stores.py`` composes this module's own Protocol (blizzard#410).
+    from blizzard.runner.environments.repository import EnvBindingRecord
     from blizzard.runner.stores import RunnerStores
 
 # What a takeover forwards from the identity env (issue #258). Nothing else leaves the
@@ -39,7 +40,9 @@ __all__ = [
     "LiveWorkerConflict",
     "OpenedTakeover",
     "SubmissionPending",
+    "TakeoverCloseScope",
     "TakeoverCommand",
+    "TakeoverOpenScope",
     "TakeoverRecord",
     "TakeoverService",
 ]
@@ -59,6 +62,31 @@ class TakeoverRecord:
     workdir: str
     fence_epoch: int | None
     opened_at: datetime
+
+
+@dataclass(frozen=True)
+class TakeoverOpenScope:
+    """The chunk-keyed facts :meth:`TakeoverService.open` reads, resolved at the edge
+    (``bzh:domain-takes-objects``): the runner holds no chunk entity, so this names
+    exactly the facts the rule's refusals and reference-lease derivation read from
+    ``chunk_id`` — the open takeover, the held bindings, the active and latest leases,
+    and the fence-epoch floor."""
+
+    chunk_id: str
+    open_takeover: TakeoverRecord | None
+    bindings: list[EnvBindingRecord]
+    active_lease: LeaseRecord | None
+    latest_lease: LeaseRecord | None
+    latest_epoch: int
+
+
+@dataclass(frozen=True)
+class TakeoverCloseScope:
+    """The chunk-keyed fact :meth:`TakeoverService.close` reads, resolved at the edge
+    (``bzh:domain-takes-objects``)."""
+
+    chunk_id: str
+    open_takeover: TakeoverRecord | None
 
 
 class IReadTakeoverRepository(Protocol):
@@ -198,15 +226,17 @@ class TakeoverService:
         # ``None`` on a broker-less app, a no-op there.
         self._events = events
 
-    def open(self, chunk_id: str, *, force: bool) -> OpenedTakeover:
-        if self._stores.takeover.open_takeover_for_chunk(chunk_id) is not None:
+    def open(self, scope: TakeoverOpenScope, *, force: bool) -> OpenedTakeover:
+        """Open a takeover over ``scope.chunk_id``, or raise a ``409``-mapped refusal.
+        ``scope`` is already resolved by the caller (``bzh:domain-takes-objects``)."""
+        chunk_id = scope.chunk_id
+        if scope.open_takeover is not None:
             raise ChunkNotTakeable(f"chunk {chunk_id} already has an open takeover")
-        bindings = self._stores.environments.bindings_for_chunk(chunk_id)
-        if not bindings:
+        if not scope.bindings:
             raise ChunkNotTakeable(f"chunk {chunk_id} is not held by this runner — nothing to take over")
-        workdir = bindings[0].workdir
+        workdir = scope.bindings[0].workdir
 
-        active = self._stores.lease_record.active_lease_for_chunk(chunk_id)
+        active = scope.active_lease
         live = active is not None and active.lease_id not in self._stores.asks.parked_lease_ids()
         if live and not force:
             raise LiveWorkerConflict(f"chunk {chunk_id} has a live worker attempt — pass --force to take it over")
@@ -218,16 +248,14 @@ class TakeoverService:
         ):
             raise SubmissionPending(f"chunk {chunk_id}'s attempt already submitted — let it land, then `requeue`")
 
-        reference: LeaseRecord | None = (
-            active if active is not None else self._stores.lease_record.latest_lease_for_chunk(chunk_id)
-        )
+        reference: LeaseRecord | None = active if active is not None else scope.latest_lease
         if reference is None or reference.session_id is None:
             raise ChunkNotTakeable(f"chunk {chunk_id} has no resumable session to take over")
         session_id = reference.session_id
 
         now = self._clock.now()
         takeover_id = Id.mint(TAKEOVER_PREFIX, self._clock).value
-        fence_epoch = self._stores.lease_record.latest_epoch(chunk_id) + 1 if live else None
+        fence_epoch = scope.latest_epoch + 1 if live else None
 
         # Fact-before-command (bzh:crash-correctness): recorded — and so reachable by
         # every loop step's open-takeover skip — before anything is killed or returned.
@@ -280,7 +308,9 @@ class TakeoverService:
         lease_token, token_hash = LeaseToken.mint()
         self._stores.tokens.record_lease_token(reference.lease_id, token_hash, now)
         preamble = WorkerPreamble(
-            environments=[AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in bindings],
+            environments=[
+                AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in scope.bindings
+            ],
             lease_id=reference.lease_id,
             local_api_url=self._local_api_url,
             lease_token=lease_token,
@@ -301,16 +331,17 @@ class TakeoverService:
             env=env,
         )
 
-    def close(self, chunk_id: str, takeover_id: str) -> None:
+    def close(self, scope: TakeoverCloseScope, takeover_id: str) -> None:
         """End ``takeover_id``, idempotently (issue #291): ending one already ended — by this
         same call racing ``Pull``'s own closer, or a retried end-PATCH — is the desired state,
         so it succeeds rather than raising. Only a genuinely *different* takeover holding the
-        chunk is the real conflict this still refuses."""
-        record = self._stores.takeover.open_takeover_for_chunk(chunk_id)
+        chunk is the real conflict this still refuses. ``scope`` is already resolved by the
+        caller (``bzh:domain-takes-objects``)."""
+        record = scope.open_takeover
         if record is not None and record.takeover_id != takeover_id:
-            raise TakeoverEndedElsewhere(f"takeover {takeover_id} on chunk {chunk_id} is not open")
+            raise TakeoverEndedElsewhere(f"takeover {takeover_id} on chunk {scope.chunk_id} is not open")
         if record is None:
             return
         self._stores.takeover.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())
         if self._events is not None:
-            self._events.publish_takeover_changed(chunk_id, takeover_id, cause="closed")
+            self._events.publish_takeover_changed(scope.chunk_id, takeover_id, cause="closed")

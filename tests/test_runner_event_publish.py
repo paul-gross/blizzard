@@ -20,7 +20,7 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.domain.takeover import TakeoverService
+from blizzard.runner.domain.takeover import TakeoverCloseScope, TakeoverOpenScope, TakeoverService
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -83,6 +83,23 @@ def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch
     )
     store.record_spawn(lease, pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+
+def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:  # type: ignore[no-untyped-def]
+    """The edge resolution `chunk_scope.resolved_takeover_open_scope` performs in production."""
+    return TakeoverOpenScope(
+        chunk_id=chunk_id,
+        open_takeover=store.open_takeover_for_chunk(chunk_id),
+        bindings=store.bindings_for_chunk(chunk_id),
+        active_lease=store.active_lease_for_chunk(chunk_id),
+        latest_lease=store.latest_lease_for_chunk(chunk_id),
+        latest_epoch=store.latest_epoch(chunk_id),
+    )
+
+
+def _close_scope(store, chunk_id: str = "ch_1") -> TakeoverCloseScope:  # type: ignore[no-untyped-def]
+    """The edge resolution `chunk_scope.resolved_takeover_close_scope` performs in production."""
+    return TakeoverCloseScope(chunk_id=chunk_id, open_takeover=store.open_takeover_for_chunk(chunk_id))
 
 
 # --- lease-changed + environment-changed(bound) + fact-changed (mint) ------------------ #
@@ -498,7 +515,7 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
         events=events,
     )
 
-    opened = service.open("ch_1", force=False)
+    opened = service.open(_open_scope(store), force=False)
     open_frames = _frames(events, "takeover-changed")
     assert open_frames == [
         {
@@ -508,7 +525,7 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
         }
     ]
 
-    service.close("ch_1", opened.takeover_id)
+    service.close(_close_scope(store), opened.takeover_id)
     all_frames = _frames(events, "takeover-changed")
     assert all_frames[-1] == {
         "chunk_id": "ch_1",
@@ -531,7 +548,7 @@ def test_takeover_force_open_over_a_live_worker_publishes_the_fence_bump_as_fact
         events=events,
     )
 
-    service.open("ch_1", force=True)
+    service.open(_open_scope(store), force=True)
 
     fact_frames = _frames(events, "fact-changed")
     assert any(f["kind"] == "lease.minted" and f["chunk_id"] == "ch_1" for f in fact_frames)

@@ -19,7 +19,9 @@ from blizzard.runner.domain.takeover import (
     ChunkNotTakeable,
     LiveWorkerConflict,
     SubmissionPending,
+    TakeoverCloseScope,
     TakeoverEndedElsewhere,
+    TakeoverOpenScope,
     TakeoverService,
 )
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -86,6 +88,23 @@ def _seed_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
+def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:  # type: ignore[no-untyped-def]
+    """The edge resolution `chunk_scope.resolved_takeover_open_scope` performs in production."""
+    return TakeoverOpenScope(
+        chunk_id=chunk_id,
+        open_takeover=store.open_takeover_for_chunk(chunk_id),
+        bindings=store.bindings_for_chunk(chunk_id),
+        active_lease=store.active_lease_for_chunk(chunk_id),
+        latest_lease=store.latest_lease_for_chunk(chunk_id),
+        latest_epoch=store.latest_epoch(chunk_id),
+    )
+
+
+def _close_scope(store, chunk_id: str = "ch_1") -> TakeoverCloseScope:  # type: ignore[no-untyped-def]
+    """The edge resolution `chunk_scope.resolved_takeover_close_scope` performs in production."""
+    return TakeoverCloseScope(chunk_id=chunk_id, open_takeover=store.open_takeover_for_chunk(chunk_id))
+
+
 # The three parked shapes — happy path, no force
 # --------------------------------------------------------------------------- #
 
@@ -95,7 +114,7 @@ def test_takeover_opens_over_an_ask_parked_chunk(tmp_path) -> None:  # type: ign
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    opened = _service(store).open("ch_1", force=False)
+    opened = _service(store).open(_open_scope(store), force=False)
 
     assert opened.command == "cd /ws/e1 && claude --resume sess-a"
     assert opened.workdir == "/ws/e1"
@@ -114,7 +133,7 @@ def test_takeover_opens_over_a_needs_human_chunk(tmp_path) -> None:  # type: ign
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
 
-    opened = _service(store).open("ch_1", force=False)
+    opened = _service(store).open(_open_scope(store), force=False)
 
     assert opened.command == "cd /ws/e1 && claude --resume sess-a"
     record = store.open_takeover_for_chunk("ch_1")
@@ -128,7 +147,7 @@ def test_takeover_opens_over_a_gate_parked_chunk(tmp_path) -> None:  # type: ign
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="parked", closed_at=_NOW)
 
-    opened = _service(store).open("ch_1", force=False)
+    opened = _service(store).open(_open_scope(store), force=False)
 
     record = store.open_takeover_for_chunk("ch_1")
     assert record is not None
@@ -139,7 +158,7 @@ def test_takeover_opens_over_a_gate_parked_chunk(tmp_path) -> None:  # type: ign
 def test_takeover_refuses_a_chunk_with_no_held_binding(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     with pytest.raises(ChunkNotTakeable):
-        _service(store).open("ch_missing", force=False)
+        _service(store).open(_open_scope(store, "ch_missing"), force=False)
 
 
 def test_takeover_refuses_a_second_open_takeover(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -147,10 +166,10 @@ def test_takeover_refuses_a_second_open_takeover(tmp_path) -> None:  # type: ign
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
     service = _service(store)
-    service.open("ch_1", force=False)
+    service.open(_open_scope(store), force=False)
 
     with pytest.raises(ChunkNotTakeable):
-        service.open("ch_1", force=False)
+        service.open(_open_scope(store), force=False)
 
 
 # A live worker attempt — 409 without force, superseded with it
@@ -162,7 +181,7 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path) -> None:  # type
     _seed_lease(store)  # active, not parked — a live attempt
 
     with pytest.raises(LiveWorkerConflict):
-        _service(store).open("ch_1", force=False)
+        _service(store).open(_open_scope(store), force=False)
 
     # Refusing must not touch anything: no takeover fact, no kill, no fence.
     assert store.open_takeover_for_chunk("ch_1") is None
@@ -185,7 +204,7 @@ def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_n
             super().kill(pid)
 
     probe = _OrderingProbe()
-    opened = _service(store, probe=probe).open("ch_1", force=True)
+    opened = _service(store, probe=probe).open(_open_scope(store), force=True)
 
     # Fact-before-kill (bzh:crash-correctness): the fact was already durable the
     # instant the kill ran.
@@ -231,7 +250,7 @@ def test_forced_takeover_refuses_a_lease_with_a_pending_submission(tmp_path) -> 
     )
 
     with pytest.raises(SubmissionPending):
-        _service(store).open("ch_1", force=True)
+        _service(store).open(_open_scope(store), force=True)
 
     # Refusing must not touch anything: no takeover fact, no kill, no fresh fence
     # enqueued — the buffer holds only the pre-existing completion.
@@ -246,9 +265,9 @@ def test_takeover_close_marks_it_ended(tmp_path) -> None:  # type: ignore[no-unt
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
     service = _service(store)
-    opened = service.open("ch_1", force=False)
+    opened = service.open(_open_scope(store), force=False)
 
-    service.close("ch_1", opened.takeover_id)
+    service.close(_close_scope(store), opened.takeover_id)
 
     assert store.open_takeover_for_chunk("ch_1") is None
     assert "ch_1" not in store.open_takeover_chunk_ids()
@@ -259,10 +278,10 @@ def test_takeover_close_on_a_different_open_takeover_raises(tmp_path) -> None:  
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
     service = _service(store)
-    service.open("ch_1", force=False)
+    service.open(_open_scope(store), force=False)
 
     with pytest.raises(TakeoverEndedElsewhere):
-        service.close("ch_1", "tko_bogus")
+        service.close(_close_scope(store), "tko_bogus")
 
 
 def test_takeover_close_is_idempotent_once_already_ended(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -272,17 +291,17 @@ def test_takeover_close_is_idempotent_once_already_ended(tmp_path) -> None:  # t
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
     service = _service(store)
-    opened = service.open("ch_1", force=False)
-    service.close("ch_1", opened.takeover_id)
+    opened = service.open(_open_scope(store), force=False)
+    service.close(_close_scope(store), opened.takeover_id)
 
-    service.close("ch_1", opened.takeover_id)  # does not raise
+    service.close(_close_scope(store), opened.takeover_id)  # does not raise
 
 
 def test_takeover_close_with_no_takeover_ever_opened_is_a_no_op(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     service = _service(store)
 
-    service.close("ch_1", "tko_bogus")  # does not raise
+    service.close(_close_scope(store), "tko_bogus")  # does not raise
 
 
 # The loop guard — REAP/ADVANCE skip a chunk under an open takeover
@@ -395,7 +414,7 @@ def test_takeover_composes_its_command_from_the_sessions_own_stamps(tmp_path) ->
     _seed_lease(store, session_name="code", resolved_model="opus", resolved_effort="high")
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    opened = _service(store).open("ch_1", force=False)
+    opened = _service(store).open(_open_scope(store), force=False)
 
     assert opened.command == "cd /ws/e1 && claude --resume sess-a --model opus --effort high"
     # And it names WHICH lineage is being taken over, not just an opaque session id.
@@ -407,7 +426,7 @@ def test_takeover_of_a_session_predating_the_stamps_renders_the_bare_command(tmp
     _seed_lease(store)  # no stamps — *unknown*
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    opened = _service(store).open("ch_1", force=False)
+    opened = _service(store).open(_open_scope(store), force=False)
 
     assert opened.command == "cd /ws/e1 && claude --resume sess-a"
     assert opened.session_name is None
@@ -422,7 +441,7 @@ def test_takeover_carries_the_lease_identity_env_and_reminting_its_token(tmp_pat
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
     store.record_lease_token("lease_1", "prior-token-hash", _NOW)  # the spawn's original mint
 
-    opened = _service(store).open("ch_1", force=False)
+    opened = _service(store).open(_open_scope(store), force=False)
 
     assert opened.env["BLIZZARD_CHUNK_ID"] == "ch_1"
     assert opened.env["BLIZZARD_LEASE_ID"] == "lease_1"
@@ -445,7 +464,7 @@ def test_takeover_env_is_bounded_to_identity_plus_path_and_home(tmp_path) -> Non
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    opened = _service(store).open("ch_1", force=False)
+    opened = _service(store).open(_open_scope(store), force=False)
 
     # Forwarded: the execution vars an interactive resume needs from the daemon side.
     assert opened.env["PATH"] == "/daemon/venv/bin:/usr/bin"

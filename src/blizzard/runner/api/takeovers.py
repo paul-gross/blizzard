@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.api.chunk_scope import resolved_takeover_close_scope, resolved_takeover_open_scope
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import (
@@ -32,8 +33,9 @@ def open_takeover(chunk_id: str, request_body: TakeoverRequest, request: Request
     ``force`` supersedes a live worker attempt instead of refusing, consuming no retry
     and recording no escalation."""
     service = RunnerWiring.of(request).takeover()
+    scope = resolved_takeover_open_scope(chunk_id, request)
     try:
-        opened = service.open(chunk_id, force=request_body.force)
+        opened = service.open(scope, force=request_body.force)
     except (ChunkNotTakeable, LiveWorkerConflict, SubmissionPending) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return TakeoverOpenResponse(
@@ -45,8 +47,9 @@ def open_takeover(chunk_id: str, request_body: TakeoverRequest, request: Request
 def end_takeover(chunk_id: str, takeover_id: str, request: Request) -> TakeoverEndResponse:
     """Mark a takeover ended."""
     service = RunnerWiring.of(request).takeover()
+    scope = resolved_takeover_close_scope(chunk_id, request)
     try:
-        service.close(chunk_id, takeover_id)
+        service.close(scope, takeover_id)
     except TakeoverEndedElsewhere as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return TakeoverEndResponse(takeover_id=takeover_id, ended=True)
