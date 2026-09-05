@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.config import ConfigError, RunnerConfig
+from blizzard.runner.config import ConfigError, RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.loop.build import LoopWiring
@@ -291,6 +291,9 @@ def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None
     hub.claim_outcome = claimed_outcome("ch_1", envelope)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     sampler = _ClaimObservingSampler(hub=hub)
+    declaration = SubscriptionDeclaration(
+        slug="anthropic", name="Anthropic", provider="anthropic", sample_interval_seconds=300
+    )
     ctx = make_context(
         store,
         hub=hub,
@@ -298,8 +301,8 @@ def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None
         harness=harness,
         probe=FakeProbe(alive={(_HANDLE.pid, _HANDLE.process_start_time)}),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, external_usage_sample_interval_seconds=300),
-        subscription_sampler=sampler,
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, subscriptions=(declaration,)),
+        subscription_samplers={"anthropic": sampler},
     )
 
     tick(ctx)

@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import build_hosted_app, create_app
-from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
+from blizzard.runner.config import CONFIG_FILENAME, LEGACY_ANTHROPIC_SLUG, ConfigError, RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
@@ -68,20 +68,28 @@ def test_loop_wiring_threads_external_usage_credentials_path_into_the_sampler(tm
     sampler's own default credentials path and reaching the real Anthropic endpoint
     (issue #218). The sampler is a separate seam from the harness adapter (blizzard#436) —
     selected from the config's resolved (declared-or-synthesized) subscription list, not
-    threaded through ``ClaudeCodeAdapter`` anymore."""
+    threaded through ``ClaudeCodeAdapter`` anymore, and keyed by slug (phase 2) since a
+    runner may declare several. The legacy table's own ``external_usage_sample_interval_seconds``
+    reaches that same synthesized declaration's ``sample_interval_seconds`` — the cadence
+    the tick's per-slug gate reads (``ExternalUsageSample``), not a runner-wide setting."""
     scratch = str(tmp_path / "scratch-credentials.json")
     config = RunnerConfig(
         root=tmp_path,
         db_url=RunnerConfig.default_db_url(tmp_path),
         workspace_root=str(tmp_path / "workspace"),
         external_usage_credentials_path=scratch,
+        external_usage_sample_interval_seconds=123,
     )
 
     ctx = LoopWiring(config, "", "").context(FakeHub())
 
     assert isinstance(ctx.harness, ClaudeCodeAdapter)
-    assert isinstance(ctx.subscription_sampler, AnthropicSubscriptionSampler)
-    assert ctx.subscription_sampler._credentials_path == scratch
+    assert [d.slug for d in ctx.config.subscriptions] == [LEGACY_ANTHROPIC_SLUG]
+    declaration = ctx.config.subscriptions[0]
+    assert declaration.sample_interval_seconds == 123
+    sampler = ctx.subscription_samplers[LEGACY_ANTHROPIC_SLUG]
+    assert isinstance(sampler, AnthropicSubscriptionSampler)
+    assert sampler._credentials_path == scratch
 
 
 @pytest.mark.unit

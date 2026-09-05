@@ -16,6 +16,7 @@ def external_usage_group() -> None:
 
 
 @external_usage_group.command("probe")
+@click.argument("slug")
 @click.option(
     "--dir",
     "directory",
@@ -23,18 +24,21 @@ def external_usage_group() -> None:
     envvar=ENV_RUNNER_DIR,
     help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
 )
-def external_usage_probe(directory: str) -> None:
-    """Sample the runner's first declared subscription's rate-limit usage and print it.
+def external_usage_probe(slug: str, directory: str) -> None:
+    """Sample one declared subscription's rate-limit usage, by SLUG, and print it.
 
     Read-only: builds the same sampler seam the reconciliation loop uses and samples
     through it directly (blizzard#436) — no store write, no tick, nothing enqueued or
-    delivered. Naming which declared slug to probe is phase 2's CLI shape; a runner with
-    no ``[[subscription]]`` entries probes the sole synthesized legacy Anthropic one."""
+    delivered. A runner with no ``[[subscription]]`` entries declares exactly one,
+    under the reserved slug ``anthropic``."""
     try:
         config = RunnerConfig.load(Path(directory))
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
-    declaration = config.resolved_subscriptions()[0]
+    declared = {declaration.slug: declaration for declaration in config.resolved_subscriptions()}
+    if slug not in declared:
+        raise click.ClickException(f"no declared subscription with slug {slug!r} (declared: {sorted(declared)})")
+    declaration = declared[slug]
     sampler = select_sampler(declaration)
     if sampler is None:
         click.echo(f"no sample: {declaration.provider!r} (slug {declaration.slug!r}) has no known sampler binding")

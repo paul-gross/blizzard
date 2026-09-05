@@ -7,9 +7,11 @@ that parameter object, plus the loop's static config.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
+from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter
@@ -71,9 +73,11 @@ class LoopConfig:
     runner_ceiling_usd: float | None = None
     #: The runner ceiling's rolling window in hours; unused while the ceiling is ``None``.
     runner_ceiling_window_hours: float = 24.0
-    #: The external-subscription-usage sample step's cadence in seconds (issue #218) —
-    #: seconds that must elapse since the runner's last sampling attempt.
-    external_usage_sample_interval_seconds: int = 300
+    #: Every declared provider subscription, resolved (blizzard#436) — the tick samples
+    #: each one due against its own ``sample_interval_seconds`` and ``slug``-keyed anchor,
+    #: replacing the single runner-wide cadence this field used to carry. Empty means no
+    #: declared subscription: the sample step iterates nothing and samples nothing.
+    subscriptions: tuple[SubscriptionDeclaration, ...] = ()
     #: The session-context warn line; ``None`` disables the lane, reading no transcript at all.
     context_warn_tokens: int | None = None
     #: The context sample step's per-lease cadence in seconds; unused while the lane is off.
@@ -124,7 +128,7 @@ class LoopContext:
     #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on ``blizzard runner tick``, a no-op there.
     events: IRunnerEventPublisher | None = None
-    #: The provider subscription-sampling seam (blizzard#436) — selected once at
-    #: composition from the first declared subscription; ``None`` when there is none, or
-    #: its provider names no known sampler binding (declared, but unsampled).
-    subscription_sampler: ISubscriptionSampler | None = None
+    #: The provider subscription-sampling seam (blizzard#436) — one binding per declared
+    #: subscription's ``slug``, selected once at composition; a slug absent here has no
+    #: known sampler binding for its provider (declared, but unsampled).
+    subscription_samplers: Mapping[str, ISubscriptionSampler] = field(default_factory=dict)

@@ -47,5 +47,7 @@ Credentials never leave the runner machine: the sample reads the runner's own lo
 derived utilization percentages, window labels, and reset times cross the wire to the hub — the bearer token is never
 reported, stored, or forwarded.
 
-`blizzard runner external-usage probe` samples once and prints the parsed snapshot without writing, ticking, or
-reporting to the hub — confirming credentials and cadence without waiting on a scheduled sample.
+`blizzard runner external-usage probe <slug>` samples one declared subscription, by its slug, once and prints the
+parsed snapshot without writing, ticking, or reporting to the hub — confirming that subscription's credentials and
+cadence without waiting on a scheduled sample. A runner with no `[[subscription]]` declared has exactly one slug to
+name: `anthropic`, the legacy table's own subscription.

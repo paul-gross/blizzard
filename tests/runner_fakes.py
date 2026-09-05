@@ -848,7 +848,7 @@ def make_context(
     clock: FixedClock | None = None,
     config: LoopConfig | None = None,
     events: EventBroker | None = None,
-    subscription_sampler: ISubscriptionSampler | None = None,
+    subscription_samplers: dict[str, ISubscriptionSampler] | None = None,
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes."""
     resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
@@ -876,7 +876,7 @@ def make_context(
         provider=_provider,
         harness=_harness,
         process=_probe,
-        subscription_sampler=subscription_sampler,
+        subscription_samplers=subscription_samplers or {},
         worktree_git=_wt,
         check_runner=_check_runner,
         config=resolved_config,

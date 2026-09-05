@@ -272,8 +272,19 @@
     "external-usage": {
       "commands": {
         "probe": {
-          "help": "Sample the runner's first declared subscription's rate-limit usage and print it.\n\nRead-only: builds the same sampler seam the reconciliation loop uses and samples\nthrough it directly (blizzard#436) \u2014 no store write, no tick, nothing enqueued or\ndelivered. Naming which declared slug to probe is phase 2's CLI shape; a runner with\nno ``[[subscription]]`` entries probes the sole synthesized legacy Anthropic one.",
+          "help": "Sample one declared subscription's rate-limit usage, by SLUG, and print it.\n\nRead-only: builds the same sampler seam the reconciliation loop uses and samples\nthrough it directly (blizzard#436) \u2014 no store write, no tick, nothing enqueued or\ndelivered. A runner with no ``[[subscription]]`` entries declares exactly one,\nunder the reserved slug ``anthropic``.",
           "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
             {
               "hidden": false,
               "kind": "option",
@@ -287,7 +298,7 @@
             }
           ],
           "path": "runner external-usage probe",
-          "short_help": "Sample the runner's first declared subscription's rate-limit usage and print it."
+          "short_help": "Sample one declared subscription's rate-limit usage, by SLUG, and print it."
         }
       },
       "help": "Diagnostics for the runner's own external-subscription usage sampling (issue #218).",
