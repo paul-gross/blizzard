@@ -7,7 +7,7 @@ per-runner seq high-water idempotency the wire contract promises. The component 
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -26,8 +26,8 @@ pytestmark = pytest.mark.component
 _T0 = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
 
 
-def _payload(*, sampled_at: datetime, utilization_pct: float) -> dict:
-    return {
+def _payload(*, sampled_at: datetime, utilization_pct: float, slug: str | None = None, name: str | None = None) -> dict:
+    payload: dict = {
         "sampled_at": sampled_at.isoformat(),
         "windows": [
             {
@@ -38,6 +38,11 @@ def _payload(*, sampled_at: datetime, utilization_pct: float) -> dict:
             }
         ],
     }
+    if slug is not None:
+        payload["slug"] = slug
+    if name is not None:
+        payload["name"] = name
+    return payload
 
 
 def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
@@ -56,10 +61,12 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
     )
 
 
-def _row(engine: sa.Engine, runner_id: str):  # type: ignore[no-untyped-def]
+def _row(engine: sa.Engine, runner_id: str, slug: str = "anthropic"):  # type: ignore[no-untyped-def]
     with engine.connect() as conn:
         return conn.execute(
-            sa.select(s.runner_external_usage).where(s.runner_external_usage.c.runner_id == runner_id)
+            sa.select(s.runner_external_usage).where(
+                s.runner_external_usage.c.runner_id == runner_id, s.runner_external_usage.c.slug == slug
+            )
         ).one_or_none()
 
 
@@ -266,3 +273,94 @@ def test_get_runners_renders_the_landed_sample_with_exact_wire_field_names(tmp_p
     # Symmetric on the single-runner detail read too (`runner_view` is the one renderer).
     detail = hub.client.get("/api/runners/r1").json()
     assert detail["external_subscription_usage"] == usage
+
+
+def test_two_distinct_subscriptions_render_separately_and_the_legacy_field_tracks_only_the_legacy_slug(
+    tmp_path: Path,
+) -> None:
+    """A runner emitting both the pre-#436 legacy shape and a genuinely new slug
+    (blizzard#436 phase 3) — a reader consuming only ``external_subscription_usage``
+    still sees the migrated Anthropic subscription's windows, and the per-slug
+    ``subscriptions`` collection reports the *same* windows for that slug from the same
+    sample."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "external_subscription_usage.sampled",
+                    # No `slug` — the legacy shape a pre-#436 runner still emits.
+                    "payload": _payload(sampled_at=_T0, utilization_pct=42.5),
+                },
+                {
+                    "seq": 2,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": _payload(sampled_at=_T0, utilization_pct=17.0, slug="openai", name="OpenAI"),
+                },
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["applied"] == [1, 2]
+
+    detail = hub.client.get("/api/runners/r1").json()
+
+    # The legacy field renders the legacy slug's own windows, untouched by the sibling.
+    assert detail["external_subscription_usage"]["windows"][0]["utilization_pct"] == 42.5
+
+    subscriptions = {s["slug"]: s for s in detail["subscriptions"]}
+    assert set(subscriptions) == {"anthropic", "openai"}
+    assert subscriptions["anthropic"]["name"] == "anthropic"  # no `name` on the legacy-shaped fact
+    assert subscriptions["anthropic"]["windows"][0]["utilization_pct"] == 42.5
+    assert subscriptions["openai"]["name"] == "OpenAI"
+    assert subscriptions["openai"]["windows"][0]["utilization_pct"] == 17.0
+
+    # The legacy field and the legacy slug's own per-subscription view report the same
+    # windows from the one sample that landed them.
+    assert detail["external_subscription_usage"]["windows"] == subscriptions["anthropic"]["windows"]
+
+
+def test_a_stale_subscription_does_not_blank_a_healthy_sibling_at_the_component_tier(tmp_path: Path) -> None:
+    """One subscription's sample going stale must not blank a healthy sibling's
+    (blizzard#436 phase 3's staleness-is-per-subscription acceptance bar), proven through
+    the real HTTP read, not just the pure-domain unit tier."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+
+    # Relative to the hub's own (fixed) clock, not `_T0` — staleness is judged against
+    # `services.clock.now()` at read time, not the fact's own sampled instant.
+    hub_now = hub.clock.now()
+    healthy_at = hub_now - timedelta(minutes=1)
+    stale_at = hub_now - timedelta(minutes=30)
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": _payload(sampled_at=stale_at, utilization_pct=99.0, slug="openai", name="OpenAI"),
+                },
+                {
+                    "seq": 2,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": _payload(sampled_at=healthy_at, utilization_pct=5.0, slug="anthropic", name="Anthropic"),
+                },
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    detail = hub.client.get("/api/runners/r1").json()
+    subscriptions = {s["slug"]: s for s in detail["subscriptions"]}
+
+    # The stale sibling is simply absent — never a reason to omit the healthy one.
+    assert set(subscriptions) == {"anthropic"}
+    assert subscriptions["anthropic"]["windows"][0]["utilization_pct"] == 5.0
+    assert detail["external_subscription_usage"]["windows"][0]["utilization_pct"] == 5.0

@@ -62,6 +62,17 @@ class ExternalSubscriptionUsageView(BaseModel):
     windows: list[ExternalSubscriptionUsageWindowView]
 
 
+class SubscriptionUsageView(BaseModel):
+    """One declared subscription's newest sampled usage, carrying its identity
+    (issue #218) — additive beside the single legacy usage snapshot. ``slug`` is the
+    runner-unique join key, ``name`` the operator-facing label."""
+
+    slug: str
+    name: str
+    sampled_at: str
+    windows: list[ExternalSubscriptionUsageWindowView]
+
+
 class RunnerView(BaseModel):
     """One fleet-registry row — derived liveness, both brakes, and an advisory snapshot.
 
@@ -82,8 +93,13 @@ class RunnerView(BaseModel):
     # The configured environment-pool size — ``None`` when none was reported, never zero.
     env_capacity: int | None = None
     # The newest external-subscription-usage sample (issue #218) — absent when none was
-    # ever sampled, or the newest is stale; never a fabricated empty value.
+    # ever sampled, or the newest is stale; never a fabricated empty value. Derives from
+    # the legacy slug's row alone (blizzard#436 phase 3) — unchanged in name and shape.
     external_subscription_usage: ExternalSubscriptionUsageView | None = None
+    # Every declared subscription's own non-stale usage, additive beside the field above
+    # (blizzard#436 phase 3) — one dead or stale subscription is simply absent, never a
+    # reason to omit any other. Empty for a runner that has never sampled anything.
+    subscriptions: list[SubscriptionUsageView] = []
 
 
 class RunnerListResponse(BaseModel):
