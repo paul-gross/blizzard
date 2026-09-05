@@ -17,7 +17,13 @@ from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
 from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, WorkSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
-from blizzard.runner.config import DEFAULT_RUNNER_CEILING_WINDOW_HOURS, ConfigError, RunnerConfig
+from blizzard.runner.config import (
+    DEFAULT_RUNNER_CEILING_WINDOW_HOURS,
+    LEGACY_ANTHROPIC_SLUG,
+    ConfigError,
+    RunnerConfig,
+    SubscriptionDeclaration,
+)
 from blizzard.runner.config import ENV_PORT as RUNNER_ENV_PORT
 from blizzard.runner.harness.workspace_prompts import PACKAGED
 
@@ -1478,3 +1484,151 @@ def test_the_configured_hub_caps_reach_the_wired_ingest_service(tmp_path: Path) 
 
     assert resolved.runner_daily_rate_max_bytes == 214748364800
     assert resolved.record_max_bytes == TranscriptCaps().record_max_bytes
+
+
+# --------------------------------------------------------------------------- #
+# `[[subscription]]` — declared provider subscriptions (blizzard#436).
+
+
+@pytest.mark.unit
+def test_no_declarations_at_all_is_an_empty_subscriptions_field(tmp_path: Path) -> None:
+    # `subscriptions` is what was actually authored — synthesis is `resolved_subscriptions`'s
+    # concern alone, so an unedited config's raw field stays empty.
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(f'db_url = "{RunnerConfig.default_db_url(root)}"\n')
+
+    assert RunnerConfig.load(root).subscriptions == ()
+
+
+@pytest.mark.unit
+def test_no_declarations_and_no_legacy_table_resolves_to_the_synthesized_legacy_anthropic_slug(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(f'db_url = "{RunnerConfig.default_db_url(root)}"\n')
+
+    config = RunnerConfig.load(root)
+
+    assert config.resolved_subscriptions() == (
+        SubscriptionDeclaration(
+            slug=LEGACY_ANTHROPIC_SLUG,
+            name="Anthropic",
+            provider=LEGACY_ANTHROPIC_SLUG,
+            credentials_path=None,
+            sample_interval_seconds=300,
+        ),
+    )
+
+
+@pytest.mark.unit
+def test_no_declarations_resolves_the_legacy_tables_own_cadence_and_credentials_path(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n'
+        "\n[external_subscription_usage]\n"
+        "sample_interval_seconds = 60\n"
+        'credentials_path = "/tmp/creds.json"\n'
+    )
+
+    config = RunnerConfig.load(root)
+    resolved = config.resolved_subscriptions()
+
+    assert len(resolved) == 1
+    synthesized = resolved[0]
+    assert synthesized.slug == LEGACY_ANTHROPIC_SLUG
+    assert synthesized.credentials_path == "/tmp/creds.json"
+    assert synthesized.sample_interval_seconds == 60
+
+
+@pytest.mark.unit
+def test_declarations_present_win_over_the_legacy_table_entirely(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n'
+        "\n[external_subscription_usage]\n"
+        "sample_interval_seconds = 60\n"
+        'credentials_path = "/tmp/should-be-ignored.json"\n'
+        "\n[[subscription]]\n"
+        'slug = "my-anthropic"\n'
+        'name = "My Anthropic Plan"\n'
+        'provider = "anthropic"\n'
+        'credentials_path = "/tmp/real-creds.json"\n'
+        "sample_interval_seconds = 120\n"
+    )
+
+    config = RunnerConfig.load(root)
+
+    # The legacy table's own credentials_path/sample_interval_seconds still parse onto
+    # the always-present `external_usage_*` fields (unchanged, phase 1) — but the resolved
+    # subscription list is the declared entry alone, never the legacy one too.
+    expected = (
+        SubscriptionDeclaration(
+            slug="my-anthropic",
+            name="My Anthropic Plan",
+            provider="anthropic",
+            credentials_path="/tmp/real-creds.json",
+            sample_interval_seconds=120,
+        ),
+    )
+    assert config.subscriptions == expected
+    assert config.resolved_subscriptions() == expected
+
+
+@pytest.mark.unit
+def test_declarations_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    edited = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        subscriptions=(
+            SubscriptionDeclaration(slug="a", name="A", provider="anthropic"),
+            SubscriptionDeclaration(
+                slug="b", name="B", provider="anthropic", credentials_path="/tmp/b.json", sample_interval_seconds=90
+            ),
+        ),
+    )
+    edited.config_path.write_text(edited.to_toml())
+
+    reloaded = RunnerConfig.load(edited.root)
+
+    assert reloaded.subscriptions == edited.subscriptions
+
+
+@pytest.mark.unit
+def test_a_declaration_missing_a_required_key_raises(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[[subscription]]\nslug = "a"\nname = "A"\n'
+    )
+    with pytest.raises(ConfigError, match="provider"):
+        RunnerConfig.load(root)
+
+
+@pytest.mark.unit
+def test_a_duplicate_declaration_slug_raises(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n'
+        '\n[[subscription]]\nslug = "a"\nname = "A"\nprovider = "anthropic"\n'
+        '\n[[subscription]]\nslug = "a"\nname = "A2"\nprovider = "anthropic"\n'
+    )
+    with pytest.raises(ConfigError, match="duplicate"):
+        RunnerConfig.load(root)
+
+
+@pytest.mark.unit
+def test_an_empty_declaration_slug_raises(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[[subscription]]\nslug = ""\nname = "A"\nprovider = "anthropic"\n'
+    )
+    with pytest.raises(ConfigError, match="empty"):
+        RunnerConfig.load(root)

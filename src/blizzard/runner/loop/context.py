@@ -13,6 +13,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.harness.subscription_sampler import ISubscriptionSampler
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.loop.checks import ICheckRunner
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -123,3 +124,7 @@ class LoopContext:
     #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on ``blizzard runner tick``, a no-op there.
     events: IRunnerEventPublisher | None = None
+    #: The provider subscription-sampling seam (blizzard#436) — selected once at
+    #: composition from the first declared subscription; ``None`` when there is none, or
+    #: its provider names no known sampler binding (declared, but unsampled).
+    subscription_sampler: ISubscriptionSampler | None = None

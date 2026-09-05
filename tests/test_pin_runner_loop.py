@@ -266,17 +266,18 @@ def test_loop_wiring_uses_the_injected_prompts_and_never_re_derives_them(tmp_pat
 # --------------------------------------------------------------------------- #
 
 
-class _ClaimObservingHarness(FakeHarness):
-    """Records how many route claims the hub had taken by the time the sampler ran."""
+class _ClaimObservingSampler:
+    """Records how many route claims the hub had taken by the time the sampler ran
+    (blizzard#436) — a scriptable :class:`ISubscriptionSampler`, since the sample no
+    longer rides on the coding-harness adapter (issue #218)."""
 
-    def __init__(self, *, hub: FakeHub, **kwargs) -> None:  # type: ignore[no-untyped-def]
-        super().__init__(**kwargs)
+    def __init__(self, *, hub: FakeHub) -> None:
         self._hub = hub
         self.claims_at_sample: list[int] = []
 
-    def sample_external_subscription_usage(self):  # type: ignore[no-untyped-def]
+    def sample(self):  # type: ignore[no-untyped-def]
         self.claims_at_sample.append(len(self._hub.claims))
-        return super().sample_external_subscription_usage()
+        return None
 
 
 @pytest.mark.unit
@@ -288,7 +289,8 @@ def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", envelope)
-    harness = _ClaimObservingHarness(hub=hub, handle=_HANDLE, verdict="pass")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    sampler = _ClaimObservingSampler(hub=hub)
     ctx = make_context(
         store,
         hub=hub,
@@ -297,9 +299,10 @@ def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None
         probe=FakeProbe(alive={(_HANDLE.pid, _HANDLE.process_start_time)}),
         clock=FixedClock(_NOW),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, external_usage_sample_interval_seconds=300),
+        subscription_sampler=sampler,
     )
 
     tick(ctx)
 
     assert len(hub.claims) == 1  # FILL did claim this tick
-    assert harness.claims_at_sample == [1], "the sampler ran ahead of FILL's claim — it must be the tick's last step"
+    assert sampler.claims_at_sample == [1], "the sampler ran ahead of FILL's claim — it must be the tick's last step"

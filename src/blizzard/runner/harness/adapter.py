@@ -1,9 +1,10 @@
 """The coding-harness adapter seam.
 
 Four operations cover every headless-run + persisted-session + resume harness: ``spawn``,
-``resume_with_message``, ``resume_command``, and ``parse_verdict``. Usage translation,
-external-subscription sampling, and the transcript source ride alongside them. Adapters
-stay dumb (``bzh:deterministic-shell``): they translate, they never decide."""
+``resume_with_message``, ``resume_command``, and ``parse_verdict``. Usage translation and
+the transcript source ride alongside them. Provider subscription sampling is a separate,
+provider-selected seam (blizzard#436): see ``blizzard.runner.harness.subscription_sampler``.
+Adapters stay dumb (``bzh:deterministic-shell``): they translate, they never decide."""
 
 from __future__ import annotations
 
@@ -12,7 +13,6 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
@@ -195,14 +195,6 @@ class IHarnessAdapter(Protocol):
         The envelope-less fallback, for a worker killed before it produced a result
         envelope: token counts with ``cost_usd=None``, since a transcript carries no dollar
         figure. ``model`` is the same attribution fallback :meth:`parse_usage` takes."""
-        ...
-
-    def sample_external_subscription_usage(self) -> ExternalSubscriptionUsageSnapshot | None:
-        """Sample this harness's own subscription rate-limit utilization (issue #218).
-
-        ``None`` means this harness has no subscription concept at all, **or** that this
-        attempt produced nothing — a bad credential, an unreachable endpoint, an
-        unparseable response, anything. Never a raise: the sample is best-effort."""
         ...
 
     def transcript_source(self) -> IHarnessTranscriptSource:

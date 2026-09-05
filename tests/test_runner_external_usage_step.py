@@ -1,9 +1,10 @@
 """``sample_external_subscription_usage`` — the tick's last step (issue #218, phase 2).
 
 Unit-drives the step against a real (tmp sqlite) runner store and a scriptable
-``FakeHarness``, then a component tier running several full ``tick()`` passes across
-an advancing ``FixedClock`` to check the cadence gate and that the sampler never
-perturbs the other steps' behavior."""
+``FakeSubscriptionSampler`` (blizzard#436 — the sampler no longer rides on the harness
+adapter), then a component tier running several full ``tick()`` passes across an
+advancing ``FixedClock`` to check the cadence gate and that the sampler never perturbs
+the other steps' behavior."""
 
 from __future__ import annotations
 
@@ -15,7 +16,10 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot, ExternalSubscriptionUsageWindow
+from blizzard.runner.harness.subscription_sampler import (
+    ExternalSubscriptionUsageSnapshot,
+    ExternalSubscriptionUsageWindow,
+)
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import ExternalUsageSample
 from blizzard.runner.loop.tick import tick
@@ -25,6 +29,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    FakeSubscriptionSampler,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -60,21 +65,24 @@ def _snapshot(*, sampled_at: datetime = _NOW) -> ExternalSubscriptionUsageSnapsh
     )
 
 
-def _ctx(store, *, harness: FakeHarness, clock: FixedClock, interval_seconds: int = 300):  # type: ignore[no-untyped-def]
+def _ctx(store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval_seconds: int = 300):  # type: ignore[no-untyped-def]
     return make_context(
         store,
         hub=FakeHub(),
         provider=FakeProvider({}),
-        harness=harness,
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         clock=clock,
         config=LoopConfig(
             runner_id="r1", workspace_id="ws1", max_agents=1, external_usage_sample_interval_seconds=interval_seconds
         ),
+        subscription_sampler=sampler,
     )
 
 
-def _ctx_with_a_claimable_chunk(store, *, harness: FakeHarness, clock: FixedClock, interval_seconds: int = 300):  # type: ignore[no-untyped-def]
+def _ctx_with_a_claimable_chunk(
+    store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval_seconds: int = 300
+):  # type: ignore[no-untyped-def]
     hub = FakeHub()
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
@@ -86,12 +94,13 @@ def _ctx_with_a_claimable_chunk(store, *, harness: FakeHarness, clock: FixedCloc
         store,
         hub=hub,
         provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=probe,
         clock=clock,
         config=LoopConfig(
             runner_id="r1", workspace_id="ws1", max_agents=1, external_usage_sample_interval_seconds=interval_seconds
         ),
+        subscription_sampler=sampler,
     )
     return ctx, hub
 
@@ -103,58 +112,58 @@ def _ctx_with_a_claimable_chunk(store, *, harness: FakeHarness, clock: FixedCloc
 @pytest.mark.unit
 def test_first_ever_attempt_samples_immediately(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_snapshot=_snapshot())
-    ctx = _ctx(store, harness=harness, clock=FixedClock(_NOW))
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
     assert store.last_external_usage_attempt_at() is None
     ExternalUsageSample(ctx).run()
 
-    assert harness.external_usage_calls == 1
+    assert sampler.sample_calls == 1
     assert store.last_external_usage_attempt_at() == _NOW
 
 
 @pytest.mark.unit
 def test_within_the_interval_the_adapter_is_not_called(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_snapshot=_snapshot())
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
-    ctx = _ctx(store, harness=harness, clock=clock, interval_seconds=300)
+    ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=300)
 
     ExternalUsageSample(ctx).run()
-    assert harness.external_usage_calls == 1
+    assert sampler.sample_calls == 1
 
     clock.advance(timedelta(seconds=299))
     ExternalUsageSample(ctx).run()
-    assert harness.external_usage_calls == 1  # still gated — under the interval
+    assert sampler.sample_calls == 1  # still gated — under the interval
 
 
 @pytest.mark.unit
 def test_at_exactly_the_interval_the_adapter_is_called(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_snapshot=_snapshot())
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
-    ctx = _ctx(store, harness=harness, clock=clock, interval_seconds=300)
+    ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=300)
 
     ExternalUsageSample(ctx).run()
-    assert harness.external_usage_calls == 1
+    assert sampler.sample_calls == 1
 
     clock.advance(timedelta(seconds=300))
     ExternalUsageSample(ctx).run()
-    assert harness.external_usage_calls == 2  # exactly at the interval — samples
+    assert sampler.sample_calls == 2  # exactly at the interval — samples
 
 
 @pytest.mark.unit
 def test_past_the_interval_the_adapter_is_called(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_snapshot=_snapshot())
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
-    ctx = _ctx(store, harness=harness, clock=clock, interval_seconds=300)
+    ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=300)
 
     ExternalUsageSample(ctx).run()
     clock.advance(timedelta(seconds=301))
     ExternalUsageSample(ctx).run()
 
-    assert harness.external_usage_calls == 2
+    assert sampler.sample_calls == 2
 
 
 # AC 2 — a successful sample writes one attempt row and enqueues one outbound entry.
@@ -165,8 +174,8 @@ def test_past_the_interval_the_adapter_is_called(tmp_path) -> None:  # type: ign
 def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     snapshot = _snapshot()
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_snapshot=snapshot)
-    ctx = _ctx(store, harness=harness, clock=FixedClock(_NOW))
+    sampler = FakeSubscriptionSampler(snapshot=snapshot)
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
     ExternalUsageSample(ctx).run()
 
@@ -195,9 +204,9 @@ def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_
 @pytest.mark.unit
 def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_snapshot=None)
+    sampler = FakeSubscriptionSampler(snapshot=None)
     clock = FixedClock(_NOW)
-    ctx = _ctx(store, harness=harness, clock=clock, interval_seconds=300)
+    ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=300)
 
     ExternalUsageSample(ctx).run()
 
@@ -208,7 +217,7 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path)
     # attempt still counts as "tried" for cadence purposes.
     clock.advance(timedelta(seconds=100))
     ExternalUsageSample(ctx).run()
-    assert harness.external_usage_calls == 1
+    assert sampler.sample_calls == 1
     assert store.last_external_usage_attempt_at() == _NOW  # unchanged — no new attempt
 
 
@@ -219,9 +228,9 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path)
 @pytest.mark.unit
 def test_a_raising_adapter_still_lets_the_tick_complete_and_fill_spawn(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_raises=RuntimeError("boom"))
+    sampler = FakeSubscriptionSampler(raises=RuntimeError("boom"))
     clock = FixedClock(_NOW)
-    ctx, hub = _ctx_with_a_claimable_chunk(store, harness=harness, clock=clock)
+    ctx, hub = _ctx_with_a_claimable_chunk(store, sampler=sampler, clock=clock)
 
     with capture_logs() as logs:
         tick(ctx)  # must not raise
@@ -230,7 +239,7 @@ def test_a_raising_adapter_still_lets_the_tick_complete_and_fill_spawn(tmp_path)
     assert len(hub.claims) == 1
     assert len(store.list_active_leases()) == 1
     # The sampler was reached (last step) and its failure was swallowed, logged.
-    assert harness.external_usage_calls == 1
+    assert sampler.sample_calls == 1
     warnings = [e for e in logs if "external subscription usage sample step failed" in e["event"]]
     assert len(warnings) == 1
     # No attempt row survives a raise inside the try (the store write never ran).
@@ -240,8 +249,8 @@ def test_a_raising_adapter_still_lets_the_tick_complete_and_fill_spawn(tmp_path)
 @pytest.mark.unit
 def test_a_raising_step_called_directly_returns_without_raising(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_raises=ValueError("nope"))
-    ctx = _ctx(store, harness=harness, clock=FixedClock(_NOW))
+    sampler = FakeSubscriptionSampler(raises=ValueError("nope"))
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
     ExternalUsageSample(ctx).run()  # must not raise
 
@@ -255,9 +264,9 @@ def test_a_raising_step_called_directly_returns_without_raising(tmp_path) -> Non
 @pytest.mark.unit
 def test_several_ticks_sample_at_the_expected_cadence(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_snapshot=_snapshot())
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
-    ctx, _hub = _ctx_with_a_claimable_chunk(store, harness=harness, clock=clock, interval_seconds=300)
+    ctx, _hub = _ctx_with_a_claimable_chunk(store, sampler=sampler, clock=clock, interval_seconds=300)
 
     # Ticks at t=0, 100, 200, 300, 400, 500, 600 (7 ticks, 100s apart): the gate fires
     # on t=0, t=300, t=600 — 3 calls.
@@ -265,7 +274,7 @@ def test_several_ticks_sample_at_the_expected_cadence(tmp_path) -> None:  # type
         tick(ctx)
         clock.advance(timedelta(seconds=100))
 
-    assert harness.external_usage_calls == 3
+    assert sampler.sample_calls == 3
 
 
 @pytest.mark.unit
@@ -277,14 +286,14 @@ def test_a_very_large_interval_never_resamples_and_every_other_step_behaves_iden
     (tmp_path / "b").mkdir()
     clock_a = FixedClock(_NOW)
     store_a = _store(tmp_path / "a")
-    harness_a = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_snapshot=_snapshot())
-    ctx_a, hub_a = _ctx_with_a_claimable_chunk(store_a, harness=harness_a, clock=clock_a, interval_seconds=300)
+    sampler_a = FakeSubscriptionSampler(snapshot=_snapshot())
+    ctx_a, hub_a = _ctx_with_a_claimable_chunk(store_a, sampler=sampler_a, clock=clock_a, interval_seconds=300)
 
     clock_b = FixedClock(_NOW)
     store_b = _store(tmp_path / "b")
-    harness_b = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_snapshot=_snapshot())
+    sampler_b = FakeSubscriptionSampler(snapshot=_snapshot())
     ctx_b, hub_b = _ctx_with_a_claimable_chunk(
-        store_b, harness=harness_b, clock=clock_b, interval_seconds=1_000_000_000
+        store_b, sampler=sampler_b, clock=clock_b, interval_seconds=1_000_000_000
     )
 
     for _ in range(5):
@@ -295,5 +304,5 @@ def test_a_very_large_interval_never_resamples_and_every_other_step_behaves_iden
 
     assert len(hub_a.claims) == len(hub_b.claims) == 1
     assert len(store_a.list_active_leases()) == len(store_b.list_active_leases()) == 1
-    assert harness_a.external_usage_calls >= 1
-    assert harness_b.external_usage_calls == 1  # the very first, never-attempted-before sample only
+    assert sampler_a.sample_calls >= 1
+    assert sampler_b.sample_calls == 1  # the very first, never-attempted-before sample only
