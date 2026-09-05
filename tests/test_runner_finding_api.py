@@ -6,18 +6,19 @@ scope."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
+import httpx
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import blizzard.runner.api.hub_proxy as hub_proxy
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
-from tests.runner_fakes import make_store, make_stores
+from tests.runner_fakes import make_store, make_stores, no_retry_delay
 
 _NOW = datetime(2026, 9, 4, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -43,22 +44,32 @@ _FINDING = {
 _BUCKET = [_FINDING]
 
 
-class _FakeHubResponse:
-    def __init__(self, status_code: int, payload: object | None = None, text: str = "") -> None:
-        self.status_code = status_code
-        self._payload = payload
-        self.text = text
+class _HubRouter:
+    """A late-bound handler behind the proxy's ``httpx.Client`` — ``_app_with_store`` builds
+    the client (and the app wired to it) before a test knows how the hub should answer, so
+    ``_stub_hub`` arms this after the fact instead of monkeypatching a module-level function."""
 
-    def json(self) -> object:
-        if self._payload is None:
-            raise ValueError("no JSON body")
-        return self._payload
+    def __init__(self) -> None:
+        self.handler: Callable[[httpx.Request], httpx.Response] = lambda request: httpx.Response(
+            500, json={"detail": f"hub not stubbed for {request.url}"}
+        )
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        return self.handler(request)
 
 
 def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url)
-    return create_app(config, runner_stores=make_stores(store)), store
+    router = _HubRouter()
+    app = create_app(
+        config,
+        runner_stores=make_stores(store),
+        hub_proxy_client=httpx.Client(transport=httpx.MockTransport(router)),
+        hub_retry_delay=no_retry_delay,
+    )
+    app.state.hub_router = router
+    return app, store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -78,13 +89,13 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
     store.record_lease_token(str(fields["lease_id"]), TokenHash(_TOKEN).hex, _NOW)
 
 
-def _stub_hub(monkeypatch: pytest.MonkeyPatch, response: _FakeHubResponse, seen: list[str] | None = None) -> None:
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+def _stub_hub(app: FastAPI, status_code: int, payload: object, seen: list[str] | None = None) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
         if seen is not None:
-            seen.append(url)
-        return response
+            seen.append(str(request.url))
+        return httpx.Response(status_code, json=payload)
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    app.state.hub_router.handler = handler
 
 
 # --------------------------------------------------------------------------- #
@@ -133,13 +144,11 @@ def test_list_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path) 
     assert unauthed.status_code == 403
 
 
-def test_list_forwards_to_the_hub_chunks_findings_route_and_returns_the_set(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_forwards_to_the_hub_chunks_findings_route_and_returns_the_set(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     seen: list[str] = []
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _BUCKET), seen)
+    _stub_hub(app, 200, _BUCKET, seen)
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/findings", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
@@ -147,27 +156,23 @@ def test_list_forwards_to_the_hub_chunks_findings_route_and_returns_the_set(
     assert resp.json() == _BUCKET
 
 
-def test_list_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import httpx
-
+def test_list_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
 
-    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("refused")
 
-    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    app.state.hub_router.handler = handler
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/findings", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 502
 
 
-def test_list_hub_refusal_of_a_chunk_answering_no_proposal_passes_through_verbatim(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_hub_refusal_of_a_chunk_answering_no_proposal_passes_through_verbatim(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(404, {"detail": f"chunk {_CHUNK} answers no accepted, minted proposal"}))
+    _stub_hub(app, 404, {"detail": f"chunk {_CHUNK} answers no accepted, minted proposal"})
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/findings", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
@@ -186,13 +191,11 @@ def test_get_403_for_a_missing_token(tmp_path: Path) -> None:
     assert resp.status_code == 403
 
 
-def test_get_forwards_to_the_hub_chunks_finding_route_and_returns_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_forwards_to_the_hub_chunks_finding_route_and_returns_it(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     seen: list[str] = []
-    _stub_hub(monkeypatch, _FakeHubResponse(200, _FINDING), seen)
+    _stub_hub(app, 200, _FINDING, seen)
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/findings/fin_1", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
@@ -200,12 +203,10 @@ def test_get_forwards_to_the_hub_chunks_finding_route_and_returns_it(
     assert resp.json() == _FINDING
 
 
-def test_get_hub_refusal_of_an_out_of_set_id_passes_through_verbatim(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_hub_refusal_of_an_out_of_set_id_passes_through_verbatim(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    _stub_hub(monkeypatch, _FakeHubResponse(404, {"detail": "finding fin_other is not among the findings"}))
+    _stub_hub(app, 404, {"detail": "finding fin_other is not among the findings"})
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/findings/fin_other", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
