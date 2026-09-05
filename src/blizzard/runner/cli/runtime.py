@@ -5,27 +5,20 @@ from __future__ import annotations
 import os
 import signal
 import types
-from collections.abc import Callable
 from pathlib import Path
 
 import click
 
 from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
-from blizzard.foundation.clock import SystemClock
-from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.composition import build_stores
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
-from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking
-from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop.build import LoopWiring, PeriodicDriver
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
-from blizzard.runner.store.errors import RunnerStoreErrorFactory
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0
@@ -84,7 +77,8 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # One broker for the process (D2): `host` is the one composer building both the
     # served app and the ticked loop, so every writer and the stream route share it.
     broker = EventBroker()
-    app = build_hosted_app(config, events=broker)
+    hosted = build_hosted_app(config, events=broker)
+    app = hosted.app
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
     # `PeriodicDriver` resolves its prompt files on this thread, not in the loop thread: a
     # configured-but-missing prompt raises here, before any socket binds.
@@ -113,7 +107,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
 
     # Ungraceful-restart recovery (#13): a `kill -9` never ran the graceful shutdown marker below, so
     # sessions killed mid-work are marked here for the same startup RESUME the first tick runs.
-    resumable = _resume_marked(config, lambda marking: marking.on_startup())
+    resumable = hosted.resume.on_startup()
     if resumable:
         click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
 
@@ -124,23 +118,12 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         # Stop the loop first so no in-flight tick races the marking: `stop()` blocks on the tick
         # thread, so the loop is quiescent before every in-flight lease is marked.
         driver.stop()
-        marked = _resume_marked(config, lambda marking: marking.on_shutdown())
+        marked = hosted.resume.on_shutdown()
         if marked:
             click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
         # uvicorn closes a pre-bound socket but does not unlink its file; leaving it would
         # make the next start take the stale-corpse path in `Uds.bound` for nothing.
         Uds(config.socket_path).unlink()
-
-
-def _resume_marked(config: RunnerConfig, mark: Callable[[ResumeMarking], int]) -> int:
-    """Wire one :class:`ResumeMarking` over its own short-lived engine — the engine lifecycle
-    ``ResumeMarking`` itself used to own, relocated here now that its store is injected."""
-    engine = create_engine_from_url(config.db_url)
-    try:
-        stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
-        return mark(ResumeMarking(stores, SystemClock(), LinuxProcessProbe()))
-    finally:
-        engine.dispose()
 
 
 @click.command("tick")

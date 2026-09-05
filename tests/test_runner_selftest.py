@@ -513,7 +513,7 @@ def _serve_local_api(root: Path) -> Iterator[Path]:
     The CLI verb is a pure client of this API, driven against a real server over a
     real socket rather than a stubbed transport."""
     config = RunnerConfig.load(root, port=0)
-    app = build_hosted_app(config)
+    app = build_hosted_app(config).app
     sockets = Listeners.of(config).bound()
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
     thread = threading.Thread(target=lambda: server.run(sockets=sockets), daemon=True)

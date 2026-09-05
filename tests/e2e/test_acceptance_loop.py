@@ -533,7 +533,7 @@ def _runner_api(config: RunnerConfig, *, events: EventBroker | None = None) -> I
 
     Touches no store, so it runs alongside the tick without contention. ``events`` (D2,
     blizzard#317) threads a broker in, for a scenario proving the stream route too."""
-    app = build_hosted_app(config, events=events)
+    app = build_hosted_app(config, events=events).app
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
     thread = threading.Thread(target=server.run, name="runner-local-api", daemon=True)
     thread.start()

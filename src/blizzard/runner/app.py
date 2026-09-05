@@ -84,6 +84,7 @@ from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapt
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
+from blizzard.runner.loop.build import ResumeMarking
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
@@ -299,7 +300,17 @@ def create_app(
     return app
 
 
-def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None) -> FastAPI:
+@dataclass(frozen=True)
+class HostedApp:
+    """The ``host`` composition root's return: the served app alongside the restart-resume
+    hook, both wired from the one object graph :func:`build_hosted_app` builds (D4) — no
+    caller wires a second engine, store bundle, clock, or process probe to reach either."""
+
+    app: FastAPI
+    resume: ResumeMarking
+
+
+def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None) -> HostedApp:
     """The ``host`` composition root: open the store and wire the readiness seam.
 
     Engine creation is connection-free, so this stays cheap; the connection is opened
@@ -387,7 +398,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     jti_cache = JtiCacheRepository(RunnerStoreConnections(engine, errors), SystemClock())
     # The real, network-reaching hub client — only `host` wires one (issue #95).
     hub_http_client = httpx.Client(base_url=config.hub_url, timeout=5.0)
-    return create_app(
+    app = create_app(
         config,
         readiness=readiness,
         workspace_provider=workspace_provider,
@@ -405,6 +416,8 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         hub_proxy_client=hub_proxy_client,
         events=events,
     )
+    resume = ResumeMarking(runner_stores, SystemClock(), LinuxProcessProbe())
+    return HostedApp(app=app, resume=resume)
 
 
 def create_app_for_export() -> FastAPI:

@@ -592,7 +592,7 @@ def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
     # Pin the SSO auth-mode probe (issue #95) to a none-mode (unreachable) hub so the
     # human-lane gating resolves to the authless path these hub-free tests assume.
     config = dataclasses.replace(config, hub_url="http://127.0.0.1:1")
-    app = build_hosted_app(config)
+    app = build_hosted_app(config).app
     sockets = Listeners.of(config).bound()
     tcp_url = f"http://{sockets[1].getsockname()[0]}:{sockets[1].getsockname()[1]}"
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
