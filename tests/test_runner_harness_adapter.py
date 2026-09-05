@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from structlog.testing import capture_logs
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
@@ -29,38 +30,43 @@ _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Lo
 
 @pytest.mark.unit
 def test_parse_verdict_extracts_choice_from_json_envelope() -> None:
-    assert ClaudeCodeAdapter().parse_verdict(_JSON_PASS) == "pass"
+    assert ClaudeCodeAdapter(clock=SystemClock()).parse_verdict(_JSON_PASS) == "pass"
 
 
 @pytest.mark.unit
 def test_parse_verdict_reads_plain_text_reply() -> None:
-    assert ClaudeCodeAdapter().parse_verdict("verdict: <Choice>fail</Choice>") == "fail"
+    assert ClaudeCodeAdapter(clock=SystemClock()).parse_verdict("verdict: <Choice>fail</Choice>") == "fail"
 
 
 @pytest.mark.unit
 def test_parse_verdict_missing_choice_is_none() -> None:
-    assert ClaudeCodeAdapter().parse_verdict('{"type":"result","result":"no verdict here","session_id":"s1"}') is None
+    assert (
+        ClaudeCodeAdapter(clock=SystemClock()).parse_verdict(
+            '{"type":"result","result":"no verdict here","session_id":"s1"}'
+        )
+        is None
+    )
     # A delivered judgement whose reply has no parseable <Choice> is a failure:
     # an unclosed tag, whitespace-only name, and a bare open tag all read as None.
-    assert ClaudeCodeAdapter().parse_verdict("<Choice>") is None
-    assert ClaudeCodeAdapter().parse_verdict("<Choice></Choice>") is None
-    assert ClaudeCodeAdapter().parse_verdict("<Choice>   </Choice>") is None
+    assert ClaudeCodeAdapter(clock=SystemClock()).parse_verdict("<Choice>") is None
+    assert ClaudeCodeAdapter(clock=SystemClock()).parse_verdict("<Choice></Choice>") is None
+    assert ClaudeCodeAdapter(clock=SystemClock()).parse_verdict("<Choice>   </Choice>") is None
 
 
 @pytest.mark.unit
 def test_parse_assessment_returns_text_after_the_choice() -> None:
     output = '{"type":"result","result":"<Choice>fail</Choice>\\nBLOCKING: guard empty input","session_id":"s1"}'
-    assert ClaudeCodeAdapter().parse_assessment(output) == "BLOCKING: guard empty input"
+    assert ClaudeCodeAdapter(clock=SystemClock()).parse_assessment(output) == "BLOCKING: guard empty input"
 
 
 @pytest.mark.unit
 def test_parse_assessment_is_empty_without_a_choice() -> None:
-    assert ClaudeCodeAdapter().parse_assessment("no verdict at all") == ""
+    assert ClaudeCodeAdapter(clock=SystemClock()).parse_assessment("no verdict at all") == ""
 
 
 @pytest.mark.unit
 def test_resume_command_is_the_literal_takeover() -> None:
-    cmd = ClaudeCodeAdapter(binary="claude").resume_command("/ws/e1", "sess-x")
+    cmd = ClaudeCodeAdapter(clock=SystemClock(), binary="claude").resume_command("/ws/e1", "sess-x")
     assert cmd == "cd /ws/e1 && claude --resume sess-x"
 
 
@@ -68,7 +74,7 @@ def test_resume_command_is_the_literal_takeover() -> None:
 def test_attended_resume_command_reasserts_the_permission_mode() -> None:
     # The flag is per-invocation, not session-sticky (issue #258): the takeover door's
     # exec'd command reasserts it so a bypassPermissions worker is not demoted mid-task.
-    adapter = ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude", permission_mode="bypassPermissions")
 
     cmd = adapter.resume_command("/ws/e1", "sess-x", model="opus", attended=True)
 
@@ -79,7 +85,7 @@ def test_attended_resume_command_reasserts_the_permission_mode() -> None:
 def test_the_advertised_paste_string_never_carries_the_permission_mode() -> None:
     # The default composition is the escalation record / `runner status` paste string:
     # a human runs it in a bare terminal, so it stays at the interactive default.
-    adapter = ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude", permission_mode="bypassPermissions")
 
     assert adapter.resume_command("/ws/e1", "sess-x") == "cd /ws/e1 && claude --resume sess-x"
 
@@ -87,7 +93,7 @@ def test_the_advertised_paste_string_never_carries_the_permission_mode() -> None
 @pytest.mark.unit
 def test_resume_command_without_a_permission_mode_stays_bare() -> None:
     assert (
-        ClaudeCodeAdapter(binary="claude").resume_command("/ws/e1", "sess-x", attended=True)
+        ClaudeCodeAdapter(clock=SystemClock(), binary="claude").resume_command("/ws/e1", "sess-x", attended=True)
         == "cd /ws/e1 && claude --resume sess-x"
     )
 
@@ -114,7 +120,7 @@ def _fake_popen_capturing(captured: dict[str, list[str]]) -> object:
 
 
 def _spawn_fixture() -> tuple[ClaudeCodeAdapter, NodeEnvelope, WorkerPreamble]:
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
@@ -169,7 +175,7 @@ def test_spawn_env_excludes_the_hub_token_and_an_unlisted_sentinel(
 ) -> None:
     monkeypatch.setenv("BZ_HUB_TOKEN", "super-secret-token")
     monkeypatch.setenv(_SENTINEL_UNLISTED_VAR, "should-not-leak")
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
@@ -185,7 +191,7 @@ def test_spawn_env_excludes_the_hub_token_and_an_unlisted_sentinel(
 
 @pytest.mark.unit
 def test_spawn_env_excludes_the_elicitation_marker() -> None:
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
@@ -209,7 +215,7 @@ def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
     dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=str(dump_script))
 
     handle = adapter.judge(str(workdir), "sess-1", "assess", str(workdir / "judge-output.json"))
     os.waitpid(handle.pid, 0)
@@ -228,7 +234,7 @@ def test_judge_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path) 
     dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=str(dump_script))
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
         lease_id="lease_42",
@@ -255,7 +261,7 @@ def test_judge_child_env_carries_the_elicitation_marker_when_given_a_preamble(tm
     dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=str(dump_script))
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
         lease_id="lease_42",
@@ -282,7 +288,7 @@ def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_se
     dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=str(dump_script))
 
     pid = adapter.resume_with_message(str(workdir), "sess-1", "deliver")
     os.waitpid(pid, 0)
@@ -301,7 +307,7 @@ def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(tm
     dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=str(dump_script))
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
         lease_id="lease_42",
@@ -326,7 +332,7 @@ def test_resume_with_message_child_env_excludes_the_elicitation_marker(tmp_path:
     dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=str(dump_script))
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
         lease_id="lease_42",
@@ -343,7 +349,7 @@ def test_resume_with_message_child_env_excludes_the_elicitation_marker(tmp_path:
 @pytest.mark.unit
 def test_spawn_env_forwards_a_named_passthrough_var(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MY_HARNESS_QUIRK", "needed-by-the-real-binary")
-    adapter = ClaudeCodeAdapter(binary="claude", env_passthrough=("MY_HARNESS_QUIRK",))
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude", env_passthrough=("MY_HARNESS_QUIRK",))
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
@@ -360,7 +366,7 @@ def test_spawn_env_forwards_a_named_passthrough_var(monkeypatch: pytest.MonkeyPa
 def test_spawn_env_forwards_lc_prefixed_locale_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LC_ALL", "en_US.UTF-8")
     monkeypatch.setenv("LC_TIME", "fr_FR.UTF-8")
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
@@ -382,7 +388,7 @@ def test_spawn_env_still_carries_the_base_allowlist_and_deliberate_blizzard_vars
     # own BLIZZARD_* additions still ride the child env.
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     monkeypatch.setenv("HOME", "/home/worker")
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
@@ -402,7 +408,7 @@ def test_spawn_env_still_carries_the_base_allowlist_and_deliberate_blizzard_vars
 def test_spawn_env_carries_the_lease_capability_token(monkeypatch: pytest.MonkeyPatch) -> None:
     # issue #113, Phase 1 — the preamble's plaintext lease token rides the spawn env
     # as an explicit per-spawn identity var, alongside BLIZZARD_LEASE_ID.
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
@@ -421,7 +427,7 @@ def test_the_suites_worker_identity_strip_list_covers_every_var_the_adapter_can_
     """The conftest strip-list agrees with every ``BLIZZARD_*`` var any adapter injection path
     can add, judge's elicitation marker included — add one to a path without adding it here
     and fail, rather than only in a fleet worker where nobody is watching a red suite."""
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
@@ -484,7 +490,7 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path) -> None:
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=binary)
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary)
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
@@ -510,7 +516,7 @@ def test_spawn_pins_a_configured_model(tmp_path: Path) -> None:
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=binary, model="claude-sonnet-5")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary, model="claude-sonnet-5")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
@@ -531,7 +537,7 @@ def test_spawn_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=binary, permission_mode="bypassPermissions")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary, permission_mode="bypassPermissions")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
@@ -550,7 +556,7 @@ def test_judge_resume_output_parses_to_choice(tmp_path: Path) -> None:
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=binary)
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary)
     output_path = str(workdir / "judge-output.json")
 
     handle = adapter.judge(str(workdir), "sess-123", "Assess the build. Reply <Choice>name</Choice>.", output_path)
@@ -567,7 +573,7 @@ def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=binary, permission_mode="bypassPermissions")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary, permission_mode="bypassPermissions")
 
     handle = adapter.judge(
         str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.", str(workdir / "judge-output.json")
@@ -585,7 +591,7 @@ def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path) -
     workdir = tmp_path / "e1"
     workdir.mkdir()
     settings = tmp_path / "worker-settings.json"
-    adapter = ClaudeCodeAdapter(binary=binary, settings_path=str(settings))
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary, settings_path=str(settings))
 
     pid = adapter.resume_with_message(str(workdir), "sess-123", "continue where you left off")
     os.waitpid(pid, 0)
@@ -601,7 +607,9 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(tmp_path:
     workdir = tmp_path / "e1"
     workdir.mkdir()
     settings = tmp_path / "worker-settings.json"
-    adapter = ClaudeCodeAdapter(binary=binary, settings_path=str(settings), permission_mode="bypassPermissions")
+    adapter = ClaudeCodeAdapter(
+        clock=SystemClock(), binary=binary, settings_path=str(settings), permission_mode="bypassPermissions"
+    )
 
     pid = adapter.resume_with_message(str(workdir), "sess-123", "continue", effort="high")
     os.waitpid(pid, 0)
@@ -628,7 +636,7 @@ def test_spawn_runs_at_workspace_root_and_prepends_prefix(tmp_path: Path) -> Non
     workspace_root.mkdir()
     env_workdir = workspace_root / "r1"
     env_workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=binary)
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary)
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="r1", workdir=str(env_workdir))],
@@ -654,7 +662,7 @@ def test_spawn_falls_back_to_env_workdir_without_a_workspace_root(tmp_path: Path
     binary = _fake_binary(tmp_path)
     env_workdir = tmp_path / "r1"
     env_workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=binary)
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary)
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="r1", workdir=str(env_workdir))],
@@ -693,7 +701,7 @@ _USAGE_ENVELOPE = json.dumps(
 
 @pytest.mark.unit
 def test_parse_usage_extracts_tokens_and_cost_from_json_envelope() -> None:
-    sample = ClaudeCodeAdapter().parse_usage(_USAGE_ENVELOPE, "judge")
+    sample = ClaudeCodeAdapter(clock=SystemClock()).parse_usage(_USAGE_ENVELOPE, "judge")
     assert sample is not None
     assert sample.kind == "judge"
     assert sample.model == "claude-opus-4-8"
@@ -706,8 +714,8 @@ def test_parse_usage_extracts_tokens_and_cost_from_json_envelope() -> None:
 
 @pytest.mark.unit
 def test_parse_usage_returns_none_without_a_result_envelope() -> None:
-    assert ClaudeCodeAdapter().parse_usage("not json at all", "spawn") is None
-    assert ClaudeCodeAdapter().parse_usage("", "spawn") is None
+    assert ClaudeCodeAdapter(clock=SystemClock()).parse_usage("not json at all", "spawn") is None
+    assert ClaudeCodeAdapter(clock=SystemClock()).parse_usage("", "spawn") is None
 
 
 @pytest.mark.unit
@@ -715,7 +723,7 @@ def test_parse_usage_returns_none_when_envelope_has_no_usage_object() -> None:
     # A killed/verdict-less worker's envelope (if any) carries no `usage` at all —
     # the caller's cue to fall back to `sum_transcript_usage`.
     envelope = json.dumps({"type": "result", "result": "<Choice>pass</Choice>", "session_id": "s1"})
-    assert ClaudeCodeAdapter().parse_usage(envelope, "spawn") is None
+    assert ClaudeCodeAdapter(clock=SystemClock()).parse_usage(envelope, "spawn") is None
 
 
 @pytest.mark.unit
@@ -733,7 +741,7 @@ def test_parse_usage_falls_back_to_the_configured_model_when_envelope_omits_it()
             },
         }
     )
-    sample = ClaudeCodeAdapter(model="claude-sonnet-5").parse_usage(envelope, "resume")
+    sample = ClaudeCodeAdapter(clock=SystemClock(), model="claude-sonnet-5").parse_usage(envelope, "resume")
     assert sample is not None
     assert sample.model == "claude-sonnet-5"
     assert sample.cost_usd is None  # no `total_cost_usd` in this envelope — absent, never fabricated
@@ -742,7 +750,7 @@ def test_parse_usage_falls_back_to_the_configured_model_when_envelope_omits_it()
 @pytest.mark.unit
 def test_parse_usage_missing_token_fields_default_to_zero() -> None:
     envelope = json.dumps({"type": "result", "result": "ok", "session_id": "s1", "usage": {}})
-    sample = ClaudeCodeAdapter().parse_usage(envelope, "spawn")
+    sample = ClaudeCodeAdapter(clock=SystemClock()).parse_usage(envelope, "spawn")
     assert sample is not None
     counts = (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens)
     assert counts == (0, 0, 0, 0)
@@ -786,7 +794,7 @@ def test_sum_transcript_usage_sums_multiple_assistant_messages() -> None:
         ),
     ]
 
-    sample = ClaudeCodeAdapter().sum_transcript_usage(lines, "resume")
+    sample = ClaudeCodeAdapter(clock=SystemClock()).sum_transcript_usage(lines, "resume")
 
     assert sample.kind == "resume"
     assert sample.model == "claude-opus-4-8"
@@ -815,7 +823,7 @@ def test_sum_transcript_usage_counts_one_message_once_however_many_records_carry
         json.dumps({"type": "assistant", "message": {**message, "content": [{"type": "tool_use"}]}, "uuid": "a3"}),
     ]
 
-    sample = ClaudeCodeAdapter().sum_transcript_usage(lines, "spawn")
+    sample = ClaudeCodeAdapter(clock=SystemClock()).sum_transcript_usage(lines, "spawn")
 
     assert (sample.input_tokens, sample.output_tokens) == (10, 5)
     assert (sample.cache_read_tokens, sample.cache_create_tokens) == (1_000, 20)
@@ -841,7 +849,7 @@ def test_sum_transcript_usage_counts_an_id_less_record_rather_than_collapsing_it
             message["id"] = message_id
         return json.dumps({"type": "assistant", "message": message})
 
-    sample = ClaudeCodeAdapter().sum_transcript_usage([_record(None, 7), _record(None, 11)], "spawn")
+    sample = ClaudeCodeAdapter(clock=SystemClock()).sum_transcript_usage([_record(None, 7), _record(None, 11)], "spawn")
 
     assert sample.input_tokens == 18
 
@@ -857,7 +865,7 @@ def test_sum_transcript_usage_ignores_non_assistant_and_malformed_lines() -> Non
         json.dumps({"type": "assistant", "message": {"usage": "not-a-dict"}}),
     ]
 
-    sample = ClaudeCodeAdapter().sum_transcript_usage(lines, "spawn")
+    sample = ClaudeCodeAdapter(clock=SystemClock()).sum_transcript_usage(lines, "spawn")
 
     counts = (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens)
     assert counts == (0, 0, 0, 0)
@@ -866,7 +874,7 @@ def test_sum_transcript_usage_ignores_non_assistant_and_malformed_lines() -> Non
 
 @pytest.mark.unit
 def test_sum_transcript_usage_of_empty_transcript_is_zeroed() -> None:
-    sample = ClaudeCodeAdapter(model="claude-sonnet-5").sum_transcript_usage([], "judge")
+    sample = ClaudeCodeAdapter(clock=SystemClock(), model="claude-sonnet-5").sum_transcript_usage([], "judge")
 
     assert sample.kind == "judge"
     assert sample.model == "claude-sonnet-5"  # nothing to read — falls back to the configured default
@@ -930,7 +938,7 @@ def test_spawn_redirects_stdout_to_the_injected_stdout_path(tmp_path: Path) -> N
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
-    adapter = ClaudeCodeAdapter(binary=binary)
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary)
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
@@ -955,7 +963,7 @@ def test_spawn_without_a_stdout_path_still_discards_output(tmp_path: Path) -> No
     binary = _fake_binary_with_usage(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=binary)
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary)
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
@@ -975,7 +983,7 @@ def test_resume_with_message_redirects_stdout_to_the_injected_path(tmp_path: Pat
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1-resume.stdout"
-    adapter = ClaudeCodeAdapter(binary=binary)
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary)
 
     pid = adapter.resume_with_message(str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path))
     os.waitpid(pid, 0)
@@ -994,7 +1002,7 @@ def test_resume_with_message_passes_output_format_json_so_cost_is_real(tmp_path:
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1-resume-cost.stdout"
-    adapter = ClaudeCodeAdapter(binary=binary)
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary)
 
     pid = adapter.resume_with_message(str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path))
     os.waitpid(pid, 0)
@@ -1011,7 +1019,7 @@ def test_resume_without_output_format_json_yields_no_envelope(tmp_path: Path) ->
     binary = _fake_binary_with_usage(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = ClaudeCodeAdapter(binary=binary)
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary=binary)
 
     result = subprocess.run(
         [binary, "-p", "--resume", "sess-usage", "deliver the answer"],
@@ -1030,7 +1038,7 @@ def test_resume_without_output_format_json_yields_no_envelope(tmp_path: Path) ->
 @pytest.mark.unit
 def test_resolve_model_maps_the_standard_tiers_with_no_config_at_all() -> None:
     # A zero-config runner resolves the three standard tiers off the adapter's built-ins.
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     assert adapter.resolve_model(["blizzard:frontier"]) == "fable"
     assert adapter.resolve_model(["blizzard:advanced"]) == "opus"
     assert adapter.resolve_model(["blizzard:basic"]) == "sonnet"
@@ -1038,7 +1046,7 @@ def test_resolve_model_maps_the_standard_tiers_with_no_config_at_all() -> None:
 
 @pytest.mark.unit
 def test_resolve_model_takes_the_first_entry_that_resolves() -> None:
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     assert adapter.resolve_model(["blizzard:advanced", "blizzard:basic"]) == "opus"
 
 
@@ -1046,26 +1054,26 @@ def test_resolve_model_takes_the_first_entry_that_resolves() -> None:
 def test_resolve_model_skips_a_native_name_belonging_to_another_harness() -> None:
     # A mixed list must fall past a name belonging to another harness rather than hand
     # `claude` a name it would reject, turning a preference into a spawn failure.
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     assert adapter.resolve_model(["gpt-5.3-codex", "blizzard:basic"]) == "sonnet"
 
 
 @pytest.mark.unit
 def test_resolve_model_skips_an_alias_neither_config_nor_builtins_map() -> None:
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     assert adapter.resolve_model(["blizzard:experimental", "blizzard:basic"]) == "sonnet"
 
 
 @pytest.mark.unit
 def test_resolve_model_accepts_a_native_short_name_and_the_claude_family_prefix() -> None:
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     assert adapter.resolve_model(["haiku"]) == "haiku"
     assert adapter.resolve_model(["claude-sonnet-5"]) == "claude-sonnet-5"
 
 
 @pytest.mark.unit
 def test_runner_config_overrides_the_adapters_builtin_tier() -> None:
-    adapter = ClaudeCodeAdapter(binary="claude", model_aliases=(("blizzard:basic", "haiku"),))
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude", model_aliases=(("blizzard:basic", "haiku"),))
     assert adapter.resolve_model(["blizzard:basic"]) == "haiku"
 
 
@@ -1073,7 +1081,7 @@ def test_runner_config_overrides_the_adapters_builtin_tier() -> None:
 def test_an_all_unresolvable_list_falls_back_to_the_adapter_default_with_a_note() -> None:
     # Never a spawn failure: an all-unresolvable list is exactly what a mixed-harness
     # fleet produces, and the fallback says which entries it skipped.
-    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude", model="claude-opus-5")
 
     with capture_logs() as logs:
         resolved = adapter.resolve_model(["gpt-5.3-codex", "blizzard:experimental"])
@@ -1087,32 +1095,35 @@ def test_an_all_unresolvable_list_falls_back_to_the_adapter_default_with_a_note(
 @pytest.mark.unit
 def test_an_empty_preference_list_is_the_adapter_default() -> None:
     # A chunk that expresses no preference (issue #144).
-    assert ClaudeCodeAdapter(binary="claude", model="claude-opus-5").resolve_model([]) == "claude-opus-5"
+    assert (
+        ClaudeCodeAdapter(clock=SystemClock(), binary="claude", model="claude-opus-5").resolve_model([])
+        == "claude-opus-5"
+    )
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("value", ["low", "medium", "high", "max"])
 def test_resolve_effort_passes_the_well_known_ordinal_through(value: str) -> None:
-    assert ClaudeCodeAdapter(binary="claude").resolve_effort(value) == value
+    assert ClaudeCodeAdapter(clock=SystemClock(), binary="claude").resolve_effort(value) == value
 
 
 @pytest.mark.unit
 def test_resolve_effort_reaches_a_native_tier_outside_the_ordinal_via_config() -> None:
     # `xhigh` is Claude Code's own, outside the well-known four — reachable by alias.
-    adapter = ClaudeCodeAdapter(binary="claude", effort_aliases=(("max", "xhigh"),))
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude", effort_aliases=(("max", "xhigh"),))
     assert adapter.resolve_effort("max") == "xhigh"
 
 
 @pytest.mark.unit
 def test_resolve_effort_of_no_preference_is_none() -> None:
-    assert ClaudeCodeAdapter(binary="claude").resolve_effort(None) is None
+    assert ClaudeCodeAdapter(clock=SystemClock(), binary="claude").resolve_effort(None) is None
 
 
 @pytest.mark.unit
 def test_an_unrecognized_effort_logs_once_and_is_ignored() -> None:
     # An unrecognized effort is an authoring mistake — dropped rather than failing a
     # spawn, and noted once rather than on every spawn of a long-lived runner.
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
 
     with capture_logs() as logs:
         assert adapter.resolve_effort("glacial") is None
@@ -1126,18 +1137,18 @@ def test_an_unrecognized_effort_logs_once_and_is_ignored() -> None:
 def test_resolve_compaction_window_passes_a_recognized_spelling_through(value: str) -> None:
     # `auto` or a token count (blizzard#343) — the adapter checks the shape, not the CLI's
     # own 100k-1M range, which it never re-validates.
-    assert ClaudeCodeAdapter(binary="claude").resolve_compaction_window(value) == value
+    assert ClaudeCodeAdapter(clock=SystemClock(), binary="claude").resolve_compaction_window(value) == value
 
 
 @pytest.mark.unit
 def test_resolve_compaction_window_of_no_preference_is_none() -> None:
-    assert ClaudeCodeAdapter(binary="claude").resolve_compaction_window(None) is None
+    assert ClaudeCodeAdapter(clock=SystemClock(), binary="claude").resolve_compaction_window(None) is None
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("value", ["", "150k tokens", "True", "auto2"])
 def test_an_unrecognized_compaction_window_logs_once_per_value_and_is_ignored(value: str) -> None:
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
 
     with capture_logs() as logs:
         assert adapter.resolve_compaction_window(value) is None
@@ -1150,7 +1161,7 @@ def test_an_unrecognized_compaction_window_logs_once_per_value_and_is_ignored(va
 def test_a_missing_compaction_window_is_silently_none_never_logged() -> None:
     # `None` means "no declaration" — not an authoring mistake, so it never logs (unlike
     # a real bad value, or the empty string): mirrors `resolve_effort`'s treatment of `None`.
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
 
     with capture_logs() as logs:
         assert adapter.resolve_compaction_window(None) is None
@@ -1230,7 +1241,7 @@ def test_judge_carries_the_compaction_window(monkeypatch: pytest.MonkeyPatch, tm
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
-    ClaudeCodeAdapter(binary="claude").judge(
+    ClaudeCodeAdapter(clock=SystemClock(), binary="claude").judge(
         "/ws", "sid", "verdict?", str(tmp_path / "judge-output.txt"), compaction_window="150k"
     )
 
@@ -1243,7 +1254,9 @@ def test_resume_with_message_carries_the_compaction_window(monkeypatch: pytest.M
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
-    ClaudeCodeAdapter(binary="claude").resume_with_message("/ws", "sid", "msg", compaction_window="150k")
+    ClaudeCodeAdapter(clock=SystemClock(), binary="claude").resume_with_message(
+        "/ws", "sid", "msg", compaction_window="150k"
+    )
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--autocompact") + 1] == "150k"
@@ -1267,7 +1280,7 @@ def test_judge_carries_the_effort_but_never_the_model(monkeypatch: pytest.Monkey
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
-    ClaudeCodeAdapter(binary="claude").judge(
+    ClaudeCodeAdapter(clock=SystemClock(), binary="claude").judge(
         "/ws", "sid", "verdict?", str(tmp_path / "judge-output.txt"), effort="high", model="sonnet"
     )
 
@@ -1281,7 +1294,7 @@ def test_resume_with_message_carries_the_effort_but_never_the_model(monkeypatch:
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
-    ClaudeCodeAdapter(binary="claude").resume_with_message("/ws", "sid", "msg", effort="high")
+    ClaudeCodeAdapter(clock=SystemClock(), binary="claude").resume_with_message("/ws", "sid", "msg", effort="high")
 
     cmd = captured["cmd"]
     assert "--model" not in cmd
@@ -1294,7 +1307,7 @@ def test_resume_with_message_carries_the_effort_but_never_the_model(monkeypatch:
 
 @pytest.mark.unit
 def test_parse_usage_attributes_to_the_supplied_model_when_the_harness_reports_none() -> None:
-    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude", model="claude-opus-5")
     output = json.dumps({"result": "x", "usage": {"input_tokens": 5}})
 
     sample = adapter.parse_usage(output, "spawn", model="sonnet")
@@ -1305,7 +1318,7 @@ def test_parse_usage_attributes_to_the_supplied_model_when_the_harness_reports_n
 
 @pytest.mark.unit
 def test_parse_usage_still_prefers_what_the_harness_itself_reports() -> None:
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
     output = json.dumps({"result": "x", "model": "claude-haiku-4-5", "usage": {"input_tokens": 5}})
 
     sample = adapter.parse_usage(output, "spawn", model="sonnet")
@@ -1316,7 +1329,7 @@ def test_parse_usage_still_prefers_what_the_harness_itself_reports() -> None:
 
 @pytest.mark.unit
 def test_parse_usage_without_a_supplied_model_keeps_the_adapter_default() -> None:
-    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude", model="claude-opus-5")
     output = json.dumps({"result": "x", "usage": {"input_tokens": 5}})
 
     sample = adapter.parse_usage(output, "spawn")
@@ -1327,7 +1340,7 @@ def test_parse_usage_without_a_supplied_model_keeps_the_adapter_default() -> Non
 
 @pytest.mark.unit
 def test_sum_transcript_usage_attributes_to_the_supplied_model_when_no_line_names_one() -> None:
-    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude", model="claude-opus-5")
     lines = [json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": 3}}})]
 
     sample = adapter.sum_transcript_usage(lines, "spawn", model="sonnet")
@@ -1355,7 +1368,7 @@ def test_the_base_allowlist_carries_no_anthropic_model_override(monkeypatch: pyt
 
 @pytest.mark.unit
 def test_resume_command_appends_the_sessions_stamped_model_and_effort() -> None:
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
 
     command = adapter.resume_command("/ws/e1", "sess-a", model="opus", effort="high")
 
@@ -1366,14 +1379,14 @@ def test_resume_command_appends_the_sessions_stamped_model_and_effort() -> None:
 def test_resume_command_with_no_stamps_renders_todays_bare_command() -> None:
     # A session predating the stamps reads *unknown*: render the bare command rather than
     # guessing at a default and presenting it as what the session ran.
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
 
     assert adapter.resume_command("/ws/e1", "sess-a") == "cd /ws/e1 && claude --resume sess-a"
 
 
 @pytest.mark.unit
 def test_resume_command_appends_only_the_stamp_it_has() -> None:
-    adapter = ClaudeCodeAdapter(binary="claude")
+    adapter = ClaudeCodeAdapter(clock=SystemClock(), binary="claude")
 
     assert (
         adapter.resume_command("/ws/e1", "sess-a", model="opus") == "cd /ws/e1 && claude --resume sess-a --model opus"

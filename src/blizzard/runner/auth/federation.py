@@ -234,14 +234,16 @@ async def callback(request: Request) -> Response:
     config: RunnerConfig = request.app.state.config
     jwks: JwksCache = request.app.state.jwks_cache
     jti_cache: IJtiCache = request.app.state.jti_cache
+    clock: IClock = request.app.state.clock
     try:
-        identity = FederationToken(token, runner_id=config.runner_id, jwks=jwks, jti_cache=jti_cache).identity()
+        identity = FederationToken(
+            token, runner_id=config.runner_id, jwks=jwks, jti_cache=jti_cache, clock=clock
+        ).identity()
     except FederationTokenError as exc:
         _log.warning("federation token refused", detail=str(exc))
         return bounce.refuse("token refused")
 
     role = LocalRole(config, username=identity.username, hub_role=identity.role).role
-    clock: IClock = request.app.state.clock
     now = clock.now()
     session = RunnerSession(username=identity.username, role=role, issued_at=now, expires_at=now + SESSION_TTL)
     cookie_value = SessionCookie(request.app.state.session_secret).mint(session)

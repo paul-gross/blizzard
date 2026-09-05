@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 
 import jwt
 
+from blizzard.foundation.clock import IClock
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
 
@@ -44,6 +45,7 @@ class FederationToken:
     runner_id: str
     jwks: JwksCache
     jti_cache: IJtiCache
+    clock: IClock
 
     def identity(self) -> FederatedIdentity:
         """The claims, once signature, audience, expiry and single-use all hold —
@@ -75,7 +77,7 @@ class FederationToken:
             raise FederationTokenError("token is missing a required claim")
 
         exp = claims.get("exp")
-        expires_at = datetime.fromtimestamp(exp, tz=UTC) if exp is not None else datetime.now(UTC)
+        expires_at = datetime.fromtimestamp(exp, tz=UTC) if exp is not None else self.clock.now()
         if not self.jti_cache.check_and_record(jti, aud=self.runner_id, expires_at=expires_at):
             raise FederationTokenError(f"jti {jti!r} already used (replay)")
 

@@ -344,12 +344,3 @@ def test_zero_parseable_windows_returns_none_and_warns_once(tmp_path: Path, monk
 
     assert result is None
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
-
-
-# Every existing construction site keeps building an adapter unchanged.
-
-
-@pytest.mark.unit
-def test_default_construction_still_works_with_no_new_arguments() -> None:
-    ClaudeCodeAdapter()
-    ClaudeCodeAdapter(binary="claude", settings_path="/tmp/settings.json")

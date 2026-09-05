@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.runner.harness.internal import claude_code_adapter as adapter_module
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 
@@ -17,7 +18,7 @@ def test_an_unmapped_tier_alias_never_substitutes_downward(monkeypatch: pytest.M
     """Tier aliases are unordered roles, not an ordered scale (issue #144): an unmapped
     entry is unresolvable, not substituted with the next tier down."""
     monkeypatch.setattr(adapter_module, "_BUILTIN_TIERS", {"blizzard:advanced": "opus", "blizzard:basic": "sonnet"})
-    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5")
+    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", clock=SystemClock())
 
     assert adapter.resolve_model(["blizzard:frontier"]) == "claude-opus-5"
     # …and an author who wants a fallback writes one into the list.

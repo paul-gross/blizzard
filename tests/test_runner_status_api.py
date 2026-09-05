@@ -421,7 +421,7 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
     service = RunnerStatusService(
         make_read_stores(store),
         FixedClock(_NOW),
-        ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions"),
+        ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions", clock=FixedClock(_NOW)),
         runner_id="runner-local",
         workspace_id="workspace-local",
         max_agents=2,
