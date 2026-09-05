@@ -209,7 +209,6 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-explorer-list.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-neighborhood.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.
