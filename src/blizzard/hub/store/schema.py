@@ -202,6 +202,18 @@ routines = Table(
     UniqueConstraint("name", name="uq_routines_name"),
 )
 
+# The many-to-many between a routine and every scope its runs may write into
+# (blizzard#488) — mutable like garden_proposal_findings, not append-only like scope_lifecycle_facts.
+
+routine_scopes = Table(
+    "routine_scopes",
+    metadata,
+    Column("routine_id", String, ForeignKey("routines.routine_id"), primary_key=True),
+    Column("scope_slug", String, ForeignKey("scopes.slug"), primary_key=True),
+)
+
+Index("ix_routine_scopes_scope_slug", routine_scopes.c.scope_slug)
+
 # --- Chunks and their work refs (chunk.minted) ------------------------------
 
 chunks = Table(

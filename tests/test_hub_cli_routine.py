@@ -148,6 +148,8 @@ def test_routine_list_on_no_routines_prints_a_friendly_message(monkeypatch: pyte
 @pytest.mark.unit
 def test_routine_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        if url.endswith("/scopes"):
+            return _FakeResponse(200, ["blizzard"])
         return _FakeResponse(
             200,
             {
@@ -167,6 +169,33 @@ def test_routine_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -
     assert "nightly" in result.output
     assert "blizzard" in result.output
     assert "basic" in result.output
+
+
+@pytest.mark.unit
+def test_routine_show_lists_the_routines_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """blizzard#488 Phase 3: ``routine show`` also reads ``GET /routines/{id}/scopes``
+    and appends a ``scopes:`` line naming every linked scope."""
+
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        if url.endswith("/scopes"):
+            return _FakeResponse(200, ["blizzard", "cold"])
+        return _FakeResponse(
+            200,
+            {
+                "routine_id": "rtn_1",
+                "name": "nightly",
+                "graph_name": "alpha",
+                "default_scope_slug": "blizzard",
+                "default_model": [],
+                "default_effort": None,
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["routine", "show", "rtn_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "scopes: blizzard, cold" in result.output
 
 
 @pytest.mark.unit
@@ -216,6 +245,132 @@ def test_routine_edit_reads_the_current_name_then_patches(monkeypatch: pytest.Mo
             },
         )
     ]
+
+
+# --------------------------------------------------------------------------- #
+# `blizzard hub routine scope add|remove` (blizzard#488 Phase 3)
+
+
+@pytest.mark.unit
+def test_routine_scope_add_links_the_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def fake_put(url: str, *, timeout: float) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(204)
+
+    monkeypatch.setattr(httpx, "put", fake_put)
+    result = CliRunner().invoke(
+        hub_group, ["routine", "scope", "add", "rtn_1", "cold"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == ["http://hub.local:8421/api/routines/rtn_1/scopes/cold"]
+    assert "rtn_1" in result.output
+    assert "cold" in result.output
+
+
+@pytest.mark.unit
+def test_routine_scope_add_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def fake_put(url: str, *, timeout: float) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(204)
+
+    monkeypatch.setattr(httpx, "put", fake_put)
+    runner = CliRunner()
+    first = runner.invoke(hub_group, ["routine", "scope", "add", "rtn_1", "cold"])
+    second = runner.invoke(hub_group, ["routine", "scope", "add", "rtn_1", "cold"])
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert len(calls) == 2
+
+
+@pytest.mark.unit
+def test_routine_scope_add_on_unknown_routine(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_put(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404, {"detail": "unknown routine rtn_ghost"})
+
+    monkeypatch.setattr(httpx, "put", fake_put)
+    result = CliRunner().invoke(hub_group, ["routine", "scope", "add", "rtn_ghost", "cold"])
+
+    assert result.exit_code != 0
+    assert "unknown routine rtn_ghost" in result.output
+
+
+@pytest.mark.unit
+def test_routine_scope_add_on_unknown_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_put(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404, {"detail": "unknown scope ghost"})
+
+    monkeypatch.setattr(httpx, "put", fake_put)
+    result = CliRunner().invoke(hub_group, ["routine", "scope", "add", "rtn_1", "ghost"])
+
+    assert result.exit_code != 0
+    assert "unknown scope ghost" in result.output
+
+
+@pytest.mark.unit
+def test_routine_scope_add_on_malformed_slug(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_put(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(422, {"detail": "scope slug must match [a-z0-9-]+, got 'Not A Slug'"})
+
+    monkeypatch.setattr(httpx, "put", fake_put)
+    result = CliRunner().invoke(hub_group, ["routine", "scope", "add", "rtn_1", "Not A Slug"])
+
+    assert result.exit_code != 0
+    assert "Not A Slug" in result.output
+
+
+@pytest.mark.unit
+def test_routine_scope_remove_unlinks_the_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def fake_delete(url: str, *, timeout: float) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(204)
+
+    monkeypatch.setattr(httpx, "delete", fake_delete)
+    result = CliRunner().invoke(
+        hub_group, ["routine", "scope", "remove", "rtn_1", "cold"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == ["http://hub.local:8421/api/routines/rtn_1/scopes/cold"]
+    assert "rtn_1" in result.output
+    assert "cold" in result.output
+
+
+@pytest.mark.unit
+def test_routine_scope_remove_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def fake_delete(url: str, *, timeout: float) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(204)
+
+    monkeypatch.setattr(httpx, "delete", fake_delete)
+    runner = CliRunner()
+    first = runner.invoke(hub_group, ["routine", "scope", "remove", "rtn_1", "cold"])
+    second = runner.invoke(hub_group, ["routine", "scope", "remove", "rtn_1", "cold"])
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert len(calls) == 2
+
+
+@pytest.mark.unit
+def test_routine_scope_remove_refuses_the_default_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_delete(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(422, {"detail": "routine 'rtn_1's default scope 'blizzard' cannot be unlinked"})
+
+    monkeypatch.setattr(httpx, "delete", fake_delete)
+    result = CliRunner().invoke(hub_group, ["routine", "scope", "remove", "rtn_1", "blizzard"])
+
+    assert result.exit_code != 0
+    assert "cannot be unlinked" in result.output
 
 
 @pytest.mark.unit

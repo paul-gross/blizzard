@@ -8825,6 +8825,106 @@ export type RunRoutineApiRoutinesRoutineIdRunPostResponses = {
 
 export type RunRoutineApiRoutinesRoutineIdRunPostResponse = RunRoutineApiRoutinesRoutineIdRunPostResponses[keyof RunRoutineApiRoutinesRoutineIdRunPostResponses];
 
+export type ListRoutineScopesApiRoutinesRoutineIdScopesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+    };
+    query?: never;
+    url: '/api/routines/{routine_id}/scopes';
+};
+
+export type ListRoutineScopesApiRoutinesRoutineIdScopesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRoutineScopesApiRoutinesRoutineIdScopesGetError = ListRoutineScopesApiRoutinesRoutineIdScopesGetErrors[keyof ListRoutineScopesApiRoutinesRoutineIdScopesGetErrors];
+
+export type ListRoutineScopesApiRoutinesRoutineIdScopesGetResponses = {
+    /**
+     * Response List Routine Scopes Api Routines  Routine Id  Scopes Get
+     *
+     * Successful Response
+     */
+    200: Array<string>;
+};
+
+export type ListRoutineScopesApiRoutinesRoutineIdScopesGetResponse = ListRoutineScopesApiRoutinesRoutineIdScopesGetResponses[keyof ListRoutineScopesApiRoutinesRoutineIdScopesGetResponses];
+
+export type UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+        /**
+         * Scope Slug
+         */
+        scope_slug: string;
+    };
+    query?: never;
+    url: '/api/routines/{routine_id}/scopes/{scope_slug}';
+};
+
+export type UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteError = UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteErrors[keyof UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteErrors];
+
+export type UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteResponse = UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteResponses[keyof UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteResponses];
+
+export type LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutData = {
+    body?: never;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+        /**
+         * Scope Slug
+         */
+        scope_slug: string;
+    };
+    query?: never;
+    url: '/api/routines/{routine_id}/scopes/{scope_slug}';
+};
+
+export type LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutError = LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutErrors[keyof LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutErrors];
+
+export type LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutResponse = LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutResponses[keyof LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutResponses];
+
 export type RoutineSweepsApiRoutinesRoutineIdSweepsGetData = {
     body?: never;
     path: {

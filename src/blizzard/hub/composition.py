@@ -85,7 +85,12 @@ from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.restart import RestartService
 from blizzard.hub.domain.routine_baselines import RoutineBaselineService
 from blizzard.hub.domain.routine_run import RunService
-from blizzard.hub.domain.routines import IReadRoutineRepository, RoutineAuthoring
+from blizzard.hub.domain.routines import (
+    IReadRoutineRepository,
+    IReadRoutineScopeRepository,
+    RoutineAuthoring,
+    RoutineScopeMembership,
+)
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.stop import StopService
@@ -108,6 +113,7 @@ from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -224,6 +230,12 @@ class HubServices:
     #: The routine read Protocol (blizzard#389) — the same store instance as
     #: ``routine_authoring``'s writes.
     routines: IReadRoutineRepository
+    #: The routine_scopes join's read Protocol (blizzard#488) — the declared many-to-many
+    #: a routine's own ``default_scope_slug`` is a member of.
+    routine_scopes: IReadRoutineScopeRepository
+    #: Link/unlink a routine's own `routine_scopes` set, refusing to unlink its default
+    #: (blizzard#488 D8).
+    routine_scope_membership: RoutineScopeMembership
     #: Create and edit a routine, minting its default scope on demand (blizzard#389 D4).
     routine_authoring: RoutineAuthoring
     #: Mint, ingest, and promote a hub work item from a routine, in one act (blizzard#392).
@@ -397,6 +409,7 @@ def build_services(
     scope_store = ScopeStore(store_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = RoutineStore(store_connections)
+    routine_scope_store = RoutineScopeStore(store_connections)
     finding_set_store = FindingSetStore(store_connections)
     garden_proposal_store = GardenProposalStore(store_connections)
     garden_proposal_closure_store = GardenProposalClosureStore(store_connections)
@@ -537,8 +550,14 @@ def build_services(
         scope_registry=scope_registry,
         scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
         routines=routine_store,
+        routine_scopes=routine_scope_store,
+        routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store),
         routine_authoring=RoutineAuthoring(
-            routines=routine_store, graphs=graph_store, scope_registry=scope_registry, clock=clock
+            routines=routine_store,
+            graphs=graph_store,
+            scope_registry=scope_registry,
+            routine_scopes=routine_scope_store,
+            clock=clock,
         ),
         routine_run=RunService(
             scopes=scope_store,

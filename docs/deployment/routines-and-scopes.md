@@ -34,6 +34,13 @@ run instead bails out with a single `undeclared-axis` finding, at full model cos
 cannot be fixed with `routine edit` either — only a new routine, starting its own baselines and trend history over,
 corrects it.
 
+`show` also reports the routine's full linked-scopes list, beside its default scope, graph, and model/effort fields. A
+routine sweeps a set of scopes, not only its default; `blizzard hub routine scope add <routine_id> <scope_slug>` and
+`scope remove <routine_id> <scope_slug>`, addressed by `routine_id` like `show`/`edit`, link and unlink a scope into
+that set. Both are idempotent and never mint or retire a scope — naming one `scope create` hasn't minted, or a
+`routine_id` no routine holds, refuses rather than creating either. `scope remove` also refuses removing the routine's
+own default scope, which stays a member of its set for as long as it is the default.
+
 ## Running one
 
 `blizzard hub routine run <name> [--scope <slug>] [--mode full|delta] [--note <text>]` mints, ingests, and promotes a

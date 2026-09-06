@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub
+from blizzard.auth_core import Role
+from tests.support import build_hub, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -220,3 +221,182 @@ def test_list_returns_every_routine(tmp_path: Path) -> None:
     names = {row["name"] for row in hub.client.get("/api/routines").json()}
 
     assert names == {"a", "b"}
+
+
+# --- The routine_scopes join sub-resource (blizzard#488) -----------------------------
+
+
+def _mint_scope(hub, slug: str) -> None:  # type: ignore[no-untyped-def]
+    resp = hub.client.post("/api/scopes", json={"slug": slug, "description": ""})
+    assert resp.status_code == 201, resp.text
+
+
+def test_get_scopes_starts_with_only_the_default(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create(hub)
+
+    resp = hub.client.get(f"/api/routines/{routine['routine_id']}/scopes")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == ["blizzard"]
+
+
+def test_get_scopes_unknown_routine_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get("/api/routines/rtn_ghost/scopes")
+    assert resp.status_code == 404
+
+
+def test_link_adds_an_existing_scope_to_the_set(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create(hub)
+    _mint_scope(hub, "extra")
+
+    resp = hub.client.put(f"/api/routines/{routine['routine_id']}/scopes/extra")
+
+    assert resp.status_code == 204, resp.text
+    assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["blizzard", "extra"]
+
+
+def test_link_is_idempotent(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create(hub)
+    _mint_scope(hub, "extra")
+
+    hub.client.put(f"/api/routines/{routine['routine_id']}/scopes/extra")
+    resp = hub.client.put(f"/api/routines/{routine['routine_id']}/scopes/extra")
+
+    assert resp.status_code == 204, resp.text
+    assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["blizzard", "extra"]
+
+
+def test_link_unknown_routine_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_scope(hub, "extra")
+
+    resp = hub.client.put("/api/routines/rtn_ghost/scopes/extra")
+
+    assert resp.status_code == 404
+
+
+def test_link_an_unknown_scope_is_404_rather_than_minted(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create(hub)
+
+    resp = hub.client.put(f"/api/routines/{routine['routine_id']}/scopes/never-minted")
+
+    assert resp.status_code == 404, resp.text
+    assert hub.client.get("/api/scopes/never-minted").status_code == 404
+
+
+def test_link_a_malformed_scope_slug_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create(hub)
+
+    resp = hub.client.put(f"/api/routines/{routine['routine_id']}/scopes/Not A Slug")
+
+    assert resp.status_code == 422, resp.text
+
+
+def test_unlink_removes_a_non_default_scope(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create(hub)
+    _mint_scope(hub, "extra")
+    hub.client.put(f"/api/routines/{routine['routine_id']}/scopes/extra")
+
+    resp = hub.client.delete(f"/api/routines/{routine['routine_id']}/scopes/extra")
+
+    assert resp.status_code == 204, resp.text
+    assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["blizzard"]
+
+
+def test_unlink_is_idempotent(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create(hub)
+    _mint_scope(hub, "extra")
+
+    resp = hub.client.delete(f"/api/routines/{routine['routine_id']}/scopes/extra")
+
+    assert resp.status_code == 204, resp.text
+
+
+def test_unlink_the_default_scope_is_refused(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create(hub)
+
+    resp = hub.client.delete(f"/api/routines/{routine['routine_id']}/scopes/blizzard")
+
+    assert resp.status_code == 422, resp.text
+    assert "blizzard" in resp.json()["detail"]
+    assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["blizzard"]
+
+
+def test_unlink_unknown_routine_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_scope(hub, "extra")
+
+    resp = hub.client.delete("/api/routines/rtn_ghost/scopes/extra")
+
+    assert resp.status_code == 404
+
+
+def test_unlink_an_unknown_scope_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create(hub)
+
+    resp = hub.client.delete(f"/api/routines/{routine['routine_id']}/scopes/never-minted")
+
+    assert resp.status_code == 404
+
+
+def test_unlink_a_malformed_scope_slug_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create(hub)
+
+    resp = hub.client.delete(f"/api/routines/{routine['routine_id']}/scopes/Not A Slug")
+
+    assert resp.status_code == 422, resp.text
+
+
+def _cookie(token: str) -> dict[str, str]:
+    return {"Cookie": f"bz_session={token}"}
+
+
+def test_guest_reads_scopes_but_is_refused_link_and_unlink(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="root", role=Role.SUPERUSER)
+    admin_token = seed_session(hub, admin)
+    graph_resp = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_A}, headers=_cookie(admin_token))
+    assert graph_resp.status_code == 201, graph_resp.text
+    routine_id = hub.client.post(
+        "/api/routines",
+        json={
+            "name": "nightly",
+            "graph_name": "alpha",
+            "default_scope_slug": "blizzard",
+            "default_model": [],
+            "default_effort": None,
+        },
+        headers=_cookie(admin_token),
+    ).json()["routine_id"]
+    guest = seed_user(hub, username="reader", role=Role.GUEST)
+    guest_token = seed_session(hub, guest)
+
+    read_resp = hub.client.get(f"/api/routines/{routine_id}/scopes", headers=_cookie(guest_token))
+    assert read_resp.status_code == 200, read_resp.text
+
+    link_resp = hub.client.put(f"/api/routines/{routine_id}/scopes/blizzard", headers=_cookie(guest_token))
+    assert link_resp.status_code == 403, link_resp.text
+
+    unlink_resp = hub.client.delete(f"/api/routines/{routine_id}/scopes/blizzard", headers=_cookie(guest_token))
+    assert unlink_resp.status_code == 403, unlink_resp.text

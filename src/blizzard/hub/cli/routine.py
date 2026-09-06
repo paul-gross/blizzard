@@ -3,7 +3,7 @@ adds ``trend``, the gardening routine panel adds ``sweeps``."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -32,6 +32,7 @@ class RoutineListing(Listing):
 @dataclass(frozen=True)
 class RoutineDetail:
     body: dict[str, Any]
+    scopes: Sequence[str]
 
     def lines(self) -> Iterator[str]:
         body = self.body
@@ -39,6 +40,7 @@ class RoutineDetail:
         yield f"  default scope: {body['default_scope_slug']}"
         models = ", ".join(body.get("default_model") or []) or "-"
         yield f"  default model: {models}   default effort: {body.get('default_effort') or '-'}"
+        yield f"  scopes: {', '.join(self.scopes)}"
 
 
 @click.group("routine")
@@ -92,12 +94,18 @@ def routine_list(cli: CliContext) -> None:
 @routine_group.command("show", cls=FleetCommand)
 @click.argument("routine_id")
 def routine_show(cli: CliContext, routine_id: str) -> None:
-    """One routine's whole record — name, graph, default scope, model/effort defaults."""
+    """One routine's whole record — name, graph, default scope, model/effort defaults,
+    and its linked scopes (blizzard#488)."""
     resp = cli.get(
         f"/api/routines/{routine_id}", "GET /routines/{id}", on_status={404: f"unknown routine {routine_id}"}
     )
     body = resp.json()
-    cli.show(body, RoutineDetail(body))
+    scopes = cli.get(
+        f"/api/routines/{routine_id}/scopes",
+        "GET /routines/{id}/scopes",
+        on_status={404: f"unknown routine {routine_id}"},
+    ).json()
+    cli.show({**body, "scopes": scopes}, RoutineDetail(body, scopes))
 
 
 @routine_group.command("edit", cls=FleetCommand)
@@ -136,6 +144,55 @@ def routine_edit(
     cli.check(resp, "PATCH /routines/{id}", on_status={404: f"unknown routine {routine_id}"})
     body = resp.json()
     cli.show_lines(body, f"routine {routine_id} updated")
+
+
+@routine_group.group("scope")
+def routine_scope_group() -> None:
+    """Manage a routine's scope membership (blizzard#488): add, remove."""
+
+
+@routine_scope_group.command("add", cls=FleetCommand)
+@click.argument("routine_id")
+@click.argument("scope_slug")
+def routine_scope_add(cli: CliContext, routine_id: str, scope_slug: str) -> None:
+    """Link SCOPE_SLUG into ROUTINE_ID's own scope set; idempotent.
+
+    404 on an unknown ROUTINE_ID or a well-formed but unknown SCOPE_SLUG; 422 on a
+    malformed SCOPE_SLUG."""
+    resp = cli.send("put", f"/api/routines/{routine_id}/scopes/{scope_slug}")
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        raise click.ClickException(f"scope add rejected: {cli.detail(resp, 'validation failed')}")
+    cli.check(
+        resp,
+        "PUT /routines/{id}/scopes/{slug}",
+        on_status={404: f"unknown routine {routine_id} or scope {scope_slug}"},
+    )
+    cli.show_lines(
+        {"routine_id": routine_id, "scope_slug": scope_slug}, f"linked scope {scope_slug!r} to routine {routine_id}"
+    )
+
+
+@routine_scope_group.command("remove", cls=FleetCommand)
+@click.argument("routine_id")
+@click.argument("scope_slug")
+def routine_scope_remove(cli: CliContext, routine_id: str, scope_slug: str) -> None:
+    """Unlink SCOPE_SLUG from ROUTINE_ID's own scope set; idempotent.
+
+    404 on an unknown ROUTINE_ID or a well-formed but unknown SCOPE_SLUG; 422 on a
+    malformed SCOPE_SLUG, or on naming ROUTINE_ID's own default scope — always a member
+    of its own set."""
+    resp = cli.send("delete", f"/api/routines/{routine_id}/scopes/{scope_slug}")
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        raise click.ClickException(f"scope remove rejected: {cli.detail(resp, 'validation failed')}")
+    cli.check(
+        resp,
+        "DELETE /routines/{id}/scopes/{slug}",
+        on_status={404: f"unknown routine {routine_id} or scope {scope_slug}"},
+    )
+    cli.show_lines(
+        {"routine_id": routine_id, "scope_slug": scope_slug},
+        f"unlinked scope {scope_slug!r} from routine {routine_id}",
+    )
 
 
 @routine_group.command("run", cls=FleetCommand)

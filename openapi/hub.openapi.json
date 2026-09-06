@@ -14559,6 +14559,141 @@
         ]
       }
     },
+    "/api/routines/{routine_id}/scopes": {
+      "get": {
+        "description": "Every scope slug linked to `routine_id`, sorted (blizzard#488) \u2014 its own default\nscope is always among them (D8). 404 on an unknown routine id.",
+        "operationId": "list_routine_scopes_api_routines__routine_id__scopes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response List Routine Scopes Api Routines  Routine Id  Scopes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Routine Scopes",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/routines/{routine_id}/scopes/{scope_slug}": {
+      "delete": {
+        "description": "Unlink `scope_slug` from `routine_id`'s own set (blizzard#488); idempotent. 404\non an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed\nscope slug, or on naming the routine's own default scope (D8) \u2014 always a member of\nits own set.",
+        "operationId": "unlink_routine_scope_api_routines__routine_id__scopes__scope_slug__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scope_slug",
+            "required": true,
+            "schema": {
+              "title": "Scope Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unlink Routine Scope",
+        "tags": [
+          "routines"
+        ]
+      },
+      "put": {
+        "description": "Link `scope_slug` into `routine_id`'s own set (blizzard#488); idempotent. 404 on\nan unknown routine id or a well-formed but unknown scope slug; 422 on a malformed\nscope slug.",
+        "operationId": "link_routine_scope_api_routines__routine_id__scopes__scope_slug__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scope_slug",
+            "required": true,
+            "schema": {
+              "title": "Scope Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link Routine Scope",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
     "/api/routines/{routine_id}/sweeps": {
       "get": {
         "description": "``routine_id``'s per-scope last-swept table (D2, D3, D4) \u2014 every non-retired\nscope, plus any retired scope this routine has swept \u2014 and its measurement series\n(D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a malformed instant\nor a non-positive span.",
