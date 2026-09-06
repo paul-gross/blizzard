@@ -55,8 +55,8 @@ _ROUTE_NOT_INJECTED: Final = _RouteNotInjected.TOKEN
 def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedView | None:
     """A derived marking's wire wrapping (issue #457) — the one home every caller of
     :func:`~blizzard.hub.domain.dependencies.derive_blocked_prerequisites` reaches through,
-    listing routes and ``ChunkView`` alike (review round 1 F6), rather than each
-    re-declaring the same wrap. Takes the dependent's whole unmet set, in declared order:
+    listing routes and ``ChunkView`` alike, rather than each re-declaring the same wrap.
+    Takes the dependent's whole unmet set, in declared order:
     the marking names its first and counts them all. An absent or empty set is no marking."""
     if not unmet_prerequisite_chunk_ids:
         return None
@@ -97,7 +97,7 @@ class ChunkView:
         neighborhood: ChunkNeighborhoodView | None = None,
     ) -> ChunkView:
         """``facts`` lets a caller that already loaded the chunk's own facts for another
-        reason (the detail route's blocked-marking gate, issue #457 F5) hand it in rather
+        reason (the detail route's blocked-marking gate, issue #457) hand it in rather
         than this reloading it a second time; omitted, this loads it as before."""
         return cls(
             services=services,

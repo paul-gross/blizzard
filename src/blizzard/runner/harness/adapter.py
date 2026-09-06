@@ -22,7 +22,7 @@ class HarnessSpawnError(RuntimeError):
     """The harness binary could not be launched (missing binary, bad workdir).
 
     Part of the adapter contract (``spawn`` raises it), so it lives on the public seam
-    rather than an internal adapter (issue #125, change L(iii))."""
+    rather than an internal adapter (issue #125)."""
 
 
 @dataclass(frozen=True)

@@ -270,8 +270,7 @@ export type CapacitiesView = {
  * ChunkDetail
  *
  * The whole chunk aggregate (issue #314): transition history, inline artifact
- * store, and the open escalation. Declared once, never re-typed per route, so a
- * field reaches both specs at once.
+ * store, and the open escalation.
  */
 export type ChunkDetail = {
     /**

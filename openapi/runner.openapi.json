@@ -356,7 +356,7 @@
         "type": "object"
       },
       "ChunkDetail": {
-        "description": "The whole chunk aggregate (issue #314): transition history, inline artifact\nstore, and the open escalation. Declared once, never re-typed per route, so a\nfield reaches both specs at once.",
+        "description": "The whole chunk aggregate (issue #314): transition history, inline artifact\nstore, and the open escalation.",
         "properties": {
           "artifacts": {
             "default": [],

@@ -1,4 +1,4 @@
-"""A hub command node's mid-run marker-write credential (issue #230, phase 1).
+"""A hub command node's mid-run marker-write credential (issue #230).
 
 A land script is a subprocess of the process serving the marker-write endpoint, so an
 instance-scoped in-memory authority suffices — an orphaned script fails against a

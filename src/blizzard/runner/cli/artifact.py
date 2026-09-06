@@ -44,9 +44,8 @@ _READ_ONLY_SCOPE_REASON = {
 
 
 def _refuse_read_only_scope(verb: str, scope: str | None) -> None:
-    """``create``/``commit``/``staged`` are node-scope only. Refuses using
-    ``_READ_ONLY_SCOPE_REASON``'s table, stating the domain fact to a worker parsing stderr
-    mid-turn (which scopes each verb serves: ``blizzard-context:/standards/worker-nodes/declarations.md``)."""
+    """``create``/``commit``/``staged`` are node-scope only; refuses using
+    ``_READ_ONLY_SCOPE_REASON``'s table (``blizzard-context:/standards/worker-nodes/declarations.md``)."""
     reason = _READ_ONLY_SCOPE_REASON.get(scope or "")
     if reason is not None:
         raise click.ClickException(f"artifact {verb}: {scope} scope is read-only — {reason}")
@@ -243,7 +242,8 @@ def artifact_staged(content: bool, scope: str | None) -> None:
 def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_sha: str, scope: str | None) -> None:
     """Worker: durably declare a git-commit artifact for REPO (issue #143). Carries the ``git_commit``
     kind only — an asset is declared through ``artifact create``. Node scope only. Deliberately no
-    ``--forge`` (pinned by tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag)."""
+    ``--forge``: the origin comes from the environment's repo manifest (pinned by
+    tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag)."""
     _refuse_read_only_scope("commit", scope)
     worker = WorkerCall.of("artifact commit")
     body: dict[str, str] = {"repo": repo, "branch": branch, "commit": commit_sha}

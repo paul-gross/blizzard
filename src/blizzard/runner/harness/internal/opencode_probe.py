@@ -1,8 +1,9 @@
 """Concrete, process-owning probes for the pinned OpenCode compatibility proof.
 
 The binding invokes the supplied binary with argument lists, gives children the allowlisted
-environment and runner-owned config, parses shapes, and turns each probe into one
-observation. Provider access follows the caller's explicit live-provider opt-in.
+environment and runner-owned config, parses the observed OpenCode 1.18.25 shapes, and
+turns each probe into one observation. Provider access follows the caller's explicit
+live-provider opt-in.
 """
 
 from __future__ import annotations

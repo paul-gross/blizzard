@@ -163,7 +163,7 @@ class GardenDelivery:
     ) -> DeliveryOutcome:
         """Materialize `validated`. `delta_artifact_ids`/`proposal_artifact_ids` name the
         artifact each of `validated.deltas`/`validated.proposals` came from, positionally
-        parallel — neither carries its own artifact id (deltas and proposals don't track one).
+        parallel — neither carries its own artifact id.
         `chunk`/`node`/`epoch` identify the delivering node-step, the idempotence
         marker's own key."""
         chunk_id = chunk.chunk_id

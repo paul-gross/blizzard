@@ -1,4 +1,4 @@
-"""runner_external_usage's subscription join key (blizzard#436 phase 3) — widens the
+"""runner_external_usage's subscription join key (blizzard#436) — widens the
 primary key to ``(runner_id, slug)``, backfilling every existing row to the legacy slug/name.
 
 Revision ID: 20260905_1100_hub_runner_external_usage_slug

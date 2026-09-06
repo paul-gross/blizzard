@@ -23,8 +23,7 @@ class WorkSourceSummary(BaseModel):
 
 
 class WorkSourcesListView(BaseModel):
-    """Every configured (plus the built-in ``hub``) source — ``GET /api/work-sources``
-    (``docs/versioning.md``)."""
+    """Every configured (plus the built-in ``hub``) source — ``GET /api/work-sources``."""
 
     sources: list[WorkSourceSummary] = []
 

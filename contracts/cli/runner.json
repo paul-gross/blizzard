@@ -3,7 +3,7 @@
     "artifact": {
       "commands": {
         "commit": {
-          "help": "Worker: durably declare a git-commit artifact for REPO (issue #143). Carries the ``git_commit``\nkind only \u2014 an asset is declared through ``artifact create``. Node scope only. Deliberately no\n``--forge`` (pinned by tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag).",
+          "help": "Worker: durably declare a git-commit artifact for REPO (issue #143). Carries the ``git_commit``\nkind only \u2014 an asset is declared through ``artifact create``. Node scope only. Deliberately no\n``--forge``: the origin comes from the environment's repo manifest (pinned by\ntests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag).",
           "params": [
             {
               "hidden": false,

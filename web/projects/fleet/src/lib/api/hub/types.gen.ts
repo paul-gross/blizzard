@@ -794,8 +794,7 @@ export type ChunkDependencyReleaseRequest = {
  * ChunkDetail
  *
  * The whole chunk aggregate (issue #314): transition history, inline artifact
- * store, and the open escalation. Declared once, never re-typed per route, so a
- * field reaches both specs at once.
+ * store, and the open escalation.
  */
 export type ChunkDetail = {
     /**
@@ -5180,8 +5179,7 @@ export type WorkSourceSummary = {
 /**
  * WorkSourcesListView
  *
- * Every configured (plus the built-in ``hub``) source — ``GET /api/work-sources``
- * (``docs/versioning.md``).
+ * Every configured (plus the built-in ``hub``) source — ``GET /api/work-sources``.
  */
 export type WorkSourcesListView = {
     /**
