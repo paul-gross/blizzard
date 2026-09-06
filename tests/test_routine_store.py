@@ -15,6 +15,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.routines import Routine
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from tests.support import hub_store_connections
@@ -157,3 +158,29 @@ def test_list_scopes_for_an_unlinked_routine_is_empty(tmp_path: Path) -> None:
     store = _routine_scope_store(tmp_path)
 
     assert store.list_scopes("rtn_ghost") == []
+
+
+def test_unlinking_a_pair_leaves_its_findings_readable(tmp_path: Path) -> None:
+    """AC6 (blizzard#488): a finding recorded under a `(routine, scope)` pair stays
+    readable through `FindingStore.list_for` after that pair is unlinked — no finding
+    read joins through `routine_scopes` (D1, D2)."""
+    routine_store, engine = _store_and_engine(tmp_path)
+    routine_store.create(_routine())
+    scope_store = RoutineScopeStore(hub_store_connections(engine))
+    finding_store = FindingStore(hub_store_connections(engine))
+    scope_store.link("rtn_1", "blizzard")
+    finding_store.add(
+        "fnd_1",
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="style",
+        locus="src/example.py:1",
+        summary="an example finding",
+        introduced=None,
+        at=_NOW,
+    )
+
+    scope_store.unlink("rtn_1", "blizzard")
+
+    assert scope_store.list_scopes("rtn_1") == []
+    assert [f.finding_id for f in finding_store.list_for("nightly", "blizzard")] == ["fnd_1"]
