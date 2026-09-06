@@ -27,7 +27,7 @@ left by an earlier attempt; re-verify its conclusions against the code rather th
    them passes it; one item with code in it routes the whole chunk by complexity instead.
 
    When the chunk does pass, the route overrides the item's complexity label whatever the change's size, because
-   harness work warrants the frontier tier rather than the tier its size suggests.
+   harness work warrants this lane's judgement-heavy gates rather than the tier its size suggests.
 
 3. Lane by complexity — the item's complexity label is the prior here, confirmed against the work itself. `basic` work
    is small and well-specified: a prompt, doc, or skill change, or a single well-anchored code change, with clear

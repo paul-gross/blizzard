@@ -1,25 +1,21 @@
-# The basic-harness-workflow graph — build -> review -> deliver -> retrospective, on one
-# single linear track, at the frontier capability tier.
+# The basic-harness-workflow graph — build -> review -> pre-push -> deliver ->
+# retrospective, on one single linear track.
 #
 # Harness work — workspace skills, `blizzard-context` convention rules, graph prompts,
 # agent docs, and other agent-capability surfaces — is the fleet's own operating rules:
-# unusually high-leverage per token and judgement-heavy per line, so this lane runs on
-# the strongest available model rather than the mechanical `blizzard:basic` tier the
-# other lightweight lane (`bas-dwf`) pins. It is otherwise the SAME lightweight shape as
-# `basic-development-workflow`, cut down one node further: no `pre-push` node at all.
+# unusually high-leverage per token and judgement-heavy per line. Frontier authors once;
+# advanced reviews and iterates (issue #493): only `build`, the first authoring pass,
+# runs on the frontier tier. `review`'s cold-eyes gate, the `iterate` loop that answers
+# its findings, and the `pre-push` integration step all run on the advanced tier
+# instead — none of the three is doing first-draft authoring, so none needs frontier
+# judgement a second time.
 #
-# Why no pre-push: `bas-dwf` keeps one so a rejected fast-forward (the base moved) can be
-# resolved by rebasing without re-earning verification — the point of that node is
-# recovering from a moved base without disturbing an already-reviewed change. This lane
-# is the user-stated minimum instead (issue #231): build, review, deliver, plus the
-# closing retrospective every lane owes. A rejected fast-forward here routes straight
-# back to `build` — the only station left that can rebase and revalidate — carrying the
-# same "why you're back" context `bas-dwf`'s `pre-push.from-deliver.md` gives its own
-# re-entry, just landing one node earlier.
-#
-# Like `bas-dwf`: no `plan` node (harness changes are prose-and-convention shaped; inline
-# planning suffices) and no standalone `verify` node (`build` fuses build and
-# verification into one node).
+# It is otherwise the SAME lightweight shape as `basic-development-workflow`: no `plan`
+# node (harness changes are prose-and-convention shaped; inline planning suffices) and
+# no standalone `verify` node (`build` fuses build and verification into one node).
+# `pre-push` is ported from `bas-dwf` for the same reason that graph keeps one: a
+# rejected fast-forward (the base moved) is a moved base, not a wrong change, and is
+# resolved by rebasing without re-earning the frontier build.
 #
 # Delivery is PR-free: `deliver` runs the packaged `land_ff` script, which fast-forwards
 # each repo's base branch ref directly to the chunk's own commit instead of opening and
@@ -36,19 +32,33 @@
 name: bas-hwf
 entry: build
 
-# Named session pools (issue #144), both pinned to the frontier tier — the whole point
-# of this lane (issue #231). Two lineages:
+# Named session pools (issue #144). Four lineages, split across two tiers:
 #
-#   code  the mechanical build lineage, BOUNDED — it is the one that can accumulate
-#         indefinitely across a review-fail (or deliver-conflict) loop.
-#   gate  the cold-eyes review. No `rotate:` block: a gate is only ever reached through
-#         `fresh:gate`, so its head is minted every entry and rotation never applies.
+#   code      the mechanical build lineage, on the frontier tier — the one pass this
+#             lane still spends its strongest model on. BOUNDED: it can accumulate
+#             indefinitely across a review-fail (or deliver-conflict) loop.
+#   gate      the cold-eyes review, on the advanced tier. No `rotate:` block: a gate is
+#             only ever reached through `fresh:gate`, so its head is minted every entry
+#             and rotation never applies.
+#   iteration the `iterate` node's own lineage, on the advanced tier — reads the code
+#             cold rather than resuming `code`'s own build context, giving the fixer a
+#             lineage that has not already argued with the reviewer. Named `iteration`,
+#             not `iterate`: a session name colliding with a node name is a mint-time
+#             error. BOUNDED, across the review-fail loop.
+#   prepush   the `pre-push` node's own lineage, on the advanced tier. BOUNDED, across
+#             the deliver-conflict loop.
+#
+# Every pool carries the same `compaction_window` (issue #343) as a ceiling sitting
+# above the bounded lineages' own `rotate:` bounds, and inert on `gate`'s unbounded one
+# for the same reason `rotate:` is absent there — see `advanced-development-workflow`
+# for where the window and the three rotate numbers come from.
 #
 # Declared here rather than inherited — a graph referencing a pool it does not declare
 # is rejected at mint, and `graph_sync` would go red on first boot.
 sessions:
   code:
     model: ["blizzard:frontier"]
+    compaction_window: "450000"
     rotate:
       # Harness INVOCATIONS, not node-steps: one node-step burns two or three.
       max_invocations: 12
@@ -57,25 +67,18 @@ sessions:
       max_context_tokens: 300000
       max_transcript_bytes: 10000000
   gate:
-    model: ["blizzard:frontier"]
-  iteration:
-    # The `iterate` node's own lineage, on the advanced tier — reads the code cold
-    # rather than resuming `code`'s own build context, giving the fixer a lineage
-    # that has not already argued with the reviewer. Named `iteration`, not `iterate`:
-    # a session name colliding with a node name is a mint-time error.
     model: ["blizzard:advanced"]
-    # code's three numbers, inherited as bounds for this lineage: it accumulates
-    # across the review-fail loop the same way code does across a deliver-conflict one.
+    compaction_window: "450000"
+  iteration:
+    model: ["blizzard:advanced"]
+    compaction_window: "450000"
     rotate:
       max_invocations: 12
       max_context_tokens: 300000
       max_transcript_bytes: 10000000
   prepush:
-    # The `pre-push` node's own lineage, on the advanced tier — it accumulates across
-    # the deliver-conflict loop the same way `iteration` accumulates across review-fail.
     model: ["blizzard:advanced"]
-    # code's three numbers again, inherited as bounds rather than re-derived for this
-    # lineage.
+    compaction_window: "450000"
     rotate:
       max_invocations: 12
       max_context_tokens: 300000

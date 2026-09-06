@@ -46,11 +46,12 @@ def test_bas_hwf_shape_is_the_six_node_frontier_build_advanced_gate_lane() -> No
     assert doc.node("retrospective").executor is Executor.RUNNER  # type: ignore[union-attr]
 
 
-def test_bas_hwf_session_pools_retier_the_iterate_and_prepush_loops() -> None:
+def test_bas_hwf_four_pools_retier_review_iterate_and_prepush_off_frontier() -> None:
     doc = _doc()
     assert set(doc.sessions) == {"code", "gate", "iteration", "prepush"}
+    # Frontier authors once; every gate and loop behind it runs advanced.
     assert doc.sessions["code"].model == ["blizzard:frontier"]
-    assert doc.sessions["gate"].model == ["blizzard:frontier"]
+    assert doc.sessions["gate"].model == ["blizzard:advanced"]
     assert doc.sessions["iteration"].model == ["blizzard:advanced"]
     assert doc.sessions["prepush"].model == ["blizzard:advanced"]
     # The build, iterate, and pre-push lineages are each bounded — every one can
@@ -59,6 +60,9 @@ def test_bas_hwf_session_pools_retier_the_iterate_and_prepush_loops() -> None:
     assert doc.sessions["iteration"].rotate is not None
     assert doc.sessions["prepush"].rotate is not None
     assert doc.sessions["gate"].rotate is None
+    # A uniform ceiling above every bounded lineage's rotate bound, inert on gate.
+    for pool in ("code", "gate", "iteration", "prepush"):
+        assert doc.sessions[pool].compaction_window == "450000"
 
 
 def test_bas_hwf_node_continuity() -> None:
@@ -67,16 +71,18 @@ def test_bas_hwf_node_continuity() -> None:
     assert (doc.node("review").session, doc.node("review").session_source) == (SessionMode.FRESH, "gate")  # type: ignore[union-attr]
     assert (doc.node("iterate").session, doc.node("iterate").session_source) == (SessionMode.RESUME, "iteration")  # type: ignore[union-attr]
     assert (doc.node("pre-push").session, doc.node("pre-push").session_source) == (SessionMode.RESUME, "prepush")  # type: ignore[union-attr]
+    retrospective = doc.node("retrospective")
+    assert retrospective is not None
     # Explicit, not bare resume: unlike bas-dwf, the prepush lineage never saw build
     # or iterate, so retrospective must pin the same pool pre-push actually ran on.
-    assert (doc.node("retrospective").session, doc.node("retrospective").session_source) == (SessionMode.RESUME, "prepush")  # type: ignore[union-attr]
+    assert (retrospective.session, retrospective.session_source) == (SessionMode.RESUME, "prepush")
 
 
 def test_bas_hwf_target_routing_table() -> None:
     """The full routing table from blizzard#493."""
     doc = _doc()
 
-    def routes(name: str) -> dict[str, str]:
+    def routes(name: str) -> dict[str, str | None]:
         node = doc.node(name)
         assert node is not None and node.judgement is not None
         return {c.name: c.to for c in node.judgement.choices}
