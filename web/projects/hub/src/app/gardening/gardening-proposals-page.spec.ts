@@ -55,6 +55,17 @@ const PASSED = {
   },
 };
 
+const ARCHITECTURE_WAITING = {
+  proposal_id: 'gp_4',
+  routine_name: 'architecture',
+  class: 'remediate',
+  title: 'Extract the shared seam',
+  body: 'Two modules duplicate the same adapter.',
+  created_at: '2026-01-05T00:00:00Z',
+  findings: ['fin_5'],
+  closure: null,
+};
+
 function findingFixture(findingId: string) {
   return {
     finding_id: findingId,
@@ -261,5 +272,44 @@ describe('GardeningProposalsPage', () => {
     const { el } = await render([]);
 
     expect(el.querySelector('[data-testid="gardening-proposals-empty"]')).toBeTruthy();
+  });
+
+  it('derives the routine chips from the fetched data, defaulting to all routines', async () => {
+    const { el } = await render([WAITING_A, ARCHITECTURE_WAITING]);
+
+    expect(el.querySelector('[data-testid="gardening-proposal-routine-all"]')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(el.querySelector('[data-testid="gardening-proposal-routine-item-comments"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-routine-item-architecture"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_4"]')).toBeTruthy();
+  });
+
+  it('narrows the list down to one routine, riding the query string', async () => {
+    const { router, fixture, el } = await render([WAITING_A, ARCHITECTURE_WAITING]);
+
+    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-routine-item-architecture"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toContain('routine=architecture');
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_4"]')).toBeTruthy();
+  });
+
+  it('moves a routed proposal a routine change excludes onto the first row still in the set', async () => {
+    const { fixture, router, el } = await render(
+      [WAITING_A, ARCHITECTURE_WAITING],
+      VIEWER_ME_RESPONSE,
+      '/gardening/proposals/gp_1',
+    );
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')?.classList).toContain('selected');
+
+    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-routine-item-architecture"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/proposals/gp_4?routine=architecture');
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-proposal-row-gp_4"]')?.classList).toContain('selected');
   });
 });

@@ -5,6 +5,11 @@
     (choose)="onWaitingChoose($event)"
   />
   <fleet-kit-chips [options]="classChips()" [selectedValue]="classChipValue()" (choose)="onClassChoose($event)" />
+  <fleet-kit-chips
+    [options]="routineChips()"
+    [selectedValue]="routineChipValue()"
+    (choose)="onRoutineChoose($event)"
+  />
 </div>
 
 <div class="gp-layout">

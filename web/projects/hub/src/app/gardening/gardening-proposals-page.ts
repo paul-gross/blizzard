@@ -29,21 +29,28 @@ const CLASS_VALUE_PREFIX = 'class:';
  * proposals not yet closed), and this one value widens it to every proposal. */
 const SHOW_ALL = 'all';
 
+/** The routine chip row's "All routines" value. Unlike `class`, `routine_name` is
+ * not opaque deployment vocabulary — it names one of blizzard's own gardening
+ * routines — so it needs no `CLASS_VALUE_PREFIX`-style collision guard. */
+const ALL_ROUTINES = 'all';
+
 /**
  * The `/gardening/proposals` sub-tab
  * (`blizzard-product:/plans/garden/user-interface.md` §The docket) — the proposal
- * docket, filtered client-side by waiting state and by class (Decision 1: `GET
- * /api/garden-proposals` declares no query parameters), beside a `<router-outlet>`
- * holding whichever proposal the URL names (`gardening-proposal-detail.ts`).
+ * docket, filtered client-side by waiting state, by class, and by routine (Decision
+ * 1: `GET /api/garden-proposals` declares no query parameters), beside a
+ * `<router-outlet>` holding whichever proposal the URL names
+ * (`gardening-proposal-detail.ts`).
  *
- * `gardening-scopes-page.ts`'s own parent-list/child-detail shape. Both filters
- * live in the query string (`route-state.ts`), so a pick survives a row click and
- * a filtered docket is a link the operator can hand somebody.
+ * `gardening-scopes-page.ts`'s own parent-list/child-detail shape. All three
+ * filters live in the query string (`route-state.ts`), so a pick survives a row
+ * click and a filtered docket is a link the operator can hand somebody.
  *
  * A container: it injects the one list read and derives the rows the
- * presentational {@link FleetProposalList} renders. The class chips come from the
- * fetched data (Decision 2: `class` is the deployment's own opaque vocabulary,
- * never a hardcoded list).
+ * presentational {@link FleetProposalList} renders. The class and routine chips
+ * both come from the fetched data (Decision 2: `class` is the deployment's own
+ * opaque vocabulary, never a hardcoded list; `routine_name` likewise, though it is
+ * blizzard's own vocabulary rather than the deployment's).
  *
  * This is the one tab whose bare route does not rest on an empty pane:
  * {@link reconcileSelection} sends it to the first row of the *filtered* set. The
@@ -103,6 +110,33 @@ export class GardeningProposalsPage {
     { value: SHOW_ALL, label: 'All', testid: 'gardening-proposal-filter-all' },
   ];
 
+  /** `null` means every routine — mirrors {@link classFilter}'s "all drops the
+   * param" shape. */
+  private readonly routineFilter = computed<string | null>(() => this.url.read('routine'));
+
+  /** Every routine present in the fetched data, alphabetized, each with an "All
+   * routines" chip ahead of them — never a hardcoded vocabulary, mirroring
+   * {@link classChips}. */
+  protected readonly routineChips = computed<readonly KitChipOption[]>(() => {
+    const routines = Array.from(new Set(this.proposals().map((p) => p.routine_name))).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    return [
+      { value: ALL_ROUTINES, label: 'All routines', testid: 'gardening-proposal-routine-all' },
+      ...routines.map((r) => ({
+        value: r,
+        label: r,
+        testid: `gardening-proposal-routine-item-${r}`,
+      })),
+    ];
+  });
+
+  protected readonly routineChipValue = computed<string>(() => this.routineFilter() ?? ALL_ROUTINES);
+
+  protected onRoutineChoose(value: string): void {
+    this.url.patch({ routine: value === ALL_ROUTINES ? null : value });
+  }
+
   protected readonly waitingChipValue = computed<string>(() => (this.waitingOnly() ? 'waiting' : SHOW_ALL));
 
   protected onWaitingChoose(value: string): void {
@@ -114,8 +148,12 @@ export class GardeningProposalsPage {
   private readonly filteredProposals = computed<readonly GardenProposalView[]>(() => {
     const waitingOnly = this.waitingOnly();
     const cls = this.classFilter();
+    const routine = this.routineFilter();
     return this.proposals().filter(
-      (p) => (!waitingOnly || isGardenProposalWaiting(p)) && (cls === null || p.class === cls),
+      (p) =>
+        (!waitingOnly || isGardenProposalWaiting(p)) &&
+        (cls === null || p.class === cls) &&
+        (routine === null || p.routine_name === routine),
     );
   });
 
