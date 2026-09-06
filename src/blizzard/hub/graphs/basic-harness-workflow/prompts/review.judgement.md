@@ -5,5 +5,5 @@ unless this attempt already has. The `review-findings` asset must record how eve
 adjudicated, accepted and rejected alike.
 
 Record `pass` when the work meets the work item's intent, is well-formed against the review axes applied, and no
-blocking issue remains; the chunk then goes to the `deliver` node. Record `fail` when any blocking issue remains — the
+blocking issue remains; the chunk then goes to the `pre-push` node. Record `fail` when any blocking issue remains — the
 `review-findings` asset rides back into the `iterate` node's envelope.

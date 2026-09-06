@@ -1,8 +1,8 @@
 ## Arriving from review
 
 Review found blocking issues, so you are here; the commits are intact on the feature branch. The blocking issues are in
-the `review-findings` asset carried into this arrival — read it with `blizzard runner artifact get review-findings
---content`.
+the `review-findings` asset carried into this arrival — read it with
+`blizzard runner artifact get review-findings --content`.
 
 Check each finding against the work as it now stands first: one an earlier attempt already resolved needs no second fix.
 Answer every finding, by fixing it or by refuting it on the record; disagreement is never expressed by quietly ignoring

@@ -1,5 +1,6 @@
 # The basic-harness-workflow graph — build -> review -> pre-push -> deliver ->
-# retrospective, on one single linear track.
+# retrospective, on one single linear track, with review <-> iterate as its own bounce
+# loop off that spine.
 #
 # Harness work — workspace skills, `blizzard-context` convention rules, graph prompts,
 # agent docs, and other agent-capability surfaces — is the fleet's own operating rules:
@@ -36,7 +37,7 @@ entry: build
 #
 #   code      the mechanical build lineage, on the frontier tier — the one pass this
 #             lane still spends its strongest model on. BOUNDED: it can accumulate
-#             indefinitely across a review-fail (or deliver-conflict) loop.
+#             indefinitely across its own fail self-loop.
 #   gate      the cold-eyes review, on the advanced tier. No `rotate:` block: a gate is
 #             only ever reached through `fresh:gate`, so its head is minted every entry
 #             and rotation never applies.

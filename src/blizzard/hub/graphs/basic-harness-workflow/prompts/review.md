@@ -1,7 +1,7 @@
 # Review
 
 You work this prompt at a chunk's `review` node-step, in a fresh session that did not build the work, reading the change
-cold against the work item's intent. Review observes and build repairs: no fix is committed from this node.
+cold against the work item's intent. Review observes and iterate repairs: no fix is committed from this node.
 
 ## Open the pass
 
@@ -47,6 +47,6 @@ had been fixed and does not block `pass`.
 ## Submit the findings
 
 Every finding is specific, actionable, and anchored at a file and line, since on a `fail` the asset rides back into the
-build node's envelope for the next build attempt. Before declaring done you MUST run
+iterate node's envelope for the next attempt. Before declaring done you MUST run
 `blizzard runner artifact create --name review-findings` with the findings on stdin, recording what was checked, what
 passed, and every blocking issue.

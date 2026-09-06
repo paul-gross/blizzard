@@ -18,5 +18,5 @@ When torn between two severities, take the more cautious route: `significant` ov
 
 Alongside your verdict, submit this node's retrospective: run `blizzard runner artifact create --name retrospective`
 with a few honest lines on stdin — what went well, what didn't, and what the closing `retrospective` node should know.
-Unlike `bas-dwf`, this lane's `prepush` lineage never saw `build` or `iterate`, so this is the only session-local record
-of the integration leg the closing node can draw on.
+This lineage never saw `build` or `iterate`, so this is the only session-local record of the integration leg the
+closing node can draw on.

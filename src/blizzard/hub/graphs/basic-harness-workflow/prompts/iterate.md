@@ -7,6 +7,15 @@ memory of build's own reasoning or its arguments with the reviewer.
 
 Declare done only once every condition the rest of this prompt states holds.
 
+## What this visit answers
+
+Most visits answer `review`'s findings — fix or refute each, per the arrival addendum. A visit from `pre-push`'s
+`significant` edge carries no findings at all: it exists because a rebase needed semantic choices or reshaped the
+change, and with no `verify` node in this lane, this is the only station left to revalidate the result. On that path,
+read the rebased code back the same way `build` and `review` do — does the rule say what it means, does the routing
+to it land, does the instruction survive being followed literally — concentrated on whatever the rebase disturbed,
+before declaring done.
+
 ## Orient before changing anything
 
 In each repo you expect to touch, check which branch is checked out, whether the working tree is clean, and what it
@@ -29,8 +38,10 @@ assuming an earlier attempt's declaration got there.
 ## Submit the refutation record
 
 On every pass through this node you MUST run `blizzard runner artifact create --name review-finding-refutes` with the
-refutation content on stdin; the submission is mandatory. Read the previous submission first with
-`blizzard runner artifact get review-finding-refutes --content` and carry it forward. Every refutation still standing is
-restated in each new submission, including any a reviewer already accepted in an earlier round, each marked `open` or
-`accepted`: that asset is replaced rather than appended to, and the reviewer sees only the newest submission and never
-looks for an older one.
+refutation content on stdin; the submission is mandatory, including a first pass that has nothing to refute — say so
+explicitly rather than skipping the submission. Read the previous submission first with
+`blizzard runner artifact get review-finding-refutes --content`, absent on this node's first-ever visit in the chunk
+— normal, not a gap to flag — and carry it forward when present. Every refutation still standing is restated in each
+new submission, including any a reviewer already accepted in an earlier round, each marked `open` or `accepted`: that
+asset is replaced rather than appended to, and the reviewer sees only the newest submission and never looks for an
+older one.
