@@ -651,7 +651,7 @@ export const reopenFindingsApiFindingsReopenPost = <ThrowOnError extends boolean
  *
  * Resolve every finding in `finding_ids`, recording NOTE: the work that answers a
  * finding landed. 404 for an unknown id, 422 for a blank note. A hand resolution names
- * no garden proposal — that attribution is Phase 3's own, delivery-triggered.
+ * no garden proposal — that attribution happens only when a delivery lands.
  */
 export const resolveFindingsApiFindingsResolvePost = <ThrowOnError extends boolean = false>(options: Options<ResolveFindingsApiFindingsResolvePostData, ThrowOnError>): RequestResult<ResolveFindingsApiFindingsResolvePostResponses, ResolveFindingsApiFindingsResolvePostErrors, ThrowOnError> => (options.client ?? client).post<ResolveFindingsApiFindingsResolvePostResponses, ResolveFindingsApiFindingsResolvePostErrors, ThrowOnError>({
     url: '/api/findings/resolve',

@@ -1810,7 +1810,7 @@ export type ExternalSubscriptionUsageWindowView = {
  * FindingExitRequest
  *
  * `POST /api/findings/{verb}` — the shared shape for every human-driven exit and
- * `reopen` except `supersede` (blizzard#394 Phase 2): every finding named exits (or
+ * `reopen` except `supersede` (blizzard#394): every finding named exits (or
  * reopens) together, one call, carrying the same required note (D7).
  */
 export type FindingExitRequest = {

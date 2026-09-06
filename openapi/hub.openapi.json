@@ -2778,7 +2778,7 @@
       },
       "FindingExitRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/findings/{verb}` \u2014 the shared shape for every human-driven exit and\n`reopen` except `supersede` (blizzard#394 Phase 2): every finding named exits (or\nreopens) together, one call, carrying the same required note (D7).",
+        "description": "`POST /api/findings/{verb}` \u2014 the shared shape for every human-driven exit and\n`reopen` except `supersede` (blizzard#394): every finding named exits (or\nreopens) together, one call, carrying the same required note (D7).",
         "properties": {
           "finding_ids": {
             "items": {
@@ -11863,7 +11863,7 @@
     },
     "/api/findings/resolve": {
       "post": {
-        "description": "Resolve every finding in `finding_ids`, recording NOTE: the work that answers a\nfinding landed. 404 for an unknown id, 422 for a blank note. A hand resolution names\nno garden proposal \u2014 that attribution is Phase 3's own, delivery-triggered.",
+        "description": "Resolve every finding in `finding_ids`, recording NOTE: the work that answers a\nfinding landed. 404 for an unknown id, 422 for a blank note. A hand resolution names\nno garden proposal \u2014 that attribution happens only when a delivery lands.",
         "operationId": "resolve_findings_api_findings_resolve_post",
         "requestBody": {
           "content": {
