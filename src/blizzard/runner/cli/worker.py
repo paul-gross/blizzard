@@ -101,8 +101,7 @@ def work_items(chunk_id: str) -> None:
 def pm_items(ctx: click.Context, chunk_id: str) -> None:
     """Deprecated alias for ``blizzard runner work-items`` (issue #55).
 
-    Kept working, hidden from ``--help``: a node's prompt is inlined into the store at mint and
-    immutable thereafter, so every already-minted graph names this verb forever (pinned by
+    Kept working, hidden from ``--help`` (pinned by
     tests/test_pin_runner_misc.py::test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item)."""
     click.echo(
         "warning: `blizzard runner pm-items` is deprecated — use `blizzard runner work-items`",
