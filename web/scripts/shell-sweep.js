@@ -105,6 +105,10 @@
  *     scroll, and `FleetScopePanel`'s description editor holds the row's
  *     remaining width beside its actions — rather than a second sweep file of
  *     their own, which leaves `ng test fleet` hanging after a green suite.
+ *   - projects/fleet/src/lib/garden/finding-fact-timeline.shell-sweep.spec.ts —
+ *     the finding detail panel's fact timeline (blizzard#487): a long
+ *     human-authored exit note genuinely wraps inside its row rather than
+ *     forcing the row wider than its column, at 390/320px.
  *   - projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts —
  *     the gardening routines container's own list-beside-panel grid
  *     (blizzard#397): the list and panel sit side by side at 1280px, and
@@ -196,6 +200,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/garden-runs.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts' },

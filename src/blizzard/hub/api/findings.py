@@ -19,8 +19,14 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.findings import Finding, FindingNoteRequiredError
-from blizzard.wire.finding import FindingExitRequest, FindingSupersedeRequest, FindingView
+from blizzard.hub.domain.findings import Finding, FindingFact, FindingNoteRequiredError
+from blizzard.wire.finding import (
+    FindingDetailView,
+    FindingExitRequest,
+    FindingFactView,
+    FindingSupersedeRequest,
+    FindingView,
+)
 
 router = APIRouter(prefix="/api", tags=["findings"], dependencies=[Depends(reject_runner_principal)])
 
@@ -49,6 +55,19 @@ def finding_view(finding: Finding) -> FindingView:
             "last_seen_at": iso_utc(finding.last_seen_at) if finding.last_seen_at is not None else None,
             "observed_count": finding.observed_count,
         }
+    )
+
+
+def _fact_view(fact: FindingFact) -> FindingFactView:
+    """The one ``FindingFact`` -> ``FindingFactView`` projection, `finding_view`'s own
+    sibling for a chain entry (blizzard#487)."""
+    return FindingFactView(
+        kind=fact.kind,
+        recorded_at=iso_utc(fact.recorded_at),
+        note=fact.note,
+        actor=fact.actor,
+        proposal_id=fact.proposal_id,
+        superseded_by=fact.superseded_by,
     )
 
 
@@ -90,13 +109,17 @@ def list_findings(
     return [finding_view(f) for f in services.findings.list_for(routine, scope, include_gone=include_gone)]
 
 
-@router.get("/findings/{finding_id}", response_model=FindingView, dependencies=[Depends(require(FLEET_VIEW))])
-def get_finding(finding_id: str, services: Annotated[HubServices, Depends(get_services)]) -> FindingView:
-    """One finding's whole record; 404 on an unknown id."""
+@router.get("/findings/{finding_id}", response_model=FindingDetailView, dependencies=[Depends(require(FLEET_VIEW))])
+def get_finding(finding_id: str, services: Annotated[HubServices, Depends(get_services)]) -> FindingDetailView:
+    """One finding's whole record, plus its whole fact chain oldest-first (blizzard#487);
+    404 on an unknown id."""
     finding = services.findings.get(finding_id)
     if finding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown finding {finding_id}")
-    return finding_view(finding)
+    facts = services.findings.get_facts(finding_id)
+    return FindingDetailView.model_validate(
+        {**finding_view(finding).model_dump(by_alias=True), "facts": [_fact_view(f) for f in facts]}
+    )
 
 
 def _exit_verb(

@@ -198,6 +198,7 @@ const PANEL_FINDING: FindingPanelVm = {
   lastSeenAt: '2026-01-10T00:00:00Z',
   summary: 'Module docstring narrates the change history rather than stating the contract.',
   note: null,
+  facts: [{ kind: 'add', recorded_at: '2026-01-02T00:00:00Z' }],
   workItem: null,
 };
 

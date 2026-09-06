@@ -143,6 +143,10 @@ class FindingStore:
             facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
             return {row.finding_id: self._of(row, facts_by_id[row.finding_id]) for row in rows}
 
+    def get_facts(self, finding_id: str) -> list[FindingFact]:
+        with self._store.read("get_facts") as conn:
+            return self._facts(conn, finding_id)
+
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """The pass's own bucket read (D3) — filtered on `ix_findings_routine_scope`,
         ordered by `finding_id` so every backend returns the same rows."""

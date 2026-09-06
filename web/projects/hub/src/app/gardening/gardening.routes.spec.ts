@@ -241,6 +241,7 @@ describe('the /gardening route subtree', () => {
           last_seen_at: '2026-01-05T00:00:00Z',
           observed_count: 1,
           note: null,
+          facts: [{ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' }],
         };
       }
       if (method === 'GET' && path === '/api/scopes') return [];

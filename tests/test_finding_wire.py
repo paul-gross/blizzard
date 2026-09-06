@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from blizzard.wire.finding import FindingCandidate, FindingDelta
+from blizzard.wire.finding import FindingCandidate, FindingDelta, FindingDetailView, FindingFactView
 
 pytestmark = pytest.mark.unit
 
@@ -87,3 +87,62 @@ def test_a_candidate_omitting_introduced_parses() -> None:
         {"ref": "F1", "class": "stale-docstring", "locus": "a.py:1", "summary": "s"}
     )
     assert candidate.introduced is None
+
+
+def _detail(**overrides: object) -> dict[str, object]:
+    fields: dict[str, object] = {
+        "finding_id": "fin_1",
+        "routine_name": "nightly",
+        "scope_slug": "blizzard",
+        "class": "stale-docstring",
+        "locus": "a.py:1",
+        "summary": "s",
+        "live": True,
+        "state": "live",
+        "last_seen_at": None,
+        "observed_count": 0,
+        "facts": [],
+    }
+    fields.update(overrides)
+    return fields
+
+
+def test_a_detail_view_with_an_empty_fact_chain_parses() -> None:
+    view = FindingDetailView.model_validate(_detail())
+    assert view.finding_id == "fin_1"
+    assert view.class_ == "stale-docstring"
+    assert view.facts == []
+
+
+def test_a_detail_view_with_a_couple_of_facts_parses_oldest_first() -> None:
+    view = FindingDetailView.model_validate(
+        _detail(
+            facts=[
+                {"kind": "add", "recorded_at": "2026-07-16T12:00:00Z"},
+                {
+                    "kind": "resolved",
+                    "recorded_at": "2026-07-17T09:00:00Z",
+                    "note": "shipped it",
+                    "actor": "pgross",
+                    "proposal_id": "prop_1",
+                },
+            ]
+        )
+    )
+    assert [f.kind for f in view.facts] == ["add", "resolved"]
+    assert view.facts[0].note is None
+    assert view.facts[0].actor is None
+    assert view.facts[0].proposal_id is None
+    assert view.facts[0].superseded_by is None
+    assert view.facts[1].note == "shipped it"
+    assert view.facts[1].actor == "pgross"
+    assert view.facts[1].proposal_id == "prop_1"
+
+
+def test_a_fact_view_with_only_kind_and_recorded_at_parses() -> None:
+    fact = FindingFactView.model_validate({"kind": "add", "recorded_at": "2026-07-16T12:00:00Z"})
+    assert fact.kind == "add"
+    assert fact.note is None
+    assert fact.actor is None
+    assert fact.proposal_id is None
+    assert fact.superseded_by is None

@@ -148,6 +148,13 @@ class IReadFindingRepository(Protocol):
         (blizzard#394), so it costs one query pair, not one pair per row."""
         ...
 
+    def get_facts(self, finding_id: str) -> list[FindingFact]:
+        """A finding's whole fact chain, oldest-first — `get`'s own facts, exposed
+        directly rather than only folded through `derive_liveness` (blizzard#487).
+        Empty for an unknown id, same as `get`'s `None` in spirit but a list here
+        since callers pair it with a `get` call that already 404s on unknown ids."""
+        ...
+
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """A routine's findings under one scope
         (blizzard-product:/plans/garden/machinery.md §Managing findings and proposals) —

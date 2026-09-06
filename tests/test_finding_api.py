@@ -111,6 +111,99 @@ def test_get_renders_one_finding(tmp_path: Path) -> None:
     assert body["observed_count"] == 0
 
 
+def test_get_renders_the_whole_fact_chain_oldest_first_for_an_add_only_finding(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+    FindingStore(hub_store_connections(hub.engine)).add(
+        "fin_1",
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s1",
+        introduced=None,
+        at=_NOW,
+    )
+
+    resp = hub.client.get("/api/findings/fin_1")
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [f["kind"] for f in body["facts"]] == ["add"]
+    assert body["facts"][0]["note"] is None
+
+
+def test_get_renders_an_exit_fact_followed_by_a_reopen_oldest_first(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+    store = FindingStore(hub_store_connections(hub.engine))
+    store.add(
+        "fin_1",
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s1",
+        introduced=None,
+        at=_NOW,
+    )
+    store.record_fact("fin_1", kind="wont-fix", at=_NOW.replace(hour=13), note="meh", actor="pgross")
+    store.record_fact("fin_1", kind="reopened", at=_NOW.replace(hour=14), note="regressed", actor="pgross")
+
+    resp = hub.client.get("/api/findings/fin_1")
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [f["kind"] for f in body["facts"]] == ["add", "wont-fix", "reopened"]
+    assert body["facts"][1]["note"] == "meh"
+    assert body["facts"][2]["note"] == "regressed"
+
+
+def test_get_renders_a_finding_whose_newest_fact_carries_no_note(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+    store = FindingStore(hub_store_connections(hub.engine))
+    store.add(
+        "fin_1",
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s1",
+        introduced=None,
+        at=_NOW,
+    )
+    store.record_fact("fin_1", kind="observed", at=_NOW.replace(hour=13))
+
+    resp = hub.client.get("/api/findings/fin_1")
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [f["kind"] for f in body["facts"]] == ["add", "observed"]
+    assert body["facts"][-1]["note"] is None
+    assert body["note"] is None
+
+
+def test_list_read_carries_no_facts_key(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+    FindingStore(hub_store_connections(hub.engine)).add(
+        "fin_1",
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s1",
+        introduced=None,
+        at=_NOW,
+    )
+
+    resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard"})
+
+    assert resp.status_code == 200, resp.text
+    assert "facts" not in resp.json()[0]
+
+
 def test_get_unknown_id_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 

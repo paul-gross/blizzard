@@ -1,0 +1,25 @@
+@if (rows().length === 0) {
+  <fleet-kit-async-state
+    state="empty"
+    placement="inline"
+    emptyText="No recorded history."
+    emptyTestid="finding-fact-timeline-empty"
+  />
+} @else {
+  <ol class="timeline" data-testid="finding-fact-timeline">
+    @for (row of rows(); track row.key) {
+      <li class="fact" data-testid="finding-fact-row">
+        <div class="fact-head">
+          <span class="kind" data-testid="finding-fact-kind">{{ row.label }}</span>
+          <span class="ts" [title]="row.whenTitle">{{ row.when }}</span>
+        </div>
+        @if (row.note) {
+          <p class="note" data-testid="finding-fact-note">{{ row.note }}</p>
+        }
+        @if (row.actor) {
+          <p class="actor" data-testid="finding-fact-actor">by {{ row.actor }}</p>
+        }
+      </li>
+    }
+  </ol>
+}

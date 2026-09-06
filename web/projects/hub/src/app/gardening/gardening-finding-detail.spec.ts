@@ -17,6 +17,7 @@ function findingFixture(overrides: { state: string } & Record<string, unknown>) 
     last_seen_at: '2026-01-05T00:00:00Z',
     introduced: '4ba7ef06d',
     note: null,
+    facts: [{ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' }],
     live: overrides.state === 'live',
     ...overrides,
   };
@@ -124,6 +125,36 @@ describe('GardeningFindingDetail', () => {
     // `introduced` is a git revision, never a timestamp (`finding-panel.ts`'s own
     // doc comment) — rendered plain, never through `fleet-when`.
     expect(panel?.querySelector('[data-testid="fp-introduced"]')?.textContent).toContain('4ba7ef06d');
+  });
+
+  it('renders the finding panel’s fact timeline in the wire order, including a noteless fact', async () => {
+    const findingWithFacts = findingFixture({
+      finding_id: 'fnd_11',
+      class: 'stale-docstring',
+      locus: 'a.py:1',
+      summary: 'summary a',
+      state: 'resolved',
+      facts: [
+        { kind: 'add', recorded_at: '2026-01-01T00:00:00Z' },
+        { kind: 'observed', recorded_at: '2026-01-02T00:00:00Z' },
+        { kind: 'resolved', recorded_at: '2026-01-03T00:00:00Z', note: 'fixed', actor: 'u_1' },
+      ],
+    });
+    const { fixture } = await mount('fnd_11', {
+      routeOverride: (method, path) => (method === 'GET' && path === '/api/findings/fnd_11' ? findingWithFacts : undefined),
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const timeline = el.querySelector('[data-testid="fp-timeline"]')!;
+    const rows = timeline.querySelectorAll('[data-testid="finding-fact-row"]');
+    expect(rows.length).toBe(3);
+    expect(Array.from(rows).map((r) => r.querySelector('[data-testid="finding-fact-kind"]')?.textContent)).toEqual([
+      'Added',
+      'Observed',
+      'Resolved',
+    ]);
+    expect(rows[1].querySelector('[data-testid="finding-fact-note"]')).toBeNull();
+    expect(rows[2].querySelector('[data-testid="finding-fact-note"]')?.textContent).toBe('fixed');
   });
 
   it('surfaces an unknown findingId as the panel’s error state, not as “nothing selected”', async () => {

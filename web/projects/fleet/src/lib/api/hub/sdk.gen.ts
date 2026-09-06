@@ -697,7 +697,8 @@ export const wontFixFindingsApiFindingsWontFixPost = <ThrowOnError extends boole
 /**
  * Get Finding
  *
- * One finding's whole record; 404 on an unknown id.
+ * One finding's whole record, plus its whole fact chain oldest-first (blizzard#487);
+ * 404 on an unknown id.
  */
 export const getFindingApiFindingsFindingIdGet = <ThrowOnError extends boolean = false>(options: Options<GetFindingApiFindingsFindingIdGetData, ThrowOnError>): RequestResult<GetFindingApiFindingsFindingIdGetResponses, GetFindingApiFindingsFindingIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetFindingApiFindingsFindingIdGetResponses, GetFindingApiFindingsFindingIdGetErrors, ThrowOnError>({ url: '/api/findings/{finding_id}', ...options });
 

@@ -7,10 +7,10 @@ import {
   hasPermission,
   injectHubFindingQuery,
   injectMeQuery,
+  type FindingDetailView,
   type FindingPanelTriageVerb,
   type FindingPanelVm,
   type FindingTriageVerb,
-  type FindingView,
   type KitAsyncStateValue,
 } from 'fleet';
 import { map } from 'rxjs';
@@ -52,7 +52,7 @@ export class GardeningFindingDetail {
 
   private readonly findingQuery = injectHubFindingQuery(this.findingId);
 
-  private readonly selectedFinding = computed<FindingView | null>(() => {
+  private readonly selectedFinding = computed<FindingDetailView | null>(() => {
     const id = this.findingId();
     if (id === null) return null;
     const finding = this.findingQuery.data() ?? null;
@@ -82,6 +82,7 @@ export class GardeningFindingDetail {
       lastSeenAt: finding.last_seen_at,
       summary: finding.summary,
       note: finding.note ?? null,
+      facts: finding.facts,
       workItem: this.workItemLookup.workItemFor(finding.finding_id),
     };
   });

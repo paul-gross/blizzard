@@ -1,6 +1,11 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getFindingApiFindingsFindingIdGet, listFindingsApiFindingsGet, type FindingView } from '../api/hub';
+import {
+  getFindingApiFindingsFindingIdGet,
+  listFindingsApiFindingsGet,
+  type FindingDetailView,
+  type FindingView,
+} from '../api/hub';
 import { hubFindingKey, hubFindingsBucketKey, hubFindingsKey } from '../query-keys';
 
 /**
@@ -56,6 +61,12 @@ export function injectHubFindingsQuery(findingIds: () => readonly string[]) {
  *
  * Stays disabled while `findingId()` is null — the caller's own "nothing selected"
  * rest state is branched before this read is consulted, `bzh:frontend-empty-state-gated`.
+ *
+ * Resolves `FindingDetailView` (blizzard#487) — `GET /api/findings/{finding_id}`'s
+ * actual response, a superset of `FindingView` that adds the finding's whole
+ * append-only fact chain (`facts`, oldest-first). {@link injectHubFindingsQuery}'s
+ * fan-out keeps reading plain `FindingView` off the list endpoint; only the
+ * one-finding read carries the chain.
  */
 export function injectHubFindingQuery(findingId: () => string | null) {
   return injectQuery(() => {
@@ -63,7 +74,7 @@ export function injectHubFindingQuery(findingId: () => string | null) {
     return {
       queryKey: hubFindingKey(id),
       enabled: id !== null,
-      queryFn: async (): Promise<FindingView> => {
+      queryFn: async (): Promise<FindingDetailView> => {
         const { data, error } = await getFindingApiFindingsFindingIdGet({
           path: { finding_id: id! },
           throwOnError: false,

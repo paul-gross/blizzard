@@ -16,6 +16,7 @@ const LIVE_VM: FindingPanelVm = {
   lastSeenAt: '2026-01-05T00:00:00Z',
   summary: 'docstring narrates a removed parameter',
   note: null,
+  facts: [{ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' }],
   workItem: null,
 };
 
@@ -166,6 +167,23 @@ describe('FleetFindingPanel', () => {
       'docstring narrates a removed parameter',
     );
     expect(el.querySelector('[data-testid="fp-note"]')?.textContent).toContain('fixed in the same pass');
+  });
+
+  it('renders the fact timeline for a finding with more than one fact', async () => {
+    const fixture = await mount({
+      vm: {
+        ...LIVE_VM,
+        facts: [
+          { kind: 'add', recorded_at: '2026-01-01T00:00:00Z' },
+          { kind: 'observed', recorded_at: '2026-01-03T00:00:00Z' },
+        ],
+      },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="fp-timeline"]')).toBeTruthy();
+    const rows = el.querySelectorAll('[data-testid="finding-fact-row"]');
+    expect(rows.length).toBe(2);
   });
 
   it('renders no note block when the finding carries none', async () => {

@@ -92,6 +92,28 @@ def test_get_many_of_no_ids_is_empty(tmp_path: Path) -> None:
     assert store.get_many([]) == {}
 
 
+def test_get_facts_returns_the_whole_chain_oldest_first(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add(store)
+
+    store.record_fact("fin_1", kind="observed", at=_LATER)
+    store.record_fact("fin_1", kind="resolved", at=_LATER.replace(hour=14), note="shipped it", actor="pgross")
+
+    facts = store.get_facts("fin_1")
+
+    assert [f.kind for f in facts] == ["add", "observed", "resolved"]
+    assert facts[0].note is None
+    assert facts[1].actor is None
+    assert facts[2].note == "shipped it"
+    assert facts[2].actor == "pgross"
+
+
+def test_get_facts_of_an_unknown_id_is_empty(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    assert store.get_facts("fin_ghost") == []
+
+
 def test_record_facts_is_all_or_nothing(tmp_path: Path) -> None:
     """Pins D7: one bad entry in a batch rolls back every entry in it, not just its own."""
     store = _store(tmp_path)
