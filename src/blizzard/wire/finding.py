@@ -106,6 +106,26 @@ class FindingView(BaseModel):
     observed_count: int
 
 
+class FindingFactView(BaseModel):
+    """One entry in a finding's fact chain, oldest-first — `FindingFact` on the wire
+    (blizzard#487)."""
+
+    kind: str
+    recorded_at: str
+    note: str | None = None
+    actor: str | None = None
+    proposal_id: str | None = None
+    superseded_by: str | None = None
+
+
+class FindingDetailView(FindingView):
+    """`GET /api/findings/{finding_id}`'s own response model (blizzard#487) — adds the
+    finding's whole fact chain, oldest-first, atop every `FindingView` field. The list
+    read (`GET /api/findings`) returns plain `FindingView` and carries no chain."""
+
+    facts: list[FindingFactView]
+
+
 class FindingExitRequest(BaseModel):
     """`POST /api/findings/{verb}` — the shared shape for every human-driven exit and
     `reopen` except `supersede` (blizzard#394): every finding named exits (or

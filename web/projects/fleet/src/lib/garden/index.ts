@@ -66,6 +66,7 @@ export { injectHubScopesQuery } from './scopes.query';
 export { injectHubWorkItemQuery, injectHubWorkItemsQuery } from './work-item.query';
 export type { WorkItemPointer } from './work-item.query';
 export type {
+  FindingDetailView,
   FindingView,
   GardenProposalAcceptResponse,
   GardenProposalClosureKind,

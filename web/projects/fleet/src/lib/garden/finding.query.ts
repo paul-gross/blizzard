@@ -1,6 +1,11 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getFindingApiFindingsFindingIdGet, listFindingsApiFindingsGet, type FindingView } from '../api/hub';
+import {
+  getFindingApiFindingsFindingIdGet,
+  listFindingsApiFindingsGet,
+  type FindingDetailView,
+  type FindingView,
+} from '../api/hub';
 import { hubFindingKey, hubFindingsBucketKey, hubFindingsKey } from '../query-keys';
 
 /**
@@ -56,6 +61,12 @@ export function injectHubFindingsQuery(findingIds: () => readonly string[]) {
  *
  * Stays disabled while `findingId()` is null — the caller's own "nothing selected"
  * rest state is branched before this read is consulted, `bzh:frontend-empty-state-gated`.
+ *
+ * Resolves `FindingDetailView` (blizzard#487) — `GET /api/findings/{finding_id}`'s
+ * actual response, a superset of `FindingView` that adds the finding's whole
+ * append-only fact chain (`facts`, oldest-first). {@link injectHubFindingsQuery}'s
+ * fan-out keeps reading plain `FindingView` off the list endpoint; only the
+ * one-finding read carries the chain.
  */
 export function injectHubFindingQuery(findingId: () => string | null) {
   return injectQuery(() => {
@@ -63,7 +74,7 @@ export function injectHubFindingQuery(findingId: () => string | null) {
     return {
       queryKey: hubFindingKey(id),
       enabled: id !== null,
-      queryFn: async (): Promise<FindingView> => {
+      queryFn: async (): Promise<FindingDetailView> => {
         const { data, error } = await getFindingApiFindingsFindingIdGet({
           path: { finding_id: id! },
           throwOnError: false,
@@ -76,15 +87,18 @@ export function injectHubFindingQuery(findingId: () => string | null) {
 }
 
 /**
- * The findings triage bucket read — every finding for one routine+scope pair, live
- * through `GET /api/findings?routine=&scope=` (the triage surface, as distinct from
+ * The findings triage bucket read — every finding matching `routine`/`scope`, live
+ * through `GET /api/findings` (the triage surface, as distinct from
  * {@link injectHubFindingsQuery}'s by-id fan-out the docket detail's evidence table
- * reads). Both `routine` and `scope` are required by the server
- * (`ListFindingsApiFindingsGetData.query`), so the query stays disabled until both are
- * chosen, `work-item.query.ts`'s own null-tolerant disabled-query shape. Always reads
- * with `include_gone: true` — a gone finding still belongs on the triage surface until
- * a person confirms it (that's what `confirm-gone` records), so the bucket can't
- * afford to have the server drop it before a person has weighed in.
+ * reads). Widened (blizzard#486) to every routine and every scope: `routine` and
+ * `scope` are each independently optional on the server, a `null` meaning "every
+ * value on that dimension, unfiltered" rather than "not chosen yet" — so the read is
+ * always enabled, with no precondition it has to wait out. A `null` half is simply
+ * omitted from the request's query params (never sent through as the literal string
+ * `"null"`); a named half rides as-is. Always reads with `include_gone: true` — a gone
+ * finding still belongs on the triage surface until a person confirms it (that's what
+ * `confirm-gone` records), so the bucket can't afford to have the server drop it
+ * before a person has weighed in.
  */
 export function injectHubFindingsBucketQuery(routine: () => string | null, scope: () => string | null) {
   return injectQuery(() => {
@@ -92,10 +106,9 @@ export function injectHubFindingsBucketQuery(routine: () => string | null, scope
     const s = scope();
     return {
       queryKey: hubFindingsBucketKey(r, s),
-      enabled: r !== null && s !== null,
       queryFn: async (): Promise<FindingView[]> => {
         const { data, error } = await listFindingsApiFindingsGet({
-          query: { routine: r!, scope: s!, include_gone: true },
+          query: { ...(r !== null ? { routine: r } : {}), ...(s !== null ? { scope: s } : {}), include_gone: true },
           throwOnError: false,
         });
         if (error) throw error;

@@ -105,6 +105,11 @@
  *     scroll, and `FleetScopePanel`'s description editor holds the row's
  *     remaining width beside its actions — rather than a second sweep file of
  *     their own, which leaves `ng test fleet` hanging after a green suite.
+ *   - projects/fleet/src/lib/garden/finding-fact-timeline.shell-sweep.spec.ts —
+ *     the finding detail panel's fact timeline (blizzard#487), mounted through
+ *     the composed `FleetFindingPanel` rather than standalone: a genuinely
+ *     unbroken long note wraps inside its row rather than forcing the row wider
+ *     than its column, at 390/320px.
  *   - projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts —
  *     the gardening routines container's own list-beside-panel grid
  *     (blizzard#397): the list and panel sit side by side at 1280px, and
@@ -156,6 +161,12 @@
  *     with no horizontal overflow — the same `@media (max-width: 720px)` claim
  *     Routines and Proposals each carry, driven from one table rather than three
  *     copied files.
+ *   - projects/hub/src/app/gardening/gardening-findings-filters.shell-sweep.spec.ts —
+ *     the findings tab widened to every routine and every scope (blizzard#486): the
+ *     four filter chip rows (routine, scope, class, state), each now carrying a
+ *     leading "All" option, genuinely fit with no horizontal overflow, and a row
+ *     from a bucket mixing routines and scopes genuinely renders both its own
+ *     routine and scope with no horizontal overflow of the row itself, at 390/320px.
  *   - projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts —
  *     the blocked marking's adjacency to a card's status: it renders directly below the
  *     status row without moving the status's own position or overflowing the card, at
@@ -196,6 +207,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/garden-runs.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts' },
@@ -205,6 +217,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/gardening-findings-triage.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-finding-triage-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-page-grids.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-findings-filters.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },

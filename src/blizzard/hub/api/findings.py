@@ -1,9 +1,11 @@
 """Finding routes (blizzard#390; write verbs blizzard#394).
 
 ``GET /api/findings`` is the pass's own bucket read
-(blizzard-product:/plans/garden/machinery.md §Managing findings and proposals): a
-routine's live findings under one scope. The `POST /api/findings/{verb}` routes are the
-human-driven exit verbs and `reopen`, delegating to `FindingExitService`."""
+(blizzard-product:/plans/garden/machinery.md §Managing findings and proposals), widened
+to every routine and every scope (blizzard#486): `routine` and `scope` are each
+independently optional, an absent one meaning "every one, not filtered on that
+dimension". The `POST /api/findings/{verb}` routes are the human-driven exit verbs and
+`reopen`, delegating to `FindingExitService`."""
 
 from __future__ import annotations
 
@@ -19,10 +21,39 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.findings import Finding, FindingNoteRequiredError
-from blizzard.wire.finding import FindingExitRequest, FindingSupersedeRequest, FindingView
+from blizzard.hub.domain.findings import Finding, FindingFact, FindingNoteRequiredError
+from blizzard.wire.finding import (
+    FindingDetailView,
+    FindingExitRequest,
+    FindingFactView,
+    FindingSupersedeRequest,
+    FindingView,
+)
 
 router = APIRouter(prefix="/api", tags=["findings"], dependencies=[Depends(reject_runner_principal)])
+
+
+def _finding_view_fields(finding: Finding) -> dict[str, object]:
+    """The one `Finding` -> wire-dict projection — `finding_view` wraps it in
+    `FindingView.model_validate`, `get_finding` extends it with `facts` and wraps in
+    `FindingDetailView.model_validate`, so neither round-trips the other's already-
+    validated model through `model_dump` (review:F8)."""
+    return {
+        "finding_id": finding.finding_id,
+        "routine_name": finding.routine_name,
+        "scope_slug": finding.scope_slug,
+        "class": finding.class_,
+        "locus": finding.locus,
+        "summary": finding.summary,
+        "introduced": finding.introduced,
+        "introduced_at": iso_utc(finding.introduced_at) if finding.introduced_at is not None else None,
+        "first_observed_at": (iso_utc(finding.first_observed_at) if finding.first_observed_at is not None else None),
+        "live": finding.live,
+        "state": finding.state,
+        "note": finding.note,
+        "last_seen_at": iso_utc(finding.last_seen_at) if finding.last_seen_at is not None else None,
+        "observed_count": finding.observed_count,
+    }
 
 
 def finding_view(finding: Finding) -> FindingView:
@@ -30,25 +61,19 @@ def finding_view(finding: Finding) -> FindingView:
     fleet route (``blizzard.hub.api.fleet``) rather than restated there."""
     # `class_`'s alias is the Python keyword `class` — constructed by alias via
     # `model_validate`, the `_proposal_view` shape.
-    return FindingView.model_validate(
-        {
-            "finding_id": finding.finding_id,
-            "routine_name": finding.routine_name,
-            "scope_slug": finding.scope_slug,
-            "class": finding.class_,
-            "locus": finding.locus,
-            "summary": finding.summary,
-            "introduced": finding.introduced,
-            "introduced_at": iso_utc(finding.introduced_at) if finding.introduced_at is not None else None,
-            "first_observed_at": (
-                iso_utc(finding.first_observed_at) if finding.first_observed_at is not None else None
-            ),
-            "live": finding.live,
-            "state": finding.state,
-            "note": finding.note,
-            "last_seen_at": iso_utc(finding.last_seen_at) if finding.last_seen_at is not None else None,
-            "observed_count": finding.observed_count,
-        }
+    return FindingView.model_validate(_finding_view_fields(finding))
+
+
+def _fact_view(fact: FindingFact) -> FindingFactView:
+    """The one ``FindingFact`` -> ``FindingFactView`` projection, `finding_view`'s own
+    sibling for a chain entry (blizzard#487)."""
+    return FindingFactView(
+        kind=fact.kind,
+        recorded_at=iso_utc(fact.recorded_at),
+        note=fact.note,
+        actor=fact.actor,
+        proposal_id=fact.proposal_id,
+        superseded_by=fact.superseded_by,
     )
 
 
@@ -80,23 +105,37 @@ def _reread(findings: list[Finding], services: HubServices) -> list[FindingView]
 @router.get("/findings", response_model=list[FindingView], dependencies=[Depends(require(FLEET_VIEW))])
 def list_findings(
     services: Annotated[HubServices, Depends(get_services)],
-    routine: Annotated[str, Query()],
-    scope: Annotated[str, Query()],
+    routine: Annotated[str | None, Query()] = None,
+    scope: Annotated[str | None, Query()] = None,
     include_gone: Annotated[bool, Query()] = False,
 ) -> list[FindingView]:
-    """A routine's findings under one scope — live only, unless `include_gone` (D3),
-    which also surfaces every exited finding, not just a merely `gone` one; the read a
-    running pass calls to cross-reference its own bucket."""
-    return [finding_view(f) for f in services.findings.list_for(routine, scope, include_gone=include_gone)]
+    """The findings bucket, widened to every routine and every scope (blizzard#486) —
+    live only, unless `include_gone` (D3), which also surfaces every exited finding, not
+    just a merely `gone` one. `routine` and `scope` are both optional, independently:
+
+    - both named — one routine's findings under one scope (`list_for`)
+    - `routine` named, `scope` absent — one routine's findings across every scope it
+      holds (`list_for_routine`)
+    - `routine` absent, `scope` named — every routine's findings under one scope
+    - both absent — every finding across every routine and every scope
+
+    The last two are `list_across_routines`'s own two shapes."""
+    if routine is not None and scope is not None:
+        return [finding_view(f) for f in services.findings.list_for(routine, scope, include_gone=include_gone)]
+    if routine is not None:
+        return [finding_view(f) for f in services.findings.list_for_routine(routine, include_gone=include_gone)]
+    return [finding_view(f) for f in services.findings.list_across_routines(scope, include_gone=include_gone)]
 
 
-@router.get("/findings/{finding_id}", response_model=FindingView, dependencies=[Depends(require(FLEET_VIEW))])
-def get_finding(finding_id: str, services: Annotated[HubServices, Depends(get_services)]) -> FindingView:
-    """One finding's whole record; 404 on an unknown id."""
-    finding = services.findings.get(finding_id)
-    if finding is None:
+@router.get("/findings/{finding_id}", response_model=FindingDetailView, dependencies=[Depends(require(FLEET_VIEW))])
+def get_finding(finding_id: str, services: Annotated[HubServices, Depends(get_services)]) -> FindingDetailView:
+    """One finding's whole record, plus its whole fact chain oldest-first (blizzard#487);
+    404 on an unknown id."""
+    result = services.findings.get_with_facts(finding_id)
+    if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown finding {finding_id}")
-    return finding_view(finding)
+    finding, facts = result
+    return FindingDetailView.model_validate({**_finding_view_fields(finding), "facts": [_fact_view(f) for f in facts]})
 
 
 def _exit_verb(

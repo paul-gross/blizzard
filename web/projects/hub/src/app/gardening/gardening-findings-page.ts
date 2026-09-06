@@ -26,17 +26,17 @@ import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters
  * A container: it injects the bucket read through
  * `gardening-findings-bucket-filters.ts` and forwards plain rows to the
  * presentational {@link FleetFindingList}. The routine/scope pair, the class/state
- * filters, and the bucket read all live in that module — the pair is **persistent
- * filter state independent of selection**, seeded from the fetched routine list's
- * own first row, since this tab mounts no run list to borrow a pairing from. All
- * four render as `fleet-kit-chips`, always visible (no accordion — no other
- * gardening tab collapses its filters, so this one doesn't either), one labeled
- * row per filter — `kit-fact-list.css`'s own fixed-label-column shape, so the four
- * groups read distinctly instead of running together in one row. Class and state
- * chips carry an "All" option and come from the fetched bucket's own `class`
- * values (never a hardcoded vocabulary) and the fixed seven-value state
- * vocabulary; routine and scope carry no "All" option, since the bucket read
- * requires a concrete routine and scope.
+ * filters, and the bucket read all live in that module. The bucket widened to
+ * every routine and every scope (blizzard#486) — its resting state, with no query
+ * params at all, reads everything, no seeded pair required. All four filters
+ * render as `fleet-kit-chips`, always visible (no accordion — no other gardening
+ * tab collapses its filters, so this one doesn't either), one labeled row per
+ * filter — `kit-fact-list.css`'s own fixed-label-column shape, so the four groups
+ * read distinctly instead of running together in one row. Every chip row now
+ * carries an "All" option: class and state's come from the fetched bucket's own
+ * `class` values (never a hardcoded vocabulary) and the fixed seven-value state
+ * vocabulary respectively; routine and scope's each name every fetched
+ * routine/scope, per the widened bucket.
  */
 @Component({
   selector: 'app-gardening-findings-page',
@@ -56,7 +56,10 @@ export class GardeningFindingsPage {
   /** Pared to what the 320px master column renders — `observed_count` and
    * `introduced` show in the detail pane once the row is picked, not here;
    * `last_seen_at` rides both, since the row's own fourth line is the most recent
-   * observation. */
+   * observation. Only the dimension the active filter leaves unnamed shows on the
+   * row (D4): a bucket widened to every routine or every scope needs each row to
+   * say which it came from, but a bucket already filtered to one doesn't need it
+   * repeated on every row. */
   protected readonly findingListRows = computed<readonly FindingListRowVm[]>(() =>
     this.filters.filteredBucket().map((f) => ({
       findingId: f.finding_id,
@@ -65,15 +68,13 @@ export class GardeningFindingsPage {
       summary: f.summary,
       state: f.state,
       lastSeenAt: f.last_seen_at,
+      routineName: this.filters.selectedRoutine() === null ? f.routine_name : null,
+      scopeSlug: this.filters.selectedScope() === null ? f.scope_slug : null,
     })),
   );
 
-  /** The bucket panel's own "nothing chosen yet" rest state, branched before
-   * consulting the bucket query's own async state. */
   protected readonly bucketState = computed<KitAsyncStateValue>(() =>
-    this.filters.selectedRoutine() === null || this.filters.selectedScope() === null
-      ? 'empty'
-      : asyncState(this.filters.bucketQuery, this.findingListRows().length === 0),
+    asyncState(this.filters.bucketQuery, this.findingListRows().length === 0),
   );
 
   protected selectFinding(findingId: string): void {

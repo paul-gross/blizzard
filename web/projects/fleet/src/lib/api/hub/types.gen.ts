@@ -1806,6 +1806,76 @@ export type ExternalSubscriptionUsageWindowView = {
 };
 
 /**
+ * FindingDetailView
+ *
+ * `GET /api/findings/{finding_id}`'s own response model (blizzard#487) — adds the
+ * finding's whole fact chain, oldest-first, atop every `FindingView` field. The list
+ * read (`GET /api/findings`) returns plain `FindingView` and carries no chain.
+ */
+export type FindingDetailView = {
+    /**
+     * Class
+     */
+    class: string;
+    /**
+     * Facts
+     */
+    facts: Array<FindingFactView>;
+    /**
+     * Finding Id
+     */
+    finding_id: string;
+    /**
+     * First Observed At
+     */
+    first_observed_at?: string | null;
+    /**
+     * Introduced
+     */
+    introduced?: string | null;
+    /**
+     * Introduced At
+     */
+    introduced_at?: string | null;
+    /**
+     * Last Seen At
+     */
+    last_seen_at: string | null;
+    /**
+     * Live
+     */
+    live: boolean;
+    /**
+     * Locus
+     */
+    locus: string;
+    /**
+     * Note
+     */
+    note?: string | null;
+    /**
+     * Observed Count
+     */
+    observed_count: number;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+    /**
+     * Scope Slug
+     */
+    scope_slug: string;
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Summary
+     */
+    summary: string;
+};
+
+/**
  * FindingExitRequest
  *
  * `POST /api/findings/{verb}` — the shared shape for every human-driven exit and
@@ -1821,6 +1891,39 @@ export type FindingExitRequest = {
      * Note
      */
     note: string;
+};
+
+/**
+ * FindingFactView
+ *
+ * One entry in a finding's fact chain, oldest-first — `FindingFact` on the wire
+ * (blizzard#487).
+ */
+export type FindingFactView = {
+    /**
+     * Actor
+     */
+    actor?: string | null;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Note
+     */
+    note?: string | null;
+    /**
+     * Proposal Id
+     */
+    proposal_id?: string | null;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Superseded By
+     */
+    superseded_by?: string | null;
 };
 
 /**
@@ -6993,15 +7096,15 @@ export type ListEventsApiEventsGetResponse = ListEventsApiEventsGetResponses[key
 export type ListFindingsApiFindingsGetData = {
     body?: never;
     path?: never;
-    query: {
+    query?: {
         /**
          * Routine
          */
-        routine: string;
+        routine?: string | null;
         /**
          * Scope
          */
-        scope: string;
+        scope?: string | null;
         /**
          * Include Gone
          */
@@ -7217,7 +7320,7 @@ export type GetFindingApiFindingsFindingIdGetResponses = {
     /**
      * Successful Response
      */
-    200: FindingView;
+    200: FindingDetailView;
 };
 
 export type GetFindingApiFindingsFindingIdGetResponse = GetFindingApiFindingsFindingIdGetResponses[keyof GetFindingApiFindingsFindingIdGetResponses];

@@ -62,6 +62,11 @@
         <fleet-kit-prose-block label="Note" [text]="panel.note" testid="fp-note" />
       }
 
+      <section class="fp-timeline" data-testid="fp-timeline">
+        <h4>Timeline</h4>
+        <fleet-finding-fact-timeline [facts]="panel.facts" />
+      </section>
+
       @if (panel.workItem; as workItem) {
         <p class="fp-work-item" data-testid="fp-work-item">
           Work item:

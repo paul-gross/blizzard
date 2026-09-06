@@ -15,16 +15,31 @@ import { injectQueryFilters } from '../route-state';
 
 const ALL_CLASSES = 'all';
 const ALL_STATES = 'all';
+/** UI-only chip sentinels for the "every routine"/"every scope" chip — never sent to
+ * the server and never stored in the URL, where `null` is what actually rides both
+ * the URL and the API call. Routine names and scope slugs are operator-authored,
+ * exactly like `class` below, so they carry the same collision-guarding prefix
+ * (review:F1). */
+const ALL_ROUTINES = 'all';
+const ALL_SCOPES = 'all';
 
 /** `class` is opaque, deployment-chosen vocabulary — this prefix keeps a real class
  * literally named `all` from colliding with {@link ALL_CLASSES}. */
 const CLASS_VALUE_PREFIX = 'class:';
+/** Routine names are operator-authored, exactly like `class` above — this prefix
+ * keeps a real routine literally named `all` from colliding with {@link ALL_ROUTINES}. */
+const ROUTINE_VALUE_PREFIX = 'routine:';
+/** Scope slugs are operator-authored, exactly like `class` above — this prefix
+ * keeps a real scope literally named `all` from colliding with {@link ALL_SCOPES}. */
+const SCOPE_VALUE_PREFIX = 'scope:';
 
 export interface FindingsBucketFilters {
   readonly selectedRoutine: Signal<string | null>;
   readonly selectedScope: Signal<string | null>;
   readonly routineChips: Signal<readonly KitChipOption[]>;
+  readonly routineChipValue: Signal<string>;
   readonly scopeChips: Signal<readonly KitChipOption[]>;
+  readonly scopeChipValue: Signal<string>;
   onRoutineChoose(routine: string): void;
   onScopeChoose(scope: string): void;
   readonly classChips: Signal<readonly KitChipOption[]>;
@@ -45,27 +60,17 @@ export interface FindingsBucketFilters {
  *
  * All four filters live in the URL's query string (`route-state.ts`), not in
  * signals of their own: a filtered bucket is then a link the operator can send
- * somebody, and it survives every navigation this tab makes. Reading them back
- * through `injectQueryFilters` also means the seed below is only ever a
- * *fallback* — a URL that names no routine still resolves to one.
+ * somebody, and it survives every navigation this tab makes.
  *
- * The pair is **persistent filter state independent of selection** — the routine
- * seeds from `firstRoutine` (the fetched routine list's own first row), and the
- * scope from whichever routine is *in effect*, URL-named or seeded, never from the
- * first row independently. That keeps the two halves coherent for a URL that names
- * only one of them: `?routine=weekly` resolves scope to weekly's own default, not
- * to the first row's. This tab mounts no run list of its own to borrow a
- * routine/scope pairing from (Findings used to share a tab with Runs, and seeded
- * from the run list's first row — that borrow broke once the two tabs split, so it
- * seeds off a routine's own declared default scope instead, the same pairing a run
- * of that routine would have used).
- *
- * Routine and scope render as {@link KitChipOption} rows, `classChips`/`stateChips`'s
- * own shape, but carry **no "All" option**: the bucket read
- * (`injectHubFindingsBucketQuery`) requires a concrete routine and a concrete
- * scope, there is no "every routine" read behind it, so one of each stays selected
- * at all times — {@link selectedRoutine}/{@link selectedScope} feed `selectedValue`
- * directly, always resolving to the seed until an explicit pick replaces it.
+ * The bucket widened to every routine and every scope (blizzard#486): its resting
+ * state, with no query params at all, is "every routine, every scope" — `null`/`null`
+ * — rather than a seeded pair. {@link selectedRoutine}/{@link selectedScope} read the
+ * URL straight through with no fallback, since a `null` is now a fully meaningful
+ * "all" state and not "nothing chosen yet". Routine and scope render as
+ * {@link KitChipOption} rows, `classChips`/`stateChips`'s own shape, each now carrying
+ * a leading "All" chip ({@link routineChipValue}/{@link scopeChipValue} map the `null`
+ * filter state onto it, `classChipValue`'s own pattern) — there is no longer a
+ * "requires a concrete pair" constraint pinning one of each selected at all times.
  */
 export function injectFindingsBucketFilters(): FindingsBucketFilters {
   const url = injectQueryFilters();
@@ -74,49 +79,52 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
   const routines = computed<readonly RoutineView[]>(() => routinesQuery.data() ?? []);
   const scopes = computed<readonly ScopeView[]>(() => scopesQuery.data() ?? []);
 
-  const firstRoutine = computed<RoutineView | null>(() => routines()[0] ?? null);
-  const defaultRoutine = computed<string | null>(() => firstRoutine()?.name ?? null);
+  const selectedRoutine = computed<string | null>(() => url.read('routine'));
+  const selectedScope = computed<string | null>(() => url.read('scope'));
 
-  const selectedRoutine = computed<string | null>(() => url.read('routine') ?? defaultRoutine());
-
-  /** The row {@link selectedRoutine} names, whether it got there from the URL or from
-   * the seed — so the scope seed below follows the routine actually in effect rather
-   * than the list's first row. */
-  const selectedRoutineRow = computed<RoutineView | null>(() => {
-    const name = selectedRoutine();
-    return name === null ? null : (routines().find((r) => r.name === name) ?? null);
+  const routineChips = computed<readonly KitChipOption[]>(() => [
+    { value: ALL_ROUTINES, label: 'All routines', testid: 'gardening-findings-routine-all' },
+    ...routines().map((r) => ({
+      value: ROUTINE_VALUE_PREFIX + r.name,
+      label: r.name,
+      testid: `gardening-findings-routine-item-${r.name}`,
+    })),
+  ]);
+  const routineChipValue = computed<string>(() => {
+    const r = selectedRoutine();
+    return r === null ? ALL_ROUTINES : ROUTINE_VALUE_PREFIX + r;
   });
-  const defaultScope = computed<string | null>(() => selectedRoutineRow()?.default_scope_slug ?? null);
+  const scopeChips = computed<readonly KitChipOption[]>(() => [
+    { value: ALL_SCOPES, label: 'All scopes', testid: 'gardening-findings-scope-all' },
+    ...scopes().map((s) => ({
+      value: SCOPE_VALUE_PREFIX + s.slug,
+      label: s.slug,
+      testid: `gardening-findings-scope-item-${s.slug}`,
+    })),
+  ]);
+  const scopeChipValue = computed<string>(() => {
+    const s = selectedScope();
+    return s === null ? ALL_SCOPES : SCOPE_VALUE_PREFIX + s;
+  });
 
-  const selectedScope = computed<string | null>(() => url.read('scope') ?? defaultScope());
-
-  const routineChips = computed<readonly KitChipOption[]>(() =>
-    routines().map((r) => ({ value: r.name, label: r.name, testid: `gardening-findings-routine-item-${r.name}` })),
-  );
-  const scopeChips = computed<readonly KitChipOption[]>(() =>
-    scopes().map((s) => ({ value: s.slug, label: s.slug, testid: `gardening-findings-scope-item-${s.slug}` })),
-  );
-
-  /** Picking a scope pins the routine's current effective value alongside it (F2):
-   * the routine seed is the fetched list's first row, so leaving it unnamed would
-   * let the same link resolve to a different routine once the list grows.
-   *
-   * Picking a *routine* carries scope over only when the operator actually chose
-   * one — `url.read`, not {@link selectedScope}. An explicit scope is a choice and
-   * survives the pick; an unnamed scope is still sitting on the seed, and pinning
-   * its value would staple the old routine's default onto the new routine, a
-   * pairing nobody chose. Left unnamed, it re-seeds off the newly picked routine's
-   * own `default_scope_slug` — the pairing a run of that routine would have used.
-   *
-   * Each pick also clears the class/state filters (F5), so a filter chosen against
-   * the old bucket can't strand the new one looking empty with no active chip
-   * explaining why. Both halves of that go out as one patch, so a pick is one
-   * navigation. */
-  function onRoutineChoose(routine: string): void {
-    url.patch({ routine, scope: url.read('scope'), class: null, state: null });
+  /** Each pick patches only its own URL param — no more pinning the other
+   * dimension's current value alongside it (blizzard#486 retired the seeding chain
+   * that pinning existed to keep coherent). It also clears the class/state filters
+   * (F5), so a filter chosen against the old bucket can't strand the new one
+   * looking empty with no active chip explaining why. */
+  function onRoutineChoose(value: string): void {
+    url.patch({
+      routine: value === ALL_ROUTINES ? null : value.slice(ROUTINE_VALUE_PREFIX.length),
+      class: null,
+      state: null,
+    });
   }
-  function onScopeChoose(scope: string): void {
-    url.patch({ routine: selectedRoutine(), scope, class: null, state: null });
+  function onScopeChoose(value: string): void {
+    url.patch({
+      scope: value === ALL_SCOPES ? null : value.slice(SCOPE_VALUE_PREFIX.length),
+      class: null,
+      state: null,
+    });
   }
 
   const bucketQuery = injectHubFindingsBucketQuery(selectedRoutine, selectedScope);
@@ -160,7 +168,9 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
     selectedRoutine,
     selectedScope,
     routineChips,
+    routineChipValue,
     scopeChips,
+    scopeChipValue,
     onRoutineChoose,
     onScopeChoose,
     classChips,
