@@ -155,6 +155,48 @@ describe('RunnerPanelView', () => {
     expect(el.querySelector('[data-testid="runner-pace-bar"]')).toBeNull();
   });
 
+  it('renders per-subscription groups instead of the flat loop when the row carries subscriptionPaces (blizzard#478)', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_multi', {
+        // Both subscriptions report a "5h" window, and the row also still carries the
+        // legacy flat paceBars — the grouped render must win, exclusively, so the same
+        // windows never render twice.
+        paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }],
+        subscriptionPaces: [
+          { slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }] },
+          { slug: 'anthropic-secondary', name: 'Anthropic (secondary)', paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }] },
+        ],
+      }),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const groupsHost = el.querySelector('[data-runner="rn_multi"] [data-testid="runner-subscription-groups"]');
+    expect(groupsHost).not.toBeNull();
+    expect(groupsHost?.querySelectorAll('[data-testid="subscription-pace-group"]')).toHaveLength(2);
+    // The legacy flat loop is withheld entirely once the grouped render has data.
+    expect(el.querySelector('[data-runner="rn_multi"] [data-testid="runner-pace-bars"]')).toBeNull();
+  });
+
+  it('falls back to the legacy flat loop for a runner reporting only the single-subscription shape (blizzard#478)', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_legacy', {
+        paceBars: [{ window: '5h', utilizationPct: 55, elapsedPct: 30 }],
+        subscriptionPaces: [],
+      }),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-runner="rn_legacy"] [data-testid="runner-subscription-groups"]')).toBeNull();
+    const bars = el.querySelectorAll('[data-runner-pace-bar="rn_legacy"]');
+    expect(bars).toHaveLength(1);
+  });
+
   it('emits togglePause with the row when the pause/resume button is activated', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
     fixture.componentRef.setInput('state', 'ready');

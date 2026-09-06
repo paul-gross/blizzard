@@ -76,12 +76,19 @@
                 [total]="row.env_capacity ?? 0"
               />
             }
-            <!-- The rate-limit pacing bars (issue #218): one stacked utilization/elapsed
-                 pair per external-subscription window the runner last sampled. Rendered
-                 straight off the folded paceBars array — empty (no bars, not zeroed
-                 ones) for a runner that has never sampled, or whose sample the hub has
-                 already nulled as stale. -->
-            @if (row.paceBars.length > 0) {
+            <!-- The rate-limit pacing bars: one group per declared subscription, keyed
+                 by slug (blizzard#478), so two subscriptions sharing a window label
+                 never collide. Falls back to the legacy flat loop only for a runner
+                 still on the single-subscription shape alone (blizzard#436) — a runner
+                 reporting the per-slug collection renders that exclusively, never both,
+                 so the same windows never render twice. -->
+            @if (row.subscriptionPaces.length > 0) {
+              <fleet-subscription-pace-group
+                data-testid="runner-subscription-groups"
+                [attr.data-runner-subscription-groups]="row.runner_id"
+                [subscriptionPaces]="row.subscriptionPaces"
+              />
+            } @else if (row.paceBars.length > 0) {
               <div class="pace-bars" data-testid="runner-pace-bars">
                 @for (bar of row.paceBars; track bar.window) {
                   <fleet-kit-pace-bar

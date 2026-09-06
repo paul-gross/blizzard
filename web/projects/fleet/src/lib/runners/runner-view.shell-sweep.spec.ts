@@ -37,14 +37,45 @@ const ROW: RunnerRow = {
   subscriptionPaces: [],
 };
 
-async function render() {
+const SUBSCRIPTION_ROW: RunnerRow = {
+  runner_id: 'rn_subs',
+  workspace_id: 'ws_a',
+  registered_at: NOW,
+  last_seen_at: NOW,
+  online: true,
+  hub_paused: false,
+  locally_paused: false,
+  claims: [],
+  used: 0,
+  paceBars: [],
+  // Two declared subscriptions sharing an identical "5h" window label (blizzard#478) —
+  // the layout claim this sweep exists to prove is that the two groups stay visually
+  // distinct rather than merging into one shared bar list.
+  subscriptionPaces: [
+    {
+      slug: 'anthropic-default',
+      name: 'Anthropic (default)',
+      paceBars: [
+        { window: '5h', utilizationPct: 62, elapsedPct: 38 },
+        { window: '7d', utilizationPct: 81, elapsedPct: 90 },
+      ],
+    },
+    {
+      slug: 'anthropic-secondary',
+      name: 'Anthropic (secondary)',
+      paceBars: [{ window: '5h', utilizationPct: 15, elapsedPct: 5 }],
+    },
+  ],
+};
+
+async function render(rows: readonly RunnerRow[] = [ROW]) {
   await TestBed.configureTestingModule({
     imports: [RunnerPanelView],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(RunnerPanelView);
   fixture.componentRef.setInput('state', 'ready');
-  fixture.componentRef.setInput('rows', [ROW]);
+  fixture.componentRef.setInput('rows', rows);
   await fixture.whenStable();
   return fixture;
 }
@@ -87,6 +118,55 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
 
       // Nothing pushes the panel wider than its own box — the pace bars fit the rail
       // rather than clipping or forcing horizontal scroll.
+      expect(
+        panel.scrollWidth,
+        `panel overflows horizontally at 390px (${panel.scrollWidth} > ${panel.clientWidth})`,
+      ).toBeLessThanOrEqual(panel.clientWidth);
+    } finally {
+      root.remove();
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    }
+
+    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  it('keeps two subscriptions with an identical window label visually distinct, with no page errors or horizontal overflow at ~390px (blizzard#478)', async () => {
+    const pageErrors: string[] = [];
+    const onError = (e: ErrorEvent) => pageErrors.push(e.message);
+    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+
+    const fixture = await render([SUBSCRIPTION_ROW]);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
+      expect(panel).not.toBeNull();
+
+      const groups = root.querySelectorAll<HTMLElement>('[data-testid="subscription-pace-group"]');
+      expect(groups).toHaveLength(2);
+
+      const defaultGroup = root.querySelector<HTMLElement>('[data-subscription-slug="anthropic-default"]')!;
+      const secondaryGroup = root.querySelector<HTMLElement>('[data-subscription-slug="anthropic-secondary"]')!;
+
+      // The two groups sit on distinct rows, not overlapping — a genuine stack, not a
+      // collapsed one.
+      expect(defaultGroup.getBoundingClientRect().top).toBeLessThan(secondaryGroup.getBoundingClientRect().top);
+
+      // Each group's own "5h" window stays scoped to it — the identical label never
+      // merges the two subscriptions' bars into one.
+      expect(defaultGroup.querySelectorAll('[data-pace-window="5h"]')).toHaveLength(1);
+      expect(secondaryGroup.querySelectorAll('[data-pace-window="5h"]')).toHaveLength(1);
+
+      // Nothing pushes the panel wider than its own box at the narrow, mobile-reachable
+      // rail width.
       expect(
         panel.scrollWidth,
         `panel overflows horizontally at 390px (${panel.scrollWidth} > ${panel.clientWidth})`,

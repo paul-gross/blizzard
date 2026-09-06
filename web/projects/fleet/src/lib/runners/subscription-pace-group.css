@@ -1,0 +1,28 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 3px;
+}
+.sub-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sub-name {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.pace-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sub-unsampled {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+}

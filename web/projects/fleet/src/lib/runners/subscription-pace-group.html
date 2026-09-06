@@ -1,0 +1,26 @@
+@for (group of subscriptionPaces(); track group.slug) {
+  <div class="sub-group" data-testid="subscription-pace-group" [attr.data-subscription-slug]="group.slug">
+    <div class="sub-name" data-testid="subscription-pace-group-name">{{ group.name }}</div>
+    @if (group.paceBars.length > 0) {
+      <div class="pace-bars" data-testid="subscription-pace-group-bars">
+        @for (bar of group.paceBars; track bar.window) {
+          <fleet-kit-pace-bar
+            data-testid="runner-pace-bar"
+            [attr.data-pace-window]="bar.window"
+            [label]="bar.window"
+            [utilizationPct]="bar.utilizationPct"
+            [elapsedPct]="bar.elapsedPct"
+          />
+        }
+      </div>
+    } @else {
+      <div
+        class="sub-unsampled"
+        data-testid="subscription-pace-group-unsampled"
+        [attr.aria-label]="group.name + ' usage not yet sampled'"
+      >
+        NOT YET SAMPLED
+      </div>
+    }
+  </div>
+}

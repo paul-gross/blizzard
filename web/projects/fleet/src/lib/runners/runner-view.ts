@@ -10,6 +10,7 @@ import { KitSlotBar } from '../kit/kit-slot-bar';
 import type { Tone } from '../kit/tone';
 import { formatSeenAgo } from '../when';
 import type { RunnerRow } from './runner-panel';
+import { SubscriptionPaceGroup } from './subscription-pace-group';
 
 /**
  * The runner registry's presentational half (issue #80) — the registry
@@ -20,7 +21,7 @@ import type { RunnerRow } from './runner-panel';
 @Component({
   selector: 'fleet-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitPaceBar, KitPanel, KitSlotBar],
+  imports: [KitAsyncState, KitBadge, KitPaceBar, KitPanel, KitSlotBar, SubscriptionPaceGroup],
   templateUrl: './runner-view.html',
   styleUrl: './runner-view.css',
 })
