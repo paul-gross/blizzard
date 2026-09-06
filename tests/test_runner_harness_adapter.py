@@ -22,7 +22,7 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.wire.envelope import NodeEnvelope
 from tests.conftest import _WORKER_IDENTITY_ENV
-from tests.runner_fakes import make_envelope
+from tests.runner_fakes import FakeProbe, make_envelope
 
 _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
 
@@ -155,6 +155,42 @@ def test_spawn_without_resume_from_is_unchanged(monkeypatch: pytest.MonkeyPatch)
     assert cmd[cmd.index("--session-id") + 1] == "fresh-hint"
     assert "--resume" not in cmd
     assert handle.session_id == "fresh-hint"
+
+
+@pytest.mark.unit
+def test_spawn_stamps_process_start_time_from_the_injected_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    # `_FakeSpawnedProcess.pid` is implausibly large so the real `/proc` reader would find
+    # nothing — proving the stamp came from the injected probe, not a fallback to `/proc`.
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
+    probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-start-time-token")})
+    adapter = ClaudeCodeAdapter(binary="claude", process=probe)
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint")
+
+    assert handle.pid == _FakeSpawnedProcess.pid
+    assert handle.process_start_time == "fake-start-time-token"
+
+
+@pytest.mark.unit
+def test_judge_stamps_process_start_time_from_the_injected_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
+    probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-judge-start-time")})
+    adapter = ClaudeCodeAdapter(binary="claude", process=probe)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+
+    handle = adapter.judge(str(workdir), "sess-123", "Assess the build.", str(workdir / "judge-output.json"))
+
+    assert handle.pid == _FakeSpawnedProcess.pid
+    assert handle.process_start_time == "fake-judge-start-time"
 
 
 # --------------------------------------------------------------------------- #
