@@ -4405,9 +4405,9 @@
    "total": 233
   },
   "test_basic_harness_workflow_graph.py": {
-   "comments": 18,
-   "docstrings": 5,
-   "total": 111
+   "comments": 25,
+   "docstrings": 6,
+   "total": 128
   },
   "test_blocked_marking_api.py": {
    "comments": 8,

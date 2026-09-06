@@ -1,25 +1,22 @@
-# The basic-harness-workflow graph — build -> review -> deliver -> retrospective, on one
-# single linear track, at the frontier capability tier.
+# The basic-harness-workflow graph — build -> review -> pre-push -> deliver ->
+# retrospective, on one single linear track, with review <-> iterate as its own bounce
+# loop off that spine.
 #
 # Harness work — workspace skills, `blizzard-context` convention rules, graph prompts,
 # agent docs, and other agent-capability surfaces — is the fleet's own operating rules:
-# unusually high-leverage per token and judgement-heavy per line, so this lane runs on
-# the strongest available model rather than the mechanical `blizzard:basic` tier the
-# other lightweight lane (`bas-dwf`) pins. It is otherwise the SAME lightweight shape as
-# `basic-development-workflow`, cut down one node further: no `pre-push` node at all.
+# unusually high-leverage per token and judgement-heavy per line. Frontier authors once;
+# advanced reviews and iterates (issue #493): only `build`, the first authoring pass,
+# runs on the frontier tier. `review`'s cold-eyes gate, the `iterate` loop that answers
+# its findings, and the `pre-push` integration step all run on the advanced tier
+# instead — none of the three is doing first-draft authoring, so none needs frontier
+# judgement a second time.
 #
-# Why no pre-push: `bas-dwf` keeps one so a rejected fast-forward (the base moved) can be
-# resolved by rebasing without re-earning verification — the point of that node is
-# recovering from a moved base without disturbing an already-reviewed change. This lane
-# is the user-stated minimum instead (issue #231): build, review, deliver, plus the
-# closing retrospective every lane owes. A rejected fast-forward here routes straight
-# back to `build` — the only station left that can rebase and revalidate — carrying the
-# same "why you're back" context `bas-dwf`'s `pre-push.from-deliver.md` gives its own
-# re-entry, just landing one node earlier.
-#
-# Like `bas-dwf`: no `plan` node (harness changes are prose-and-convention shaped; inline
-# planning suffices) and no standalone `verify` node (`build` fuses build and
-# verification into one node).
+# It is otherwise the SAME lightweight shape as `basic-development-workflow`: no `plan`
+# node (harness changes are prose-and-convention shaped; inline planning suffices) and
+# no standalone `verify` node (`build` fuses build and verification into one node).
+# `pre-push` is ported from `bas-dwf` for the same reason that graph keeps one: a
+# rejected fast-forward (the base moved) is a moved base, not a wrong change, and is
+# resolved by rebasing without re-earning the frontier build.
 #
 # Delivery is PR-free: `deliver` runs the packaged `land_ff` script, which fast-forwards
 # each repo's base branch ref directly to the chunk's own commit instead of opening and
@@ -36,19 +33,33 @@
 name: bas-hwf
 entry: build
 
-# Named session pools (issue #144), both pinned to the frontier tier — the whole point
-# of this lane (issue #231). Two lineages:
+# Named session pools (issue #144). Four lineages, split across two tiers:
 #
-#   code  the mechanical build lineage, BOUNDED — it is the one that can accumulate
-#         indefinitely across a review-fail (or deliver-conflict) loop.
-#   gate  the cold-eyes review. No `rotate:` block: a gate is only ever reached through
-#         `fresh:gate`, so its head is minted every entry and rotation never applies.
+#   code      the mechanical build lineage, on the frontier tier — the one pass this
+#             lane still spends its strongest model on. BOUNDED: it can accumulate
+#             indefinitely across its own fail self-loop.
+#   gate      the cold-eyes review, on the advanced tier. No `rotate:` block: a gate is
+#             only ever reached through `fresh:gate`, so its head is minted every entry
+#             and rotation never applies.
+#   iteration the `iterate` node's own lineage, on the advanced tier — reads the code
+#             cold rather than resuming `code`'s own build context, giving the fixer a
+#             lineage that has not already argued with the reviewer. Named `iteration`,
+#             not `iterate`: a session name colliding with a node name is a mint-time
+#             error. BOUNDED, across the review-fail loop.
+#   prepush   the `pre-push` node's own lineage, on the advanced tier. BOUNDED, across
+#             the deliver-conflict loop.
+#
+# Every pool carries the same `compaction_window` (issue #343) as a ceiling sitting
+# above the bounded lineages' own `rotate:` bounds, and inert on `gate`'s unbounded one
+# for the same reason `rotate:` is absent there — see `advanced-development-workflow`
+# for where the window and the three rotate numbers come from.
 #
 # Declared here rather than inherited — a graph referencing a pool it does not declare
 # is rejected at mint, and `graph_sync` would go red on first boot.
 sessions:
   code:
     model: ["blizzard:frontier"]
+    compaction_window: "450000"
     rotate:
       # Harness INVOCATIONS, not node-steps: one node-step burns two or three.
       max_invocations: 12
@@ -57,7 +68,22 @@ sessions:
       max_context_tokens: 300000
       max_transcript_bytes: 10000000
   gate:
-    model: ["blizzard:frontier"]
+    model: ["blizzard:advanced"]
+    compaction_window: "450000"
+  iteration:
+    model: ["blizzard:advanced"]
+    compaction_window: "450000"
+    rotate:
+      max_invocations: 12
+      max_context_tokens: 300000
+      max_transcript_bytes: 10000000
+  prepush:
+    model: ["blizzard:advanced"]
+    compaction_window: "450000"
+    rotate:
+      max_invocations: 12
+      max_context_tokens: 300000
+      max_transcript_bytes: 10000000
 
 nodes:
   build:
@@ -67,13 +93,6 @@ nodes:
       # own prior context, not whichever node ran last (review is deliberately fresh, so
       # bare `resume` would otherwise hand build its cold-read session instead of its own)
     produces:
-      # The refutation channel (see prompts/build.from-review.md): review findings the
-      # build declines rather than fixes, with the argument. `review` is a fresh cold read
-      # every pass, so without this it re-raises a deliberately declined finding forever;
-      # it now must accept or reject each refutation explicitly. Doubly worth having in
-      # this lane, where findings are judgements about prose and convention rather than
-      # about code that either works or doesn't.
-      - review-finding-refutes
       - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
     judgement:
       prompt: ./prompts/build.judgement.md
@@ -94,17 +113,74 @@ nodes:
     prompt: ./prompts/review.md
     session: fresh:gate  # cold eyes for review; the default is resume
     produces:
-      - review-findings  # asset artifact — carried back into build on a fail
+      - review-findings  # asset artifact — carried back into iterate on a fail
     judgement:
       prompt: ./prompts/review.judgement.md
       choices:
         pass:
-          description: The submitted work passes review and is ready to deliver.
-          to: deliver
+          description: The submitted work passes review and is ready for the pre-push integration step.
+          to: pre-push
         fail:
           description: Review found blocking issues, recorded in the review-findings asset.
-          to: build  # THE LOOP: the findings asset rides this edge back into build
-          prompt_addendum: ./prompts/build.from-review.md
+          to: iterate  # THE LOOP: the findings asset rides this edge back into iterate
+          prompt_addendum: ./prompts/iterate.from-review.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  iterate:
+    executor: runner
+    prompt: ./prompts/iterate.md
+    session: resume:iteration  # explicit: the review-fail loop's own lineage,
+      # separate from build's — a fixer that has not already argued with the reviewer
+    produces:
+      # The refutation channel (see prompts/iterate.from-review.md): review findings
+      # this node declines rather than fixes, with the argument. `review` is a fresh
+      # cold read every pass, so without this it re-raises a deliberately declined
+      # finding forever; it now must accept or reject each refutation explicitly.
+      - review-finding-refutes
+      - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
+    judgement:
+      prompt: ./prompts/iterate.judgement.md
+      choices:
+        pass:
+          description: Every review finding is answered — fixed or refuted on the record — committed and pushed.
+          to: review
+        fail:
+          description: The findings are not yet fully answered; the failure output is attached.
+          to: iterate
+          prompt_addendum: ./prompts/iterate.from-iterate.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  pre-push:
+    executor: runner
+    prompt: ./prompts/pre-push.md
+    session: resume:prepush  # its own lineage — accumulates across the
+      # deliver-conflict loop, distinct from `code` and `iteration`
+    produces:
+      - pre-push-summary
+      - retrospective
+      # A rebase REWRITES the branch, so the commit build (or iterate) declared is
+      # orphaned the moment this node runs. Re-declaring here is what lets `deliver`
+      # fast-forward to the rebased tip instead of the stale one it can never
+      # fast-forward to.
+      - {name: commit, kind: git_commit}
+    judgement:
+      prompt: ./prompts/pre-push.judgement.md
+      choices:
+        clean:
+          description: The rebase applied with no conflicts (or trivial mechanical ones) and the read-back holds.
+          to: deliver
+        insignificant:
+          description: Conflicts were resolved without semantic choices; the rebased result re-enters review for cold eyes.
+          to: review
+          prompt_addendum: ./prompts/review.from-pre-push.md
+        significant:
+          description: Conflict resolution required semantic choices (or the rebase reshaped the change); with no verify node in this lane, the work re-enters iterate to revalidate.
+          to: iterate
+          prompt_addendum: ./prompts/iterate.from-pre-push.md
     retries:
       max: 2
       exhausted: escalate
@@ -120,20 +196,21 @@ nodes:
           description: Every repo's base branch ref fast-forwarded cleanly to this chunk's commit; the chunk closes with a retrospective.
           to: retrospective
         conflict:
-          description: A repo did not fast-forward cleanly (the base moved out from under it); with no pre-push node in this lane, returned to build to rebase against the base as it now stands and revalidate.
-          to: build
-          prompt_addendum: ./prompts/build.from-deliver.md
+          description: A repo did not fast-forward cleanly (the base moved out from under it); returned to pre-push to rebase against the base as it now stands, not to build.
+          to: pre-push
+          prompt_addendum: ./prompts/pre-push.from-deliver.md
         failure:
-          description: land_ff itself failed or crashed (a missing env var, an unauthorized or failed marker write) rather than reporting a clean outcome; returned to build — the same recovery point as conflict — to diagnose and retry without discarding the validated spine.
-          to: build
-          prompt_addendum: ./prompts/build.from-deliver.md
+          description: land_ff itself failed or crashed (a missing env var, an unauthorized or failed marker write) rather than reporting a clean outcome; this lane has no resolve node, so it returns to pre-push — the same recovery point as conflict — to diagnose and retry without discarding the validated spine.
+          to: pre-push
+          prompt_addendum: ./prompts/pre-push.from-deliver.md
 
   retrospective:
     executor: runner
     prompt: ./prompts/retrospective.md
-    session: resume  # the default, spelled out: `deliver` is a script node with no
-      # session, so the chunk's most-recent session is build's own — the session
-      # holding the whole journey, which is exactly what a retrospective synthesizes.
+    session: resume:prepush  # explicit: `deliver` is a script node with no session,
+      # so the chunk's most-recent session is `pre-push`'s own. Unlike `bas-dwf`, that
+      # lineage never saw build or iterate — it only ever entered cold — so this node
+      # leans on the chunk's asset trail and `chunk history`, not on lineage memory.
     produces:
       - retrospective
     judgement:

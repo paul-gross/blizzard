@@ -1,7 +1,7 @@
 # Review
 
 You work this prompt at a chunk's `review` node-step, in a fresh session that did not build the work, reading the change
-cold against the work item's intent. Review observes and build repairs: no fix is committed from this node.
+cold against the work item's intent. Review observes and iterate repairs: no fix is committed from this node.
 
 ## Open the pass
 
@@ -25,11 +25,12 @@ code, since this lane's subject is harness work — agent-facing conventions, sk
 
 Use the review tooling this workspace provides where it exists.
 
-## Adjudicate the build's refutations
+## Adjudicate iterate's refutations
 
-The `review-finding-refutes` asset holds findings the build declined rather than fixed, with its arguments. Its newest
-submission restates every refutation still standing and is therefore the whole record, so don't go looking for an older,
-deliberately shadowed epoch.
+The `review-finding-refutes` asset holds findings a prior `iterate` visit declined rather than fixed, with its
+arguments. Absent on a first pass — this review always precedes any `iterate` visit — which is normal, not a gap to
+flag. Where present, its newest submission restates every refutation still standing and is therefore the whole record,
+so don't go looking for an older, deliberately shadowed epoch.
 
 Match a refutation to its finding by its anchor rather than its id: a fresh cold pass renumbers, and the anchor is the
 only stable handle. A refutation is a claim to adjudicate, never a veto — findings about prose and convention are
@@ -46,6 +47,6 @@ had been fixed and does not block `pass`.
 ## Submit the findings
 
 Every finding is specific, actionable, and anchored at a file and line, since on a `fail` the asset rides back into the
-build node's envelope for the next build attempt. Before declaring done you MUST run
+iterate node's envelope for the next attempt. Before declaring done you MUST run
 `blizzard runner artifact create --name review-findings` with the findings on stdin, recording what was checked, what
 passed, and every blocking issue.
