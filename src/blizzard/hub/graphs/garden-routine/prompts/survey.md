@@ -1,7 +1,7 @@
 # Survey
 
 You are running one pass of a garden routine. Your job at this node is to look and record what you see — not to fix
-anything, and not to decide what should be done about it.
+anything, and not to decide what to do about it.
 
 ## Your charge
 
@@ -13,8 +13,7 @@ restatement), and what to record every run (Measurement).
 
 No route to a registry, and a route to one that just does not declare your axis, are the same gap: stop before sweeping.
 Record one finding, class `undeclared-axis`, locus `gardening-axes registry`, summary the axis name, nothing else — your
-whole output, judgement choice `no-strategy`. Judging by criteria you went looking for, not the target's own, is taste —
-improvising one because something registry-shaped turned up is exactly that.
+whole output, judgement choice `no-strategy`.
 
 ## Scope discipline
 
@@ -25,8 +24,8 @@ outside that change is not yours; a finding outside scope corrupts the one guara
 ## Gut-check before you enumerate
 
 Before you record anything, sample enough of the scope to know roughly what is in it, then ask one question: **could you
-inventory this well within the context you have** — not whether it would be tedious, but whether you could finish the
-list and stand behind it.
+inventory this well within the context you have** — not whether tedious, but whether you could finish the list and
+stand behind it.
 
 If the answer is no, stop. Do not enumerate. Record a single finding, class `excessive-scope`, with the scope itself as
 its locus and an honest count or estimate in its summary, and nothing else at all — that finding is your whole output,
@@ -39,7 +38,8 @@ Record instances, not themes. One finding is one thing somebody could fix, at on
 package are seventeen entries, never a single entry counting them — grouping is the docket's job, not yours.
 
 A candidate is `ref` (stable only within this submission), `class`, `locus`, `summary`, and `introduced` (best effort,
-omit rather than guess). Read the full shape live with
+omit rather than guess). Spell `class` as a stable, reusable kind of thing, not a one-off phrase for this instance — one
+that reads the same run after run is what propose later recognizes as ready to mechanize. Read the full shape live with
 `blizzard runner artifact get --scope system garden/finding-format --content` and follow it exactly; on failure or an
 empty read, use the restatement above.
 

@@ -1527,6 +1527,151 @@
         "title": "FleetSummaryView",
         "type": "object"
       },
+      "GardenProposalClosureKind": {
+        "description": "How a garden proposal closed \u2014 recorded on the row itself when it closes, never\nderived from anything else.",
+        "enum": [
+          "passed",
+          "accepted"
+        ],
+        "title": "GardenProposalClosureKind",
+        "type": "string"
+      },
+      "GardenProposalClosureView": {
+        "description": "How a garden proposal closed (blizzard#395) \u2014 a pass or an accept, either way\nterminal.",
+        "properties": {
+          "closed_at": {
+            "title": "Closed At",
+            "type": "string"
+          },
+          "closed_by": {
+            "title": "Closed By",
+            "type": "string"
+          },
+          "closure": {
+            "$ref": "#/components/schemas/GardenProposalClosureKind"
+          },
+          "item_outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GardenProposalItemOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "closure",
+          "reason",
+          "closed_by",
+          "closed_at",
+          "item_outcome",
+          "source",
+          "ref"
+        ],
+        "title": "GardenProposalClosureView",
+        "type": "object"
+      },
+      "GardenProposalItemOutcome": {
+        "description": "Whether an accepted proposal minted a work item \u2014 recorded positively rather than\ninferred from an absent link, so a declined mint reads as a decision, not a gap.",
+        "enum": [
+          "minted",
+          "declined"
+        ],
+        "title": "GardenProposalItemOutcome",
+        "type": "string"
+      },
+      "GardenProposalView": {
+        "description": "A garden proposal, its closure carried alongside it once one exists.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "closure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GardenProposalClosureView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "proposal_id": {
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "routine_name",
+          "class",
+          "title",
+          "body",
+          "findings",
+          "created_at"
+        ],
+        "title": "GardenProposalView",
+        "type": "object"
+      },
       "GitCommitDeclarationRequest": {
         "description": "A worker's explicit git-commit declaration for one repo it touched.\n\nCarries no forge (issue #143): the origin verified against is read from the environment's\nrepo manifest. ``environment_id`` is required once a chunk holds several.",
         "properties": {
@@ -5068,6 +5213,53 @@
           }
         },
         "summary": "List Garden Findings",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/garden/proposals": {
+      "get": {
+        "description": "Forward this lease's chunk's garden-proposals read to the hub \u2014 the layered\npass-through. A chunk with no run context (not a routine run) reaches this only as\nthe hub's own refusal, forwarded verbatim rather than answered as an empty bucket.",
+        "operationId": "list_garden_proposals_api_leases__lease_id__garden_proposals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GardenProposalView"
+                  },
+                  "title": "Response List Garden Proposals Api Leases  Lease Id  Garden Proposals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Garden Proposals",
         "tags": [
           "runner"
         ]

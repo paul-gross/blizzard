@@ -345,6 +345,12 @@
           "params": [],
           "path": "runner garden findings",
           "short_help": "Worker: list this run's live finding bucket as JSON."
+        },
+        "proposals": {
+          "help": "Worker: list this run's own routine's open garden proposals as JSON, closed ones\nexcluded. The routine is derived server-side from this lease's own chunk \u2014 nothing\nhere names it, so a worker cannot point this read at another routine's proposals.",
+          "params": [],
+          "path": "runner garden proposals",
+          "short_help": "Worker: list this run's own routine's open garden proposals as JSON, closed ones excluded."
         }
       },
       "help": "Worker: read this run's own garden machinery.\n\nThe lease binding is ambient, like ``artifact``: every verb acts on the worker's own\nlease, resolved from the spawn environment \u2014 none takes a flag naming another routine\nor scope.",

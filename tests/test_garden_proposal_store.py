@@ -102,6 +102,34 @@ def test_list_all_orders_newest_first(tmp_path: Path) -> None:
     assert ids == ["gprop_new", "gprop_old"]
 
 
+def test_list_for_routine_orders_newest_first_and_excludes_other_routines(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.create("gprop_old", routine_name="nightly", class_="c", title="old", body="b", findings=["fin_1"], at=_NOW)
+    store.create(
+        "gprop_new",
+        routine_name="nightly",
+        class_="c",
+        title="new",
+        body="b",
+        findings=["fin_2"],
+        at=_NOW.replace(hour=13),
+    )
+    store.create(
+        "gprop_other", routine_name="other-routine", class_="c", title="other", body="b", findings=["fin_1"], at=_NOW
+    )
+
+    ids = [p.proposal_id for p in store.list_for_routine("nightly")]
+
+    assert ids == ["gprop_new", "gprop_old"]
+
+
+def test_list_for_routine_is_empty_for_an_unseen_routine(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.create("gprop_1", routine_name="nightly", class_="c", title="t", body="b", findings=["fin_1"], at=_NOW)
+
+    assert store.list_for_routine("ghost-routine") == []
+
+
 def test_count_by_class_counts_across_the_named_routine(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.create(

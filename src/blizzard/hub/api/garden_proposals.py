@@ -39,7 +39,7 @@ from blizzard.wire.garden_proposal import (
 router = APIRouter(prefix="/api", tags=["garden-proposals"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _closure_view(closure: GardenProposalClosure) -> GardenProposalClosureView:
+def closure_view(closure: GardenProposalClosure) -> GardenProposalClosureView:
     return GardenProposalClosureView(
         closure=closure.closure,
         reason=closure.reason,
@@ -51,7 +51,10 @@ def _closure_view(closure: GardenProposalClosure) -> GardenProposalClosureView:
     )
 
 
-def _proposal_view(proposal: GardenProposal, closure: GardenProposalClosure | None) -> GardenProposalView:
+def proposal_view(proposal: GardenProposal, closure: GardenProposalClosure | None) -> GardenProposalView:
+    """The one ``GardenProposal`` -> ``GardenProposalView`` projection — reused as-is by
+    the runner-facing fleet route (``blizzard.hub.api.fleet``) rather than restated
+    there, the ``finding_view`` shape."""
     # `class_`'s alias is the Python keyword `class` — constructed by alias via
     # `model_validate`, the `finding_view` shape.
     return GardenProposalView.model_validate(
@@ -63,7 +66,7 @@ def _proposal_view(proposal: GardenProposal, closure: GardenProposalClosure | No
             "body": proposal.body,
             "findings": list(proposal.findings),
             "created_at": iso_utc(proposal.created_at),
-            "closure": _closure_view(closure) if closure is not None else None,
+            "closure": closure_view(closure) if closure is not None else None,
         }
     )
 
@@ -80,7 +83,7 @@ def list_garden_proposals(services: Annotated[HubServices, Depends(get_services)
     """Every garden proposal, newest first."""
     proposals = services.garden_proposals.list_all()
     closures = services.garden_proposal_closures.get_many([p.proposal_id for p in proposals])
-    return [_proposal_view(p, closures.get(p.proposal_id)) for p in proposals]
+    return [proposal_view(p, closures.get(p.proposal_id)) for p in proposals]
 
 
 @router.get(
@@ -93,7 +96,7 @@ def get_garden_proposal(
 ) -> GardenProposalView:
     """One garden proposal's whole record; 404 on an unknown id."""
     proposal = _get_or_404(proposal_id, services)
-    return _proposal_view(proposal, services.garden_proposal_closures.get(proposal_id))
+    return proposal_view(proposal, services.garden_proposal_closures.get(proposal_id))
 
 
 @router.post("/garden-proposals/{proposal_id}/pass", response_model=GardenProposalView)
@@ -114,7 +117,7 @@ def pass_garden_proposal(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return _proposal_view(proposal, closure)
+    return proposal_view(proposal, closure)
 
 
 @router.post("/garden-proposals/{proposal_id}/accept", response_model=GardenProposalAcceptResponse)
@@ -169,5 +172,5 @@ def accept_garden_proposal(
         )
         services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     return GardenProposalAcceptResponse(
-        **_proposal_view(proposal, accepted.closure).model_dump(), chunk_id=accepted.chunk_id
+        **proposal_view(proposal, accepted.closure).model_dump(), chunk_id=accepted.chunk_id
     )

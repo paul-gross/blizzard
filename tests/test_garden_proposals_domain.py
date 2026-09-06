@@ -1,7 +1,8 @@
-"""``GardenProposalAuthoring`` (unit tier, blizzard#390): create over a fake repository —
-an empty ``findings`` list is refused (D7), a duplicate-naming one is refused, and a
-clean non-empty one mints a `gprop_` id and delegates to the repository with the clock's
-instant (``bzh:domain-core``, the ``tests/test_scope_domain.py`` shape)."""
+"""``GardenProposalAuthoring`` and ``OpenGardenProposalReader`` (unit tier, blizzard#390):
+create over a fake repository — an empty ``findings`` list is refused (D7), a
+duplicate-naming one is refused, and a clean one mints a `gprop_` id and delegates with
+the clock's instant (``bzh:domain-core``, the ``tests/test_scope_domain.py`` shape).
+``OpenGardenProposalReader`` filters out any proposal a closure already exists for."""
 
 from __future__ import annotations
 
@@ -13,12 +14,14 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.findings import Finding
+from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure, GardenProposalClosureKind
 from blizzard.hub.domain.garden_proposals import (
     DuplicateProposalFindingError,
     EmptyProposalFindingsError,
     GardenProposal,
     GardenProposalAuthoring,
     IWriteGardenProposalRepository,
+    OpenGardenProposalReader,
 )
 
 pytestmark = pytest.mark.unit
@@ -119,3 +122,78 @@ def test_create_rejects_the_same_finding_named_twice() -> None:
         )
 
     assert repo.created == []
+
+
+def _proposal(proposal_id: str) -> GardenProposal:
+    return GardenProposal(
+        proposal_id=proposal_id,
+        routine_name="nightly",
+        class_="fix-the-source",
+        title="t",
+        body="b",
+        created_at=_T0,
+        findings=["fin_1"],
+    )
+
+
+@dataclass
+class _FakeReadGardenProposalRepo:
+    by_routine: dict[str, list[GardenProposal]] = field(default_factory=dict)
+
+    def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
+        return self.by_routine.get(routine_name, [])
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"should not touch {name!r}")
+
+
+@dataclass
+class _FakeGardenProposalClosureRepo:
+    closed: dict[str, GardenProposalClosure] = field(default_factory=dict)
+
+    def get_many(self, proposal_ids: list[str]) -> dict[str, GardenProposalClosure]:
+        return {pid: self.closed[pid] for pid in proposal_ids if pid in self.closed}
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"should not touch {name!r}")
+
+
+def _closure(proposal_id: str) -> GardenProposalClosure:
+    return GardenProposalClosure(
+        proposal_id=proposal_id,
+        closure=GardenProposalClosureKind.PASSED,
+        reason="not worth it",
+        closed_by="u_1",
+        closed_at=_T0,
+        item_outcome=None,
+        source=None,
+        ref=None,
+    )
+
+
+def test_open_reader_excludes_a_proposal_already_carrying_a_closure() -> None:
+    proposals = _FakeReadGardenProposalRepo(by_routine={"nightly": [_proposal("gprop_1"), _proposal("gprop_2")]})
+    closures = _FakeGardenProposalClosureRepo(closed={"gprop_2": _closure("gprop_2")})
+    reader = OpenGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
+
+    open_proposals = reader.list_open_for_routine("nightly")
+
+    assert [p.proposal_id for p in open_proposals] == ["gprop_1"]
+
+
+def test_open_reader_returns_everything_when_none_are_closed() -> None:
+    proposals = _FakeReadGardenProposalRepo(by_routine={"nightly": [_proposal("gprop_1")]})
+    closures = _FakeGardenProposalClosureRepo()
+    reader = OpenGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
+
+    open_proposals = reader.list_open_for_routine("nightly")
+
+    assert [p.proposal_id for p in open_proposals] == ["gprop_1"]
+
+
+def test_open_reader_is_empty_for_a_routine_with_no_proposals() -> None:
+    reader = OpenGardenProposalReader(
+        proposals=cast(Any, _FakeReadGardenProposalRepo()), closures=cast(Any, _FakeGardenProposalClosureRepo())
+    )
+
+    assert reader.list_open_for_routine("nightly") == []

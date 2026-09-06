@@ -112,6 +112,9 @@ class _FakeProposals:
     def list_all(self) -> list[GardenProposal]:
         raise NotImplementedError
 
+    def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
+        raise NotImplementedError
+
     def count_by_class(self, routine_name: str, class_: str) -> int:
         raise NotImplementedError
 

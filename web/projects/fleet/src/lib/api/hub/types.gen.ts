@@ -7474,6 +7474,38 @@ export type GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetResponses = {
 
 export type GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetResponse = GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetResponses[keyof GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetResponses];
 
+export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/garden/proposals';
+};
+
+export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetError = GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetErrors[keyof GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetErrors];
+
+export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetResponses = {
+    /**
+     * Response Get Garden Proposals Api Fleet Chunks  Chunk Id  Garden Proposals Get
+     *
+     * Successful Response
+     */
+    200: Array<GardenProposalView>;
+};
+
+export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetResponse = GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetResponses[keyof GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetResponses];
+
 export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostData = {
     body?: never;
     path: {

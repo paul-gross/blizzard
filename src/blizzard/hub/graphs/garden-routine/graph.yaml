@@ -28,14 +28,21 @@ sessions:
   match:
     model: ["blizzard:advanced"]
 
-# NOT declared here. The wire formats a run's artifacts must conform to are the
-# platform's, not this graph's: the hub validates against a shape that ships with its
-# validator, so baking a copy into this mint would make the graph a second owner of a
-# fact it only obeys. They are read at runtime from system scope instead —
-# `blizzard runner artifact get --scope system garden/finding-format` — the published
-# system-artifact set beside node and graph scope.
+# The wire formats a run's artifacts must conform to are NOT declared here: the hub
+# validates against a shape that ships with its validator, so baking a copy into this
+# mint would make the graph a second owner of a fact it only obeys. They are read at
+# runtime from system scope instead — `blizzard runner artifact get --scope system
+# garden/finding-format` — the published system-artifact set beside node and graph
+# scope.
 #
-# artifacts: (none)
+# `ladder`, below, is a different kind of thing: authored method text this graph owns
+# outright — the mechanization ladder and the proposal-class register — not a copy of a
+# platform wire format. It is held here, out of the byte-barred prompt tree, for the
+# same reason `advanced-development-workflow`'s `docket` is. On the `artifacts:` key
+# itself, see
+# https://github.com/paul-gross/blizzard/blob/master/docs/deployment/artifacts.md#graph-scoped-artifacts
+artifacts:
+  ladder: ./ladder.md
 
 nodes:
   survey:
@@ -80,7 +87,7 @@ nodes:
           description: The delta is assembled — every candidate resolved as an addition or as a transformation of a live finding, and every live finding this run actually visited accounted for.
           to: propose
         nothing-to-propose:
-          description: The delta holds only transformations — nothing new, and nothing whose response is not already open. Deliver the delta and stop.
+          description: The delta holds only transformations — nothing new, and nothing whose response is not already open, checked against this run's own open-proposal read and matched by the finding ids each proposal cites. Deliver the delta and stop.
           to: deliver
     retries:
       max: 2

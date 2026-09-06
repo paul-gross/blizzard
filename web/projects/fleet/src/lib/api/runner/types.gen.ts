@@ -964,6 +964,90 @@ export type FleetSummaryView = {
 };
 
 /**
+ * GardenProposalClosureKind
+ *
+ * How a garden proposal closed — recorded on the row itself when it closes, never
+ * derived from anything else.
+ */
+export type GardenProposalClosureKind = 'passed' | 'accepted';
+
+/**
+ * GardenProposalClosureView
+ *
+ * How a garden proposal closed (blizzard#395) — a pass or an accept, either way
+ * terminal.
+ */
+export type GardenProposalClosureView = {
+    /**
+     * Closed At
+     */
+    closed_at: string;
+    /**
+     * Closed By
+     */
+    closed_by: string;
+    closure: GardenProposalClosureKind;
+    item_outcome: GardenProposalItemOutcome | null;
+    /**
+     * Reason
+     */
+    reason: string | null;
+    /**
+     * Ref
+     */
+    ref: string | null;
+    /**
+     * Source
+     */
+    source: string | null;
+};
+
+/**
+ * GardenProposalItemOutcome
+ *
+ * Whether an accepted proposal minted a work item — recorded positively rather than
+ * inferred from an absent link, so a declined mint reads as a decision, not a gap.
+ */
+export type GardenProposalItemOutcome = 'minted' | 'declined';
+
+/**
+ * GardenProposalView
+ *
+ * A garden proposal, its closure carried alongside it once one exists.
+ */
+export type GardenProposalView = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Class
+     */
+    class: string;
+    closure?: GardenProposalClosureView | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Findings
+     */
+    findings: Array<string>;
+    /**
+     * Proposal Id
+     */
+    proposal_id: string;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
  * GitCommitDeclarationRequest
  *
  * A worker's explicit git-commit declaration for one repo it touched.
@@ -3226,6 +3310,38 @@ export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses = {
 };
 
 export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponse = ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses[keyof ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses];
+
+export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/garden/proposals';
+};
+
+export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetError = ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors[keyof ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors];
+
+export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses = {
+    /**
+     * Response List Garden Proposals Api Leases  Lease Id  Garden Proposals Get
+     *
+     * Successful Response
+     */
+    200: Array<GardenProposalView>;
+};
+
+export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponse = ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses[keyof ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses];
 
 export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostData = {
     body: GitCommitDeclarationRequest;

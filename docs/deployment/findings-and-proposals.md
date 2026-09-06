@@ -62,6 +62,12 @@ resolved, attributed to the proposal, the same as a hand `blizzard hub finding r
 own. Re-delivering the same item resolves nothing a second time. Either closing verb answers 409, naming the
 proposal's existing closure, when called again — closure is terminal.
 
+A running pass reads its own routine's open proposals a different way: `blizzard runner garden proposals`, flagless —
+the routine is derived server-side from the lease's own chunk, so a worker cannot point this read at another routine's
+docket, and a closed proposal never appears in it. It needs no hub credential in its child environment either, the
+same shape `blizzard runner garden findings` above takes;
+[openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint shape.
+
 **The hub board's Gardening tab renders a docket sheet on its own Proposals sub-tab, over the same reads: every
 proposal, filtered by waiting state and by class, each read as prose beside its findings — read live, one finding at a
 time, never a copy the proposal itself carries. Passing and accepting are each a dialog off the selected proposal, the

@@ -7,11 +7,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import GARDEN_PROPOSAL_PREFIX, Id
 from blizzard.hub.domain.findings import Finding
+
+if TYPE_CHECKING:
+    # Deferred to break the cycle: `garden_proposal_closure.py` itself imports
+    # `GardenProposal` from this module.
+    from blizzard.hub.domain.garden_proposal_closure import IReadGardenProposalClosureRepository
 
 
 class EmptyProposalFindingsError(ValueError):
@@ -48,6 +53,13 @@ class IReadGardenProposalRepository(Protocol):
     def get(self, proposal_id: str) -> GardenProposal | None: ...
 
     def list_all(self) -> list[GardenProposal]: ...
+
+    def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
+        """Every proposal `routine_name` has raised, newest first — `list_all`'s
+        routine-narrowed sibling (mirrors `IReadFindingRepository.list_for_routine`). A
+        proposal carries no scope column, so unlike a finding bucket this is never
+        narrowed further."""
+        ...
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
         """How often `class_` recurs among `routine_name`'s proposals
@@ -104,3 +116,20 @@ class GardenProposalAuthoring:
             findings=finding_ids,
             at=self._clock.now(),
         )
+
+
+class OpenGardenProposalReader:
+    """A routine's open garden proposals — `list_for_routine`'s own composed reader,
+    filtering out any proposal a closure already exists for. The runner-facing read: a
+    worker sees only proposals still awaiting a person's pass or accept."""
+
+    def __init__(
+        self, *, proposals: IReadGardenProposalRepository, closures: IReadGardenProposalClosureRepository
+    ) -> None:
+        self._proposals = proposals
+        self._closures = closures
+
+    def list_open_for_routine(self, routine_name: str) -> list[GardenProposal]:
+        proposals = self._proposals.list_for_routine(routine_name)
+        closed = self._closures.get_many([p.proposal_id for p in proposals])
+        return [p for p in proposals if p.proposal_id not in closed]

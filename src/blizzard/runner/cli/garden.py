@@ -1,4 +1,5 @@
-"""``blizzard runner garden`` — a worker's own routine's live finding bucket (D4)."""
+"""``blizzard runner garden`` — a worker's own routine's live finding bucket (D4) and open
+garden-proposal docket."""
 
 from __future__ import annotations
 
@@ -23,4 +24,14 @@ def garden_findings() -> None:
     a worker cannot point this read at another routine's bucket."""
     worker = WorkerCall.of("garden findings")
     resp = worker.get(worker.leased("garden/findings"), failure="could not read the finding bucket")
+    click.echo(resp.text)
+
+
+@garden_group.command("proposals")
+def garden_proposals() -> None:
+    """Worker: list this run's own routine's open garden proposals as JSON, closed ones
+    excluded. The routine is derived server-side from this lease's own chunk — nothing
+    here names it, so a worker cannot point this read at another routine's proposals."""
+    worker = WorkerCall.of("garden proposals")
+    resp = worker.get(worker.leased("garden/proposals"), failure="could not read the proposal docket")
     click.echo(resp.text)
