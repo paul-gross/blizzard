@@ -79,6 +79,11 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("PATCH", "/api/routines/{routine_id}"): GRAPH_EDIT,
     ("GET", "/api/routines/trend"): FLEET_VIEW,  # blizzard#394 Phase 4
     ("GET", "/api/routines/{routine_id}/sweeps"): FLEET_VIEW,
+    # A routine's scope membership (blizzard#488) — reads take FLEET_VIEW, writes take
+    # GRAPH_EDIT, the same split as scopes/routines themselves (D8).
+    ("GET", "/api/routines/{routine_id}/scopes"): FLEET_VIEW,
+    ("PUT", "/api/routines/{routine_id}/scopes/{scope_slug}"): GRAPH_EDIT,
+    ("DELETE", "/api/routines/{routine_id}/scopes/{scope_slug}"): GRAPH_EDIT,
     # Mint, ingest, and promote a run in one act (blizzard#392) — the same CHUNK_CONTROL
     # the acts it composes (ingest, promote) already require.
     ("POST", "/api/routines/{routine_id}/run"): CHUNK_CONTROL,

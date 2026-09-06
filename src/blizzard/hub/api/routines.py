@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW, GRAPH_EDIT
@@ -28,12 +28,13 @@ from blizzard.hub.domain.routine_baselines import RoutineBaseline
 from blizzard.hub.domain.routine_run import RunResult, ScopeRetiredError
 from blizzard.hub.domain.routines import (
     Routine,
+    RoutineDefaultScopeUnlinkError,
     RoutineGraphUnresolvedError,
     RoutineNameImmutableError,
     RoutineNameTakenError,
     RunMode,
 )
-from blizzard.hub.domain.scopes import ScopeSlug, ScopeSlugError
+from blizzard.hub.domain.scopes import Scope, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
@@ -236,6 +237,76 @@ def routine_baselines(
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
     return [_baseline_view(b) for b in services.routine_baselines.baselines_for(routine)]
+
+
+@router.get(
+    "/routines/{routine_id}/scopes",
+    response_model=list[str],
+    dependencies=[Depends(require(FLEET_VIEW))],
+)
+def list_routine_scopes(routine_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[str]:
+    """Every scope slug linked to `routine_id`, sorted (blizzard#488) — its own default
+    scope is always among them (D8). 404 on an unknown routine id."""
+    routine = services.routines.get(routine_id)
+    if routine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    return services.routine_scope_membership.list_scopes(routine)
+
+
+def _resolve_scope_for_membership(scope_slug: str, services: HubServices) -> Scope:
+    """Parse and resolve `scope_slug` for a link/unlink write: 422 on a malformed slug,
+    404 on a well-formed but unknown one — a management verb never silently mints
+    (`hub scope create` is the one deliberate mint path, D8's own carve-out)."""
+    try:
+        slug = ScopeSlug.parse(scope_slug)
+    except ScopeSlugError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    scope = services.scopes.get(slug.value)
+    if scope is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {scope_slug}")
+    return scope
+
+
+@router.put(
+    "/routines/{routine_id}/scopes/{scope_slug}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require(GRAPH_EDIT))],
+)
+def link_routine_scope(
+    routine_id: str, scope_slug: str, services: Annotated[HubServices, Depends(get_services)]
+) -> Response:
+    """Link `scope_slug` into `routine_id`'s own set (blizzard#488); idempotent. 404 on
+    an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed
+    scope slug."""
+    routine = services.routines.get(routine_id)
+    if routine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    scope = _resolve_scope_for_membership(scope_slug, services)
+    services.routine_scope_membership.link(routine, scope)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/routines/{routine_id}/scopes/{scope_slug}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require(GRAPH_EDIT))],
+)
+def unlink_routine_scope(
+    routine_id: str, scope_slug: str, services: Annotated[HubServices, Depends(get_services)]
+) -> Response:
+    """Unlink `scope_slug` from `routine_id`'s own set (blizzard#488); idempotent. 404
+    on an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed
+    scope slug, or on naming the routine's own default scope (D8) — always a member of
+    its own set."""
+    routine = services.routines.get(routine_id)
+    if routine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    scope = _resolve_scope_for_membership(scope_slug, services)
+    try:
+        services.routine_scope_membership.unlink(routine, scope)
+    except RoutineDefaultScopeUnlinkError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.patch("/routines/{routine_id}", response_model=RoutineView, dependencies=[Depends(require(GRAPH_EDIT))])

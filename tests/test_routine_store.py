@@ -15,6 +15,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.routines import Routine
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from tests.support import hub_store_connections
 
@@ -104,3 +105,55 @@ def test_edit_changes_everything_but_name_and_id(tmp_path: Path) -> None:
     assert edited.default_model == ["basic"]
     assert edited.default_effort == "low"
     assert store.get("rtn_1") == edited
+
+
+# --- RoutineScopeStore (the routine_scopes join, blizzard#488) --------------------
+
+
+def _routine_scope_store(tmp_path: Path) -> RoutineScopeStore:
+    routine_store, engine = _store_and_engine(tmp_path)
+    routine_store.create(_routine())
+    with engine.begin() as conn:
+        conn.execute(s.scopes.insert().values(slug="other", description="", created_at=_NOW))
+    return RoutineScopeStore(hub_store_connections(engine))
+
+
+def test_link_then_list_scopes_round_trips(tmp_path: Path) -> None:
+    store = _routine_scope_store(tmp_path)
+
+    store.link("rtn_1", "blizzard")
+    store.link("rtn_1", "other")
+
+    assert store.list_scopes("rtn_1") == ["blizzard", "other"]
+
+
+def test_link_is_idempotent(tmp_path: Path) -> None:
+    store = _routine_scope_store(tmp_path)
+
+    store.link("rtn_1", "blizzard")
+    store.link("rtn_1", "blizzard")
+
+    assert store.list_scopes("rtn_1") == ["blizzard"]
+
+
+def test_unlink_removes_the_link(tmp_path: Path) -> None:
+    store = _routine_scope_store(tmp_path)
+    store.link("rtn_1", "blizzard")
+
+    store.unlink("rtn_1", "blizzard")
+
+    assert store.list_scopes("rtn_1") == []
+
+
+def test_unlink_is_idempotent_when_not_linked(tmp_path: Path) -> None:
+    store = _routine_scope_store(tmp_path)
+
+    store.unlink("rtn_1", "blizzard")  # no-op — never linked
+
+    assert store.list_scopes("rtn_1") == []
+
+
+def test_list_scopes_for_an_unlinked_routine_is_empty(tmp_path: Path) -> None:
+    store = _routine_scope_store(tmp_path)
+
+    assert store.list_scopes("rtn_ghost") == []

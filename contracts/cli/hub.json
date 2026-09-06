@@ -3357,8 +3357,118 @@
           "path": "hub routine run",
           "short_help": "Mint, ingest, and promote a hub work item from routine NAME, in one act."
         },
+        "scope": {
+          "commands": {
+            "add": {
+              "help": "Link SCOPE_SLUG into ROUTINE_ID's own scope set; idempotent.\n\n404 on an unknown ROUTINE_ID or a well-formed but unknown SCOPE_SLUG; 422 on a\nmalformed SCOPE_SLUG.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "routine_id",
+                  "opts": [
+                    "routine_id"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "scope_slug",
+                  "opts": [
+                    "scope_slug"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub routine scope add",
+              "short_help": "Link SCOPE_SLUG into ROUTINE_ID's own scope set; idempotent."
+            },
+            "remove": {
+              "help": "Unlink SCOPE_SLUG from ROUTINE_ID's own scope set; idempotent.\n\n404 on an unknown ROUTINE_ID or a well-formed but unknown SCOPE_SLUG; 422 on a\nmalformed SCOPE_SLUG, or on naming ROUTINE_ID's own default scope \u2014 always a member\nof its own set.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "routine_id",
+                  "opts": [
+                    "routine_id"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "scope_slug",
+                  "opts": [
+                    "scope_slug"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub routine scope remove",
+              "short_help": "Unlink SCOPE_SLUG from ROUTINE_ID's own scope set; idempotent."
+            }
+          },
+          "help": "Manage a routine's scope membership (blizzard#488): add, remove.",
+          "params": [],
+          "path": "hub routine scope",
+          "short_help": "Manage a routine's scope membership (blizzard#488): add, remove."
+        },
         "show": {
-          "help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults.",
+          "help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults,\nand its linked scopes (blizzard#488).",
           "params": [
             {
               "hidden": false,
@@ -3395,7 +3505,7 @@
             }
           ],
           "path": "hub routine show",
-          "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults."
+          "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults, and its linked scopes (blizzard#488)."
         },
         "sweeps": {
           "help": "NAME's per-scope last-swept table \u2014 every non-retired scope, plus any retired\nscope NAME has swept \u2014 and its measurement series over --since/--until.\n\nNAME is resolved to its routine_id through the routine list (D3).",
