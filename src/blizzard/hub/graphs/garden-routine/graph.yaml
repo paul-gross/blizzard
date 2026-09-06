@@ -39,8 +39,7 @@ sessions:
 # outright — the mechanization ladder and the proposal-class register — not a copy of a
 # platform wire format. It is held here, out of the byte-barred prompt tree, for the
 # same reason `advanced-development-workflow`'s `docket` is. On the `artifacts:` key
-# itself, see
-# https://github.com/paul-gross/blizzard/blob/master/docs/deployment/artifacts.md#graph-scoped-artifacts
+# itself, see ../../../../../docs/deployment/artifacts.md#graph-scope-artifacts
 artifacts:
   ladder: ./ladder.md
 

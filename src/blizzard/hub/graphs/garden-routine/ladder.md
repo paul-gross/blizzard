@@ -25,10 +25,11 @@ cheapest rung that would actually hold; tiers 1-4 all resolve to `mechanize`, ti
    cost of a new dependency but no bespoke code.
 3. **Author a bespoke check.** When no existing tool, running or not, covers the exact rule: a small project-owned
    script or test enforcing it mechanically. New infrastructure the project must maintain itself, and has to carry its
-   own case for why that is worth it.
-4. **Graduate the check into a standing gate.** A bespoke or newly adopted check that has proven itself moves house
-   rather than being copied: the axis's own Criteria pointer moves to point at the mechanized check, and the axis stops
-   re-judging that class by hand. One owner per check.
+   own case for why that is worth it. A brand-new check is always this rung, even one the same proposal also wires up
+   to run — it has not yet proven itself, so it is not yet the axis's judgment of record.
+4. **Graduate the check into a standing gate.** Reserved for a check — bespoke or adopted — that has already run for a
+   while and proven itself: only then does it move house rather than staying a copy. The axis's own Criteria pointer
+   moves to point at it, and the axis stops re-judging that class by hand. One owner per check.
 5. **Prevent, when nothing mechanical can hold it.** The judgment is real but nothing above catches it, so the rung to
    reach for is a change to the project's own guidance: the missing standard, the exemplar spreading the pattern. This
    tier is `prevent`, not `mechanize`.

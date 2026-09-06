@@ -11,6 +11,7 @@ proposal has no response yet, however old it is — that is `converged`, so `pro
 If you could not fetch the routine's live findings at all, choose neither: say so, and let the retry handle it — a
 delta assembled without knowing what the routine already holds is a duplicate storm with a timestamp on it.
 
-If the proposals read failed outright, or came back empty in a way you cannot trust as a genuine "nothing is open"
-answer, do not let that produce `nothing-to-propose`. Choose `converged` instead — an untrustworthy proposals read
-degrades to the branch that still gets a person another look, never to the one that stops here.
+If the proposals read failed outright, do not let that produce `nothing-to-propose`. Choose `converged` instead — a
+failed proposals read degrades to the branch that still gets a person another look, never to the one that stops here.
+A successful read that comes back empty is trustworthy: it means the routine has no open proposals at all, so any
+live finding left standing is, correctly, unanswered.

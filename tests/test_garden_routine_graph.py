@@ -79,8 +79,8 @@ def test_garden_routine_prompts_read_the_formats_from_system_scope() -> None:
 
 
 def test_garden_routine_propose_states_the_closed_four_class_vocabulary() -> None:
-    """Phase 3: `class` is no longer the proposer's own taxonomy to invent — it is drawn
-    from exactly four closed values, ported from the manual gardening-pass method."""
+    """`class` is not the proposer's own taxonomy to invent — it is drawn from exactly
+    four closed values, ported from the manual gardening-pass method."""
     prompt = _doc().node("propose").prompt  # type: ignore[union-attr]
     for cls in ("`remediate`", "`prevent`", "`mechanize`", "`escalate`"):
         assert cls in prompt  # type: ignore[operator]
@@ -89,9 +89,9 @@ def test_garden_routine_propose_states_the_closed_four_class_vocabulary() -> Non
 
 
 def test_garden_routine_propose_points_at_the_ladder_artifact() -> None:
-    """Phase 3: the mechanization ladder's full text lives in the graph-scoped `ladder`
-    artifact; `propose.md` only briefly restates its shape and names the fetch, with the
-    same degrade-gracefully fallback every other system-scope pointer in this graph uses."""
+    """The mechanization ladder's full text lives in the graph-scoped `ladder` artifact;
+    `propose.md` only briefly restates its shape and names the fetch, with the same
+    degrade-gracefully fallback every other system-scope pointer in this graph uses."""
     prompt = _doc().node("propose").prompt  # type: ignore[union-attr]
     assert "blizzard runner artifact get ladder --scope graph --content" in prompt  # type: ignore[operator]
     assert "fails or comes back empty" in prompt  # type: ignore[operator]
@@ -104,16 +104,16 @@ def test_garden_routine_propose_keeps_the_docket_publish_and_no_hub_verb() -> No
 
 
 def test_garden_routine_survey_states_reusable_class_spelling_guidance() -> None:
-    """Phase 3 (D5): survey never reads the live bucket, so this is guidance about how to
-    word a class, not an instruction to go check anything."""
+    """Survey never reads the live bucket, so this is guidance about how to word a class,
+    not an instruction to go check anything."""
     prompt = _doc().node("survey").prompt  # type: ignore[union-attr]
     assert "stable, reusable kind of thing" in prompt  # type: ignore[operator]
 
 
 def test_garden_routine_reconcile_states_class_reuse_against_the_bucket() -> None:
-    """Phase 3 (D5): reconcile, unlike survey, already holds the live bucket when it
-    decides an `add`, so it is the node positioned to reuse an existing class rather
-    than mint a near-duplicate spelling."""
+    """Reconcile, unlike survey, already holds the live bucket when it decides an `add`,
+    so it is the node positioned to reuse an existing class rather than mint a
+    near-duplicate spelling."""
     prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
     assert "reuse a class already live on the bucket" in prompt  # type: ignore[operator]
 
@@ -128,8 +128,8 @@ def test_garden_routine_reconcile_owns_the_measurement_survey_could_not_settle()
 
 
 def test_garden_routine_reconcile_names_the_open_proposals_read() -> None:
-    """Phase 2: reconcile now grounds `nothing-to-propose` in the runner's own read of the
-    routine's open proposals rather than a guess."""
+    """Reconcile grounds `nothing-to-propose` in the runner's own read of the routine's
+    open proposals rather than a guess."""
     prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
     assert "blizzard runner garden proposals" in prompt  # type: ignore[operator]
 
