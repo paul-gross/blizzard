@@ -105,9 +105,12 @@ export class GardeningProposalsPage {
     this.url.patch({ class: value === ALL_CLASSES ? null : value.slice(CLASS_VALUE_PREFIX.length) });
   }
 
+  /** `All` renders first, matching the class row's own "All classes" lead, while
+   * `Waiting` stays the resting selection — {@link waitingOnly} reads an absent
+   * `show` param as waiting-only, so order here is presentation, not default. */
   protected readonly waitingChips: readonly KitChipOption[] = [
-    { value: 'waiting', label: 'Waiting', testid: 'gardening-proposal-filter-waiting' },
     { value: SHOW_ALL, label: 'All', testid: 'gardening-proposal-filter-all' },
+    { value: 'waiting', label: 'Waiting', testid: 'gardening-proposal-filter-waiting' },
   ];
 
   /** `null` means every routine — mirrors {@link classFilter}'s "all drops the
