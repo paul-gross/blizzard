@@ -343,11 +343,9 @@ def test_routine_scopes_table_survives_migration_roundtrip(tmp_path: Path) -> No
 
 
 def test_routine_scopes_seeds_from_findings_finding_sets_and_routine_defaults(tmp_path: Path) -> None:
-    """The migration backfills ``routine_scopes`` from every distinct ``(routine_name,
-    scope_slug)`` pair ``findings``/``finding_sets`` have carried, resolved to a
-    ``routine_id`` by name, plus each routine's own ``default_scope_slug``. A
-    ``finding_sets.routine_name`` of ``""`` (its legacy default) and a name matching no
-    live routine are both skipped, and a duplicate pair is inserted only once."""
+    """Backfills ``routine_scopes`` from every distinct ``(routine_name, scope_slug)``
+    pair ``findings``/``finding_sets`` carried plus each routine's default; an empty or
+    unmatched ``routine_name`` is skipped, and a duplicate pair inserted only once."""
     url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
     runner.upgrade(_ROUTINE_SCOPES_JOIN_PARENT)

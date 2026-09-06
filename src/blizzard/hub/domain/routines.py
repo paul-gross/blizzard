@@ -200,9 +200,8 @@ class RoutineAuthoring:
             default_model=list(default_model or []),
             default_effort=default_effort,
         )
-        # The new default is linked; a changed-away-from previous default is deliberately
-        # *not* unlinked — the routine still sweeps it, and blizzard#488 makes a set
-        # larger than its default legal.
+        # The new default is linked; a previous default is deliberately left linked —
+        # the routine still sweeps it, and a set larger than its default is legal.
         self._routine_scopes.link(routine.routine_id, scope.slug)
         return edited
 

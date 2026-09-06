@@ -1,7 +1,5 @@
-"""``routine_scopes`` — the declared many-to-many between a routine and every scope its
-runs may write into (blizzard#488), seeded from history: every ``(routine_name,
-scope_slug)`` pair a routine's own ``findings``/``finding_sets`` have ever carried, plus
-each routine's own ``default_scope_slug``.
+"""``routine_scopes`` (blizzard#488) — the many-to-many between a routine and its scopes,
+seeded from ``findings``/``finding_sets`` history plus each routine's own default.
 
 Revision ID: 20260906_1130_routine_scopes_join
 Revises: 20260905_1100_hub_runner_external_usage_slug
@@ -20,10 +18,8 @@ down_revision: str | None = "20260905_1100_hub_runner_external_usage_slug"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape (``bzh:frozen-revisions``). ``scopes``/``routines``
-# below are FK-resolution stubs — never created, never dropped; ``routines`` is widened
-# past that bare need to the columns the seed below reads. ``findings``/``finding_sets``
-# are narrow read-only stubs: this revision never creates or drops either.
+# This revision's own frozen shape (``bzh:frozen-revisions``); ``routines`` is widened
+# past FK-resolution to the columns the seed reads. ``findings``/``finding_sets`` are read-only stubs.
 _frozen_metadata = sa.MetaData()
 
 _scopes = sa.Table(

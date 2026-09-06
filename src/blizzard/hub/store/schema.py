@@ -202,11 +202,8 @@ routines = Table(
     UniqueConstraint("name", name="uq_routines_name"),
 )
 
-# The declared many-to-many between a routine and every scope its runs may write into
-# (blizzard#488) — a routine's own ``default_scope_slug`` above is a member of this set,
-# never a substitute for it. A mutable entity relationship, not a fact table: a row is
-# deleted on unlink, the ``garden_proposal_findings`` shape (composite PK, no timestamp),
-# not ``scope_lifecycle_facts``'s append-only one.
+# The many-to-many between a routine and every scope its runs may write into
+# (blizzard#488) — mutable like garden_proposal_findings, not append-only like scope_lifecycle_facts.
 
 routine_scopes = Table(
     "routine_scopes",
