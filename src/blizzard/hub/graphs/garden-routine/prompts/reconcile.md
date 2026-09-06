@@ -1,29 +1,30 @@
 # Reconcile
 
-You are joining this run cold, and deliberately so. The session that swept the target has spent a while convincing
-itself that what it found is real; your job needs someone who has not.
+You are joining this run cold, on purpose: the session that swept the target has spent a while convincing itself that
+what it found is real, and your job needs someone who has not.
 
-You have two inputs: the `survey` asset from this run — read it with `blizzard runner artifact get survey --content` —
-and the findings already live on this routine in this run's scope. Fetch the latter with
-`blizzard runner garden findings` — no flags: the hub derives this run's routine and scope from the chunk itself, so
-there is nothing here to name. What comes back is your scope's bucket, not the routine's whole set: findings recorded
-under other scopes are deliberately not in front of you. Read both before you write anything.
+You have three inputs: the `survey` asset from this run — read it with `blizzard runner artifact get survey --content`
+— this routine's live findings in your scope, and this routine's own open proposals. Fetch findings with
+`blizzard runner garden findings` and proposals with `blizzard runner garden proposals`, both flagless: the hub derives
+this run's routine and scope from the chunk itself. Findings are your scope's bucket only; proposals are the routine's
+whole open set, each already naming the finding ids it answers — judgement needs that to tell an answered finding from
+one still waiting. Read all three before you write anything.
 
 ## What you are deciding
 
 For each candidate in the survey, one question: **is this something this routine already knows?**
 
-- If it is genuinely new, it becomes an `add`.
+- If it is genuinely new, it becomes an `add` — reuse a class already live on the bucket for the same kind of thing
+  rather than minting a near-duplicate; you hold the bucket here, propose does not.
 - If it is a finding already live — the same thing wrong at the same locus, however differently the survey happened to
   word it — it becomes an `observed` transformation naming that finding's id. Not a new finding. The whole point of
   matching is that a routine's memory does not fill with the same fact restated weekly.
 
 A survey that bailed out arrives as a single candidate of one of two classes — `excessive-scope` or `undeclared-axis` —
 and nothing else. Match it the way you match anything: if this routine already carries a live finding of that same class
-for this scope, the candidate is an `observed` on that one, never a second of its own — repeating a bail-out is how a
-weekly routine turns one honest fact into fifty. Then emit nothing further. A run that could not inventory the scope did
-not look at any of it, so every other live finding in your bucket keeps its last word, and the delta you deliver holds
-that single entry.
+for this scope, the candidate is an `observed` on that one, never a second of its own — repeating a bail-out turns one
+honest fact into fifty. Then emit nothing further: a run that could not inventory the scope did not look at any of it,
+so the delta you deliver holds that single entry.
 
 Otherwise, for each live finding **inside this run's scope** that the survey did not report: look. If it no longer
 reproduces, record a `gone` transformation. If it does still reproduce and the survey simply missed it, record an
@@ -33,14 +34,13 @@ reproduces, record a `gone` transformation. If it does still reproduce and the s
 
 **A live finding you did not actually look for gets no entry at all.** Not `gone`, not `observed` — nothing. The
 bucketed fetch already keeps other scopes out of your hands, but a bucket is not proof you swept all of it: where the
-survey did not reach some corner of your own scope, the findings there get silence too. Your artifact is a delta, and a
-finding you say nothing about keeps its last word. Writing `gone` for a finding you did not actually look for would
-absolve real drift by omission, and nothing downstream would catch it.
+survey did not reach some corner of your own scope, the findings there get silence too. A finding you say nothing about
+keeps its last word.
 
 ## Matching is judgment, and duplicates are cheap
 
-You are matching by reading, not by computing a key. Two findings that describe the same weed at the same place are the
-same finding even when the words differ; two findings at the same file that object to different things are not. When you
+You are matching by reading, not by computing a key. Two findings describing the same weed at the same place are the
+same finding even when worded differently; two at the same file objecting to different things are not. When you
 genuinely cannot tell, add rather than merge — a duplicate costs a person one moment of recognition and closes alongside
 its twin, while a wrong merge hides new drift behind an old finding and nobody ever sees it.
 

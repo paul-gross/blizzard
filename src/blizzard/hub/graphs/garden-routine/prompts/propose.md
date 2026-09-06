@@ -11,20 +11,15 @@ the backlog has drained. A docket somebody cannot read is a docket somebody will
 
 ## Reach for the source first
 
-When a sweep returns a great deal, the highest-leverage response is almost never the cleanup. Ask what is producing the
-findings: a standard nobody wrote, an exemplar spreading the pattern, a rule too vague to follow. Proposing a thousand
-cleanups while the thing generating them runs untouched is motion without progress — next week's run will find a
-thousand more.
-
-Then ask which of your own judgments no longer need a model. A finding class that recurs run after run with nobody ever
-overriding it is, by demonstration, crisp enough to encode — a proposal to retire the judgment altogether, carrying its
-case: which class it retires, and what it saves.
-
-Reach for the cheapest rung that would actually hold. Rule data in infrastructure the project already runs — a lint rule
-enabled, a config tightened — costs nothing to adopt. New infrastructure has to carry its own case. A change to the
-project's own guidance is the rung to reach for when the judgment is real but nothing mechanical can hold it yet. A
-check that graduates a rung **moves house rather than being copied** — once a class is a lint rule, the axis's own
-Criteria pointer moves to the mechanized check and stops re-judging it by hand. One owner per check.
+When a sweep returns a great deal, the highest-leverage response is almost never the cleanup: ask what is producing the
+findings before you propose fixing each one. The mechanization ladder — five rungs, tiers 1-4 all `mechanize`, tier 5
+`prevent` — carries the full reasoning for climbing from the cheapest rung that would hold to a change in the project's
+own guidance; read it with `blizzard runner artifact get ladder --scope graph --content`, or proceed on the brief
+restatement below if that read fails or comes back empty. A check that graduates a rung (tier 4) **moves house rather
+than being copied** — the axis's own Criteria pointer moves to the mechanized check, and it stops re-judging by hand.
+One owner per check. Tiers 1 and 2 are research obligations, not options: before authoring anything bespoke, check
+whether tooling the project already runs, or widely available tooling it does not yet run, already covers the rule —
+and if a proposal reaches for one, its body must name the tool, the rule, and whether the project already runs it.
 
 ## Shape
 
@@ -34,18 +29,19 @@ the `ref` an `add` op in this same delta carries, when it carries one: the hub m
 resolves that ref against it, so citing your own run's addition needs no id you do not yet have. Read the full shape
 live with `blizzard runner artifact get --scope system garden/proposal-format --content`; if that read fails or comes
 back empty, proceed on the restatement above. Publish the docket with `blizzard runner artifact create --name docket`
-(content on stdin) — even when it is empty, since an empty list is itself a statement. `class` is your own taxonomy for
-a kind of response: the hub stores it, indexes it, groups by it, and never interprets it, so settle its vocabulary
-yourself. Hold it self-consistent within this run — the same kind of response spells its class the same way twice in one
-docket. The body should let a reader decide without opening the findings: state the case, not the inventory.
+(content on stdin) — even when it is empty, since an empty list is itself a statement. `class` is drawn from a closed
+set of four — `remediate`, `prevent`, `mechanize`, `escalate` — never one invented for this run; the ladder artifact
+above carries what each means. Hold it self-consistent within this run — the same kind of response spells its class the
+same way twice in one docket. The ladder artifact also carries this surface's own register: the body is written for a
+person, not an agent. State the case, not the inventory.
 
 ## When the delta is a bail-out
 
 A delta holding a single `excessive-scope` or `undeclared-axis` finding is the survey reporting it could not do its job.
 If reconcile matched it to a finding already live on this routine, draft one proposal citing that id; if reconcile added
 it instead, cite the `ref` its `add` op carries in this same delta. Name what a person would have to decide — rescope
-the routine, author the axis the registry is missing, plan the campaign somewhere blizzard is not — and give it a
-`class` naming that decision for what it is. Do not draft cleanups against an inventory that was never taken.
+the routine, author the axis the registry is missing, plan the campaign somewhere blizzard is not — and class it
+`escalate`. Do not draft cleanups against an inventory that was never taken.
 
 ## What you are not doing
 

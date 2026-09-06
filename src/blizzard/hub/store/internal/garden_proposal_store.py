@@ -76,6 +76,17 @@ class GardenProposalStore:
             ).all()
             return [self._of(row, self._findings(conn, row.proposal_id)) for row in rows]
 
+    def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
+        """`list_all`'s routine-narrowed sibling — newest first, the same
+        `created_at`/`proposal_id` tie-break."""
+        with self._store.read("list_for_routine") as conn:
+            rows = conn.execute(
+                select(garden_proposals)
+                .where(garden_proposals.c.routine_name == routine_name)
+                .order_by(garden_proposals.c.created_at.desc(), garden_proposals.c.proposal_id.desc())
+            ).all()
+            return [self._of(row, self._findings(conn, row.proposal_id)) for row in rows]
+
     def count_by_class(self, routine_name: str, class_: str) -> int:
         with self._store.read("count_by_class") as conn:
             return conn.execute(

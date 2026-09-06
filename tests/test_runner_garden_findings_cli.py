@@ -143,9 +143,12 @@ def test_garden_group_is_listed_in_top_level_help() -> None:
     assert re.search(r"^  garden\s", result.output, re.MULTILINE)
 
 
-def test_garden_group_names_only_findings() -> None:
-    """D4: one new verb, not two — no routine-read verb alongside it."""
+def test_garden_group_names_findings_alongside_proposals() -> None:
+    """Two verbs now: `findings` and `proposals`, both listed under the same group —
+    the counterpart assertion lives with the ``proposals`` verb's own tests
+    (``tests/test_runner_garden_proposals_cli.py``)."""
     result = CliRunner().invoke(runner_group, ["garden", "--help"])
 
     assert result.exit_code == 0, result.output
     assert re.search(r"^  findings\s", result.output, re.MULTILINE)
+    assert re.search(r"^  proposals\s", result.output, re.MULTILINE)

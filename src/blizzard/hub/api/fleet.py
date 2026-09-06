@@ -25,6 +25,7 @@ from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.api.auth import AuthMode, RunnerPrincipal, require_runner_principal
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.findings import finding_view
+from blizzard.hub.api.garden_proposals import proposal_view
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import HubConfig
@@ -48,6 +49,7 @@ from blizzard.wire.facts import (
 )
 from blizzard.wire.finding import FindingView
 from blizzard.wire.fleet import FleetSummaryView
+from blizzard.wire.garden_proposal import GardenProposalView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekResponse
 from blizzard.wire.route import (
@@ -310,6 +312,27 @@ def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(
             detail=f"chunk {chunk_id} carries no run context — not a routine run",
         )
     return [finding_view(f) for f in services.findings.list_for(run.routine_name, run.scope_slug)]
+
+
+@router.get("/chunks/{chunk_id}/garden/proposals", response_model=list[GardenProposalView])
+def get_garden_proposals(
+    chunk_id: str, services: Annotated[HubServices, Depends(get_services)]
+) -> list[GardenProposalView]:
+    """A worker's own routine's open garden proposals — the chunk's own run context
+    derives the routine; no caller-supplied flag can name another, and no scope filter
+    applies (a proposal carries no scope column). 404 both for an unknown chunk and for
+    one carrying no run context (not a routine run): a chunk with nothing to read is
+    refused rather than answered with an empty bucket."""
+    chunk = services.chunks.record.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    run = services.run_context.for_chunk(chunk)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"chunk {chunk_id} carries no run context — not a routine run",
+        )
+    return [proposal_view(p, None) for p in services.open_garden_proposals.list_open_for_routine(run.routine_name)]
 
 
 def _answered_findings_or_404(chunk_id: str, services: HubServices) -> list[FindingView]:

@@ -532,8 +532,8 @@
   },
   "blizzard_mock/mock_hub/api/routes.py": {
    "comments": 7,
-   "docstrings": 18,
-   "total": 291
+   "docstrings": 20,
+   "total": 303
   },
   "blizzard_mock/mock_hub/app.py": {
    "comments": 0,
@@ -566,14 +566,14 @@
    "total": 65
   },
   "blizzard_mock/mock_hub/domain/models.py": {
-   "comments": 28,
-   "docstrings": 41,
-   "total": 274
+   "comments": 30,
+   "docstrings": 47,
+   "total": 296
   },
   "blizzard_mock/mock_hub/domain/service.py": {
    "comments": 47,
-   "docstrings": 118,
-   "total": 910
+   "docstrings": 127,
+   "total": 943
   },
   "blizzard_mock/mock_hub/domain/state.py": {
    "comments": 6,
@@ -582,8 +582,8 @@
   },
   "blizzard_mock/mock_hub/domain/wire.py": {
    "comments": 18,
-   "docstrings": 26,
-   "total": 311
+   "docstrings": 29,
+   "total": 327
   },
   "blizzard_mock/mock_hub/internal/__init__.py": {
    "comments": 0,
@@ -929,13 +929,13 @@
   },
   "blizzard/hub/api/fleet.py": {
    "comments": 23,
-   "docstrings": 85,
-   "total": 703
+   "docstrings": 90,
+   "total": 726
   },
   "blizzard/hub/api/garden_proposals.py": {
    "comments": 5,
-   "docstrings": 16,
-   "total": 173
+   "docstrings": 19,
+   "total": 176
   },
   "blizzard/hub/api/garden_runs.py": {
    "comments": 5,
@@ -1298,9 +1298,9 @@
    "total": 95
   },
   "blizzard/hub/composition.py": {
-   "comments": 82,
+   "comments": 84,
    "docstrings": 13,
-   "total": 568
+   "total": 578
   },
   "blizzard/hub/config.py": {
    "comments": 45,
@@ -1578,9 +1578,9 @@
    "total": 131
   },
   "blizzard/hub/domain/garden_proposals.py": {
-   "comments": 2,
-   "docstrings": 15,
-   "total": 106
+   "comments": 4,
+   "docstrings": 22,
+   "total": 135
   },
   "blizzard/hub/domain/garden_run.py": {
    "comments": 4,
@@ -1929,8 +1929,8 @@
   },
   "blizzard/hub/store/internal/garden_proposal_store.py": {
    "comments": 2,
-   "docstrings": 7,
-   "total": 109
+   "docstrings": 9,
+   "total": 120
   },
   "blizzard/hub/store/internal/garden_run_store.py": {
    "comments": 15,
@@ -2559,8 +2559,8 @@
   },
   "blizzard/runner/api/garden.py": {
    "comments": 0,
-   "docstrings": 7,
-   "total": 26
+   "docstrings": 11,
+   "total": 40
   },
   "blizzard/runner/api/git_commits.py": {
    "comments": 2,
@@ -2749,8 +2749,8 @@
   },
   "blizzard/runner/cli/garden.py": {
    "comments": 0,
-   "docstrings": 9,
-   "total": 26
+   "docstrings": 13,
+   "total": 37
   },
   "blizzard/runner/cli/opencode.py": {
    "comments": 0,
@@ -4859,6 +4859,11 @@
    "docstrings": 11,
    "total": 128
   },
+  "test_fleet_garden_proposals_api.py": {
+   "comments": 1,
+   "docstrings": 11,
+   "total": 128
+  },
   "test_fleet_spend_api.py": {
    "comments": 13,
    "docstrings": 6,
@@ -4957,7 +4962,7 @@
   "test_garden_proposal_store.py": {
    "comments": 3,
    "docstrings": 4,
-   "total": 130
+   "total": 158
   },
   "test_garden_proposal_wire.py": {
    "comments": 0,
@@ -4966,8 +4971,8 @@
   },
   "test_garden_proposals_domain.py": {
    "comments": 0,
-   "docstrings": 4,
-   "total": 121
+   "docstrings": 5,
+   "total": 199
   },
   "test_garden_routine_graph.py": {
    "comments": 21,
@@ -5592,7 +5597,7 @@
   "test_route_classification.py": {
    "comments": 52,
    "docstrings": 36,
-   "total": 363
+   "total": 364
   },
   "test_route_permission_matrix.py": {
    "comments": 9,
@@ -5791,8 +5796,18 @@
   },
   "test_runner_garden_findings_cli.py": {
    "comments": 1,
-   "docstrings": 11,
-   "total": 151
+   "docstrings": 13,
+   "total": 154
+  },
+  "test_runner_garden_proposals_api.py": {
+   "comments": 3,
+   "docstrings": 14,
+   "total": 204
+  },
+  "test_runner_garden_proposals_cli.py": {
+   "comments": 1,
+   "docstrings": 8,
+   "total": 131
   },
   "test_runner_gates.py": {
    "comments": 37,
@@ -5932,7 +5947,7 @@
   "test_runner_route_gating.py": {
    "comments": 12,
    "docstrings": 21,
-   "total": 157
+   "total": 158
   },
   "test_runner_selftest.py": {
    "comments": 24,

@@ -51,10 +51,24 @@ def test_garden_routine_has_no_person_in_the_run() -> None:
     assert {n.judgement.by if n.judgement is not None else JudgedBy.WORKER for n in doc.nodes} == {JudgedBy.WORKER}
 
 
-def test_garden_routine_mints_with_no_artifacts_map() -> None:
-    """The wire formats are the platform's own: the graph bakes no copy in, and the
-    prompts read them from system scope at runtime instead."""
-    assert _doc().artifacts == {}
+def test_garden_routine_bakes_the_ladder_as_its_only_graph_scoped_artifact() -> None:
+    """The wire formats are still the platform's own — the graph bakes no copy of those
+    in, and the prompts read them from system scope at runtime. `ladder` is different:
+    authored method text this graph owns outright, baked in because it is prose, not a
+    wire format."""
+    artifacts = _doc().artifacts
+    assert set(artifacts) == {"ladder"}
+    ladder = artifacts["ladder"]
+    for marker in (
+        "1. **Reconfigure tooling",
+        "2. **Adopt tooling",
+        "3. **Author a bespoke check",
+        "4. **Graduate the check",
+        "5. **Prevent, when nothing mechanical",
+        "`mechanize`",
+        "`prevent`",
+    ):
+        assert marker in ladder
 
 
 def test_garden_routine_prompts_read_the_formats_from_system_scope() -> None:
@@ -64,6 +78,46 @@ def test_garden_routine_prompts_read_the_formats_from_system_scope() -> None:
     assert "garden/proposal-format" in doc.node("propose").prompt  # type: ignore[union-attr, operator]
 
 
+def test_garden_routine_propose_states_the_closed_four_class_vocabulary() -> None:
+    """`class` is not the proposer's own taxonomy to invent — it is drawn from exactly
+    four closed values, ported from the manual gardening-pass method."""
+    prompt = _doc().node("propose").prompt  # type: ignore[union-attr]
+    for cls in ("`remediate`", "`prevent`", "`mechanize`", "`escalate`"):
+        assert cls in prompt  # type: ignore[operator]
+    assert "is drawn from a closed" in prompt  # type: ignore[operator]
+    assert "settle its vocabulary yourself" not in prompt  # type: ignore[operator]
+
+
+def test_garden_routine_propose_points_at_the_ladder_artifact() -> None:
+    """The mechanization ladder's full text lives in the graph-scoped `ladder` artifact;
+    `propose.md` only briefly restates its shape and names the fetch, with the same
+    degrade-gracefully fallback every other system-scope pointer in this graph uses."""
+    prompt = _doc().node("propose").prompt  # type: ignore[union-attr]
+    assert "blizzard runner artifact get ladder --scope graph --content" in prompt  # type: ignore[operator]
+    assert "fails or comes back empty" in prompt  # type: ignore[operator]
+
+
+def test_garden_routine_propose_keeps_the_docket_publish_and_no_hub_verb() -> None:
+    prompt = _doc().node("propose").prompt  # type: ignore[union-attr]
+    assert "blizzard runner artifact create --name docket" in prompt  # type: ignore[operator]
+    assert "blizzard hub" not in prompt  # type: ignore[operator]
+
+
+def test_garden_routine_survey_states_reusable_class_spelling_guidance() -> None:
+    """Survey never reads the live bucket, so this is guidance about how to word a class,
+    not an instruction to go check anything."""
+    prompt = _doc().node("survey").prompt  # type: ignore[union-attr]
+    assert "stable, reusable kind of thing" in prompt  # type: ignore[operator]
+
+
+def test_garden_routine_reconcile_states_class_reuse_against_the_bucket() -> None:
+    """Reconcile, unlike survey, already holds the live bucket when it decides an `add`,
+    so it is the node positioned to reuse an existing class rather than mint a
+    near-duplicate spelling."""
+    prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
+    assert "reuse a class already live on the bucket" in prompt  # type: ignore[operator]
+
+
 def test_garden_routine_reconcile_owns_the_measurement_survey_could_not_settle() -> None:
     """The axis registry may declare a measurement only reconciliation can compute — how
     many findings a run opened is unknowable while candidates are still unmatched. So
@@ -71,6 +125,37 @@ def test_garden_routine_reconcile_owns_the_measurement_survey_could_not_settle()
     prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
     assert "`measurement` corrected" in prompt  # type: ignore[operator]
     assert "`scope` and `revisions` through" in prompt  # type: ignore[operator]
+
+
+def test_garden_routine_reconcile_names_the_open_proposals_read() -> None:
+    """Reconcile grounds `nothing-to-propose` in the runner's own read of the routine's
+    open proposals rather than a guess."""
+    prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
+    assert "blizzard runner garden proposals" in prompt  # type: ignore[operator]
+
+
+def test_garden_routine_reconcile_judgement_cites_findings_by_id() -> None:
+    """`nothing-to-propose` only holds when every still-live finding is named in an open
+    proposal's own `findings` list — the D4 citation rule, checkable now that reconcile
+    holds both the live bucket and the open-proposal set."""
+    judgement = _doc().node("reconcile").judgement  # type: ignore[union-attr]
+    assert judgement is not None
+    prompt = judgement.prompt
+    assert prompt is not None
+    assert "`findings` list" in prompt
+    assert "blizzard runner garden proposals" in prompt
+
+
+def test_garden_routine_reconcile_judgement_degrades_to_converged_on_a_bad_proposals_read() -> None:
+    """A failed or untrustworthy proposals read must never manufacture `nothing-to-propose`
+    — it falls back to `converged`, which still routes through `propose` for another look.
+    This is distinct from a failed findings read, which stalls for retry instead."""
+    judgement = _doc().node("reconcile").judgement  # type: ignore[union-attr]
+    assert judgement is not None
+    prompt = judgement.prompt
+    assert prompt is not None
+    assert "do not let that produce `nothing-to-propose`" in prompt
+    assert "Choose `converged` instead" in prompt
 
 
 def test_garden_routine_session_policy_is_load_bearing() -> None:

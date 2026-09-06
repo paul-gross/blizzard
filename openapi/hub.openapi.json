@@ -12632,6 +12632,53 @@
         ]
       }
     },
+    "/api/fleet/chunks/{chunk_id}/garden/proposals": {
+      "get": {
+        "description": "A worker's own routine's open garden proposals \u2014 the chunk's own run context\nderives the routine; no caller-supplied flag can name another, and no scope filter\napplies (a proposal carries no scope column). 404 both for an unknown chunk and for\none carrying no run context (not a routine run): a chunk with nothing to read is\nrefused rather than answered with an empty bucket.",
+        "operationId": "get_garden_proposals_api_fleet_chunks__chunk_id__garden_proposals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GardenProposalView"
+                  },
+                  "title": "Response Get Garden Proposals Api Fleet Chunks  Chunk Id  Garden Proposals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Garden Proposals",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
     "/api/fleet/chunks/{chunk_id}/hub-advance": {
       "post": {
         "description": "Drive a chunk parked at a generic hub command node one step (#65), running that node's\nhub-side command once under the fleet-wide serialization\nslot. ``ran=False`` is never an error: a different chunk holds the slot, or (#66) the node reported\n``pending`` and ``poll_interval`` has not elapsed, or the chunk is not parked at a hub command node\nat all \u2014 ``detail`` names which. The request declares no ``runner_id`` to confine against.",
