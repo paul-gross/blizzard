@@ -46,3 +46,12 @@
   color: var(--label-dim);
   font-size: var(--fs-label);
 }
+/* A `superseded` fact's absorbing-finding id, or a delivery-triggered `resolved`
+   fact's proposal id (review:F10) — `.actor`'s own style, reused rather than
+   redeclared, since both are the same secondary-fact metadata line. */
+.proposal,
+.superseded-by {
+  margin: 2px 0 0;
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}

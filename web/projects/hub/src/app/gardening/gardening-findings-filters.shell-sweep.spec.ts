@@ -19,6 +19,11 @@ import { GardeningFindingsPage } from './gardening-findings-page';
  * neither genuinely overflows at the phone widths gardening is reached at
  * (`bzh:narrow-viewport-tier-rule`) — jsdom lays out the grid/flex chains involved
  * without ever checking whether a long routine/scope pair actually overflows them.
+ * Also proves a long, unbroken class name still shrinks-and-ellipsizes on
+ * `.fl-class`'s own line, alongside `.fl-ref`, rather than wrapping the ref onto a
+ * second line once `.fl-routine`/`.fl-scope` render too (review:F2) — jsdom would
+ * happily lay out `flex-wrap: wrap` without ever exercising the hypothetical-size
+ * wrap decision the bug lived in.
  *
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) —
  * run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
@@ -50,13 +55,16 @@ const SCOPES = [
 ];
 
 /** Two findings from two distinct routines and two distinct scopes, so the
- * disambiguation markup (blizzard#486) has something genuine to render. */
+ * disambiguation markup (blizzard#486) has something genuine to render. `fnd_1`'s
+ * `class` is deliberately a long, unbroken 40+ character run — proves `.fl-class`
+ * shrinks-and-ellipsizes on its own line rather than pushing `.fl-ref` onto a
+ * second line once `.fl-routine`/`.fl-scope` also render (review:F2). */
 const FINDINGS = [
   {
     finding_id: 'fnd_1',
     routine_name: 'nightly',
     scope_slug: 'blizzard',
-    class: 'stale-docstring',
+    class: 'stale-docstring-with-a-genuinely-long-unbroken-class-name',
     locus: 'src/a.py:1',
     summary: 'docstring narrates a removed parameter',
     state: 'live',
@@ -171,6 +179,18 @@ describe('gardening findings filter row and row disambiguation shell sweep (web:
         row.scrollWidth,
         `${width}px: the disambiguated row overflows horizontally (${row.scrollWidth} > ${row.clientWidth})`,
       ).toBeLessThanOrEqual(row.clientWidth);
+
+      // The long, unbroken class name (review:F2) must shrink-and-ellipsize on
+      // `.fl-class`'s own line rather than wrap `.fl-ref` onto a second line — proven
+      // by the two sharing the same `top`, not merely by the row's own overall
+      // scrollWidth, which the wrap bug above didn't move.
+      const cls = row.querySelector<HTMLElement>('.fl-class')!;
+      const ref = row.querySelector<HTMLElement>('.fl-ref')!;
+      const topDelta = Math.abs(ref.getBoundingClientRect().top - cls.getBoundingClientRect().top);
+      expect(
+        topDelta,
+        `${width}px: .fl-class and .fl-ref no longer share the same line (top delta ${topDelta}px)`,
+      ).toBeLessThan(6);
     } finally {
       root.remove();
       stub.restore();

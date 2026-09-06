@@ -17,15 +17,21 @@ const ALL_CLASSES = 'all';
 const ALL_STATES = 'all';
 /** UI-only chip sentinels for the "every routine"/"every scope" chip — never sent to
  * the server and never stored in the URL, where `null` is what actually rides both
- * the URL and the API call. Routine names and scope slugs are both platform-defined
- * identifiers, unlike `class` (below), so a real one colliding with the literal
- * string `all` is vanishingly unlikely and these carry no collision-guarding prefix. */
+ * the URL and the API call. Routine names and scope slugs are operator-authored,
+ * exactly like `class` below, so they carry the same collision-guarding prefix
+ * (review:F1). */
 const ALL_ROUTINES = 'all';
 const ALL_SCOPES = 'all';
 
 /** `class` is opaque, deployment-chosen vocabulary — this prefix keeps a real class
  * literally named `all` from colliding with {@link ALL_CLASSES}. */
 const CLASS_VALUE_PREFIX = 'class:';
+/** Routine names are operator-authored, exactly like `class` above — this prefix
+ * keeps a real routine literally named `all` from colliding with {@link ALL_ROUTINES}. */
+const ROUTINE_VALUE_PREFIX = 'routine:';
+/** Scope slugs are operator-authored, exactly like `class` above — this prefix
+ * keeps a real scope literally named `all` from colliding with {@link ALL_SCOPES}. */
+const SCOPE_VALUE_PREFIX = 'scope:';
 
 export interface FindingsBucketFilters {
   readonly selectedRoutine: Signal<string | null>;
@@ -78,14 +84,28 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
 
   const routineChips = computed<readonly KitChipOption[]>(() => [
     { value: ALL_ROUTINES, label: 'All routines', testid: 'gardening-findings-routine-all' },
-    ...routines().map((r) => ({ value: r.name, label: r.name, testid: `gardening-findings-routine-item-${r.name}` })),
+    ...routines().map((r) => ({
+      value: ROUTINE_VALUE_PREFIX + r.name,
+      label: r.name,
+      testid: `gardening-findings-routine-item-${r.name}`,
+    })),
   ]);
-  const routineChipValue = computed<string>(() => selectedRoutine() ?? ALL_ROUTINES);
+  const routineChipValue = computed<string>(() => {
+    const r = selectedRoutine();
+    return r === null ? ALL_ROUTINES : ROUTINE_VALUE_PREFIX + r;
+  });
   const scopeChips = computed<readonly KitChipOption[]>(() => [
     { value: ALL_SCOPES, label: 'All scopes', testid: 'gardening-findings-scope-all' },
-    ...scopes().map((s) => ({ value: s.slug, label: s.slug, testid: `gardening-findings-scope-item-${s.slug}` })),
+    ...scopes().map((s) => ({
+      value: SCOPE_VALUE_PREFIX + s.slug,
+      label: s.slug,
+      testid: `gardening-findings-scope-item-${s.slug}`,
+    })),
   ]);
-  const scopeChipValue = computed<string>(() => selectedScope() ?? ALL_SCOPES);
+  const scopeChipValue = computed<string>(() => {
+    const s = selectedScope();
+    return s === null ? ALL_SCOPES : SCOPE_VALUE_PREFIX + s;
+  });
 
   /** Each pick patches only its own URL param — no more pinning the other
    * dimension's current value alongside it (blizzard#486 retired the seeding chain
@@ -93,10 +113,18 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
    * (F5), so a filter chosen against the old bucket can't strand the new one
    * looking empty with no active chip explaining why. */
   function onRoutineChoose(value: string): void {
-    url.patch({ routine: value === ALL_ROUTINES ? null : value, class: null, state: null });
+    url.patch({
+      routine: value === ALL_ROUTINES ? null : value.slice(ROUTINE_VALUE_PREFIX.length),
+      class: null,
+      state: null,
+    });
   }
   function onScopeChoose(value: string): void {
-    url.patch({ scope: value === ALL_SCOPES ? null : value, class: null, state: null });
+    url.patch({
+      scope: value === ALL_SCOPES ? null : value.slice(SCOPE_VALUE_PREFIX.length),
+      class: null,
+      state: null,
+    });
   }
 
   const bucketQuery = injectHubFindingsBucketQuery(selectedRoutine, selectedScope);

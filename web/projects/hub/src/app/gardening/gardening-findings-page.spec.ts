@@ -233,6 +233,66 @@ describe('GardeningFindingsPage', () => {
       expect(resolved?.querySelector('.fl-body--exited')).toBeTruthy();
     });
 
+    it('reaches a scope literally named "all" through its own chip, distinct from the "All scopes" sentinel (review:F1)', async () => {
+      // `stubRequestClient`'s own `CapturedRequest` drops each request's query
+      // string down to a bare path — this local fetch stub keeps the full URL
+      // alongside it (`finding.query.spec.ts`'s own `stubFetchCapturingUrl`
+      // shape), needed here to prove `scope=all` genuinely rides the bucket
+      // read rather than being read as the "every scope" sentinel and omitted.
+      const SCOPE_ALL = { slug: 'all', description: 'a scope literally named all', created_at: '2026-01-01T00:00:00Z' };
+      const FINDING_IN_SCOPE_ALL = findingFixture({
+        finding_id: 'fnd_30',
+        class: 'stale-docstring',
+        locus: 'z.py:1',
+        summary: 'summary z',
+        state: 'live',
+        scope_slug: 'all',
+      });
+      const urls: string[] = [];
+      const previousFetch = globalThis.fetch;
+      const fakeFetch = async (input: Request): Promise<Response> => {
+        const url = new URL(input.url);
+        if (url.pathname === '/api/findings') urls.push(input.url);
+        const method = input.method.toUpperCase();
+        let body: unknown = {};
+        if (method === 'GET' && url.pathname === '/api/me') body = OPERATOR_ME_RESPONSE;
+        else if (method === 'GET' && url.pathname === '/api/findings') body = [...BUCKET, FINDING_IN_SCOPE_ALL];
+        else if (method === 'GET' && url.pathname === '/api/garden-proposals') body = [];
+        else if (method === 'GET' && url.pathname === '/api/routines') body = ROUTINES;
+        else if (method === 'GET' && url.pathname === '/api/scopes') body = [...SCOPES, SCOPE_ALL];
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      };
+      hubClient.setConfig({ baseUrl: 'http://localhost', fetch: fakeFetch as typeof fetch });
+      try {
+        await TestBed.configureTestingModule({
+          imports: [TestFindingsHost],
+          providers: [
+            provideZonelessChangeDetection(),
+            provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+            provideRouter(routes),
+          ],
+        }).compileComponents();
+        const fixture = TestBed.createComponent(TestFindingsHost);
+        const router = TestBed.inject(Router);
+        await router.navigateByUrl('/gardening/findings');
+        await settle(fixture, 12);
+        const el = fixture.nativeElement as HTMLElement;
+
+        el.querySelector<HTMLButtonElement>('[data-testid="gardening-findings-scope-item-all"]')!.click();
+        await settle(fixture);
+
+        expect(router.url).toBe('/gardening/findings?scope=all');
+        expect(pressed(el, 'gardening-findings-scope-item-all')).toBe('true');
+        expect(pressed(el, 'gardening-findings-scope-all')).toBe('false');
+        expect(el.querySelector('[data-testid="gardening-finding-row-fnd_30"]')).toBeTruthy();
+
+        const lastFindingsUrl = urls.at(-1)!;
+        expect(new URL(lastFindingsUrl).searchParams.get('scope')).toBe('all');
+      } finally {
+        hubClient.setConfig({ baseUrl: '', fetch: previousFetch });
+      }
+    });
+
     it('takes an explicit routine/scope pair from the URL, so a filtered bucket is a shareable link', async () => {
       const { el } = await mount({
         url: '/gardening/findings?routine=weekly&scope=web',

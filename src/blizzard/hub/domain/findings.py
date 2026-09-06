@@ -155,6 +155,13 @@ class IReadFindingRepository(Protocol):
         since callers pair it with a `get` call that already 404s on unknown ids."""
         ...
 
+    def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
+        """`get`/`get_facts` unified into one read transaction (review:F5) — the API
+        detail route needs the row and its whole fact chain to agree on the same
+        instant, which two independent reads cannot guarantee under a concurrent
+        write between them. `None` for an unknown id, `get`'s own contract."""
+        ...
+
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """A routine's findings under one scope
         (blizzard-product:/plans/garden/machinery.md §Managing findings and proposals) —

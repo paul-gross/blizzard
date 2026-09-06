@@ -25,6 +25,10 @@ from blizzard.hub.domain.findings import (
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 
+#: `_facts_for_many`'s own per-statement id-batch size (review:F6) — see that method's
+#: docstring for why an unbounded `IN (...)` cannot be allowed to grow with the caller.
+_FACTS_BATCH_SIZE = 500
+
 
 class FindingStore:
     """Read-write finding adapter over the hub store engine."""
@@ -143,9 +147,20 @@ class FindingStore:
             facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
             return {row.finding_id: self._of(row, facts_by_id[row.finding_id]) for row in rows}
 
+    def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
+        with self._store.read("get_with_facts") as conn:
+            row = conn.execute(select(findings).where(findings.c.finding_id == finding_id)).one_or_none()
+            if row is None:
+                return None
+            facts = self._facts(conn, finding_id)
+            finding = self._of(row, facts)
+        return finding, facts
+
     def get_facts(self, finding_id: str) -> list[FindingFact]:
-        with self._store.read("get_facts") as conn:
-            return self._facts(conn, finding_id)
+        """`get_with_facts`'s facts-only projection (review:F5) — kept for callers that
+        only need the chain, e.g. `get_many`'s batched sibling never calls this alone."""
+        result = self.get_with_facts(finding_id)
+        return result[1] if result is not None else []
 
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """The pass's own bucket read (D3) — filtered on `ix_findings_routine_scope`,
@@ -207,19 +222,22 @@ class FindingStore:
         return [self._fact_of(r) for r in rows]
 
     def _facts_for_many(self, conn, finding_ids: list[str]) -> dict[str, list[FindingFact]]:  # type: ignore[no-untyped-def]
-        """One query for every id in `finding_ids` (index-backed on
-        `ix_finding_facts_finding_id_id`), so a bucket read never issues one fact query
-        per row."""
+        """One query per up-to-`_FACTS_BATCH_SIZE`-id batch (index-backed on
+        `ix_finding_facts_finding_id_id`) — `list_across_routines` (blizzard#486) can hand
+        this an unbounded id list, and one unbatched `IN (...)` would eventually exceed
+        the driver's own per-statement bind-parameter ceiling (review:F6)."""
         grouped: dict[str, list[FindingFact]] = {finding_id: [] for finding_id in finding_ids}
         if not finding_ids:
             return grouped
-        rows = conn.execute(
-            select(finding_facts)
-            .where(finding_facts.c.finding_id.in_(finding_ids))
-            .order_by(finding_facts.c.finding_id, finding_facts.c.id.asc())
-        ).all()
-        for r in rows:
-            grouped[r.finding_id].append(self._fact_of(r))
+        for start in range(0, len(finding_ids), _FACTS_BATCH_SIZE):
+            batch = finding_ids[start : start + _FACTS_BATCH_SIZE]
+            rows = conn.execute(
+                select(finding_facts)
+                .where(finding_facts.c.finding_id.in_(batch))
+                .order_by(finding_facts.c.finding_id, finding_facts.c.id.asc())
+            ).all()
+            for r in rows:
+                grouped[r.finding_id].append(self._fact_of(r))
         return grouped
 
     @staticmethod

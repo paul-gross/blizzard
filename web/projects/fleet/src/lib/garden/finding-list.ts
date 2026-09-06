@@ -32,8 +32,8 @@ export interface FindingListRowVm {
    * once the active filter no longer names one for it; a bucket already filtered
    * to a concrete routine or scope leaves the matching field `null` rather than
    * repeat what every row already shares. */
-  readonly routineName?: string | null;
-  readonly scopeSlug?: string | null;
+  readonly routineName: string | null;
+  readonly scopeSlug: string | null;
 }
 
 /** The triage verbs a finding can be dispatched under — every human-driven exit

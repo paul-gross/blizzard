@@ -19,6 +19,12 @@
         @if (row.actor) {
           <p class="actor" data-testid="finding-fact-actor">by {{ row.actor }}</p>
         }
+        @if (row.proposalId) {
+          <p class="proposal" data-testid="finding-fact-proposal">answers proposal {{ row.proposalId }}</p>
+        }
+        @if (row.supersededBy) {
+          <p class="superseded-by" data-testid="finding-fact-superseded-by">superseded by {{ row.supersededBy }}</p>
+        }
       </li>
     }
   </ol>

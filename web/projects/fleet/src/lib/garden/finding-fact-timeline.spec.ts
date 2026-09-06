@@ -82,6 +82,42 @@ describe('FleetFindingFactTimeline', () => {
     expect(rows[1].querySelector('[data-testid="finding-fact-note"]')).toBeNull();
   });
 
+  it('renders the proposal id and the superseding finding when a fact carries them', async () => {
+    const fixture = await mount([
+      { kind: 'add', recorded_at: '2026-01-01T00:00:00Z' },
+      {
+        kind: 'resolved',
+        recorded_at: '2026-01-02T00:00:00Z',
+        proposal_id: 'gp_1',
+      },
+      {
+        kind: 'superseded',
+        recorded_at: '2026-01-03T00:00:00Z',
+        superseded_by: 'fin_9',
+      },
+    ]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const rows = Array.from(el.querySelectorAll('[data-testid="finding-fact-row"]'));
+    expect(rows[1].querySelector('[data-testid="finding-fact-proposal"]')?.textContent).toBe(
+      'answers proposal gp_1',
+    );
+    expect(rows[1].querySelector('[data-testid="finding-fact-superseded-by"]')).toBeNull();
+    expect(rows[2].querySelector('[data-testid="finding-fact-superseded-by"]')?.textContent).toBe(
+      'superseded by fin_9',
+    );
+    expect(rows[2].querySelector('[data-testid="finding-fact-proposal"]')).toBeNull();
+  });
+
+  it('omits the proposal and superseded-by lines when a fact carries neither', async () => {
+    const fixture = await mount(ADD_ONLY);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const row = el.querySelector('[data-testid="finding-fact-row"]')!;
+    expect(row.querySelector('[data-testid="finding-fact-proposal"]')).toBeNull();
+    expect(row.querySelector('[data-testid="finding-fact-superseded-by"]')).toBeNull();
+  });
+
   it('shows the empty state when facts is empty', async () => {
     const fixture = await mount([]);
     const el = fixture.nativeElement as HTMLElement;

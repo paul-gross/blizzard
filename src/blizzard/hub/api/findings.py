@@ -33,31 +33,35 @@ from blizzard.wire.finding import (
 router = APIRouter(prefix="/api", tags=["findings"], dependencies=[Depends(reject_runner_principal)])
 
 
+def _finding_view_fields(finding: Finding) -> dict[str, object]:
+    """The one `Finding` -> wire-dict projection — `finding_view` wraps it in
+    `FindingView.model_validate`, `get_finding` extends it with `facts` and wraps in
+    `FindingDetailView.model_validate`, so neither round-trips the other's already-
+    validated model through `model_dump` (review:F8)."""
+    return {
+        "finding_id": finding.finding_id,
+        "routine_name": finding.routine_name,
+        "scope_slug": finding.scope_slug,
+        "class": finding.class_,
+        "locus": finding.locus,
+        "summary": finding.summary,
+        "introduced": finding.introduced,
+        "introduced_at": iso_utc(finding.introduced_at) if finding.introduced_at is not None else None,
+        "first_observed_at": (iso_utc(finding.first_observed_at) if finding.first_observed_at is not None else None),
+        "live": finding.live,
+        "state": finding.state,
+        "note": finding.note,
+        "last_seen_at": iso_utc(finding.last_seen_at) if finding.last_seen_at is not None else None,
+        "observed_count": finding.observed_count,
+    }
+
+
 def finding_view(finding: Finding) -> FindingView:
     """The one ``Finding`` -> ``FindingView`` projection — reused as-is by the runner-facing
     fleet route (``blizzard.hub.api.fleet``) rather than restated there."""
     # `class_`'s alias is the Python keyword `class` — constructed by alias via
     # `model_validate`, the `_proposal_view` shape.
-    return FindingView.model_validate(
-        {
-            "finding_id": finding.finding_id,
-            "routine_name": finding.routine_name,
-            "scope_slug": finding.scope_slug,
-            "class": finding.class_,
-            "locus": finding.locus,
-            "summary": finding.summary,
-            "introduced": finding.introduced,
-            "introduced_at": iso_utc(finding.introduced_at) if finding.introduced_at is not None else None,
-            "first_observed_at": (
-                iso_utc(finding.first_observed_at) if finding.first_observed_at is not None else None
-            ),
-            "live": finding.live,
-            "state": finding.state,
-            "note": finding.note,
-            "last_seen_at": iso_utc(finding.last_seen_at) if finding.last_seen_at is not None else None,
-            "observed_count": finding.observed_count,
-        }
-    )
+    return FindingView.model_validate(_finding_view_fields(finding))
 
 
 def _fact_view(fact: FindingFact) -> FindingFactView:
@@ -127,13 +131,11 @@ def list_findings(
 def get_finding(finding_id: str, services: Annotated[HubServices, Depends(get_services)]) -> FindingDetailView:
     """One finding's whole record, plus its whole fact chain oldest-first (blizzard#487);
     404 on an unknown id."""
-    finding = services.findings.get(finding_id)
-    if finding is None:
+    result = services.findings.get_with_facts(finding_id)
+    if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown finding {finding_id}")
-    facts = services.findings.get_facts(finding_id)
-    return FindingDetailView.model_validate(
-        {**finding_view(finding).model_dump(by_alias=True), "facts": [_fact_view(f) for f in facts]}
-    )
+    finding, facts = result
+    return FindingDetailView.model_validate({**_finding_view_fields(finding), "facts": [_fact_view(f) for f in facts]})
 
 
 def _exit_verb(

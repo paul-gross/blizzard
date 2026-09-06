@@ -1,5 +1,3 @@
-export { FleetFindingFactTimeline } from './finding-fact-timeline';
-export type { FindingFactRow } from './finding-fact-timeline-rows';
 export { FleetFindingList } from './finding-list';
 export type { FindingListRowVm, FindingTriageVerb } from './finding-list';
 export { FleetFindingPanel } from './finding-panel';
@@ -69,7 +67,6 @@ export { injectHubWorkItemQuery, injectHubWorkItemsQuery } from './work-item.que
 export type { WorkItemPointer } from './work-item.query';
 export type {
   FindingDetailView,
-  FindingFactView,
   FindingView,
   GardenProposalAcceptResponse,
   GardenProposalClosureKind,

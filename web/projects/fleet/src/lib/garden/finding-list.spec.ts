@@ -11,6 +11,8 @@ const LIVE_ROW: FindingListRowVm = {
   summary: 'docstring narrates a removed parameter',
   state: 'live',
   lastSeenAt: '2026-01-05T00:00:00Z',
+  routineName: null,
+  scopeSlug: null,
 };
 
 const GONE_ROW: FindingListRowVm = {
@@ -20,6 +22,8 @@ const GONE_ROW: FindingListRowVm = {
   summary: 'import no longer referenced',
   state: 'gone',
   lastSeenAt: '2026-01-06T00:00:00Z',
+  routineName: null,
+  scopeSlug: null,
 };
 
 const RESOLVED_ROW: FindingListRowVm = {
@@ -29,6 +33,8 @@ const RESOLVED_ROW: FindingListRowVm = {
   summary: 'docstring rewritten to match the signature',
   state: 'resolved',
   lastSeenAt: null,
+  routineName: null,
+  scopeSlug: null,
 };
 
 const ROWS: readonly FindingListRowVm[] = [LIVE_ROW, GONE_ROW, RESOLVED_ROW];
