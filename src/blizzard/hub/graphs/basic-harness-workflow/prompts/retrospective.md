@@ -12,9 +12,9 @@ trail: the work item(s) the chunk wraps and the review findings.
 Fetch each repo's own worktree before checking anything: its view of the base branch was last refreshed when the
 environment was acquired, and the fast-forward happened on the forge.
 
-`blizzard runner artifact list` returns one `git_commit` entry per repo per node that declared one; in this lane every
-declaration comes from `build`, including any re-declaration after a deliver-conflict bounce rebased and re-pushed.
-Verify the newest `epoch` entry per repo; an older, superseded declaration is expected to be unreachable after a rebase
+`blizzard runner artifact list` returns one `git_commit` entry per repo per node that declared one; in this lane `build`,
+`iterate`, and `pre-push` can each declare, since a rebase or a fresh fix re-pushes and re-declares. Verify the newest
+`epoch` entry per repo; an older, superseded declaration is expected to be unreachable after a rebase
 and is not a discrepancy.
 
 Test reachability specifically with `git merge-base --is-ancestor <sha> origin/<base>` — `origin/master` unless the repo
