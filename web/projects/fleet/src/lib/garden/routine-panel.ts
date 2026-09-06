@@ -51,6 +51,14 @@ export interface LastSweptRowVm {
   readonly revisionsLabel: string;
 }
 
+/** One scope related to the selected routine (blizzard#489) — `isDefault` marks
+ * whether this scope is the routine's own default, `RelatedRoutineVm`'s own shape
+ * (`scope-panel.ts`). */
+export interface RelatedScopeVm {
+  readonly slug: string;
+  readonly isDefault: boolean;
+}
+
 /** The selected routine's whole panel view model (D1, D5, D7, D8) — plain data, no
  * query or wire type, so the presentational component and its spec never see one.
  * `blockedReason` alone carries blocked-ness: a non-`null` reason means blocked, so
@@ -63,6 +71,10 @@ export interface RoutinePanelVm {
   readonly measurements: readonly MeasurementReadingVm[];
   readonly lastSwept: readonly LastSweptRowVm[];
   readonly windowLabel: string;
+  /** Every scope linked to this routine (blizzard#489), each marked whether it is
+   * the routine's own default (D8) — `null` while the relation read is still
+   * pending, `trend`'s own nullable-secondary-read shape. */
+  readonly relatedScopes: readonly RelatedScopeVm[] | null;
 }
 
 /**

@@ -9329,6 +9329,38 @@ export type RetireScopeApiScopesSlugRetirePostResponses = {
 
 export type RetireScopeApiScopesSlugRetirePostResponse = RetireScopeApiScopesSlugRetirePostResponses[keyof RetireScopeApiScopesSlugRetirePostResponses];
 
+export type ListScopeRoutinesApiScopesSlugRoutinesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/scopes/{slug}/routines';
+};
+
+export type ListScopeRoutinesApiScopesSlugRoutinesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListScopeRoutinesApiScopesSlugRoutinesGetError = ListScopeRoutinesApiScopesSlugRoutinesGetErrors[keyof ListScopeRoutinesApiScopesSlugRoutinesGetErrors];
+
+export type ListScopeRoutinesApiScopesSlugRoutinesGetResponses = {
+    /**
+     * Response List Scope Routines Api Scopes  Slug  Routines Get
+     *
+     * Successful Response
+     */
+    200: Array<string>;
+};
+
+export type ListScopeRoutinesApiScopesSlugRoutinesGetResponse = ListScopeRoutinesApiScopesSlugRoutinesGetResponses[keyof ListScopeRoutinesApiScopesSlugRoutinesGetResponses];
+
 export type FleetSpendApiSpendGetData = {
     body?: never;
     path?: never;

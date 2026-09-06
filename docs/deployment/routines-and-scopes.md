@@ -13,8 +13,9 @@ append-only brake: retiring a scope appends `scope.retired`, `enable` appends `s
 stored slug or description.
 
 The hub board's Gardening tab renders the same reads from its own Scopes sub-tab: every scope beside the selected one's
-own panel, which names the routines defaulting to it, edits the description in place, and retires or re-enables it.
-Every one of those writes is gated on `graph:edit`; without it the panel reads, and offers nothing.
+own panel, which names the routines related to it — marking which of them default here (blizzard#489) — edits the
+description in place, and retires or re-enables it. Every one of those writes is gated on `graph:edit`; without it the
+panel reads, and offers nothing.
 
 ## Routines
 
@@ -71,9 +72,10 @@ and per-repository revisions, or `never` when the pair has recorded none — and
 each delivered set records, cut to `--since`/`--until`. Unlike the last-swept table, the measurement series is windowed:
 a scope swept months ago still reads its true last-swept instant, never "never".
 
-The hub board's Gardening tab renders both reads on that same Routines sub-tab, plus a routine's stored record and the
-effective graph's own node prompts, as read-only prose, and the Run action above it. A routine whose graph has lost
-every enabled mint shows as blocked there instead of offering a run.
+The hub board's Gardening tab renders both reads on that same Routines sub-tab, plus a routine's stored record, its own
+related scopes — marking its default among them (blizzard#489) — and the effective graph's own node prompts, as
+read-only prose, and the Run action above it. A routine whose graph has lost every enabled mint shows as blocked there
+instead of offering a run.
 
 ## Reading runs
 

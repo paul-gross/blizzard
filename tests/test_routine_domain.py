@@ -131,6 +131,9 @@ class _FakeRoutineScopeRepo:
     def list_scopes(self, routine_id: str) -> list[str]:
         return sorted(slug for rid, slug in self.linked if rid == routine_id)
 
+    def list_routines(self, scope_slug: str) -> list[str]:
+        return sorted(rid for rid, slug in self.linked if slug == scope_slug)
+
     def link(self, routine_id: str, scope_slug: str) -> None:
         self.linked.add((routine_id, scope_slug))
 
@@ -302,3 +305,9 @@ class TestRoutineScopeMembership:
         membership = RoutineScopeMembership(routine_scopes=_as_write_routine_scopes(repo))
 
         assert membership.list_scopes(self._routine()) == ["a", "b"]
+
+    def test_list_routines_delegates_to_the_repository(self) -> None:
+        repo = _FakeRoutineScopeRepo(linked={("rtn_1", "a"), ("rtn_2", "a"), ("rtn_3", "b")})
+        membership = RoutineScopeMembership(routine_scopes=_as_write_routine_scopes(repo))
+
+        assert membership.list_routines(self._scope("a")) == ["rtn_1", "rtn_2"]

@@ -15348,6 +15348,53 @@
         ]
       }
     },
+    "/api/scopes/{slug}/routines": {
+      "get": {
+        "description": "Every routine id linked to `slug` (blizzard#489) \u2014 the reverse direction of\n`GET /api/routines/{routine_id}/scopes` (blizzard#488). 404 on an unknown slug.",
+        "operationId": "list_scope_routines_api_scopes__slug__routines_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response List Scope Routines Api Scopes  Slug  Routines Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Scope Routines",
+        "tags": [
+          "scopes"
+        ]
+      }
+    },
     "/api/spend": {
       "get": {
         "description": "The fleet's total usage/cost since ``since`` (an ISO-8601 instant) \u2014 summed\nover every usage fact recorded at or after it, across every chunk. An optional\n``until`` bounds the window's other edge, exclusive.",

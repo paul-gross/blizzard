@@ -8,10 +8,12 @@ import {
   hasPermission,
   injectEditScopeMutation,
   injectHubRoutinesQuery,
+  injectHubScopeRoutinesQuery,
   injectHubScopesQuery,
   injectMeQuery,
   injectScopeLifecycleMutation,
   type KitAsyncStateValue,
+  type RelatedRoutineVm,
   type RoutineView,
   type ScopeDescriptionEditEvent,
   type ScopePanelVm,
@@ -32,9 +34,10 @@ import { map } from 'rxjs';
  * second fetch and keeps the two halves free of a seam between them.
  *
  * The routines read is not dead weight even though this pane shows no routine of
- * its own: `FleetScopePanel` shows which routines default to the selected scope
- * (`scopePanelVm`'s own `defaultingRoutineNames`) — do not "clean up" what looks
- * like an unused query.
+ * its own: `FleetScopePanel` renders the routines related to the selected scope
+ * (`scopePanelVm`'s own `relatedRoutines`, blizzard#489), resolving each id the
+ * dedicated scope-routines read returns into a name and its default-ness off this
+ * already-held list — do not "clean up" what looks like an unused query.
  *
  * Scopes are editable in place and retire/enable-able, gated on `graph:edit` (the
  * same permission `src/blizzard/hub/api/scopes.py` requires) — `graph-detail.ts`'s
@@ -69,13 +72,28 @@ export class GardeningScopeDetail {
     return slug === null ? null : (this.scopes().find((s) => s.slug === slug) ?? null);
   });
 
+  private readonly scopeRoutinesQuery = injectHubScopeRoutinesQuery(() => this.selectedScope()?.slug ?? null);
+
   /** Whether the current identity may author scopes (`graph:edit`, admin-tier — the
    * same permission the scope write routes require server-side); `null`/pending
    * resolves to `false`, `graph-detail.ts`'s own `canEdit`. */
   protected readonly canEditScopes = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
 
-  /** The selected scope's panel view model — `defaultingRoutineNames` is free: the
-   * routines query is fetched purely to serve it. */
+  /** The selected scope's related routines (blizzard#489), each resolved to a name
+   * and its default-ness off the already-held routines list (D2) — `null` until the
+   * scope-routines read resolves (D5). */
+  private readonly relatedRoutines = computed<readonly RelatedRoutineVm[] | null>(() => {
+    const ids = this.scopeRoutinesQuery.data();
+    const scope = this.selectedScope();
+    if (ids === undefined || scope === null) return null;
+    const routinesById = new Map(this.routines().map((r) => [r.routine_id, r]));
+    return ids.map((id) => {
+      const routine = routinesById.get(id);
+      return { name: routine?.name ?? id, isDefault: routine?.default_scope_slug === scope.slug };
+    });
+  });
+
+  /** The selected scope's panel view model. */
   protected readonly scopePanelVm = computed<ScopePanelVm | null>(() => {
     const scope = this.selectedScope();
     if (scope === null) return null;
@@ -83,9 +101,7 @@ export class GardeningScopeDetail {
       slug: scope.slug,
       description: scope.description,
       retired: scope.retired ?? false,
-      defaultingRoutineNames: this.routines()
-        .filter((r) => r.default_scope_slug === scope.slug)
-        .map((r) => r.name),
+      relatedRoutines: this.relatedRoutines(),
     };
   });
 

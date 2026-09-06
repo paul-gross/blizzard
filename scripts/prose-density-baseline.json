@@ -532,8 +532,8 @@
   },
   "blizzard_mock/mock_hub/api/routes.py": {
    "comments": 7,
-   "docstrings": 18,
-   "total": 291
+   "docstrings": 20,
+   "total": 303
   },
   "blizzard_mock/mock_hub/app.py": {
    "comments": 0,
@@ -566,14 +566,14 @@
    "total": 65
   },
   "blizzard_mock/mock_hub/domain/models.py": {
-   "comments": 28,
-   "docstrings": 41,
-   "total": 274
+   "comments": 30,
+   "docstrings": 47,
+   "total": 296
   },
   "blizzard_mock/mock_hub/domain/service.py": {
    "comments": 47,
-   "docstrings": 118,
-   "total": 910
+   "docstrings": 127,
+   "total": 943
   },
   "blizzard_mock/mock_hub/domain/state.py": {
    "comments": 6,
@@ -582,8 +582,8 @@
   },
   "blizzard_mock/mock_hub/domain/wire.py": {
    "comments": 18,
-   "docstrings": 26,
-   "total": 311
+   "docstrings": 29,
+   "total": 327
   },
   "blizzard_mock/mock_hub/internal/__init__.py": {
    "comments": 0,
@@ -1004,8 +1004,8 @@
   },
   "blizzard/hub/api/scopes.py": {
    "comments": 0,
-   "docstrings": 13,
-   "total": 111
+   "docstrings": 15,
+   "total": 125
   },
   "blizzard/hub/api/spend.py": {
    "comments": 0,
@@ -1684,8 +1684,8 @@
   },
   "blizzard/hub/domain/routines.py": {
    "comments": 5,
-   "docstrings": 37,
-   "total": 234
+   "docstrings": 39,
+   "total": 242
   },
   "blizzard/hub/domain/run_context.py": {
    "comments": 1,
@@ -1955,7 +1955,7 @@
   "blizzard/hub/store/internal/routine_scope_store.py": {
    "comments": 1,
    "docstrings": 7,
-   "total": 50
+   "total": 59
   },
   "blizzard/hub/store/internal/routine_store.py": {
    "comments": 1,
@@ -5612,7 +5612,7 @@
   "test_route_classification.py": {
    "comments": 54,
    "docstrings": 36,
-   "total": 369
+   "total": 370
   },
   "test_route_permission_matrix.py": {
    "comments": 9,
@@ -5647,7 +5647,7 @@
   "test_routine_domain.py": {
    "comments": 1,
    "docstrings": 10,
-   "total": 304
+   "total": 313
   },
   "test_routine_lifecycle_api.py": {
    "comments": 4,
@@ -5672,7 +5672,7 @@
   "test_routine_store.py": {
    "comments": 4,
    "docstrings": 6,
-   "total": 186
+   "total": 212
   },
   "test_run_context_store.py": {
    "comments": 0,
@@ -6070,9 +6070,9 @@
    "total": 137
   },
   "test_scope_lifecycle_api.py": {
-   "comments": 0,
+   "comments": 4,
    "docstrings": 5,
-   "total": 155
+   "total": 222
   },
   "test_scope_store.py": {
    "comments": 2,

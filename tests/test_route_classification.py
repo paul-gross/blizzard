@@ -69,6 +69,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/scopes"): GRAPH_EDIT,
     ("GET", "/api/scopes"): FLEET_VIEW,
     ("GET", "/api/scopes/{slug}"): FLEET_VIEW,
+    ("GET", "/api/scopes/{slug}/routines"): FLEET_VIEW,
     ("PATCH", "/api/scopes/{slug}"): GRAPH_EDIT,
     ("POST", "/api/scopes/{slug}/retire"): GRAPH_EDIT,
     ("POST", "/api/scopes/{slug}/enable"): GRAPH_EDIT,

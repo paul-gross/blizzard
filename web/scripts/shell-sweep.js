@@ -89,10 +89,16 @@
  *     flex column has to reproduce now that they moved out from under
  *     `.body`'s own flex column — a real CSS layout claim jsdom cannot make.
  *   - projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts — the
- *     gardening routine panel (blizzard#397): the record, strategy, trend,
- *     measurement, and last-swept blocks genuinely stack at 1280/390/320px
- *     with no horizontal overflow, and the last-swept table's own long
- *     revision hashes wrap inside their column rather than widening it.
+ *     gardening routine panel (blizzard#397): the record, related-scopes
+ *     (blizzard#489), strategy, trend, measurement, and last-swept blocks
+ *     genuinely stack at 1280/390/320px with no horizontal overflow, and the
+ *     last-swept table's own long revision hashes wrap inside their column
+ *     rather than widening it.
+ *   - projects/fleet/src/lib/garden/scope-panel.shell-sweep.spec.ts — the
+ *     gardening scope panel (blizzard#489): the description, lifecycle
+ *     controls, and related-routines list genuinely stack at 1280/390/320px
+ *     with no horizontal overflow, and a routine name long enough to wrap
+ *     stays inside the list rather than widening the panel.
  *   - projects/fleet/src/lib/garden/garden-runs.shell-sweep.spec.ts — the
  *     gardening runs-and-findings tab's two presentational components
  *     (blizzard#401 Phase 3): `FleetRunList`'s escalated row carries a
@@ -206,6 +212,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/routine-panel.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/garden/scope-panel.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/garden-runs.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },

@@ -42,6 +42,7 @@ export type {
   StrategyStepVm,
   MeasurementReadingVm,
   LastSweptRowVm,
+  RelatedScopeVm,
   RoutinePanelVm,
 } from './routine-panel';
 export { injectRunRoutineMutation } from './routine-run.mutations';
@@ -50,6 +51,7 @@ export {
   injectHubRoutinesQuery,
   injectHubRoutineTrendQuery,
   injectHubRoutineSweepsQuery,
+  injectHubRoutineScopesQuery,
 } from './routines.query';
 export { FleetRunDelta } from './run-delta';
 export type { RunDeltaVm } from './run-delta';
@@ -60,9 +62,9 @@ export { injectScopeLifecycleMutation } from './scope-lifecycle.mutations';
 export { FleetScopeList } from './scope-list';
 export type { ScopeRowVm, ScopeDescriptionEditEvent } from './scope-list';
 export { FleetScopePanel } from './scope-panel';
-export type { ScopePanelVm } from './scope-panel';
+export type { RelatedRoutineVm, ScopePanelVm } from './scope-panel';
 export { injectCreateScopeMutation } from './scopes.mutations';
-export { injectHubScopesQuery } from './scopes.query';
+export { injectHubScopesQuery, injectHubScopeRoutinesQuery } from './scopes.query';
 export { injectHubWorkItemQuery, injectHubWorkItemsQuery } from './work-item.query';
 export type { WorkItemPointer } from './work-item.query';
 export type {

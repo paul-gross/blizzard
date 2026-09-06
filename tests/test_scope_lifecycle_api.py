@@ -153,3 +153,70 @@ def test_retire_defaults_by_to_operator(tmp_path: Path) -> None:
 
     assert resp.status_code == 202, resp.text
     assert resp.json()["retired"] is True
+
+
+# --- GET /api/scopes/{slug}/routines — the routine_scopes join's reverse read
+# (blizzard#489) --------------------------------------------------------------------
+
+
+_GRAPH = """
+name: alpha
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: do the work
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: done
+"""
+
+
+def _mint_graph(hub) -> None:  # type: ignore[no-untyped-def]
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH})
+    assert resp.status_code == 201, resp.text
+
+
+def _create_routine(hub, name: str, default_scope_slug: str = "blizzard") -> dict:  # type: ignore[no-untyped-def, type-arg]
+    resp = hub.client.post(
+        "/api/routines",
+        json={
+            "name": name,
+            "graph_name": "alpha",
+            "default_scope_slug": default_scope_slug,
+            "default_model": [],
+            "default_effort": None,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_get_scope_routines_starts_with_only_the_default(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create_routine(hub, "nightly")
+
+    resp = hub.client.get("/api/scopes/blizzard/routines")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == [routine["routine_id"]]
+
+
+def test_get_scope_routines_for_a_scope_no_routine_links_is_empty(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post("/api/scopes", json={"slug": "unlinked", "description": ""})
+
+    resp = hub.client.get("/api/scopes/unlinked/routines")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
+def test_get_scope_routines_unknown_scope_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get("/api/scopes/ghost/routines")
+    assert resp.status_code == 404

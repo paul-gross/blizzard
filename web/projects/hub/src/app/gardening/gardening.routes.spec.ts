@@ -101,6 +101,7 @@ describe('the /gardening route subtree', () => {
       if (method === 'GET' && path === '/api/scopes') {
         return [{ slug: 'blizzard', description: 'the blizzard monorepo', retired: false, created_at: '2026-01-01T00:00:00Z' }];
       }
+      if (method === 'GET' && path === '/api/scopes/blizzard/routines') return [];
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       return {};
     });
@@ -150,6 +151,7 @@ describe('the /gardening route subtree', () => {
       if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') {
         return { routine_name: 'nightly', since: '2026-01-01T00:00:00Z', until: '2026-01-29T00:00:00Z', last_swept: [], measurements: [] };
       }
+      if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return [];
       if (method === 'GET' && path === '/api/runs') return [];
       if (method === 'GET' && path === '/api/scopes') return [];
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;

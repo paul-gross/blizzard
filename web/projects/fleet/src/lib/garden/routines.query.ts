@@ -2,13 +2,14 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import {
   listRoutinesApiRoutinesGet,
+  listRoutineScopesApiRoutinesRoutineIdScopesGet,
   routineSweepsApiRoutinesRoutineIdSweepsGet,
   routineTrendApiRoutinesTrendGet,
   type GardenSweepsView,
   type RoutineView,
   type TrendView,
 } from '../api/hub';
-import { hubRoutineSweepsKey, hubRoutineTrendKey, hubRoutinesKey } from '../query-keys';
+import { hubRoutineScopesKey, hubRoutineSweepsKey, hubRoutineTrendKey, hubRoutinesKey } from '../query-keys';
 
 /**
  * Hub `GET /api/routines` read — every routine, newest first. Routines change rarely
@@ -81,6 +82,30 @@ export function injectHubRoutineSweepsQuery(routineId: () => string | null, sinc
         });
         if (error) throw error;
         return data as GardenSweepsView;
+      },
+    };
+  });
+}
+
+/**
+ * Hub `GET /api/routines/{routine_id}/scopes` read — every scope slug linked to a
+ * routine's own set (blizzard#488), its own default always among them. Disabled while
+ * `routineId()` is `null`, the same rest state {@link injectHubRoutineSweepsQuery}
+ * carries.
+ */
+export function injectHubRoutineScopesQuery(routineId: () => string | null) {
+  return injectQuery(() => {
+    const id = routineId();
+    return {
+      queryKey: hubRoutineScopesKey(id),
+      enabled: id !== null,
+      queryFn: async (): Promise<string[]> => {
+        const { data, error } = await listRoutineScopesApiRoutinesRoutineIdScopesGet({
+          path: { routine_id: id! },
+          throwOnError: false,
+        });
+        if (error) throw error;
+        return data ?? [];
       },
     };
   });
