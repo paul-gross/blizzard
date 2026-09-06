@@ -25,11 +25,12 @@ code, since this lane's subject is harness work — agent-facing conventions, sk
 
 Use the review tooling this workspace provides where it exists.
 
-## Adjudicate the build's refutations
+## Adjudicate iterate's refutations
 
-The `review-finding-refutes` asset holds findings the build declined rather than fixed, with its arguments. Its newest
-submission restates every refutation still standing and is therefore the whole record, so don't go looking for an older,
-deliberately shadowed epoch.
+The `review-finding-refutes` asset holds findings a prior `iterate` visit declined rather than fixed, with its
+arguments. Absent on a first pass — this review always precedes any `iterate` visit — which is normal, not a gap to
+flag. Where present, its newest submission restates every refutation still standing and is therefore the whole record,
+so don't go looking for an older, deliberately shadowed epoch.
 
 Match a refutation to its finding by its anchor rather than its id: a fresh cold pass renumbers, and the anchor is the
 only stable handle. A refutation is a claim to adjudicate, never a veto — findings about prose and convention are

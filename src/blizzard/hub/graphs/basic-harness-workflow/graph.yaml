@@ -58,6 +58,18 @@ sessions:
       max_transcript_bytes: 10000000
   gate:
     model: ["blizzard:frontier"]
+  iteration:
+    # The `iterate` node's own lineage, on the advanced tier — reads the code cold
+    # rather than resuming `code`'s own build context, giving the fixer a lineage
+    # that has not already argued with the reviewer. Named `iteration`, not `iterate`:
+    # a session name colliding with a node name is a mint-time error.
+    model: ["blizzard:advanced"]
+    # code's three numbers, inherited as bounds for this lineage: it accumulates
+    # across the review-fail loop the same way code does across a deliver-conflict one.
+    rotate:
+      max_invocations: 12
+      max_context_tokens: 300000
+      max_transcript_bytes: 10000000
 
 nodes:
   build:
@@ -67,13 +79,6 @@ nodes:
       # own prior context, not whichever node ran last (review is deliberately fresh, so
       # bare `resume` would otherwise hand build its cold-read session instead of its own)
     produces:
-      # The refutation channel (see prompts/build.from-review.md): review findings the
-      # build declines rather than fixes, with the argument. `review` is a fresh cold read
-      # every pass, so without this it re-raises a deliberately declined finding forever;
-      # it now must accept or reject each refutation explicitly. Doubly worth having in
-      # this lane, where findings are judgements about prose and convention rather than
-      # about code that either works or doesn't.
-      - review-finding-refutes
       - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
     judgement:
       prompt: ./prompts/build.judgement.md
@@ -94,7 +99,7 @@ nodes:
     prompt: ./prompts/review.md
     session: fresh:gate  # cold eyes for review; the default is resume
     produces:
-      - review-findings  # asset artifact — carried back into build on a fail
+      - review-findings  # asset artifact — carried back into iterate on a fail
     judgement:
       prompt: ./prompts/review.judgement.md
       choices:
@@ -103,8 +108,34 @@ nodes:
           to: deliver
         fail:
           description: Review found blocking issues, recorded in the review-findings asset.
-          to: build  # THE LOOP: the findings asset rides this edge back into build
-          prompt_addendum: ./prompts/build.from-review.md
+          to: iterate  # THE LOOP: the findings asset rides this edge back into iterate
+          prompt_addendum: ./prompts/iterate.from-review.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  iterate:
+    executor: runner
+    prompt: ./prompts/iterate.md
+    session: resume:iteration  # explicit: the review-fail loop's own lineage,
+      # separate from build's — a fixer that has not already argued with the reviewer
+    produces:
+      # The refutation channel (see prompts/iterate.from-review.md): review findings
+      # this node declines rather than fixes, with the argument. `review` is a fresh
+      # cold read every pass, so without this it re-raises a deliberately declined
+      # finding forever; it now must accept or reject each refutation explicitly.
+      - review-finding-refutes
+      - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
+    judgement:
+      prompt: ./prompts/iterate.judgement.md
+      choices:
+        pass:
+          description: Every review finding is answered — fixed or refuted on the record — committed and pushed.
+          to: review
+        fail:
+          description: The findings are not yet fully answered; the failure output is attached.
+          to: iterate
+          prompt_addendum: ./prompts/iterate.from-iterate.md
     retries:
       max: 2
       exhausted: escalate

@@ -42,12 +42,3 @@ Push the branch to each repo's origin. For every repo you touched, you MUST then
 `blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>`; the declaration is mandatory, and an
 undeclared push does not count. Re-declaring a tip that was already declared is harmless, so declare again rather than
 assuming an earlier attempt's declaration got there.
-
-## Submit the refutation record
-
-On every pass through this node you MUST run `blizzard runner artifact create --name review-finding-refutes` with the
-refutation content on stdin; the submission is mandatory. Read the previous submission first with
-`blizzard runner artifact get review-finding-refutes --content` and carry it forward. Every refutation still standing is
-restated in each new submission, including any a reviewer already accepted in an earlier round, each marked `open` or
-`accepted`: that asset is replaced rather than appended to, and the reviewer sees only the newest submission and never
-looks for an older one.
