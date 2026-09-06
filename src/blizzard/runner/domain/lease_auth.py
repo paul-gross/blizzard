@@ -35,7 +35,8 @@ class LeaseToken:
     @property
     def valid(self) -> bool:
         """``False`` when either side is absent — no token presented, or the lease never
-        minted one (a lease pre-dating Phase 1, or an id that resolved to nothing)."""
+        minted one (a lease that predates capability tokens, or an id that resolved to
+        nothing)."""
         if self.presented is None or self.stored_hash is None:
             return False
         return hmac.compare_digest(TokenHash(self.presented).hex, self.stored_hash)

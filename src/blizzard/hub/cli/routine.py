@@ -1,5 +1,5 @@
 """``blizzard hub routine`` — issue #389: operator verbs over routines; blizzard#394
-Phase 4 adds ``trend``, the gardening routine panel adds ``sweeps``."""
+adds ``trend``, the gardening routine panel adds ``sweeps``."""
 
 from __future__ import annotations
 
@@ -177,7 +177,7 @@ def routine_run(cli: CliContext, name: str, scope_slug: str | None, mode: str, n
 
 @dataclass(frozen=True)
 class TrendDetail:
-    """`routine trend`'s own render (blizzard#394 Phase 4) — per-period counts, then the
+    """`routine trend`'s own render (blizzard#394) — per-period counts, then the
     D5 age cut."""
 
     body: dict[str, Any]

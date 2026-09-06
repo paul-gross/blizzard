@@ -1,4 +1,4 @@
-"""Human-driven exit verbs (blizzard#394 Phase 1): widens ``ck_finding_facts_kind``,
+"""Human-driven exit verbs (blizzard#394): widens ``ck_finding_facts_kind``,
 adds ``finding_facts.actor``/``proposal_id``/``superseded_by``, and adds ``findings.introduced_at``.
 
 Revision ID: 20260831_1030_finding_exits

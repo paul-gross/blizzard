@@ -1,5 +1,5 @@
 """The runner live-event stream — ``GET /api/events/stream`` (SSE), excluded from the OpenAPI
-schema (blizzard#317 Phase 2). A subscriber registers with
+schema (blizzard#317). A subscriber registers with
 :class:`~blizzard.runner.events.broker.EventBroker`, replays its buffered tail, then streams
 live over the hub-shared :class:`Cursor`/:class:`Stream` machinery (D1). Mounted in the
 ``_HUMAN`` lane, gated at router inclusion. ``app.state.events`` is ``None`` on a

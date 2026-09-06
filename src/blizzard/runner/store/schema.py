@@ -345,7 +345,7 @@ route_tokens = Table(
     Column("acquired_at", UtcDateTime, nullable=False),
 )
 
-# --- Lease capability tokens (issue #113, Phase 1) ---------------------------
+# --- Lease capability tokens (issue #113) -------------------------------------
 # Only the sha256 hash is stored; the plaintext rides the spawn env, never persisted.
 
 lease_tokens = Table(
@@ -372,7 +372,7 @@ attachments = Table(
     Column("attached_at", UtcDateTime, nullable=False),
 )
 
-# --- Nudge-fired facts (issue #113, Phase 4) ---------------------------------
+# --- Nudge-fired facts (issue #113) -------------------------------------------
 # Written BEFORE the resume it guards, so "at most one nudge" survives a crash.
 
 nudge_facts = Table(
@@ -439,7 +439,7 @@ jwt_jti_seen = Table(
     Column("expires_at", UtcDateTime, nullable=False),
 )
 
-# --- Git-commit declarations (issue #143, Phase 3) ---------------------------
+# --- Git-commit declarations (issue #143) -------------------------------------
 # Latest-wins-per-``(lease_id, repo)``: a chunk may span multiple repos.
 
 git_commit_declarations = Table(

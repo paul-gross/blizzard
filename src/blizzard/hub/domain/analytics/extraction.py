@@ -1,4 +1,4 @@
-"""Per-kind turn recognition (blizzard#254, Phase 2) — pure over turn objects, no store
+"""Per-kind turn recognition (blizzard#254) — pure over turn objects, no store
 or sweep (``bzh:domain-core``).
 
 An extractor recognizes calls per *dialect*, keyed on the segment's own
@@ -28,7 +28,7 @@ _CLAUDE_CODE_DIALECTS: dict[str, str] = {"claude-code-jsonl/2": "Agent"}
 @dataclass(frozen=True)
 class ExtractedEvent:
     """One recognized occurrence, still payload-shaped as a plain mapping — the
-    derivation service (Phase 3) serializes it and stamps the node-step context this
+    derivation service serializes it and stamps the node-step context this
     layer never sees. ``subject``/``tool`` are the projection its extractor supplies
     (blizzard#255 D1); ``subject`` is ``None`` for a kind with no natural one."""
 

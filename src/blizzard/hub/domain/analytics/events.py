@@ -1,4 +1,4 @@
-"""The transcript-event store seam and its domain types (blizzard#254, Phase 1).
+"""The transcript-event store seam and its domain types (blizzard#254).
 
 An event row is an immutable observation, never a status (``bzh:facts-not-status``): it
 is fully re-derivable from the segments that back it, and its source's mutability is
@@ -57,7 +57,7 @@ class DerivationMarker:
 
 @dataclass(frozen=True)
 class SegmentDerivationInput:
-    """Everything a segment offers the derivation service (Phase 3): decoded once,
+    """Everything a segment offers the derivation service: decoded once,
     fingerprinted once. ``complete`` is ``False`` when a record is a content hole (D6) —
     ``turns`` is then a partial view, declared rather than indistinguishable from a
     session that read nothing."""

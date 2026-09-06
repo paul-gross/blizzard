@@ -1,4 +1,4 @@
-"""``blizzard runner artifact commit`` — wire body (issue #143, Phase 3).
+"""``blizzard runner artifact commit`` — wire body (issue #143).
 
 Behind ``POST /api/leases/{lease_id}/git-commits``: the ``git_commit`` artifact kind's
 channel, carrying structured identity rather than content.

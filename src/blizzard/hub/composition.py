@@ -230,7 +230,7 @@ class HubServices:
     #: The finding read Protocol (blizzard#390).
     findings: IReadFindingRepository
     #: The human-driven exit verbs over findings — resolve/confirm-gone/wont-fix/
-    #: not-a-finding/supersede/reopen (blizzard#394 Phase 1).
+    #: not-a-finding/supersede/reopen (blizzard#394).
     finding_exit: FindingExitService
     #: The finding-set read Protocol (blizzard#390) — one set per delivered artifact list.
     finding_sets: IReadFindingSetRepository
@@ -245,15 +245,15 @@ class HubServices:
     garden_proposal_closure: GardenProposalClosureService
     #: A run's identity — routine, scope, and mode; read-only (``bzh:controller-read-only``).
     run_context: IReadRunContextRepository
-    #: The findings a chunk's own accepted, minted garden proposal answers (blizzard#397
-    #: Phase 1) — the worker's per-chunk read, distinct from the routine-bucket read
+    #: The findings a chunk's own accepted, minted garden proposal answers (blizzard#397)
+    #: — the worker's per-chunk read, distinct from the routine-bucket read
     #: `findings`/`run_context` back.
     answered_findings: AnsweredFindingsReader
-    #: Materialize a validated delivery in one transaction (blizzard#393 Phase 3).
+    #: Materialize a validated delivery in one transaction (blizzard#393).
     garden_delivery: GardenDelivery
     #: Resolves a cited commit against the configured forge (blizzard#393 D2).
     commit_resolver: CommitResolver
-    #: A routine's finding inflow-against-outflow over a window (blizzard#394 Phase 4).
+    #: A routine's finding inflow-against-outflow over a window (blizzard#394).
     garden_trend: GardenTrendService
     #: A routine's per-scope last-swept table and windowed measurement series.
     garden_sweeps: GardenSweepsService

@@ -1,4 +1,4 @@
-"""Reading a worker's presented lease token off a request (issue #113, Phase 2;
+"""Reading a worker's presented lease token off a request (issue #113;
 issue #127).
 
 The one place the two accepted forms are decoded — the dedicated ``X-Blizzard-Lease-Token``

@@ -1,7 +1,7 @@
 """The lease- and route-token repository seam (blizzard#410).
 
 Two independent capability tokens: a chunk's route claim token (issue #84a) and a
-lease's attach capability token hash (issue #113, Phase 1). Neither plaintext is
+lease's attach capability token hash (issue #113). Neither plaintext is
 persisted except the route token itself, which the runner alone ever presents."""
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ class IReadTokenRepository(Protocol):
 
     def lease_token_hash(self, lease_id: str) -> str | None:
         """The lease's minted capability token hash, or ``None`` if never minted
-        here (issue #113, Phase 1) — what an attach authorization check compares a
+        here (issue #113) — what an attach authorization check compares a
         presented plaintext's hash against."""
         ...
 
@@ -39,7 +39,7 @@ class IWriteTokenRepository(IReadTokenRepository, Protocol):
         ...
 
     def record_lease_token(self, lease_id: str, token_hash: str, at: datetime) -> None:
-        """Persist a lease's capability-token hash (issue #113, Phase 1).
+        """Persist a lease's capability-token hash (issue #113).
 
         Overwrite-safe: the implementation replaces any prior row, invalidating the
         previous token. The plaintext is never persisted, only this sha256 hash."""

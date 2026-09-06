@@ -1,4 +1,4 @@
-"""Delivery validation (blizzard#393 Phase 2) — the hub-executed delivery node's shape
+"""Delivery validation (blizzard#393) — the hub-executed delivery node's shape
 check, before anything is written; the check itself is specified by
 blizzard-product:/plans/garden/machinery.md §Delivery. Pure functions over already-loaded
 objects (`bzh:domain-takes-objects`), no I/O. Materializing a passing result is

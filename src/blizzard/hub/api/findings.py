@@ -1,4 +1,4 @@
-"""Finding routes (blizzard#390; write verbs blizzard#394 Phase 2).
+"""Finding routes (blizzard#390; write verbs blizzard#394).
 
 ``GET /api/findings`` is the pass's own bucket read
 (blizzard-product:/plans/garden/machinery.md §Managing findings and proposals): a
@@ -123,7 +123,7 @@ def resolve_findings(
 ) -> list[FindingView]:
     """Resolve every finding in `finding_ids`, recording NOTE: the work that answers a
     finding landed. 404 for an unknown id, 422 for a blank note. A hand resolution names
-    no garden proposal — that attribution is Phase 3's own, delivery-triggered."""
+    no garden proposal — that attribution happens only when a delivery lands."""
     return _exit_verb(request, services, identity, services.finding_exit.resolve)
 
 

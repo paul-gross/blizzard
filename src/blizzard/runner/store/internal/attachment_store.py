@@ -42,7 +42,7 @@ class AttachmentStore:
         attached_at: datetime,
     ) -> None:
         # A single committed transaction — durable the instant this returns, so it
-        # survives a `kill -9` right after (issue #113 Phase 2).
+        # survives a `kill -9` right after (issue #113).
         with self._store.begin() as conn:
             conn.execute(
                 attachments.insert().values(

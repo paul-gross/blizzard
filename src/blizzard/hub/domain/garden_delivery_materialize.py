@@ -1,4 +1,4 @@
-"""Delivery materialization (blizzard#393 Phase 3) — turning a :class:`ValidatedDelivery`
+"""Delivery materialization (blizzard#393) — turning a :class:`ValidatedDelivery`
 into the rows a passing delivery mints, written in one transaction
 (blizzard-product:/plans/garden/machinery.md §Delivery). Sibling to ``garden_delivery.py``
 rather than folded into it so that module stays pure validation with no I/O; this one
@@ -163,7 +163,7 @@ class GardenDelivery:
     ) -> DeliveryOutcome:
         """Materialize `validated`. `delta_artifact_ids`/`proposal_artifact_ids` name the
         artifact each of `validated.deltas`/`validated.proposals` came from, positionally
-        parallel — neither carries its own artifact id (Phase 2 doesn't track one).
+        parallel — neither carries its own artifact id (deltas and proposals don't track one).
         `chunk`/`node`/`epoch` identify the delivering node-step, the idempotence
         marker's own key."""
         chunk_id = chunk.chunk_id

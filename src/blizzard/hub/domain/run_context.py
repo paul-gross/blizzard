@@ -1,4 +1,4 @@
-"""A run's identity (blizzard#393 Phase 1) — the routine, scope, and mode a work item's
+"""A run's identity (blizzard#393) — the routine, scope, and mode a work item's
 run executes under. Minted by blizzard#392; this seam only resolves it back, through a
 chunk's first work ref, to the ``work_item_runs`` row blizzard#392 wrote."""
 

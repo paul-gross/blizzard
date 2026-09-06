@@ -45,7 +45,7 @@ class IReadGitCommitDeclarationRepository(Protocol):
 
     def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
         """The lease's explicit git-commit declarations, newest per ``(environment_id,
-        repo)`` (issue #143, Phase 3), keyed the same way.
+        repo)`` (issue #143), keyed the same way.
 
         Append-only, latest-wins. Keying on the environment as well as the repo keeps
         several environments from collapsing one env's branch onto another's."""

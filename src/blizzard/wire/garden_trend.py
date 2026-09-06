@@ -1,5 +1,4 @@
-"""A routine's finding trend — the `GET /api/routines/trend` read view (blizzard#394
-Phase 4).
+"""A routine's finding trend — the `GET /api/routines/trend` read view (blizzard#394).
 
 Every count is a fold over the window's own `finding_facts`, never a stored rollup
 (`bzh:facts-not-status`); periods are fixed-length slices of `[since, until)`, and `age`

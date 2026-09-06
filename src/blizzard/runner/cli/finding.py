@@ -1,5 +1,5 @@
 """``blizzard runner finding`` — the findings a worker's own chunk's accepted, minted
-garden proposal answers (blizzard#397 Phase 2)."""
+garden proposal answers (blizzard#397)."""
 
 from __future__ import annotations
 

@@ -248,7 +248,7 @@ class TranscriptIngestService:
         if byte_count > self._caps.record_max_bytes:
             return self._rejected(record, REJECTED_RECORD_TOO_LARGE, byte_count, self._caps.record_max_bytes)
         # D4: only already-*stored* bytes count toward the chunk budget — a rejection
-        # counts toward the daily rate only (Phase 2 AC).
+        # counts toward the daily rate only, never the chunk budget.
         stored = self._store.chunk_stored_bytes(record.chunk_id)
         if stored + byte_count > self._caps.chunk_budget_max_bytes:
             return self._rejected(

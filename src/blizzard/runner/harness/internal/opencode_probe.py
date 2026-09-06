@@ -1,7 +1,7 @@
 """Concrete, process-owning probes for the pinned OpenCode compatibility proof.
 
 The binding invokes the supplied binary with argument lists, gives children the allowlisted
-environment and runner-owned config, parses Phase 1 shapes, and turns each probe into one
+environment and runner-owned config, parses shapes, and turns each probe into one
 observation. Provider access follows the caller's explicit live-provider opt-in.
 """
 

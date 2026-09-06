@@ -1,7 +1,7 @@
 """The runner-store composition root (blizzard#410, D4).
 
 The only module under ``src/`` that names a concrete ``runner/store/internal/`` adapter
-(the structural gate Phase 4 adds asserts this) — every other collaborator takes a
+(a structural gate asserts this) — every other collaborator takes a
 Protocol seam or the :class:`~blizzard.runner.stores.RunnerStores` bundle this builds.
 Mirrors :func:`blizzard.hub.composition.build_services`."""
 

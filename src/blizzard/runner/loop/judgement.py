@@ -268,7 +268,7 @@ class Judgement:
         the same tree its judgement and the gate are rendered on. The in-flight record is
         durable BEFORE the process starts (D1), mirroring `Spawner.spawn`'s mint-before-spawn:
         a crash in the gap leaves a record with no process, which REAP's generic staleness
-        treatment (Phase 2) absorbs the same way an orphaned lease mint is absorbed today."""
+        treatment absorbs the same way an orphaned lease mint is absorbed today."""
         lease = self.lease
         output_path = self.ctx.elicitation_files.output_path(lease.lease_id, lease.epoch, attempt=0)
         self.ctx.stores.elicitations.record_elicitation_launch(

@@ -18,7 +18,7 @@ class IReadChunkArtifactsRepository(Protocol):
 
     def latest_artifact(self, chunk_id: str, name: str) -> ArtifactRow | None:
         """The chunk's newest artifact row named ``name`` — highest epoch, then latest
-        ``produced_at`` (blizzard#393 Phase 4) — the garden-delivery route's own
+        ``produced_at`` (blizzard#393) — the garden-delivery route's own
         by-name resolution. ``None`` when no artifact of that name exists."""
         ...
 

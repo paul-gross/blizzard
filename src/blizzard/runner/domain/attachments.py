@@ -1,4 +1,4 @@
-"""The worker attach channel — ``blizzard runner attach --name <n>`` (issue #113, Phase 2).
+"""The worker attach channel — ``blizzard runner attach --name <n>`` (issue #113).
 
 A worker durably submits an explicit artifact for a ``produces:`` name, authorized by
 the lease token minted at its own spawn. :meth:`AttachmentService.attach` is the one
@@ -64,7 +64,7 @@ class AttachmentRejected(Exception):
 
 class AttachmentService:
     """Composition-root-wired: the attachment store, the token store (for authorization),
-    and the clock (issue #113, Phase 2)."""
+    and the clock (issue #113)."""
 
     def __init__(self, store: IWriteAttachmentRepository, clock: IClock, *, tokens: IReadTokenRepository) -> None:
         self._store = store

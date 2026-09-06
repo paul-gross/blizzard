@@ -1,4 +1,4 @@
-"""The GitHub-backed commit resolver (blizzard#393 Phase 4, D2) — the real forge check
+"""The GitHub-backed commit resolver (blizzard#393, D2) — the real forge check
 behind `garden_delivery.CommitResolver`: resolves whether a cited commit exists on a
 repo when the hub has a forge configured and the repo is addressable, degrading to
 ``None`` (well-formedness only) otherwise. Confined to ``internal/``

@@ -185,7 +185,7 @@ class GardenRunStore:
         """The finding ids `finding_set_id`'s own `add` facts minted, in insertion
         order — positionally parallel to its artifact's `AddFindingOp` entries
         (`GardenDelivery.deliver` appends one fact per op in artifact order). A set
-        predating the `finding_facts.finding_set_id` linkage (Phase 1) matches none."""
+        predating the `finding_facts.finding_set_id` linkage's addition matches none."""
         return list(
             conn.execute(
                 select(finding_facts.c.finding_id)

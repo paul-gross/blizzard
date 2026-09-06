@@ -24,7 +24,7 @@ class IReadCheckRepository(Protocol):
 
     def nudge_fired(self, lease_id: str, epoch: int) -> bool:
         """``True`` iff this attempt's `produces`-unmet nudge is already spent
-        (issue #113, Phase 4) — the durable guard consulted before resuming a worker
+        (issue #113) — the durable guard consulted before resuming a worker
         session to nudge it. Written by :meth:`~IWriteCheckRepository.record_nudge_fired`
         *before* that resume runs, so a crash between the two still leaves this reading
         ``True`` on the next pass."""
@@ -47,8 +47,8 @@ class IWriteCheckRepository(IReadCheckRepository, Protocol):
     """Read-write check/nudge store — held only by the domain."""
 
     def record_nudge_fired(self, *, lease_id: str, epoch: int, at: datetime) -> None:
-        """Durably spend this attempt's one `produces`-unmet nudge (issue #113,
-        Phase 4). Idempotent by its own check-then-insert, not a DB constraint
+        """Durably spend this attempt's one `produces`-unmet nudge (issue #113).
+        Idempotent by its own check-then-insert, not a DB constraint
         (``bzh:sql-portable``), mirroring :meth:`record_usage`. Called *before* the
         resume that delivers the nudge — the ordering rationale lives at the call site
         in ``runner/loop/steps.py``."""

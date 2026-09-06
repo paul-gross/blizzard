@@ -1,4 +1,4 @@
-"""work_item_runs (blizzard#393 Phase 1 — a run's identity).
+"""work_item_runs (blizzard#393 — a run's identity).
 
 Revision ID: 20260830_1835_work_item_runs
 Revises: 20260829_1930_fact_tables_chunk_id_index

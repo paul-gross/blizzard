@@ -1,5 +1,5 @@
 """SQLAlchemy adapter for the garden-delivery materialization seam (package-private,
-blizzard#393 Phase 3). All ``sqlalchemy`` usage is confined here (``bzh:dependency-
+blizzard#393). All ``sqlalchemy`` usage is confined here (``bzh:dependency-
 inversion``). One ``store.write`` transaction per :meth:`GardenDeliveryStore.deliver`
 call — every row a :class:`DeliveryPlan` carries, plus its own idempotence marker, land
 together or not at all."""

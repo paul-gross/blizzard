@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the garden-trend read seam (package-private, blizzard#394
-Phase 4).
+"""SQLAlchemy adapter for the garden-trend read seam (package-private, blizzard#394).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the window
 itself is bound in SQL, but period bucketing is left to

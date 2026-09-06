@@ -1,4 +1,4 @@
-"""``blizzard hub finding`` — blizzard#390: read verbs over findings; blizzard#394 Phase 2
+"""``blizzard hub finding`` — blizzard#390: read verbs over findings; blizzard#394
 adds the human-driven exit verbs and `reopen`."""
 
 from __future__ import annotations

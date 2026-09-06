@@ -1,6 +1,6 @@
 """Export the live ``blizzard hub`` / ``blizzard runner`` command trees as JSON.
 
-The single source of ``contracts/cli/``'s golden corpus (blizzard#cli-by-concept Phase 1):
+The single source of ``contracts/cli/``'s golden corpus (blizzard#cli-by-concept):
 each root group is walked via plain ``click`` introspection — no invocation, no I/O — and
 dumped as deterministic, sorted JSON, so a drift check over the committed output is stable
 (the same shape ``blizzard.tools.openapi`` uses for the OpenAPI specs)."""
