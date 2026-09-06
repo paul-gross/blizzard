@@ -2776,6 +2776,124 @@
         "title": "ExternalSubscriptionUsageWindowView",
         "type": "object"
       },
+      "FindingDetailView": {
+        "description": "`GET /api/findings/{finding_id}`'s own response model (blizzard#487) \u2014 adds the\nfinding's whole fact chain, oldest-first, atop every `FindingView` field. The list\nread (`GET /api/findings`) returns plain `FindingView` and carries no chain.",
+        "properties": {
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/FindingFactView"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "first_observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Observed At"
+          },
+          "introduced": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Introduced"
+          },
+          "introduced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Introduced At"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "live": {
+            "title": "Live",
+            "type": "boolean"
+          },
+          "locus": {
+            "title": "Locus",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "observed_count": {
+            "title": "Observed Count",
+            "type": "integer"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          },
+          "scope_slug": {
+            "title": "Scope Slug",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "routine_name",
+          "scope_slug",
+          "class",
+          "locus",
+          "summary",
+          "live",
+          "state",
+          "last_seen_at",
+          "observed_count",
+          "facts"
+        ],
+        "title": "FindingDetailView",
+        "type": "object"
+      },
       "FindingExitRequest": {
         "additionalProperties": false,
         "description": "`POST /api/findings/{verb}` \u2014 the shared shape for every human-driven exit and\n`reopen` except `supersede` (blizzard#394): every finding named exits (or\nreopens) together, one call, carrying the same required note (D7).",
@@ -2798,6 +2916,69 @@
           "note"
         ],
         "title": "FindingExitRequest",
+        "type": "object"
+      },
+      "FindingFactView": {
+        "description": "One entry in a finding's fact chain, oldest-first \u2014 `FindingFact` on the wire\n(blizzard#487).",
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
+          }
+        },
+        "required": [
+          "kind",
+          "recorded_at"
+        ],
+        "title": "FindingFactView",
         "type": "object"
       },
       "FindingSupersedeRequest": {
@@ -11659,25 +11840,39 @@
     },
     "/api/findings": {
       "get": {
-        "description": "A routine's findings under one scope \u2014 live only, unless `include_gone` (D3),\nwhich also surfaces every exited finding, not just a merely `gone` one; the read a\nrunning pass calls to cross-reference its own bucket.",
+        "description": "The findings bucket, widened to every routine and every scope (blizzard#486) \u2014\nlive only, unless `include_gone` (D3), which also surfaces every exited finding, not\njust a merely `gone` one. `routine` and `scope` are both optional, independently:\n\n- both named \u2014 one routine's findings under one scope (`list_for`)\n- `routine` named, `scope` absent \u2014 one routine's findings across every scope it\n  holds (`list_for_routine`)\n- `routine` absent, `scope` named \u2014 every routine's findings under one scope\n- both absent \u2014 every finding across every routine and every scope\n\nThe last two are `list_across_routines`'s own two shapes.",
         "operationId": "list_findings_api_findings_get",
         "parameters": [
           {
             "in": "query",
             "name": "routine",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Routine",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Routine"
             }
           },
           {
             "in": "query",
             "name": "scope",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Scope",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
             }
           },
           {
@@ -12001,7 +12196,7 @@
     },
     "/api/findings/{finding_id}": {
       "get": {
-        "description": "One finding's whole record; 404 on an unknown id.",
+        "description": "One finding's whole record, plus its whole fact chain oldest-first (blizzard#487);\n404 on an unknown id.",
         "operationId": "get_finding_api_findings__finding_id__get",
         "parameters": [
           {
@@ -12019,7 +12214,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FindingView"
+                  "$ref": "#/components/schemas/FindingDetailView"
                 }
               }
             },

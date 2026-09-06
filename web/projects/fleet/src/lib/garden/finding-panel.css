@@ -55,6 +55,17 @@
   color: var(--label-dim);
   font-style: italic;
 }
+/* Matches `fleet-kit-prose-block`'s own `.who` label style (`kit-prose-block.css`)
+ * so "Timeline" reads like the "Summary"/"Note" labels beside it, rather than the
+ * browser's UA-default `<h4>` (review:F11). */
+.fp-timeline h4 {
+  margin: 0 0 4px;
+  font-size: var(--fs-label);
+  font-weight: normal;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--label);
+}
 .fp-work-item {
   margin: 0;
 }

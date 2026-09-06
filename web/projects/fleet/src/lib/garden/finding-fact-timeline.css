@@ -1,0 +1,57 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+.timeline {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.fact {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+  min-width: 0;
+}
+.fact:last-child {
+  border-bottom: none;
+}
+.fact-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.kind {
+  color: var(--text);
+}
+.ts {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  white-space: nowrap;
+}
+/* A note/actor line can run long (a person's own triage note) — wraps rather than
+   forcing this narrow-viewport surface (gardening's mobile bottom tab bar) wider
+   than its column. */
+.note,
+.actor {
+  margin: 2px 0 0;
+  color: var(--label);
+  overflow-wrap: anywhere;
+}
+.actor {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+/* A `superseded` fact's absorbing-finding id, or a delivery-triggered `resolved`
+   fact's proposal id (review:F10) — `.actor`'s own style, reused rather than
+   redeclared, since both are the same secondary-fact metadata line. */
+.proposal,
+.superseded-by {
+  margin: 2px 0 0;
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}

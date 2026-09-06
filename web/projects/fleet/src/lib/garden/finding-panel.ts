@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output } from '@angular/core';
 
+import type { FindingFactView } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBadge } from '../kit/kit-badge';
@@ -8,6 +9,7 @@ import { KitFactList, type KitFact } from '../kit/kit-fact-list';
 import { KitProseBlock } from '../kit/kit-prose-block';
 import { FleetWhen } from '../when-display';
 import type { Tone } from '../kit/tone';
+import { FleetFindingFactTimeline } from './finding-fact-timeline';
 import { findingStateTone, isFindingExited } from './finding-state';
 import type { FindingTriageVerb } from './finding-list';
 import type { ProposalWorkItemVm } from './proposal-panel';
@@ -41,6 +43,9 @@ export interface FindingPanelVm {
   readonly lastSeenAt: string | null;
   readonly summary: string;
   readonly note: string | null;
+  /** The finding's whole append-only fact chain, oldest-first (blizzard#487) — fed
+   * straight to {@link FleetFindingFactTimeline}, which owns its own rendering. */
+  readonly facts: readonly FindingFactView[];
   readonly workItem: ProposalWorkItemVm | null;
 }
 
@@ -61,7 +66,7 @@ export interface FindingPanelVm {
 @Component({
   selector: 'fleet-finding-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitButton, KitFactList, KitProseBlock, FleetWhen],
+  imports: [KitAsyncState, KitBadge, KitButton, KitFactList, KitProseBlock, FleetFindingFactTimeline, FleetWhen],
   templateUrl: './finding-panel.html',
   styleUrl: './finding-panel.css',
 })

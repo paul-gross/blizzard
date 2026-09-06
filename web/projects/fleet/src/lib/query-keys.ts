@@ -79,8 +79,10 @@ export function hubFindingKey(findingId: string | null): readonly unknown[] {
 export const hubFindingsBucketPrefixKey = ['hub', 'findings-bucket'] as const;
 
 /** The findings triage bucket read, keyed by the selected routine and scope. Both are
- * required by the server (`ListFindingsApiFindingsGetData.query`), `hubGraphKey`'s own
- * null-tolerant shape for the disabled-query rest state while either is unset. */
+ * independently optional on the server (blizzard#486) — `null` means "every value on
+ * that dimension" rather than "not chosen yet" — so the `(null, null)` pair is itself
+ * a distinct, meaningful cache entry (the widened "every routine, every scope" read),
+ * not a disabled-query rest state the way `hubGraphKey`'s nullable id is. */
 export function hubFindingsBucketKey(routine: string | null, scope: string | null): readonly unknown[] {
   return [...hubFindingsBucketPrefixKey, routine, scope];
 }

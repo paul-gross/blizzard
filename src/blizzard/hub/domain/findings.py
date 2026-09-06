@@ -148,6 +148,20 @@ class IReadFindingRepository(Protocol):
         (blizzard#394), so it costs one query pair, not one pair per row."""
         ...
 
+    def get_facts(self, finding_id: str) -> list[FindingFact]:
+        """A finding's whole fact chain, oldest-first — `get`'s own facts, exposed
+        directly rather than only folded through `derive_liveness` (blizzard#487).
+        Empty for an unknown id, same as `get`'s `None` in spirit but a list here
+        since callers pair it with a `get` call that already 404s on unknown ids."""
+        ...
+
+    def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
+        """`get`/`get_facts` unified into one read transaction (review:F5) — the API
+        detail route needs the row and its whole fact chain to agree on the same
+        instant, which two independent reads cannot guarantee under a concurrent
+        write between them. `None` for an unknown id, `get`'s own contract."""
+        ...
+
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """A routine's findings under one scope
         (blizzard-product:/plans/garden/machinery.md §Managing findings and proposals) —
@@ -159,6 +173,18 @@ class IReadFindingRepository(Protocol):
         """Every finding live on `routine_name`, across every scope it holds (blizzard#393)
         — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter.
         Live only, unless `include_gone` (D3), which also surfaces every exited finding."""
+        ...
+
+    def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
+        """Every finding across every routine (blizzard#486) — `scope_slug=None` reads
+        every scope too, a named one narrows to just it. `list_for`/`list_for_routine`'s
+        own routine-narrowed siblings, minus the `routine_name` filter. Live only,
+        unless `include_gone` (D3), which also surfaces every exited finding.
+
+        Neither `ix_findings_routine_scope` nor `ix_findings_routine_class` can serve
+        this read — both lead with `routine_name`, which this read never filters on —
+        so this table-scans by construction; blizzard#486 puts the scale question out
+        of scope rather than pre-emptively indexing for it."""
         ...
 
     def count_by_class(self, routine_name: str, class_: str) -> int:

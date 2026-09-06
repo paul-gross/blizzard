@@ -50,6 +50,8 @@ const ROWS: readonly FindingListRowVm[] = [
     summary: 'unused import',
     state: 'live',
     lastSeenAt: '2026-01-05T00:00:00Z',
+    routineName: null,
+    scopeSlug: null,
   },
   {
     findingId: 'fin_2',
@@ -58,6 +60,8 @@ const ROWS: readonly FindingListRowVm[] = [
     summary: 'unused variable',
     state: 'gone',
     lastSeenAt: '2026-01-06T00:00:00Z',
+    routineName: null,
+    scopeSlug: null,
   },
   {
     findingId: 'fin_3',
@@ -66,6 +70,8 @@ const ROWS: readonly FindingListRowVm[] = [
     summary: 'missing docstring',
     state: 'live',
     lastSeenAt: '2026-01-04T00:00:00Z',
+    routineName: null,
+    scopeSlug: null,
   },
   {
     findingId: 'fin_4',
@@ -74,6 +80,8 @@ const ROWS: readonly FindingListRowVm[] = [
     summary: 'unreachable code',
     state: 'resolved',
     lastSeenAt: null,
+    routineName: null,
+    scopeSlug: null,
   },
 ];
 
@@ -159,6 +167,8 @@ describe('FleetFindingList summary headline clamp shell sweep (web:shell-sweep)'
         summary: 'one short line',
         state: 'live',
         lastSeenAt: '2026-01-05T00:00:00Z',
+        routineName: null,
+        scopeSlug: null,
       },
       {
         findingId: 'fin_long',
@@ -167,6 +177,8 @@ describe('FleetFindingList summary headline clamp shell sweep (web:shell-sweep)'
         summary: LONG_SUMMARY,
         state: 'live',
         lastSeenAt: '2026-01-05T00:00:00Z',
+        routineName: null,
+        scopeSlug: null,
       },
     ]);
     try {
