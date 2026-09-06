@@ -160,6 +160,12 @@
  *     with no horizontal overflow — the same `@media (max-width: 720px)` claim
  *     Routines and Proposals each carry, driven from one table rather than three
  *     copied files.
+ *   - projects/hub/src/app/gardening/gardening-findings-filters.shell-sweep.spec.ts —
+ *     the findings tab widened to every routine and every scope (blizzard#486): the
+ *     four filter chip rows (routine, scope, class, state), each now carrying a
+ *     leading "All" option, genuinely fit with no horizontal overflow, and a row
+ *     from a bucket mixing routines and scopes genuinely renders both its own
+ *     routine and scope with no horizontal overflow of the row itself, at 390/320px.
  *   - projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts —
  *     the blocked marking's adjacency to a card's status: it renders directly below the
  *     status row without moving the status's own position or overflowing the card, at
@@ -210,6 +216,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/gardening-findings-triage.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-finding-triage-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-page-grids.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-findings-filters.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },

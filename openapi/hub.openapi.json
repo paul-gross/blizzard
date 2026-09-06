@@ -11840,25 +11840,39 @@
     },
     "/api/findings": {
       "get": {
-        "description": "A routine's findings under one scope \u2014 live only, unless `include_gone` (D3),\nwhich also surfaces every exited finding, not just a merely `gone` one; the read a\nrunning pass calls to cross-reference its own bucket.",
+        "description": "The findings bucket, widened to every routine and every scope (blizzard#486) \u2014\nlive only, unless `include_gone` (D3), which also surfaces every exited finding, not\njust a merely `gone` one. `routine` and `scope` are both optional, independently:\n\n- both named \u2014 one routine's findings under one scope (`list_for`)\n- `routine` named, `scope` absent \u2014 one routine's findings across every scope it\n  holds (`list_for_routine`)\n- `routine` absent, `scope` named \u2014 every routine's findings under one scope\n- both absent \u2014 every finding across every routine and every scope\n\nThe last two are `list_across_routines`'s own two shapes.",
         "operationId": "list_findings_api_findings_get",
         "parameters": [
           {
             "in": "query",
             "name": "routine",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Routine",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Routine"
             }
           },
           {
             "in": "query",
             "name": "scope",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Scope",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
             }
           },
           {

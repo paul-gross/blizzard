@@ -62,8 +62,20 @@ const FINDING_GONE_CONFIRMED = findingFixture({
   state: 'gone-confirmed',
   note: 'confirmed gone',
 });
+/** A second routine/scope, distinct from the other three fixtures' `nightly`/
+ * `blizzard` — the disambiguation markup (blizzard#486) only means something once a
+ * bucket genuinely mixes rows from more than one of each. */
+const FINDING_OTHER_ROUTINE = findingFixture({
+  finding_id: 'fnd_20',
+  class: 'unused-import',
+  locus: 'w.py:1',
+  summary: 'summary w',
+  state: 'live',
+  routine_name: 'weekly',
+  scope_slug: 'web',
+});
 
-const BUCKET = [FINDING_LIVE, FINDING_GONE, FINDING_RESOLVED_1, FINDING_GONE_CONFIRMED];
+const BUCKET = [FINDING_LIVE, FINDING_GONE, FINDING_RESOLVED_1, FINDING_GONE_CONFIRMED, FINDING_OTHER_ROUTINE];
 
 /** Stands in for `GardeningFindingDetail`, whose own behavior is
  * `gardening-finding-detail.spec.ts`'s. */
@@ -152,10 +164,10 @@ describe('GardeningFindingsPage', () => {
     expect(el.querySelector('[data-testid="gardening-findings-scope-item-blizzard"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-finding-class-all"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-finding-state-all"]')).toBeTruthy();
-    // Neither routine nor scope carries an "All" option — the bucket read always
-    // needs a concrete pair.
-    expect(el.querySelector('[data-testid="gardening-findings-routine-all"]')).toBeNull();
-    expect(el.querySelector('[data-testid="gardening-findings-scope-all"]')).toBeNull();
+    // Every filter now carries an "All" option (blizzard#486) — the bucket read no
+    // longer requires a concrete routine/scope pair.
+    expect(el.querySelector('[data-testid="gardening-findings-routine-all"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-findings-scope-all"]')).toBeTruthy();
   });
 
   it('keeps a detail pane mounted on the bare route, with no row highlighted', async () => {
@@ -203,21 +215,25 @@ describe('GardeningFindingsPage', () => {
   });
 
   describe('the findings triage bucket', () => {
-    it("seeds the bucket's routine/scope from the first fetched routine's own name and default scope, showing both chips already selected with no interaction and no run list mounted anywhere in this tab", async () => {
+    it('rests on every routine and every scope with no query params — both "All" chips selected, the bucket read firing with neither named', async () => {
       const { el } = await mount({ routeOverride: withBucket });
 
-      expect(pressed(el, 'gardening-findings-routine-item-nightly')).toBe('true');
-      expect(pressed(el, 'gardening-findings-scope-item-blizzard')).toBe('true');
+      expect(pressed(el, 'gardening-findings-routine-all')).toBe('true');
+      expect(pressed(el, 'gardening-findings-scope-all')).toBe('true');
 
-      const live = el.querySelector('[data-testid="gardening-finding-row-fnd_10"]');
+      // The bucket read fires immediately, no seeded routine/scope required, and
+      // renders rows from more than one routine and scope at once.
+      const nightly = el.querySelector('[data-testid="gardening-finding-row-fnd_10"]');
+      const weekly = el.querySelector('[data-testid="gardening-finding-row-fnd_20"]');
+      expect(nightly).toBeTruthy();
+      expect(weekly).toBeTruthy();
       const gone = el.querySelector('[data-testid="gardening-finding-row-fnd_11"]');
       const resolved = el.querySelector('[data-testid="gardening-finding-row-fnd_12"]');
-      expect(live).toBeTruthy();
       expect(gone?.querySelector('.fl-body--gone')).toBeTruthy();
       expect(resolved?.querySelector('.fl-body--exited')).toBeTruthy();
     });
 
-    it('takes its routine/scope pair from the URL over the seed, so a filtered bucket is a shareable link', async () => {
+    it('takes an explicit routine/scope pair from the URL, so a filtered bucket is a shareable link', async () => {
       const { el } = await mount({
         url: '/gardening/findings?routine=weekly&scope=web',
         routeOverride: withBucket,
@@ -225,14 +241,14 @@ describe('GardeningFindingsPage', () => {
 
       expect(pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
       expect(pressed(el, 'gardening-findings-scope-item-web')).toBe('true');
-      expect(pressed(el, 'gardening-findings-routine-item-nightly')).toBe('false');
+      expect(pressed(el, 'gardening-findings-routine-all')).toBe('false');
+      expect(pressed(el, 'gardening-findings-scope-all')).toBe('false');
     });
 
-    it("renders the bucket's own rest state while no routines exist and no explicit pick has been made", async () => {
+    it("renders the bucket's own empty rest state when the read resolves with no rows", async () => {
       const { fixture, el } = await mount({
         routeOverride: (method, path) => {
-          if (method === 'GET' && path === '/api/routines') return [];
-          if (method === 'GET' && path === '/api/findings') return BUCKET;
+          if (method === 'GET' && path === '/api/findings') return [];
           return undefined;
         },
       });
@@ -240,6 +256,29 @@ describe('GardeningFindingsPage', () => {
       const list = fixture.debugElement.query(By.css('fleet-finding-list'));
       expect(list.componentInstance.state()).toBe('empty');
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeNull();
+    });
+
+    it("shows each row's own routine and scope while both dimensions are unnamed, so a widened bucket disambiguates itself", async () => {
+      const { el } = await mount({ routeOverride: withBucket });
+
+      const nightly = el.querySelector('[data-testid="gardening-finding-row-fnd_10"]');
+      expect(nightly?.querySelector('.fl-routine')?.textContent?.trim()).toBe('nightly');
+      expect(nightly?.querySelector('.fl-scope')?.textContent?.trim()).toBe('blizzard');
+
+      const weekly = el.querySelector('[data-testid="gardening-finding-row-fnd_20"]');
+      expect(weekly?.querySelector('.fl-routine')?.textContent?.trim()).toBe('weekly');
+      expect(weekly?.querySelector('.fl-scope')?.textContent?.trim()).toBe('web');
+    });
+
+    it('omits the routine/scope markup once a concrete routine and scope are chosen', async () => {
+      const { el } = await mount({
+        url: '/gardening/findings?routine=nightly&scope=blizzard',
+        routeOverride: withBucket,
+      });
+
+      const nightly = el.querySelector('[data-testid="gardening-finding-row-fnd_10"]');
+      expect(nightly?.querySelector('.fl-routine')).toBeNull();
+      expect(nightly?.querySelector('.fl-scope')).toBeNull();
     });
 
     it('narrows the rendered rows via the class and state filters, naming each in the URL', async () => {
@@ -259,46 +298,6 @@ describe('GardeningFindingsPage', () => {
       expect(router.url).toBe('/gardening/findings?class=unused-import&state=gone');
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeTruthy();
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_14"]')).toBeNull();
-    });
-
-    it('re-seeds an unchosen scope off the newly picked routine, rather than stapling the old default on (F2)', async () => {
-      const { fixture, router, el } = await mount({ routeOverride: withBucket });
-      expect(pressed(el, 'gardening-findings-routine-item-nightly')).toBe('true');
-      expect(pressed(el, 'gardening-findings-scope-item-blizzard')).toBe('true');
-
-      el.querySelector<HTMLElement>('[data-testid="gardening-findings-routine-item-weekly"]')!.click();
-      await settle(fixture);
-
-      // Scope was never chosen — it was sitting on nightly's default. The pick
-      // leaves it unnamed so it re-seeds off weekly's own 'web', the pairing a run
-      // of weekly would have used, instead of carrying nightly's 'blizzard' over.
-      expect(router.url).toBe('/gardening/findings?routine=weekly');
-      expect(pressed(el, 'gardening-findings-scope-item-web')).toBe('true');
-    });
-
-    it('carries an explicitly chosen scope across a routine pick (F2)', async () => {
-      const { fixture, router, el } = await mount({
-        url: '/gardening/findings?scope=blizzard',
-        routeOverride: withBucket,
-      });
-      expect(pressed(el, 'gardening-findings-scope-item-blizzard')).toBe('true');
-
-      el.querySelector<HTMLElement>('[data-testid="gardening-findings-routine-item-weekly"]')!.click();
-      await settle(fixture);
-
-      // Named in the URL, 'blizzard' is a choice rather than a seed, so it survives
-      // the pick even though weekly's own default is 'web'.
-      expect(router.url).toBe('/gardening/findings?scope=blizzard&routine=weekly');
-      expect(pressed(el, 'gardening-findings-scope-item-blizzard')).toBe('true');
-    });
-
-    it("resolves scope off the routine the URL names, not the routine list's first row", async () => {
-      const { el } = await mount({ url: '/gardening/findings?routine=weekly', routeOverride: withBucket });
-
-      // A link naming only a routine is the symmetric case to naming neither: the
-      // scope seed follows the routine in effect, so weekly pairs with 'web'.
-      expect(pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
-      expect(pressed(el, 'gardening-findings-scope-item-web')).toBe('true');
     });
 
     it('clears the class and state filters on a routine or scope pick (F5)', async () => {

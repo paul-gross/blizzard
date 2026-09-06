@@ -595,11 +595,19 @@ export const listEventsApiEventsGet = <ThrowOnError extends boolean = false>(opt
 /**
  * List Findings
  *
- * A routine's findings under one scope — live only, unless `include_gone` (D3),
- * which also surfaces every exited finding, not just a merely `gone` one; the read a
- * running pass calls to cross-reference its own bucket.
+ * The findings bucket, widened to every routine and every scope (blizzard#486) —
+ * live only, unless `include_gone` (D3), which also surfaces every exited finding, not
+ * just a merely `gone` one. `routine` and `scope` are both optional, independently:
+ *
+ * - both named — one routine's findings under one scope (`list_for`)
+ * - `routine` named, `scope` absent — one routine's findings across every scope it
+ * holds (`list_for_routine`)
+ * - `routine` absent, `scope` named — every routine's findings under one scope
+ * - both absent — every finding across every routine and every scope
+ *
+ * The last two are `list_across_routines`'s own two shapes.
  */
-export const listFindingsApiFindingsGet = <ThrowOnError extends boolean = false>(options: Options<ListFindingsApiFindingsGetData, ThrowOnError>): RequestResult<ListFindingsApiFindingsGetResponses, ListFindingsApiFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<ListFindingsApiFindingsGetResponses, ListFindingsApiFindingsGetErrors, ThrowOnError>({ url: '/api/findings', ...options });
+export const listFindingsApiFindingsGet = <ThrowOnError extends boolean = false>(options?: Options<ListFindingsApiFindingsGetData, ThrowOnError>): RequestResult<ListFindingsApiFindingsGetResponses, ListFindingsApiFindingsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListFindingsApiFindingsGetResponses, ListFindingsApiFindingsGetErrors, ThrowOnError>({ url: '/api/findings', ...options });
 
 /**
  * Confirm Gone Findings

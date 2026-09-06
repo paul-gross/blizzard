@@ -173,6 +173,24 @@ describe('FleetFindingList', () => {
     expect(el.querySelector('[data-testid="gardening-findings-empty"]')).toBeTruthy();
   });
 
+  it('renders a row’s routine/scope when the VM sets them, and omits them when left null', async () => {
+    const fixture = await mount({
+      rows: [
+        { ...LIVE_ROW, routineName: 'nightly', scopeSlug: 'blizzard' },
+        { ...GONE_ROW, routineName: null, scopeSlug: null },
+      ],
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const named = el.querySelector('[data-testid="gardening-finding-row-fin_01M1KANH0RZEABSD44RCEH6G9B"]');
+    expect(named?.querySelector('.fl-routine')?.textContent?.trim()).toBe('nightly');
+    expect(named?.querySelector('.fl-scope')?.textContent?.trim()).toBe('blizzard');
+
+    const unnamed = el.querySelector('[data-testid="gardening-finding-row-fin_2"]');
+    expect(unnamed?.querySelector('.fl-routine')).toBeNull();
+    expect(unnamed?.querySelector('.fl-scope')).toBeNull();
+  });
+
   it('renders no checkbox and no bulk bar — triage is single-finding only, dispatched from the panel a row opens', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;

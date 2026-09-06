@@ -51,6 +51,7 @@
 }
 .fl-hdr {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 6px;
   margin-top: 2px;
@@ -68,6 +69,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* The row's own routine/scope (blizzard#486) — rendered only on a widened bucket
+ * that mixes rows from more than one routine or scope. Unlike `.fl-class`, these
+ * wrap rather than ellipsize: `.fl-hdr` carries `flex-wrap: wrap` (below) precisely
+ * so a routine name and a scope slug alongside a long class name and the ref flow
+ * onto their own line at a narrow width rather than forcing the row wider than its
+ * column. */
+.fl-routine,
+.fl-scope {
+  color: var(--label-dim);
+  overflow-wrap: anywhere;
 }
 .fl-ref {
   flex: none;

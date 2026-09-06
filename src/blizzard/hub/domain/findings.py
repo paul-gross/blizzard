@@ -168,6 +168,18 @@ class IReadFindingRepository(Protocol):
         Live only, unless `include_gone` (D3), which also surfaces every exited finding."""
         ...
 
+    def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
+        """Every finding across every routine (blizzard#486) — `scope_slug=None` reads
+        every scope too, a named one narrows to just it. `list_for`/`list_for_routine`'s
+        own routine-narrowed siblings, minus the `routine_name` filter. Live only,
+        unless `include_gone` (D3), which also surfaces every exited finding.
+
+        Neither `ix_findings_routine_scope` nor `ix_findings_routine_class` can serve
+        this read — both lead with `routine_name`, which this read never filters on —
+        so this table-scans by construction; blizzard#486 puts the scale question out
+        of scope rather than pre-emptively indexing for it."""
+        ...
+
     def count_by_class(self, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name`
         (blizzard-product:/plans/garden/machinery.md §What the store buys) — a count,

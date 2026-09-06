@@ -7096,15 +7096,15 @@ export type ListEventsApiEventsGetResponse = ListEventsApiEventsGetResponses[key
 export type ListFindingsApiFindingsGetData = {
     body?: never;
     path?: never;
-    query: {
+    query?: {
         /**
          * Routine
          */
-        routine: string;
+        routine?: string | null;
         /**
          * Scope
          */
-        scope: string;
+        scope?: string | null;
         /**
          * Include Gone
          */

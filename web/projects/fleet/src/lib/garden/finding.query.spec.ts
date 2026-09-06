@@ -149,18 +149,23 @@ describe('injectHubFindingsBucketQuery', () => {
   let stub: { urls: string[]; restore: () => void };
   afterEach(() => stub?.restore());
 
-  it('stays disabled until both routine and scope are set', async () => {
+  it('fires immediately with both routine and scope null — a null half is a meaningful "all", not a pending precondition', async () => {
     stub = stubFetchCapturingUrl([]);
     TestBed.configureTestingModule({
       imports: [TestFindingsBucketQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
     });
     const fixture = TestBed.createComponent(TestFindingsBucketQueryHost);
-    fixture.componentInstance.routine.set('comments');
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.isPending()).toBe(true);
-    expect(stub.urls).toHaveLength(0);
+    expect(fixture.componentInstance.query.isPending()).toBe(false);
+    expect(stub.urls).toHaveLength(1);
+    const url = new URL(stub.urls[0]);
+    expect(url.pathname).toBe('/api/findings');
+    // Omitted entirely rather than sent through as the literal string "null".
+    expect(url.searchParams.has('routine')).toBe(false);
+    expect(url.searchParams.has('scope')).toBe(false);
+    expect(url.searchParams.get('include_gone')).toBe('true');
   });
 
   it('reads the bucket off GET /api/findings?routine=&scope=&include_gone=true', async () => {
@@ -194,5 +199,21 @@ describe('injectHubFindingsBucketQuery', () => {
     expect(url.searchParams.get('routine')).toBe('comments');
     expect(url.searchParams.get('scope')).toBe('blizzard');
     expect(url.searchParams.get('include_gone')).toBe('true');
+  });
+
+  it('omits scope alone when only routine is named — every scope under that one routine', async () => {
+    stub = stubFetchCapturingUrl([]);
+    TestBed.configureTestingModule({
+      imports: [TestFindingsBucketQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestFindingsBucketQueryHost);
+    fixture.componentInstance.routine.set('comments');
+    await settle(fixture);
+
+    expect(stub.urls).toHaveLength(1);
+    const url = new URL(stub.urls[0]);
+    expect(url.searchParams.get('routine')).toBe('comments');
+    expect(url.searchParams.has('scope')).toBe(false);
   });
 });

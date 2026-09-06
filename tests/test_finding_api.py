@@ -86,6 +86,92 @@ def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(
     assert {row["finding_id"] for row in resp.json()} == {"fin_1", "fin_4"}
 
 
+def test_list_widens_across_the_four_routine_scope_combinations(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+    _seed_scope(hub, "other-scope")
+    store = FindingStore(hub_store_connections(hub.engine))
+    store.add(
+        "fin_1",
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s1",
+        introduced=None,
+        at=_NOW,
+    )
+    store.add(
+        "fin_2",
+        routine_name="nightly",
+        scope_slug="other-scope",
+        class_="stale-docstring",
+        locus="b.py:2",
+        summary="s2",
+        introduced=None,
+        at=_NOW,
+    )
+    store.add(
+        "fin_3",
+        routine_name="weekly",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="c.py:3",
+        summary="s3",
+        introduced=None,
+        at=_NOW,
+    )
+
+    # named routine, named scope
+    resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard"})
+    assert resp.status_code == 200, resp.text
+    assert {row["finding_id"] for row in resp.json()} == {"fin_1"}
+
+    # named routine, absent scope
+    resp = hub.client.get("/api/findings", params={"routine": "nightly"})
+    assert resp.status_code == 200, resp.text
+    assert {row["finding_id"] for row in resp.json()} == {"fin_1", "fin_2"}
+
+    # absent routine, named scope
+    resp = hub.client.get("/api/findings", params={"scope": "blizzard"})
+    assert resp.status_code == 200, resp.text
+    assert {row["finding_id"] for row in resp.json()} == {"fin_1", "fin_3"}
+
+    # absent routine, absent scope
+    resp = hub.client.get("/api/findings")
+    assert resp.status_code == 200, resp.text
+    assert {row["finding_id"] for row in resp.json()} == {"fin_1", "fin_2", "fin_3"}
+
+
+def test_list_include_gone_behaves_the_same_across_routine_absent_combinations(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+    store = FindingStore(hub_store_connections(hub.engine))
+    store.add(
+        "fin_1",
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s1",
+        introduced=None,
+        at=_NOW,
+    )
+    store.record_fact("fin_1", kind="gone", at=_NOW, note="no longer reproduces")
+
+    # both absent
+    resp = hub.client.get("/api/findings")
+    assert resp.json() == []
+    resp = hub.client.get("/api/findings", params={"include_gone": True})
+    assert {row["finding_id"] for row in resp.json()} == {"fin_1"}
+
+    # scope only
+    resp = hub.client.get("/api/findings", params={"scope": "blizzard"})
+    assert resp.json() == []
+    resp = hub.client.get("/api/findings", params={"scope": "blizzard", "include_gone": True})
+    assert {row["finding_id"] for row in resp.json()} == {"fin_1"}
+
+
 def test_get_renders_one_finding(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub, "blizzard")

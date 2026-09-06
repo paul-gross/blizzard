@@ -16,6 +16,12 @@
             <p class="fl-summary">{{ row.summary }}</p>
             <div class="fl-hdr">
               <span class="fl-class">{{ row.findingClass }}</span>
+              @if (row.routineName) {
+                <span class="fl-routine">{{ row.routineName }}</span>
+              }
+              @if (row.scopeSlug) {
+                <span class="fl-scope">{{ row.scopeSlug }}</span>
+              }
               <span class="fl-ref" [title]="row.findingId">{{ compactRef(row.findingId) }}</span>
             </div>
             <p class="fl-locus">{{ row.locus }}</p>

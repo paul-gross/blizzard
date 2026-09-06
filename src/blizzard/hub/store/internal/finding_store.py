@@ -171,6 +171,16 @@ class FindingStore:
             result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
+    def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
+        with self._store.read("list_across_routines") as conn:
+            stmt = select(findings).order_by(findings.c.finding_id)
+            if scope_slug is not None:
+                stmt = stmt.where(findings.c.scope_slug == scope_slug)
+            rows = conn.execute(stmt).all()
+            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
+            result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
+        return [f for f in result if include_gone or f.live]
+
     def count_by_class(self, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name` — filtered on
         `ix_findings_routine_class`."""

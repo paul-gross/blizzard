@@ -36,6 +36,10 @@ def _store_and_engine(tmp_path: Path) -> tuple[FindingStore, Engine]:
         conn.execute(
             sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('blizzard', '', :now)"), {"now": _NOW}
         )
+        conn.execute(
+            sa.text("INSERT INTO scopes (slug, description, created_at) VALUES ('other-scope', '', :now)"),
+            {"now": _NOW},
+        )
     return FindingStore(hub_store_connections(engine)), engine
 
 
@@ -175,6 +179,44 @@ def test_list_for_is_scoped_to_the_named_routine_and_scope(tmp_path: Path) -> No
     _add(store, finding_id="fin_2", routine_name="weekly", scope_slug="blizzard")
 
     assert [f.finding_id for f in store.list_for("nightly", "blizzard")] == ["fin_1"]
+
+
+def test_list_across_routines_of_no_scope_returns_every_live_finding_across_every_routine(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add(store, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
+    _add(store, finding_id="fin_2", routine_name="weekly", scope_slug="other-scope")
+
+    assert {f.finding_id for f in store.list_across_routines()} == {"fin_1", "fin_2"}
+
+
+def test_list_across_routines_narrows_to_the_named_scope_across_every_routine(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add(store, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
+    _add(store, finding_id="fin_2", routine_name="weekly", scope_slug="blizzard")
+    _add(store, finding_id="fin_3", routine_name="nightly", scope_slug="other-scope")
+
+    assert {f.finding_id for f in store.list_across_routines("blizzard")} == {"fin_1", "fin_2"}
+
+
+def test_a_gone_finding_is_excluded_from_list_across_routines_unless_include_gone(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add(store, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
+    _add(store, finding_id="fin_2", routine_name="weekly", scope_slug="other-scope")
+    store.record_fact("fin_1", kind="gone", at=_LATER, note="no longer reproduces")
+
+    live = store.list_across_routines()
+    assert [f.finding_id for f in live] == ["fin_2"]
+
+    everything = store.list_across_routines(include_gone=True)
+    assert {f.finding_id for f in everything} == {"fin_1", "fin_2"}
+
+
+def test_list_across_routines_orders_by_finding_id(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add(store, finding_id="fin_2", routine_name="weekly", scope_slug="other-scope")
+    _add(store, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
+
+    assert [f.finding_id for f in store.list_across_routines()] == ["fin_1", "fin_2"]
 
 
 def test_count_by_class_counts_across_the_named_routine(tmp_path: Path) -> None:

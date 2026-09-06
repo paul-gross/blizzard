@@ -87,15 +87,18 @@ export function injectHubFindingQuery(findingId: () => string | null) {
 }
 
 /**
- * The findings triage bucket read — every finding for one routine+scope pair, live
- * through `GET /api/findings?routine=&scope=` (the triage surface, as distinct from
+ * The findings triage bucket read — every finding matching `routine`/`scope`, live
+ * through `GET /api/findings` (the triage surface, as distinct from
  * {@link injectHubFindingsQuery}'s by-id fan-out the docket detail's evidence table
- * reads). Both `routine` and `scope` are required by the server
- * (`ListFindingsApiFindingsGetData.query`), so the query stays disabled until both are
- * chosen, `work-item.query.ts`'s own null-tolerant disabled-query shape. Always reads
- * with `include_gone: true` — a gone finding still belongs on the triage surface until
- * a person confirms it (that's what `confirm-gone` records), so the bucket can't
- * afford to have the server drop it before a person has weighed in.
+ * reads). Widened (blizzard#486) to every routine and every scope: `routine` and
+ * `scope` are each independently optional on the server, a `null` meaning "every
+ * value on that dimension, unfiltered" rather than "not chosen yet" — so the read is
+ * always enabled, with no precondition it has to wait out. A `null` half is simply
+ * omitted from the request's query params (never sent through as the literal string
+ * `"null"`); a named half rides as-is. Always reads with `include_gone: true` — a gone
+ * finding still belongs on the triage surface until a person confirms it (that's what
+ * `confirm-gone` records), so the bucket can't afford to have the server drop it
+ * before a person has weighed in.
  */
 export function injectHubFindingsBucketQuery(routine: () => string | null, scope: () => string | null) {
   return injectQuery(() => {
@@ -103,10 +106,9 @@ export function injectHubFindingsBucketQuery(routine: () => string | null, scope
     const s = scope();
     return {
       queryKey: hubFindingsBucketKey(r, s),
-      enabled: r !== null && s !== null,
       queryFn: async (): Promise<FindingView[]> => {
         const { data, error } = await listFindingsApiFindingsGet({
-          query: { routine: r!, scope: s!, include_gone: true },
+          query: { ...(r !== null ? { routine: r } : {}), ...(s !== null ? { scope: s } : {}), include_gone: true },
           throwOnError: false,
         });
         if (error) throw error;

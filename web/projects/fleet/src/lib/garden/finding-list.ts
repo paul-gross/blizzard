@@ -26,6 +26,14 @@ export interface FindingListRowVm {
   readonly summary: string;
   readonly state: string;
   readonly lastSeenAt: string | null;
+  /** The finding's own routine/scope (blizzard#486), rendered only when the
+   * container hands a non-null value. The widened findings bucket can mix rows
+   * from every routine and every scope, so a row needs to say which it came from
+   * once the active filter no longer names one for it; a bucket already filtered
+   * to a concrete routine or scope leaves the matching field `null` rather than
+   * repeat what every row already shares. */
+  readonly routineName?: string | null;
+  readonly scopeSlug?: string | null;
 }
 
 /** The triage verbs a finding can be dispatched under — every human-driven exit

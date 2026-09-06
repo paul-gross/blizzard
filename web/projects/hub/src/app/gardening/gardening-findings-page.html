@@ -2,14 +2,14 @@
   <span class="gf-filter-label" data-testid="gardening-findings-filter-label-routine">Routine</span>
   <fleet-kit-chips
     [options]="filters.routineChips()"
-    [selectedValue]="filters.selectedRoutine()"
+    [selectedValue]="filters.routineChipValue()"
     (choose)="filters.onRoutineChoose($event)"
   />
 
   <span class="gf-filter-label" data-testid="gardening-findings-filter-label-scope">Scope</span>
   <fleet-kit-chips
     [options]="filters.scopeChips()"
-    [selectedValue]="filters.selectedScope()"
+    [selectedValue]="filters.scopeChipValue()"
     (choose)="filters.onScopeChoose($event)"
   />
 
