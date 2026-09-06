@@ -16,7 +16,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.findings import Finding
+from blizzard.hub.domain.findings import Finding, FindingFact
 from blizzard.hub.domain.garden_run import (
     DeliveredSet,
     DeliveredSetRaw,
@@ -92,10 +92,16 @@ class _FakeFindings:
         self.calls.append(list(finding_ids))
         return {fid: f for fid in finding_ids if (f := self.findings.get(fid)) is not None}
 
+    def get_facts(self, finding_id: str) -> list[FindingFact]:
+        raise NotImplementedError
+
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         raise NotImplementedError
 
     def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
+        raise NotImplementedError
+
+    def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
         raise NotImplementedError
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
