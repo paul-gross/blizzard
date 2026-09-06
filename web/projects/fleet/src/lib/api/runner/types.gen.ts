@@ -269,9 +269,9 @@ export type CapacitiesView = {
 /**
  * ChunkDetail
  *
- * The whole chunk aggregate — one response model behind both the hub's own detail read and the
- * runner's pass-through proxy of it (issue #314): transition history, inline artifact store, and the
- * open escalation. Declared once, never re-typed per route, so a field reaches both specs at once.
+ * The whole chunk aggregate (issue #314): transition history, inline artifact
+ * store, and the open escalation. Declared once, never re-typed per route, so a
+ * field reaches both specs at once.
  */
 export type ChunkDetail = {
     /**
@@ -411,10 +411,9 @@ export type ChunkNeighborView = {
 /**
  * ChunkNeighborhoodView
  *
- * A chunk's standing dependency edges one hop each way (issue #462), unlike
- * ``blocked``'s null-or-a-marking shape: a chunk with no edges still carries two
- * lists, empty rather than null — both required here, never omitted, so a generated
- * client can rely on that without its own fallback.
+ * A chunk's standing dependency edges one hop each way (issue #462) — both
+ * ``prerequisites`` and ``dependents`` are always present as lists, empty rather than
+ * null.
  */
 export type ChunkNeighborhoodView = {
     /**

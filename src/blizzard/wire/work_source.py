@@ -23,9 +23,8 @@ class WorkSourceSummary(BaseModel):
 
 
 class WorkSourcesListView(BaseModel):
-    """Every configured (plus the built-in ``hub``) source — ``GET /api/work-sources``.
-    Wrapped, not a bare array, so a future field can join it non-breakingly
-    (``docs/versioning.md``), matching ``WorkItemsListView`` beside it."""
+    """Every configured (plus the built-in ``hub``) source — ``GET /api/work-sources``
+    (``docs/versioning.md``)."""
 
     sources: list[WorkSourceSummary] = []
 
