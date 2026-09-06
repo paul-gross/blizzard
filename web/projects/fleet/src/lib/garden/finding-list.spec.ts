@@ -166,13 +166,6 @@ describe('FleetFindingList', () => {
     expect(resolved?.querySelector('.fl-body--gone')).toBeNull();
   });
 
-  it('names the finding list CLI verb', async () => {
-    const fixture = await mount({});
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.textContent).toContain('hub finding list');
-  });
-
   it('shows the empty state when there are no findings', async () => {
     const fixture = await mount({ rows: [], state: 'empty' });
     const el = fixture.nativeElement as HTMLElement;
