@@ -17,6 +17,13 @@ from blizzard.runner.config import RunnerConfig
 LOCAL_CLIENT_TIMEOUT = 5.0
 
 
+def uds_client(sock: Path) -> httpx.Client:
+    """A client whose transport reaches the runner over ``sock`` — the base_url host is a
+    placeholder, since the UDS transport decides where the bytes go."""
+    transport = httpx.HTTPTransport(uds=str(sock))
+    return httpx.Client(transport=transport, base_url="http://runner", timeout=LOCAL_CLIENT_TIMEOUT)
+
+
 @dataclass(frozen=True)
 class RunnerDaemon:
     """One operator verb's door onto the runner's local API — its UDS socket, or TCP when
@@ -50,10 +57,7 @@ class RunnerDaemon:
             raise click.ClickException(
                 f"no runner daemon is serving at {sock} — start one with `blizzard runner host --dir {directory}`"
             )
-        # The base_url host is a placeholder: the UDS transport decides where the bytes go.
-        transport = httpx.HTTPTransport(uds=str(sock))
-        client = httpx.Client(transport=transport, base_url="http://runner", timeout=LOCAL_CLIENT_TIMEOUT)
-        return cls(verb, client, str(sock))
+        return cls(verb, uds_client(sock), str(sock))
 
     def __enter__(self) -> RunnerDaemon:
         return self

@@ -1,4 +1,4 @@
-"""``blizzard.hub.session_store`` — the CLI's local session-token file (unit tier,
+"""``blizzard.hub.cli.session_store`` — the CLI's local session-token file (unit tier,
 issue #96).
 
 Pins the two acceptance-criteria facts directly: the file (and its parent directory)
@@ -11,7 +11,7 @@ import stat
 
 import pytest
 
-from blizzard.hub.session_store import SessionFile
+from blizzard.hub.cli.session_store import SessionFile
 
 pytestmark = pytest.mark.unit
 

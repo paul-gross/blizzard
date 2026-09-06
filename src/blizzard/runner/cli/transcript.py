@@ -6,7 +6,7 @@ import click
 import httpx
 
 from blizzard.foundation.store.migrations import RevisionMismatchError
-from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT
+from blizzard.runner.cli.daemon import uds_client
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.loop.build import LoopWiring
@@ -27,9 +27,8 @@ def _daemon_holding(config: RunnerConfig) -> str | None:
     sock = RunnerConfig.socket_path_for(config.root)
     if not sock.exists():
         return None
-    transport = httpx.HTTPTransport(uds=str(sock))
     try:
-        with httpx.Client(transport=transport, base_url="http://runner", timeout=LOCAL_CLIENT_TIMEOUT) as client:
+        with uds_client(sock) as client:
             response = client.get("/api/health")
     except httpx.ConnectError:
         return None  # a socket file an ungraceful exit left behind — nothing is listening on the corpse

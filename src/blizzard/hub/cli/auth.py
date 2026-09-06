@@ -6,8 +6,8 @@ import contextlib
 
 import click
 
-from blizzard.hub import session_store
 from blizzard.hub.cli import login as cli_login
+from blizzard.hub.cli import session_store
 from blizzard.hub.cli.command import AuthCommand
 from blizzard.hub.cli.context import CliContext
 
