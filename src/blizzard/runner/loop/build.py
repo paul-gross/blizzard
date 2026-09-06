@@ -90,6 +90,7 @@ class LoopWiring:
             model_aliases=config.model_aliases,
             effort_aliases=config.effort_aliases,
             transcript_source=harness_transcript_source,
+            process=LinuxProcessProbe(),
         )
         # The subscription-sampling seam (blizzard#436) — each declaration paired with its
         # resolved binding; an unknown provider selects `None` (declared, unsampled).

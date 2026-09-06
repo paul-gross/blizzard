@@ -338,6 +338,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         model_aliases=config.model_aliases,
         effort_aliases=config.effort_aliases,
         transcript_source=harness_transcript_source,
+        process=LinuxProcessProbe(),
     )
     # ``stale_after`` is left at its default so the two readers never desync (#28).
     leases = LocalLeaseService(

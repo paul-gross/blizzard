@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from typing import IO, Any
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.process import ProcStat
 from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
     IHarnessAdapter,
@@ -27,6 +26,7 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
@@ -134,6 +134,7 @@ class ClaudeCodeAdapter:
         model_aliases: Sequence[tuple[str, str]] = (),
         effort_aliases: Sequence[tuple[str, str]] = (),
         transcript_source: IHarnessTranscriptSource | None = None,
+        process: IProcessProbe | None = None,
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
@@ -154,6 +155,9 @@ class ClaudeCodeAdapter:
         # Injected, never self-constructed (`bzh:dependency-injection`); the null source
         # serves the construction sites that need no real one.
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
+        # The pid-liveness seam (`bzh:pluggable-seams`); the Linux `/proc` reference binding
+        # serves the construction sites that need no substitute.
+        self._process: IProcessProbe = process or LinuxProcessProbe()
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         """Left-to-right; first entry that resolves wins; unresolvable entries skipped."""
@@ -274,7 +278,7 @@ class ClaudeCodeAdapter:
                 _log.error("harness spawn failed", binary=self._binary, cwd=workdir, detail=str(exc))
                 raise HarnessSpawnError(f"failed to spawn {self._binary} in {workdir}: {exc}") from exc
 
-        start_time = ProcStat.of(proc.pid).start_time or ""
+        start_time = self._process.start_time(proc.pid) or ""
         _log.info("spawned worker", binary=self._binary, pid=proc.pid, session_id=session_id, cwd=workdir)
         return WorkerHandle(session_id=session_id, pid=proc.pid, process_start_time=start_time)
 
@@ -320,7 +324,7 @@ class ClaudeCodeAdapter:
         except OSError as exc:
             _log.error("elicitation launch failed", binary=self._binary, cwd=workdir, detail=str(exc))
             raise HarnessSpawnError(f"failed to launch {self._binary} in {workdir}: {exc}") from exc
-        start_time = ProcStat.of(proc.pid).start_time or ""
+        start_time = self._process.start_time(proc.pid) or ""
         _log.info("elicitation launched", binary=self._binary, pid=proc.pid, session_id=session_id, cwd=workdir)
         return WorkerHandle(session_id=session_id, pid=proc.pid, process_start_time=start_time)
 
