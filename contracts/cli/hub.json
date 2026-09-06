@@ -164,7 +164,7 @@
           "short_help": "Read the derived transcript-event projection (blizzard#255), every ``/events`` filter as a flag: a bounded page by default, or the whole filtered set streamed as NDJSON to stdout under ``--ndjson``."
         },
         "re-derive": {
-          "help": "Force the standing derivation sweep's own replacement unit now, rather than\nwaiting for its next tick \u2014 scoped to one segment, one chunk, or every candidate\n(neither option given). No downtime: it runs the same in-process reconciler already\nlive, just driven directly. Prints ``derived``/``remaining``; a nonzero ``remaining``\non a chunk/all-scoped call means running it again continues from where it left off.",
+          "help": "Force the standing derivation sweep's own replacement unit now, rather than\nwaiting for its next tick \u2014 scoped to one segment, one chunk, or every candidate\n(neither option given). No downtime. Prints ``derived``/``remaining``; a nonzero\n``remaining`` on a chunk/all-scoped call means running it again continues from where\nit left off.",
           "params": [
             {
               "hidden": false,
@@ -1047,7 +1047,7 @@
           "short_help": "Close an escalation by supersession: requeue CHUNK at its current node."
         },
         "restart": {
-          "help": "Force CHUNK onto a node now, on a freshly minted session (issues #370, #371).\n\nA pure client of ``POST /api/chunks/{id}/restart``. The move has already happened when the call\nreturns: the bumped epoch tears the running attempt down and re-enters, where ``migrate`` only\nrecords an intent for the next transition. 409 when CHUNK is terminal or the target refuses it.",
+          "help": "Force CHUNK onto a node now, on a freshly minted session (issues #370, #371).\n\nA pure client of ``POST /api/chunks/{id}/restart``. The move has already happened when the call\nreturns: the running attempt is torn down and re-entered, where ``migrate`` only records an\nintent for the next transition. 409 when CHUNK is terminal or the target refuses it.",
           "params": [
             {
               "hidden": false,
@@ -3068,7 +3068,7 @@
       "short_help": "A hub command node's ``run:`` script: record a marker artifact mid-run (#65)."
     },
     "rotate-signing-key": {
-      "help": "Rotate the hub's IdP signing keypair (issue #95) \u2014 mints a fresh current key,\ndemoting the old current to previous; no restart. A no-op error under ``auth.mode = \"none\"``\n(no keypair exists). Human-plane, gated on ``user:manage`` \u2014 under ``auth.mode =\n\"oauth\"`` this requires a hub session (``blizzard hub login``, issue #96).",
+      "help": "Rotate the hub's IdP signing keypair (issue #95) \u2014 a fresh key signs immediately; the\nold key still verifies already-issued tokens, and no restart is needed. A no-op error under\n``auth.mode = \"none\"`` (no keypair exists). Human-plane, gated on ``user:manage`` \u2014 under\n``auth.mode = \"oauth\"`` this requires a hub session (``blizzard hub login``, issue #96).",
       "params": [
         {
           "hidden": false,
@@ -3083,7 +3083,7 @@
         }
       ],
       "path": "hub rotate-signing-key",
-      "short_help": "Rotate the hub's IdP signing keypair (issue #95) \u2014 mints a fresh current key, demoting the old current to previous; no restart."
+      "short_help": "Rotate the hub's IdP signing keypair (issue #95) \u2014 a fresh key signs immediately; the old key still verifies already-issued tokens, and no restart is needed."
     },
     "routine": {
       "commands": {

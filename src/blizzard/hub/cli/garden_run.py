@@ -1,6 +1,5 @@
 """``blizzard hub run`` — reading routine runs: the windowed list and one run's own
-delta. Distinct from ``blizzard hub routine run``, which starts a new run rather than
-reading an existing one."""
+delta. Distinct from ``blizzard hub routine run``."""
 
 from __future__ import annotations
 

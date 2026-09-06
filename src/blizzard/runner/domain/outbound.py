@@ -46,8 +46,8 @@ class IReadOutboundRepository(Protocol):
         """Lease ids with an unacked ``completion.submitted`` or ``decision.submitted``
         fact in the buffer.
 
-        ADVANCE's skip set, so a node-step's outcome is elicited exactly once while the
-        flush is pending."""
+        The judged-and-buffered skip set, so a node-step's outcome is elicited exactly once
+        while the flush is pending."""
         ...
 
     def pending_outbound(self) -> list[BufferedFact]:

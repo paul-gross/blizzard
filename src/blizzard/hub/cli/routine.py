@@ -200,9 +200,7 @@ class TrendDetail:
 
 
 def _utc_query_value(value: datetime) -> str:
-    """A bare ``--since``/``--until``/``--introduced-boundary`` is read as the operator's
-    own local wall clock, not UTC — converted (not merely relabeled) before it crosses the
-    wire (`src/blizzard/hub/cli/analytics.py`'s own D6 rule)."""
+    """See `src/blizzard/hub/cli/analytics.py`'s own `_utc_query_value` (D6)."""
     return iso_utc(value.astimezone(UTC))
 
 

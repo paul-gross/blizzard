@@ -27,7 +27,7 @@ def uds_client(sock: Path) -> httpx.Client:
 @dataclass(frozen=True)
 class RunnerDaemon:
     """One operator verb's door onto the runner's local API — its UDS socket, or TCP when
-    ``--runner-url`` names one. Never the store, and never the hub.
+    an operator-supplied override names one. Never the store, and never the hub.
 
     A context manager: it closes the client and turns any transport failure inside the block
     into one ``verb: could not reach the runner at <where>``."""
@@ -38,8 +38,8 @@ class RunnerDaemon:
 
     @classmethod
     def reach(cls, verb: str, directory: str, runner_url: str | None) -> RunnerDaemon:
-        """Ranked by where each value came from (``param_rank``) because ``--dir`` always *has*
-        one: an explicit flag beats an ambient variable, and only a tie on the line is ambiguous."""
+        """Ranked by where each value came from, see ``src/blizzard/cli/param_rank.py`` —
+        only a tie on the command line between the two is ambiguous."""
         dir_source = ParamSource.of("directory")
         url_source = ParamSource.of("runner_url") if runner_url is not None else None
 

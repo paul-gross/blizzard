@@ -13,8 +13,7 @@ from blizzard.hub.cli.context import CliContext
 
 class WorkToken(click.ParamType):
     """A work-item token as typed (``hub:42``, ``blizzard#123``), parsed once here at
-    the CLI edge into the plain ``(source, ref)`` path segments the wire carries — unlike
-    ``Pointer``, the token form never rides an item route."""
+    the CLI edge into the plain ``(source, ref)`` path segments the wire carries."""
 
     name = "token"
 

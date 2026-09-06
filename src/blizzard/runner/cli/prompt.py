@@ -142,7 +142,7 @@ def _echo_prompt_status(source: str, prompt: str) -> None:
 
 def _effective_prompt(config: RunnerConfig) -> tuple[str, str]:
     """The prompt a spawn would read, and the lane it came from — the one definition the
-    `prompt` verbs share, mirroring `SpawnPlan._render`'s override-first precedence."""
+    `prompt` verbs share: a stored override wins first, else the configured resolution."""
     override = _stored_override(config)
     if override is not None:
         return override, _OVERRIDE_SOURCE

@@ -18,7 +18,7 @@ class IReadPauseRepository(Protocol):
     """Read-only pause-brake and daemon-liveness queries (held by read-path edges)."""
 
     def hub_contact_at(self, runner_id: str) -> datetime | None:
-        """When PULL last **successfully** reached the hub, or ``None`` if never (issue #51).
+        """When the runner last **successfully** reached the hub, or ``None`` if never (issue #51).
 
         :meth:`~IWritePauseRepository.set_hub_paused` is only called after a successful hub
         round trip (``runner/loop/steps.py``), so its ``updated_at`` **is** the last-successful-
@@ -26,9 +26,9 @@ class IReadPauseRepository(Protocol):
         ...
 
     def hub_paused(self, runner_id: str) -> bool:
-        """The last hub pause brake PULL mirrored locally — FILL adheres.
+        """The last hub pause brake value mirrored locally — consulted before claiming new work.
 
-        Defaults False when PULL has never synced (a fresh runner claims freely until it
+        Defaults False when it has never been synced (a fresh runner claims freely until it
         first hears otherwise)."""
         ...
 
@@ -66,7 +66,7 @@ class IWritePauseRepository(IReadPauseRepository, Protocol):
         ...
 
     def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:
-        """Mirror the hub's pause brake locally (upsert) — read back by FILL."""
+        """Mirror the hub's pause brake locally (upsert) — read back before claiming new work."""
         ...
 
     def record_local_pause(

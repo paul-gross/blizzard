@@ -29,7 +29,7 @@ class Cost:
 @dataclass(frozen=True)
 class ChunkRow:
     row: dict[str, Any]
-    #: ``status`` renders the node id where ``chunk list`` prefers the node's name.
+    #: True renders the node's name when known; false renders its id.
     prefer_node_name: bool = True
 
     @property

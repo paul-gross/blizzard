@@ -44,10 +44,9 @@ _READ_ONLY_SCOPE_REASON = {
 
 
 def _refuse_read_only_scope(verb: str, scope: str | None) -> None:
-    """``create``/``commit``/``staged`` are node-scope only: a graph's declarations are baked at
-    mint and a system artifact is blizzard's own published document — both read-only. Refusing
-    here states that domain fact to a worker parsing stderr mid-turn (which scopes each verb
-    serves: ``blizzard-context:/standards/worker-nodes/declarations.md``)."""
+    """``create``/``commit``/``staged`` are node-scope only. Refuses using
+    ``_READ_ONLY_SCOPE_REASON``'s table, stating the domain fact to a worker parsing stderr
+    mid-turn (which scopes each verb serves: ``blizzard-context:/standards/worker-nodes/declarations.md``)."""
     reason = _READ_ONLY_SCOPE_REASON.get(scope or "")
     if reason is not None:
         raise click.ClickException(f"artifact {verb}: {scope} scope is read-only — {reason}")
@@ -158,10 +157,9 @@ def artifact_get(name: str, node: str | None, scope: str | None, content: bool) 
 )
 def artifact_create(name: str, scope: str | None) -> None:
     """Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node
-    scope only — ``--scope graph``/``--scope system`` are refused, both being read-only.
-    A submission *stages* the content, published into the envelope only on completion (issue #169)
-    — read it back with ``artifact staged``. Empty stdin and any rejection exit non-zero rather
-    than silently losing the submission."""
+    scope only. A submission *stages* the content, published into the envelope only on completion
+    (issue #169) — read it back with ``artifact staged``. Empty stdin and any rejection exit
+    non-zero rather than silently losing the submission."""
     _refuse_read_only_scope("create", scope)
     worker = WorkerCall.of("artifact create")
     content = click.get_text_stream("stdin").read()
@@ -195,10 +193,10 @@ def artifact_create(name: str, scope: str | None) -> None:
     help="Always `node` — `graph` and `system` are refused, neither ever having a staged submission.",
 )
 def artifact_staged(content: bool, scope: str | None) -> None:
-    """Worker: list this node-step's own staged (not-yet-published) submissions, node scope only
-    — ``--scope graph``/``--scope system`` are refused, neither ever being staged. Read straight
-    off the runner's own ``attachments`` record rather than the hub envelope (issue #169), so a
-    fresh ``artifact create`` shows up here immediately; ``--content`` gives the full text."""
+    """Worker: list this node-step's own staged (not-yet-published) submissions, node scope only.
+    Read straight off the runner's own ``attachments`` record rather than the hub envelope (issue
+    #169), so a fresh ``artifact create`` shows up here immediately; ``--content`` gives the full
+    text."""
     _refuse_read_only_scope("staged", scope)
     worker = WorkerCall.of("artifact staged")
     resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
@@ -244,9 +242,8 @@ def artifact_staged(content: bool, scope: str | None) -> None:
 )
 def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_sha: str, scope: str | None) -> None:
     """Worker: durably declare a git-commit artifact for REPO (issue #143). Carries the ``git_commit``
-    kind only — an asset is declared through ``artifact create``. Node scope only —
-    ``--scope graph``/``--scope system`` are refused. Deliberately no ``--forge``: the origin
-    comes from the environment's repo manifest (pinned by
+    kind only — an asset is declared through ``artifact create``. Node scope only. Deliberately no
+    ``--forge``: the origin comes from the environment's repo manifest (pinned by
     tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag)."""
     _refuse_read_only_scope("commit", scope)
     worker = WorkerCall.of("artifact commit")

@@ -102,7 +102,7 @@ class IReadTranscriptLedgerRepository(Protocol):
 
     def outstanding_transcript_buffer_bytes(self) -> int:
         """Sum of ``payload`` bytes across every UNACKED row of the transcript outbound
-        buffer, across every segment (F8, review round 7) — the pump's own backpressure
+        buffer, across every segment — the pump's own backpressure
         gate against a prolonged hub outage leaving unbounded content resident in SQLite.
         Distinct from :meth:`chunk_transcript_shipped_bytes`, which bounds one chunk's
         SHIPPED total, not the buffer's own resident total."""
@@ -136,7 +136,7 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
 
     def mark_transcript_record_truncated(self, segment_id: str, *, reason: str, severity: int) -> bool:
         """Note that one shipped record was shrunk in place (D4's per-record cap) —
-        informational only. Latches per ``(segment_id, reason)`` (F2): the SAME reason
+        informational only. Latches per ``(segment_id, reason)``: the SAME reason
         recurring never re-warns; a DIFFERENT one always does, regardless of what currently
         displays. ``severity`` ranks ``reason`` against this method's other callers — the
         store keeps whichever arrived with the highest severity as the displayed one."""
@@ -169,7 +169,7 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         agent_tool_use_ids: dict[str, str] | None = None,
     ) -> list[int]:
         """Advance a segment's cursor/shipped counts/version stamp and atomically enqueue
-        ``len(payloads)`` buffer rows (issue #246; F1) — ONE transaction, so a batch split
+        ``len(payloads)`` buffer rows (issue #246) — ONE transaction, so a batch split
         into several records still advances the cursor exactly once, and a crash loses
         neither the cursor advance nor any record. Returns their seqs, in payload order."""
         ...

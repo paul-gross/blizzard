@@ -216,7 +216,7 @@ class ResumeIntents:
         """Active, session-bearing leases that are neither parked, mid-submission, nor
         mid-elicitation — an unspawned one is REAP's residue, with nothing to resume.
 
-        The elicitation exclusion (D6, review F1/F2/F5) matters on both callers: a graceful
+        The elicitation exclusion (D6) matters on both callers: a graceful
         restart-resume would otherwise wake a second process on the same session, and an
         ungraceful crash-orphan scan would otherwise leave the pre-resume elicitation's stale
         record to be misread as the resumed generation's own verdict — neither path may

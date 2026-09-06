@@ -14,10 +14,10 @@ from blizzard.hub.cli.context import CliContext
 
 @click.command("rotate-signing-key", cls=AuthCommand)
 def rotate_signing_key(cli: CliContext) -> None:
-    """Rotate the hub's IdP signing keypair (issue #95) — mints a fresh current key,
-    demoting the old current to previous; no restart. A no-op error under ``auth.mode = "none"``
-    (no keypair exists). Human-plane, gated on ``user:manage`` — under ``auth.mode =
-    "oauth"`` this requires a hub session (``blizzard hub login``, issue #96)."""
+    """Rotate the hub's IdP signing keypair (issue #95) — a fresh key signs immediately; the
+    old key still verifies already-issued tokens, and no restart is needed. A no-op error under
+    ``auth.mode = "none"`` (no keypair exists). Human-plane, gated on ``user:manage`` — under
+    ``auth.mode = "oauth"`` this requires a hub session (``blizzard hub login``, issue #96)."""
     cli.post(
         "/api/auth/rotate-signing-key",
         "POST /auth/rotate-signing-key",

@@ -122,7 +122,7 @@ OPEN_PAUSE_PARK = Unsuperseded(
 )
 
 #: The pause-park half of ask/park's ``parked_lease_ids`` union — shared so the ask
-#: adapter never reaches into a sibling adapter for it (blizzard#410 review F3).
+#: adapter never reaches into a sibling adapter for it (blizzard#410).
 PAUSE_PARKED_LEASE_IDS = select(pause_parks.c.lease_id).where(OPEN_PAUSE_PARK.clause).distinct()
 
 # Correlated against ``open_escalations``'s own outer ``leases``/``lease_closures`` join.

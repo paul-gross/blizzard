@@ -105,9 +105,9 @@ class WorkerCall:
     ) -> httpx.Response:
         """One call, with this lease's token attached and a failure named as ``verb: failure``.
 
-        A rejection the worker can act on (an unknown ``--repo``, naming the repos the env
-        does list) carries its guidance in the body, so that is preferred over the bare status
-        line; ``rejected`` names it differently from an unreachable runner where that helps."""
+        A rejection the worker can act on carries its guidance in the body, so that is preferred
+        over the bare status line; ``rejected`` names it differently from an unreachable runner
+        where that helps."""
         kwargs: dict[str, object] = {"timeout": timeout, "headers": self._headers(), "params": params}
         if json_body is not None:
             kwargs["json"] = json_body

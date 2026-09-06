@@ -1,8 +1,7 @@
 """Reconcile ``host``'s positional DIRECTORY with its ``--dir`` option (issue #3).
 
-An explicit ``--dir`` on the command line beats its own envvar/default fallback, so a
-bare positional works unchanged when ``--dir`` was never spelled out; only a
-command-line tie that disagrees is a usage error."""
+Ranked per ``src/blizzard/cli/param_rank.py``: only a command-line tie that disagrees
+is a usage error."""
 
 from __future__ import annotations
 
@@ -22,8 +21,8 @@ class HostDirectory:
 
     @property
     def path(self) -> str:
-        """The directory to use — a ``click.UsageError`` when the positional and
-        ``--dir`` were both spelled out on the command line and disagree."""
+        """The directory to use — a ``click.UsageError`` on a command-line tie that
+        disagrees (ranked per ``src/blizzard/cli/param_rank.py``)."""
         if (
             self.directory is not None
             and ParamSource.of("dir_option").on_commandline

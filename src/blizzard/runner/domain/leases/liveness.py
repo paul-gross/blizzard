@@ -15,19 +15,20 @@ __all__ = ["IReadLeaseLivenessRepository", "IWriteLeaseLivenessRepository", "Lea
 
 
 class IReadLeaseLivenessRepository(Protocol):
-    """Read-only heartbeat and spawn queries — REAP's staleness baseline (held by
-    read-path edges)."""
+    """Read-only heartbeat and spawn queries backing the lease-liveness staleness baseline
+    (held by read-path edges)."""
 
     def latest_heartbeat(self, lease_id: str) -> datetime | None:
         """The lease's most recent heartbeat stamp, or ``None`` if it never beat.
 
-        REAP's stall signal; on ``None`` the caller falls back to :meth:`latest_spawn`."""
+        The primary signal in the staleness baseline; on ``None`` the caller falls back to
+        :meth:`latest_spawn`."""
         ...
 
     def latest_spawn(self, lease_id: str) -> datetime | None:
         """When this lease's newest process was spawned, or ``None`` if it never was.
 
-        The second half of REAP's staleness baseline (issue #150). A lease outlives its
+        The fallback half of the staleness baseline (issue #150). A lease outlives its
         processes, so the newest ``lease_spawns`` row is when the running worker started."""
         ...
 

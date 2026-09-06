@@ -75,7 +75,8 @@ class Callback:
 
 @dataclass(frozen=True)
 class Login:
-    """One ``blizzard hub login`` dance against one hub — the client half of the hub's ``Delivery``."""
+    """One ``blizzard hub login`` dance against one hub: builds the PKCE authorize URL, then
+    exchanges the resulting code for a session token."""
 
     base_url: str
     redirect_uri: str

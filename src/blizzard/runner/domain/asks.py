@@ -61,7 +61,7 @@ class IReadAskRepository(Protocol):
         """Leases dormant on a question **or an operator pause** — the union of
         :meth:`ask_parked_lease_ids` and :mod:`~blizzard.runner.domain.pause`'s own
         ``pause_parked_lease_ids`` (issue #46). A parked lease has no live worker, so
-        REAP's stall clock does not apply ([ask-answer.md])."""
+        it is exempt from staleness reclamation ([ask-answer.md])."""
         ...
 
     def ask_parked_lease_ids(self) -> set[str]:
