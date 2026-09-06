@@ -532,8 +532,8 @@
   },
   "blizzard_mock/mock_hub/api/routes.py": {
    "comments": 7,
-   "docstrings": 20,
-   "total": 303
+   "docstrings": 18,
+   "total": 291
   },
   "blizzard_mock/mock_hub/app.py": {
    "comments": 0,
@@ -566,14 +566,14 @@
    "total": 65
   },
   "blizzard_mock/mock_hub/domain/models.py": {
-   "comments": 30,
-   "docstrings": 47,
-   "total": 296
+   "comments": 28,
+   "docstrings": 41,
+   "total": 274
   },
   "blizzard_mock/mock_hub/domain/service.py": {
    "comments": 47,
-   "docstrings": 127,
-   "total": 943
+   "docstrings": 118,
+   "total": 910
   },
   "blizzard_mock/mock_hub/domain/state.py": {
    "comments": 6,
@@ -582,8 +582,8 @@
   },
   "blizzard_mock/mock_hub/domain/wire.py": {
    "comments": 18,
-   "docstrings": 29,
-   "total": 327
+   "docstrings": 26,
+   "total": 311
   },
   "blizzard_mock/mock_hub/internal/__init__.py": {
    "comments": 0,
@@ -924,8 +924,8 @@
   },
   "blizzard/hub/api/findings.py": {
    "comments": 3,
-   "docstrings": 33,
-   "total": 202
+   "docstrings": 50,
+   "total": 241
   },
   "blizzard/hub/api/fleet.py": {
    "comments": 23,
@@ -1544,8 +1544,8 @@
   },
   "blizzard/hub/domain/findings.py": {
    "comments": 22,
-   "docstrings": 62,
-   "total": 347
+   "docstrings": 79,
+   "total": 373
   },
   "blizzard/hub/domain/fleet.py": {
    "comments": 0,
@@ -1913,9 +1913,9 @@
    "total": 90
   },
   "blizzard/hub/store/internal/finding_store.py": {
-   "comments": 5,
-   "docstrings": 25,
-   "total": 342
+   "comments": 7,
+   "docstrings": 28,
+   "total": 374
   },
   "blizzard/hub/store/internal/garden_delivery_store.py": {
    "comments": 15,
@@ -3789,8 +3789,8 @@
   },
   "blizzard/wire/finding.py": {
    "comments": 0,
-   "docstrings": 38,
-   "total": 124
+   "docstrings": 43,
+   "total": 144
   },
   "blizzard/wire/fleet.py": {
    "comments": 0,
@@ -4209,6 +4209,11 @@
    "docstrings": 14,
    "total": 119
   },
+  "service/test_runner_garden_proposals_service.py": {
+   "comments": 3,
+   "docstrings": 13,
+   "total": 105
+  },
   "service/test_runner_service.py": {
    "comments": 68,
    "docstrings": 65,
@@ -4390,9 +4395,9 @@
    "total": 233
   },
   "test_basic_harness_workflow_graph.py": {
-   "comments": 26,
+   "comments": 25,
    "docstrings": 6,
-   "total": 126
+   "total": 128
   },
   "test_blocked_marking_api.py": {
    "comments": 8,
@@ -4800,9 +4805,9 @@
    "total": 364
   },
   "test_finding_api.py": {
-   "comments": 9,
+   "comments": 15,
    "docstrings": 6,
-   "total": 279
+   "total": 458
   },
   "test_finding_exit_service.py": {
    "comments": 0,
@@ -4826,13 +4831,13 @@
   },
   "test_finding_store.py": {
    "comments": 7,
-   "docstrings": 11,
-   "total": 192
+   "docstrings": 16,
+   "total": 297
   },
   "test_finding_wire.py": {
    "comments": 3,
    "docstrings": 5,
-   "total": 89
+   "total": 148
   },
   "test_findings_domain.py": {
    "comments": 1,
@@ -4957,7 +4962,7 @@
   "test_garden_proposal_resolution_domain.py": {
    "comments": 4,
    "docstrings": 13,
-   "total": 400
+   "total": 412
   },
   "test_garden_proposal_store.py": {
    "comments": 3,
@@ -4975,9 +4980,9 @@
    "total": 199
   },
   "test_garden_routine_graph.py": {
-   "comments": 21,
-   "docstrings": 20,
-   "total": 173
+   "comments": 39,
+   "docstrings": 40,
+   "total": 258
   },
   "test_garden_routine_graph_mint.py": {
    "comments": 0,
@@ -4997,7 +5002,7 @@
   "test_garden_run_domain.py": {
    "comments": 4,
    "docstrings": 21,
-   "total": 514
+   "total": 523
   },
   "test_garden_sweeps_component.py": {
    "comments": 0,
