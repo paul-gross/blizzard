@@ -1,5 +1,5 @@
 """SQLAlchemy adapter for the run-context repository seam (package-private,
-blizzard#393 Phase 1). All ``sqlalchemy`` usage is confined here
+blizzard#393). All ``sqlalchemy`` usage is confined here
 (``bzh:dependency-inversion``). Resolves a chunk's first work ref straight against
 ``work_items`` rather than composing another store instance (``bzh:repository-split``)
 — this store depends only on :class:`HubStoreConnections`."""

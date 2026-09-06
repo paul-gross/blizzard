@@ -1,8 +1,8 @@
 """Daemon-neutral ``init``/``migrate``/``host`` glue shared by the hub and runner CLIs.
 
 Parameterized, not generalized (D5): each shared body takes the daemon's own
-callables/exception types as arguments, so a daemon-specific difference (e.g. the
-hub's ``allow_external_db``) is bound by the caller, never taught to this module."""
+callables/exception types as arguments, so a daemon-specific difference is bound by
+the caller, never taught to this module."""
 
 from __future__ import annotations
 

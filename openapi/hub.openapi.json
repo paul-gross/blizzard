@@ -1121,7 +1121,7 @@
         "type": "object"
       },
       "ChunkDetail": {
-        "description": "The whole chunk aggregate \u2014 one response model behind both the hub's own detail read and the\nrunner's pass-through proxy of it (issue #314): transition history, inline artifact store, and the\nopen escalation. Declared once, never re-typed per route, so a field reaches both specs at once.",
+        "description": "The whole chunk aggregate (issue #314): transition history, inline artifact\nstore, and the open escalation.",
         "properties": {
           "artifacts": {
             "default": [],
@@ -1509,7 +1509,7 @@
         "type": "object"
       },
       "ChunkNeighborhoodView": {
-        "description": "A chunk's standing dependency edges one hop each way (issue #462), unlike\n``blocked``'s null-or-a-marking shape: a chunk with no edges still carries two\nlists, empty rather than null \u2014 both required here, never omitted, so a generated\nclient can rely on that without its own fallback.",
+        "description": "A chunk's standing dependency edges one hop each way (issue #462) \u2014 both\n``prerequisites`` and ``dependents`` are always present as lists, empty rather than\nnull.",
         "properties": {
           "dependents": {
             "items": {
@@ -2778,7 +2778,7 @@
       },
       "FindingExitRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/findings/{verb}` \u2014 the shared shape for every human-driven exit and\n`reopen` except `supersede` (blizzard#394 Phase 2): every finding named exits (or\nreopens) together, one call, carrying the same required note (D7).",
+        "description": "`POST /api/findings/{verb}` \u2014 the shared shape for every human-driven exit and\n`reopen` except `supersede` (blizzard#394): every finding named exits (or\nreopens) together, one call, carrying the same required note (D7).",
         "properties": {
           "finding_ids": {
             "items": {
@@ -3024,7 +3024,7 @@
         "type": "object"
       },
       "GardenDeliveryRequest": {
-        "description": "The garden-delivery route's body (blizzard#393 Phase 4) \u2014 the artifact names to\nconsume, named the way `garden_deliver`'s repeatable ``--delta``/``--proposals``\nflags carry them.",
+        "description": "The garden-delivery route's body (issue #393) \u2014 the delta and proposal artifact\nnames to deliver, each independently optional.",
         "properties": {
           "delta": {
             "default": [],
@@ -3047,7 +3047,7 @@
         "type": "object"
       },
       "GardenDeliveryResponse": {
-        "description": "The result of one garden delivery \u2014 ``recorded`` durably means it (materialized\nnow or replayed, blizzard#393 Phase 3's own `DeliveryOutcome`); ``invalid`` carries\nthe rejection reason in ``detail``, for the graph's ``invalid`` edge to attach.",
+        "description": "The result of one garden delivery \u2014 ``recorded`` durably means it, materialized\nnow or replayed (issue #393); ``invalid`` carries the rejection reason in\n``detail``.",
         "properties": {
           "detail": {
             "default": "",
@@ -7969,7 +7969,7 @@
         "type": "object"
       },
       "WorkSourcesListView": {
-        "description": "Every configured (plus the built-in ``hub``) source \u2014 ``GET /api/work-sources``.\nWrapped, not a bare array, so a future field can join it non-breakingly\n(``docs/versioning.md``), matching ``WorkItemsListView`` beside it.",
+        "description": "Every configured (plus the built-in ``hub``) source \u2014 ``GET /api/work-sources``.",
         "properties": {
           "sources": {
             "default": [],
@@ -11863,7 +11863,7 @@
     },
     "/api/findings/resolve": {
       "post": {
-        "description": "Resolve every finding in `finding_ids`, recording NOTE: the work that answers a\nfinding landed. 404 for an unknown id, 422 for a blank note. A hand resolution names\nno garden proposal \u2014 that attribution is Phase 3's own, delivery-triggered.",
+        "description": "Resolve every finding in `finding_ids`, recording NOTE: the work that answers a\nfinding landed. 404 for an unknown id, 422 for a blank note. A hand resolution names\nno garden proposal \u2014 that attribution happens only when a delivery lands.",
         "operationId": "resolve_findings_api_findings_resolve_post",
         "requestBody": {
           "content": {

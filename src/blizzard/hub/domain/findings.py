@@ -85,7 +85,7 @@ class FindingFact:
     #: (blizzard#394).
     actor: str | None = None
     #: The proposal a `resolved` fact answered, when the delivery-triggered drain
-    #: recorded it (blizzard#394 Phase 3) — always `None` for a hand resolution.
+    #: recorded it (blizzard#394) — always `None` for a hand resolution.
     proposal_id: str | None = None
     #: The absorbing finding, set only on a `superseded` fact (blizzard#394).
     superseded_by: str | None = None
@@ -156,8 +156,8 @@ class IReadFindingRepository(Protocol):
         ...
 
     def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
-        """Every finding live on `routine_name`, across every scope it holds (blizzard#393
-        Phase 4) — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter.
+        """Every finding live on `routine_name`, across every scope it holds (blizzard#393)
+        — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter.
         Live only, unless `include_gone` (D3), which also surfaces every exited finding."""
         ...
 

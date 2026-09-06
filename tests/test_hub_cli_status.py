@@ -139,6 +139,19 @@ def test_status_renders_a_manual_pause_bare_with_no_reason(monkeypatch: pytest.M
     assert "—" not in result.output
 
 
+def test_status_names_a_hub_pause_with_no_local_brake(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fleet-side pause names itself ``hub``, distinct from a local one — collapsing both to
+    a bare ``paused`` would hide which verb clears it (issue #43)."""
+    cost = _cost(0.0, partial=False)
+    runners = [_runner(hub_paused=True)]
+    _install(monkeypatch, _responses(cost, cost, runners))
+
+    result = CliRunner().invoke(hub_group, ["status"])
+
+    assert result.exit_code == 0, result.output
+    assert "[paused: hub]" in result.output
+
+
 def test_status_names_both_brakes_with_the_local_reason_inline(monkeypatch: pytest.MonkeyPatch) -> None:
     """Both brakes on at once still name which is which, and the local one's reason still
     rides alongside it (issue #43's naming, extended by issue #61's reason)."""

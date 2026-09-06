@@ -1,5 +1,5 @@
-"""transcript_segments.truncated_reasons_warned + truncated_reason_severity (blizzard#246,
-F2) — latches the truncation warning per (segment, reason), display precedence explicit.
+"""transcript_segments.truncated_reasons_warned + truncated_reason_severity (blizzard#246)
+— latches the truncation warning per (segment, reason), display precedence explicit.
 
 Revision ID: 20260810_1200_runner_transcript_truncated_reasons_warned
 Revises: 20260809_2330_runner_transcript_sidechain_warned_agents

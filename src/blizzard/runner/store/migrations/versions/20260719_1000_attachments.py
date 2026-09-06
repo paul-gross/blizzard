@@ -1,4 +1,4 @@
-"""worker attachment channel — attachments (runner store tree, issue #113 Phase 2)
+"""worker attachment channel — attachments (runner store tree, issue #113)
 
 Append-only, one row per attach call, latest-wins per ``(lease_id, name)``; ``checkfirst``.
 Revision ID: 20260719_1000_runner_attachments

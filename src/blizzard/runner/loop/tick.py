@@ -36,7 +36,7 @@ def tick(ctx: LoopContext) -> None:
     Pull(ctx).run()
     Fill(ctx).run()
     Advance(ctx).run()
-    # After every fact-lane-draining step (D3, issue #246) — bounded (F7: the real bound
+    # After every fact-lane-draining step (D3, issue #246) — bounded (the real bound
     # is `transcript_drain.py`'s own, see there), so it delays nothing fleet-truth-bearing.
     TranscriptDrain(ctx).run()
     # Observation only, so its position is not load-bearing: it gates nothing and nothing

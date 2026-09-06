@@ -259,7 +259,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         dependencies=ChunkDependenciesStore(store_connections, clock),
     )
     # Own instances, ahead of `build_services` below — mirrors `work_item_store`'s own
-    # early construction (blizzard#394 Phase 3): the built-in hub closer needs this seam
+    # early construction (blizzard#394): the built-in hub closer needs this seam
     # before `build_services` wires its own.
     finding_store = FindingStore(store_connections)
     finding_exit = FindingExitService(repo=finding_store, clock=clock)

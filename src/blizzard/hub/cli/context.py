@@ -11,7 +11,7 @@ from typing import Any, Protocol
 import click
 import httpx
 
-from blizzard.hub import session_store
+from blizzard.hub.cli import session_store
 
 
 class View(Protocol):
@@ -107,10 +107,9 @@ class CliContext:
         self, method: str, path: str, *, json_body: object | None = None, params: dict[str, str] | None = None
     ) -> httpx.Response:
         """The call itself, unchecked — for a verb that reads a status code of its own first.
-        Dispatches through ``httpx``'s module-level verb function so a test's
-        ``monkeypatch.setattr`` still intercepts it — except a DELETE carrying a JSON
-        body, which ``httpx.delete`` refuses a ``json`` keyword for: that case goes
-        through ``httpx.request`` instead."""
+        Dispatches through ``httpx``'s module-level verb function, same as :meth:`stream` —
+        except a DELETE carrying a JSON body, which ``httpx.delete`` refuses a ``json`` keyword
+        for: that case goes through ``httpx.request`` instead."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
         kwargs: dict[str, Any] = {"timeout": CLIENT_TIMEOUT}
         if json_body is not None:

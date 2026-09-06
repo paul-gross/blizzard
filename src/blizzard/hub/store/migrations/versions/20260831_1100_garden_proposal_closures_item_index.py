@@ -1,4 +1,4 @@
-"""garden_proposal_closures(source, ref) unique index (blizzard#394 Phase 3) — the reverse
+"""garden_proposal_closures(source, ref) unique index (blizzard#394) — the reverse
 read a delivered item's own pointer needs, DB-enforcing `find_by_item`'s `one_or_none()`.
 
 Revision ID: 20260831_1100_gpc_item_index

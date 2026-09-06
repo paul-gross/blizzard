@@ -1,6 +1,6 @@
 """A routine's finding trend — a read over a window's `finding_facts`, folded into
 fixed-length periods with per-kind exit counts, the outflow/withdrawn roll-ups, and the
-D5 introduced-age cut (blizzard#394 Phase 4). Periods are cut in Python, not SQL (D6,
+D5 introduced-age cut (blizzard#394). Periods are cut in Python, not SQL (D6,
 `bzh:sql-portable`); the read never writes, and every count derives at read time
 (`bzh:facts-not-status`)."""
 

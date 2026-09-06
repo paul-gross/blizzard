@@ -27,5 +27,6 @@ class IWriteLeaseResumeIntentRepository(IReadLeaseResumeIntentRepository, Protoc
         ...
 
     def record_resume_clear(self, *, lease_id: str, cleared_at: datetime) -> None:
-        """Clear a lease's resume-intent — the RESUME step resumed or abandoned it."""
+        """Clear a lease's resume-intent — the marked restart-resume was resolved, whether
+        by reattaching the lease or abandoning it."""
         ...

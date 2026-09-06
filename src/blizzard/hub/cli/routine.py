@@ -1,5 +1,5 @@
 """``blizzard hub routine`` — issue #389: operator verbs over routines; blizzard#394
-Phase 4 adds ``trend``, the gardening routine panel adds ``sweeps``."""
+adds ``trend``, the gardening routine panel adds ``sweeps``."""
 
 from __future__ import annotations
 
@@ -177,7 +177,7 @@ def routine_run(cli: CliContext, name: str, scope_slug: str | None, mode: str, n
 
 @dataclass(frozen=True)
 class TrendDetail:
-    """`routine trend`'s own render (blizzard#394 Phase 4) — per-period counts, then the
+    """`routine trend`'s own render (blizzard#394) — per-period counts, then the
     D5 age cut."""
 
     body: dict[str, Any]
@@ -200,9 +200,7 @@ class TrendDetail:
 
 
 def _utc_query_value(value: datetime) -> str:
-    """A bare ``--since``/``--until``/``--introduced-boundary`` is read as the operator's
-    own local wall clock, not UTC — converted (not merely relabeled) before it crosses the
-    wire (`src/blizzard/hub/cli/analytics.py`'s own D6 rule)."""
+    """See `src/blizzard/hub/cli/analytics.py`'s own `_utc_query_value` (D6)."""
     return iso_utc(value.astimezone(UTC))
 
 

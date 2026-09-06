@@ -14,7 +14,7 @@ from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli import login as cli_login
-from blizzard.hub.session_store import SessionFile
+from blizzard.hub.cli.session_store import SessionFile
 
 pytestmark = pytest.mark.unit
 

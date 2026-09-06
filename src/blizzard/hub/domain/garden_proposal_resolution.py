@@ -1,6 +1,6 @@
 """Garden-proposal-closure-triggered finding resolutions: delivery-triggered exit
-(blizzard#394 Phase 3), when the item an accepted proposal minted is delivered, and the
-worker-facing read (blizzard#397 Phase 1), the findings a chunk's own accepted, minted
+(blizzard#394), when the item an accepted proposal minted is delivered, and the
+worker-facing read (blizzard#397), the findings a chunk's own accepted, minted
 proposal answers. Delivery resolution is gated on `has_resolution_for_proposal`, not any
 one finding's current state, so a crash-retry
 (`blizzard-context:/architecture/crash-correctness/hub.md`) still completes an

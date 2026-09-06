@@ -1,5 +1,4 @@
-"""The per-segment replacement unit and the standing convergence sweep (blizzard#254,
-Phase 3).
+"""The per-segment replacement unit and the standing convergence sweep (blizzard#254).
 
 There is no finalize hook to derive from (D1/D2): the sweep is the only first-derivation
 path, and re-running it is the re-derive path — one engine, one convergence property

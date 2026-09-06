@@ -343,7 +343,7 @@ def record_garden_delivery(
     proposal_artifact_ids = [proposal_artifact_id_by_name[name] for name in validated.proposal_sources]
 
     # Both `DeliveryOutcome` members mean "durably recorded" to this route's caller
-    # (Phase 3's own docstring) — a replay minting nothing is not itself news.
+    # (see `DeliveryOutcome`'s own docstring) — a replay minting nothing is not itself news.
     services.garden_delivery.deliver(
         validated,
         chunk=chunk,

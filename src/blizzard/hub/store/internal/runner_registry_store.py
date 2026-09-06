@@ -192,8 +192,8 @@ class RunnerRegistryStore:
     ) -> None:
         # No FK, no known-runner requirement: the fact can legitimately arrive ahead of
         # the registration, and must not stall this runner's high-water mark waiting.
-        # Upserts on (runner_id, slug) — one row per declared subscription (blizzard#436
-        # phase 3), so a sibling slug's row is untouched by this one's write.
+        # Upserts on (runner_id, slug) — one row per declared subscription (blizzard#436),
+        # so a sibling slug's row is untouched by this one's write.
         with self._store.write("record_external_usage") as conn:
             existing = conn.execute(
                 select(s.runner_external_usage.c.runner_id).where(

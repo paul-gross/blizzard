@@ -111,7 +111,7 @@ def _require_until_after_since(since: datetime, until: datetime) -> None:
 
 @dataclass(frozen=True)
 class _TrendWindow:
-    """One ``GET /routines/trend`` request's parsed window (blizzard#394 Phase 4,
+    """One ``GET /routines/trend`` request's parsed window (blizzard#394,
     `SpendWindow`'s own shape, `src/blizzard/hub/api/spend.py`) — a malformed edge or a
     non-positive ``period_days`` is the 422 it names."""
 

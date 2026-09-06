@@ -1,6 +1,6 @@
 """A garden routine's runs are readable — the run list and one run's own delta, over
 `work_item_runs`, `finding_sets`, and the delivered artifact's own raw content (blizzard
-gardening: runs are readable, Phase 2).
+gardening: runs are readable).
 
 `work_item_runs` is the only table that makes an escalated or a still-running run
 enumerable (`bzh:facts-not-status`) — a run's `outcome` is derived fresh from the
@@ -76,7 +76,7 @@ class RunRow:
 class AddedFinding:
     """One `add` op a delivered set's artifact named — `finding_id` is the finding it
     minted, or `None` when the set predates the `finding_facts.finding_set_id` linkage
-    (Phase 1) and so cannot be matched back to one."""
+    and so cannot be matched back to one."""
 
     finding_id: str | None
     class_: str

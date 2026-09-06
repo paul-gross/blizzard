@@ -92,9 +92,9 @@ def analytics_group() -> None:
 def analytics_re_derive(cli: CliContext, segment_id: str | None, chunk_id: str | None, limit: int) -> None:
     """Force the standing derivation sweep's own replacement unit now, rather than
     waiting for its next tick — scoped to one segment, one chunk, or every candidate
-    (neither option given). No downtime: it runs the same in-process reconciler already
-    live, just driven directly. Prints ``derived``/``remaining``; a nonzero ``remaining``
-    on a chunk/all-scoped call means running it again continues from where it left off."""
+    (neither option given). No downtime. Prints ``derived``/``remaining``; a nonzero
+    ``remaining`` on a chunk/all-scoped call means running it again continues from where
+    it left off."""
     if segment_id is not None and chunk_id is not None:
         raise click.ClickException("--segment and --chunk are mutually exclusive")
     body: dict[str, object] = {"limit": limit}
@@ -302,8 +302,7 @@ class _Dataset:
 
 
 #: Mints the ten read rollup routes' own criteria types, mirroring each route's own
-#: declared query params (``api/analytics.py``) — not derived from the path, so a
-#: hyphenated route (``counts/agent-types``) never round-trips through a naive rule.
+#: declared query params (``api/analytics.py``).
 _DATASETS: dict[str, _Dataset] = {
     "counts-files": _Dataset(
         "/api/analytics/counts/files",

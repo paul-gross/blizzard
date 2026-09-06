@@ -51,7 +51,7 @@ class TurnSegmentView(BaseModel):
 
     index: int
     #: Closed to :data:`TurnKind` — a viewer branches on it turn-by-turn — while ``link``/
-    #: ``input_shape`` stay open (`review:F10`); the cost is ``docs/versioning.md``'s.
+    #: ``input_shape`` stay open; the cost is ``docs/versioning.md``'s.
     kind: TurnKind
     timestamp: str | None
     text: str

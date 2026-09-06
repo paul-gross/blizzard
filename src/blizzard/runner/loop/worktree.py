@@ -1,5 +1,5 @@
 """The worker-artifact git seam — read-only verify of what a build declared (issue
-#143, Phase 4).
+#143).
 
 A declared ``(repo, branch, commit)`` is confirmed **read-only** against a named origin —
 never inferring a branch name off git residue, never mutating git, never consulting a

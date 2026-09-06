@@ -157,7 +157,7 @@ class FindingStore:
         return [f for f in result if include_gone or f.live]
 
     def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
-        """Every finding live on `routine_name`, across every scope (blizzard#393 Phase 4)
+        """Every finding live on `routine_name`, across every scope (blizzard#393)
         — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter."""
         with self._store.read("list_for_routine") as conn:
             rows = conn.execute(

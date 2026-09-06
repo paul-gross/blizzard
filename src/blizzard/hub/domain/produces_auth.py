@@ -1,5 +1,5 @@
 """Produces-artifact authorization — the hub-side backstop on a node's ``produces:``
-declaration (issue #113 phase 5).
+declaration (issue #113).
 
 The backstop against a submission carrying no explicit attachment and no covering git
 commit for a declared name. Its coverage predicate is shared via

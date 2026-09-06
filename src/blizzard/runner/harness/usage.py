@@ -1,4 +1,4 @@
-"""The harness-usage domain value (epic #57, phase 1 of #58).
+"""The harness-usage domain value (epic #57, issue #58).
 
 Cost always comes from the harness's own reported figure — blizzard never maintains a
 pricing table. Token counts are always present, but ``cost_usd`` can be legitimately

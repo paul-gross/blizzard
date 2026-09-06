@@ -141,15 +141,15 @@ class Judgement:
         reply back and continue exactly where a launch's own reply would have (blizzard#443).
 
         Staleness is checked FIRST, unconditionally — before liveness — so a hung process
-        that never exits is still bounded, not just a lost-and-empty one (review F6). Still
+        that never exits is still bounded, not just a lost-and-empty one. Still
         running and under the bound: pass over, no store write, collected on a later pass —
         never blocking this one on a live model turn. Exited with nothing usable at all —
         empty, or a partial write with no result envelope at all, the shape a `kill -9`
-        mid-write leaves (review F7) — is a **lost** elicitation, not a verdict-less reply:
+        mid-write leaves — is a **lost** elicitation, not a verdict-less reply:
         that relaunches under the staleness bound rather than consuming a retry (D5).
 
         The record is cleared, and its output files swept, only AFTER the collected reply
-        is fully processed (review F3): a crash mid-processing leaves the record standing,
+        is fully processed: a crash mid-processing leaves the record standing,
         so the next pass re-reads the same still-present file and re-runs `_judged` — safe
         because usage recording and completion buffering are already idempotent replays
         under a crash, the same guarantee the once-synchronous elicitation always leaned on."""
@@ -163,7 +163,7 @@ class Judgement:
                 relaunch_count=elicitation.relaunch_count,
             )
             # `Attempt.fail` kills the (possibly still-running) process and clears this
-            # record itself (D7) — no separate write of our own precedes it (review F4).
+            # record itself (D7) — no separate write of our own precedes it.
             Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
             return
         pid, start_time = elicitation.pid, elicitation.process_start_time or ""
@@ -268,7 +268,7 @@ class Judgement:
         the same tree its judgement and the gate are rendered on. The in-flight record is
         durable BEFORE the process starts (D1), mirroring `Spawner.spawn`'s mint-before-spawn:
         a crash in the gap leaves a record with no process, which REAP's generic staleness
-        treatment (Phase 2) absorbs the same way an orphaned lease mint is absorbed today."""
+        treatment absorbs the same way an orphaned lease mint is absorbed today."""
         lease = self.lease
         output_path = self.ctx.elicitation_files.output_path(lease.lease_id, lease.epoch, attempt=0)
         self.ctx.stores.elicitations.record_elicitation_launch(
@@ -281,7 +281,7 @@ class Judgement:
     def _elicit(self, output_path: str) -> None:
         """Render the judgement prompt against this attempt's own checks and launch it into
         ``output_path`` (blizzard#443) — the shared half of a fresh launch and a lost
-        answer's relaunch (review F9), including reasserting the stamped effort/compaction-
+        answer's relaunch, including reasserting the stamped effort/compaction-
         window the same way on both: neither is session-sticky (issue #144, blizzard#343), so
         a resume that omits them drops the declared value back to the ambient default."""
         lease = self.lease

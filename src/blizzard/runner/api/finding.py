@@ -1,6 +1,6 @@
 """``GET /api/leases/{lease_id}/findings`` and its ``/{finding_id}`` sibling — the
-findings a worker's own chunk's accepted, minted garden proposal answers (blizzard#397
-Phase 2). Lease-scoped and token-authorized, then forwarded to the hub as the runner
+findings a worker's own chunk's accepted, minted garden proposal answers (blizzard#397).
+Lease-scoped and token-authorized, then forwarded to the hub as the runner
 principal — the shape ``runner/api/garden.py`` already sets for a lease-token-authorized,
 hub-proxied read (``bzh:pluggable-seams``)."""
 

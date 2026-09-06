@@ -16,7 +16,7 @@ import pytest
 
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub import session_store
+from blizzard.hub.cli import session_store
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 

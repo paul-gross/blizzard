@@ -3,7 +3,7 @@
     "artifact": {
       "commands": {
         "commit": {
-          "help": "Worker: durably declare a git-commit artifact for REPO (issue #143). Carries the ``git_commit``\nkind only \u2014 an asset is declared through ``artifact create``. Node scope only \u2014\n``--scope graph``/``--scope system`` are refused. Deliberately no ``--forge``: the origin\ncomes from the environment's repo manifest (pinned by\ntests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag).",
+          "help": "Worker: durably declare a git-commit artifact for REPO (issue #143). Carries the ``git_commit``\nkind only \u2014 an asset is declared through ``artifact create``. Node scope only. Deliberately no\n``--forge``: the origin comes from the environment's repo manifest (pinned by\ntests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag).",
           "params": [
             {
               "hidden": false,
@@ -65,7 +65,7 @@
           "short_help": "Worker: durably declare a git-commit artifact for REPO (issue #143)."
         },
         "create": {
-          "help": "Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node\nscope only \u2014 ``--scope graph``/``--scope system`` are refused, both being read-only.\nA submission *stages* the content, published into the envelope only on completion (issue #169)\n\u2014 read it back with ``artifact staged``. Empty stdin and any rejection exit non-zero rather\nthan silently losing the submission.",
+          "help": "Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node\nscope only. A submission *stages* the content, published into the envelope only on completion\n(issue #169) \u2014 read it back with ``artifact staged``. Empty stdin and any rejection exit\nnon-zero rather than silently losing the submission.",
           "params": [
             {
               "hidden": false,
@@ -91,7 +91,7 @@
             }
           ],
           "path": "runner artifact create",
-          "short_help": "Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node scope only \u2014 ``--scope graph``/``--scope system`` are refused, both being read-only."
+          "short_help": "Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node scope only."
         },
         "get": {
           "help": "Worker: read one artifact by NAME \u2014 a ``produces:`` name (node scope), a baked-in graph\ndeclaration (graph scope), or one of blizzard's own published documents (system scope);\nunknown is a ``404``, more than one candidate a ``409`` naming them. ``--content`` prints\nraw asset text, and errors on the ``git_commit`` kind, which carries none. NAME is\npercent-encoded (issue #233).",
@@ -174,7 +174,7 @@
           "short_help": "Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch, plus the graph mint's own baked-in declarations and blizzard's published system-artifact set \u2014 ``--scope`` narrows to one."
         },
         "staged": {
-          "help": "Worker: list this node-step's own staged (not-yet-published) submissions, node scope only\n\u2014 ``--scope graph``/``--scope system`` are refused, neither ever being staged. Read straight\noff the runner's own ``attachments`` record rather than the hub envelope (issue #169), so a\nfresh ``artifact create`` shows up here immediately; ``--content`` gives the full text.",
+          "help": "Worker: list this node-step's own staged (not-yet-published) submissions, node scope only.\nRead straight off the runner's own ``attachments`` record rather than the hub envelope (issue\n#169), so a fresh ``artifact create`` shows up here immediately; ``--content`` gives the full\ntext.",
           "params": [
             {
               "hidden": false,
@@ -200,7 +200,7 @@
             }
           ],
           "path": "runner artifact staged",
-          "short_help": "Worker: list this node-step's own staged (not-yet-published) submissions, node scope only \u2014 ``--scope graph``/``--scope system`` are refused, neither ever being staged."
+          "short_help": "Worker: list this node-step's own staged (not-yet-published) submissions, node scope only."
         }
       },
       "help": "Worker: read node-step, graph, and system artifacts; write this node-step's own (issue\n#127). The lease binding is ambient: every verb acts on the worker's own lease, resolved\nfrom the spawn environment \u2014 none takes a flag naming another chunk. ``--scope`` picks node\nscope, the graph mint's baked-in declarations, or blizzard's published system-artifact set.\n``create`` *stages* a submission, published on completion (#169).",
@@ -528,7 +528,7 @@
       "short_help": "Read-only diagnostics for the pinned OpenCode compatibility contract."
     },
     "pause": {
-      "help": "Declarative control: pause this runner \u2014 it starts no new workers (issue #45). This runner's\n**own** brake, a pure client of its local API, so it works with the hub unreachable: it blocks\nevery spawn site and defers both the kill of a stalled worker and escalation at an exhausted retry\nbudget. No retry is consumed, and a live worker is left alone \u2014 this is not a drain. Distinct from\nthe hub's brake, and each is cleared where it was set.",
+      "help": "Declarative control: pause this runner \u2014 it starts no new workers (issue #45). This runner's\n**own** brake, a pure client of its local API, so it works with the hub unreachable: a stalled\nworker is not killed, and an exhausted retry budget does not escalate, until it is cleared. No\nretry is consumed, and a live worker is left alone \u2014 this is not a drain. Distinct from the hub's\nbrake, and each is cleared where it was set.",
       "params": [
         {
           "hidden": false,
@@ -568,7 +568,7 @@
       "short_help": "Declarative control: pause this runner \u2014 it starts no new workers (issue #45)."
     },
     "pm-items": {
-      "help": "Deprecated alias for ``blizzard runner work-items`` (issue #55).\n\nKept working, hidden from ``--help``: a node's prompt is inlined into the store at mint and\nimmutable thereafter, so every already-minted graph names this verb forever (pinned by\ntests/test_pin_runner_misc.py::test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item).",
+      "help": "Deprecated alias for ``blizzard runner work-items`` (issue #55).\n\nKept working, hidden from ``--help`` (pinned by\ntests/test_pin_runner_misc.py::test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item).",
       "params": [
         {
           "hidden": false,
@@ -705,7 +705,7 @@
       "short_help": "Operator: the packaged workspace-prompt samples, and which one this runtime uses."
     },
     "requeue": {
-      "help": "Hand a needs_human chunk back to the fleet: a fresh attempt at its current node (issue #53).\nAppends the fact that clears the chunk's local needs_human hold; the next FILL spawns a fresh\nattempt \u2014 new session, new lease, fresh epoch \u2014 at the current node. The route is never released\nand the chunk never re-enters the hub's queue. Refused ``409`` while its takeover is still open,\nor while it is not parked needs_human.",
+      "help": "Hand a needs_human chunk back to the fleet: a fresh attempt at its current node (issue #53).\nClears the chunk's local needs_human hold; a fresh attempt spawns at the current node on the\nfleet's next pass. The route is never released and the chunk never re-enters the hub's queue.\nRefused ``409`` while its takeover is still open, or while it is not parked needs_human.",
       "params": [
         {
           "hidden": false,

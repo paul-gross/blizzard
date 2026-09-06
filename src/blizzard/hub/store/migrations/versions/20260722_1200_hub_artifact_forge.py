@@ -1,4 +1,4 @@
-"""artifacts.forge — the worker's declared origin, on the git_commit artifact row (issue #143 Phase 4)
+"""artifacts.forge — the worker's declared origin, on the git_commit artifact row (issue #143)
 
 A nullable ``git_commit``-only sibling of ``repo``; null reads as "the repo's origin".
 Revision ID: 20260722_1200_hub_artifact_forge

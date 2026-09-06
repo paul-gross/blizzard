@@ -99,7 +99,7 @@ class ExternalSubscriptionUsageWindow:
 
 @dataclass(frozen=True)
 class SubscriptionUsageRecord:
-    """One declared subscription's newest reported sample, raw (blizzard#436 phase 3) —
+    """One declared subscription's newest reported sample, raw (blizzard#436) —
     staleness is applied per record at derive time, never here, so one dead sampler's
     record cannot blank a healthy sibling's. ``name`` is the declaration's own
     operator-facing label, reported alongside ``slug`` on the fact."""
@@ -132,7 +132,7 @@ class LegacySubscriptionUsageView:
 @dataclass(frozen=True)
 class PerSubscriptionUsageView:
     """One subscription's usage, past its own staleness gate, carrying its identity
-    (blizzard#436 phase 3) — the wire's additive per-subscription collection, beside the
+    (blizzard#436) — the wire's additive per-subscription collection, beside the
     single legacy :class:`LegacySubscriptionUsageView`."""
 
     slug: str

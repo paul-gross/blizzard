@@ -391,8 +391,8 @@ def chunk_restart(cli: CliContext, chunk_id: str, to_graph: str | None, node: st
     """Force CHUNK onto a node now, on a freshly minted session (issues #370, #371).
 
     A pure client of ``POST /api/chunks/{id}/restart``. The move has already happened when the call
-    returns: the bumped epoch tears the running attempt down and re-enters, where ``migrate`` only
-    records an intent for the next transition. 409 when CHUNK is terminal or the target refuses it."""
+    returns: the running attempt is torn down and re-entered, where ``migrate`` only records an
+    intent for the next transition. 409 when CHUNK is terminal or the target refuses it."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/restart",
         "POST /chunks/{id}/restart",
@@ -490,8 +490,8 @@ def chunk_delete(cli: CliContext, chunk_id: str, by: str, yes: bool) -> None:
 
 @dataclass(frozen=True)
 class WorkItems:
-    """One chunk's work items, read and rendered — the body ``work-items`` and its deprecated
-    ``pm`` alias share, since a ``cls=``-built verb cannot be reached through ``Context.invoke``."""
+    """One chunk's work items, read and rendered, as a callable body shareable across verbs
+    that cannot reach each other through ``Context.invoke``."""
 
     cli: CliContext
     chunk_id: str

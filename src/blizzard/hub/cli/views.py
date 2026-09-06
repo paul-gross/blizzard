@@ -29,7 +29,7 @@ class Cost:
 @dataclass(frozen=True)
 class ChunkRow:
     row: dict[str, Any]
-    #: ``status`` renders the node id where ``chunk list`` prefers the node's name.
+    #: True renders the node's name when known; false renders its id.
     prefer_node_name: bool = True
 
     @property
@@ -54,8 +54,8 @@ class RunnerRow:
 
     @property
     def brake(self) -> str:
-        """Name which brake is on (issue #43): "paused" alone would hide whether the fleet
-        stopped this runner or it stopped itself — they are cleared by different verbs."""
+        """Name which brake is on (issue #43; pinned by
+        tests/test_hub_cli_status.py::test_status_names_a_hub_pause_with_no_local_brake)."""
         brakes = []
         if self.row.get("hub_paused"):
             brakes.append("hub")

@@ -296,7 +296,7 @@ artifacts = Table(
     Column("kind", String, nullable=False),  # git_commit | asset
     Column("data", Text, nullable=False),  # '<branch>:<commit>' | raw content
     Column("repo", String, nullable=True),  # git_commit only
-    Column("forge", String, nullable=True),  # git_commit only (issue #143, Phase 4); null = legacy row
+    Column("forge", String, nullable=True),  # git_commit only (issue #143); null = legacy row
     Column("produced_at", UtcDateTime, nullable=False),
 )
 
@@ -340,7 +340,7 @@ finding_facts = Table(
     # Who recorded a human-driven fact (blizzard#394) — null for a run-driven add/observed/gone.
     Column("actor", String, nullable=True),
     # The proposal a `resolved` fact answered, when the delivery-triggered drain recorded
-    # it (blizzard#394 Phase 3) — always null for a hand resolution.
+    # it (blizzard#394) — always null for a hand resolution.
     Column("proposal_id", String, ForeignKey("garden_proposals.proposal_id"), nullable=True),
     # The absorbing finding, set only on a `superseded` fact (blizzard#394).
     Column("superseded_by", String, ForeignKey("findings.finding_id"), nullable=True),
@@ -448,7 +448,7 @@ garden_proposal_closures = Table(
     UniqueConstraint("proposal_id", name="uq_garden_proposal_closures_proposal_id"),
 )
 
-# The reverse read a delivered item's own `(source, ref)` needs (blizzard#394 Phase 3).
+# The reverse read a delivered item's own `(source, ref)` needs (blizzard#394).
 # Unique, so `find_by_item`'s `one_or_none()` is DB-enforced, not merely assumed.
 Index(
     "ix_garden_proposal_closures_source_ref",
@@ -1218,7 +1218,7 @@ transcript_events = Table(
     Column("graph_id", String, nullable=False),
     Column("depth", Integer, nullable=False),  # 0 main lane; nesting depth otherwise (D8)
     Column("agent_type", String, nullable=True),  # nearest-enclosing sidechain's; None at depth 0
-    # The turn's own instant, never the hub's receipt instant; nullable (Phase 1) for an
+    # The turn's own instant, never the hub's receipt instant; nullable for an
     # untimed turn.
     Column("occurred_at", UtcDateTime, nullable=True),
     UniqueConstraint(
@@ -1292,7 +1292,7 @@ work_items = Table(
 
 Index("ix_work_items_source", work_items.c.source)
 
-# --- Work item runs (a run's identity — blizzard#393 Phase 1) -----------------------
+# --- Work item runs (a run's identity — blizzard#393) -----------------------
 # What routine, scope, and mode a work item's run is executing under — minted by
 # blizzard#392, read back through a chunk's first work ref (D1: `routine_name`, not a
 # surrogate `routine_id`, the `findings.routine_name` shape).

@@ -151,10 +151,10 @@ def status(directory: str, runner_url: str | None) -> None:
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 def pause(directory: str, runner_url: str | None, by: str) -> None:
     """Declarative control: pause this runner — it starts no new workers (issue #45). This runner's
-    **own** brake, a pure client of its local API, so it works with the hub unreachable: it blocks
-    every spawn site and defers both the kill of a stalled worker and escalation at an exhausted retry
-    budget. No retry is consumed, and a live worker is left alone — this is not a drain. Distinct from
-    the hub's brake, and each is cleared where it was set."""
+    **own** brake, a pure client of its local API, so it works with the hub unreachable: a stalled
+    worker is not killed, and an exhausted retry budget does not escalate, until it is cleared. No
+    retry is consumed, and a live worker is left alone — this is not a drain. Distinct from the hub's
+    brake, and each is cleared where it was set."""
     _set_local_paused(paused=True, by=by, directory=directory, runner_url=runner_url)
 
 
@@ -242,10 +242,9 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
 )
 def requeue(chunk_id: str, directory: str, runner_url: str | None) -> None:
     """Hand a needs_human chunk back to the fleet: a fresh attempt at its current node (issue #53).
-    Appends the fact that clears the chunk's local needs_human hold; the next FILL spawns a fresh
-    attempt — new session, new lease, fresh epoch — at the current node. The route is never released
-    and the chunk never re-enters the hub's queue. Refused ``409`` while its takeover is still open,
-    or while it is not parked needs_human."""
+    Clears the chunk's local needs_human hold; a fresh attempt spawns at the current node on the
+    fleet's next pass. The route is never released and the chunk never re-enters the hub's queue.
+    Refused ``409`` while its takeover is still open, or while it is not parked needs_human."""
     with RunnerDaemon.reach("requeue", directory, runner_url) as daemon:
         resp = daemon.send("post", f"/api/chunks/{chunk_id}/requeues")
         if resp.status_code == 409:

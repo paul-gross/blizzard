@@ -142,7 +142,7 @@ def _echo_prompt_status(source: str, prompt: str) -> None:
 
 def _effective_prompt(config: RunnerConfig) -> tuple[str, str]:
     """The prompt a spawn would read, and the lane it came from — the one definition the
-    `prompt` verbs share, mirroring `SpawnPlan._render`'s override-first precedence."""
+    `prompt` verbs share: a stored override wins first, else the configured resolution."""
     override = _stored_override(config)
     if override is not None:
         return override, _OVERRIDE_SOURCE
@@ -174,11 +174,9 @@ def _stored_override(config: RunnerConfig) -> str | None:
 
 
 def _repoint_config(root: Path, *, file_path: str) -> None:
-    """Point the top-level prompt knobs at an installed copy, leaving the rest of the file alone.
-
-    A targeted line rewrite: regenerating the config would drop every comment and table an
-    operator added. A knob the file predates is inserted beside its siblings rather than at the
-    region boundary, where it would split a table's comment block off from its header."""
+    """Point the top-level prompt knobs at an installed copy, leaving the rest of the file alone —
+    a targeted line rewrite, not a regeneration (pinned by
+    tests/test_cli_workspace_prompt.py::test_install_into_a_config_predating_the_package_knob_keeps_it_parseable)."""
     path = root / CONFIG_FILENAME
     lines = path.read_text().splitlines(keepends=True)
     knobs = {"workspace_prompt_file": json.dumps(file_path), "workspace_prompt_package": '""'}

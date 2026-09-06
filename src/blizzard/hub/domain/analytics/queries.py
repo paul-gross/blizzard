@@ -3,7 +3,7 @@ counts, over the projection :mod:`extraction` and :mod:`derivation` populate.
 
 New, not an extension of :mod:`events` (``bzh:controller-read-only``): that module's
 ``IReadTranscriptEvents`` carries derivation bookkeeping alone, never an event query.
-The routes (Phase 3) depend on this Protocol only; no write repository backs them."""
+The routes depend on this Protocol only; no write repository backs them."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class EventQueryCriteria:
 
 @dataclass(frozen=True)
 class EventRecord:
-    """One event row as the query layer renders it — the wire layer (Phase 3) shapes
+    """One event row as the query layer renders it — the wire layer shapes
     this further for the two encodings. ``payload`` stays raw JSON object text
     (``bzh:sql-portable``: never parsed or filtered on here)."""
 

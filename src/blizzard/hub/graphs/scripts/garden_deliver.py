@@ -1,4 +1,4 @@
-"""The garden delivery node's own script (blizzard#393 Phase 4) — posts a routine run's
+"""The garden delivery node's own script (blizzard#393) — posts a routine run's
 ``--delta``/``--proposals`` artifact names to the hub's garden-delivery route and reports
 the outcome. Pure stdlib (``bzh:deterministic-shell``), built on `land_common`'s own
 :class:`~blizzard.hub.graphs.scripts.land_common.ScriptEnv`/``forge_request``/
@@ -24,8 +24,8 @@ _ENV_GARDEN_DELIVERY_URL = "BZ_HUB_GARDEN_DELIVERY_URL"
 _ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"
 _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
 
-# The failure-marker name a rejected delivery's `invalid` edge reads back (the reviewed
-# plan's own Phase 4 §The route and the script).
+# The failure-marker name a rejected delivery's `invalid` edge reads back (see
+# `garden-routine/prompts/reconcile.from-deliver.md`).
 _FAILURE_MARKER_NAME = "garden-delivery-failure"
 
 

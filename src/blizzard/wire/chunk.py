@@ -317,18 +317,17 @@ class HubMarkerResponse(BaseModel):
 
 
 class GardenDeliveryRequest(BaseModel):
-    """The garden-delivery route's body (blizzard#393 Phase 4) — the artifact names to
-    consume, named the way `garden_deliver`'s repeatable ``--delta``/``--proposals``
-    flags carry them."""
+    """The garden-delivery route's body (issue #393) — the delta and proposal artifact
+    names to deliver, each independently optional."""
 
     delta: list[str] = []
     proposals: list[str] = []
 
 
 class GardenDeliveryResponse(BaseModel):
-    """The result of one garden delivery — ``recorded`` durably means it (materialized
-    now or replayed, blizzard#393 Phase 3's own `DeliveryOutcome`); ``invalid`` carries
-    the rejection reason in ``detail``, for the graph's ``invalid`` edge to attach."""
+    """The result of one garden delivery — ``recorded`` durably means it, materialized
+    now or replayed (issue #393); ``invalid`` carries the rejection reason in
+    ``detail``."""
 
     outcome: Literal["recorded", "invalid"]
     detail: str = ""
@@ -421,19 +420,17 @@ class ChunkNeighborView(BaseModel):
 
 
 class ChunkNeighborhoodView(BaseModel):
-    """A chunk's standing dependency edges one hop each way (issue #462), unlike
-    ``blocked``'s null-or-a-marking shape: a chunk with no edges still carries two
-    lists, empty rather than null — both required here, never omitted, so a generated
-    client can rely on that without its own fallback."""
+    """A chunk's standing dependency edges one hop each way (issue #462) — both
+    ``prerequisites`` and ``dependents`` are always present as lists, empty rather than
+    null."""
 
     prerequisites: list[ChunkNeighborView]
     dependents: list[ChunkNeighborView]
 
 
 class ChunkDetail(BaseModel):
-    """The whole chunk aggregate — one response model behind both the hub's own detail read and the
-    runner's pass-through proxy of it (issue #314): transition history, inline artifact store, and the
-    open escalation. Declared once, never re-typed per route, so a field reaches both specs at once."""
+    """The whole chunk aggregate (issue #314): transition history, inline artifact
+    store, and the open escalation."""
 
     chunk_id: str
     graph_id: str

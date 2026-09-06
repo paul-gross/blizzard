@@ -35,7 +35,7 @@ class IReadElicitationRepository(Protocol):
 
     def in_flight_elicitation_lease_ids(self) -> set[str]:
         """Every lease id with an in-flight elicitation record, regardless of epoch — the
-        bulk read ``ResumeIntents._resumable`` filters on (D6, review F1): no path may
+        bulk read ``ResumeIntents._resumable`` filters on (D6): no path may
         re-mint or resume a lease while its elicitation is in flight, matching the
         already-established ``parked_lease_ids``/``pending_submission_lease_ids`` shape."""
         ...
