@@ -3,8 +3,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import {
   asyncStateOf,
   errorMessage,
-  injectCreateScopeMutation,
   injectHubRoutineBaselinesQuery,
+  injectHubRoutineScopesQuery,
   injectHubScopesQuery,
   injectRunRoutineMutation,
   type RoutineRunResponse,
@@ -19,10 +19,12 @@ import { GardeningRunDialogView, type RunSubmission } from './gardening-run-dial
  * (`GET /api/routines/{routine_id}/baselines`, D5) resolving before submission rather
  * than after.
  *
- * Injects `injectHubScopesQuery`, `injectHubRoutineBaselinesQuery`, and the two
- * mutations (`injectCreateScopeMutation`, `injectRunRoutineMutation`); composes their
- * data into the scope ordering D5 names and delegates every field and the submission
- * flow to {@link GardeningRunDialogView} (`bzh:frontend-container-presentational`).
+ * Injects `injectHubScopesQuery` (every scope, for descriptions),
+ * `injectHubRoutineScopesQuery` (the routine's own related set, D6),
+ * `injectHubRoutineBaselinesQuery`, and `injectRunRoutineMutation`; composes their data
+ * into the scope ordering D5 names, restricted to the routine's related, non-retired
+ * scopes, and delegates every field and the submission flow to
+ * {@link GardeningRunDialogView} (`bzh:frontend-container-presentational`).
  *
  * The host page mounts this with `@if` around the selected routine (the routine
  * panel's own `run` output), so a fresh instance — and a fresh view, with its own
@@ -42,29 +44,30 @@ export class GardeningRunDialog {
   readonly closed = output<void>();
 
   protected readonly scopesQuery = injectHubScopesQuery();
+  protected readonly routineScopesQuery = injectHubRoutineScopesQuery(() => this.routineId());
   protected readonly baselinesQuery = injectHubRoutineBaselinesQuery(() => this.routineId());
-  private readonly createScopeMutation = injectCreateScopeMutation();
   private readonly runMutation = injectRunRoutineMutation();
 
-  /** Every non-retired scope (D6's own reading of "the scope picker lists every
-   * non-retired scope") — a scope this chunk's issue owns no verb to un-retire
-   * inline, so a retired one is simply never offered. */
-  private readonly liveScopes = computed<readonly ScopeView[]>(() => (this.scopesQuery.data() ?? []).filter((s) => !s.retired));
+  /** The routine's own related set (D6), read off `GET /api/routines/{id}/scopes` —
+   * slugs only, joined below against the all-scopes read for descriptions. */
+  private readonly relatedSlugs = computed<ReadonlySet<string>>(
+    () => new Set(this.routineScopesQuery.data() ?? []),
+  );
+
+  /** The routine's related, non-retired scopes (D6) — a retired scope stays related
+   * but is offered to no run. */
+  private readonly liveScopes = computed<readonly ScopeView[]>(() =>
+    (this.scopesQuery.data() ?? []).filter((s) => !s.retired && this.relatedSlugs().has(s.slug)),
+  );
 
   /** The scope slugs this routine has swept, D5's own read. */
   protected readonly sweptSlugs = computed<ReadonlySet<string>>(
     () => new Set((this.baselinesQuery.data() ?? []).map((b) => b.scope_slug)),
   );
 
-  /** Every scope's slug, retired included — see `GardeningRunScopeField.existingSlugs`
-   * for why. */
-  protected readonly existingSlugs = computed<ReadonlySet<string>>(
-    () => new Set((this.scopesQuery.data() ?? []).map((s) => s.slug)),
-  );
-
   /** Previously-swept scopes first, in D5's own newest-swept-first order; every other
-   * live scope after, in the order `GET /api/scopes` served them (D5's own ordering
-   * criterion). */
+   * live, related scope after, in the order `GET /api/scopes` served them (D5's own
+   * ordering criterion). */
   protected readonly orderedScopes = computed<readonly ScopeView[]>(() => {
     const swept = this.sweptSlugs();
     const bySlug = new Map(this.liveScopes().map((s) => [s.slug, s]));
@@ -75,43 +78,21 @@ export class GardeningRunDialog {
     return [...sweptOrdered, ...rest];
   });
 
-  /** `isEmpty` reads the scopes read's own literal count — never hardcoded. A zero
-   * count still renders the rest of the form: the mint escape hatch is the only way a
-   * zero-scope routine ever gets its first scope, so `'empty'` can't gate it away the
-   * way it gates away the (nonexistent) list of existing scopes. */
+  /** `isEmpty` reads the related set's own literal count (D7) — never hardcoded. */
   protected readonly state = computed(() =>
-    asyncStateOf([this.scopesQuery, this.baselinesQuery], (this.scopesQuery.data() ?? []).length === 0),
+    asyncStateOf([this.scopesQuery, this.routineScopesQuery, this.baselinesQuery], this.liveScopes().length === 0),
   );
 
-  protected readonly submitting = computed(() => this.createScopeMutation.isPending() || this.runMutation.isPending());
+  protected readonly submitting = computed(() => this.runMutation.isPending());
 
   protected readonly submitError = signal<string | null>(null);
 
   protected readonly confirmedRun = signal<RoutineRunResponse | null>(null);
 
-  /** D3's create-then-run ordering: a new slug is minted through `POST /api/scopes`,
-   * with its description, before the run — never left to the run route's own
-   * empty-description mint. A create that fails surfaces its own refusal and never
-   * reaches the run at all. */
   protected onSubmit(submission: RunSubmission): void {
     this.submitError.set(null);
-    const { selection, mode, note } = submission;
-    if (selection.isNew) {
-      this.createScopeMutation.mutate(
-        { slug: selection.slug, description: selection.newDescription },
-        {
-          onSuccess: () => this.runNow(selection.slug, mode, note),
-          onError: (error) => this.submitError.set(errorMessage(error, 'Could not create the scope.')),
-        },
-      );
-      return;
-    }
-    this.runNow(selection.slug, mode, note);
-  }
-
-  private runNow(scopeSlug: string, mode: 'full' | 'delta', note: string | null): void {
     this.runMutation.mutate(
-      { routineId: this.routineId(), scopeSlug, mode, note },
+      { routineId: this.routineId(), scopeSlug: submission.selection, mode: submission.mode, note: submission.note },
       {
         onSuccess: (data) => this.confirmedRun.set(data),
         onError: (error) => this.submitError.set(errorMessage(error, 'Run failed.')),

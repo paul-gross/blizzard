@@ -1,6 +1,6 @@
 """The gardening run dialog, in a real browser (blizzard#399 D6): a real Chromium
-(Playwright) opens it from the selected routine's own panel, proving the
-create-then-run submission (D3) and the never-swept delta-steering (D5) round-trip
+(Playwright) opens it from the selected routine's own panel, proving the related-set
+picker (D6) — no free-text mint — and the never-swept delta-steering (D5) round-trip
 against a live hub. No runner or forge traffic: the routine's run mints a queued
 chunk, never executed here. Needs the built bundle (``mise run web-build``)."""
 
@@ -41,8 +41,9 @@ def _graph_yaml(name: str) -> str:
 
 
 def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) -> None:
-    """Opens the run dialog off the selected routine's own panel, mints a new scope
-    before running (D3), and lands on the confirmation naming a real chunk id and
+    """Opens the run dialog off the selected routine's own panel, proves it offers only
+    the routine's own related set (D6) — its own default plus a scope linked ahead of
+    time, no free-text mint — and lands on the confirmation naming a real chunk id and
     linking to the board — against a live hub, no fixtures."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
@@ -68,6 +69,21 @@ def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) 
         assert routine_created.status_code == 201, routine_created.text
         routine_id = routine_created.json()["routine_id"]
 
+        # A related scope, linked ahead of time — the dialog offers no mint of its own,
+        # so a related-but-not-default scope must already exist and already be linked.
+        scope_created = hub.post(
+            "/api/scopes", json={"slug": "gardening-e2e-related", "description": "a related weed patch"}
+        )
+        assert scope_created.status_code == 201, scope_created.text
+        scope_linked = hub.put(f"/api/routines/{routine_id}/scopes/gardening-e2e-related")
+        assert scope_linked.status_code == 204, scope_linked.text
+        # An unrelated scope — never linked into the routine's own set — proves the
+        # dialog's picker narrows to the related set rather than every live scope.
+        unrelated_created = hub.post(
+            "/api/scopes", json={"slug": "gardening-e2e-unrelated", "description": "not this routine's own"}
+        )
+        assert unrelated_created.status_code == 201, unrelated_created.text
+
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
             page = browser.new_page()
@@ -75,7 +91,7 @@ def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) 
             try:
                 # --- The routine list selects, the panel triggers the run ----------------
                 page.goto(f"http://127.0.0.1:{hub_port}/gardening/routines", wait_until="load")
-                row = page.get_by_test_id(f"gardening-routine-row-{routine_id}")
+                row = page.get_by_test_id("gardening-routine-row-gardening-e2e-routine")
                 expect(row).to_be_visible()
                 row.click()
                 expect(page.get_by_test_id("gardening-routine-record")).to_contain_text("gardening-e2e-routine")
@@ -85,21 +101,21 @@ def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) 
                 expect(dialog).to_be_visible()
                 expect(page.get_by_test_id("run-dialog-title")).to_contain_text("gardening-e2e-routine")
 
+                # --- The dialog offers only the routine's related set (D6) ---------------
+                expect(page.get_by_test_id("run-scope-option-gardening-e2e-default")).to_be_visible()
+                expect(page.get_by_test_id("run-scope-option-gardening-e2e-related")).to_be_visible()
+                expect(page.get_by_test_id("run-scope-option-gardening-e2e-unrelated")).to_have_count(0)
+                expect(page.get_by_test_id("run-scope-option-new")).to_have_count(0)
+
                 # --- The never-swept default scope steers to full (D5) -------------------
-                expect(page.get_by_test_id("run-scope-option-gardening-e2e-default")).to_be_checked()
+                page.get_by_test_id("run-scope-option-gardening-e2e-default").click()
                 expect(page.get_by_test_id("run-mode-never-swept")).to_be_visible()
                 expect(page.get_by_test_id("run-mode-delta")).to_be_disabled()
 
-                # --- D3: mint a new scope, with its description, before the run ----------
-                page.get_by_test_id("run-scope-option-new").click()
+                # --- Switching to the related, linked scope and submitting ---------------
+                page.get_by_test_id("run-scope-option-gardening-e2e-related").click()
                 submit = page.get_by_test_id("run-dialog-submit")
-                expect(submit).to_be_disabled()
-
-                page.get_by_test_id("run-new-scope-slug").fill("gardening-e2e-fresh")
-                expect(submit).to_be_disabled()
-                page.get_by_test_id("run-new-scope-description").fill("a fresh weed patch, minted from the browser")
                 expect(submit).to_be_enabled()
-
                 submit.click()
 
                 # --- The confirmation names the real chunk id and links to the board -----
@@ -113,12 +129,11 @@ def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) 
                 expect(board_link).to_have_attribute("href", f"/board/chunk/{chunk_id}")
                 expect(dialog.locator("fleet-board, [data-testid='board']")).to_have_count(0)
 
-                # The mint really landed, before the run — a live hub read, not merely a
-                # rendered claim.
-                minted_scope = hub.get("/api/scopes")
-                assert minted_scope.status_code == 200, minted_scope.text
-                slugs = {s["slug"] for s in minted_scope.json()}
-                assert "gardening-e2e-fresh" in slugs, f"the new scope never reached the hub: {slugs}"
+                # The run really landed against the related scope the operator picked —
+                # a live hub read, not merely a rendered claim.
+                run_delta = hub.get(f"/api/runs/{chunk_id}")
+                assert run_delta.status_code == 200, run_delta.text
+                assert run_delta.json()["scope_slug"] == "gardening-e2e-related", run_delta.json()
 
                 # --- Done closes the dialog back to the routines list ---------------------
                 page.get_by_test_id("run-dialog-done").click()

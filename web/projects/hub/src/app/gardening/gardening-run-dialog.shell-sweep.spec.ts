@@ -12,16 +12,15 @@ import { GardeningRunDialogView } from './gardening-run-dialog-view';
  * routines page and the desktop board), which `KitDialog`'s own sweep
  * (`kit-dialog.shell-sweep.spec.ts`) does not cover: the scope field's radio rows
  * genuinely stack, the mode field's delta baseline block genuinely stacks its
- * finding-set-id line above its per-repo landed-since lines, the new-scope near-match
- * warning genuinely renders below both new-scope inputs rather than overlapping them,
- * and the footer's Cancel/Run buttons genuinely sit side by side with neither
- * overflowing the panel — real CSS layout claims jsdom (this repo's default unit-test
- * environment, whose `getBoundingClientRect` never lays anything out) cannot make.
+ * finding-set-id line above its per-repo landed-since lines, and the footer's
+ * Cancel/Run buttons genuinely sit side by side with neither overflowing the panel —
+ * real CSS layout claims jsdom (this repo's default unit-test environment, whose
+ * `getBoundingClientRect` never lays anything out) cannot make.
  *
  * Mounts `GardeningRunDialogView` directly with plain inputs — no query double,
  * matching how the container actually feeds it (`bzh:frontend-container-
  * presentational`) — and drives the scope field and mode radios through real pointer
- * events to reach the delta-baseline and near-match states.
+ * events to reach the delta-baseline state.
  *
  * Excluded from the default `ng test hub` run the same way every other
  * `*.shell-sweep.spec.ts` is — run it via `npm run shell-sweep`
@@ -54,7 +53,6 @@ async function mount(width: number) {
   fixture.componentRef.setInput('routineName', 'gardening');
   fixture.componentRef.setInput('scopes', SCOPES);
   fixture.componentRef.setInput('sweptSlugs', new Set(['web']));
-  fixture.componentRef.setInput('existingSlugs', new Set(SCOPES.map((s) => s.slug)));
   fixture.componentRef.setInput('baselines', BASELINES);
   fixture.componentRef.setInput('state', 'ready');
   await fixture.whenStable();
@@ -71,9 +69,7 @@ describe('GardeningRunDialogView shell sweep (web:shell-sweep, blizzard#399 D6)'
       const { root } = await mount(width);
       try {
         const options = root.querySelectorAll<HTMLElement>('[data-testid^="run-scope-option-"]');
-        expect(options.length, 'fixture defect: expected at least three scope options (two scopes + mint-new)').toBeGreaterThanOrEqual(
-          3,
-        );
+        expect(options.length, 'fixture defect: expected two scope options').toBe(2);
         for (let i = 1; i < options.length; i += 1) {
           const prev = options[i - 1].getBoundingClientRect();
           const cur = options[i].getBoundingClientRect();
@@ -119,30 +115,6 @@ describe('GardeningRunDialogView shell sweep (web:shell-sweep, blizzard#399 D6)'
       expect(secondRepoRect.top, 'the second repo line did not land below the first').toBeGreaterThanOrEqual(
         firstRepoRect.bottom,
       );
-    } finally {
-      root.remove();
-    }
-  });
-
-  it('renders the near-match warning below both new-scope inputs, not overlapping them', async () => {
-    const { root, fixture } = await mount(1024);
-    try {
-      await userEvent.click(root.querySelector('[data-testid="run-scope-option-new"]')!);
-      await fixture.whenStable();
-
-      const slugInput = root.querySelector<HTMLInputElement>('[data-testid="run-new-scope-slug"]')!;
-      await userEvent.type(slugInput, 'webb');
-      await fixture.whenStable();
-
-      const descInput = root.querySelector<HTMLInputElement>('[data-testid="run-new-scope-description"]')!;
-      const warning = root.querySelector<HTMLElement>('[data-testid="run-scope-near-match-warning"]')!;
-
-      const descRect = descInput.getBoundingClientRect();
-      const warningRect = warning.getBoundingClientRect();
-      expect(warningRect.top, 'the near-match warning did not land below the description input').toBeGreaterThanOrEqual(
-        descRect.bottom,
-      );
-      expect(warning.textContent, 'the warning must name the close existing slug').toContain('web');
     } finally {
       root.remove();
     }

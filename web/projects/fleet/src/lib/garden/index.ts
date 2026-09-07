@@ -63,7 +63,6 @@ export { FleetScopeList } from './scope-list';
 export type { ScopeRowVm, ScopeDescriptionEditEvent } from './scope-list';
 export { FleetScopePanel } from './scope-panel';
 export type { RelatedRoutineVm, ScopePanelVm } from './scope-panel';
-export { injectCreateScopeMutation } from './scopes.mutations';
 export { injectHubScopesQuery, injectHubScopeRoutinesQuery } from './scopes.query';
 export { injectHubWorkItemQuery, injectHubWorkItemsQuery } from './work-item.query';
 export type { WorkItemPointer } from './work-item.query';
