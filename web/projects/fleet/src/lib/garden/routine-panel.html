@@ -18,6 +18,28 @@
           />
         </header>
 
+        @if (panel.relatedScopes; as relatedScopes) {
+          <section class="rp-scopes" data-testid="gardening-routine-scopes">
+            <h4>Related scopes</h4>
+            @if (relatedScopes.length) {
+              <ul>
+                @for (scope of relatedScopes; track scope.slug) {
+                  <li>
+                    {{ scope.slug }}
+                    @if (scope.isDefault) {
+                      <fleet-kit-badge tone="spawning" variant="pill" data-testid="gardening-routine-scope-default">
+                        default
+                      </fleet-kit-badge>
+                    }
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p>No scope is related to this routine.</p>
+            }
+          </section>
+        }
+
         @if (panel.blockedReason !== null) {
           <p class="rp-blocked" data-testid="gardening-routine-blocked">
             Blocked — {{ panel.blockedReason }}. No run is offered.

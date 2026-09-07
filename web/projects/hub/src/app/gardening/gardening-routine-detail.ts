@@ -7,6 +7,7 @@ import {
   FleetRoutinePanel,
   injectHubGraphQuery,
   injectHubGraphsQuery,
+  injectHubRoutineScopesQuery,
   injectHubRoutineSweepsQuery,
   injectHubRoutineTrendQuery,
   injectHubRoutinesQuery,
@@ -14,6 +15,7 @@ import {
   type KitAsyncStateValue,
   type LastSweptRowVm,
   type MeasurementReadingVm,
+  type RelatedScopeVm,
   type RoutinePanelVm,
   type RoutineView,
   type StrategyStepVm,
@@ -30,11 +32,13 @@ import { GardeningRunDialog } from './gardening-run-dialog';
  * both of that route's children, so the bare one renders the panel's own
  * "nothing selected" empty state. D1 ships no New/Edit affordance here.
  *
- * A container: it injects the routine, graph, trend, and sweeps queries and
- * forwards a plain view model to the presentational {@link FleetRoutinePanel},
+ * A container: it injects the routine, graph, trend, sweeps, and scopes queries
+ * and forwards a plain view model to the presentational {@link FleetRoutinePanel},
  * which injects no query of its own. The routine and graph reads are the same
  * cache-keyed queries the list beside it already holds, so resolving the routed
- * routine independently costs no second fetch.
+ * routine independently costs no second fetch. The scopes read renders the
+ * routine's related scope set, each marked whether it is this routine's own
+ * default (D8).
  *
  * The reporting window is this pane's alone — nothing in the list is cut to it —
  * so it is computed here, once, at construction.
@@ -95,6 +99,7 @@ export class GardeningRoutineDetail {
     () => this.window.since,
     () => this.window.until,
   );
+  private readonly scopesQuery = injectHubRoutineScopesQuery(() => this.selectedRoutine()?.routine_id ?? null);
 
   private readonly strategy = computed<readonly StrategyStepVm[]>(() =>
     (this.graphQuery.data()?.nodes ?? []).map((n) => ({ name: n.name, prompt: n.prompt ?? null })),
@@ -121,6 +126,16 @@ export class GardeningRoutineDetail {
     })),
   );
 
+  /** The selected routine's related scopes, each marked whether it is the routine's
+   * own default (D8) — `null` until the routine-scopes read resolves
+   * (D5). */
+  private readonly relatedScopes = computed<readonly RelatedScopeVm[] | null>(() => {
+    const slugs = this.scopesQuery.data();
+    const routine = this.selectedRoutine();
+    if (slugs === undefined || routine === null) return null;
+    return slugs.map((slug) => ({ slug, isDefault: slug === routine.default_scope_slug }));
+  });
+
   protected readonly panelVm = computed<RoutinePanelVm | null>(() => {
     const routine = this.selectedRoutine();
     if (routine === null) return null;
@@ -146,6 +161,7 @@ export class GardeningRoutineDetail {
       measurements: this.measurements(),
       lastSwept: this.lastSwept(),
       windowLabel: this.window.label,
+      relatedScopes: this.relatedScopes(),
     };
   });
 

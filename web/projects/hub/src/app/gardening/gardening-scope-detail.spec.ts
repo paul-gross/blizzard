@@ -31,11 +31,11 @@ const ROUTINE = {
 
 /**
  * Exercises the `/gardening/scopes` detail child — the selected scope's
- * description, lifecycle, and defaulting-routines readout. The list beside it and
- * the selection's own route wiring are `gardening-scopes-page.spec.ts`'s;
- * everything routine-shaped is `gardening-routines-page.spec.ts`'s. This pane
- * still reads the routines list (`defaultingRoutineNames` needs it), so every
- * fixture below still stubs `/api/routines`.
+ * description, lifecycle, and related-routines readout. The list
+ * beside it and the selection's own route wiring are `gardening-scopes-page.spec.ts`'s;
+ * everything routine-shaped is `gardening-routines-page.spec.ts`'s. This pane still
+ * reads the routines list (`relatedRoutines` resolves each related id to a name and
+ * its default-ness off it), so every fixture below still stubs `/api/routines`.
  */
 describe('GardeningScopeDetail', () => {
   let stub: RequestClientStub;
@@ -59,6 +59,7 @@ describe('GardeningScopeDetail', () => {
       if (overridden !== undefined) return overridden;
       if (method === 'GET' && path === '/api/scopes') return scopes;
       if (method === 'GET' && path === '/api/routines') return routines;
+      if (method === 'GET' && path === '/api/scopes/blizzard/routines') return [ROUTINE.routine_id];
       if (method === 'GET' && path === '/api/me') return me;
       return {};
     });
@@ -103,11 +104,25 @@ describe('GardeningScopeDetail', () => {
     expect(el.querySelector('[data-testid="gardening-scope-panel-retire"]')).toBeNull();
   });
 
-  it('lists the routines defaulting to the selected scope', async () => {
+  it('lists the routines related to the selected scope, marking the one that defaults here', async () => {
     const fixture = await render({ params: { scopeSlug: 'blizzard' } });
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="gardening-scope-panel-routines"]')?.textContent).toContain('nightly');
+    const section = el.querySelector('[data-testid="gardening-scope-panel-routines"]');
+    expect(section?.textContent).toContain('nightly');
+    expect(section?.querySelector('[data-testid="gardening-scope-panel-routine-default"]')).toBeTruthy();
+  });
+
+  it('says so when no routine is related to the selected scope', async () => {
+    const fixture = await render({
+      params: { scopeSlug: 'blizzard' },
+      routeOverride: (method, path) => (method === 'GET' && path === '/api/scopes/blizzard/routines' ? [] : undefined),
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-scope-panel-routines"]')?.textContent).toContain(
+      'No routine is related to this scope.',
+    );
   });
 
   it('shows the description editor and lifecycle control for an identity with graph:edit', async () => {

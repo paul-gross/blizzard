@@ -58,9 +58,10 @@ const TREND = {
 
 /**
  * Exercises the `/gardening/routines` detail child — the selected routine's
- * record, its read-only strategy, its three health readings, and the Run trigger
- * that opens the run dialog. The list beside it, its blocked marking, and the
- * selection's own route wiring are `gardening-routines-page.spec.ts`'s.
+ * record, its related scopes, its read-only strategy, its three
+ * health readings, and the Run trigger that opens the run dialog. The list beside
+ * it, its blocked marking, and the selection's own route wiring are
+ * `gardening-routines-page.spec.ts`'s.
  */
 describe('GardeningRoutineDetail', () => {
   let stub: RequestClientStub;
@@ -84,6 +85,7 @@ describe('GardeningRoutineDetail', () => {
       if (method === 'GET' && path === '/api/graphs') return graphs;
       if (method === 'GET' && path === '/api/graphs/gr_1') return GRAPH_DETAIL;
       if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') return SWEEPS;
+      if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return ['blizzard'];
       if (method === 'GET' && path === '/api/routines/trend') return TREND;
       // The gardening run dialog's own baselines read, fired only once its Run trigger opens it.
       if (method === 'GET' && path === '/api/routines/rtn_1/baselines') return [];
@@ -132,6 +134,15 @@ describe('GardeningRoutineDetail', () => {
     expect(record?.textContent).toContain('blizzard');
     expect(record?.textContent).toContain('claude-sonnet-5');
     expect(record?.textContent).toContain('medium');
+  });
+
+  it('lists the related scopes, marking the routine default', async () => {
+    const fixture = await render({ params: { routineName: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const section = el.querySelector('[data-testid="gardening-routine-scopes"]');
+    expect(section?.textContent).toContain('blizzard');
+    expect(section?.querySelector('[data-testid="gardening-routine-scope-default"]')).toBeTruthy();
   });
 
   it('renders the strategy as read-only prose with no edit affordance beyond the Run trigger', async () => {

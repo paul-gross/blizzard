@@ -38,6 +38,20 @@ fleet-kit-panel {
 .rp-record-facts {
   --kv-label-col: max-content;
 }
+.rp-scopes h4 {
+  margin: 0 0 4px;
+  font-size: var(--fs-sm);
+  color: var(--label);
+}
+.rp-scopes ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.rp-scopes p {
+  margin: 0;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
 .rp-blocked {
   color: var(--red, #c33);
 }

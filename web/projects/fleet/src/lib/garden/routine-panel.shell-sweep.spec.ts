@@ -5,12 +5,13 @@ import { page } from 'vitest/browser';
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
 
 /**
- * The gardening routine panel's health blocks (blizzard#397, the tooled half of
+ * The gardening routine panel's health blocks (the tooled half of
  * `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method) — a real,
- * headless-Chromium proof that the record, strategy, trend, measurement, and
- * last-swept blocks genuinely stack at phone widths with no horizontal overflow, and
- * that the last-swept table's own long revision hashes wrap inside their column rather
- * than forcing the table wider than its section. jsdom lays out a flex column and a
+ * headless-Chromium proof that the record, related-scopes, strategy, trend,
+ * measurement, and last-swept blocks genuinely stack at phone widths with no
+ * horizontal overflow, and that the last-swept table's own long revision hashes wrap
+ * inside their column rather than forcing the table wider than its section. jsdom lays
+ * out a flex column and a
  * `table-layout: fixed` grid without ever checking whether either actually clips, so
  * this is exactly the class of layout claim `web:unit-test` cannot make good on
  * (`bzh:narrow-viewport-tier-rule`) — gardening sits in the hub's mobile bottom tab
@@ -47,6 +48,7 @@ const VM: RoutinePanelVm = {
     { scopeSlug: 'never-swept-scope', findingSetId: null, producedAt: null, revisionsLabel: '—' },
   ],
   windowLabel: 'last 28 days',
+  relatedScopes: [{ slug: 'blizzard', isDefault: true }],
 };
 
 async function render() {
@@ -83,6 +85,7 @@ describe('gardening routine panel layout shell sweep (web:shell-sweep, blizzard#
 
       const blockIds = [
         'gardening-routine-record',
+        'gardening-routine-scopes',
         'gardening-routine-strategy',
         'gardening-routine-trend',
         'gardening-routine-measurements',

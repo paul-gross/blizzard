@@ -160,6 +160,32 @@ def test_list_scopes_for_an_unlinked_routine_is_empty(tmp_path: Path) -> None:
     assert store.list_scopes("rtn_ghost") == []
 
 
+def test_list_routines_returns_the_linked_routine_ids(tmp_path: Path) -> None:
+    store = _routine_scope_store(tmp_path)
+
+    store.link("rtn_1", "blizzard")
+
+    assert store.list_routines("blizzard") == ["rtn_1"]
+
+
+def test_list_routines_orders_by_routine_id(tmp_path: Path) -> None:
+    routine_store, engine = _store_and_engine(tmp_path)
+    routine_store.create(_routine(routine_id="rtn_b", name="b"))
+    routine_store.create(_routine(routine_id="rtn_a", name="a"))
+    store = RoutineScopeStore(hub_store_connections(engine))
+
+    store.link("rtn_b", "blizzard")
+    store.link("rtn_a", "blizzard")
+
+    assert store.list_routines("blizzard") == ["rtn_a", "rtn_b"]
+
+
+def test_list_routines_for_an_unlinked_scope_is_empty(tmp_path: Path) -> None:
+    store = _routine_scope_store(tmp_path)
+
+    assert store.list_routines("other") == []
+
+
 def test_unlinking_a_pair_leaves_its_findings_readable(tmp_path: Path) -> None:
     """AC6 (blizzard#488): a finding recorded under a `(routine, scope)` pair stays
     readable through `FindingStore.list_for` after that pair is unlinked — no finding

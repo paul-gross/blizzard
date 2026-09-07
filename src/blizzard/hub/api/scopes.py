@@ -60,6 +60,20 @@ def get_scope(slug: str, services: Annotated[HubServices, Depends(get_services)]
     return _scope_view(scope, retired=services.scopes.is_retired(slug))
 
 
+@router.get(
+    "/scopes/{slug}/routines",
+    response_model=list[str],
+    dependencies=[Depends(require(FLEET_VIEW))],
+)
+def list_scope_routines(slug: str, services: Annotated[HubServices, Depends(get_services)]) -> list[str]:
+    """Every routine id linked to `slug` — the reverse direction of
+    `GET /api/routines/{routine_id}/scopes`. 404 on an unknown slug."""
+    scope = services.scopes.get(slug)
+    if scope is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")
+    return services.routine_scope_membership.list_routines(scope)
+
+
 @router.patch("/scopes/{slug}", response_model=ScopeView, dependencies=[Depends(require(GRAPH_EDIT))])
 def edit_scope(
     slug: str, request: ScopeEditRequest, services: Annotated[HubServices, Depends(get_services)]

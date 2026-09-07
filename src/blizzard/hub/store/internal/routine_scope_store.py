@@ -30,6 +30,15 @@ class RoutineScopeStore:
             ).all()
         return [row.scope_slug for row in rows]
 
+    def list_routines(self, scope_slug: str) -> list[str]:
+        with self._store.read("list_routines") as conn:
+            rows = conn.execute(
+                select(routine_scopes.c.routine_id)
+                .where(routine_scopes.c.scope_slug == scope_slug)
+                .order_by(routine_scopes.c.routine_id)
+            ).all()
+        return [row.routine_id for row in rows]
+
     def link(self, routine_id: str, scope_slug: str) -> None:
         try:
             with self._store.write("link", expect=(IntegrityError,)) as conn:

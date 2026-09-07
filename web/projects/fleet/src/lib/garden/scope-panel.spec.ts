@@ -8,7 +8,7 @@ const VM: ScopePanelVm = {
   slug: 'blizzard',
   description: 'the blizzard monorepo',
   retired: false,
-  defaultingRoutineNames: ['nightly'],
+  relatedRoutines: [{ name: 'nightly', isDefault: true }],
 };
 
 describe('FleetScopePanel', () => {
@@ -121,18 +121,38 @@ describe('FleetScopePanel', () => {
     confirmSpy.mockRestore();
   });
 
-  it('lists the routines defaulting to this scope, and says so when none do', async () => {
+  it('lists the routines related to this scope, marking the one that defaults here', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="gardening-scope-panel-routines"]')?.textContent).toContain('nightly');
+    const section = el.querySelector('[data-testid="gardening-scope-panel-routines"]');
+    expect(section?.textContent).toContain('nightly');
+    expect(section?.querySelector('[data-testid="gardening-scope-panel-routine-default"]')).toBeTruthy();
+  });
 
-    fixture.componentRef.setInput('vm', { ...VM, defaultingRoutineNames: [] });
+  it('says so when no routine is related, and omits the default marker for a non-defaulting one', async () => {
+    const fixture = await mount({
+      vm: { ...VM, relatedRoutines: [{ name: 'other', isDefault: false }] },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const section = el.querySelector('[data-testid="gardening-scope-panel-routines"]');
+    expect(section?.textContent).toContain('other');
+    expect(section?.querySelector('[data-testid="gardening-scope-panel-routine-default"]')).toBeNull();
+
+    fixture.componentRef.setInput('vm', { ...VM, relatedRoutines: [] });
     await fixture.whenStable();
 
     expect(el.querySelector('[data-testid="gardening-scope-panel-routines"]')?.textContent).toContain(
-      'No routine defaults to this scope.',
+      'No routine is related to this scope.',
     );
+  });
+
+  it('renders no related-routines section while the relation read is still pending', async () => {
+    const fixture = await mount({ vm: { ...VM, relatedRoutines: null } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-scope-panel-routines"]')).toBeNull();
   });
 
   it('renders the action error beside the controls that raise it', async () => {

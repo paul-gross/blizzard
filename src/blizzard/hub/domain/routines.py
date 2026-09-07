@@ -118,6 +118,11 @@ class IReadRoutineScopeRepository(Protocol):
         """Every scope slug linked to ``routine_id``, sorted."""
         ...
 
+    def list_routines(self, scope_slug: str) -> list[str]:
+        """Every routine id linked to ``scope_slug``, sorted — the reverse direction
+        of :meth:`list_scopes`."""
+        ...
+
 
 class IWriteRoutineScopeRepository(IReadRoutineScopeRepository, Protocol):
     """Read-write access to the ``routine_scopes`` join. Only the domain layer depends
@@ -232,3 +237,6 @@ class RoutineScopeMembership:
 
     def list_scopes(self, routine: Routine) -> list[str]:
         return self._routine_scopes.list_scopes(routine.routine_id)
+
+    def list_routines(self, scope: Scope) -> list[str]:
+        return self._routine_scopes.list_routines(scope.slug)

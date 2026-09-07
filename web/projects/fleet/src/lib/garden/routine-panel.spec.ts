@@ -30,6 +30,7 @@ const VM: RoutinePanelVm = {
     { scopeSlug: 'never-swept', findingSetId: null, producedAt: null, revisionsLabel: '—' },
   ],
   windowLabel: 'last 28 days',
+  relatedScopes: [{ slug: 'blizzard', isDefault: true }],
 };
 
 describe('FleetRoutinePanel', () => {
@@ -232,6 +233,40 @@ describe('FleetRoutinePanel', () => {
     expect(swept?.textContent).toContain('blizzard@abc123');
     const never = el.querySelector('[data-testid="gardening-routine-last-swept-never-swept"]');
     expect(never?.querySelector('[data-testid="gardening-routine-last-swept-never"]')?.textContent).toBe('never');
+  });
+
+  it('lists the related scopes, marking the routine default', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    const section = el.querySelector('[data-testid="gardening-routine-scopes"]');
+    expect(section?.textContent).toContain('blizzard');
+    expect(section?.querySelector('[data-testid="gardening-routine-scope-default"]')).toBeTruthy();
+  });
+
+  it('omits the default marker for a non-default related scope, and says so when none are related', async () => {
+    const fixture = await mount({
+      vm: { ...VM, relatedScopes: [{ slug: 'other', isDefault: false }] },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const section = el.querySelector('[data-testid="gardening-routine-scopes"]');
+    expect(section?.textContent).toContain('other');
+    expect(section?.querySelector('[data-testid="gardening-routine-scope-default"]')).toBeNull();
+
+    fixture.componentRef.setInput('vm', { ...VM, relatedScopes: [] });
+    await fixture.whenStable();
+
+    expect(el.querySelector('[data-testid="gardening-routine-scopes"]')?.textContent).toContain(
+      'No scope is related to this routine.',
+    );
+  });
+
+  it('renders no related-scopes section while the relation read is still pending', async () => {
+    const fixture = await mount({ vm: { ...VM, relatedScopes: null } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-scopes"]')).toBeNull();
   });
 
   it('names no CLI read verb anywhere in the panel', async () => {

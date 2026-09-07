@@ -133,6 +133,20 @@ export function hubRoutineBaselinesKey(routineId: string): readonly unknown[] {
   return ['hub', 'routines', routineId, 'baselines'];
 }
 
+/** One routine's linked scope set, keyed by routine id — `GET
+ * /api/routines/{routine_id}/scopes`. `routineId` is nullable, `hubChunkKey`'s own
+ * null-tolerant shape, for the disabled-query rest state. */
+export function hubRoutineScopesKey(routineId: string | null): readonly unknown[] {
+  return ['hub', 'routine', routineId, 'scopes'];
+}
+
+/** One scope's linked routine set, keyed by slug — `GET /api/scopes/{slug}/routines`,
+ * the reverse of {@link hubRoutineScopesKey}. `scopeSlug` is nullable, `hubChunkKey`'s
+ * own null-tolerant shape, for the disabled-query rest state. */
+export function hubScopeRoutinesKey(scopeSlug: string | null): readonly unknown[] {
+  return ['hub', 'scope', scopeSlug, 'routines'];
+}
+
 /** The garden run list's key prefix — `GET /api/runs`, windowed by `since` alone;
  * `until` rides no key or request param (`garden-runs.query.ts`'s own doc), so a new
  * `since` is its own cache entry, `hubRoutineTrendKey`'s own window-in-key shape. */
