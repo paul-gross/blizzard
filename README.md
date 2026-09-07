@@ -172,7 +172,7 @@ The top-level packages:
 | `src/blizzard/cli/`        | the `blizzard` binary's root command group — verbs namespaced by target (`blizzard hub …`, `blizzard runner …`).                                                                                                                                                                                        |
 | `src/blizzard/foundation/` | the shared kernel both daemons compose: the injected clock, structlog wiring, the portable store engine, the Alembic migration runner plus its revision-mismatch guard, and the daemon-neutral vocabulary both daemons speak (chunk status, artifacts, node steps, tokens).                             |
 | `src/blizzard/static/`     | the wheel-embedded frontend assets seam — CI fills `hub/` and `runner/` with the compiled Angular apps ([static/README.md](./src/blizzard/static/README.md)).                                                                                                                                           |
-| `src/blizzard/tools/`      | dev and CI tooling — the OpenAPI exporter (`blizzard-export-openapi`) and the facts-level invariant checker.                                                                                                                                                                                             |
+| `src/blizzard/tools/`      | dev and CI tooling — the OpenAPI exporter (`blizzard-export-openapi`) and the facts-level invariant checker.                                                                                                                                                                                            |
 
 ```bash
 uv sync                        # install
