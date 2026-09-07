@@ -5,6 +5,7 @@ covers the drain that retires what the enqueue queued."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.work import (
     PendingCloseIntent,
     WorkItemCloseOutcome,
@@ -23,11 +25,23 @@ from blizzard.hub.domain.work import (
     WorkRef,
 )
 from blizzard.hub.domain.work_closure import CloseIntentDrainer
+from blizzard.hub.events.broker import EVENT_LOGGED
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
-from tests.support import FakeCloser, HubHarness, build_hub, hub_store_connections, ingest
+from tests.support import FakeCloser, HubHarness, build_hub, emitted_events, hub_store_connections, ingest
 
 pytestmark = pytest.mark.unit
+
+
+def _event_log(hub: HubHarness) -> EventLogService:
+    """A real :class:`EventLogService` over the harness's own store and broker, for a
+    test that wires its own :class:`CloseIntentDrainer` rather than taking
+    ``hub.services.close_drain``."""
+    return EventLogService(events=cast(IWriteChunkEventsRepository, hub.services.chunks.events), publisher=hub.events)
+
+
+def _event_logged_frames(hub: HubHarness, *, since: int = 0) -> list[dict]:
+    return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == EVENT_LOGGED]
 
 
 def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
@@ -132,7 +146,7 @@ class _RecordedEvent:
 
 
 class _FakeCloseChunks:
-    """The minimal slice of :class:`IWriteChunkDeliveryRepository`/:class:`IWriteChunkEventsRepository`
+    """The minimal slice of :class:`IWriteChunkDeliveryRepository`/:class:`EventLogService`
     :class:`CloseIntentDrainer` calls. ``record_work_item_closure`` also retires the
     matching intent — recorded rather than persisted, matching the real store's own
     folded transaction."""
@@ -159,7 +173,7 @@ class _FakeCloseChunks:
         self.closures.append((chunk_id, pointer, outcome, reason))
         return True
 
-    def record_event(
+    def record(
         self,
         *,
         severity: str,
@@ -182,8 +196,8 @@ def _as_delivery(chunks: _FakeCloseChunks) -> IWriteChunkDeliveryRepository:
     return cast(IWriteChunkDeliveryRepository, chunks)
 
 
-def _as_events(chunks: _FakeCloseChunks) -> IWriteChunkEventsRepository:
-    return cast(IWriteChunkEventsRepository, chunks)
+def _as_events(chunks: _FakeCloseChunks) -> EventLogService:
+    return cast(EventLogService, chunks)
 
 
 def _drainer(chunks: _FakeCloseChunks, closers: dict[str, FakeCloser]) -> CloseIntentDrainer:
@@ -293,7 +307,9 @@ def test_sweep_over_an_empty_queue_issues_no_forge_call() -> None:
 @pytest.mark.component
 def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Path) -> None:
     """Driven twice, then re-read: the second pass issues no second close and writes
-    no second fact — the mutation-review re-read (``bzh:mutation-review-selection``)."""
+    no second fact — the mutation-review re-read (``bzh:mutation-review-selection``). The
+    closed arm publishes exactly one ``event-logged`` frame carrying an ``event_log:``
+    key, and the redelivered second pass publishes none (event-recording-publishes AC2)."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
@@ -301,16 +317,23 @@ def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Pat
     registry = WorkSourceRegistry({}, closers={"default": closer})
     drainer = CloseIntentDrainer(
         delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
-        events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
+        events=_event_log(hub),
         work_sources=registry,
         clock=hub.clock,
     )
 
     drainer.sweep()
+
+    frames = _event_logged_frames(hub)
+    assert len(frames) == 1
+    assert frames[0]["kind"] == "work-item-closed"
+    assert frames[0]["key"].startswith("event_log:")
+
     drainer.sweep()
 
     assert closer.closed == [WorkRef(source="default", ref="1")]  # only the first pass actually closed it
     assert hub.services.chunks.delivery.pending_close_intents() == []
+    assert len(_event_logged_frames(hub)) == 1  # the redelivered pass published no second frame
 
 
 @pytest.mark.component
@@ -323,7 +346,7 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
     registry = WorkSourceRegistry({}, closers={"default": closer})
     drainer = CloseIntentDrainer(
         delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
-        events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
+        events=_event_log(hub),
         work_sources=registry,
         clock=hub.clock,
     )
@@ -341,6 +364,37 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
 
 
 @pytest.mark.component
+def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path: Path) -> None:
+    """The failed arm publishes exactly one ``event-logged`` frame carrying an
+    ``event_log:`` key, and a second sweep over the same still-failing intent — an
+    identical redelivered outcome — publishes none (event-recording-publishes AC2)."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    _land(hub, chunk_id)
+    closer = FakeCloser(fail_refs={"1"})
+    registry = WorkSourceRegistry({}, closers={"default": closer})
+    drainer = CloseIntentDrainer(
+        delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+        events=_event_log(hub),
+        work_sources=registry,
+        clock=hub.clock,
+    )
+    pointer = WorkRef(source="default", ref="1")
+
+    drainer.sweep()
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
+
+    frames = _event_logged_frames(hub)
+    assert len(frames) == 1
+    assert frames[0]["kind"] == "work-item-close-failed"
+    assert frames[0]["key"].startswith("event_log:")
+
+    drainer.sweep()  # the same failure again — an identical outcome, already recorded
+
+    assert len(_event_logged_frames(hub)) == 1
+
+
+@pytest.mark.component
 def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_path: Path) -> None:
     """D4: a source removed from config after a landing — the only way this arises —
     leaves a stuck pending row rather than dead-lettering it."""
@@ -350,7 +404,7 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_p
     registry = WorkSourceRegistry({}, closers={})  # no closer seated for any source
     drainer = CloseIntentDrainer(
         delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
-        events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
+        events=_event_log(hub),
         work_sources=registry,
         clock=hub.clock,
     )

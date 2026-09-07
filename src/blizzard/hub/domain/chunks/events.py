@@ -59,3 +59,15 @@ class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
         event-specific payload, serialized to JSON text by the store. Returns the
         freshly-written ``event_log.id``."""
         ...
+
+
+class IEventLogPublisher(Protocol):
+    """The live-broadcast half of recording an event — narrowed to the one operation
+    :class:`~blizzard.hub.domain.event_log.EventLogService` needs.
+    :class:`~blizzard.hub.events.broker.EventBroker` satisfies this structurally."""
+
+    def publish_event_logged(
+        self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str, key: str | None = None
+    ) -> int:
+        """Fan out one ``event-logged`` SSE frame."""
+        ...

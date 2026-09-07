@@ -56,6 +56,7 @@ from blizzard.hub.domain.dependencies import DependencyService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
+from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.findings import FindingExitService, IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.garden_delivery import CommitResolver
@@ -347,13 +348,17 @@ def build_services(
     analytics_event_queries = AnalyticsEventQueryStore(store_connections)
     operational_analytics = AnalyticsOperationalStore(store_connections)
     marker_authority = MarkerAuthority()
+    # Recording an event is what publishes it (``bzh:operational-event-log``) — one
+    # service, shared by every event-authoring call site below, over the same store and
+    # broker instance every other collaborator holds.
+    event_log = EventLogService(events=chunk_events, publisher=events)
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
         artifacts=chunk_artifacts,
         delivery=chunk_delivery,
         hub_exec=chunk_hub_exec,
         escalations=chunk_escalations,
-        events=chunk_events,
+        events=event_log,
         runner=hub_command_runner or SubprocessHubCommandRunner(),
         workdir=hub_workdir
         or FilesystemHubWorkdir(hub_workdir_root or Path(tempfile.gettempdir()) / "blizzard-hub-workdirs"),
@@ -490,7 +495,7 @@ def build_services(
             escalations=chunk_escalations,
             questions=chunk_questions,
             usage=chunk_usage,
-            events=chunk_events,
+            events=event_log,
             fleet=fleet,
             clock=clock,
         ),
@@ -520,7 +525,7 @@ def build_services(
         system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
         work_sources=work_sources,
         close_drain=CloseIntentDrainer(
-            delivery=chunk_delivery, events=chunk_events, work_sources=work_sources, clock=clock
+            delivery=chunk_delivery, events=event_log, work_sources=work_sources, clock=clock
         ),
         work_item_materialization=WorkItemMaterializationReconciler(
             delivery=chunk_delivery,

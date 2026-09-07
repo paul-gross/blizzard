@@ -44,12 +44,14 @@ from blizzard.hub.domain.work import (
     HubNodePollFact,
     TransitionFact,
 )
+from blizzard.hub.events.broker import EVENT_LOGGED
 from blizzard.hub.store import schema as s
 from tests.support import (
     FakeHubCommandRunner,
     FakeHubWorkdir,
     FakeWorkSource,
     build_hub,
+    emitted_events,
     pointer_token,
     report_lease,
 )
@@ -771,15 +773,22 @@ _UNROUTABLE_GRAPH_YAML = _HUB_CMD_GRAPH_YAML.replace(
 )
 
 
+def _event_logged_frames(hub, *, since: int = 0) -> list[dict]:  # type: ignore[no-untyped-def]
+    return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == EVENT_LOGGED]
+
+
 @pytest.mark.component
 def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> None:
     """A step exiting non-zero into an outcome the graph never authored strands the
     node, re-polling the identical failure forever with no retry/bounce consumed —
-    but must announce itself exactly once per (node, epoch), not flood the event feed."""
+    but must announce itself exactly once per (node, epoch), not flood the event feed —
+    and publishes exactly one ``critical`` ``event-logged`` frame per node epoch, none on
+    a repeat visit at the same epoch (event-recording-publishes AC3)."""
     runner = FakeHubCommandRunner()
     runner.arm("land-the-repo", CommandResult(exit_code=1, stdout="", stderr="boom"))
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
     chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_UNROUTABLE_GRAPH_YAML)
+    since = int(emitted_events(hub)[-1]["id"]) if emitted_events(hub) else 0
 
     apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
     assert apply.json()["outcome"] == "hub_node_taken"
@@ -814,6 +823,12 @@ def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> No
     assert "no authored edge for choice `failure`" in events[0].message
     assert events[0].detail["authored_choices"] == ["success"]
 
+    frames = _event_logged_frames(hub, since=since)
+    assert len(frames) == 1, "and once on the live SSE stream"
+    assert frames[0]["kind"] == "hub-node-unroutable-outcome"
+    assert frames[0]["severity"] == "critical"
+    assert frames[0]["key"].startswith("event_log:")
+
     # Re-poll: the node re-runs and fails identically. Still exactly one of each —
     # the artifact's (chunk, node, name, epoch) idempotency is what gates the event.
     again = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
@@ -823,6 +838,7 @@ def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> No
     artifacts, events = _announcements()
     assert len(artifacts) == 1, "a poll loop must not write an artifact per attempt"
     assert len(events) == 1, "nor an event per attempt"
+    assert len(_event_logged_frames(hub, since=since)) == 1, "nor a frame per attempt"
 
 
 @pytest.mark.component

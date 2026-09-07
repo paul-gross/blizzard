@@ -111,6 +111,31 @@ def test_hub_store_internal_acquires_no_connection_outside_the_seam() -> None:
     )
 
 
+_EVENT_LOG_SERVICE_FILE = _HUB_DIR / "domain" / "event_log.py"
+_CHUNK_EVENTS_STORE_FILE = _HUB_DIR / "store" / "internal" / "chunk_events_store.py"
+
+
+def _record_event_call_sites(root: Path) -> list[str]:
+    violations: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        if path in (_EVENT_LOG_SERVICE_FILE, _CHUNK_EVENTS_STORE_FILE):
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "record_event":
+                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} calls record_event")
+    return violations
+
+
+def test_record_event_is_called_only_through_event_log_service() -> None:
+    """Recording an event is what publishes it (``bzh:operational-event-log``):
+    ``EventLogService.record`` (``event_log.py``) is the only caller of the write
+    repository's ``record_event`` — every event-authoring call site takes the service
+    instead, so a new one can never land a row that stays unbroadcast."""
+    violations = _record_event_call_sites(_SRC_DIR)
+    assert not violations, f"M — record_event must be called only from EventLogService: {violations}"
+
+
 _RUNNER_STORE_CONNECTIONS_FILE = _RUNNER_STORE_DIR / "internal" / "base.py"
 
 

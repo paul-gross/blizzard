@@ -10,7 +10,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
-from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.work import WorkItemCloseOutcome
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -38,7 +38,7 @@ class CloseIntentDrainer:
         self,
         *,
         delivery: IWriteChunkDeliveryRepository,
-        events: IWriteChunkEventsRepository,
+        events: EventLogService,
         work_sources: IWorkSourceRegistry,
         clock: IClock,
     ) -> None:
@@ -78,7 +78,7 @@ class CloseIntentDrainer:
             if not wrote:
                 continue  # a redelivered sweep already recorded this outcome
             if outcome is WorkItemCloseOutcome.CLOSED:
-                self._events.record_event(
+                self._events.record(
                     severity="info",
                     kind=_EVENT_CLOSED,
                     runner_id=_HUB_RUNNER_ID,
@@ -90,7 +90,7 @@ class CloseIntentDrainer:
                     at=at,
                 )
             else:
-                self._events.record_event(
+                self._events.record(
                     severity="warning",
                     kind=_EVENT_CLOSE_FAILED,
                     runner_id=_HUB_RUNNER_ID,
