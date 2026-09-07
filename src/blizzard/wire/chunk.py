@@ -138,10 +138,8 @@ class ChunkSummary(BaseModel):
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     # The chunk's derived completion instant (issue #173) — null for every non-terminal status.
     completed_at: str | None = None
-    # The chunk's blocked marking (issue #457) — non-None only on the fleet-list and detail reads,
-    # where a pre-claim dependent's standing edge names a prerequisite not yet done; every other
-    # route returning this model (the operator verbs) does not derive it and reads null even on a
-    # blocked chunk. Carried independently of ``status``; see BlockedView.
+    # The chunk's blocked marking (issue #457) — non-None only when it both waits on an
+    # unmet prerequisite and this read derives it; null otherwise, regardless of block state.
     blocked: BlockedView | None = None
 
 
@@ -453,10 +451,8 @@ class ChunkDetail(BaseModel):
     # The operator's per-chunk pause brake (issue #46) — non-None iff currently paused, and carried
     # independently of ``status`` so a gated-and-paused chunk stays legible (see PauseView).
     pause: PauseView | None = None
-    # The chunk's blocked marking (issue #457) — non-None only on the fleet-list and detail reads,
-    # where a pre-claim dependent's standing edge names a prerequisite not yet done; every other
-    # route returning this model (the operator verbs) does not derive it and reads null even on a
-    # blocked chunk. Carried independently of ``status``; see BlockedView.
+    # The chunk's blocked marking (issue #457) — non-None only when it both waits on an
+    # unmet prerequisite and this read derives it; null otherwise, regardless of block state.
     blocked: BlockedView | None = None
     # The chunk's standing dependency edges one hop each way (issue #462) — always present,
     # unlike ``blocked``; see ChunkNeighborhoodView.
@@ -467,11 +463,11 @@ class ChunkDetail(BaseModel):
     # yet-transitioned one.
     decision: DecisionView | None = None
     history: list[TransitionView] = []
-    # The chunk's cross-graph migration steps (issue #90), oldest first — woven into the timeline
-    # alongside ``history`` by ``recorded_at``. Empty for a single-graph chunk.
+    # The chunk's cross-graph migration steps (issue #90), oldest first — interleaves with
+    # ``history`` by ``recorded_at``. Empty for a single-graph chunk.
     migrations: list[MigrationView] = []
-    # The chunk's operator restarts (issue #370), oldest first — the API's record of who moved
-    # the chunk, from where, and to what. No timeline renderer reads them today.
+    # The chunk's operator restarts (issue #370), oldest first — who moved the chunk, from
+    # where, and to what.
     restarts: list[RestartView] = []
     artifacts: list[ArtifactView] = []
     # The chunk's questions, oldest first — open *and* answered (issue #165), an answered one still

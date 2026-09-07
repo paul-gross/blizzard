@@ -109,10 +109,12 @@ def test_resolving_with_a_subset_strikes_exactly_those_and_leaves_the_rest_pendi
         hub, chunk_id, node_id, proposals=[_create_proposal(title="keep"), _create_proposal(title="strike")]
     )
     ids = _proposal_ids_by_title(hub, chunk_id)
+    decision = hub.services.chunks.decisions.get_decision(decision_id)
+    assert decision is not None
 
-    result = hub.services.decisions.resolve(decision_id, choice="pass", resolved_by="alice", struck=[ids["strike"]])
+    result = hub.services.decisions.resolve(decision, choice="pass", resolved_by="alice", struck=[ids["strike"]])
 
-    assert result is not None and result.resolved
+    assert result.resolved
     strikes = _strike_rows(hub)
     assert set(strikes) == {ids["strike"]}
     assert strikes[ids["strike"]] == (decision_id, "alice")
@@ -127,10 +129,12 @@ def test_resolving_with_an_empty_set_strikes_nothing_and_resolves_normally(tmp_p
     hub = build_hub(tmp_path)
     chunk_id, node_id = _ingest(hub)
     decision_id = _submit_decision(hub, chunk_id, node_id, proposals=[_create_proposal(title="only")])
+    decision = hub.services.chunks.decisions.get_decision(decision_id)
+    assert decision is not None
 
-    result = hub.services.decisions.resolve(decision_id, choice="pass", resolved_by="alice")
+    result = hub.services.decisions.resolve(decision, choice="pass", resolved_by="alice")
 
-    assert result is not None and result.resolved
+    assert result.resolved
     assert _strike_rows(hub) == {}
 
 
@@ -138,9 +142,11 @@ def test_a_proposal_id_not_pending_for_the_chunk_is_rejected_and_writes_nothing(
     hub = build_hub(tmp_path)
     chunk_id, node_id = _ingest(hub)
     decision_id = _submit_decision(hub, chunk_id, node_id, proposals=[_create_proposal(title="only")])
+    decision = hub.services.chunks.decisions.get_decision(decision_id)
+    assert decision is not None
 
     with pytest.raises(ValueError):
-        hub.services.decisions.resolve(decision_id, choice="pass", resolved_by="alice", struck=["wip_bogus"])
+        hub.services.decisions.resolve(decision, choice="pass", resolved_by="alice", struck=["wip_bogus"])
 
     assert _strike_rows(hub) == {}
     decision = hub.services.chunks.decisions.get_decision(decision_id)
@@ -154,12 +160,14 @@ def test_the_cas_loser_writes_no_strike_when_its_ids_are_disjoint_from_the_winne
         hub, chunk_id, node_id, proposals=[_create_proposal(title="one"), _create_proposal(title="two")]
     )
     ids = _proposal_ids_by_title(hub, chunk_id)
+    decision = hub.services.chunks.decisions.get_decision(decision_id)
+    assert decision is not None
 
-    won = hub.services.decisions.resolve(decision_id, choice="pass", resolved_by="alice", struck=[ids["one"]])
-    lost = hub.services.decisions.resolve(decision_id, choice="fail", resolved_by="bob", struck=[ids["two"]])
+    won = hub.services.decisions.resolve(decision, choice="pass", resolved_by="alice", struck=[ids["one"]])
+    lost = hub.services.decisions.resolve(decision, choice="fail", resolved_by="bob", struck=[ids["two"]])
 
-    assert won is not None and won.resolved
-    assert lost is not None and not lost.resolved
+    assert won.resolved
+    assert not lost.resolved
     assert set(_strike_rows(hub)) == {ids["one"]}
 
 
@@ -174,14 +182,18 @@ def test_the_cas_loser_writes_no_strike_even_when_its_ids_overlap_the_winners(tm
         hub, chunk_id, node_id, proposals=[_create_proposal(title="one"), _create_proposal(title="two")]
     )
     ids = _proposal_ids_by_title(hub, chunk_id)
+    decision = hub.services.chunks.decisions.get_decision(decision_id)
+    assert decision is not None
 
-    won = hub.services.decisions.resolve(decision_id, choice="pass", resolved_by="alice", struck=[ids["one"]])
-    lost = hub.services.decisions.resolve(
-        decision_id, choice="fail", resolved_by="bob", struck=[ids["one"], ids["two"]]
-    )
+    won = hub.services.decisions.resolve(decision, choice="pass", resolved_by="alice", struck=[ids["one"]])
+    # Re-fetch: the loser's own call must see the winner's write, exactly as a second HTTP
+    # request would — resolving against the stale pre-winner object would test nothing.
+    decision = hub.services.chunks.decisions.get_decision(decision_id)
+    assert decision is not None
+    lost = hub.services.decisions.resolve(decision, choice="fail", resolved_by="bob", struck=[ids["one"], ids["two"]])
 
-    assert won is not None and won.resolved
-    assert lost is not None and not lost.resolved
+    assert won.resolved
+    assert not lost.resolved
     assert set(_strike_rows(hub)) == {ids["one"]}
 
 
@@ -192,7 +204,9 @@ def test_after_delivery_the_sweep_materializes_every_unstruck_proposal_and_no_st
         hub, chunk_id, node_id, proposals=[_create_proposal(title="keep"), _create_proposal(title="strike")]
     )
     ids = _proposal_ids_by_title(hub, chunk_id)
-    hub.services.decisions.resolve(decision_id, choice="pass", resolved_by="alice", struck=[ids["strike"]])
+    decision = hub.services.chunks.decisions.get_decision(decision_id)
+    assert decision is not None
+    hub.services.decisions.resolve(decision, choice="pass", resolved_by="alice", struck=[ids["strike"]])
     _deliver_past_gate(hub, chunk_id, node_id, decision_id)
 
     hub.services.work_item_materialization.sweep()

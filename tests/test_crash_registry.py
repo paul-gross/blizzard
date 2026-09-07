@@ -12,13 +12,14 @@ import os
 import pytest
 
 from blizzard.foundation import crash
+from tests.crash_points import discover_crash_points
 
 pytestmark = pytest.mark.unit
 
 
 def test_registry_enumerates_the_daemon_loop_points() -> None:
     """Returns a non-empty, name-sorted list of crash points."""
-    points = crash.CrashPoint.discover()
+    points = discover_crash_points()
     names = [p.name for p in points]
     assert names == sorted(names), "points must enumerate name-sorted for a stable sweep order"
     # The registry spans both daemons' dangerous windows.

@@ -14,7 +14,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.outbound import OutboundFactRecord
 from blizzard.runner.environments.repository import EnvBindingRecord
-from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.stores import RunnerReadStores
 
 __all__ = [
@@ -48,7 +48,7 @@ class PauseState:
 
 @dataclass(frozen=True)
 class Capacities:
-    """Agent slots — the same math FILL claims against (``loop/steps.py``'s ``Fill``)."""
+    """See ``src/blizzard/wire/runner_status.py``'s ``CapacitiesView``."""
 
     max_agents: int
     used: int
@@ -133,7 +133,7 @@ class RunnerStatusService:
         self,
         stores: RunnerReadStores,
         clock: IClock,
-        harness: IHarnessAdapter,
+        harness: IHarnessWorkerLifecycle,
         *,
         runner_id: str,
         workspace_id: str,

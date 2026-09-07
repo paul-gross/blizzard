@@ -15,7 +15,7 @@ from typing import Protocol
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict, WorkerHandle, WorkerPreamble
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.selftest.model import (
     AUTOMATED_RESUME,
@@ -90,7 +90,7 @@ class Scratch:
     """The throwaway repo a run is performed against, the seams its checks drive it
     through, and the session id they drive it under."""
 
-    adapter: IHarnessAdapter
+    adapter: IHarnessLifecycleAndVerdict
     scratch_git: IScratchGit
     process: IProcessProbe
     workdir: str
@@ -221,7 +221,7 @@ class ResumeCommand(Check):
 class SelfTest:
     """The five adapter-drift checks against a single throwaway scratch repo."""
 
-    adapter: IHarnessAdapter
+    adapter: IHarnessLifecycleAndVerdict
     scratch_git: IScratchGit
     process: IProcessProbe
 

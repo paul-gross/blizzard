@@ -279,14 +279,13 @@ class FleetService:
         """Refresh a runner's liveness; returns False if it is unregistered."""
         return self._registry.touch_last_seen(runner_id, at=self._clock.now())
 
-    def set_paused(self, runner_id: str, *, paused: bool, by: str) -> int | None:
-        """Flip the fleet's brake for a registered runner; returns ``None`` if unknown,
-        else the freshly-written ``runner_pause_facts.id`` (issue #213's activity-feed
-        key)."""
-        if self._registry.get_runner(runner_id) is None:
-            return None
-        fact_id = self._registry.record_pause(runner_id, paused=paused, at=self._clock.now(), by=by)
-        _log.info("runner pause set", runner_id=runner_id, paused=paused, by=by)
+    def set_paused(self, registration: RunnerRegistration, *, paused: bool, by: str) -> int:
+        """Flip the fleet's brake for a registered runner, returning the freshly-written
+        ``runner_pause_facts.id`` (issue #213's activity-feed key). Takes the loaded
+        registration (``bzh:domain-takes-objects``) — the edge resolves ``runner_id`` to
+        it (404 if unknown) before calling this."""
+        fact_id = self._registry.record_pause(registration.runner_id, paused=paused, at=self._clock.now(), by=by)
+        _log.info("runner pause set", runner_id=registration.runner_id, paused=paused, by=by)
         return fact_id
 
     def record_local_pause(
@@ -313,11 +312,10 @@ class FleetService:
         )
         _log.info("runner external usage sample landed", runner_id=runner_id, slug=slug, sampled_at=sampled_at)
 
-    def get_liveness(self, runner_id: str) -> RunnerLiveness | None:
-        """One runner with its derived liveness — the runner's own pull read."""
-        registration = self._registry.get_runner(runner_id)
-        if registration is None:
-            return None
+    def get_liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
+        """One runner's derived liveness over its loaded registration
+        (``bzh:domain-takes-objects``) — the edge resolves ``runner_id`` to it (404 if
+        unknown) before calling this."""
         return self._liveness(registration)
 
     def list_with_liveness(self) -> list[RunnerLiveness]:

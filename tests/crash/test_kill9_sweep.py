@@ -18,7 +18,6 @@ import httpx
 import pytest
 from sqlalchemy import Engine, select
 
-from blizzard.foundation.crash import discover_crash_points
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.config import HubConfig
@@ -55,6 +54,7 @@ from tests.crash.support import (
     wait_status,
     write_runner_config,
 )
+from tests.crash_points import discover_crash_points
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 
 pytestmark = pytest.mark.crash_sweep

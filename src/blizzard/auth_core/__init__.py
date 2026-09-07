@@ -23,13 +23,13 @@ class Role(StrEnum):
 
 Permission = NewType("Permission", str)
 
-#: All board reads, including the SSE stream (``GET /api/events/stream``) — belongs to
-#: ``guest``+. Reused by the work-source item routes (blizzard#358), not just the board.
+#: Fleet-state reads, including the streaming one (``GET /api/events/stream``); reused across
+#: more than one route family. Belongs to ``guest``+.
 FLEET_VIEW = Permission("fleet:view")
 #: Ingest a chunk (``POST /chunks``).
 CHUNK_INGEST = Permission("chunk:ingest")
 #: Every other chunk-scoped control write — promote/detach/pause/resume/stop/requeue/
-#: patch/hub-marker — plus the not-chunk-scoped work-item writes (blizzard#358), reused.
+#: patch/hub-marker — plus a write outside chunk scope that reuses this same tier.
 CHUNK_CONTROL = Permission("chunk:control")
 #: Answer a question (``POST /questions/{id}/answers``, and the durable ask that lands it).
 QUESTION_ANSWER = Permission("question:answer")

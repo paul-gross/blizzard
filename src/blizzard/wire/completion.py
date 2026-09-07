@@ -63,8 +63,8 @@ WorkItemProposal = Annotated[CreateWorkItemProposal | UpdateWorkItemProposal, Fi
 
 
 class _ProducesLike(Protocol):
-    """Structural shape both ``produces:`` spec types share, so :meth:`Coverage.unmet` is
-    generic over either."""
+    """Structural shape both ``produces:`` spec types share: a name and an artifact kind,
+    nothing else."""
 
     @property
     def name(self) -> str: ...
@@ -111,8 +111,7 @@ class CheckResult(BaseModel):
 
 
 class _HasPassed(Protocol):
-    """The one field :class:`ChecksGate` reads, so it is generic over both check-result
-    shapes without either importing the other's type."""
+    """Structural shape both check-result types share: a pass/fail verdict, nothing else."""
 
     @property
     def passed(self) -> bool: ...

@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:domain-takes-objects
+language: Python
+severity: error
+message: >-
+  Domain operations take already-loaded objects, not raw identifiers
+  (blizzard-context:/architecture/repository-access.md#domain-operations-take-objects-bzhdomain-takes-objects)
+  — resolve $ID to its entity at the edge and pass that instead.
+files:
+  - src/blizzard/hub/domain/**
+  - src/blizzard/runner/domain/**
+rule:
+  all:
+    - kind: function_definition
+    # A domain *operation* is a public entry point; a private helper (an
+    # internal validation or derivation step, never called from an edge) is
+    # not one, even when it shares the same id-in, load-by-id shape.
+    - not:
+        has:
+          field: name
+          regex: "^_"
+    - has:
+        field: parameters
+        has:
+          pattern:
+            context: "def f($ID: str): pass"
+            selector: typed_parameter
+    - has:
+        field: body
+        has:
+          stopBy: end
+          pattern:
+            context: "self.$OBJ.$VERB($ID)"
+            selector: call
+constraints:
+  VERB:
+    regex: "^(get|load)_"
+  ID:
+    regex: "_id$"

@@ -51,8 +51,10 @@ class WorkerHandle:
     process_start_time: str  # stable across pid reuse — REAP keys on (pid, start_time)
 
 
-class IHarnessAdapter(Protocol):
-    """The coding-harness seam. Dumb: translates, never decides."""
+class IHarnessWorkerLifecycle(Protocol):
+    """Spawning, resuming, and judging a worker process (``bzh:seam-size-ceiling``) — one
+    of the four slices ``IHarnessAdapter`` composes; a consumer driving only worker
+    lifecycle takes this narrower seam instead."""
 
     def spawn(
         self,
@@ -138,6 +140,12 @@ class IHarnessAdapter(Protocol):
         off display surfaces."""
         ...
 
+
+class IHarnessModelResolution(Protocol):
+    """Resolving an authored model/effort/compaction-window preference to this harness's
+    own vocabulary (``bzh:seam-size-ceiling``) — never failing a spawn over an
+    unresolvable one."""
+
     def resolve_model(self, preferences: Sequence[str]) -> str:
         """Resolve a preference list to a native model name (issue #144): left-to-right,
         first resolvable entry wins; an unresolvable entry is skipped, never an error; an
@@ -160,6 +168,11 @@ class IHarnessAdapter(Protocol):
         unrecognized, unsupported, and ``None`` all return ``None``."""
         ...
 
+
+class IHarnessVerdictParsing(Protocol):
+    """Parsing a worker's raw output into a verdict, a usability check, and its free-text
+    assessment (``bzh:seam-size-ceiling``)."""
+
     def parse_verdict(self, output: str) -> str | None:
         """Parse the ``<Choice>{name}</Choice>`` reply into a choice name, else ``None``."""
         ...
@@ -181,6 +194,12 @@ class IHarnessAdapter(Protocol):
         assessment."""
         ...
 
+
+class IHarnessUsageAccounting(Protocol):
+    """Turning a worker's raw output or transcript into a usage sample
+    (``bzh:seam-size-ceiling``) — the result-envelope path and the envelope-less
+    transcript-sum fallback."""
+
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
         """Translate a result envelope's ``usage`` + ``total_cost_usd`` into a sample.
 
@@ -196,6 +215,25 @@ class IHarnessAdapter(Protocol):
         envelope: token counts with ``cost_usd=None``, since a transcript carries no dollar
         figure. ``model`` is the same attribution fallback :meth:`parse_usage` takes."""
         ...
+
+
+class IHarnessLifecycleAndVerdict(IHarnessWorkerLifecycle, IHarnessVerdictParsing, Protocol):
+    """Worker lifecycle plus verdict parsing, shared by the two consumers that call
+    exactly this pair and nothing wider (``bzh:seam-size-ceiling``): the runner loop's
+    own step functions and the selftest canary."""
+
+
+class IHarnessAdapter(
+    IHarnessWorkerLifecycle,
+    IHarnessModelResolution,
+    IHarnessVerdictParsing,
+    IHarnessUsageAccounting,
+    Protocol,
+):
+    """The coding-harness seam: its four narrower slices (``bzh:seam-size-ceiling``) plus
+    ``transcript_source``, unsliced since no consumer needs it alone. Dumb: translates, never
+    decides. A genuine pass-through — threading the adapter on rather than calling it, today
+    only ``app.py`` — takes this alias; a caller takes the narrowest slice its job needs."""
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         """This harness's transcript source (blizzard#245).

@@ -368,7 +368,7 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        requeue_id = services.requeue.requeue(chunk_id)
+        requeue_id = services.requeue.requeue(chunk)
     except NotEscalated as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     change.publish(cause="requeued", key=f"requeues:{requeue_id}")
@@ -545,7 +545,7 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
-    promoted_id = services.promote.promote(chunk_id)
+    promoted_id = services.promote.promote(chunk)
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
     change.publish(cause="promoted", key=key)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.publisher import IRunnerEventPublisher
-from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.loop.checks import ICheckRunner
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -116,7 +116,7 @@ class LoopContext:
     clock: IClock
     hub: IHubClient
     provider: IWorkspaceProvider
-    harness: IHarnessAdapter
+    harness: IHarnessLifecycleAndVerdict
     process: IProcessProbe
     worktree_git: IWorktreeGit
     config: LoopConfig

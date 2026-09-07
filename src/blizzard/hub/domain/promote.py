@@ -12,6 +12,7 @@ from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.queue import IReadChunkQueueRepository, IWriteChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.queue import QueueService
+from blizzard.hub.domain.work import Chunk
 
 
 def tail_position(record: IReadChunkRecordRepository, queue: IReadChunkQueueRepository) -> float:
@@ -43,13 +44,14 @@ class PromoteService:
         self._queue = queue
         self._clock = clock
 
-    def promote(self, chunk_id: str) -> int | None:
+    def promote(self, chunk: Chunk) -> int | None:
         """Append the ``chunk.promoted`` fact and stamp an explicit tail position, in one
         transaction. A complete no-op on an already-promoted chunk; otherwise stamps
         :func:`tail_position`, read *before* the write, and returns the fresh
-        ``chunk_promoted.id``."""
-        facts = self._facts.load_facts(chunk_id)
+        ``chunk_promoted.id``. Takes the loaded chunk (``bzh:domain-takes-objects``) —
+        the edge resolves ``chunk_id`` to it (404 if unknown) before calling this."""
+        facts = self._facts.load_facts(chunk.chunk_id)
         if facts is not None and facts.promoted:
             return None
         tail = tail_position(self._record, self._queue)
-        return self._queue.record_promote_with_tail_position(chunk_id, position=tail, at=self._clock.now())
+        return self._queue.record_promote_with_tail_position(chunk.chunk_id, position=tail, at=self._clock.now())

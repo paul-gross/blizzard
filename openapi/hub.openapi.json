@@ -294,7 +294,7 @@
         "type": "object"
       },
       "AnalyticsCountView": {
-        "description": "One grouping key and how many events fell under it (blizzard#255). ``key`` is\nwhichever column the counts endpoint serving it groups by \u2014 a file path, a skill\nname, an agent type, or a node id.",
+        "description": "One grouping key and how many events fell under it (blizzard#255). ``key`` names\nwhichever dimension this response is grouped by \u2014 a file path, a skill name, an\nagent type, or a node id.",
         "properties": {
           "count": {
             "title": "Count",
@@ -6663,7 +6663,7 @@
         "type": "object"
       },
       "SystemArtifactView": {
-        "description": "One system artifact as the fleet route serves it \u2014 its global name and raw text.",
+        "description": "A system artifact's global name and raw text.",
         "properties": {
           "content": {
             "title": "Content",

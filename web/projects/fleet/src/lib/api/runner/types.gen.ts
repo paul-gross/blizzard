@@ -249,7 +249,7 @@ export type BounceView = {
 /**
  * CapacitiesView
  *
- * Agent slots — the same math FILL claims against.
+ * Agent-slot accounting: ``used`` plus ``free`` accounts for ``max_agents``.
  */
 export type CapacitiesView = {
     /**
@@ -589,10 +589,10 @@ export type CreateWorkItemProposal = {
 /**
  * DashboardView
  *
- * ``GET /api/dashboard`` — the panel's seven status reads composed into one
- * response. ``fleet_summary`` alone is a hub pass-through and the only nullable
- * section — ``None`` on a hub failure or an unwired runner, while the six local
- * sections still populate.
+ * ``GET /api/dashboard`` — seven status reads composed into one response.
+ * ``fleet_summary`` alone is a hub pass-through and the only nullable section —
+ * ``None`` on a hub failure or an unwired runner, while the six local sections
+ * still populate.
  */
 export type DashboardView = {
     asks: AskListResponse;
@@ -2406,10 +2406,9 @@ export type WorkRefView = {
 /**
  * WorkerArtifact
  *
- * One artifact as the worker's own artifact routes serve it, node- or graph-scoped.
- * A node-scope row is resolved latest-by-epoch and names its producing node and
- * epoch; a graph-scope row is one of the pinned graph mint's own baked-in declarations
- * and carries neither, since no node-step produced it.
+ * One artifact, node- or graph-scoped. A node-scope row is resolved latest-by-epoch
+ * and names its producing node and epoch; a graph-scope row is one of the pinned graph
+ * mint's own baked-in declarations and carries neither, since no node-step produced it.
  */
 export type WorkerArtifact = {
     /**

@@ -99,6 +99,9 @@ dev = [
     # The browser binary itself is installed out of band (`uv run playwright install
     # chromium`); the e2e test skips cleanly when it is absent (see tests/e2e/conftest.py).
     "playwright>=1.49.0",
+    # The ast-grep structural-gate channel (blizzard-context:bzh:domain-takes-objects) —
+    # pinned exactly, since a rule's match set can shift across engine versions.
+    "ast-grep-cli==0.45.3",
 ]
 
 [tool.pytest.ini_options]

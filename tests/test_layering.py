@@ -89,6 +89,39 @@ def test_moved_vocabulary_has_exactly_one_importable_home() -> None:
     assert not violations, f"D — imported from somewhere other than its declared foundation home: {violations}"
 
 
+def _docstring_ids(tree: ast.Module) -> set[int]:
+    ids: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            body = node.body
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                ids.add(id(body[0].value))
+    return ids
+
+
+def _daemon_named_strings(root: Path, forbidden_prefixes: tuple[str, ...]) -> list[str]:
+    violations: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        docstring_ids = _docstring_ids(tree)
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
+                continue
+            if id(node) in docstring_ids:
+                continue  # a docstring's bare-pointer prose (bzh:comment-encapsulation) is not a live dependency
+            if any(prefix in node.value for prefix in forbidden_prefixes):
+                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} names {node.value!r}")
+    return violations
+
+
+def test_foundation_names_neither_daemon_in_a_string_literal() -> None:
+    """A-C only see imports; a module path threaded as a string is invisible to them —
+    ``foundation/crash.py`` used to hold exactly that shape. This file's first non-import
+    check, one bespoke walker like its siblings."""
+    violations = _daemon_named_strings(_FOUNDATION_DIR, ("blizzard.hub.", "blizzard.runner."))
+    assert not violations, f"N — foundation must not name either daemon, even as a string: {violations}"
+
+
 def _bare_engine_accesses(root: Path, *, exempt: frozenset[Path] = frozenset()) -> list[str]:
     violations: list[str] = []
     for path in sorted(root.rglob("*.py")):

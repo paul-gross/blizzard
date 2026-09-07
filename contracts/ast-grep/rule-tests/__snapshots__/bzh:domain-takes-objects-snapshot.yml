@@ -1,0 +1,60 @@
+id: bzh:domain-takes-objects
+snapshots:
+  ? |
+    class ClaimService:
+        def claim(self, runner_id: str) -> ClaimResult:
+            registration = self._registry.get_runner(runner_id)
+            return registration
+  : labels:
+    - source: |-
+        def claim(self, runner_id: str) -> ClaimResult:
+                registration = self._registry.get_runner(runner_id)
+                return registration
+      style: primary
+      start: 24
+      end: 159
+    - source: 'runner_id: str'
+      style: secondary
+      start: 40
+      end: 54
+    - source: 'runner_id: str'
+      style: secondary
+      start: 40
+      end: 54
+    - source: self._registry.get_runner(runner_id)
+      style: secondary
+      start: 95
+      end: 131
+    - source: self._registry.get_runner(runner_id)
+      style: secondary
+      start: 95
+      end: 131
+  ? |
+    class RequeueService:
+        def requeue(self, chunk_id: str) -> int:
+            facts = self._facts.load_facts(chunk_id)
+            return self._movement.record_requeue(chunk_id)
+  : labels:
+    - source: |-
+        def requeue(self, chunk_id: str) -> int:
+                facts = self._facts.load_facts(chunk_id)
+                return self._movement.record_requeue(chunk_id)
+      style: primary
+      start: 26
+      end: 170
+    - source: 'chunk_id: str'
+      style: secondary
+      start: 44
+      end: 57
+    - source: 'chunk_id: str'
+      style: secondary
+      start: 44
+      end: 57
+    - source: self._facts.load_facts(chunk_id)
+      style: secondary
+      start: 83
+      end: 115
+    - source: self._facts.load_facts(chunk_id)
+      style: secondary
+      start: 83
+      end: 115

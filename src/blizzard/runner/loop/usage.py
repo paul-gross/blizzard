@@ -9,7 +9,7 @@ from blizzard.runner.domain.leases import IReadLeaseLivenessRepository, LeaseRec
 from blizzard.runner.domain.usage import IWriteUsageRepository
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.events.publisher import IRunnerEventPublisher
-from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.harness.adapter import IHarnessUsageAccounting
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
@@ -25,7 +25,7 @@ class UsageRecorder:
     leases: IReadLeaseLivenessRepository
     usage: IWriteUsageRepository
     clock: IClock
-    harness: IHarnessAdapter
+    harness: IHarnessUsageAccounting
     worker_files: WorkerStdoutFiles
     workspace_root: str
     transcripts: IHarnessTranscriptSource | None = None
