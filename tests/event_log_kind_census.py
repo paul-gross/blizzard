@@ -36,7 +36,7 @@ Disposition = Recorded | Projected
 EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "needs-human": Projected("hub/domain/work.py:EventFeed._projected", "critical"),
     "worker-lost": Recorded("runner/loop/attempt.py:Attempt.fail", "critical"),
-    "hub-node-unroutable-outcome": Recorded("hub/delivery/hub_node.py:HubNode.run", "critical"),
+    "hub-node-unroutable-outcome": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._route", "critical"),
     "attempt-failed": Recorded("runner/loop/attempt.py:Attempt.fail", "warning"),
     "command-failed": Recorded("runner/loop/outbound.py:OutboundFacts.command_failed", "warning"),
     "work-item-close-failed": Recorded("hub/domain/work_closure.py:CloseIntentDrainer.sweep", "warning"),
@@ -44,6 +44,7 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "transcript-sidechain-dropped": Recorded(
         "runner/loop/transcript_pump.py:TranscriptPump._warn_sidechains_dropped", "warning"
     ),
+    "worker-context-warned": Recorded("runner/loop/steps.py:ContextSample._event", "warning"),
     "attempt-abandoned": Recorded("runner/loop/attempt.py:Attempt.fail", "info"),
     "work-item-closed": Recorded("hub/domain/work_closure.py:CloseIntentDrainer.sweep", "info"),
 }

@@ -26,8 +26,8 @@ from blizzard.wire.facts import (
 COMPLETION_KIND = "completion.submitted"
 DECISION_KIND = "decision.submitted"
 
-_COMMAND_FAILED: EventLogKind = "command-failed"
-_TRANSCRIPT_TRUNCATED: EventLogKind = "transcript-truncated"
+_EVENT_COMMAND_FAILED: EventLogKind = "command-failed"
+_EVENT_TRANSCRIPT_TRUNCATED: EventLogKind = "transcript-truncated"
 
 
 @dataclass(frozen=True)
@@ -86,7 +86,7 @@ class OutboundFacts:
         """A captured spawn/verify/env-prep command failure (issue #125), surfaced as a
         ``warning`` operational event that rides no closure and alters no control flow."""
         self.event(
-            kind=_COMMAND_FAILED,
+            kind=_EVENT_COMMAND_FAILED,
             chunk_id=chunk_id,
             lease_id=lease_id,
             node_name=node_name,
@@ -100,7 +100,7 @@ class OutboundFacts:
         ``warning`` operational event on the FACT lane — the issue-#125 precedent.
         Truncation is never silent: it is also a field on the segment itself."""
         self.event(
-            kind=_TRANSCRIPT_TRUNCATED,
+            kind=_EVENT_TRANSCRIPT_TRUNCATED,
             chunk_id=chunk_id,
             lease_id=None,
             node_name=None,

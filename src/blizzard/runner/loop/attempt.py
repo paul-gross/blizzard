@@ -97,16 +97,13 @@ class Attempt:
         if self.detached():
             # Emitted HERE rather than in `abandon`, which the ordinary detach sweep also
             # reaches and which must stay silent.
-            detail: dict[str, object] = {"via": via, "reason": reason, "node": lease.node_name}
-            if tail:
-                detail["stderr_tail"] = tail
             OutboundFacts(self.ctx).event(
                 kind=_ATTEMPT_ABANDONED,
                 chunk_id=lease.chunk_id,
                 lease_id=lease.lease_id,
                 node_name=lease.node_name,
                 message=f"attempt abandoned — chunk reassigned ({reason}, via {via})",
-                detail=detail,
+                detail=self._detail(reason, via, tail),
                 at=now,
             )
             self.abandon(killed=True, via=via)
@@ -372,19 +369,23 @@ class Attempt:
                 chunk_id=self.lease.chunk_id,
             )
 
-    def _event(self, kind: EventLogKind, message: str, reason: str, via: str, stderr_tail: str) -> dict[str, object]:
-        """The ``event.recorded`` payload one :meth:`fail` branch surfaces (issue #125), whose
-        ``detail`` carries the ``(reason, via)`` that classified it and any captured stderr tail."""
-        severity = EVENT_LOG_SEVERITY[kind]
+    def _detail(self, reason: str, via: str, stderr_tail: str) -> dict[str, object]:
+        """The ``(reason, via)`` that classified a :meth:`fail` branch, plus any captured
+        stderr tail — every branch's ``detail``, whether it reaches the hub through
+        :meth:`_event`'s payload or :class:`OutboundFacts.event`'s own."""
         detail: dict[str, object] = {"via": via, "reason": reason, "node": self.lease.node_name}
         if stderr_tail:
             detail["stderr_tail"] = stderr_tail
+        return detail
+
+    def _event(self, kind: EventLogKind, message: str, reason: str, via: str, stderr_tail: str) -> dict[str, object]:
+        """The ``event.recorded`` payload one :meth:`fail` branch surfaces (issue #125)."""
         return {
-            "severity": severity,
+            "severity": EVENT_LOG_SEVERITY[kind],
             "kind": kind,
             "chunk_id": self.lease.chunk_id,
             "lease_id": self.lease.lease_id,
             "node_name": self.lease.node_name,
             "message": message,
-            "detail": detail,
+            "detail": self._detail(reason, via, stderr_tail),
         }

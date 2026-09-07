@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import LeaseRecord, Liveness, as_utc
@@ -78,7 +79,7 @@ _CP_PULL_AFTER = crashpoint("pull.after-flush", "PULL done; buffer drained as fa
 
 # The crossing rides `event.recorded`, not a fact kind of its own — both hubs already ingest that
 # lane. `(severity, kind)` as `attempt.py` classifies; the kind is the EVENT's, never a fact's.
-_CONTEXT_WARNED = ("warning", "worker-context-warned")
+_CONTEXT_WARNED: EventLogKind = "worker-context-warned"
 
 
 @dataclass(frozen=True)
@@ -572,10 +573,9 @@ class ContextSample(Step):
     @staticmethod
     def _event(lease: LeaseRecord, tokens: int | None, warn_tokens: int, now: datetime) -> dict[str, object]:
         """The ``event.recorded`` payload one crossing surfaces, in the shape the hub ingests."""
-        severity, kind = _CONTEXT_WARNED
         return {
-            "severity": severity,
-            "kind": kind,
+            "severity": EVENT_LOG_SEVERITY[_CONTEXT_WARNED],
+            "kind": _CONTEXT_WARNED,
             "chunk_id": lease.chunk_id,
             "lease_id": lease.lease_id,
             "node_name": lease.node_name,

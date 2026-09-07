@@ -33,7 +33,7 @@ from blizzard.runner.transcripts.ledger import TranscriptSegmentLedgerRow
 
 _log = get_logger("blizzard.runner.loop")
 
-_TRANSCRIPT_SIDECHAIN_DROPPED: EventLogKind = "transcript-sidechain-dropped"
+_EVENT_TRANSCRIPT_SIDECHAIN_DROPPED: EventLogKind = "transcript-sidechain-dropped"
 
 #: Backpressure cap on total unacked bytes across the WHOLE outbound buffer, distinct
 #: from `CHUNK_TRANSCRIPT_MAX_BYTES`'s per-chunk shipped total — self-clears as the drain catches up.
@@ -318,7 +318,7 @@ class TranscriptPump:
             return
         agent_ids = newly
         OutboundFacts(self.ctx).event(
-            kind=_TRANSCRIPT_SIDECHAIN_DROPPED,
+            kind=_EVENT_TRANSCRIPT_SIDECHAIN_DROPPED,
             chunk_id=segment.chunk_id,
             lease_id=None,
             node_name=None,

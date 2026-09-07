@@ -16,6 +16,7 @@ EventLogKind = Literal[
     "work-item-close-failed",
     "transcript-truncated",
     "transcript-sidechain-dropped",
+    "worker-context-warned",
     "attempt-abandoned",
     "work-item-closed",
 ]
@@ -30,6 +31,7 @@ EVENT_LOG_SEVERITY: Mapping[EventLogKind, str] = {
     "work-item-close-failed": "warning",
     "transcript-truncated": "warning",
     "transcript-sidechain-dropped": "warning",
+    "worker-context-warned": "warning",
     "attempt-abandoned": "info",
     "work-item-closed": "info",
 }

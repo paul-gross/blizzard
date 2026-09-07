@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import re
 from pathlib import Path
 from typing import cast, get_args
@@ -34,10 +35,14 @@ def test_every_disposition_is_recorded_or_projected_with_a_real_site() -> None:
 
 
 def _event_kinds_table() -> list[tuple[str, str]]:
-    """The ``### Event kinds`` table's ``(Kind, Severity)`` rows, in document order."""
+    """The ``### Event kinds`` table's ``(Kind, Severity)`` rows, in document order — bounded
+    to this one table, not every ``|``-prefixed line for the rest of the file, so a later
+    table added anywhere below cannot silently join the parse."""
     text = _OPERATIONS_MD.read_text()
     section = text.split("### Event kinds", 1)[1]
-    table_lines = [line for line in section.splitlines() if line.startswith("|")]
+    lines = section.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("|"))
+    table_lines = list(itertools.takewhile(lambda line: line.startswith("|"), lines[start:]))
     rows: list[tuple[str, str]] = []
     for line in table_lines[1:]:  # skip the header row; its underline comes next
         cells = [c.strip() for c in line.strip("|").split("|")]

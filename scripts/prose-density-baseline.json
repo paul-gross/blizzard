@@ -735,7 +735,7 @@
   "blizzard/foundation/event_log.py": {
    "comments": 1,
    "docstrings": 3,
-   "total": 35
+   "total": 37
   },
   "blizzard/foundation/events/__init__.py": {
    "comments": 0,
@@ -3139,8 +3139,8 @@
   },
   "blizzard/runner/loop/attempt.py": {
    "comments": 44,
-   "docstrings": 56,
-   "total": 390
+   "docstrings": 58,
+   "total": 391
   },
   "blizzard/runner/loop/build.py": {
    "comments": 20,
@@ -4107,7 +4107,7 @@
   "event_log_kind_census.py": {
    "comments": 1,
    "docstrings": 12,
-   "total": 49
+   "total": 50
   },
   "journey/__init__.py": {
    "comments": 0,
@@ -4811,10 +4811,10 @@
   },
   "test_event_log_kind_census.py": {
    "comments": 2,
-   "docstrings": 4,
-   "total": 62
+   "docstrings": 6,
+   "total": 67
   },
-  "test_event_log_service.py": {
+  "test_event_log_service_unit.py": {
    "comments": 0,
    "docstrings": 7,
    "total": 106
