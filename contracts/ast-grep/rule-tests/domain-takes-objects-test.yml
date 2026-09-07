@@ -1,0 +1,43 @@
+id: bzh:domain-takes-objects
+valid:
+  # The converted shape: a loaded object in, no id-keyed lookup left to catch.
+  - |
+    class PromoteService:
+        def promote(self, chunk: Chunk) -> int | None:
+            facts = self._facts.load_facts(chunk.chunk_id)
+            return None if facts is None else 1
+  # A private helper is not a domain *operation* — an internal step, not an
+  # edge-facing entry point — so the same id-in, load-by-id shape is exempt.
+  - |
+    class PauseGuard:
+        def _require_pausable(self, chunk_id: str) -> None:
+            facts = self._facts.load_facts(chunk_id) or ChunkFacts(minted=True)
+            if facts.stopped:
+                raise ChunkNotPausable(chunk_id)
+  # The rule's own honest boundary: ast-grep has no taint mode, so a body that
+  # rebinds the identifier before passing it on slips past.
+  - |
+    class ClaimService:
+        def claim(self, runner_id: str) -> ClaimResult:
+            alias = runner_id
+            registration = self._registry.get_runner(alias)
+            return registration
+  # A str parameter not shaped like an id at all.
+  - |
+    class DecisionService:
+        def resolve(self, choice: str, *, resolved_by: str) -> ResolutionResult:
+            return self._decisions.record_decision_resolution(choice, resolved_by)
+invalid:
+  # The exact shape D5 exempts at the site with `# ast-grep-ignore` — caught
+  # here with no suppression, to pin the rule's positive match.
+  - |
+    class ClaimService:
+        def claim(self, runner_id: str) -> ClaimResult:
+            registration = self._registry.get_runner(runner_id)
+            return registration
+  # `load_` is as much a violation as `get_`.
+  - |
+    class RequeueService:
+        def requeue(self, chunk_id: str) -> int:
+            facts = self._facts.load_facts(chunk_id)
+            return self._movement.record_requeue(chunk_id)
