@@ -260,6 +260,14 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
         assert created.status_code == 201, created.text
         routine_id = created.json()["routine_id"]
 
+        # Every non-default scope this routine runs against below must already be
+        # related (blizzard#399 D1-D3) — the run route no longer mints one of its own.
+        for slug in (_SCOPE_CLEAN, _SCOPE_THICKET, _SCOPE_VIRGIN, _SCOPE_UNDECLARED):
+            scope_created = hub.post("/api/scopes", json={"slug": slug, "description": ""})
+            assert scope_created.status_code == 201, scope_created.text
+            scope_linked = hub.put(f"/api/routines/{routine_id}/scopes/{slug}")
+            assert scope_linked.status_code == 204, scope_linked.text
+
         config = dataclasses.replace(_runner_config(runner_dir, workspace, bin_dir, hub_port), max_agents=1)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"

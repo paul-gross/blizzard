@@ -287,8 +287,10 @@ def _relay(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_run_list_and_show_work_end_to_end_against_a_real_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub = build_hub(tmp_path)
     routine = _routine(hub)
+    scope = hub.services.scopes.get(routine.default_scope_slug)
+    assert scope is not None
     result = hub.services.routine_run.run(
-        routine, scope_slug=None, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("usr_1")
+        routine, scope=scope, mode=RunMode.FULL, note=None, author=WorkItemAuthor.user("usr_1")
     )
     hub.clock.advance(timedelta(hours=1))
     _relay(hub, monkeypatch)

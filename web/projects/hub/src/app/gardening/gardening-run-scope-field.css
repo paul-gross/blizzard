@@ -27,16 +27,3 @@
   font-size: var(--fs-sm);
   color: var(--label);
 }
-
-.new-scope {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 6px 0 2px 24px;
-}
-
-.near-match-warning {
-  margin: 4px 0 0;
-  font-size: var(--fs-xs);
-  color: var(--amber);
-}

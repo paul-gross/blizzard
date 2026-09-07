@@ -1304,10 +1304,12 @@ export const routineBaselinesApiRoutinesRoutineIdBaselinesGet = <ThrowOnError ex
  * Run Routine
  *
  * Mint, ingest, and promote a hub work item from the routine, in one act
- * (blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug`` or an unknown
- * ``mode``; 503 on a retired effective scope or a graph name with no enabled mint (D5,
- * mirroring ``POST /work-sources/{source}/items``'s own retired-default-graph shape);
- * 409 on an out-of-band ingest already holding the allocated ref's pointer.
+ * (blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
+ * ``mode``, or an effective scope no scope row holds or outside the routine's own
+ * related set (blizzard#399 D1, D4 — never minted); 503 on a retired effective scope or
+ * a graph name with no enabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s
+ * own retired-default-graph shape); 409 on an out-of-band ingest already holding the
+ * allocated ref's pointer.
  */
 export const runRoutineApiRoutinesRoutineIdRunPost = <ThrowOnError extends boolean = false>(options: Options<RunRoutineApiRoutinesRoutineIdRunPostData, ThrowOnError>): RequestResult<RunRoutineApiRoutinesRoutineIdRunPostResponses, RunRoutineApiRoutinesRoutineIdRunPostErrors, ThrowOnError> => (options.client ?? client).post<RunRoutineApiRoutinesRoutineIdRunPostResponses, RunRoutineApiRoutinesRoutineIdRunPostErrors, ThrowOnError>({
     url: '/api/routines/{routine_id}/run',

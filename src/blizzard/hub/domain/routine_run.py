@@ -1,9 +1,12 @@
 """Routine run — mint, ingest, and promote a hub work item from a routine in one act
 (blizzard#392): ``blizzard hub routine run <name>``.
 
-Takes an already-resolved routine (``bzh:domain-takes-objects``), settles the mode against
-the pair's recorded baseline, composes the charge, and drives the one-act write
-atomically. A retired scope or an unresolvable graph refuses rather than defaults (D5)."""
+Takes an already-resolved routine and an already-resolved, already-related scope
+(``bzh:domain-takes-objects`` — blizzard#399 D1): the API edge resolves the effective
+slug and refuses one no scope row holds before this service is ever called. Settles the
+mode against the pair's recorded baseline, composes the charge, and drives the one-act
+write atomically. A scope outside the routine's own related set, a retired scope, or an
+unresolvable graph refuses rather than defaults (D5)."""
 
 from __future__ import annotations
 
@@ -17,8 +20,8 @@ from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.graph import IReadGraphRepository
 from blizzard.hub.domain.promote import tail_position
-from blizzard.hub.domain.routines import Routine, RoutineGraphUnresolvedError, RunMode
-from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeRegistry, ScopeSlug
+from blizzard.hub.domain.routines import IReadRoutineScopeRepository, Routine, RoutineGraphUnresolvedError, RunMode
+from blizzard.hub.domain.scopes import IReadScopeRepository, Scope
 from blizzard.hub.domain.work import IWriteWorkItemRepository, WorkItemAuthor, WorkItemRecord
 from blizzard.hub.domain.work_items import prepare_mint
 
@@ -29,6 +32,18 @@ class ScopeRetiredError(ValueError):
 
     def __init__(self, slug: str) -> None:
         super().__init__(f"scope {slug!r} is retired")
+        self.slug = slug
+
+
+class ScopeNotRelatedError(ValueError):
+    """A run's effective scope is not a member of the routine's own related set
+    (blizzard#399 D1-D3): refused rather than run against, and never minted. The
+    routine's own default is always a member, so this can only fire on an explicit
+    override."""
+
+    def __init__(self, routine_id: str, slug: str) -> None:
+        super().__init__(f"scope {slug!r} is not related to routine {routine_id!r}")
+        self.routine_id = routine_id
         self.slug = slug
 
 
@@ -83,7 +98,7 @@ class RunService:
         self,
         *,
         scopes: IReadScopeRepository,
-        scope_registry: ScopeRegistry,
+        routine_scopes: IReadRoutineScopeRepository,
         graphs: IReadGraphRepository,
         finding_sets: IReadFindingSetRepository,
         items: IWriteWorkItemRepository,
@@ -93,7 +108,7 @@ class RunService:
         clock: IClock,
     ) -> None:
         self._scopes = scopes
-        self._scope_registry = scope_registry
+        self._routine_scopes = routine_scopes
         self._graphs = graphs
         self._finding_sets = finding_sets
         self._items = items
@@ -106,7 +121,7 @@ class RunService:
         self,
         routine: Routine,
         *,
-        scope_slug: ScopeSlug | None,
+        scope: Scope,
         mode: RunMode,
         note: str | None,
         author: WorkItemAuthor,
@@ -114,8 +129,8 @@ class RunService:
         graph = self._graphs.get_enabled_by_name(routine.graph_name)
         if graph is None:
             raise RoutineGraphUnresolvedError(routine.graph_name)
-        slug = scope_slug if scope_slug is not None else ScopeSlug.parse(routine.default_scope_slug)
-        scope = self._scope_registry.ensure(slug)
+        if scope.slug not in self._routine_scopes.list_scopes(routine.routine_id):
+            raise ScopeNotRelatedError(routine.routine_id, scope.slug)
         if self._scopes.is_retired(scope.slug):
             raise ScopeRetiredError(scope.slug)
 

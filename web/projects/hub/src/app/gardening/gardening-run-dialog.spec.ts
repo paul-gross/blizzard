@@ -12,7 +12,10 @@ const SCOPES = [
   { slug: 'blizzard', description: 'the hub itself', created_at: '2026-01-01T00:00:00Z', retired: false },
   { slug: 'web', description: 'the frontend', created_at: '2026-01-01T00:00:00Z', retired: false },
   { slug: 'retired-scope', description: 'old ground', created_at: '2026-01-01T00:00:00Z', retired: true },
+  { slug: 'unrelated', description: 'not this routine\'s own', created_at: '2026-01-01T00:00:00Z', retired: false },
 ];
+
+const ROUTINE_SCOPES = ['blizzard', 'retired-scope', 'web'];
 
 const BASELINES = [
   {
@@ -55,10 +58,8 @@ async function mount(route: (method: string, path: string) => unknown) {
 
 function defaultRoute(method: string, path: string): unknown {
   if (method === 'GET' && path === '/api/scopes') return SCOPES;
+  if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return ROUTINE_SCOPES;
   if (method === 'GET' && path === '/api/routines/rtn_1/baselines') return BASELINES;
-  if (method === 'POST' && path === '/api/scopes') {
-    return { slug: 'fresh-scope', description: 'a fresh weed patch', created_at: '2026-03-01T00:00:00Z', retired: false };
-  }
   if (method === 'POST' && path === '/api/routines/rtn_1/run') {
     return {
       chunk_id: 'ch_new',
@@ -67,7 +68,7 @@ function defaultRoute(method: string, path: string): unknown {
       title: 'gardening run (full)',
       body: 'Routine: gardening',
       routine_name: 'gardening',
-      scope_slug: 'fresh-scope',
+      scope_slug: 'web',
       effective_mode: 'full',
       downgraded: false,
       baseline_finding_set_id: null,
@@ -91,43 +92,45 @@ describe('GardeningRunDialog', () => {
     expect(mounted.el.querySelector('[data-testid="run-note-field"]')).not.toBeNull();
   });
 
-  it('lists every non-retired scope with its description, previously-swept first', async () => {
+  it('lists only the routine\'s related, non-retired scopes with their descriptions, previously-swept first', async () => {
     const mounted = await mount(defaultRoute);
     stub = mounted.stub;
 
-    const rows = Array.from(mounted.el.querySelectorAll('[data-testid^="run-scope-option-"]:not([data-testid$="-new"])'));
+    const rows = Array.from(mounted.el.querySelectorAll('[data-testid^="run-scope-option-"]'));
     const slugs = rows.map((r) => r.getAttribute('data-testid')?.replace('run-scope-option-', ''));
     expect(slugs).toEqual(['web', 'blizzard']);
     expect(mounted.el.textContent).not.toContain('retired-scope');
+    expect(mounted.el.textContent).not.toContain('unrelated');
 
     const webRow = mounted.el.querySelector('[data-testid="run-scope-option-web"]')!.closest('label')!;
     expect(webRow.querySelector('[data-testid="run-scope-swept-badge"]')).not.toBeNull();
     expect(webRow.textContent).toContain('the frontend');
   });
 
-  it('requires a description for a new slug and warns on a near match before committing', async () => {
-    const mounted = await mount(defaultRoute);
+  it('renders the empty state, and no scope field, for a routine with no runnable related scope', async () => {
+    const mounted = await mount((method, path) => {
+      if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return [];
+      return defaultRoute(method, path);
+    });
     stub = mounted.stub;
-    const { el, fixture } = mounted;
+    const { el } = mounted;
 
-    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-new"]')!.click();
-    await settle(fixture);
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.disabled).toBe(true);
+    expect(el.querySelector('[data-testid="run-dialog-empty"]')?.textContent).toContain(
+      'no related scope to run against yet',
+    );
+    expect(el.querySelector('[data-testid="run-scope-field"]')).toBeNull();
+  });
 
-    const slugInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-slug"]')!;
-    slugInput.value = 'webb';
-    slugInput.dispatchEvent(new Event('input'));
-    await settle(fixture);
+  it('renders the empty state when the routine\'s only related scope is retired', async () => {
+    const mounted = await mount((method, path) => {
+      if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return ['retired-scope'];
+      return defaultRoute(method, path);
+    });
+    stub = mounted.stub;
+    const { el } = mounted;
 
-    expect(el.querySelector('[data-testid="run-scope-near-match-warning"]')?.textContent).toContain('web');
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.disabled).toBe(true);
-
-    const descInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-description"]')!;
-    descInput.value = 'a fresh weed patch';
-    descInput.dispatchEvent(new Event('input'));
-    await settle(fixture);
-
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.disabled).toBe(false);
+    expect(el.querySelector('[data-testid="run-dialog-empty"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="run-scope-field"]')).toBeNull();
   });
 
   it('displays the recorded baseline revision, its instant, and how much has landed since, once delta is selected', async () => {
@@ -179,35 +182,12 @@ describe('GardeningRunDialog', () => {
     expect(el.querySelector<HTMLInputElement>('[data-testid="run-mode-full"]')!.checked).toBe(true);
   });
 
-  it('warns on a retired scope\'s exact slug too, even though it is never a picker row', async () => {
+  it('runs against the selected related scope and confirms the chunk id and a board link — no board of its own', async () => {
     const mounted = await mount(defaultRoute);
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
-    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-new"]')!.click();
-    await settle(fixture);
-    const slugInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-slug"]')!;
-    slugInput.value = 'retired-scope';
-    slugInput.dispatchEvent(new Event('input'));
-    await settle(fixture);
-
-    expect(el.querySelector('[data-testid="run-scope-near-match-warning"]')?.textContent).toContain('retired-scope');
-  });
-
-  it('mints a new scope before running (D3), then confirms the chunk id and links to the board — no board of its own', async () => {
-    const mounted = await mount(defaultRoute);
-    stub = mounted.stub;
-    const { el, fixture } = mounted;
-
-    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-new"]')!.click();
-    await settle(fixture);
-    const slugInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-slug"]')!;
-    slugInput.value = 'fresh-scope';
-    slugInput.dispatchEvent(new Event('input'));
-    await settle(fixture);
-    const descInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-description"]')!;
-    descInput.value = 'a fresh weed patch';
-    descInput.dispatchEvent(new Event('input'));
+    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-blizzard"]')!.click();
     await settle(fixture);
 
     const btn = el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!;
@@ -215,17 +195,9 @@ describe('GardeningRunDialog', () => {
     await settle(fixture);
     await settle(fixture);
 
-    const createCalls = stub.forRoute('/api/scopes', 'POST');
-    expect(createCalls).toHaveLength(1);
-    expect(createCalls[0].body).toEqual({ slug: 'fresh-scope', description: 'a fresh weed patch' });
     const runCalls = stub.forRoute('/api/routines/rtn_1/run', 'POST');
     expect(runCalls).toHaveLength(1);
-    expect(runCalls[0].body).toMatchObject({ scope_slug: 'fresh-scope', mode: 'full' });
-
-    const createIndex = stub.requests.findIndex((r) => r.path === '/api/scopes' && r.method === 'POST');
-    const runIndex = stub.requests.findIndex((r) => r.path === '/api/routines/rtn_1/run' && r.method === 'POST');
-    expect(createIndex).toBeGreaterThanOrEqual(0);
-    expect(createIndex).toBeLessThan(runIndex);
+    expect(runCalls[0].body).toMatchObject({ scope_slug: 'blizzard', mode: 'full' });
 
     expect(el.querySelector('[data-testid="run-confirmation-chunk-id"]')?.textContent).toBe('ch_new');
     const link = el.querySelector('[data-testid="run-confirmation-board-link"]');
@@ -233,12 +205,12 @@ describe('GardeningRunDialog', () => {
     expect(el.querySelector('fleet-board, [data-testid="board"]')).toBeNull();
   });
 
-  it('surfaces a refused run after its scope create already succeeded, and a resubmit reaches the run', async () => {
+  it('surfaces a refused run and never renders a confirmation, then lets a resubmit reach the run', async () => {
     let runAttempts = 0;
     const mounted = await mount((method, path) => {
       if (method === 'POST' && path === '/api/routines/rtn_1/run') {
         runAttempts += 1;
-        if (runAttempts === 1) return stubError(503, { detail: "scope 'fresh-scope' is retired" });
+        if (runAttempts === 1) return stubError(503, { detail: "scope 'web' is retired" });
         return {
           chunk_id: 'ch_retry',
           source: 'hub',
@@ -246,7 +218,7 @@ describe('GardeningRunDialog', () => {
           title: 'gardening run (full)',
           body: 'Routine: gardening',
           routine_name: 'gardening',
-          scope_slug: 'fresh-scope',
+          scope_slug: 'web',
           effective_mode: 'full',
           downgraded: false,
           baseline_finding_set_id: null,
@@ -259,63 +231,21 @@ describe('GardeningRunDialog', () => {
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
-    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-new"]')!.click();
-    await settle(fixture);
-    const slugInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-slug"]')!;
-    slugInput.value = 'fresh-scope';
-    slugInput.dispatchEvent(new Event('input'));
-    await settle(fixture);
-    const descInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-description"]')!;
-    descInput.value = 'a fresh weed patch';
-    descInput.dispatchEvent(new Event('input'));
-    await settle(fixture);
-
     const btn = el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!;
     btn.click();
     await settle(fixture);
     await settle(fixture);
 
-    // The create already landed even though the run that followed it refused.
-    expect(stub.forRoute('/api/scopes', 'POST')).toHaveLength(1);
     expect(el.querySelector('[data-testid="run-submit-error"]')?.textContent).toContain('retired');
     expect(el.querySelector('[data-testid="run-confirmation"]')).toBeNull();
 
-    // A resubmit re-creates the same slug — mint-or-no-op (D4) — and this time the run succeeds.
     btn.click();
     await settle(fixture);
     await settle(fixture);
 
-    expect(stub.forRoute('/api/scopes', 'POST')).toHaveLength(2);
     expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')).toHaveLength(2);
     expect(el.querySelector('[data-testid="run-confirmation-chunk-id"]')?.textContent).toBe('ch_retry');
     expect(el.querySelector('[data-testid="run-submit-error"]')).toBeNull();
-  });
-
-  it('surfaces a refused scope create and never reaches the run', async () => {
-    const mounted = await mount((method, path) => {
-      if (method === 'POST' && path === '/api/scopes') return stubError(422, { detail: 'malformed slug' });
-      return defaultRoute(method, path);
-    });
-    stub = mounted.stub;
-    const { el, fixture } = mounted;
-
-    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-new"]')!.click();
-    await settle(fixture);
-    const slugInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-slug"]')!;
-    slugInput.value = '!!!';
-    slugInput.dispatchEvent(new Event('input'));
-    await settle(fixture);
-    const descInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-description"]')!;
-    descInput.value = 'x';
-    descInput.dispatchEvent(new Event('input'));
-    await settle(fixture);
-
-    el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.click();
-    await settle(fixture);
-    await settle(fixture);
-
-    expect(el.querySelector('[data-testid="run-submit-error"]')?.textContent).toContain('malformed slug');
-    expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')).toHaveLength(0);
   });
 
   it('keeps a submitting run mounted through Escape, a backdrop click, and a disabled Cancel', async () => {
@@ -378,50 +308,5 @@ describe('GardeningRunDialog', () => {
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="run-confirmation"]')).not.toBeNull();
-  });
-
-  it('trims a newly minted slug and description before they reach POST /api/scopes', async () => {
-    const mounted = await mount(defaultRoute);
-    stub = mounted.stub;
-    const { el, fixture } = mounted;
-
-    el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-new"]')!.click();
-    await settle(fixture);
-    const slugInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-slug"]')!;
-    slugInput.value = '  fresh-scope  ';
-    slugInput.dispatchEvent(new Event('input'));
-    await settle(fixture);
-    const descInput = el.querySelector<HTMLInputElement>('[data-testid="run-new-scope-description"]')!;
-    descInput.value = '  a fresh weed patch  ';
-    descInput.dispatchEvent(new Event('input'));
-    await settle(fixture);
-
-    el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.click();
-    await settle(fixture);
-    await settle(fixture);
-
-    const createCalls = stub.forRoute('/api/scopes', 'POST');
-    expect(createCalls).toHaveLength(1);
-    expect(createCalls[0].body).toEqual({ slug: 'fresh-scope', description: 'a fresh weed patch' });
-  });
-
-  it('still offers the mint escape hatch when GET /api/scopes returns zero rows', async () => {
-    const mounted = await mount((method, path) => {
-      if (method === 'GET' && path === '/api/scopes') return [];
-      if (method === 'GET' && path === '/api/routines/rtn_1/baselines') return [];
-      return defaultRoute(method, path);
-    });
-    stub = mounted.stub;
-    const { el, fixture } = mounted;
-
-    expect(el.querySelector('[data-testid="run-dialog-empty"]')?.textContent).toContain('No scopes declared yet.');
-
-    const mintOption = el.querySelector<HTMLInputElement>('[data-testid="run-scope-option-new"]')!;
-    expect(mintOption).not.toBeNull();
-    mintOption.click();
-    await settle(fixture);
-
-    expect(el.querySelector('[data-testid="run-new-scope-slug"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="run-new-scope-description"]')).not.toBeNull();
   });
 });

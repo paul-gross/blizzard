@@ -18,9 +18,9 @@ from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.routine_run import RunService, ScopeRetiredError, compose_charge
-from blizzard.hub.domain.routines import Routine, RoutineGraphUnresolvedError, RunMode
-from blizzard.hub.domain.scopes import IReadScopeRepository, IWriteScopeRepository, Scope, ScopeRegistry, ScopeSlug
+from blizzard.hub.domain.routine_run import RunService, ScopeNotRelatedError, ScopeRetiredError, compose_charge
+from blizzard.hub.domain.routines import IReadRoutineScopeRepository, Routine, RoutineGraphUnresolvedError, RunMode
+from blizzard.hub.domain.scopes import IReadScopeRepository, Scope
 from blizzard.hub.domain.work import (
     Chunk,
     IWriteWorkItemRepository,
@@ -42,6 +42,7 @@ _ROUTINE = Routine(
     default_model=["opus"],
     default_effort="high",
 )
+_DEFAULT_SCOPE = Scope(slug="blizzard", description="the hub itself", created_at=_T0)
 
 
 @dataclass
@@ -57,11 +58,8 @@ class _FakeGraphs:
 
 @dataclass
 class _FakeScopes:
-    scopes: dict[str, Scope] = field(
-        default_factory=lambda: {"blizzard": Scope(slug="blizzard", description="the hub itself", created_at=_T0)}
-    )
+    scopes: dict[str, Scope] = field(default_factory=lambda: {"blizzard": _DEFAULT_SCOPE})
     retired: set[str] = field(default_factory=set)
-    ensured: list[str] = field(default_factory=list)
 
     def get(self, slug: str) -> Scope | None:
         return self.scopes.get(slug)
@@ -72,14 +70,19 @@ class _FakeScopes:
     def is_retired(self, slug: str) -> bool:
         return slug in self.retired
 
-    def ensure(self, slug: str, *, description: str, at: datetime) -> Scope:
-        self.ensured.append(slug)
-        existing = self.scopes.get(slug)
-        if existing is not None:
-            return existing
-        scope = Scope(slug=slug, description=description, created_at=at)
-        self.scopes[slug] = scope
-        return scope
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"should not touch {name!r}")
+
+
+@dataclass
+class _FakeRoutineScopes:
+    """A routine's own related set (blizzard#399 D2) — defaults to just the fixture
+    routine's own default scope, the one member every routine always carries."""
+
+    related: list[str] = field(default_factory=lambda: ["blizzard"])
+
+    def list_scopes(self, routine_id: str) -> list[str]:
+        return self.related
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -154,6 +157,7 @@ class _FakeItems:
 def _service(
     *,
     scopes: _FakeScopes | None = None,
+    routine_scopes: _FakeRoutineScopes | None = None,
     graphs: _FakeGraphs | None = None,
     finding_sets: _FakeFindingSets | None = None,
     items: _FakeItems | None = None,
@@ -161,13 +165,14 @@ def _service(
 ) -> tuple[RunService, _FakeItems, _FakeScopes, _FakeChunks]:
     clock = FixedClock(instant=_T0)
     scopes = scopes or _FakeScopes()
+    routine_scopes = routine_scopes or _FakeRoutineScopes()
     graphs = graphs or _FakeGraphs()
     finding_sets = finding_sets or _FakeFindingSets()
     items = items or _FakeItems()
     chunks = chunks or _FakeChunks()
     service = RunService(
         scopes=cast(IReadScopeRepository, scopes),
-        scope_registry=ScopeRegistry(scopes=cast(IWriteScopeRepository, scopes), clock=clock),
+        routine_scopes=cast(IReadRoutineScopeRepository, routine_scopes),
         graphs=cast(IReadGraphRepository, graphs),
         finding_sets=cast(IReadFindingSetRepository, finding_sets),
         items=cast(IWriteWorkItemRepository, items),
@@ -186,43 +191,50 @@ def test_run_unresolved_graph_raises_naming_it() -> None:
     service, *_ = _service(graphs=_FakeGraphs(resolvable={}))
 
     with pytest.raises(RoutineGraphUnresolvedError, match="default"):
-        service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
 def test_run_retired_default_scope_is_refused() -> None:
     service, *_ = _service(scopes=_FakeScopes(retired={"blizzard"}))
 
     with pytest.raises(ScopeRetiredError, match="blizzard"):
-        service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
 def test_run_retired_override_scope_is_refused() -> None:
-    scopes = _FakeScopes(
-        scopes={
-            "blizzard": Scope(slug="blizzard", description="", created_at=_T0),
-            "cold": Scope(slug="cold", description="", created_at=_T0),
-        },
-        retired={"cold"},
-    )
-    service, *_ = _service(scopes=scopes)
+    cold = Scope(slug="cold", description="", created_at=_T0)
+    scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "cold": cold}, retired={"cold"})
+    service, *_ = _service(scopes=scopes, routine_scopes=_FakeRoutineScopes(related=["blizzard", "cold"]))
 
     with pytest.raises(ScopeRetiredError, match="cold"):
-        service.run(_ROUTINE, scope_slug=ScopeSlug.parse("cold"), mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope=cold, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
-def test_run_override_scope_mints_an_unseen_slug() -> None:
-    service, items, scopes, _chunks = _service()
+def test_run_refuses_an_override_outside_the_routines_related_set() -> None:
+    unrelated = Scope(slug="unrelated", description="", created_at=_T0)
+    scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "unrelated": unrelated})
+    service, *_ = _service(scopes=scopes)  # routine_scopes defaults to just ["blizzard"]
 
-    service.run(_ROUTINE, scope_slug=ScopeSlug.parse("new-scope"), mode=RunMode.FULL, note=None, author=_AUTHOR)
+    with pytest.raises(ScopeNotRelatedError, match="unrelated"):
+        service.run(_ROUTINE, scope=unrelated, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
-    assert "new-scope" in scopes.ensured
-    assert items.calls[0]["scope_slug"] == "new-scope"
+
+def test_run_refuses_a_related_check_before_the_retire_check() -> None:
+    """An unrelated, also-retired scope is refused for being unrelated (D3's own
+    order) — the retire brake never runs against a scope the routine has no set
+    membership for at all."""
+    unrelated = Scope(slug="unrelated", description="", created_at=_T0)
+    scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "unrelated": unrelated}, retired={"unrelated"})
+    service, *_ = _service(scopes=scopes)
+
+    with pytest.raises(ScopeNotRelatedError):
+        service.run(_ROUTINE, scope=unrelated, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
 def test_run_delta_with_no_baseline_downgrades_to_full() -> None:
     service, items, *_ = _service()
 
-    result = service.run(_ROUTINE, scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
+    result = service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.DELTA, note=None, author=_AUTHOR)
 
     assert result.effective_mode is RunMode.FULL
     assert result.downgraded is True
@@ -241,7 +253,7 @@ def test_run_delta_with_a_recorded_baseline_stays_delta() -> None:
     )
     service, items, *_ = _service(finding_sets=_FakeFindingSets(newest={("gardening", "blizzard"): baseline}))
 
-    result = service.run(_ROUTINE, scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
+    result = service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.DELTA, note=None, author=_AUTHOR)
 
     assert result.effective_mode is RunMode.DELTA
     assert result.downgraded is False
@@ -252,7 +264,7 @@ def test_run_delta_with_a_recorded_baseline_stays_delta() -> None:
 def test_run_full_mode_never_downgrades_even_with_no_baseline() -> None:
     service, *_ = _service()
 
-    result = service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     assert result.effective_mode is RunMode.FULL
     assert result.downgraded is False
@@ -261,7 +273,7 @@ def test_run_full_mode_never_downgrades_even_with_no_baseline() -> None:
 def test_run_threads_the_routines_model_and_effort_defaults_onto_the_chunk() -> None:
     service, items, *_ = _service()
 
-    service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     chunk = items.calls[0]["chunk"]
     assert chunk.default_model == ["opus"]
@@ -274,7 +286,7 @@ def test_run_computes_the_tail_position_before_the_write() -> None:
     )
     service, items, *_ = _service(chunks=chunks)
 
-    service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     assert items.calls[0]["position"] == 4.0
 
@@ -283,13 +295,13 @@ def test_run_raises_ingest_conflict_when_the_freshly_allocated_ref_races_a_live_
     service, *_ = _service(chunks=_FakeChunks(live_holder="ch_other"))
 
     with pytest.raises(IngestConflict):
-        service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
 
 def test_run_uses_the_injected_clock_not_the_wall_clock() -> None:
     service, items, *_ = _service()
 
-    service.run(_ROUTINE, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
     assert items.calls[0]["at"] == _T0
 

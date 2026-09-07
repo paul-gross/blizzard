@@ -17,8 +17,7 @@ import {
 
 import { EMPTY_SCOPE_SELECTION, GardeningRunScopeField, type ScopeSelection } from './gardening-run-scope-field';
 
-/** What the view asks the container to do once the operator submits (D3's
- * create-then-run ordering is the container's own concern, not this view's). */
+/** What the view asks the container to do once the operator submits. */
 export interface RunSubmission {
   readonly selection: ScopeSelection;
   readonly mode: 'full' | 'delta';
@@ -27,11 +26,10 @@ export interface RunSubmission {
 
 /**
  * The gardening run dialog's presentational view (blizzard#399 D6) — three fields
- * (scope, mode, charge note) and nothing else, the delta baseline display, the
- * create-then-run submission, and the post-run confirmation, all over inputs and
- * outputs only. No query or client dependency: the container injects
- * `injectHubScopesQuery`/`injectHubRoutineBaselinesQuery`/the two mutations and maps
- * their async state into `state()`/`submitting()`/`submitError()`/`confirmedRun()`
+ * (scope, mode, charge note) and nothing else, the delta baseline display, the run
+ * submission, and the post-run confirmation, all over inputs and outputs only. No query
+ * or client dependency: the container injects the scope reads and the run mutation and
+ * maps their async state into `state()`/`submitting()`/`submitError()`/`confirmedRun()`
  * (`bzh:frontend-container-presentational`).
  *
  * Owns every field's live value as local signals — `scopeSelection`/`mode`/`note` —
@@ -66,10 +64,6 @@ export class GardeningRunDialogView {
 
   readonly sweptSlugs = input.required<ReadonlySet<string>>();
 
-  /** Every scope's slug, retired included — see `GardeningRunScopeField.existingSlugs`
-   * for why. */
-  readonly existingSlugs = input.required<ReadonlySet<string>>();
-
   /** Every scope this routine has swept, D5's own read — looked up by the currently
    * selected scope to resolve the delta baseline display and the delta-steering rule. */
   readonly baselines = input.required<readonly RoutineBaselineView[]>();
@@ -96,21 +90,19 @@ export class GardeningRunDialogView {
   protected readonly note = signal('');
 
   /** The delta baseline for the currently selected scope, or `undefined` for a
-   * never-swept pair or a new (necessarily never-swept) slug — D5's own read is the
-   * one fact both this display and {@link deltaAvailable} rest on. */
+   * never-swept pair or no selection yet — D5's own read is the one fact both this
+   * display and {@link deltaAvailable} rest on. */
   protected readonly selectedBaseline = computed<RoutineBaselineView | undefined>(() => {
     const sel = this.scopeSelection();
-    if (sel.isNew) return undefined;
-    return this.baselines().find((b) => b.scope_slug === sel.slug);
+    if (!sel) return undefined;
+    return this.baselines().find((b) => b.scope_slug === sel);
   });
 
   protected readonly deltaAvailable = computed(() => this.selectedBaseline() !== undefined);
 
   protected readonly canSubmit = computed(() => {
     if (this.submitting()) return false;
-    const sel = this.scopeSelection();
-    if (sel.isNew) return sel.slug.trim().length > 0 && sel.newDescription.trim().length > 0;
-    return sel.slug.trim().length > 0;
+    return this.scopeSelection().length > 0;
   });
 
   constructor() {
@@ -119,9 +111,8 @@ export class GardeningRunDialogView {
     // checked until the operator acts.
     effect(() => {
       const scopes = this.scopes();
-      const sel = this.scopeSelection();
-      if (scopes.length > 0 && !sel.isNew && !sel.slug) {
-        this.scopeSelection.set({ slug: scopes[0].slug, isNew: false, newDescription: '' });
+      if (scopes.length > 0 && !this.scopeSelection()) {
+        this.scopeSelection.set(scopes[0].slug);
       }
     });
     // The delta-steering rule (D5): a scope that stops carrying a baseline — the
@@ -134,16 +125,7 @@ export class GardeningRunDialogView {
 
   protected onSubmitClick(): void {
     if (!this.canSubmit()) return;
-    const sel = this.scopeSelection();
-    // Trim once here, at the one place the container's create-then-run submission
-    // actually reads from — `canSubmit` above already trims for its own gating
-    // purposes, but the value it computes is never the one the mutations read, so
-    // trimming only there would still let e.g. `" web "` reach
-    // `POST /api/scopes` with its surrounding whitespace intact.
-    const selection: ScopeSelection = sel.isNew
-      ? { ...sel, slug: sel.slug.trim(), newDescription: sel.newDescription.trim() }
-      : sel;
-    this.runSubmitted.emit({ selection, mode: this.mode(), note: this.note().trim() || null });
+    this.runSubmitted.emit({ selection: this.scopeSelection(), mode: this.mode(), note: this.note().trim() || null });
   }
 
   /** Escape, a backdrop click, and Cancel all route through `KitDialog`'s one
