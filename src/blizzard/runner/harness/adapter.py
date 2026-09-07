@@ -51,8 +51,10 @@ class WorkerHandle:
     process_start_time: str  # stable across pid reuse — REAP keys on (pid, start_time)
 
 
-class IHarnessAdapter(Protocol):
-    """The coding-harness seam. Dumb: translates, never decides."""
+class IHarnessWorkerLifecycle(Protocol):
+    """Spawning, resuming, and judging a worker process (``bzh:repository-split``) — one
+    of the five slices ``IHarnessAdapter`` composes; a consumer driving only worker
+    lifecycle takes this narrower seam instead."""
 
     def spawn(
         self,
@@ -138,6 +140,12 @@ class IHarnessAdapter(Protocol):
         off display surfaces."""
         ...
 
+
+class IHarnessModelResolution(Protocol):
+    """Resolving an authored model/effort/compaction-window preference to this harness's
+    own vocabulary (``bzh:repository-split``) — never failing a spawn over an
+    unresolvable one."""
+
     def resolve_model(self, preferences: Sequence[str]) -> str:
         """Resolve a preference list to a native model name (issue #144): left-to-right,
         first resolvable entry wins; an unresolvable entry is skipped, never an error; an
@@ -160,6 +168,11 @@ class IHarnessAdapter(Protocol):
         unrecognized, unsupported, and ``None`` all return ``None``."""
         ...
 
+
+class IHarnessVerdictParsing(Protocol):
+    """Parsing a worker's raw output into a verdict, a usability check, and its free-text
+    assessment (``bzh:repository-split``)."""
+
     def parse_verdict(self, output: str) -> str | None:
         """Parse the ``<Choice>{name}</Choice>`` reply into a choice name, else ``None``."""
         ...
@@ -181,6 +194,12 @@ class IHarnessAdapter(Protocol):
         assessment."""
         ...
 
+
+class IHarnessUsageAccounting(Protocol):
+    """Turning a worker's raw output or transcript into a usage sample
+    (``bzh:repository-split``) — the result-envelope path and the envelope-less
+    transcript-sum fallback."""
+
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
         """Translate a result envelope's ``usage`` + ``total_cost_usd`` into a sample.
 
@@ -197,6 +216,10 @@ class IHarnessAdapter(Protocol):
         figure. ``model`` is the same attribution fallback :meth:`parse_usage` takes."""
         ...
 
+
+class IHarnessTranscriptAccess(Protocol):
+    """This harness's transcript source (``bzh:repository-split``, blizzard#245)."""
+
     def transcript_source(self) -> IHarnessTranscriptSource:
         """This harness's transcript source (blizzard#245).
 
@@ -204,3 +227,18 @@ class IHarnessAdapter(Protocol):
         cohesive sub-seam with its own configuration and lifetime. A harness with no
         on-disk transcript binds a null source, so no caller needs a null check."""
         ...
+
+
+class IHarnessAdapter(
+    IHarnessWorkerLifecycle,
+    IHarnessModelResolution,
+    IHarnessVerdictParsing,
+    IHarnessUsageAccounting,
+    IHarnessTranscriptAccess,
+    Protocol,
+):
+    """The coding-harness seam, composed of its five narrower slices
+    (``bzh:repository-split``). Dumb: translates, never decides. For a genuine
+    pass-through — code that holds the adapter to thread it on rather than to call it —
+    this composed alias is the right type; a consumer that calls the adapter itself takes
+    the narrowest slice its job needs instead."""

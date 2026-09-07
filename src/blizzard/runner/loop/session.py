@@ -11,7 +11,7 @@ from blizzard.runner.domain.leases import (
     LeaseRecord,
     PoolHead,
 )
-from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.harness.adapter import IHarnessModelResolution
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.wire.envelope import NodeConfig
 
@@ -32,7 +32,7 @@ class SessionResolver:
     """Resolves a spawn's session identity against the store's own session history."""
 
     leases: IReadLeaseSessionRepository
-    harness: IHarnessAdapter
+    harness: IHarnessModelResolution
     transcripts: IHarnessTranscriptSource | None = None
 
     def resume_target(self, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> str | None:

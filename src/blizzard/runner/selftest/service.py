@@ -13,8 +13,7 @@ from dataclasses import replace
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import SELFTEST_PREFIX, Id
-from blizzard.runner.harness.adapter import IHarnessAdapter
-from blizzard.runner.selftest.checks import IProcessProbe, SelfTest
+from blizzard.runner.selftest.checks import IProcessProbe, ISelftestAdapter, SelfTest
 from blizzard.runner.selftest.model import SelfTestCheck, SelfTestRun, SelfTestStatus
 from blizzard.runner.selftest.scratch_git import IScratchGit
 
@@ -41,7 +40,7 @@ class SelfTestService:
     def __init__(
         self,
         *,
-        adapters: Mapping[str, IHarnessAdapter],
+        adapters: Mapping[str, ISelftestAdapter],
         scratch_git: IScratchGit,
         process: IProcessProbe,
         clock: IClock,
@@ -82,7 +81,7 @@ class SelfTestService:
                 return None
             return replace(run, checks=list(run.checks))
 
-    def _execute(self, selftest_id: str, adapter: IHarnessAdapter) -> None:
+    def _execute(self, selftest_id: str, adapter: ISelftestAdapter) -> None:
         # Joined against the budget in its own thread: an overrun cannot be killed, so it
         # is abandoned as a daemon thread and the run resolves anyway (issue #54).
         outcome: list[tuple[list[SelfTestCheck], str | None]] = []

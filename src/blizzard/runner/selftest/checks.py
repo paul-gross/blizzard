@@ -15,7 +15,12 @@ from typing import Protocol
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.adapter import (
+    IHarnessVerdictParsing,
+    IHarnessWorkerLifecycle,
+    WorkerHandle,
+    WorkerPreamble,
+)
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.selftest.model import (
     AUTOMATED_RESUME,
@@ -47,6 +52,12 @@ _JUDGEMENT_PROMPT = (
     "<Choice>pass</Choice> if it did, else <Choice>fail</Choice>."
 )
 _RESUME_MESSAGE = "selftest: automated follow-up resume — no action needed, just acknowledge."
+
+
+class ISelftestAdapter(IHarnessWorkerLifecycle, IHarnessVerdictParsing, Protocol):
+    """The two harness slices this canary drives end-to-end (``bzh:repository-split``):
+    every worker-lifecycle op the five checks exercise, plus the verdict parsing
+    ``Judge`` reads back — the widest single consumer of the harness seam in this repo."""
 
 
 class IProcessProbe(Protocol):
@@ -90,7 +101,7 @@ class Scratch:
     """The throwaway repo a run is performed against, the seams its checks drive it
     through, and the session id they drive it under."""
 
-    adapter: IHarnessAdapter
+    adapter: ISelftestAdapter
     scratch_git: IScratchGit
     process: IProcessProbe
     workdir: str
@@ -221,7 +232,7 @@ class ResumeCommand(Check):
 class SelfTest:
     """The five adapter-drift checks against a single throwaway scratch repo."""
 
-    adapter: IHarnessAdapter
+    adapter: ISelftestAdapter
     scratch_git: IScratchGit
     process: IProcessProbe
 
