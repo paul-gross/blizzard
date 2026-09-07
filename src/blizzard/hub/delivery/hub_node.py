@@ -328,7 +328,11 @@ class HubNodeExecutor:
     ) -> bool:
         """The mid-run marker callback's write (#65) — a ``run:`` step's own marker,
         recorded ahead of that step's exit. Idempotent per
-        ``(chunk, node, name, epoch)``, like the executor's own ``produces:`` write."""
+        ``(chunk, node, name, epoch)``, like the executor's own ``produces:`` write, and
+        fenced against the chunk's current epoch (``bzh:epoch-fencing``): a caller-supplied
+        epoch the chunk has since moved past — a restart re-aiming it while this ``run:``
+        list is still executing — writes nothing, so a superseded run's marker can no
+        longer mark a repo landed or enqueue a close."""
         wrote = self._artifacts.record_hub_artifact(
             chunk_id,
             node_id=node_id,

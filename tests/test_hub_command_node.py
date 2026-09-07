@@ -635,6 +635,38 @@ def test_produces_marker_skips_an_already_run_step(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
+def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Path) -> None:
+    """The mid-run marker callback (#65) mints its epoch before the ``run:`` list starts
+    and keeps it live for the whole run. A restart landing inside that window has
+    already re-aimed the chunk, so a marker the stale run still tries to write must be
+    refused — not just the exit transition (``bzh:epoch-fencing``): a `merged/<repo>`
+    marker also marks a repo landed, which a superseded run must not get to do."""
+    runner = FakeHubCommandRunner()
+    workdir = FakeHubWorkdir()
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
+    chunk_id, _build_node_id, graph = _to_merge_node(hub)
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+    before = hub.clock.now()
+
+    assert hub.client.post(f"/api/chunks/{chunk_id}/restart", json={}).status_code == 202
+
+    recorded = hub.services.hub_node.record_marker(
+        chunk_id,
+        node_id=merge_node.node_id,
+        node_name="merge",
+        epoch=1,  # the run's own epoch, read before the restart moved the chunk on
+        name="merged/acme-widget",
+        content="sha:abc123",
+    )
+
+    assert recorded is False
+    names = {a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
+    assert "merged/acme-widget" not in names
+    assert hub.services.chunks.delivery.count_landed_since("acme-widget", before) == 0
+
+
+@pytest.mark.component
 def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
     runner = FakeHubCommandRunner()
     workdir = FakeHubWorkdir()

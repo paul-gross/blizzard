@@ -37,6 +37,8 @@ class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
         """Append one hub-node progress artifact OUTSIDE a transition (#65).
 
         Idempotent per ``(chunk, node, name, epoch)`` natural key: a re-run that already
-        recorded this artifact writes nothing a second time. Ordinary artifact rows,
-        durable exactly like a worker-produced one. Returns True iff it wrote."""
+        recorded this artifact writes nothing a second time. Also fenced against the
+        chunk's current epoch (``bzh:epoch-fencing``): a write at an epoch the chunk has
+        moved past writes nothing either. Ordinary artifact rows, durable exactly like a
+        worker-produced one. Returns True iff it wrote."""
         ...
