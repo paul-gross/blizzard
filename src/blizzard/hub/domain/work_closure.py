@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.event_log import EventLogService
@@ -26,8 +27,8 @@ _CP_CLOSE_AFTER_CLOSE_BEFORE_RECORD = crashpoint(
 
 _HUB_RUNNER_ID = "hub"
 
-_EVENT_CLOSED = "work-item-closed"
-_EVENT_CLOSE_FAILED = "work-item-close-failed"
+_EVENT_CLOSED: EventLogKind = "work-item-closed"
+_EVENT_CLOSE_FAILED: EventLogKind = "work-item-close-failed"
 
 
 class CloseIntentDrainer:
@@ -79,7 +80,6 @@ class CloseIntentDrainer:
                 continue  # a redelivered sweep already recorded this outcome
             if outcome is WorkItemCloseOutcome.CLOSED:
                 self._events.record(
-                    severity="info",
                     kind=_EVENT_CLOSED,
                     runner_id=_HUB_RUNNER_ID,
                     chunk_id=intent.chunk_id,
@@ -91,7 +91,6 @@ class CloseIntentDrainer:
                 )
             else:
                 self._events.record(
-                    severity="warning",
                     kind=_EVENT_CLOSE_FAILED,
                     runner_id=_HUB_RUNNER_ID,
                     chunk_id=intent.chunk_id,

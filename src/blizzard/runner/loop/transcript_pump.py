@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
+from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -31,6 +32,8 @@ from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCR
 from blizzard.runner.transcripts.ledger import TranscriptSegmentLedgerRow
 
 _log = get_logger("blizzard.runner.loop")
+
+_TRANSCRIPT_SIDECHAIN_DROPPED: EventLogKind = "transcript-sidechain-dropped"
 
 #: Backpressure cap on total unacked bytes across the WHOLE outbound buffer, distinct
 #: from `CHUNK_TRANSCRIPT_MAX_BYTES`'s per-chunk shipped total — self-clears as the drain catches up.
@@ -315,21 +318,16 @@ class TranscriptPump:
             return
         agent_ids = newly
         OutboundFacts(self.ctx).event(
+            kind=_TRANSCRIPT_SIDECHAIN_DROPPED,
             chunk_id=segment.chunk_id,
             lease_id=None,
+            node_name=None,
+            message=(
+                f"transcript segment {segment.segment_id} newly observed "
+                f"{len(agent_ids)} unlinked sidechain(s) (latched, not re-warned)"
+            ),
+            detail={"segment_id": segment.segment_id, "agent_ids": agent_ids},
             at=self.ctx.clock.now(),
-            payload={
-                "severity": "warning",
-                "kind": "transcript-sidechain-dropped",
-                "chunk_id": segment.chunk_id,
-                "lease_id": None,
-                "node_name": None,
-                "message": (
-                    f"transcript segment {segment.segment_id} newly observed "
-                    f"{len(agent_ids)} unlinked sidechain(s) (latched, not re-warned)"
-                ),
-                "detail": {"segment_id": segment.segment_id, "agent_ids": agent_ids},
-            },
         )
 
 

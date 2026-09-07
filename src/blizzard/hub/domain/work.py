@@ -14,6 +14,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.artifacts import ArtifactRow
@@ -520,6 +521,8 @@ DEFAULT_EVENT_LIST_LIMIT = 200
 #: (``blizzard-context:/domain/operations.md``).
 SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
 
+_EVENT_NEEDS_HUMAN: EventLogKind = "needs-human"
+
 
 @dataclass(frozen=True)
 class EventFeed:
@@ -547,8 +550,8 @@ class EventFeed:
         return EventRow(
             id=-(index + 1),
             recorded_at=esc.recorded_at,
-            severity="critical",
-            kind="needs-human",
+            severity=EVENT_LOG_SEVERITY[_EVENT_NEEDS_HUMAN],
+            kind=_EVENT_NEEDS_HUMAN,
             runner_id=None,
             chunk_id=esc.chunk_id,
             lease_id=None,

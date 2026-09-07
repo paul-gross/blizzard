@@ -14,6 +14,7 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
@@ -176,8 +177,7 @@ class _FakeCloseChunks:
     def record(
         self,
         *,
-        severity: str,
-        kind: str,
+        kind: EventLogKind,
         runner_id: str,
         chunk_id: str | None,
         lease_id: str | None,
@@ -187,7 +187,9 @@ class _FakeCloseChunks:
         at: object,
     ) -> int:
         self.events.append(
-            _RecordedEvent(severity=severity, kind=kind, chunk_id=chunk_id, message=message, detail=detail)
+            _RecordedEvent(
+                severity=EVENT_LOG_SEVERITY[kind], kind=kind, chunk_id=chunk_id, message=message, detail=detail
+            )
         )
         return len(self.events)
 

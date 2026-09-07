@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.takeover import TakeoverCommand
@@ -52,9 +53,9 @@ _CP_PREEMPT_AFTER_KILL = crashpoint(
 
 #: The classification each :meth:`Attempt.fail` branch surfaces (issue #125). The
 #: locally-paused defer branch surfaces nothing — a deferral is not an outcome.
-_ATTEMPT_FAILED = ("warning", "attempt-failed")
-_WORKER_LOST = ("critical", "worker-lost")
-_ATTEMPT_ABANDONED = ("info", "attempt-abandoned")
+_ATTEMPT_FAILED: EventLogKind = "attempt-failed"
+_WORKER_LOST: EventLogKind = "worker-lost"
+_ATTEMPT_ABANDONED: EventLogKind = "attempt-abandoned"
 
 
 @dataclass(frozen=True)
@@ -96,13 +97,17 @@ class Attempt:
         if self.detached():
             # Emitted HERE rather than in `abandon`, which the ordinary detach sweep also
             # reaches and which must stay silent.
+            detail: dict[str, object] = {"via": via, "reason": reason, "node": lease.node_name}
+            if tail:
+                detail["stderr_tail"] = tail
             OutboundFacts(self.ctx).event(
+                kind=_ATTEMPT_ABANDONED,
                 chunk_id=lease.chunk_id,
                 lease_id=lease.lease_id,
+                node_name=lease.node_name,
+                message=f"attempt abandoned — chunk reassigned ({reason}, via {via})",
+                detail=detail,
                 at=now,
-                payload=self._event(
-                    _ATTEMPT_ABANDONED, f"attempt abandoned — chunk reassigned ({reason}, via {via})", reason, via, tail
-                ),
             )
             self.abandon(killed=True, via=via)
             return
@@ -367,12 +372,10 @@ class Attempt:
                 chunk_id=self.lease.chunk_id,
             )
 
-    def _event(
-        self, classification: tuple[str, str], message: str, reason: str, via: str, stderr_tail: str
-    ) -> dict[str, object]:
+    def _event(self, kind: EventLogKind, message: str, reason: str, via: str, stderr_tail: str) -> dict[str, object]:
         """The ``event.recorded`` payload one :meth:`fail` branch surfaces (issue #125), whose
         ``detail`` carries the ``(reason, via)`` that classified it and any captured stderr tail."""
-        severity, kind = classification
+        severity = EVENT_LOG_SEVERITY[kind]
         detail: dict[str, object] = {"via": via, "reason": reason, "node": self.lease.node_name}
         if stderr_tail:
             detail["stderr_tail"] = stderr_tail

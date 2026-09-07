@@ -267,9 +267,11 @@ class FactIngestService:
         if kind == EVENT_RECORDED:
             # Neither epoch-fenced nor route-token-gated (issue #125): an event from a fenced-out or
             # dying worker is exactly the signal this log exists to surface. `chunk_id` is optional.
-            event_id = self._events.record(
-                severity=fact.require_text("severity"),
+            # `record_wire`, not `record`: a kind minted by an older runner may not be in this
+            # hub's vocabulary, so severity is read off the wire rather than derived from it.
+            event_id = self._events.record_wire(
                 kind=fact.require_text("kind"),
+                severity=fact.require_text("severity"),
                 runner_id=runner_id,
                 chunk_id=fact.text("chunk_id"),
                 lease_id=fact.text("lease_id"),
