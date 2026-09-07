@@ -9,10 +9,27 @@ import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 import platformdirs
 
 _APP_NAME = "blizzard"
+
+
+class IReadSessionStore(Protocol):
+    """The read-only seam ``CliContext`` takes (``bzh:controller-read-only``) — every
+    read-only hub verb loses the ability to rewrite or delete the operator's session."""
+
+    def load(self, hub_url: str) -> str | None: ...
+
+
+class IWriteSessionStore(IReadSessionStore, Protocol):
+    """The full seam only ``login``/``logout`` take — the two verbs that legitimately
+    write the local session store."""
+
+    def save(self, hub_url: str, token: str) -> None: ...
+
+    def delete(self, hub_url: str) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -57,3 +74,11 @@ class SessionFile:
         os.chmod(self.path.parent, stat.S_IRWXU)
         self.path.write_text(json.dumps(sessions))
         os.chmod(self.path, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def _conforms_session_file_read(x: SessionFile) -> IReadSessionStore:
+    return x
+
+
+def _conforms_session_file_write(x: SessionFile) -> IWriteSessionStore:
+    return x

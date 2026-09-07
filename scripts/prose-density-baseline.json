@@ -1085,32 +1085,32 @@
   "blizzard/hub/auth/internal/auth_facts_repository.py": {
    "comments": 1,
    "docstrings": 6,
-   "total": 47
+   "total": 48
   },
   "blizzard/hub/auth/internal/auth_state_repository.py": {
    "comments": 6,
    "docstrings": 6,
-   "total": 80
+   "total": 81
   },
   "blizzard/hub/auth/internal/identity_repository.py": {
    "comments": 4,
    "docstrings": 6,
-   "total": 91
+   "total": 92
   },
   "blizzard/hub/auth/internal/session_repository.py": {
    "comments": 4,
    "docstrings": 6,
-   "total": 79
+   "total": 80
   },
   "blizzard/hub/auth/internal/superuser_bootstrap_repository.py": {
    "comments": 4,
    "docstrings": 7,
-   "total": 55
+   "total": 56
   },
   "blizzard/hub/auth/internal/user_repository.py": {
    "comments": 4,
    "docstrings": 6,
-   "total": 92
+   "total": 93
   },
   "blizzard/hub/auth/models.py": {
    "comments": 1,
@@ -1188,9 +1188,9 @@
    "total": 38
   },
   "blizzard/hub/cli/__init__.py": {
-   "comments": 0,
+   "comments": 2,
    "docstrings": 3,
-   "total": 57
+   "total": 61
   },
   "blizzard/hub/cli/analytics.py": {
    "comments": 11,
@@ -1208,14 +1208,14 @@
    "total": 527
   },
   "blizzard/hub/cli/command.py": {
-   "comments": 0,
-   "docstrings": 6,
-   "total": 63
+   "comments": 1,
+   "docstrings": 9,
+   "total": 75
   },
   "blizzard/hub/cli/context.py": {
    "comments": 3,
-   "docstrings": 25,
-   "total": 207
+   "docstrings": 26,
+   "total": 213
   },
   "blizzard/hub/cli/decision.py": {
    "comments": 0,
@@ -1289,8 +1289,8 @@
   },
   "blizzard/hub/cli/session_store.py": {
    "comments": 0,
-   "docstrings": 4,
-   "total": 59
+   "docstrings": 8,
+   "total": 84
   },
   "blizzard/hub/cli/status.py": {
    "comments": 1,
@@ -4422,7 +4422,7 @@
   "test_auth_repositories.py": {
    "comments": 34,
    "docstrings": 8,
-   "total": 372
+   "total": 373
   },
   "test_auth_service.py": {
    "comments": 14,
@@ -4617,7 +4617,7 @@
   "test_cli_context.py": {
    "comments": 8,
    "docstrings": 4,
-   "total": 125
+   "total": 131
   },
   "test_cli_login_api.py": {
    "comments": 2,
@@ -5286,8 +5286,8 @@
   },
   "test_hub_store_seam.py": {
    "comments": 0,
-   "docstrings": 8,
-   "total": 230
+   "docstrings": 10,
+   "total": 270
   },
   "test_hub_store_utc.py": {
    "comments": 1,
@@ -5380,9 +5380,9 @@
    "total": 1009
   },
   "test_layering.py": {
-   "comments": 9,
-   "docstrings": 32,
-   "total": 359
+   "comments": 10,
+   "docstrings": 35,
+   "total": 385
   },
   "test_lease_auth.py": {
    "comments": 0,

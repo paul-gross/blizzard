@@ -15,7 +15,13 @@ from blizzard.hub.cli.context import CliContext
 
 pytestmark = pytest.mark.unit
 
-_CTX = CliContext(hub_url="http://hub.local:8421")
+
+class _FakeSessionReader:
+    def load(self, hub_url: str) -> str | None:
+        return None
+
+
+_CTX = CliContext(hub_url="http://hub.local:8421", session_reader=_FakeSessionReader())
 
 
 class _FakeResponse:

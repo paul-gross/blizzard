@@ -53,7 +53,7 @@ def _clock() -> FixedClock:
 def _users(engine):  # type: ignore[no-untyped-def]
     """A user repository over the same engine — every ``WorkSourceEntry.registry`` call
     needs one to seat the built-in ``hub`` source's login resolution (blizzard#362)."""
-    return UserRepository(engine, RepoErrorFactory(get_logger("tests.test_work_source")))
+    return UserRepository(hub_store_connections(engine), RepoErrorFactory(get_logger("tests.test_work_source")))
 
 
 def _work_deps(engine):  # type: ignore[no-untyped-def]

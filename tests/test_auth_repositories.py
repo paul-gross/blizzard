@@ -1,7 +1,7 @@
 """The identity-spine SQLAlchemy adapters — real store, injected errors (component
-tier, issue #91). Each adapter is exercised over a migrated sqlite engine, with the
-injected ``RepoErrorFactory`` proven to wrap a raced/unexpected ``IntegrityError``
-into the domain ``RepoError``."""
+tier, issue #91). Each adapter is exercised over the hub-store seam (issue #413) atop
+a migrated sqlite engine, with the injected ``RepoErrorFactory`` proven to wrap a
+raced/unexpected ``IntegrityError`` into the domain ``RepoError``."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import AuthFact, AuthStateEntry, Identity, Session, SuperuserBootstrap, User
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
+from tests.support import hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -31,10 +32,10 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 @pytest.fixture
-def engine(tmp_path: Path):  # type: ignore[no-untyped-def]
+def store(tmp_path: Path):  # type: ignore[no-untyped-def]
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
-    return create_engine_from_url(db_url)
+    return hub_store_connections(create_engine_from_url(db_url))
 
 
 @pytest.fixture
@@ -45,8 +46,8 @@ def errors() -> RepoErrorFactory:
 # --- UserRepository -----------------------------------------------------------
 
 
-def test_user_create_and_get_round_trip(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    repo = UserRepository(engine, errors)
+def test_user_create_and_get_round_trip(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = UserRepository(store, errors)
     user = User(
         user_id="usr_1", username="ada", display_name="Ada", email="ada@example.com", role=Role.ADMIN, created_at=_T0
     )
@@ -61,11 +62,11 @@ def test_user_create_and_get_round_trip(engine, errors: RepoErrorFactory) -> Non
     assert repo.get("usr_missing") is None
 
 
-def test_user_role_round_trips_for_every_role_member(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+def test_user_role_round_trips_for_every_role_member(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
     """A stored row's ``role`` string reads back as the same :class:`Role` member for
     every declared role — no role is silently demoted on read (issue #210's AC; there
     is no migration to prove this against, so the round trip itself is the proof)."""
-    repo = UserRepository(engine, errors)
+    repo = UserRepository(store, errors)
     for i, role in enumerate(Role):
         user = User(
             user_id=f"usr_{i}", username=f"user{i}", display_name=f"User {i}", email=None, role=role, created_at=_T0
@@ -76,8 +77,8 @@ def test_user_role_round_trips_for_every_role_member(engine, errors: RepoErrorFa
         assert fetched.role is role
 
 
-def test_user_create_rejects_a_duplicate_username(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    repo = UserRepository(engine, errors)
+def test_user_create_rejects_a_duplicate_username(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = UserRepository(store, errors)
     repo.create(User(user_id="usr_1", username="ada", display_name="Ada", email=None, role=Role.GUEST, created_at=_T0))
 
     with pytest.raises(RepoError):
@@ -86,8 +87,8 @@ def test_user_create_rejects_a_duplicate_username(engine, errors: RepoErrorFacto
         )
 
 
-def test_user_create_rejects_a_duplicate_email(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    repo = UserRepository(engine, errors)
+def test_user_create_rejects_a_duplicate_email(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = UserRepository(store, errors)
     repo.create(
         User(user_id="usr_1", username="a", display_name="A", email="dup@example.com", role=Role.GUEST, created_at=_T0)
     )
@@ -105,16 +106,16 @@ def test_user_create_rejects_a_duplicate_email(engine, errors: RepoErrorFactory)
         )
 
 
-def test_user_create_allows_multiple_null_emails(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    repo = UserRepository(engine, errors)
+def test_user_create_allows_multiple_null_emails(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = UserRepository(store, errors)
     repo.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
     repo.create(
         User(user_id="usr_2", username="b", display_name="B", email=None, role=Role.GUEST, created_at=_T0)
     )  # no raise
 
 
-def test_user_list_all_returns_every_row_oldest_first(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    repo = UserRepository(engine, errors)
+def test_user_list_all_returns_every_row_oldest_first(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = UserRepository(store, errors)
     later = datetime(2026, 1, 2, tzinfo=UTC)
     repo.create(User(user_id="usr_2", username="b", display_name="B", email=None, role=Role.GUEST, created_at=later))
     repo.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
@@ -122,8 +123,8 @@ def test_user_list_all_returns_every_row_oldest_first(engine, errors: RepoErrorF
     assert [u.user_id for u in repo.list_all()] == ["usr_1", "usr_2"]
 
 
-def test_user_update_role_writes_in_place(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    repo = UserRepository(engine, errors)
+def test_user_update_role_writes_in_place(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = UserRepository(store, errors)
     repo.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
 
     repo.update_role("usr_1", Role.ADMIN)
@@ -136,10 +137,10 @@ def test_user_update_role_writes_in_place(engine, errors: RepoErrorFactory) -> N
 # --- IdentityRepository --------------------------------------------------------
 
 
-def test_identity_link_and_get_round_trip(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    users = UserRepository(engine, errors)
+def test_identity_link_and_get_round_trip(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    users = UserRepository(store, errors)
     users.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
-    identities = IdentityRepository(engine, errors)
+    identities = IdentityRepository(store, errors)
     identity = Identity(provider_name="github", subject="123", user_id="usr_1", handle="ada", created_at=_T0)
     identities.link(identity)
 
@@ -148,10 +149,10 @@ def test_identity_link_and_get_round_trip(engine, errors: RepoErrorFactory) -> N
     assert identities.list_for_user("usr_1") == [identity]
 
 
-def test_identity_link_rejects_a_duplicate_provider_subject_pair(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    users = UserRepository(engine, errors)
+def test_identity_link_rejects_a_duplicate_provider_subject_pair(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    users = UserRepository(store, errors)
     users.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
-    identities = IdentityRepository(engine, errors)
+    identities = IdentityRepository(store, errors)
     identities.link(Identity(provider_name="github", subject="123", user_id="usr_1", handle="ada", created_at=_T0))
 
     with pytest.raises(RepoError):
@@ -160,10 +161,10 @@ def test_identity_link_rejects_a_duplicate_provider_subject_pair(engine, errors:
         )
 
 
-def test_identity_update_handle_refreshes_in_place(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    users = UserRepository(engine, errors)
+def test_identity_update_handle_refreshes_in_place(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    users = UserRepository(store, errors)
     users.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
-    identities = IdentityRepository(engine, errors)
+    identities = IdentityRepository(store, errors)
     identities.link(Identity(provider_name="github", subject="123", user_id="usr_1", handle="ada", created_at=_T0))
 
     identities.update_handle("github", "123", handle="ada-lovelace")
@@ -174,10 +175,10 @@ def test_identity_update_handle_refreshes_in_place(engine, errors: RepoErrorFact
     assert refreshed.created_at == _T0  # untouched
 
 
-def test_identity_distinct_provider_names(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    users = UserRepository(engine, errors)
+def test_identity_distinct_provider_names(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    users = UserRepository(store, errors)
     users.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
-    identities = IdentityRepository(engine, errors)
+    identities = IdentityRepository(store, errors)
     assert identities.distinct_provider_names() == set()
 
     identities.link(Identity(provider_name="github", subject="1", user_id="usr_1", handle="a", created_at=_T0))
@@ -188,10 +189,10 @@ def test_identity_distinct_provider_names(engine, errors: RepoErrorFactory) -> N
 # --- SessionRepository ----------------------------------------------------
 
 
-def test_session_create_get_touch_delete_round_trip(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    users = UserRepository(engine, errors)
+def test_session_create_get_touch_delete_round_trip(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    users = UserRepository(store, errors)
     users.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
-    sessions = SessionRepository(engine, errors)
+    sessions = SessionRepository(store, errors)
     session = Session(id_hash="hash1", user_id="usr_1", created_at=_T0, expires_at=_T0, last_seen_at=_T0)
     sessions.create(session)
 
@@ -210,10 +211,10 @@ def test_session_create_get_touch_delete_round_trip(engine, errors: RepoErrorFac
     assert sessions.get_by_hash("hash1") is None
 
 
-def test_session_create_rejects_a_duplicate_id_hash(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    users = UserRepository(engine, errors)
+def test_session_create_rejects_a_duplicate_id_hash(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    users = UserRepository(store, errors)
     users.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
-    sessions = SessionRepository(engine, errors)
+    sessions = SessionRepository(store, errors)
     sessions.create(Session(id_hash="hash1", user_id="usr_1", created_at=_T0, expires_at=_T0, last_seen_at=_T0))
 
     with pytest.raises(RepoError):
@@ -223,8 +224,8 @@ def test_session_create_rejects_a_duplicate_id_hash(engine, errors: RepoErrorFac
 # --- AuthStateRepository (issue #92) -------------------------------------------
 
 
-def test_auth_state_create_get_consume_round_trip(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    repo = AuthStateRepository(engine, errors)
+def test_auth_state_create_get_consume_round_trip(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = AuthStateRepository(store, errors)
     entry = AuthStateEntry(
         state="st1",
         kind="provider_login",
@@ -244,8 +245,8 @@ def test_auth_state_create_get_consume_round_trip(engine, errors: RepoErrorFacto
     assert repo.get("st1") is None  # single-use: deleted on consume
 
 
-def test_auth_state_consume_is_idempotently_none_the_second_time(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    repo = AuthStateRepository(engine, errors)
+def test_auth_state_consume_is_idempotently_none_the_second_time(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = AuthStateRepository(store, errors)
     repo.create(
         AuthStateEntry(
             state="st1",
@@ -261,9 +262,9 @@ def test_auth_state_consume_is_idempotently_none_the_second_time(engine, errors:
     assert repo.consume("st1") is None
 
 
-def test_auth_state_consume_is_single_use_under_concurrent_callers(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+def test_auth_state_consume_is_single_use_under_concurrent_callers(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
     """Two racing ``consume`` calls on the same state must not both win (issue #92)."""
-    repo = AuthStateRepository(engine, errors)
+    repo = AuthStateRepository(store, errors)
     repo.create(
         AuthStateEntry(
             state="st1",
@@ -296,8 +297,8 @@ def test_auth_state_consume_is_single_use_under_concurrent_callers(engine, error
     assert repo.get("st1") is None
 
 
-def test_auth_state_create_rejects_a_duplicate_state(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    repo = AuthStateRepository(engine, errors)
+def test_auth_state_create_rejects_a_duplicate_state(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = AuthStateRepository(store, errors)
     entry = AuthStateEntry(
         state="st1",
         kind="provider_login",
@@ -315,8 +316,8 @@ def test_auth_state_create_rejects_a_duplicate_state(engine, errors: RepoErrorFa
 # --- AuthFactsRepository (issue #92) -------------------------------------------
 
 
-def test_auth_facts_create_and_list_recent_newest_first(engine) -> None:  # type: ignore[no-untyped-def]
-    repo = AuthFactsRepository(engine)
+def test_auth_facts_create_and_list_recent_newest_first(store) -> None:  # type: ignore[no-untyped-def]
+    repo = AuthFactsRepository(store)
     repo.create(AuthFact(kind="login_failed", actor="1.2.3.4", subject="github", detail="bad state", recorded_at=_T0))
     later = datetime(2026, 1, 2, tzinfo=UTC)
     repo.create(AuthFact(kind="sso_refused", actor="1.2.3.4", subject="oidc-co", detail="mismatch", recorded_at=later))
@@ -325,8 +326,8 @@ def test_auth_facts_create_and_list_recent_newest_first(engine) -> None:  # type
     assert [f.kind for f in recent] == ["sso_refused", "login_failed"]
 
 
-def test_auth_facts_list_recent_respects_limit(engine) -> None:  # type: ignore[no-untyped-def]
-    repo = AuthFactsRepository(engine)
+def test_auth_facts_list_recent_respects_limit(store) -> None:  # type: ignore[no-untyped-def]
+    repo = AuthFactsRepository(store)
     for i in range(3):
         repo.create(AuthFact(kind="login_failed", actor="ip", subject=str(i), detail="", recorded_at=_T0))
     assert len(repo.list_recent(limit=2)) == 2
@@ -335,15 +336,15 @@ def test_auth_facts_list_recent_respects_limit(engine) -> None:  # type: ignore[
 # --- SuperuserBootstrapRepository (issue #94) -----------------------------------
 
 
-def test_superuser_bootstrap_get_is_none_before_any_write(engine) -> None:  # type: ignore[no-untyped-def]
-    repo = SuperuserBootstrapRepository(engine)
+def test_superuser_bootstrap_get_is_none_before_any_write(store) -> None:  # type: ignore[no-untyped-def]
+    repo = SuperuserBootstrapRepository(store)
     assert repo.get() is None
 
 
-def test_superuser_bootstrap_upsert_then_get_round_trips(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    users = UserRepository(engine, errors)
+def test_superuser_bootstrap_upsert_then_get_round_trips(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    users = UserRepository(store, errors)
     users.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
-    repo = SuperuserBootstrapRepository(engine)
+    repo = SuperuserBootstrapRepository(store)
 
     repo.upsert(SuperuserBootstrap(email="alice@example.com", claimed_user_id="usr_1", updated_at=_T0))
 
@@ -351,8 +352,8 @@ def test_superuser_bootstrap_upsert_then_get_round_trips(engine, errors: RepoErr
     assert row == SuperuserBootstrap(email="alice@example.com", claimed_user_id="usr_1", updated_at=_T0)
 
 
-def test_superuser_bootstrap_upsert_replaces_the_singleton_row(engine) -> None:  # type: ignore[no-untyped-def]
-    repo = SuperuserBootstrapRepository(engine)
+def test_superuser_bootstrap_upsert_replaces_the_singleton_row(store) -> None:  # type: ignore[no-untyped-def]
+    repo = SuperuserBootstrapRepository(store)
     repo.upsert(SuperuserBootstrap(email="alice@example.com", claimed_user_id=None, updated_at=_T0))
 
     later = datetime(2026, 1, 2, tzinfo=UTC)
@@ -363,8 +364,8 @@ def test_superuser_bootstrap_upsert_replaces_the_singleton_row(engine) -> None: 
     assert row.email == "bob@example.com"
 
 
-def test_superuser_bootstrap_clear_deletes_the_row(engine) -> None:  # type: ignore[no-untyped-def]
-    repo = SuperuserBootstrapRepository(engine)
+def test_superuser_bootstrap_clear_deletes_the_row(store) -> None:  # type: ignore[no-untyped-def]
+    repo = SuperuserBootstrapRepository(store)
     repo.upsert(SuperuserBootstrap(email="alice@example.com", claimed_user_id=None, updated_at=_T0))
 
     repo.clear()

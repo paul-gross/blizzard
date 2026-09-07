@@ -60,7 +60,7 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, 
     edits = WorkItemEditService(
         items=items, work_refs=chunks.work_refs, record=chunks.record, facts=chunks.facts, clock=clock, delete=delete
     )
-    users = UserRepository(engine, RepoErrorFactory(get_logger("tests.test_hub_work_source")))
+    users = UserRepository(store, RepoErrorFactory(get_logger("tests.test_hub_work_source")))
     resolution = GardenProposalDeliveryResolution(
         closures=GardenProposalClosureStore(store),
         proposals=GardenProposalStore(store),

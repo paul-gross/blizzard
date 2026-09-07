@@ -8,26 +8,27 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Engine, delete, insert, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.models import Session
 from blizzard.hub.auth.sessions import IWriteSessionRepository
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreConnections
 
 
 class SessionRepository:
-    """Read-write session adapter over the hub store engine."""
+    """Read-write session adapter over the hub store."""
 
-    def __init__(self, engine: Engine, errors: RepoErrorFactory) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections, errors: RepoErrorFactory) -> None:
+        self._store = store
         self._errors = errors
 
     # --- reads ----------------------------------------------------------
 
     def get_by_hash(self, id_hash: str) -> Session | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get_by_hash") as conn:
             row = conn.execute(select(s.sessions).where(s.sessions.c.id_hash == id_hash)).one_or_none()
             return self._session(row) if row is not None else None
 
@@ -35,7 +36,7 @@ class SessionRepository:
 
     def create(self, session: Session) -> None:
         try:
-            with self._engine.begin() as conn:
+            with self._store.write("create", expect=(IntegrityError,)) as conn:
                 conn.execute(
                     insert(s.sessions).values(
                         id_hash=session.id_hash,
@@ -51,7 +52,7 @@ class SessionRepository:
             ) from exc
 
     def touch(self, id_hash: str, *, last_seen_at: datetime, expires_at: datetime) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("touch") as conn:
             conn.execute(
                 s.sessions.update()
                 .where(s.sessions.c.id_hash == id_hash)
@@ -59,7 +60,7 @@ class SessionRepository:
             )
 
     def delete(self, id_hash: str) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("delete") as conn:
             conn.execute(delete(s.sessions).where(s.sessions.c.id_hash == id_hash))
 
     # --- helpers ------------------------------------------------------------

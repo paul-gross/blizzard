@@ -1,7 +1,9 @@
 """The hub-store error-wrapping seam (blizzard#413) — a driver fault through every one
-of the ``hub/store/internal/`` adapters raises the wrapped ``HubStoreError``, logged once
-at the collaborator's single wrap site (D1, D4). One parametrized case drives every
-adapter below (D6, ``bzh:case-pins-its-own-name``) rather than one copy each."""
+of the ``hub/store/internal/`` adapters, and every ``hub/auth/internal/`` adapter now
+converged onto it (plan: inject-hub-auth-and-cli-seams), raises the wrapped
+``HubStoreError``, logged once at the collaborator's single wrap site (D1, D4). One
+parametrized case drives every adapter below (D6, ``bzh:case-pins-its-own-name``)
+rather than one copy each."""
 
 from __future__ import annotations
 
@@ -12,11 +14,19 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import structlog
 from sqlalchemy import Engine
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
+from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
+from blizzard.hub.auth.internal.identity_repository import IdentityRepository
+from blizzard.hub.auth.internal.session_repository import SessionRepository
+from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
+from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics.operational import OperationalCriteria
 from blizzard.hub.domain.analytics.queries import EventQueryCriteria
@@ -199,6 +209,36 @@ _ADAPTER_CASES = [
         "high_water",
     ),
     _AdapterCase("WorkItemStore", lambda store: WorkItemStore(store), lambda a: a.get("hub", "1"), "get"),
+    _AdapterCase(
+        "UserRepository",
+        lambda store: UserRepository(store, RepoErrorFactory(structlog.get_logger("test"))),
+        lambda a: a.get("usr_x"),
+        "get",
+    ),
+    _AdapterCase(
+        "IdentityRepository",
+        lambda store: IdentityRepository(store, RepoErrorFactory(structlog.get_logger("test"))),
+        lambda a: a.get("github", "123"),
+        "get",
+    ),
+    _AdapterCase(
+        "SessionRepository",
+        lambda store: SessionRepository(store, RepoErrorFactory(structlog.get_logger("test"))),
+        lambda a: a.get_by_hash("hash_x"),
+        "get_by_hash",
+    ),
+    _AdapterCase(
+        "AuthStateRepository",
+        lambda store: AuthStateRepository(store, RepoErrorFactory(structlog.get_logger("test"))),
+        lambda a: a.get("st_x"),
+        "get",
+    ),
+    _AdapterCase(
+        "AuthFactsRepository", lambda store: AuthFactsRepository(store), lambda a: a.list_recent(), "list_recent"
+    ),
+    _AdapterCase(
+        "SuperuserBootstrapRepository", lambda store: SuperuserBootstrapRepository(store), lambda a: a.get(), "get"
+    ),
 ]
 
 

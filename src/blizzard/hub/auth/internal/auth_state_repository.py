@@ -6,26 +6,27 @@ sees only :class:`~blizzard.hub.auth.models.AuthStateEntry`.
 
 from __future__ import annotations
 
-from sqlalchemy import Engine, delete, insert, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.models import AuthStateEntry
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreConnections
 
 
 class AuthStateRepository:
-    """Read-write ``auth_state`` adapter over the hub store engine."""
+    """Read-write ``auth_state`` adapter over the hub store."""
 
-    def __init__(self, engine: Engine, errors: RepoErrorFactory) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections, errors: RepoErrorFactory) -> None:
+        self._store = store
         self._errors = errors
 
     # --- reads ----------------------------------------------------------
 
     def get(self, state: str) -> AuthStateEntry | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get") as conn:
             row = conn.execute(select(s.auth_state).where(s.auth_state.c.state == state)).one_or_none()
             return self._entry(row) if row is not None else None
 
@@ -33,7 +34,7 @@ class AuthStateRepository:
 
     def create(self, entry: AuthStateEntry) -> None:
         try:
-            with self._engine.begin() as conn:
+            with self._store.write("create", expect=(IntegrityError,)) as conn:
                 conn.execute(
                     insert(s.auth_state).values(
                         state=entry.state,
@@ -54,7 +55,7 @@ class AuthStateRepository:
     def consume(self, state: str) -> AuthStateEntry | None:
         # DELETE ... RETURNING keeps the delete atomic with the read (pinned by
         # tests/test_auth_repositories.py::test_auth_state_consume_is_single_use_under_concurrent_callers).
-        with self._engine.begin() as conn:
+        with self._store.write("consume") as conn:
             row = conn.execute(
                 delete(s.auth_state).where(s.auth_state.c.state == state).returning(*s.auth_state.c)
             ).one_or_none()

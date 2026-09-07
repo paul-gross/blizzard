@@ -6,7 +6,7 @@ sees only :class:`~blizzard.hub.auth.models.User`.
 
 from __future__ import annotations
 
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.auth_core import Role
@@ -14,39 +14,40 @@ from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.users import IWriteUserRepository
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreConnections
 
 
 class UserRepository:
-    """Read-write user adapter over the hub store engine."""
+    """Read-write user adapter over the hub store."""
 
-    def __init__(self, engine: Engine, errors: RepoErrorFactory) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections, errors: RepoErrorFactory) -> None:
+        self._store = store
         self._errors = errors
 
     # --- reads ----------------------------------------------------------
 
     def get(self, user_id: str) -> User | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get") as conn:
             row = conn.execute(select(s.users).where(s.users.c.id == user_id)).one_or_none()
             return self._user(row) if row is not None else None
 
     def get_by_username(self, username: str) -> User | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get_by_username") as conn:
             row = conn.execute(select(s.users).where(s.users.c.username == username)).one_or_none()
             return self._user(row) if row is not None else None
 
     def get_by_email(self, email: str) -> User | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get_by_email") as conn:
             row = conn.execute(select(s.users).where(s.users.c.email == email)).one_or_none()
             return self._user(row) if row is not None else None
 
     def username_exists(self, username: str) -> bool:
-        with self._engine.connect() as conn:
+        with self._store.read("username_exists") as conn:
             row = conn.execute(select(s.users.c.id).where(s.users.c.username == username)).one_or_none()
             return row is not None
 
     def list_all(self) -> list[User]:
-        with self._engine.connect() as conn:
+        with self._store.read("list_all") as conn:
             rows = conn.execute(select(s.users).order_by(s.users.c.created_at)).all()
             return [self._user(row) for row in rows]
 
@@ -54,7 +55,7 @@ class UserRepository:
 
     def create(self, user: User) -> None:
         try:
-            with self._engine.begin() as conn:
+            with self._store.write("create", expect=(IntegrityError,)) as conn:
                 conn.execute(
                     insert(s.users).values(
                         id=user.user_id,
@@ -71,7 +72,7 @@ class UserRepository:
             ) from exc
 
     def update_role(self, user_id: str, role: Role) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("update_role") as conn:
             conn.execute(s.users.update().where(s.users.c.id == user_id).values(role=role.value))
 
     # --- helpers ------------------------------------------------------------

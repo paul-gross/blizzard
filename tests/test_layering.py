@@ -14,6 +14,7 @@ _FOUNDATION_DIR = _SRC_DIR / "foundation"
 _HUB_DIR = _SRC_DIR / "hub"
 _RUNNER_DIR = _SRC_DIR / "runner"
 _HUB_STORE_INTERNAL_DIR = _HUB_DIR / "store" / "internal"
+_HUB_STORE_ERRORS_FILE = _HUB_DIR / "store" / "errors.py"
 _RUNNER_STORE_DIR = _RUNNER_DIR / "store"
 _RUNNER_DOMAIN_DIR = _RUNNER_DIR / "domain"
 
@@ -136,14 +137,12 @@ def _bare_engine_accesses(root: Path, *, exempt: frozenset[Path] = frozenset()) 
     return violations
 
 
-def test_hub_store_internal_acquires_no_connection_outside_the_seam() -> None:
-    """D5 (blizzard#413): every ``hub/store/internal/`` adapter takes the injected
-    ``HubStoreConnections`` collaborator in place of ``Engine`` — no adapter method may
-    reach past it to acquire a connection directly."""
-    violations = _bare_engine_accesses(_HUB_STORE_INTERNAL_DIR)
-    assert not violations, (
-        f"E — hub/store/internal/ must route every connection through HubStoreConnections: {violations}"
-    )
+def test_hub_acquires_no_connection_outside_the_store_seam() -> None:
+    """D5 (blizzard#413), widened hub-wide (D2): every adapter under ``hub/`` takes
+    ``HubStoreConnections`` in place of ``Engine`` — none may acquire a connection
+    directly. Retires the narrower ``hub/store/internal/``-only assertion this replaces."""
+    violations = _bare_engine_accesses(_HUB_DIR, exempt=frozenset({_HUB_STORE_ERRORS_FILE}))
+    assert not violations, f"E — hub/ must route every connection through HubStoreConnections: {violations}"
 
 
 _EVENT_LOG_SERVICE_FILE = _HUB_DIR / "domain" / "event_log.py"
@@ -311,6 +310,7 @@ _COMPOSITION_ROOTS = frozenset(
     {
         _HUB_DIR / "app.py",
         _HUB_DIR / "composition.py",
+        _HUB_DIR / "cli" / "__init__.py",
         _RUNNER_DIR / "app.py",
         _RUNNER_DIR / "loop" / "build.py",
         _RUNNER_DIR / "cli" / "runtime.py",
@@ -322,7 +322,7 @@ _GATED_COMPOSITION_NAMES = ("build_stores", "build_stores_and_connections", "Cla
 
 
 def test_build_stores_and_claude_code_adapter_are_named_only_at_a_composition_root() -> None:
-    """L (plan: structural gates over runner wiring, D1, D2): only the six declared
+    """L (plan: structural gates over runner wiring, D1, D2): only the seven declared
     composition roots may import ``build_stores``/``build_stores_and_connections``/
     ``ClaudeCodeAdapter`` — every other collaborator takes the bundle or Protocol."""
     violations: list[str] = []
@@ -337,6 +337,32 @@ def test_build_stores_and_claude_code_adapter_are_named_only_at_a_composition_ro
             if hit:
                 violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
     assert not violations, f"L — only a declared composition root may import {_GATED_COMPOSITION_NAMES}: {violations}"
+
+
+_HUB_CLI_SESSION_STORE_FILE = _HUB_DIR / "cli" / "session_store.py"
+
+
+def _session_file_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:
+    violations: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        if path in exempt:
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            names_session_file = (isinstance(node, ast.Name) and node.id == "SessionFile") or (
+                isinstance(node, ast.Attribute) and node.attr == "SessionFile"
+            )
+            if names_session_file:
+                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} names SessionFile")  # type: ignore[union-attr]
+    return violations
+
+
+def test_session_file_is_named_only_at_its_composition_root() -> None:
+    """D7: ``SessionFile`` is named only at ``hub/cli/__init__.py`` — every other module
+    takes the read/write Protocol seam, however the class is reached, never the concrete
+    name itself. ``session_store.py`` (its declaring module) is exempt."""
+    violations = _session_file_accesses(_SRC_DIR, exempt=_COMPOSITION_ROOTS | frozenset({_HUB_CLI_SESSION_STORE_FILE}))
+    assert not violations, f"N — SessionFile must be named only at its composition root: {violations}"
 
 
 _RUNNER_API_DIR = _RUNNER_DIR / "api"
