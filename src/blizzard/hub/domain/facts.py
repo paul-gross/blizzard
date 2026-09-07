@@ -17,11 +17,11 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
-from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunks.usage import IWriteChunkUsageRepository
+from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.registry import LEGACY_ANTHROPIC_SLUG, FleetService
 from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import ChunkFacts
@@ -148,7 +148,7 @@ class FactIngestService:
         escalations: IWriteChunkEscalationsRepository,
         questions: IWriteChunkQuestionsRepository,
         usage: IWriteChunkUsageRepository,
-        events: IWriteChunkEventsRepository,
+        events: EventLogService,
         fleet: FleetService,
         clock: IClock,
     ) -> None:
@@ -267,7 +267,7 @@ class FactIngestService:
         if kind == EVENT_RECORDED:
             # Neither epoch-fenced nor route-token-gated (issue #125): an event from a fenced-out or
             # dying worker is exactly the signal this log exists to surface. `chunk_id` is optional.
-            event_id = self._events.record_event(
+            event_id = self._events.record(
                 severity=fact.require_text("severity"),
                 kind=fact.require_text("kind"),
                 runner_id=runner_id,

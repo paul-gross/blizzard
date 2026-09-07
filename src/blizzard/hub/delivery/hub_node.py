@@ -24,9 +24,9 @@ from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
-from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.graph import (
     DEFAULT_BOUNCE_CAP,
     HUB_DEFAULT_FAILURE_CHOICE,
@@ -288,7 +288,7 @@ class HubNodeExecutor:
         delivery: IWriteChunkDeliveryRepository,
         hub_exec: IWriteChunkHubExecRepository,
         escalations: IWriteChunkEscalationsRepository,
-        events: IWriteChunkEventsRepository,
+        events: EventLogService,
         runner: IHubCommandRunner,
         workdir: IHubWorkdir,
         clock: IClock,
@@ -560,7 +560,7 @@ class HubNodeExecutor:
                 at=now,
             )
             if announced:
-                self._events.record_event(
+                self._events.record(
                     # Never a fourth severity — the feed ranks only these three (#125).
                     severity="critical",
                     kind=_EVENT_UNROUTABLE_OUTCOME,

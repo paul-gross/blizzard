@@ -65,7 +65,7 @@ class IngestBroadcast:
         elif fact.kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
             self.services.events.publish_runner_changed(self.batch.runner_id, kind="external-usage")
         elif fact.kind == EVENT_RECORDED:
-            self._event_logged(fact, row_id)
+            pass  # already published by EventLogService.record, ahead of the ack this reads
         else:
             chunk_id = fact.payload.get("chunk_id")
             if isinstance(chunk_id, str):
@@ -82,16 +82,6 @@ class IngestBroadcast:
             by=by if isinstance(by, str) else "operator",
             reason=reason if isinstance(reason, str) else None,
             key=f"runner_local_pause_facts:{row_id}" if row_id is not None else None,
-        )
-
-    def _event_logged(self, fact: RunnerFact, row_id: int | None) -> None:
-        chunk_id = fact.payload.get("chunk_id")
-        self.services.events.publish_event_logged(
-            severity=str(fact.payload.get("severity", "")),
-            kind=str(fact.payload.get("kind", "")),
-            chunk_id=chunk_id if isinstance(chunk_id, str) else None,
-            runner_id=self.batch.runner_id,
-            key=f"event_log:{row_id}" if row_id is not None else None,
         )
 
     def _chunk_changed(self, fact: RunnerFact, row_id: int | None, chunk_id: str) -> None:
