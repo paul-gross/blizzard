@@ -21,11 +21,13 @@ class IReadChunkEventsRepository(Protocol):
         since: datetime | None = None,
         limit: int = DEFAULT_EVENT_LIST_LIMIT,
     ) -> list[EventRow]:
-        """The operational event log, newest-first (``recorded_at`` desc, ``id`` desc
-        tiebreak), filtered by whichever of ``severity``/``runner_id``/``chunk_id``/
-        ``since`` is given and bounded by ``limit`` — ``GET /api/events``'s own-table
-        half (issue #125); the caller unifies it with ``list_open_escalations`` via
-        :class:`~blizzard.hub.domain.work.EventFeed`."""
+        """The operational event log, most-severe-then-newest first (per
+        ``blizzard-context:/domain/operations.md``'s severity ranking, ``recorded_at``
+        desc, ``id`` desc tiebreak within a band), filtered by whichever of
+        ``severity``/``runner_id``/``chunk_id``/``since`` is given and bounded by
+        ``limit`` — the cap keeps the most severe rows, not merely the newest.
+        ``GET /api/events``'s own-table half (issue #125); the caller unifies it with
+        ``list_open_escalations`` via :class:`~blizzard.hub.domain.work.EventFeed`."""
         ...
 
     def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:

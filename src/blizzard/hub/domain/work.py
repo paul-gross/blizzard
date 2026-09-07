@@ -514,7 +514,11 @@ class EscalationOpen:
 #: Default cap on ``list_events`` — an unbounded read of an append-only table is an unbounded response.
 DEFAULT_EVENT_LIST_LIMIT = 200
 
-_SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
+#: The closed severity vocabulary's sort order — critical first, an out-of-vocabulary
+#: value sinking below every declared one. The single source both :class:`EventFeed`'s
+#: in-memory sort and the store adapter's SQL ordering derive from
+#: (``blizzard-context:/domain/operations.md``).
+SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
 
 
 @dataclass(frozen=True)
@@ -532,7 +536,7 @@ class EventFeed:
         merged = [*events, *projected]
         return cls(
             sorted(
-                merged, key=lambda e: (_SEVERITY_RANK.get(e.severity, len(_SEVERITY_RANK)), -e.recorded_at.timestamp())
+                merged, key=lambda e: (SEVERITY_RANK.get(e.severity, len(SEVERITY_RANK)), -e.recorded_at.timestamp())
             )
         )
 

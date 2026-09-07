@@ -279,15 +279,33 @@ describe('FleetLiveUpdates', () => {
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'running' }), '1');
-    source.emitNamed('queue-changed', JSON.stringify({}), '2');
+    // queue-changed carries no durable fact and is dropped from the ring entirely — see
+    // 'drops queue-changed from the ring, but still invalidates on it' below.
+    source.emitNamed('question-asked', JSON.stringify({ chunk_id: 'ch_a' }), '2');
 
     const log = live.log();
     expect(log).toHaveLength(2);
     expect(log[0].type).toBe('chunk-changed');
     expect(log[0].data.chunk_id).toBe('ch_a');
-    expect(log[1].type).toBe('queue-changed');
+    expect(log[1].type).toBe('question-asked');
     // Monotonic client keys for a stable render track.
     expect(log[1].seq).toBeGreaterThan(log[0].seq);
+  });
+
+  it('drops queue-changed from the ring, but still invalidates on it', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const live = TestBed.inject(FleetLiveUpdates);
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('queue-changed', JSON.stringify({}));
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+
+    expect(live.log()).toHaveLength(0);
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toContainEqual(['hub', 'queue']);
+    expect(keys).toContainEqual(['hub', 'backlog']);
   });
 
   it('re-GETs the whole tree on the confirmed reopen, not on drop detection (D1)', () => {

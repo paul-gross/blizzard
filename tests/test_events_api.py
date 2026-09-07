@@ -106,6 +106,55 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     assert len(_events(hub, limit=1)) == 1
 
 
+def test_events_feed_cap_keeps_the_most_severe_rows(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    store = chunk_stores(hub.engine, hub.clock)
+    t0 = hub.clock.now()
+    with hub.engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=t0)
+        seed_chunk(conn, "ch_a", graph_id="gr_1", at=t0)
+
+    def at(sec: int):  # type: ignore[no-untyped-def]
+        return t0 + timedelta(seconds=sec)
+
+    store.events.record_event(
+        severity="critical",
+        kind="worker-lost",
+        runner_id="r1",
+        chunk_id="ch_a",
+        lease_id=None,
+        node_name=None,
+        message="old-critical",
+        detail=None,
+        at=at(1),
+    )
+    for sec in (2, 3, 4, 5):
+        store.events.record_event(
+            severity="warning",
+            kind="attempt-failed",
+            runner_id="r1",
+            chunk_id="ch_a",
+            lease_id=None,
+            node_name=None,
+            message=f"warning-{sec}",
+            detail=None,
+            at=at(sec),
+        )
+
+    # End to end through the API: a limit=3 read over 5 rows still surfaces the oldest
+    # critical ahead of the two newest warnings, and the existing runner/chunk filters
+    # still compose with the severity-first ordering.
+    feed = _events(hub, limit=3)
+    assert [e["message"] for e in feed] == ["old-critical", "warning-5", "warning-4"]
+    assert [e["message"] for e in _events(hub, runner_id="r1")] == [
+        "old-critical",
+        "warning-5",
+        "warning-4",
+        "warning-3",
+        "warning-2",
+    ]
+
+
 def test_malformed_since_422s(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.get("/api/events", params={"since": "not-a-date"})

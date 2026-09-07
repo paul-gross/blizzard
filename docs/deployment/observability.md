@@ -21,8 +21,9 @@ or `done`.
 ## Reading the feed
 
 `GET /api/events` returns the log newest-and-most-severe first, filterable by severity, runner_id, chunk_id, and since,
-with a bounded default page. The board's Events tab renders the feed live over the SSE spine (`/api/events/stream`),
-each row linking to its chunk.
+with a bounded default page — the cap keeps the most severe rows, so a `critical` survives it ahead of any less severe
+row, however much older. The board's Events tab renders the feed live over the SSE spine (`/api/events/stream`), each
+row linking to its chunk.
 
 `GET /api/activity` is a second read the board's Event log rail backfills from on page load, merging three durable
 sources — chunk status changes, the event log, and runner pause/resume — newest-first, bounded by `since` (default 24

@@ -132,6 +132,67 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
     assert [e.message for e in store.events.list_events(limit=1)] == ["c"]
 
 
+def test_list_events_cap_keeps_the_most_severe_rows(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.events.record_event(
+        severity="critical",
+        kind="worker-lost",
+        runner_id="r1",
+        chunk_id="ch_a",
+        lease_id=None,
+        node_name=None,
+        message="old-critical",
+        detail=None,
+        at=_at(1),
+    )
+    for sec in (2, 3, 4, 5):
+        store.events.record_event(
+            severity="warning",
+            kind="attempt-failed",
+            runner_id="r1",
+            chunk_id="ch_a",
+            lease_id=None,
+            node_name=None,
+            message=f"warning-{sec}",
+            detail=None,
+            at=_at(sec),
+        )
+
+    # Recency alone would drop "old-critical" (t1) for a limit=3 read over 5 rows; the
+    # cap must rank by severity first, so it survives ahead of the newer warnings.
+    assert [e.message for e in store.events.list_events(limit=3)] == ["old-critical", "warning-5", "warning-4"]
+
+
+def test_list_events_unknown_severity_sinks_below_declared_ones_through_the_store_query(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.events.record_event(
+        severity="mystery",
+        kind="unrecognized",
+        runner_id="r1",
+        chunk_id="ch_a",
+        lease_id=None,
+        node_name=None,
+        message="unknown",
+        detail=None,
+        at=_at(5),
+    )
+    store.events.record_event(
+        severity="info",
+        kind="attempt-abandoned",
+        runner_id="r1",
+        chunk_id="ch_a",
+        lease_id=None,
+        node_name=None,
+        message="info",
+        detail=None,
+        at=_at(1),
+    )
+
+    # "unknown" is newest by recorded_at but outside the declared vocabulary, so it must
+    # sink below "info" in the SQL ordering itself, not only in the in-memory feed sort.
+    assert [e.message for e in store.events.list_events()] == ["info", "unknown"]
+
+
 def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
     with engine.begin() as conn:  # seed the requeue and stop cases' chunks

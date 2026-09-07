@@ -14,11 +14,11 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection, case, select
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
-from blizzard.hub.domain.work import DEFAULT_EVENT_LIST_LIMIT, ActivityRow, EventRow
+from blizzard.hub.domain.work import DEFAULT_EVENT_LIST_LIMIT, SEVERITY_RANK, ActivityRow, EventRow
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 
@@ -53,7 +53,16 @@ class ChunkEventsStore:
                 stmt = stmt.where(s.event_log.c.chunk_id == chunk_id)
             if since is not None:
                 stmt = stmt.where(s.event_log.c.recorded_at >= since)
-            stmt = stmt.order_by(s.event_log.c.recorded_at.desc(), s.event_log.c.id.desc()).limit(limit)
+            # Ranked from the domain's own vocabulary (`SEVERITY_RANK`), not restated
+            # here, so a severity outside it sinks below every declared one — the cap
+            # keeps the most severe rows, not merely the newest.
+            severity_rank = case(
+                *[(s.event_log.c.severity == severity, rank) for severity, rank in SEVERITY_RANK.items()],
+                else_=len(SEVERITY_RANK),
+            )
+            stmt = stmt.order_by(severity_rank.asc(), s.event_log.c.recorded_at.desc(), s.event_log.c.id.desc()).limit(
+                limit
+            )
             return [
                 EventRow(
                     id=row.id,
