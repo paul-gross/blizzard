@@ -32,7 +32,6 @@ def _node(*, produces: list[str]) -> Node:
         judged_by=JudgedBy.WORKER,
         retries_max=None,
         retries_exhausted=None,
-        mode=None,
     )
 
 

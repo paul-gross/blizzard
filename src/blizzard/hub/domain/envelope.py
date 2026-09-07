@@ -201,7 +201,6 @@ class Envelope:
             produces=[ProducesEntry(name=p.name, kind=p.kind) for p in node.produces],
             proposes_work_items=node.proposes_work_items,
             retries_max=node.retries_max,
-            mode=node.mode,
             choices=[
                 EnvelopeChoice(name=c.name, description=c.description, requires_checks=c.requires_checks)
                 for c in node.choices

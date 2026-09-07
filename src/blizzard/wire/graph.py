@@ -106,7 +106,6 @@ class GraphNodeView(BaseModel):
     judged_by: str
     retries_max: int | None = None
     retries_exhausted: str | None = None
-    mode: str | None = None
     prompt: str | None = None
     checks: list[str] = []
     # Where this node's checks run, and the per-check timeout (issue #114).

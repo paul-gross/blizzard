@@ -54,7 +54,6 @@ def _deliver_node(node_id: str = _NODE_ID, *, graph_id: str = "gr_delivery") -> 
         judged_by=JudgedBy.WORKER,
         retries_max=None,
         retries_exhausted=None,
-        mode=None,
     )
 
 

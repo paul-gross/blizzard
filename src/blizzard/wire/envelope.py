@@ -109,7 +109,6 @@ class NodeConfig(BaseModel):
     # Whether this node-step's completion may carry proposed work items (D4, D6).
     proposes_work_items: bool = False
     retries_max: int | None = None
-    mode: str | None = None
     choices: list[EnvelopeChoice] = []
 
 

@@ -286,7 +286,6 @@ class NodeDoc(NodeShape[RunStepDoc]):
     session: SessionMode
     retries_max: int | None
     retries_exhausted: str | None
-    mode: str | None
     judgement: JudgementDoc | None
     # The kick-back cap (#64) — ``None`` accepts ``DEFAULT_BOUNCE_CAP``.
     bounce_cap: int | None = None
@@ -330,7 +329,6 @@ class NodeDoc(NodeShape[RunStepDoc]):
             session=session.mode,
             retries_max=retries_max,
             retries_exhausted=retries_exhausted,
-            mode=body.text("mode"),
             bounce_cap=bounce_cap,
             judgement=JudgementDoc.of(body.get("judgement")),
             run=run,
@@ -530,7 +528,6 @@ class Node(NodeShape[RunStep]):
     judged_by: JudgedBy
     retries_max: int | None
     retries_exhausted: str | None
-    mode: str | None
     judgement_prompt: str | None = None
     choices: list[Choice] = field(default_factory=list)
     # The kick-back cap (#64) — ``None`` accepts ``DEFAULT_BOUNCE_CAP``.

@@ -3744,17 +3744,6 @@
             ],
             "title": "Judgement Prompt"
           },
-          "mode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mode"
-          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -4577,17 +4566,6 @@
           },
           "judged_by": {
             "$ref": "#/components/schemas/JudgedBy"
-          },
-          "mode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mode"
           },
           "node_id": {
             "title": "Node Id",

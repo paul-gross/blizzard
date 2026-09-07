@@ -55,7 +55,6 @@ graph_nodes = Table(
     Column("judged_by", String, nullable=False),  # worker | human
     Column("retries_max", Integer, nullable=True),
     Column("retries_exhausted", String, nullable=True),  # escalate
-    Column("mode", String, nullable=True),  # deliver hub node: merge-to-main | open-pr
     Column("produces", Text, nullable=True),  # JSON list of artifact names; e.g. review's `review-findings`
     Column("checks", Text, nullable=True),  # JSON list of check commands, runner-run at worker exit (#114)
     # Where the runner runs this node's ``checks:`` and the per-check timeout (#114) — null
