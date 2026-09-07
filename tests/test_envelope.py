@@ -47,7 +47,6 @@ def _node() -> Node:
         judged_by=JudgedBy.WORKER,
         retries_max=2,
         retries_exhausted="escalate",
-        mode=None,
         judgement_prompt="render your verdict",
         choices=[Choice("cho_1", "pass", "it works"), Choice("cho_2", "fail", "it does not")],
     )
@@ -195,7 +194,6 @@ def test_hub_node_has_no_judgement_prompt() -> None:
         judged_by=JudgedBy.WORKER,
         retries_max=None,
         retries_exhausted=None,
-        mode="merge-to-main",
         judgement_prompt=None,
         choices=[],
     )

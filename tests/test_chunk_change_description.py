@@ -32,7 +32,6 @@ def _node(node_id: str, name: str, *, graph_id: str = "gr_1") -> Node:
         judged_by=JudgedBy.WORKER,
         retries_max=None,
         retries_exhausted=None,
-        mode=None,
     )
 
 

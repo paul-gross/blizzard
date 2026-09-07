@@ -2454,10 +2454,6 @@ export type GraphNodeView = {
      */
     judgement_prompt?: string | null;
     /**
-     * Mode
-     */
-    mode?: string | null;
-    /**
      * Name
      */
     name: string;
@@ -2992,10 +2988,6 @@ export type NodeConfig = {
     choices?: Array<EnvelopeChoice>;
     executor: Executor;
     judged_by: JudgedBy;
-    /**
-     * Mode
-     */
-    mode?: string | null;
     /**
      * Node Id
      */

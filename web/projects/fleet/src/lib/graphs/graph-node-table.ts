@@ -5,7 +5,7 @@ import { KitBadge } from '../kit/kit-badge';
 import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-node';
 
 /**
- * The graph detail's node table (executor, session, judged-by, retries, mode,
+ * The graph detail's node table (executor, session, judged-by, retries,
  * checks, produces) — split out of `graph-detail.ts` (issue #143) so the
  * container stays under the `web:lint` line cap. Presentational
  * only: `nodes`/`entryNodeId` are plain inputs, no query/mutation injection

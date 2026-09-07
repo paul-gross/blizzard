@@ -124,7 +124,7 @@ def test_reify_carries_an_authored_bounce_cap() -> None:
         {
             "name": "t",
             "entry": "deliver",
-            "nodes": {"deliver": {"executor": "hub", "mode": "merge-to-main", "bounce_cap": 3}},
+            "nodes": {"deliver": {"executor": "hub", "bounce_cap": 3}},
         }
     )
     graph = Reification.of(doc, _clock()).graph

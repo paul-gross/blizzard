@@ -47,7 +47,6 @@ const DEFAULT_LIKE: GraphView = {
       executor: 'hub',
       session: 'fresh',
       judged_by: 'none',
-      mode: 'merge-to-main',
       choices: [
         { choice_id: 'c_landed', name: 'landed', description: '' },
         { choice_id: 'c_conflict', name: 'conflict', description: '' },
@@ -426,7 +425,6 @@ describe('layoutGraph', () => {
       const node = soloNode({
         session: 'resume',
         retries_max: 2,
-        mode: 'merge-to-main',
         produces: [{ name: 'plan' }, { name: 'retrospective' }, { name: 'review-findings' }],
       });
 

@@ -17,7 +17,7 @@ import { injectHubGraphQuery } from './graphs.query';
 /**
  * The graph explorer's **detail** view — one minted graph's immutable structure,
  * rendered in full: the entry node, a node table (executor, session, judged-by,
- * retries, mode, checks, produces), and the graph-level session declarations (issue
+ * retries, checks, produces), and the graph-level session declarations (issue
  * #144). Consumes
  * `injectHubGraphQuery` reactively over the `graphId` input, which the host page
  * binds to the `/graphs/:graphId` route param — refresh-safe and deep-linkable by

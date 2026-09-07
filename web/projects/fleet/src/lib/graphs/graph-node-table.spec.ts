@@ -11,7 +11,6 @@ const NODES: readonly GraphNodeView[] = [
     executor: 'claude',
     session: 'fresh',
     judged_by: 'reviewer',
-    mode: 'edit',
     checks: ['lint', 'test'],
     produces: [{ name: 'branch' }],
     retries_max: 3,

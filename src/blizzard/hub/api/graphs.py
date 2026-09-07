@@ -52,7 +52,6 @@ def _node_view(node: Node) -> GraphNodeView:
         judged_by=node.judged_by.value,
         retries_max=node.retries_max,
         retries_exhausted=node.retries_exhausted,
-        mode=node.mode,
         prompt=node.prompt,
         checks=list(node.checks),
         checks_cwd=node.checks_cwd,

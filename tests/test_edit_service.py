@@ -62,7 +62,6 @@ def _named_node(node_id: str, name: str) -> Node:
         judged_by=JudgedBy.WORKER,
         retries_max=None,
         retries_exhausted=None,
-        mode=None,
     )
 
 

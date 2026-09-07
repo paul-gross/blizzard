@@ -6,7 +6,6 @@
       <th>Session</th>
       <th>Judged by</th>
       <th>Retries</th>
-      <th>Mode</th>
       <th>Checks</th>
       <th>Produces</th>
     </tr>
@@ -26,7 +25,6 @@
         <td>{{ sessionLabel(node) }}</td>
         <td>{{ node.judged_by }}</td>
         <td>{{ retriesLabel(node) }}</td>
-        <td>{{ node.mode ?? '—' }}</td>
         <td>{{ listOrDash(node.checks) }}</td>
         <td>{{ listOrDash(producesNames(node)) }}</td>
       </tr>

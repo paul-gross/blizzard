@@ -46,7 +46,6 @@ _NODE = Node(
     judged_by=JudgedBy.WORKER,
     retries_max=None,
     retries_exhausted=None,
-    mode=None,
 )
 
 

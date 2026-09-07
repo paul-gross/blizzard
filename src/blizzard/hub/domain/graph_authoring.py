@@ -115,7 +115,6 @@ class Reification:
             judged_by=nd.judgement.by if nd.judgement is not None else JudgedBy.WORKER,
             retries_max=nd.retries_max,
             retries_exhausted=nd.retries_exhausted,
-            mode=nd.mode,
             judgement_prompt=nd.judgement.prompt if nd.judgement is not None else None,
             choices=[
                 Choice(

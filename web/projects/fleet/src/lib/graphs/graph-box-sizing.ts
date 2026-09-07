@@ -38,7 +38,7 @@ export const LABEL_HEIGHT = 20;
 const META_SEPARATOR = ' · ';
 
 /** The kinds of text the diagram sizes boxes around — a node's id/name, its
- * executor badge, its meta line (session/judged-by/mode/retries/produces), and a
+ * executor badge, its meta line (session/judged-by/retries/produces), and a
  * choice-id edge label. Distinct kinds so a real measurer can pick the matching
  * font/weight/size without the pure layout module knowing anything about fonts. */
 export type TextKind = 'name' | 'badge' | 'meta' | 'label';
@@ -57,7 +57,6 @@ function nodeMetaSegments(node: GraphNodeView): string[] {
   const meta: string[] = [];
   if (node.session) meta.push(sessionLabel(node));
   if (node.judged_by === 'human') meta.push('judged: human');
-  if (node.mode) meta.push(node.mode);
   if (node.retries_max !== undefined && node.retries_max !== null) meta.push(`retries ${node.retries_max}`);
   const produces = producesNames(node);
   if (produces && produces.length > 0) {

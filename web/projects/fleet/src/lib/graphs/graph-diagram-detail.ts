@@ -80,7 +80,6 @@ export class GraphDiagramDetail {
       { label: 'Executor', value: node.executor },
       { label: 'Session', value: sessionLabel(node) },
       { label: 'Judged by', value: node.judged_by },
-      { label: 'Mode', value: node.mode ?? '—' },
       { label: 'Retries', value: retriesLabel(node) },
       { label: 'Checks', value: listOrDash(node.checks) },
       { label: 'Produces', value: listOrDash(producesNames(node)) },

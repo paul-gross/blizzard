@@ -42,7 +42,6 @@ def _node() -> Node:
         judged_by=JudgedBy.WORKER,
         retries_max=2,
         retries_exhausted="escalate",
-        mode=None,
         judgement_prompt=None,
         choices=[],
     )
