@@ -55,15 +55,18 @@ class RunnerBrake:
 
     def set(self) -> RunnerView:
         """Write the fact, publish the frame, and read the runner back; 404 on an unknown one."""
-        fact_id = self.services.fleet.set_paused(self.runner_id, paused=self.paused, by=self.by)
-        if fact_id is None:
+        registration = self.services.registry.get_runner(self.runner_id)
+        if registration is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {self.runner_id}")
+        fact_id = self.services.fleet.set_paused(registration, paused=self.paused, by=self.by)
         self.services.events.publish_runner_changed(
             self.runner_id, kind=self.kind, by=self.by, key=f"runner_pause_facts:{fact_id}"
         )
-        liveness = self.services.fleet.get_liveness(self.runner_id)
-        assert liveness is not None  # just set_paused succeeded, so the runner exists
-        return runner_view(liveness, now=self.services.clock.now())
+        # Re-resolved after the write (not the pre-write `registration`) so the response
+        # reports the brake this call just set, not its pre-write value.
+        refreshed = self.services.registry.get_runner(self.runner_id)
+        assert refreshed is not None  # just set_paused succeeded, so the runner exists
+        return runner_view(self.services.fleet.get_liveness(refreshed), now=self.services.clock.now())
 
 
 class Paused(RunnerBrake):
@@ -140,10 +143,10 @@ def enroll_runner(runner_id: str, services: Annotated[HubServices, Depends(get_s
 
     Requires an existing registration (404 otherwise): enrollment is a deliberate act on
     a known runner, never a trust-on-first-use grant to an unregistered name."""
-    liveness = services.fleet.get_liveness(runner_id)
-    if liveness is None:
+    registration = services.registry.get_runner(runner_id)
+    if registration is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
-    token = services.enrollment.enroll(liveness.registration)
+    token = services.enrollment.enroll(registration)
     return RunnerEnrollmentResponse(runner_id=runner_id, token=token)
 
 
@@ -158,10 +161,10 @@ def list_runners(services: Annotated[HubServices, Depends(get_services)]) -> Run
 def get_runner(runner_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RunnerView:
     """One runner's derived liveness + paused state — the operator's detail read,
     symmetric with the list. 404 on unknown."""
-    liveness = services.fleet.get_liveness(runner_id)
-    if liveness is None:
+    registration = services.registry.get_runner(runner_id)
+    if registration is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
-    return runner_view(liveness, now=services.clock.now())
+    return runner_view(services.fleet.get_liveness(registration), now=services.clock.now())
 
 
 @router.post("/runners/{runner_id}/pause", response_model=RunnerView, dependencies=[Depends(require(RUNNER_PAUSE))])

@@ -24,7 +24,7 @@ from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.proposal_auth import ProposalPolicy
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.route_auth import RouteToken
-from blizzard.hub.domain.work import Chunk, DecisionChoice
+from blizzard.hub.domain.work import Chunk, DecisionChoice, DecisionRow
 from blizzard.wire.completion import SubmittedArtifact, WorkItemProposal
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -175,17 +175,16 @@ class DecisionService:
         ]
 
     def resolve(
-        self, decision_id: str, *, choice: str, resolved_by: str, struck: Sequence[str] = ()
-    ) -> ResolutionResult | None:
+        self, decision: DecisionRow, *, choice: str, resolved_by: str, struck: Sequence[str] = ()
+    ) -> ResolutionResult:
         """Record a person's choice, first-write-wins, striking ``struck``'s proposal ids
-        in the same write. ``None`` if no such decision. A struck id naming anything but
-        one of the decision's chunk's own pending, unstruck proposals raises — the same
-        rejection class as an invalid ``choice``. Skipped once this decision is already
-        resolved, so a retry or duplicate submission falls straight through to the CAS
-        and is told who won, instead of 400ing on ids this same decision already struck."""
-        decision = self._decisions.get_decision(decision_id)
-        if decision is None:
-            return None
+        in the same write. Takes the loaded decision (``bzh:domain-takes-objects``) — the
+        edge resolves ``decision_id`` to it (404 if unknown) before calling this. A struck
+        id naming anything but one of the decision's chunk's own pending, unstruck
+        proposals raises — the same rejection class as an invalid ``choice``. Skipped once
+        this decision is already resolved, so a retry or duplicate submission falls
+        straight through to the CAS and is told who won, instead of 400ing on ids this
+        same decision already struck."""
         if choice not in {c.name for c in decision.choices}:
             valid = ", ".join(c.name for c in decision.choices)
             raise ValueError(f"`{choice}` is not a choice of this decision (one of: {valid})")
@@ -195,13 +194,13 @@ class DecisionService:
             if unknown:
                 raise ValueError(f"not a pending proposal of chunk {decision.chunk_id}: {', '.join(sorted(unknown))}")
         won = self._decisions.record_decision_resolution(
-            decision_id, choice=choice, resolved_by=resolved_by, at=self._clock.now(), struck=struck
+            decision.decision_id, choice=choice, resolved_by=resolved_by, at=self._clock.now(), struck=struck
         )
         if won:
             return ResolutionResult(resolved=True, choice=choice, resolved_by=resolved_by)
         # Lost the CAS — report the winner so the loser is told who resolved. No strike
         # was written either: the loser's whole write, not just the choice, applies nothing.
-        current = self._decisions.get_decision(decision_id)
+        current = self._decisions.get_decision(decision.decision_id)
         assert current is not None and current.resolved_choice is not None
         return ResolutionResult(resolved=False, choice=current.resolved_choice, resolved_by=current.resolved_by or "")
 
@@ -222,15 +221,17 @@ class RequeueService:
         self._route = route
         self._clock = clock
 
-    def requeue(self, chunk_id: str) -> int:
+    def requeue(self, chunk: Chunk) -> int:
         """Supersede the open escalation and release the route so the chunk re-derives ready.
 
-        Raises :class:`NotEscalated` if the chunk is not ``needs_human``. Returns the
+        Takes the loaded chunk (``bzh:domain-takes-objects``) — the edge resolves
+        ``chunk_id`` to it (404 if unknown) before calling this. Raises
+        :class:`NotEscalated` if the chunk is not ``needs_human``. Returns the
         freshly-written ``requeues.id`` (issue #213)."""
-        facts = self._facts.load_facts(chunk_id)
+        facts = self._facts.load_facts(chunk.chunk_id)
         if facts is None or facts.open_escalation() is None:
-            raise NotEscalated(f"chunk {chunk_id} is not escalated (needs_human)")
+            raise NotEscalated(f"chunk {chunk.chunk_id} is not escalated (needs_human)")
         now = self._clock.now()
-        requeue_id = self._movement.record_requeue(chunk_id, at=now)  # supersedes the escalation
-        self._route.record_route_released(chunk_id, at=now)  # -> ready, re-leasable at its current node
+        requeue_id = self._movement.record_requeue(chunk.chunk_id, at=now)  # supersedes the escalation
+        self._route.record_route_released(chunk.chunk_id, at=now)  # -> ready, re-leasable at its current node
         return requeue_id

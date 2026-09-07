@@ -103,15 +103,15 @@ def resolve_decision(
     ``resolved_by`` is taken from the authenticated session identity, never the request
     body's ``resolved_by`` field — a spoofed value there is silently ignored (issue #91)."""
     pre_decision = services.chunks.decisions.get_decision(decision_id)
-    change = chunk_events.ChunkChanged.before(services, pre_decision.chunk_id) if pre_decision is not None else None
+    if pre_decision is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown decision {decision_id}")
+    change = chunk_events.ChunkChanged.before(services, pre_decision.chunk_id)
     try:
         result = services.decisions.resolve(
-            decision_id, choice=request.choice, resolved_by=resolved_username(http_request), struck=request.struck
+            pre_decision, choice=request.choice, resolved_by=resolved_username(http_request), struck=request.struck
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown decision {decision_id}")
     decision = services.chunks.decisions.get_decision(decision_id)
     if not result.resolved:
         conflict = DecisionResolutionConflict(decision_id=decision_id, already_resolved_by=result.resolved_by)

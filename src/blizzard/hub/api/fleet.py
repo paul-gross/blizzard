@@ -720,7 +720,7 @@ def get_runner(
 ) -> RunnerView:
     """One runner's declarative state — the runner's own pull read."""
     fleet.assert_owns(runner_id)
-    liveness = services.fleet.get_liveness(runner_id)
-    if liveness is None:
+    registration = services.registry.get_runner(runner_id)
+    if registration is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
-    return runners_api.runner_view(liveness, now=services.clock.now())
+    return runners_api.runner_view(services.fleet.get_liveness(registration), now=services.clock.now())

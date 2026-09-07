@@ -81,7 +81,7 @@ def test_promote_stamps_zero_when_no_chunk_is_currently_ready() -> None:
     repo = _FakeChunkRepo(facts=ChunkFacts(minted=True), ready=[])
     service = PromoteService(facts=_as_facts(repo), record=_as_record(repo), queue=_as_queue(repo), clock=clock)
 
-    service.promote("chk_1")
+    service.promote(_chunk("chk_1"))
 
     assert repo.promoted == [("chk_1", _T0)]
     assert repo.stamped == [("chk_1", 0.0, _T0)]
@@ -97,7 +97,7 @@ def test_promote_stamps_one_past_the_max_effective_position_of_ready_chunks() ->
     )
     service = PromoteService(facts=_as_facts(repo), record=_as_record(repo), queue=_as_queue(repo), clock=clock)
 
-    service.promote("chk_new")
+    service.promote(_chunk("chk_new"))
 
     assert repo.stamped == [("chk_new", 5.0, _T0)]
 
@@ -115,7 +115,7 @@ def test_promote_uses_the_effective_position_fallback_for_ready_chunks_with_no_e
     )
     service = PromoteService(facts=_as_facts(repo), record=_as_record(repo), queue=_as_queue(repo), clock=clock)
 
-    service.promote("chk_new")
+    service.promote(_chunk("chk_new"))
 
     expected = datetime(2025, 6, 1, tzinfo=UTC).timestamp() + 1.0
     assert repo.stamped == [("chk_new", expected, _T0)]
@@ -128,7 +128,7 @@ def test_promote_is_a_complete_no_op_on_an_already_promoted_chunk() -> None:
     repo = _FakeChunkRepo(facts=ChunkFacts(minted=True, promoted=True))
     service = PromoteService(facts=_as_facts(repo), record=_as_record(repo), queue=_as_queue(repo), clock=clock)
 
-    service.promote("chk_1")
+    service.promote(_chunk("chk_1"))
 
     assert repo.promoted == []
     assert repo.stamped == []
@@ -140,7 +140,7 @@ def test_promote_uses_the_injected_clock_not_the_wall_clock() -> None:
     repo = _FakeChunkRepo(facts=ChunkFacts(minted=True), ready=[])
     service = PromoteService(facts=_as_facts(repo), record=_as_record(repo), queue=_as_queue(repo), clock=clock)
 
-    service.promote("chk_1")
+    service.promote(_chunk("chk_1"))
 
     assert repo.promoted == [("chk_1", later)]
     assert repo.stamped == [("chk_1", 0.0, later)]
