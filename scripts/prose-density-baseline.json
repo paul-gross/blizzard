@@ -2974,8 +2974,8 @@
   },
   "blizzard/runner/harness/adapter.py": {
    "comments": 7,
-   "docstrings": 103,
-   "total": 249
+   "docstrings": 102,
+   "total": 244
   },
   "blizzard/runner/harness/compatibility.py": {
    "comments": 7,
@@ -3682,10 +3682,15 @@
    "docstrings": 21,
    "total": 209
   },
+  "blizzard/runner/subscriptions/internal/openai_subscription_sampler.py": {
+   "comments": 14,
+   "docstrings": 33,
+   "total": 294
+  },
   "blizzard/runner/subscriptions/internal/subscription_sampler_factory.py": {
    "comments": 0,
    "docstrings": 6,
-   "total": 29
+   "total": 34
   },
   "blizzard/runner/subscriptions/subscription_sampler.py": {
    "comments": 0,
@@ -3808,9 +3813,9 @@
    "total": 36
   },
   "blizzard/wire/facts.py": {
-   "comments": 21,
+   "comments": 22,
    "docstrings": 19,
-   "total": 97
+   "total": 100
   },
   "blizzard/wire/finding.py": {
    "comments": 0,
@@ -5939,6 +5944,11 @@
    "docstrings": 30,
    "total": 507
   },
+  "test_runner_openai_subscription_sampler.py": {
+   "comments": 8,
+   "docstrings": 13,
+   "total": 505
+  },
   "test_runner_paused.py": {
    "comments": 209,
    "docstrings": 61,
@@ -6025,9 +6035,9 @@
    "total": 1135
   },
   "test_runner_subscription_sampler_factory.py": {
-   "comments": 2,
+   "comments": 4,
    "docstrings": 5,
-   "total": 45
+   "total": 62
   },
   "test_runner_takeover.py": {
    "comments": 74,
