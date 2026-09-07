@@ -610,7 +610,9 @@ def test_outbound_drain_ack_republishes_fact_changed_on_the_same_seq(tmp_path: P
         probe=FakeProbe(),
         events=events,
     )
-    OutboundFacts(ctx).event(chunk_id=None, lease_id=None, payload={"detail": "probe"}, at=_NOW)
+    OutboundFacts(ctx).event(
+        kind="command-failed", chunk_id=None, lease_id=None, node_name=None, message="probe", detail=None, at=_NOW
+    )
 
     OutboundDrain(ctx).run()
 
@@ -813,7 +815,9 @@ def test_attempt_retry_closure_publishes_fact_changed_for_its_own_event(tmp_path
         probe=FakeProbe(),
         events=events,
     )
-    OutboundFacts(ctx).event(chunk_id=None, lease_id=None, payload={"detail": "seed"}, at=_NOW)
+    OutboundFacts(ctx).event(
+        kind="command-failed", chunk_id=None, lease_id=None, node_name=None, message="seed", detail=None, at=_NOW
+    )
 
     Advance(ctx).run()  # launches the detached elicitation
     Advance(ctx).run()  # collects it — the fake pid reads dead by default

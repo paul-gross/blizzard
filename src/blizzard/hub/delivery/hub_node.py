@@ -14,6 +14,7 @@ from datetime import timedelta
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
@@ -47,7 +48,7 @@ _HUB_RUNNER_ID = "hub"
 # Written when an outcome has no authored edge (`_route`); also the once-per-(node,
 # epoch) dedupe key gating the event_log row beside it.
 _UNROUTABLE_ARTIFACT_NAME = "hub-unroutable-outcome"
-_EVENT_UNROUTABLE_OUTCOME = "hub-node-unroutable-outcome"
+_EVENT_UNROUTABLE_OUTCOME: EventLogKind = "hub-node-unroutable-outcome"
 
 # Measured against the injected clock, never wall time. Generous on purpose: only a slot
 # abandoned by a `kill -9` — no matching release ever comes — should be reclaimed.
@@ -561,8 +562,6 @@ class HubNodeExecutor:
             )
             if announced:
                 self._events.record(
-                    # Never a fourth severity — the feed ranks only these three (#125).
-                    severity="critical",
                     kind=_EVENT_UNROUTABLE_OUTCOME,
                     runner_id=_HUB_RUNNER_ID,
                     chunk_id=chunk.chunk_id,

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.leases import LeaseRecord
@@ -24,6 +25,9 @@ from blizzard.wire.facts import (
 # The two kinds the flusher handles specially; every other kind flushes to POST /events.
 COMPLETION_KIND = "completion.submitted"
 DECISION_KIND = "decision.submitted"
+
+_EVENT_COMMAND_FAILED: EventLogKind = "command-failed"
+_EVENT_TRANSCRIPT_TRUNCATED: EventLogKind = "transcript-truncated"
 
 
 @dataclass(frozen=True)
@@ -82,18 +86,13 @@ class OutboundFacts:
         """A captured spawn/verify/env-prep command failure (issue #125), surfaced as a
         ``warning`` operational event that rides no closure and alters no control flow."""
         self.event(
+            kind=_EVENT_COMMAND_FAILED,
             chunk_id=chunk_id,
             lease_id=lease_id,
+            node_name=node_name,
+            message=f"command failed: {command}",
+            detail={"command": command, "stderr_tail": stderr_tail[-2000:] if stderr_tail else ""},
             at=self.ctx.clock.now(),
-            payload={
-                "severity": "warning",
-                "kind": "command-failed",
-                "chunk_id": chunk_id,
-                "lease_id": lease_id,
-                "node_name": node_name,
-                "message": f"command failed: {command}",
-                "detail": {"command": command, "stderr_tail": stderr_tail[-2000:] if stderr_tail else ""},
-            },
         )
 
     def transcript_truncated(self, *, chunk_id: str, segment_id: str, reason: str, at: datetime) -> None:
@@ -101,21 +100,35 @@ class OutboundFacts:
         ``warning`` operational event on the FACT lane — the issue-#125 precedent.
         Truncation is never silent: it is also a field on the segment itself."""
         self.event(
+            kind=_EVENT_TRANSCRIPT_TRUNCATED,
             chunk_id=chunk_id,
             lease_id=None,
+            node_name=None,
+            message=f"transcript segment {segment_id} truncated — {reason}",
+            detail={"segment_id": segment_id, "reason": reason},
             at=at,
-            payload={
-                "severity": "warning",
-                "kind": "transcript-truncated",
-                "chunk_id": chunk_id,
-                "lease_id": None,
-                "node_name": None,
-                "message": f"transcript segment {segment_id} truncated — {reason}",
-                "detail": {"segment_id": segment_id, "reason": reason},
-            },
         )
 
-    def event(self, *, chunk_id: str | None, lease_id: str | None, payload: Mapping[str, object], at: datetime) -> None:
+    def event(
+        self,
+        *,
+        kind: EventLogKind,
+        chunk_id: str | None,
+        lease_id: str | None,
+        node_name: str | None,
+        message: str,
+        detail: Mapping[str, object] | None,
+        at: datetime,
+    ) -> None:
+        payload = {
+            "severity": EVENT_LOG_SEVERITY[kind],
+            "kind": kind,
+            "chunk_id": chunk_id,
+            "lease_id": lease_id,
+            "node_name": node_name,
+            "message": message,
+            "detail": detail,
+        }
         self._enqueue(EVENT_RECORDED, chunk_id, lease_id, payload, at)
 
     def _enqueue(

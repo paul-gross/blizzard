@@ -26,6 +26,8 @@ _MOVED_HOMES = {
     "JudgedBy": "blizzard.foundation.node_steps",
     "SessionMode": "blizzard.foundation.node_steps",
     "TokenHash": "blizzard.foundation.tokens",
+    "EventLogKind": "blizzard.foundation.event_log",
+    "EVENT_LOG_SEVERITY": "blizzard.foundation.event_log",
 }
 
 
