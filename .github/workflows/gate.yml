@@ -33,7 +33,7 @@ jobs:
       - name: pyright
         run: uv run pyright
       - name: structural gate (blizzard:structural-gate)
-        run: uv run ast-grep scan --error=unused-suppression .
+        run: uv run ast-grep scan --error=unused-suppression . && uv run ast-grep test
 
   python-tests:
     name: pytest (unit + component)

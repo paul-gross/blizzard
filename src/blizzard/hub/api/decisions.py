@@ -121,9 +121,9 @@ def resolve_decision(
         services.events.publish_decision_resolved(decision.chunk_id, decision_id, key=key)
         # Hardcoded literal, not a derivation — a resolution always lands the chunk
         # back at `running` (see `chunk_events.ChunkChanged.publish`'s docstring).
-        chunk_events.ChunkChanged.of(
-            services, decision.chunk_id, prev_status=change.prev_status if change is not None else None
-        ).publish(cause="decision-resolved", status="running", key=key)
+        chunk_events.ChunkChanged.of(services, decision.chunk_id, prev_status=change.prev_status).publish(
+            cause="decision-resolved", status="running", key=key
+        )
     assert result.resolved and result.resolved_by
     return DecisionResolutionResponse(
         decision_id=decision_id,

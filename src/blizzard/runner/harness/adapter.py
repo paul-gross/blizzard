@@ -52,7 +52,7 @@ class WorkerHandle:
 
 
 class IHarnessWorkerLifecycle(Protocol):
-    """Spawning, resuming, and judging a worker process (``bzh:repository-split``) — one
+    """Spawning, resuming, and judging a worker process (``bzh:seam-size-ceiling``) — one
     of the five slices ``IHarnessAdapter`` composes; a consumer driving only worker
     lifecycle takes this narrower seam instead."""
 
@@ -143,7 +143,7 @@ class IHarnessWorkerLifecycle(Protocol):
 
 class IHarnessModelResolution(Protocol):
     """Resolving an authored model/effort/compaction-window preference to this harness's
-    own vocabulary (``bzh:repository-split``) — never failing a spawn over an
+    own vocabulary (``bzh:seam-size-ceiling``) — never failing a spawn over an
     unresolvable one."""
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
@@ -171,7 +171,7 @@ class IHarnessModelResolution(Protocol):
 
 class IHarnessVerdictParsing(Protocol):
     """Parsing a worker's raw output into a verdict, a usability check, and its free-text
-    assessment (``bzh:repository-split``)."""
+    assessment (``bzh:seam-size-ceiling``)."""
 
     def parse_verdict(self, output: str) -> str | None:
         """Parse the ``<Choice>{name}</Choice>`` reply into a choice name, else ``None``."""
@@ -197,7 +197,7 @@ class IHarnessVerdictParsing(Protocol):
 
 class IHarnessUsageAccounting(Protocol):
     """Turning a worker's raw output or transcript into a usage sample
-    (``bzh:repository-split``) — the result-envelope path and the envelope-less
+    (``bzh:seam-size-ceiling``) — the result-envelope path and the envelope-less
     transcript-sum fallback."""
 
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
@@ -217,8 +217,23 @@ class IHarnessUsageAccounting(Protocol):
         ...
 
 
-class IHarnessTranscriptAccess(Protocol):
-    """This harness's transcript source (``bzh:repository-split``, blizzard#245)."""
+class IHarnessLifecycleAndVerdict(IHarnessWorkerLifecycle, IHarnessVerdictParsing, Protocol):
+    """Worker lifecycle plus verdict parsing, shared by the two consumers that call
+    exactly this pair and nothing wider (``bzh:seam-size-ceiling``): the runner loop's
+    own step functions and the selftest canary."""
+
+
+class IHarnessAdapter(
+    IHarnessWorkerLifecycle,
+    IHarnessModelResolution,
+    IHarnessVerdictParsing,
+    IHarnessUsageAccounting,
+    Protocol,
+):
+    """The coding-harness seam: its four narrower slices (``bzh:seam-size-ceiling``) plus
+    ``transcript_source``, unsliced since no consumer needs it alone. Dumb: translates, never
+    decides. A genuine pass-through — threading the adapter on rather than calling it, today
+    only ``app.py`` — takes this alias; a caller takes the narrowest slice its job needs."""
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         """This harness's transcript source (blizzard#245).
@@ -227,18 +242,3 @@ class IHarnessTranscriptAccess(Protocol):
         cohesive sub-seam with its own configuration and lifetime. A harness with no
         on-disk transcript binds a null source, so no caller needs a null check."""
         ...
-
-
-class IHarnessAdapter(
-    IHarnessWorkerLifecycle,
-    IHarnessModelResolution,
-    IHarnessVerdictParsing,
-    IHarnessUsageAccounting,
-    IHarnessTranscriptAccess,
-    Protocol,
-):
-    """The coding-harness seam, composed of its five narrower slices
-    (``bzh:repository-split``). Dumb: translates, never decides. For a genuine
-    pass-through — code that holds the adapter to thread it on rather than to call it —
-    this composed alias is the right type; a consumer that calls the adapter itself takes
-    the narrowest slice its job needs instead."""

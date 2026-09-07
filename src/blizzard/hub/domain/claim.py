@@ -125,8 +125,7 @@ class ClaimService:
         # so a concurrent edit and claim resolve to exactly one winner (issue #120).
         self._claim_lock = claim_lock
 
-    # runner_id resolves a paused-runner guard here, a claim-denial rule that belongs
-    # in the domain, not the entity the operation is about (bzh:domain-takes-objects).
+    # runner_id resolves a paused-runner guard, a domain rule (bzh:domain-takes-objects).
     # ast-grep-ignore: bzh:domain-takes-objects
     def claim(
         self,

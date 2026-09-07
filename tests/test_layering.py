@@ -89,13 +89,26 @@ def test_moved_vocabulary_has_exactly_one_importable_home() -> None:
     assert not violations, f"D — imported from somewhere other than its declared foundation home: {violations}"
 
 
+def _docstring_ids(tree: ast.Module) -> set[int]:
+    ids: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            body = node.body
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                ids.add(id(body[0].value))
+    return ids
+
+
 def _daemon_named_strings(root: Path, forbidden_prefixes: tuple[str, ...]) -> list[str]:
     violations: list[str] = []
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
+        docstring_ids = _docstring_ids(tree)
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
                 continue
+            if id(node) in docstring_ids:
+                continue  # a docstring's bare-pointer prose (bzh:comment-encapsulation) is not a live dependency
             if any(prefix in node.value for prefix in forbidden_prefixes):
                 violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} names {node.value!r}")
     return violations

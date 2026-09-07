@@ -28,8 +28,8 @@ valid:
         def resolve(self, choice: str, *, resolved_by: str) -> ResolutionResult:
             return self._decisions.record_decision_resolution(choice, resolved_by)
 invalid:
-  # The exact shape D5 exempts at the site with `# ast-grep-ignore` — caught
-  # here with no suppression, to pin the rule's positive match.
+  # The exact shape ClaimService.claim exempts at its own site with `# ast-grep-ignore` —
+  # caught here with no suppression, to pin the rule's positive match.
   - |
     class ClaimService:
         def claim(self, runner_id: str) -> ClaimResult:

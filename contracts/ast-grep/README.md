@@ -6,7 +6,8 @@ negative shape with `ast-grep test`'s own `valid:`/`invalid:` fixtures and snaps
 
 `sgconfig.yml` at the repo root points here (`ruleDirs`/`testConfigs`); `mise run structural-gate` and
 `scripts/ci-gate.sh` both run `ast-grep scan --error=unused-suppression .` — the `--error=unused-suppression` flag is
-load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported instead of failing the gate.
+load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported instead of failing the gate — then
+`ast-grep test`, so a `rule-tests/` fixture or snapshot regression fails the same gate as a live violation.
 
 ## Rules
 

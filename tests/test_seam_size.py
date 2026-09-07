@@ -21,7 +21,7 @@ _SEAM_SIZE_LIMIT = 12
 
 _ACCEPTED_VIOLATIONS: set[str] = {
     # LoopContext's downstream steps exercise 13 of IHubClient's 15 methods — genuinely wide
-    # by design, not a seam left to narrow (blizzard-context:architecture/system-shape.md).
+    # by design, not a seam left to narrow (blizzard-context:architecture/system-shape/seam-size.md).
     "IHubClient",
 }
 

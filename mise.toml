@@ -48,8 +48,8 @@ description = "blizzard:restatement-sweep — fail when a fact is stated at an u
 run = "uv run python scripts/restated_invariants.py check --strict --owners --context-root ../blizzard-context src tests docs README.md web/projects ../blizzard-mock/src"
 
 [tasks.structural-gate]
-description = "blizzard:structural-gate — the ast-grep structural channel (contracts/ast-grep/), gated on a reintroduced violation and on a stale `# ast-grep-ignore` alike"
-run = "uv run ast-grep scan --error=unused-suppression ."
+description = "blizzard:structural-gate — the ast-grep structural channel (contracts/ast-grep/), gated on a reintroduced violation, a stale `# ast-grep-ignore`, and a rule-tests fixture regression alike"
+run = "uv run ast-grep scan --error=unused-suppression . && uv run ast-grep test"
 
 [tasks.lint]
 description = "Lint with ruff"

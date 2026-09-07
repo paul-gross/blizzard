@@ -177,14 +177,11 @@ class DecisionService:
     def resolve(
         self, decision: DecisionRow, *, choice: str, resolved_by: str, struck: Sequence[str] = ()
     ) -> ResolutionResult:
-        """Record a person's choice, first-write-wins, striking ``struck``'s proposal ids
-        in the same write. Takes the loaded decision (``bzh:domain-takes-objects``) — the
-        edge resolves ``decision_id`` to it (404 if unknown) before calling this. A struck
-        id naming anything but one of the decision's chunk's own pending, unstruck
-        proposals raises — the same rejection class as an invalid ``choice``. Skipped once
-        this decision is already resolved, so a retry or duplicate submission falls
-        straight through to the CAS and is told who won, instead of 400ing on ids this
-        same decision already struck."""
+        """Record a choice, first-write-wins, striking ``struck``'s proposal ids in the same
+        write. Takes the loaded decision (``bzh:domain-takes-objects``) — the edge resolves
+        ``decision_id`` to it (404 if unknown) before calling this. A struck id outside the
+        chunk's pending, unstruck proposals raises, same as an invalid ``choice`` — except once
+        already resolved, when a retry falls straight through to the CAS instead."""
         if choice not in {c.name for c in decision.choices}:
             valid = ", ".join(c.name for c in decision.choices)
             raise ValueError(f"`{choice}` is not a choice of this decision (one of: {valid})")
@@ -223,11 +220,9 @@ class RequeueService:
 
     def requeue(self, chunk: Chunk) -> int:
         """Supersede the open escalation and release the route so the chunk re-derives ready.
-
-        Takes the loaded chunk (``bzh:domain-takes-objects``) — the edge resolves
-        ``chunk_id`` to it (404 if unknown) before calling this. Raises
-        :class:`NotEscalated` if the chunk is not ``needs_human``. Returns the
-        freshly-written ``requeues.id`` (issue #213)."""
+        Takes the loaded chunk (``bzh:domain-takes-objects``) — the edge resolves ``chunk_id``
+        to it (404 if unknown) before calling this. Raises :class:`NotEscalated` if the chunk
+        is not ``needs_human``. Returns the freshly-written ``requeues.id``."""
         facts = self._facts.load_facts(chunk.chunk_id)
         if facts is None or facts.open_escalation() is None:
             raise NotEscalated(f"chunk {chunk.chunk_id} is not escalated (needs_human)")

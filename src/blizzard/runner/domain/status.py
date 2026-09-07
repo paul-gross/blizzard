@@ -48,7 +48,7 @@ class PauseState:
 
 @dataclass(frozen=True)
 class Capacities:
-    """Agent-slot accounting: ``used`` plus ``free`` accounts for ``max_agents``."""
+    """See ``src/blizzard/wire/runner_status.py``'s ``CapacitiesView``."""
 
     max_agents: int
     used: int

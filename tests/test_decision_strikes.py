@@ -186,6 +186,10 @@ def test_the_cas_loser_writes_no_strike_even_when_its_ids_overlap_the_winners(tm
     assert decision is not None
 
     won = hub.services.decisions.resolve(decision, choice="pass", resolved_by="alice", struck=[ids["one"]])
+    # Re-fetch: the loser's own call must see the winner's write, exactly as a second HTTP
+    # request would — resolving against the stale pre-winner object would test nothing.
+    decision = hub.services.chunks.decisions.get_decision(decision_id)
+    assert decision is not None
     lost = hub.services.decisions.resolve(decision, choice="fail", resolved_by="bob", struck=[ids["one"], ids["two"]])
 
     assert won.resolved

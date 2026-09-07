@@ -23,13 +23,13 @@ class Role(StrEnum):
 
 Permission = NewType("Permission", str)
 
-#: Every read — including the streaming one (``GET /api/events/stream``) — regardless of which
-#: kind of resource is being read. Belongs to ``guest``+.
+#: Fleet-state reads, including the streaming one (``GET /api/events/stream``); reused across
+#: more than one route family. Belongs to ``guest``+.
 FLEET_VIEW = Permission("fleet:view")
 #: Ingest a chunk (``POST /chunks``).
 CHUNK_INGEST = Permission("chunk:ingest")
 #: Every other chunk-scoped control write — promote/detach/pause/resume/stop/requeue/
-#: patch/hub-marker — plus every write that carries no chunk scope of its own.
+#: patch/hub-marker — plus a write outside chunk scope that reuses this same tier.
 CHUNK_CONTROL = Permission("chunk:control")
 #: Answer a question (``POST /questions/{id}/answers``, and the durable ask that lands it).
 QUESTION_ANSWER = Permission("question:answer")

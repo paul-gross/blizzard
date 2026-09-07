@@ -1493,9 +1493,9 @@
    "total": 32
   },
   "blizzard/hub/domain/claim.py": {
-   "comments": 25,
+   "comments": 24,
    "docstrings": 36,
-   "total": 243
+   "total": 242
   },
   "blizzard/hub/domain/complete.py": {
    "comments": 0,
@@ -1504,8 +1504,8 @@
   },
   "blizzard/hub/domain/decisions.py": {
    "comments": 11,
-   "docstrings": 32,
-   "total": 237
+   "docstrings": 27,
+   "total": 232
   },
   "blizzard/hub/domain/delete.py": {
    "comments": 2,
@@ -2974,8 +2974,8 @@
   },
   "blizzard/runner/harness/adapter.py": {
    "comments": 7,
-   "docstrings": 101,
-   "total": 244
+   "docstrings": 103,
+   "total": 249
   },
   "blizzard/runner/harness/compatibility.py": {
    "comments": 7,
@@ -3309,8 +3309,8 @@
   },
   "blizzard/runner/selftest/checks.py": {
    "comments": 13,
-   "docstrings": 18,
-   "total": 265
+   "docstrings": 15,
+   "total": 254
   },
   "blizzard/runner/selftest/internal/__init__.py": {
    "comments": 0,
@@ -3335,7 +3335,7 @@
   "blizzard/runner/selftest/service.py": {
    "comments": 5,
    "docstrings": 17,
-   "total": 119
+   "total": 120
   },
   "blizzard/runner/store/__init__.py": {
    "comments": 1,
@@ -3783,9 +3783,9 @@
    "total": 31
   },
   "blizzard/wire/chunk.py": {
-   "comments": 36,
+   "comments": 37,
    "docstrings": 129,
-   "total": 584
+   "total": 585
   },
   "blizzard/wire/completion.py": {
    "comments": 15,
@@ -4715,9 +4715,9 @@
    "total": 224
   },
   "test_decision_strikes.py": {
-   "comments": 0,
+   "comments": 2,
    "docstrings": 8,
-   "total": 211
+   "total": 215
   },
   "test_decisions_api.py": {
    "comments": 10,
@@ -5375,9 +5375,9 @@
    "total": 1009
   },
   "test_layering.py": {
-   "comments": 8,
+   "comments": 9,
    "docstrings": 32,
-   "total": 346
+   "total": 359
   },
   "test_lease_auth.py": {
    "comments": 0,
@@ -5618,11 +5618,6 @@
    "comments": 7,
    "docstrings": 7,
    "total": 60
-  },
-  "test_repository_seam_size.py": {
-   "comments": 2,
-   "docstrings": 9,
-   "total": 59
   },
   "test_restated_invariants.py": {
    "comments": 45,
@@ -6113,6 +6108,11 @@
    "comments": 2,
    "docstrings": 11,
    "total": 131
+  },
+  "test_seam_size.py": {
+   "comments": 2,
+   "docstrings": 9,
+   "total": 59
   },
   "test_session_end.py": {
    "comments": 11,
