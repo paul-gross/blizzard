@@ -233,6 +233,7 @@ describe('gardening routines page independent-scroll shell sweep (web:shell-swee
       if (method === 'GET' && path === '/api/graphs') return [EFFECTIVE_GRAPH_SUMMARY];
       if (method === 'GET' && path === '/api/graphs/gr_1') return GRAPH_DETAIL;
       if (method === 'GET' && path === '/api/routines/rtn_0/sweeps') return SWEEPS_LONG;
+      if (method === 'GET' && path === '/api/routines/rtn_0/scopes') return [ROUTINE.default_scope_slug];
       if (method === 'GET' && path === '/api/routines/trend') return TREND;
       if (method === 'GET' && path === '/api/scopes') return SCOPES;
       if (method === 'GET' && path === '/api/me') return ME;
