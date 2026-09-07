@@ -37,6 +37,27 @@ const ROW: RunnerRow = {
   subscriptionPaces: [],
 };
 
+// Labels of unequal glyph count, which the fixed label column must absorb. A provider
+// that derives its window labels from the lengths it reports can emit these, so the pair
+// is representative rather than contrived — and unlike "5h"/"7d" it is not equal-width in
+// the panel's monospace face, which is what makes the alignment claim falsifiable.
+const UNEQUAL_LABEL_ROW: RunnerRow = {
+  runner_id: 'rn_unequal',
+  workspace_id: 'ws_a',
+  registered_at: NOW,
+  last_seen_at: NOW,
+  online: true,
+  hub_paused: false,
+  locally_paused: false,
+  claims: [],
+  used: 0,
+  paceBars: [
+    { window: '5h', utilizationPct: 62, elapsedPct: 38 },
+    { window: '30d', utilizationPct: 81, elapsedPct: 90 },
+  ],
+  subscriptionPaces: [],
+};
+
 const SUBSCRIPTION_ROW: RunnerRow = {
   runner_id: 'rn_subs',
   workspace_id: 'ws_a',
@@ -129,6 +150,56 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
     }
 
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  it('seats every window label in a fixed left column so unequal labels still share one track edge', async () => {
+    const fixture = await render([UNEQUAL_LABEL_ROW]);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const bars = [...root.querySelectorAll<HTMLElement>('[data-runner-pace-bar="rn_unequal"]')];
+      expect(bars).toHaveLength(2);
+
+      // Measured over the text, not the element: the label box IS the fixed column, so
+      // its own width is 28px for every label and could never show the difference.
+      const glyphWidths = bars.map((bar) => {
+        const label = bar.querySelector<HTMLElement>('[data-testid="pace-bar-label"]')!;
+        const range = document.createRange();
+        range.selectNodeContents(label);
+        return Math.round(range.getBoundingClientRect().width);
+      });
+
+      for (const bar of bars) {
+        const label = bar.querySelector<HTMLElement>('[data-testid="pace-bar-label"]')!;
+        const util = bar.querySelector<HTMLElement>('[data-testid="pace-bar-utilization"]')!;
+        const labelBox = label.getBoundingClientRect();
+        const utilBox = util.getBoundingClientRect();
+
+        // Beside the track, not above it: the label's right edge clears the track's left
+        // edge, and the two share vertical space rather than stacking.
+        expect(labelBox.right).toBeLessThanOrEqual(utilBox.left);
+        expect(labelBox.top).toBeLessThan(utilBox.bottom);
+      }
+
+      // The fixture's whole purpose: the panel renders monospace, so the alignment claim
+      // is only falsifiable with labels whose text genuinely differs in width. If these
+      // two ever measure equal, the assertion below stops proving anything.
+      expect(new Set(glyphWidths).size, `fixture label text rendered equally wide — ${glyphWidths.join(', ')}`).toBe(2);
+
+      // Unequal labels, one track edge. Under a content-sized column the wider label
+      // would push its own track right, and this set would hold two values.
+      const trackLefts = bars.map(
+        (bar) => bar.querySelector<HTMLElement>('[data-testid="pace-bar-utilization"]')!.getBoundingClientRect().left,
+      );
+      expect(new Set(trackLefts).size, `bar tracks did not align — lefts were ${trackLefts.join(', ')}`).toBe(1);
+    } finally {
+      root.remove();
+    }
   });
 
   it('keeps two subscriptions with an identical window label visually distinct, with no page errors or horizontal overflow at ~390px (blizzard#478)', async () => {

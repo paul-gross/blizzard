@@ -47,6 +47,9 @@ LEGACY_ANTHROPIC_NAME = "Anthropic"
 # to share a literal today, but a config change to one must not silently unbind the other.
 PROVIDER_ANTHROPIC = "anthropic"
 
+# The OpenAI (ChatGPT plan) binding's selector — reached only by an explicit `[[subscription]]`.
+PROVIDER_OPENAI = "openai"
+
 
 class LeaseMintReport(BaseModel):
     """A runner's ``lease.minted`` — one node-step attempt's fencing epoch."""

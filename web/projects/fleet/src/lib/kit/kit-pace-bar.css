@@ -1,16 +1,27 @@
+/* The label sits in a fixed-width first column rather than above the bars, so every
+   pace bar's track starts at the same x — sibling instances each style themselves, so
+   only a static width aligns them. The label spans both rows; the bars stack beside it. */
 :host {
-  display: block;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 6px;
+  row-gap: 2px;
+  align-items: center;
 }
 .pace-lbl {
+  grid-row: 1 / span 2;
+  align-self: center;
   font-size: var(--fs-label);
   color: var(--label-dim);
-  margin-bottom: 2px;
+  text-align: right;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .bar {
   height: 6px;
   border: 1px solid var(--bezel);
   background: var(--panel-deep);
-  margin-top: 2px;
 }
 .bar .fill {
   height: 100%;

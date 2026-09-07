@@ -34,22 +34,52 @@ board's chunk cards and detail dock show the same figures live.
 
 A harness on a metered subscription tracks its own account's rate-limit window utilization independently of anything
 blizzard spends or caps; the runner samples it on the cadence `[external_subscription_usage]` `sample_interval_seconds`
-in `blizzard-runner.toml` sets (default 300 seconds when the table or key is absent), or the cadence a `[[subscription]]`
-declaration sets when a runner declares its subscriptions explicitly — a runner with none declared runs the single
-legacy table's own subscription unchanged. The sampled utilization is advisory only — it never throttles claiming,
-scheduling, or spawning, and no cost cap consults it.
+in `blizzard-runner.toml` sets (default 300 seconds when the table or key is absent), or the cadence a
+`[[subscription]]` declaration sets when a runner declares its subscriptions explicitly — a runner with none declared
+runs the single legacy table's own subscription unchanged. The sampled utilization is advisory only — it never throttles
+claiming, scheduling, or spawning, and no cost cap consults it.
 
-Claude Code's OAuth plan is the only subscription concept a shipping adapter has; a harness with none reports no sample,
-and no sample renders as an absent usage block on the board — never a fabricated zero. The hub tracks every declared
-subscription's own sample independently, keyed on slug: one subscription going stale or unsampled never blanks a
-sibling's. The runner panel renders a paced-window bar per sampled window (5h and 7d for Claude Code), only when the
-runner has a non-stale sample to show.
+Two providers ship a sampler binding, selected by a declaration's `provider` key: `anthropic`, reading Claude Code's
+OAuth plan, and `openai`, reading a ChatGPT plan's Codex usage. A provider naming neither stays declared and unsampled
+rather than failing configuration, and no sample renders as an absent usage block on the board — never a fabricated
+zero. The hub tracks every declared subscription's own sample independently, keyed on slug: one subscription going stale
+or unsampled never blanks a sibling's. The runner panel renders a paced-window bar per sampled window, only when the
+runner has a non-stale sample to show. Both plans meter a 5h and a 7d window today, but only `anthropic` reads those two
+as fixed: `openai` labels each window from the length its own response reports, so a plan metering differently is
+rendered as it comes rather than forced into that pair.
+
+Each binding reads the credential file its own vendor CLI writes: `~/.claude/.credentials.json` for `anthropic`,
+`~/.codex/auth.json` for `openai`, either overridable per declaration with `credentials_path`. **Neither binding
+refreshes the credential it reads** — the vendor CLI owns that flow and its lock. That is invisible for `anthropic`,
+whose token a fleet's own Claude Code workers renew continuously, and load-bearing for `openai`, whose token expires
+about ten days after the last `codex` run: on a runner that never runs `codex`, the subscription samples until that
+lapses and reports nothing after. Running any `codex` command refreshes it.
 
 Credentials never leave the runner machine: the sample reads the runner's own local OAuth credential file, and only
 derived utilization percentages, window labels, and reset times cross the wire to the hub — the bearer token is never
 reported, stored, or forwarded.
 
-`blizzard runner external-usage probe <slug>` samples one declared subscription, by its slug, once and prints the
-parsed snapshot without writing, ticking, or reporting to the hub — confirming that subscription's credentials and
-cadence without waiting on a scheduled sample. A runner with no `[[subscription]]` declared has exactly one slug to
+Declaring any `[[subscription]]` turns the legacy table off entirely, so a runner adding a second plan must declare both
+— and keep the Anthropic one on the slug `anthropic`, the join key its existing hub-side samples are stored under. "Off
+entirely" includes the legacy table's own `credentials_path` and `sample_interval_seconds`: a runner that had customized
+either must restate it on the Anthropic declaration, or it silently reverts to the default path and 300 seconds.
+
+```toml
+[[subscription]]
+slug = "anthropic"          # keep this slug: renaming it orphans the stored history
+name = "Anthropic"
+provider = "anthropic"
+
+[[subscription]]
+slug = "openai"
+name = "OpenAI"
+provider = "openai"
+sample_interval_seconds = 300
+```
+
+`blizzard runner external-usage probe <slug>` samples one declared subscription, by its slug, once and prints the parsed
+snapshot without writing, ticking, or reporting to the hub — confirming that subscription's credentials and cadence
+without waiting on a scheduled sample. It is also where the two silent outcomes separate: a declaration whose `provider`
+names no binding — a typo, most often — prints that it has no sampler, where a declared-and-bound subscription that
+simply got nothing back reports no sample instead. A runner with no `[[subscription]]` declared has exactly one slug to
 name: `anthropic`, the legacy table's own subscription.
