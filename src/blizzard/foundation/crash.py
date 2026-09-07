@@ -7,7 +7,6 @@ process iff it is armed (``BLIZZARD_CRASH_POINT``) and fenced
 
 from __future__ import annotations
 
-import importlib
 import os
 import signal
 from dataclasses import dataclass
@@ -17,24 +16,6 @@ from typing import ClassVar
 ENV_CRASH_POINT = "BLIZZARD_CRASH_POINT"
 #: The fence (``bzh:crash-point-registry``): a stray point name alone never kills.
 ENV_CRASH_FENCE = "BLIZZARD_CRASH_FENCE"
-
-#: The modules that declare crash points; importing them populates the registry.
-_INSTRUMENTED_MODULES = (
-    "blizzard.runner.loop.steps",
-    "blizzard.runner.loop.spawn",
-    "blizzard.runner.loop.attempt",
-    "blizzard.runner.loop.judgement",
-    "blizzard.runner.loop.drain",
-    "blizzard.runner.loop.transcript_drain",
-    "blizzard.runner.loop.claim",
-    "blizzard.runner.loop.dormant",
-    "blizzard.runner.domain.attachments",
-    "blizzard.runner.domain.git_commit_declaration",
-    "blizzard.hub.delivery.hub_node",
-    "blizzard.hub.domain.claim",
-    "blizzard.hub.domain.apply",
-    "blizzard.hub.domain.work_closure",
-)
 
 
 @dataclass(frozen=True)
@@ -79,13 +60,6 @@ class CrashPoint:
         return sorted(cls._registry.values(), key=lambda p: p.name)
 
     @classmethod
-    def discover(cls) -> list[CrashPoint]:
-        """Import the instrumented modules, then return every registered crash point."""
-        for module in _INSTRUMENTED_MODULES:
-            importlib.import_module(module)
-        return cls.all()
-
-    @classmethod
     def rearm_from_env(cls) -> None:
         """Re-read the arming from the environment — for in-process unit tests only.
 
@@ -101,7 +75,6 @@ class CrashPoint:
         os.kill(os.getpid(), signal.SIGKILL)
 
 
-#: The registry's module-level surface — the declaration verb and the two enumerations.
+#: The registry's module-level surface — the declaration verb and its enumeration.
 crashpoint = CrashPoint.declare
 all_points = CrashPoint.all
-discover_crash_points = CrashPoint.discover

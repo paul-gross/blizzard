@@ -89,6 +89,28 @@ def test_moved_vocabulary_has_exactly_one_importable_home() -> None:
     assert not violations, f"D — imported from somewhere other than its declared foundation home: {violations}"
 
 
+def _daemon_named_strings(root: Path, forbidden_prefixes: tuple[str, ...]) -> list[str]:
+    violations: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
+                continue
+            if any(prefix in node.value for prefix in forbidden_prefixes):
+                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} names {node.value!r}")
+    return violations
+
+
+def test_foundation_names_neither_daemon_in_a_string_literal() -> None:
+    """A-C see imports; a module path threaded as a string (``importlib.import_module``,
+    a dotted-symbol reference) is invisible to them. ``foundation/crash.py`` used to hold
+    exactly this shape (``bzh:crash-point-registry``'s instrumented-module roster, now
+    test-side) — this is the file's first non-import check, one bespoke walker like its
+    siblings rather than a reshape of the shared import helper."""
+    violations = _daemon_named_strings(_FOUNDATION_DIR, ("blizzard.hub.", "blizzard.runner."))
+    assert not violations, f"N — foundation must not name either daemon, even as a string: {violations}"
+
+
 def _bare_engine_accesses(root: Path, *, exempt: frozenset[Path] = frozenset()) -> list[str]:
     violations: list[str] = []
     for path in sorted(root.rglob("*.py")):

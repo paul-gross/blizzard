@@ -19,7 +19,6 @@ from sqlalchemy import select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.crash import discover_crash_points
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.delivery.hub_node import (
@@ -46,6 +45,7 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.events.broker import EVENT_LOGGED
 from blizzard.hub.store import schema as s
+from tests.crash_points import discover_crash_points
 from tests.support import (
     FakeHubCommandRunner,
     FakeHubWorkdir,

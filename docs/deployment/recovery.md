@@ -91,8 +91,8 @@ converges and lands exactly once, the facts-level invariant checker green after 
 Run just those three cases with `BLIZZARD_CRASH_SWEEP=1 uv run pytest` naming them; the run needs the sibling
 blizzard-mock worktree and a local winter source, per the crash-sweep header.
 
-The full sweep — the same recovery asserted at every boundary the crash-point registry enumerates
-(`discover_crash_points`; `bzh:crash-point-registry`), including `kill -9` mid-RESUME at each graceful-restart boundary
+The full sweep — the same recovery asserted at every boundary the crash-point registry enumerates (the test suite's own
+`discover_crash_points`; `bzh:crash-point-registry`), including `kill -9` mid-RESUME at each graceful-restart boundary
 (`test_kill9_at_resume_crash_point`) and mid-abandon at each detach boundary (`test_kill9_at_abandon_crash_point`) — is
 `mise run crash-sweep`, and the tag release workflow runs it in CI.
 
