@@ -58,6 +58,10 @@ def test_a_driven_event_folds_into_the_log_and_fans_out_over_sse_exactly_once(tm
                 assert drove["status"] == 200, drove
                 live = tap.collect(window=6.0)
             assert live.count("event-logged") == 1, live
+            # Chunk-scoped (chunk_id set above): the IngestBroadcast dispatch must treat
+            # event.recorded as its own no-op arm, not fall through to the chunk-changed
+            # arm every other chunk-scoped fact kind takes.
+            assert live.count("chunk-changed") == 0, live
 
         # ...and the event reads back off the live hub, folded into the feed.
         feed = _events(hub)
