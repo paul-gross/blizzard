@@ -1,4 +1,4 @@
-"""The Protocol seam-size gate (AC1, widened by ``bzh:pluggable-seams``): a ``ClassDef`` counts
+"""The Protocol seam-size gate (``bzh:seam-size-ceiling``): a ``ClassDef`` counts
 iff ``Protocol`` is one of its own bases (matched by ``test_layering.py``'s
 ``_protocol_declarations``), and must declare at most ``_SEAM_SIZE_LIMIT`` own methods.
 ``_ACCEPTED_VIOLATIONS`` names today's exceptions; the gate fails on an unregistered violation
@@ -21,7 +21,7 @@ _SEAM_SIZE_LIMIT = 12
 
 _ACCEPTED_VIOLATIONS: set[str] = {
     # LoopContext's downstream steps exercise 13 of IHubClient's 15 methods — genuinely wide
-    # by design, not a seam left to narrow (blizzard-context:architecture/system-shape/seam-size.md).
+    # by design, not a seam left to narrow (blizzard-context:/architecture/system-shape/seam-size.md).
     "IHubClient",
 }
 
@@ -53,7 +53,7 @@ def _oversized_protocols(root: Path) -> set[str]:
 
 
 def test_no_protocol_exceeds_the_seam_size_limit_beyond_the_registered_exceptions() -> None:
-    """AC1: any Protocol wider than a dozen own methods is a violation unless named in
+    """Any Protocol wider than a dozen own methods is a violation unless named in
     ``_ACCEPTED_VIOLATIONS`` — the registry each later phase that narrows a seam empties
     its own entry from."""
     assert _oversized_protocols(_SRC_DIR) == _ACCEPTED_VIOLATIONS

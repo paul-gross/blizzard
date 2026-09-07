@@ -53,7 +53,7 @@ class WorkerHandle:
 
 class IHarnessWorkerLifecycle(Protocol):
     """Spawning, resuming, and judging a worker process (``bzh:seam-size-ceiling``) — one
-    of the five slices ``IHarnessAdapter`` composes; a consumer driving only worker
+    of the four slices ``IHarnessAdapter`` composes; a consumer driving only worker
     lifecycle takes this narrower seam instead."""
 
     def spawn(
