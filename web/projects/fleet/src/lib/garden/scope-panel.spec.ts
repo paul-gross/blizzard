@@ -127,10 +127,10 @@ describe('FleetScopePanel', () => {
 
     const section = el.querySelector('[data-testid="gardening-scope-panel-routines"]');
     expect(section?.textContent).toContain('nightly');
-    expect(section?.textContent).toContain('(default)');
+    expect(section?.querySelector('[data-testid="gardening-scope-panel-routine-default"]')).toBeTruthy();
   });
 
-  it('says so when no routine is related, and omits the (default) marker for a non-defaulting one', async () => {
+  it('says so when no routine is related, and omits the default marker for a non-defaulting one', async () => {
     const fixture = await mount({
       vm: { ...VM, relatedRoutines: [{ name: 'other', isDefault: false }] },
     });
@@ -138,7 +138,7 @@ describe('FleetScopePanel', () => {
 
     const section = el.querySelector('[data-testid="gardening-scope-panel-routines"]');
     expect(section?.textContent).toContain('other');
-    expect(section?.textContent).not.toContain('(default)');
+    expect(section?.querySelector('[data-testid="gardening-scope-panel-routine-default"]')).toBeNull();
 
     fixture.componentRef.setInput('vm', { ...VM, relatedRoutines: [] });
     await fixture.whenStable();

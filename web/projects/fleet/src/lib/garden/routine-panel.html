@@ -27,7 +27,9 @@
                   <li>
                     {{ scope.slug }}
                     @if (scope.isDefault) {
-                      <span class="default-mark">(default)</span>
+                      <fleet-kit-badge tone="spawning" variant="pill" data-testid="gardening-routine-scope-default">
+                        default
+                      </fleet-kit-badge>
                     }
                   </li>
                 }

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitBadge } from '../kit/kit-badge';
 import { KitButton } from '../kit/kit-button';
 import { KitFactList, type KitFact } from '../kit/kit-fact-list';
 import { KitPanel } from '../kit/kit-panel';
@@ -51,9 +52,8 @@ export interface LastSweptRowVm {
   readonly revisionsLabel: string;
 }
 
-/** One scope related to the selected routine (blizzard#489) — `isDefault` marks
- * whether this scope is the routine's own default, `RelatedRoutineVm`'s own shape
- * (`scope-panel.ts`). */
+/** One scope related to the selected routine — `isDefault` marks whether this scope
+ * is the routine's own default, `RelatedRoutineVm`'s own shape (`scope-panel.ts`). */
 export interface RelatedScopeVm {
   readonly slug: string;
   readonly isDefault: boolean;
@@ -71,9 +71,9 @@ export interface RoutinePanelVm {
   readonly measurements: readonly MeasurementReadingVm[];
   readonly lastSwept: readonly LastSweptRowVm[];
   readonly windowLabel: string;
-  /** Every scope linked to this routine (blizzard#489), each marked whether it is
-   * the routine's own default (D8) — `null` while the relation read is still
-   * pending, `trend`'s own nullable-secondary-read shape. */
+  /** Every scope linked to this routine, each marked whether it is the routine's
+   * own default (D8) — `null` while the relation read is still pending, `trend`'s
+   * own nullable-secondary-read shape. */
   readonly relatedScopes: readonly RelatedScopeVm[] | null;
 }
 
@@ -101,7 +101,7 @@ export interface RoutinePanelVm {
 @Component({
   selector: 'fleet-routine-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitButton, KitFactList, KitPanel, KitProseBlock],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitFactList, KitPanel, KitProseBlock],
   templateUrl: './routine-panel.html',
   styleUrl: './routine-panel.css',
 })

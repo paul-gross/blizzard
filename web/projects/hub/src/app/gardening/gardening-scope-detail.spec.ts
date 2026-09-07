@@ -31,7 +31,7 @@ const ROUTINE = {
 
 /**
  * Exercises the `/gardening/scopes` detail child — the selected scope's
- * description, lifecycle, and related-routines readout (blizzard#489). The list
+ * description, lifecycle, and related-routines readout. The list
  * beside it and the selection's own route wiring are `gardening-scopes-page.spec.ts`'s;
  * everything routine-shaped is `gardening-routines-page.spec.ts`'s. This pane still
  * reads the routines list (`relatedRoutines` resolves each related id to a name and
@@ -110,7 +110,7 @@ describe('GardeningScopeDetail', () => {
 
     const section = el.querySelector('[data-testid="gardening-scope-panel-routines"]');
     expect(section?.textContent).toContain('nightly');
-    expect(section?.textContent).toContain('(default)');
+    expect(section?.querySelector('[data-testid="gardening-scope-panel-routine-default"]')).toBeTruthy();
   });
 
   it('says so when no routine is related to the selected scope', async () => {

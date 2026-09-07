@@ -52,16 +52,6 @@ fleet-kit-panel {
   color: var(--label-dim);
   font-size: var(--fs-xs);
 }
-.default-mark {
-  display: inline-block;
-  margin-left: 6px;
-  border: 1px solid var(--cyan);
-  border-radius: 999px;
-  padding: 0 6px;
-  color: var(--cyan);
-  font-weight: 600;
-  font-size: var(--fs-xs);
-}
 .rp-blocked {
   color: var(--red, #c33);
 }

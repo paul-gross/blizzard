@@ -15350,7 +15350,7 @@
     },
     "/api/scopes/{slug}/routines": {
       "get": {
-        "description": "Every routine id linked to `slug` (blizzard#489) \u2014 the reverse direction of\n`GET /api/routines/{routine_id}/scopes` (blizzard#488). 404 on an unknown slug.",
+        "description": "Every routine id linked to `slug` \u2014 the reverse direction of\n`GET /api/routines/{routine_id}/scopes`. 404 on an unknown slug.",
         "operationId": "list_scope_routines_api_scopes__slug__routines_get",
         "parameters": [
           {

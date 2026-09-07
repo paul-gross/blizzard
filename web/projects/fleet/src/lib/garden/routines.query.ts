@@ -89,9 +89,8 @@ export function injectHubRoutineSweepsQuery(routineId: () => string | null, sinc
 
 /**
  * Hub `GET /api/routines/{routine_id}/scopes` read — every scope slug linked to a
- * routine's own set (blizzard#488), its own default always among them. Disabled while
- * `routineId()` is `null`, the same rest state {@link injectHubRoutineSweepsQuery}
- * carries.
+ * routine's own set, its own default always among them. Disabled while `routineId()`
+ * is `null`, the same rest state {@link injectHubRoutineSweepsQuery} carries.
  */
 export function injectHubRoutineScopesQuery(routineId: () => string | null) {
   return injectQuery(() => {

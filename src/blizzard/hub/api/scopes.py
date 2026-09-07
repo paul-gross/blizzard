@@ -66,8 +66,8 @@ def get_scope(slug: str, services: Annotated[HubServices, Depends(get_services)]
     dependencies=[Depends(require(FLEET_VIEW))],
 )
 def list_scope_routines(slug: str, services: Annotated[HubServices, Depends(get_services)]) -> list[str]:
-    """Every routine id linked to `slug` (blizzard#489) — the reverse direction of
-    `GET /api/routines/{routine_id}/scopes` (blizzard#488). 404 on an unknown slug."""
+    """Every routine id linked to `slug` — the reverse direction of
+    `GET /api/routines/{routine_id}/scopes`. 404 on an unknown slug."""
     scope = services.scopes.get(slug)
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")

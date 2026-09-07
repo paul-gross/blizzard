@@ -155,8 +155,7 @@ def test_retire_defaults_by_to_operator(tmp_path: Path) -> None:
     assert resp.json()["retired"] is True
 
 
-# --- GET /api/scopes/{slug}/routines — the routine_scopes join's reverse read
-# (blizzard#489) --------------------------------------------------------------------
+# --- GET /api/scopes/{slug}/routines — the routine_scopes join's reverse read -------
 
 
 _GRAPH = """

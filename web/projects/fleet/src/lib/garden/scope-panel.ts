@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitBadge } from '../kit/kit-badge';
 import { KitButton } from '../kit/kit-button';
 import type { ScopeDescriptionEditEvent } from './scope-list';
 
-/** One routine related to the selected scope (blizzard#489) — `isDefault` marks
- * whether this scope is that routine's own default, `RelatedScopeVm`'s own shape
- * (`routine-panel.ts`). */
+/** One routine related to the selected scope — `isDefault` marks whether this scope
+ * is that routine's own default, `RelatedScopeVm`'s own shape (`routine-panel.ts`). */
 export interface RelatedRoutineVm {
   readonly name: string;
   readonly isDefault: boolean;
@@ -20,8 +20,8 @@ export interface ScopePanelVm {
   readonly slug: string;
   readonly description: string;
   readonly retired: boolean;
-  /** Every routine linked to this scope (blizzard#489), each marked whether it
-   * defaults here (D4) — `null` while the relation read is still pending. */
+  /** Every routine linked to this scope, each marked whether it defaults here (D4)
+   * — `null` while the relation read is still pending. */
   readonly relatedRoutines: readonly RelatedRoutineVm[] | null;
 }
 
@@ -38,7 +38,7 @@ export interface ScopePanelVm {
 @Component({
   selector: 'fleet-scope-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitButton],
+  imports: [KitAsyncState, KitBadge, KitButton],
   templateUrl: './scope-panel.html',
   styleUrl: './scope-panel.css',
 })

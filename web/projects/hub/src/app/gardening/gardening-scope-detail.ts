@@ -35,9 +35,9 @@ import { map } from 'rxjs';
  *
  * The routines read is not dead weight even though this pane shows no routine of
  * its own: `FleetScopePanel` renders the routines related to the selected scope
- * (`scopePanelVm`'s own `relatedRoutines`, blizzard#489), resolving each id the
- * dedicated scope-routines read returns into a name and its default-ness off this
- * already-held list — do not "clean up" what looks like an unused query.
+ * (`scopePanelVm`'s own `relatedRoutines`), resolving each id the dedicated
+ * scope-routines read returns into a name and its default-ness off this already-held
+ * list — do not "clean up" what looks like an unused query.
  *
  * Scopes are editable in place and retire/enable-able, gated on `graph:edit` (the
  * same permission `src/blizzard/hub/api/scopes.py` requires) — `graph-detail.ts`'s
@@ -79,13 +79,16 @@ export class GardeningScopeDetail {
    * resolves to `false`, `graph-detail.ts`'s own `canEdit`. */
   protected readonly canEditScopes = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
 
-  /** The selected scope's related routines (blizzard#489), each resolved to a name
-   * and its default-ness off the already-held routines list (D2) — `null` until the
-   * scope-routines read resolves (D5). */
+  /** The selected scope's related routines, each resolved to a name and its
+   * default-ness off the already-held routines list (D2) — `null` until both that
+   * list and the scope-routines read resolve (D5): gating on the id read alone would
+   * let it settle first and render every entry as its bare id with no name and no
+   * default marked, which self-corrects once `routinesQuery` catches up but reads as
+   * a wrong, settled answer in between. */
   private readonly relatedRoutines = computed<readonly RelatedRoutineVm[] | null>(() => {
     const ids = this.scopeRoutinesQuery.data();
     const scope = this.selectedScope();
-    if (ids === undefined || scope === null) return null;
+    if (ids === undefined || scope === null || this.routinesQuery.data() === undefined) return null;
     const routinesById = new Map(this.routines().map((r) => [r.routine_id, r]));
     return ids.map((id) => {
       const routine = routinesById.get(id);

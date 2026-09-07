@@ -37,8 +37,8 @@ import { GardeningRunDialog } from './gardening-run-dialog';
  * which injects no query of its own. The routine and graph reads are the same
  * cache-keyed queries the list beside it already holds, so resolving the routed
  * routine independently costs no second fetch. The scopes read renders the
- * routine's related scope set (blizzard#489), each marked whether it is this
- * routine's own default (D8).
+ * routine's related scope set, each marked whether it is this routine's own
+ * default (D8).
  *
  * The reporting window is this pane's alone — nothing in the list is cut to it —
  * so it is computed here, once, at construction.
@@ -126,8 +126,8 @@ export class GardeningRoutineDetail {
     })),
   );
 
-  /** The selected routine's related scopes (blizzard#489), each marked whether it is
-   * the routine's own default (D8) — `null` until the routine-scopes read resolves
+  /** The selected routine's related scopes, each marked whether it is the routine's
+   * own default (D8) — `null` until the routine-scopes read resolves
    * (D5). */
   private readonly relatedScopes = computed<readonly RelatedScopeVm[] | null>(() => {
     const slugs = this.scopesQuery.data();

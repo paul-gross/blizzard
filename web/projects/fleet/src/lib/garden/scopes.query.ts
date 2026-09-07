@@ -21,9 +21,9 @@ export function injectHubScopesQuery() {
 }
 
 /**
- * Hub `GET /api/scopes/{slug}/routines` read — every routine id linked to a scope
- * (blizzard#489), the reverse of {@link injectHubRoutineScopesQuery}. Disabled while
- * `scopeSlug()` is `null`, the same rest state that query carries.
+ * Hub `GET /api/scopes/{slug}/routines` read — every routine id linked to a scope,
+ * the reverse of {@link injectHubRoutineScopesQuery}. Disabled while `scopeSlug()`
+ * is `null`, the same rest state that query carries.
  */
 export function injectHubScopeRoutinesQuery(scopeSlug: () => string | null) {
   return injectQuery(() => {

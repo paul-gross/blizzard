@@ -241,10 +241,10 @@ describe('FleetRoutinePanel', () => {
 
     const section = el.querySelector('[data-testid="gardening-routine-scopes"]');
     expect(section?.textContent).toContain('blizzard');
-    expect(section?.textContent).toContain('(default)');
+    expect(section?.querySelector('[data-testid="gardening-routine-scope-default"]')).toBeTruthy();
   });
 
-  it('omits the (default) marker for a non-default related scope, and says so when none are related', async () => {
+  it('omits the default marker for a non-default related scope, and says so when none are related', async () => {
     const fixture = await mount({
       vm: { ...VM, relatedScopes: [{ slug: 'other', isDefault: false }] },
     });
@@ -252,7 +252,7 @@ describe('FleetRoutinePanel', () => {
 
     const section = el.querySelector('[data-testid="gardening-routine-scopes"]');
     expect(section?.textContent).toContain('other');
-    expect(section?.textContent).not.toContain('(default)');
+    expect(section?.querySelector('[data-testid="gardening-routine-scope-default"]')).toBeNull();
 
     fixture.componentRef.setInput('vm', { ...VM, relatedScopes: [] });
     await fixture.whenStable();

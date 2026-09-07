@@ -5,7 +5,7 @@ import { page } from 'vitest/browser';
 import { FleetScopePanel, type ScopePanelVm } from './scope-panel';
 
 /**
- * The gardening scope panel's layout (blizzard#489, the tooled half of
+ * The gardening scope panel's layout (the tooled half of
  * `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method) — a real,
  * headless-Chromium proof that the header, description editor, lifecycle actions, and
  * related-routines list genuinely stack at phone widths with no horizontal overflow,
@@ -40,7 +40,7 @@ async function render() {
   return fixture;
 }
 
-describe('gardening scope panel layout shell sweep (web:shell-sweep, blizzard#489)', () => {
+describe('gardening scope panel layout shell sweep (web:shell-sweep)', () => {
   it.each([1280, 390, 320])('stacks every block with no horizontal overflow at %ipx', async (width) => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);

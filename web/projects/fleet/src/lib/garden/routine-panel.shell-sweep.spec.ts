@@ -5,10 +5,10 @@ import { page } from 'vitest/browser';
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
 
 /**
- * The gardening routine panel's health blocks (blizzard#397, the tooled half of
+ * The gardening routine panel's health blocks (the tooled half of
  * `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method) — a real,
- * headless-Chromium proof that the record, related-scopes (blizzard#489), strategy,
- * trend, measurement, and last-swept blocks genuinely stack at phone widths with no
+ * headless-Chromium proof that the record, related-scopes, strategy, trend,
+ * measurement, and last-swept blocks genuinely stack at phone widths with no
  * horizontal overflow, and that the last-swept table's own long revision hashes wrap
  * inside their column rather than forcing the table wider than its section. jsdom lays
  * out a flex column and a

@@ -134,15 +134,15 @@ export function hubRoutineBaselinesKey(routineId: string): readonly unknown[] {
 }
 
 /** One routine's linked scope set, keyed by routine id — `GET
- * /api/routines/{routine_id}/scopes` (blizzard#488). `routineId` is nullable,
- * `hubChunkKey`'s own null-tolerant shape, for the disabled-query rest state. */
+ * /api/routines/{routine_id}/scopes`. `routineId` is nullable, `hubChunkKey`'s own
+ * null-tolerant shape, for the disabled-query rest state. */
 export function hubRoutineScopesKey(routineId: string | null): readonly unknown[] {
   return ['hub', 'routine', routineId, 'scopes'];
 }
 
-/** One scope's linked routine set, keyed by slug — `GET /api/scopes/{slug}/routines`
- * (blizzard#489), the reverse of {@link hubRoutineScopesKey}. `scopeSlug` is nullable,
- * `hubChunkKey`'s own null-tolerant shape, for the disabled-query rest state. */
+/** One scope's linked routine set, keyed by slug — `GET /api/scopes/{slug}/routines`,
+ * the reverse of {@link hubRoutineScopesKey}. `scopeSlug` is nullable, `hubChunkKey`'s
+ * own null-tolerant shape, for the disabled-query rest state. */
 export function hubScopeRoutinesKey(scopeSlug: string | null): readonly unknown[] {
   return ['hub', 'scope', scopeSlug, 'routines'];
 }

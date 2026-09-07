@@ -58,7 +58,7 @@ const TREND = {
 
 /**
  * Exercises the `/gardening/routines` detail child — the selected routine's
- * record, its related scopes (blizzard#489), its read-only strategy, its three
+ * record, its related scopes, its read-only strategy, its three
  * health readings, and the Run trigger that opens the run dialog. The list beside
  * it, its blocked marking, and the selection's own route wiring are
  * `gardening-routines-page.spec.ts`'s.
@@ -142,7 +142,7 @@ describe('GardeningRoutineDetail', () => {
 
     const section = el.querySelector('[data-testid="gardening-routine-scopes"]');
     expect(section?.textContent).toContain('blizzard');
-    expect(section?.textContent).toContain('(default)');
+    expect(section?.querySelector('[data-testid="gardening-routine-scope-default"]')).toBeTruthy();
   });
 
   it('renders the strategy as read-only prose with no edit affordance beyond the Run trigger', async () => {

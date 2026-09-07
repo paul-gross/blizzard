@@ -119,8 +119,8 @@ class IReadRoutineScopeRepository(Protocol):
         ...
 
     def list_routines(self, scope_slug: str) -> list[str]:
-        """Every routine id linked to ``scope_slug``, sorted (blizzard#489) — the
-        reverse direction of :meth:`list_scopes`."""
+        """Every routine id linked to ``scope_slug``, sorted — the reverse direction
+        of :meth:`list_scopes`."""
         ...
 
 

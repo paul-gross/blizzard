@@ -62,7 +62,9 @@
                 <li>
                   {{ routine.name }}
                   @if (routine.isDefault) {
-                    <span class="default-mark">(default)</span>
+                    <fleet-kit-badge tone="spawning" variant="pill" data-testid="gardening-scope-panel-routine-default">
+                      default
+                    </fleet-kit-badge>
                   }
                 </li>
               }

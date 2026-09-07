@@ -1503,8 +1503,8 @@ export const retireScopeApiScopesSlugRetirePost = <ThrowOnError extends boolean 
 /**
  * List Scope Routines
  *
- * Every routine id linked to `slug` (blizzard#489) — the reverse direction of
- * `GET /api/routines/{routine_id}/scopes` (blizzard#488). 404 on an unknown slug.
+ * Every routine id linked to `slug` — the reverse direction of
+ * `GET /api/routines/{routine_id}/scopes`. 404 on an unknown slug.
  */
 export const listScopeRoutinesApiScopesSlugRoutinesGet = <ThrowOnError extends boolean = false>(options: Options<ListScopeRoutinesApiScopesSlugRoutinesGetData, ThrowOnError>): RequestResult<ListScopeRoutinesApiScopesSlugRoutinesGetResponses, ListScopeRoutinesApiScopesSlugRoutinesGetErrors, ThrowOnError> => (options.client ?? client).get<ListScopeRoutinesApiScopesSlugRoutinesGetResponses, ListScopeRoutinesApiScopesSlugRoutinesGetErrors, ThrowOnError>({ url: '/api/scopes/{slug}/routines', ...options });
 
