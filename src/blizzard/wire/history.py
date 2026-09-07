@@ -84,10 +84,10 @@ class BounceRow(HistoryRow):
 
 
 class ChunkHistoryView(BaseModel):
-    """The slice of a hub ``ChunkDetail`` payload the timeline needs — never a FastAPI
+    """The history/migrations/bounces slice of a hub ``ChunkDetail`` payload — never a FastAPI
     ``response_model``, decoded with pydantic's default ``extra="ignore"``. The three fields
-    are **required**, not defaulted to ``[]`` (issue #237), so a rename fails loudly rather
-    than decoding as "no history yet"."""
+    are **required**, not defaulted to ``[]``, so a rename fails loudly rather than decoding
+    as "no history yet"."""
 
     history: list[TransitionView]
     migrations: list[MigrationView]

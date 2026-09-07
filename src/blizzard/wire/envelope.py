@@ -41,10 +41,9 @@ class GraphArtifact(BaseModel):
 
 
 class WorkerArtifact(BaseModel):
-    """One artifact as the worker's own artifact routes serve it, node- or graph-scoped.
-    A node-scope row is resolved latest-by-epoch and names its producing node and
-    epoch; a graph-scope row is one of the pinned graph mint's own baked-in declarations
-    and carries neither, since no node-step produced it."""
+    """One artifact, node- or graph-scoped. A node-scope row is resolved latest-by-epoch
+    and names its producing node and epoch; a graph-scope row is one of the pinned graph
+    mint's own baked-in declarations and carries neither, since no node-step produced it."""
 
     scope: ArtifactScope
     name: str

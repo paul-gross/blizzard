@@ -25,7 +25,7 @@ class ToolCallSegmentView(BaseModel):
     # existed must still validate on read-back through `_content_view`.
     input_truncated: bool = False
     #: This turn carries ONLY a result for the call `tool_use_id` names, shipped in an earlier
-    #: window (blizzard#338) — a reader merges it onto that call rather than rendering it.
+    #: window (blizzard#338) — a patch onto that earlier call, not new content of its own.
     output_patch: bool = False
 
 
@@ -50,8 +50,9 @@ class TurnSegmentView(BaseModel):
     returned and slides with the recency window (blizzard#248 D1). ``kind`` is closed."""
 
     index: int
-    #: Closed to :data:`TurnKind` — a viewer branches on it turn-by-turn — while ``link``/
-    #: ``input_shape`` stay open; the cost is ``docs/versioning.md``'s.
+    #: Closed to :data:`TurnKind`, unlike ``link``/``input_shape`` which stay open — an
+    #: out-of-vocabulary kind is a hard failure, never a silent round-trip; the cost is
+    #: ``docs/versioning.md``'s.
     kind: TurnKind
     timestamp: str | None
     text: str

@@ -38,9 +38,9 @@ class AnalyticsEventsResponse(BaseModel):
 
 
 class AnalyticsCountView(BaseModel):
-    """One grouping key and how many events fell under it (blizzard#255). ``key`` is
-    whichever column the counts endpoint serving it groups by — a file path, a skill
-    name, an agent type, or a node id."""
+    """One grouping key and how many events fell under it (blizzard#255). ``key`` names
+    whichever dimension this response is grouped by — a file path, a skill name, an
+    agent type, or a node id."""
 
     key: str
     count: int

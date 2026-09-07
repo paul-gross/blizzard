@@ -3,7 +3,7 @@
 A turn's ``timestamp`` is an ISO-8601 string with an explicit UTC offset, never naive
 (``bzh:utc-instants``). ``available=False`` carries ``reason`` and an empty ``turns``.
 ``TurnView`` is retired (blizzard#248 D1) for ``transcript_segment.py``'s ``TurnSegmentView``,
-the same shape the hub's segment-content route serves — one viewer renders both."""
+the same shape reused across every transcript read path."""
 
 from __future__ import annotations
 
@@ -25,5 +25,5 @@ class TranscriptResponse(BaseModel):
     #: Which side answered (D1) — always ``"local"`` for an open lease's read.
     provenance: TranscriptProvenance = "local"
     #: Set only when a closed lease's hub could not be asked *and* local cannot answer
-    #: either (D1) — the panel's distinct hub-unreachable state.
+    #: either (D1) — distinct from an ordinary unavailable read.
     hub_unreachable: bool = False

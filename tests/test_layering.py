@@ -102,11 +102,9 @@ def _daemon_named_strings(root: Path, forbidden_prefixes: tuple[str, ...]) -> li
 
 
 def test_foundation_names_neither_daemon_in_a_string_literal() -> None:
-    """A-C see imports; a module path threaded as a string (``importlib.import_module``,
-    a dotted-symbol reference) is invisible to them. ``foundation/crash.py`` used to hold
-    exactly this shape (``bzh:crash-point-registry``'s instrumented-module roster, now
-    test-side) — this is the file's first non-import check, one bespoke walker like its
-    siblings rather than a reshape of the shared import helper."""
+    """A-C only see imports; a module path threaded as a string is invisible to them —
+    ``foundation/crash.py`` used to hold exactly that shape. This file's first non-import
+    check, one bespoke walker like its siblings."""
     violations = _daemon_named_strings(_FOUNDATION_DIR, ("blizzard.hub.", "blizzard.runner."))
     assert not violations, f"N — foundation must not name either daemon, even as a string: {violations}"
 

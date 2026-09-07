@@ -332,7 +332,7 @@
         "type": "object"
       },
       "CapacitiesView": {
-        "description": "Agent slots \u2014 the same math FILL claims against.",
+        "description": "Agent-slot accounting: ``used`` plus ``free`` accounts for ``max_agents``.",
         "properties": {
           "free": {
             "title": "Free",
@@ -950,7 +950,7 @@
         "type": "object"
       },
       "DashboardView": {
-        "description": "``GET /api/dashboard`` \u2014 the panel's seven status reads composed into one\nresponse. ``fleet_summary`` alone is a hub pass-through and the only nullable\nsection \u2014 ``None`` on a hub failure or an unwired runner, while the six local\nsections still populate.",
+        "description": "``GET /api/dashboard`` \u2014 seven status reads composed into one response.\n``fleet_summary`` alone is a hub pass-through and the only nullable section \u2014\n``None`` on a hub failure or an unwired runner, while the six local sections\nstill populate.",
         "properties": {
           "asks": {
             "$ref": "#/components/schemas/AskListResponse"
@@ -3819,7 +3819,7 @@
         "type": "object"
       },
       "WorkerArtifact": {
-        "description": "One artifact as the worker's own artifact routes serve it, node- or graph-scoped.\nA node-scope row is resolved latest-by-epoch and names its producing node and\nepoch; a graph-scope row is one of the pinned graph mint's own baked-in declarations\nand carries neither, since no node-step produced it.",
+        "description": "One artifact, node- or graph-scoped. A node-scope row is resolved latest-by-epoch\nand names its producing node and epoch; a graph-scope row is one of the pinned graph\nmint's own baked-in declarations and carries neither, since no node-step produced it.",
         "properties": {
           "branch_name": {
             "anyOf": [

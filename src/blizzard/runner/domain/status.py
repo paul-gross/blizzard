@@ -48,7 +48,7 @@ class PauseState:
 
 @dataclass(frozen=True)
 class Capacities:
-    """Agent slots — the same math FILL claims against (``loop/steps.py``'s ``Fill``)."""
+    """Agent-slot accounting: ``used`` plus ``free`` accounts for ``max_agents``."""
 
     max_agents: int
     used: int
