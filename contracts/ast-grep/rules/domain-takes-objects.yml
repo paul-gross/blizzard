@@ -5,7 +5,7 @@ language: Python
 severity: error
 message: >-
   Domain operations take already-loaded objects, not raw identifiers
-  (blizzard-context:architecture/repository-access.md#domain-operations-take-objects)
+  (blizzard-context:/architecture/repository-access.md#domain-operations-take-objects-bzhdomain-takes-objects)
   — resolve $ID to its entity at the edge and pass that instead.
 files:
   - src/blizzard/hub/domain/**

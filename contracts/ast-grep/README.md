@@ -10,10 +10,10 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
 
 ## Rules
 
-- **`bzh:domain-takes-objects`** (`rules/domain-takes-objects.yml`) — a domain operation takes an already-loaded
-  object, never a raw identifier it resolves itself. The rule's own prose home, including its `Detect`/`Scope`
-  boundary, is `blizzard-context:architecture/repository-access.md#domain-operations-take-objects`; this file states
-  none of that prose, only what the rule mechanically checks:
+- **`bzh:domain-takes-objects`** (`rules/domain-takes-objects.yml`) — a domain operation takes an already-loaded object,
+  never a raw identifier it resolves itself. The rule's own prose home, including its `Detect`/`Scope` boundary, is
+  `blizzard-context:/architecture/repository-access.md#domain-operations-take-objects-bzhdomain-takes-objects`; this
+  file states none of that prose, only what the rule mechanically checks:
   - Scoped to `src/blizzard/hub/domain/**` and `src/blizzard/runner/domain/**` — a domain operation's own home, not the
     whole repo.
   - A domain *operation* is a public method; a leading-underscore helper is an internal step, not an edge-facing entry
