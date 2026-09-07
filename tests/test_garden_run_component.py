@@ -53,7 +53,9 @@ def _routine(hub: HubHarness, *, name: str = "gardening", scope: str = "blizzard
 def _run(hub: HubHarness, routine: Routine) -> str:
     """Mint a real run through `routine_run.run` — a genuine `work_item_runs` row
     joined through a genuine `chunk_work_refs`/`work_items` pointer, not hand-rolled."""
-    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    scope = hub.services.scopes.get(routine.default_scope_slug)
+    assert scope is not None
+    result = hub.services.routine_run.run(routine, scope=scope, mode=RunMode.FULL, note=None, author=_AUTHOR)
     return result.chunk_id
 
 

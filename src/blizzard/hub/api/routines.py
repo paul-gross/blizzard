@@ -25,7 +25,7 @@ from blizzard.hub.domain.garden_sweeps import GardenSweeps
 from blizzard.hub.domain.garden_trend import Trend
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.routine_baselines import RoutineBaseline
-from blizzard.hub.domain.routine_run import RunResult, ScopeRetiredError
+from blizzard.hub.domain.routine_run import RunResult, ScopeNotRelatedError, ScopeRetiredError
 from blizzard.hub.domain.routines import (
     Routine,
     RoutineDefaultScopeUnlinkError,
@@ -428,10 +428,12 @@ def run_routine(
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> object:
     """Mint, ingest, and promote a hub work item from the routine, in one act
-    (blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug`` or an unknown
-    ``mode``; 503 on a retired effective scope or a graph name with no enabled mint (D5,
-    mirroring ``POST /work-sources/{source}/items``'s own retired-default-graph shape);
-    409 on an out-of-band ingest already holding the allocated ref's pointer."""
+    (blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
+    ``mode``, or an effective scope no scope row holds or outside the routine's own
+    related set (blizzard#399 D1, D4 — never minted); 503 on a retired effective scope or
+    a graph name with no enabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s
+    own retired-default-graph shape); 409 on an out-of-band ingest already holding the
+    allocated ref's pointer."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
@@ -442,16 +444,32 @@ def run_routine(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"unknown mode {request.mode!r}"
         ) from exc
     try:
-        slug = ScopeSlug.parse(request.scope_slug) if request.scope_slug is not None else None
+        slug = (
+            ScopeSlug.parse(request.scope_slug)
+            if request.scope_slug is not None
+            else ScopeSlug.parse(routine.default_scope_slug)
+        )
+    except ScopeSlugError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    scope = services.scopes.get(slug.value)
+    if scope is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"unknown scope {slug.value!r}")
+    try:
         result = services.routine_run.run(
             routine,
-            scope_slug=slug,
+            scope=scope,
             mode=mode,
             note=request.note,
             author=WorkItemAuthor.user(identity.user_id),
         )
-    except ScopeSlugError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except ScopeNotRelatedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"scope {exc.slug!r} is not related to routine {exc.routine_id!r} — link it first with "
+                f"`blizzard hub routine scope add {exc.routine_id} {exc.slug}`"
+            ),
+        ) from exc
     except (RoutineGraphUnresolvedError, ScopeRetiredError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except IngestConflict as exc:

@@ -46,19 +46,21 @@ own default scope, which stays a member of its set for as long as it is the defa
 
 `blizzard hub routine run <name> [--scope <slug>] [--mode full|delta] [--note <text>]` mints, ingests, and promotes a
 hub work item from the named routine, in one act. `NAME` resolves to the routine's `routine_id` through the routine
-list; `--scope` overrides the routine's own default, minting an unseen slug the same way `scope create` does. `--mode`
-defaults to `full`; a requested `delta` against a routine/scope pair with no recorded baseline downgrades to `full`
-rather than refusing — the CLI names the downgrade in its output, and the item's own charge does too. A retired
-effective scope, or a routine whose graph has lost every enabled mint, refuses the run rather than running it anyway.
+list; `--scope` overrides the routine's own default with a scope already linked into the routine's own related set —
+naming one that is not, or a slug no scope row holds, refuses rather than minting it (`routine scope add` links one
+first). `--mode` defaults to `full`; a requested `delta` against a routine/scope pair with no recorded baseline
+downgrades to `full` rather than refusing — the CLI names the downgrade in its output, and the item's own charge does
+too. A retired effective scope, or a routine whose graph has lost every enabled mint, refuses the run rather than
+running it anyway.
 
 The hub board's Gardening tab offers the same act as a dialog on its Routines sub-tab, reachable from the selected
-routine's own panel. It resolves the delta baseline *before* the operator submits, through
-`GET /api/routines/{routine_id}/baselines` — one entry per scope this routine has ever swept, each carrying its
-finding-set id, the instant it was recorded, and, per repo the sweep touched, how many `delivery_repo_landed` events
-that repo has recorded since. A scope absent from the list has never been swept by this routine; the dialog steers those
-pairs to full rather than offering a delta with nothing to run against. A new scope is minted through
-`POST /api/scopes`, with its description, before the run is ever submitted — never left to the run route's own
-empty-description mint.
+routine's own panel. The scope picker offers only the routine's own related, non-retired scopes — the same set `scope
+add`/`scope remove` manage — and nothing else; linking a scope into that set is what makes it offerable here. It
+resolves the delta baseline *before* the operator submits, through `GET /api/routines/{routine_id}/baselines` — one
+entry per scope this routine has ever swept, each carrying its finding-set id, the instant it was recorded, and, per
+repo the sweep touched, how many `delivery_repo_landed` events that repo has recorded since. A scope absent from the
+list has never been swept by this routine; the dialog steers those pairs to full rather than offering a delta with
+nothing to run against.
 
 ## Reading a routine's health
 

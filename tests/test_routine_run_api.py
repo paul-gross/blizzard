@@ -77,16 +77,45 @@ def test_run_defaults_to_the_routines_own_scope(tmp_path: Path) -> None:
     assert body["scope_slug"] == "blizzard"
 
 
-def test_run_scope_override_mints_an_unseen_slug(tmp_path: Path) -> None:
+def test_run_scope_override_unknown_slug_is_422_and_never_mints(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _mint_graph(hub)
     routine = _create_routine(hub)
     assert hub.client.get("/api/scopes/new-scope").status_code == 404
 
-    body = hub.client.post(f"/api/routines/{routine['routine_id']}/run", json={"scope_slug": "new-scope"}).json()
+    resp = hub.client.post(f"/api/routines/{routine['routine_id']}/run", json={"scope_slug": "new-scope"})
 
-    assert body["scope_slug"] == "new-scope"
-    assert hub.client.get("/api/scopes/new-scope").status_code == 200
+    assert resp.status_code == 422, resp.text
+    assert "new-scope" in resp.json()["detail"]
+    assert hub.client.get("/api/scopes/new-scope").status_code == 404
+
+
+def test_run_scope_override_unrelated_scope_is_422_naming_the_relating_command(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create_routine(hub)
+    created = hub.client.post("/api/scopes", json={"slug": "unrelated", "description": ""})
+    assert created.status_code == 201, created.text
+
+    resp = hub.client.post(f"/api/routines/{routine['routine_id']}/run", json={"scope_slug": "unrelated"})
+
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert "unrelated" in detail
+    assert f"routine scope add {routine['routine_id']} unrelated" in detail
+
+
+def test_run_scope_override_a_related_scope_runs_against_it(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create_routine(hub)
+    hub.client.post("/api/scopes", json={"slug": "related", "description": ""})
+    linked = hub.client.put(f"/api/routines/{routine['routine_id']}/scopes/related")
+    assert linked.status_code == 204, linked.text
+
+    body = hub.client.post(f"/api/routines/{routine['routine_id']}/run", json={"scope_slug": "related"}).json()
+
+    assert body["scope_slug"] == "related"
 
 
 def test_run_delta_with_no_recorded_baseline_downgrades_to_full(tmp_path: Path) -> None:

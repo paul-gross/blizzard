@@ -566,7 +566,7 @@ def build_services(
         ),
         routine_run=RunService(
             scopes=scope_store,
-            scope_registry=scope_registry,
+            routine_scopes=routine_scope_store,
             graphs=graph_store,
             finding_sets=finding_set_store,
             items=work_item_store,

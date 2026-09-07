@@ -1,8 +1,8 @@
 """``RunService`` against a real store (blizzard#392, component tier) — ``build_hub``'s
 own full wiring, exercised through ``HubServices.routine_run`` directly (no HTTP route
-yet; Phase 2 adds one). Covers full, delta with a baseline, delta downgraded, a new
-scope minted by the run, the routine's defaults reaching the chunk, the graph pin, and
-the promote — the acceptance list the plan's Phase 1 owes."""
+yet; Phase 2 adds one). Covers full, delta with a baseline, delta downgraded, an
+override against a related scope, the routine's defaults reaching the chunk, the graph
+pin, and the promote — the acceptance list the plan's Phase 1 owes."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.routine_run import ScopeRetiredError
+from blizzard.hub.domain.routine_run import ScopeNotRelatedError, ScopeRetiredError
 from blizzard.hub.domain.routines import Routine, RoutineGraphUnresolvedError, RunMode
-from blizzard.hub.domain.scopes import ScopeSlug
+from blizzard.hub.domain.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
@@ -51,11 +51,19 @@ def _routine(
     return routine, graph
 
 
+def _default_scope(hub: HubHarness, routine: Routine) -> Scope:
+    scope = hub.services.scopes.get(routine.default_scope_slug)
+    assert scope is not None
+    return scope
+
+
 def test_full_mode_mints_ingests_and_promotes(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
 
-    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(
+        routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+    )
 
     assert result.effective_mode is RunMode.FULL
     assert result.downgraded is False
@@ -74,7 +82,9 @@ def test_the_minted_chunk_carries_a_resolvable_run_context(tmp_path: Path) -> No
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
 
-    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(
+        routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+    )
 
     minted = hub.services.chunks.record.get(result.chunk_id)
     assert minted is not None
@@ -89,7 +99,9 @@ def test_chunk_is_pinned_to_the_routines_graph(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, graph = _routine(hub)
 
-    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(
+        routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+    )
 
     minted = hub.services.chunks.record.get(result.chunk_id)
     assert minted is not None
@@ -100,7 +112,9 @@ def test_the_routines_model_and_effort_defaults_reach_the_minted_chunk(tmp_path:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub, model=["opus"], effort="high")
 
-    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(
+        routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+    )
 
     minted = hub.services.chunks.record.get(result.chunk_id)
     assert minted is not None
@@ -108,24 +122,33 @@ def test_the_routines_model_and_effort_defaults_reach_the_minted_chunk(tmp_path:
     assert minted.default_effort == "high"
 
 
-def test_a_scope_override_naming_no_existing_slug_mints_it_in_the_same_act(tmp_path: Path) -> None:
+def test_a_scope_override_outside_the_routines_related_set_is_refused_never_minted(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    assert hub.services.scopes.get("new-scope") is None
+    unrelated = hub.services.scope_registry.ensure(ScopeSlug.parse("unrelated"))
 
-    result = hub.services.routine_run.run(
-        routine, scope_slug=ScopeSlug.parse("new-scope"), mode=RunMode.FULL, note=None, author=_AUTHOR
-    )
+    with pytest.raises(ScopeNotRelatedError):
+        hub.services.routine_run.run(routine, scope=unrelated, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
-    assert hub.services.scopes.get("new-scope") is not None
-    assert result.item.scope_slug == "new-scope"
+
+def test_a_scope_override_naming_a_related_scope_runs_against_it(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    routine, _graph = _routine(hub)
+    related = hub.services.scope_registry.ensure(ScopeSlug.parse("related"))
+    hub.services.routine_scope_membership.link(routine, related)
+
+    result = hub.services.routine_run.run(routine, scope=related, mode=RunMode.FULL, note=None, author=_AUTHOR)
+
+    assert result.item.scope_slug == "related"
 
 
 def test_delta_against_a_never_swept_pair_downgrades_to_full(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
 
-    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(
+        routine, scope=_default_scope(hub, routine), mode=RunMode.DELTA, note=None, author=_AUTHOR
+    )
 
     assert result.effective_mode is RunMode.FULL
     assert result.downgraded is True
@@ -138,7 +161,9 @@ def test_delta_with_a_recorded_baseline_stays_delta_and_names_its_revisions(tmp_
     routine, graph = _routine(hub)
     _seed_baseline(hub, graph_id=graph.graph_id, routine_name=routine.name, scope_slug="blizzard")
 
-    result = hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.DELTA, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(
+        routine, scope=_default_scope(hub, routine), mode=RunMode.DELTA, note=None, author=_AUTHOR
+    )
 
     assert result.effective_mode is RunMode.DELTA
     assert result.downgraded is False
@@ -152,7 +177,7 @@ def test_a_note_lands_in_the_charge_as_a_this_run_section(tmp_path: Path) -> Non
     routine, _graph = _routine(hub)
 
     result = hub.services.routine_run.run(
-        routine, scope_slug=None, mode=RunMode.FULL, note="focus on the auth module", author=_AUTHOR
+        routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note="focus on the auth module", author=_AUTHOR
     )
 
     assert "This run" in result.item.body
@@ -167,7 +192,9 @@ def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> Non
     hub.services.scope_lifecycle.retire(scope, by="operator")
 
     with pytest.raises(ScopeRetiredError):
-        hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        hub.services.routine_run.run(
+            routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+        )
 
 
 def test_a_routine_whose_graph_has_no_enabled_mint_is_refused(tmp_path: Path) -> None:
@@ -176,7 +203,9 @@ def test_a_routine_whose_graph_has_no_enabled_mint_is_refused(tmp_path: Path) ->
     hub.services.graph_lifecycle.retire(graph, by="operator")
 
     with pytest.raises(RoutineGraphUnresolvedError):
-        hub.services.routine_run.run(routine, scope_slug=None, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        hub.services.routine_run.run(
+            routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+        )
 
 
 def _seed_baseline(hub: HubHarness, *, graph_id: str, routine_name: str, scope_slug: str) -> None:

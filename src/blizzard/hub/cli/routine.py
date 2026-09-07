@@ -198,7 +198,10 @@ def routine_scope_remove(cli: CliContext, routine_id: str, scope_slug: str) -> N
 @routine_group.command("run", cls=FleetCommand)
 @click.argument("name")
 @click.option(
-    "--scope", "scope_slug", default=None, help="Override the routine's default scope slug — mints it if unseen."
+    "--scope",
+    "scope_slug",
+    default=None,
+    help="Override the routine's default scope slug — must already be linked into the routine's own set.",
 )
 @click.option(
     "--mode",

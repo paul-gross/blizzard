@@ -441,6 +441,8 @@ def test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_se
         for slug in (never_swept, retired_swept):
             created = g.hub.post("/api/scopes", json={"slug": slug, "description": ""})
             assert created.status_code == 201, created.text
+        linked = g.hub.put(f"/api/routines/{g.routine_id}/scopes/{retired_swept}")
+        assert linked.status_code == 204, linked.text
 
         recorded = deliver(g, [add_op("src/app.py:1")])
         assert recorded.status_code == 200 and recorded.json()["outcome"] == "recorded", recorded.text
