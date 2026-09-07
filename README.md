@@ -17,10 +17,24 @@
   <img alt="Store" src="https://img.shields.io/badge/store-sqlite%20%7C%20postgres-5cd1e5">
 </p>
 
+<p align="center">
+  <img src="docs/media/board.webp" alt="The Blizzard chunk board — a live fleet view with a chunk's detail drawer open" width="900">
+</p>
+<p align="center">
+  <sub><em>Mission control: the chunk board, the runner registry, and one chunk's full node history.</em></sub>
+</p>
+
 Blizzard runs **the loop around the work**. It ingests items from your backlog, sequences and claims them, leases each
 worker an isolated environment in **your own workspace** ([winter](https://github.com/paul-gross/winter) enabled),
 judges what comes back, drives the result to delivery, and recovers correctly when any of that is interrupted. That loop
 — and the facts it records — is the whole product.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/topology.svg">
+    <img src="docs/media/topology-light.svg" alt="One hub connected to three runners — your laptop, a teammate's laptop, and the box in the corner — with every arrow pointing from a runner to the hub" width="720">
+  </picture>
+</p>
 
 One **hub** is shared by everyone: a single queue, a single set of workflows, and one truthful account of what the fleet
 has done. **Runners** are many — one on each engineer's machine, or on a spare box in the corner — all drawing from that
@@ -52,11 +66,44 @@ show up on the same board.
   fleet-wide, with an optional per-chunk cap and a runner-level spend kill-switch.
 - **Mission control, embedded** — the board ships inside the wheel: a live fleet view with a mobile glance shell, a
   graph explorer with retire/re-enable controls, and a durable, severity-ranked operational event log.
+- **Gardening — the fleet turned on your own codebase** — author a scope, point a routine at it, and each run records
+  findings anchored to a file, a line, and the rule id they violate. A finding carries its own fact history rather than
+  a stored flag — live, gone, first observed, last seen — and closes through explicit verbs. A garden proposal answers
+  one or more of them with an argument and the evidence attached.
 - **Everything external is a seam** — workspace, work source, coding harness, delivery, and human channel are all named
   interfaces with pluggable providers. The reference stack is the first implementation, not a shortcut around them.
 - **One repo, one wheel** — a single distributable ships both daemons, the CLI, and the compiled Angular frontend as
   embedded assets. No Node at install time or at runtime.
 - **sqlite by default** — postgres is a configuration knob (`db_url`), not a prerequisite.
+
+## 📸 A look at the board
+
+The chunk board is above. Three more of the hub's surfaces:
+
+<details>
+<summary><b>Design and build your own workflow</b></summary>
+<br>
+<img src="docs/media/graph-advanced-workflow.webp" alt="The graph explorer showing a workflow graph, with pass and fail edges drawn between the plan, plan-review, build, verify, and review nodes, including the cycles of the fix loop">
+<p><sub>Work travels node to node, and each node is a fresh or resumed agent tuned to that one job. The edges close the
+loops — a failed gate routes back into <code>build</code> rather than off the rails — which is what makes the graph a
+place to do loop engineering.</sub></p>
+</details>
+
+<details>
+<summary><b>Gardening</b></summary>
+<br>
+<img src="docs/media/gardening-routines.webp" alt="The gardening routines list beside one routine's activity panel, showing inflow and outflow counts and a dated measurement log per scope">
+<p><sub>Evaluate the project along any axis you define, producing findings that violate an invariant or a project
+rule.</sub></p>
+</details>
+
+<details>
+<summary><b>Garden proposals</b></summary>
+<br>
+<img src="docs/media/gardening-proposals.webp" alt="The garden proposals surface showing waiting proposals filtered by class, beside one proposal's argument, its pass and accept commands, and the evidence findings behind it">
+<p><sub>Agents then propose the sweeping changes that prune the drift those findings expose — and you stay on the loop,
+passing or accepting each proposal on its argument and its evidence.</sub></p>
+</details>
 
 ## 🚀 Quickstart
 

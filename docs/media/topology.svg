@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 286" width="760" height="286" role="img">
+  <!-- Blizzard hub/runner topology, dark-ground variant, for the reader's dark theme.
+       One hub, many runners, and every arrow pointing at the hub: contact is
+       runner-initiated, so the hub never reaches into anyone's machine. -->
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2b6675"/>
+    </marker>
+  </defs>
+  <rect width="760" height="286" rx="10" fill="#060a12"/>
+  <g fill="none" stroke="#2b6675" stroke-width="1.6" marker-end="url(#ah)">
+    <path d="M494 50 C 418 50, 366 116, 288 116"/>
+    <path d="M494 124 C 418 124, 366 116, 288 116"/>
+    <path d="M494 198 C 418 198, 366 116, 288 116"/>
+  </g>
+  <rect x="24" y="58" width="252" height="134" rx="9" fill="#0b1120" stroke="#f2b25c" stroke-opacity="0.5"/>
+  <circle cx="58" cy="92" r="8" fill="#f2b25c"/>
+  <circle cx="58" cy="92" r="13" fill="none" stroke="#f2b25c" stroke-width="1.3" opacity="0.55"/>
+  <text x="84" y="99" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="19" font-weight="700" letter-spacing="3" fill="#f2b25c">HUB</text>
+  <text x="44" y="128" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="10.5" fill="#b8c6d8">· one queue, shared by everyone</text>
+  <text x="44" y="147" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="10.5" fill="#b8c6d8">· one set of workflow graphs</text>
+  <text x="44" y="166" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="10.5" fill="#b8c6d8">· one record of what happened</text>
+  <rect x="498" y="22" width="238" height="56" rx="7" fill="#0b1120" stroke="#1d2b44"/>
+  <circle cx="524" cy="50" r="5.5" fill="#5cd1e5"/>
+  <text x="542" y="47" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="700" letter-spacing="1.5" fill="#5cd1e5">RUNNER</text>
+  <text x="542" y="64" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#5c7089">your laptop</text>
+  <rect x="498" y="96" width="238" height="56" rx="7" fill="#0b1120" stroke="#1d2b44"/>
+  <circle cx="524" cy="124" r="5.5" fill="#5cd1e5"/>
+  <text x="542" y="121" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="700" letter-spacing="1.5" fill="#5cd1e5">RUNNER</text>
+  <text x="542" y="138" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#5c7089">a teammate's laptop</text>
+  <rect x="498" y="170" width="238" height="56" rx="7" fill="#0b1120" stroke="#1d2b44"/>
+  <circle cx="524" cy="198" r="5.5" fill="#5cd1e5"/>
+  <text x="542" y="195" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" font-weight="700" letter-spacing="1.5" fill="#5cd1e5">RUNNER</text>
+  <text x="542" y="212" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#5c7089">the box in the corner</text>
+  <text x="380" y="252" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="10.5" fill="#b8c6d8">claims a chunk · leases an environment · reports facts back</text>
+  <text x="380" y="270" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#5c7089">every connection is opened by the runner — the hub never reaches into a machine</text>
+</svg>
