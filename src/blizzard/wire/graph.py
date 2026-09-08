@@ -10,6 +10,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 
 
 class GraphMintRequest(BaseModel):
@@ -98,12 +99,12 @@ class GraphNodeView(BaseModel):
 
     node_id: str
     name: str
-    executor: str
-    session: str
+    executor: Executor
+    session: SessionMode
     # The session reference target (issues #115, #144): ``None`` for a bare reference,
     # otherwise the declared session or node name it targets. Read with ``session``.
     session_source: str | None = None
-    judged_by: str
+    judged_by: JudgedBy
     retries_max: int | None = None
     retries_exhausted: str | None = None
     prompt: str | None = None

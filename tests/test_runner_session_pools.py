@@ -20,7 +20,8 @@ from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTr
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.steps import Advance, Fill, Pull
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, RotatePolicyView
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.graph import RotatePolicyView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

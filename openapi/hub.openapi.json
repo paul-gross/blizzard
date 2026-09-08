@@ -3726,12 +3726,10 @@
             "type": "array"
           },
           "executor": {
-            "title": "Executor",
-            "type": "string"
+            "$ref": "#/components/schemas/Executor"
           },
           "judged_by": {
-            "title": "Judged By",
-            "type": "string"
+            "$ref": "#/components/schemas/JudgedBy"
           },
           "judgement_prompt": {
             "anyOf": [
@@ -3799,8 +3797,7 @@
             "title": "Retries Max"
           },
           "session": {
-            "title": "Session",
-            "type": "string"
+            "$ref": "#/components/schemas/SessionMode"
           },
           "session_source": {
             "anyOf": [
@@ -3890,7 +3887,7 @@
           "rotate": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/blizzard__wire__graph__RotatePolicyView"
+                "$ref": "#/components/schemas/RotatePolicyView"
               },
               {
                 "type": "null"
@@ -4646,7 +4643,7 @@
           "session_rotate": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/blizzard__wire__envelope__RotatePolicyView"
+                "$ref": "#/components/schemas/RotatePolicyView"
               },
               {
                 "type": "null"
@@ -5440,6 +5437,46 @@
           "role"
         ],
         "title": "RoleAssignmentRequest",
+        "type": "object"
+      },
+      "RotatePolicyView": {
+        "description": "One declared session's rotation bounds (issue #144).\n\nEvery threshold is independently optional; ``max_invocations`` counts **harness\ninvocations**, not node-steps, one of which burns several.",
+        "properties": {
+          "max_context_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Context Tokens"
+          },
+          "max_invocations": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Invocations"
+          },
+          "max_transcript_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Transcript Bytes"
+          }
+        },
+        "title": "RotatePolicyView",
         "type": "object"
       },
       "RouteClaim": {
@@ -8140,86 +8177,6 @@
           }
         },
         "title": "WorkSourcesListView",
-        "type": "object"
-      },
-      "blizzard__wire__envelope__RotatePolicyView": {
-        "description": "The declared session's rotation bounds (issue #144), carried on ``NodeConfig``.\n``max_invocations`` counts **harness invocations** \u2014 spawn, resume, judge \u2014 not node-steps,\nof which one burns two or three.",
-        "properties": {
-          "max_context_tokens": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Context Tokens"
-          },
-          "max_invocations": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Invocations"
-          },
-          "max_transcript_bytes": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Transcript Bytes"
-          }
-        },
-        "title": "RotatePolicyView",
-        "type": "object"
-      },
-      "blizzard__wire__graph__RotatePolicyView": {
-        "description": "One declared session's rotation bounds (issue #144).\n\nEvery threshold is independently optional; ``max_invocations`` counts **harness\ninvocations**, not node-steps, one of which burns several.",
-        "properties": {
-          "max_context_tokens": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Context Tokens"
-          },
-          "max_invocations": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Invocations"
-          },
-          "max_transcript_bytes": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Transcript Bytes"
-          }
-        },
-        "title": "RotatePolicyView",
         "type": "object"
       }
     }

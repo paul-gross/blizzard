@@ -20,9 +20,8 @@ from blizzard.wire.envelope import (
     GraphArtifact,
     NodeConfig,
     NodeEnvelope,
-    RotatePolicyView,
 )
-from blizzard.wire.graph import ProducesEntry
+from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 
 
 @dataclass(frozen=True)

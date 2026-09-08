@@ -46,10 +46,10 @@ def _node_view(node: Node) -> GraphNodeView:
     return GraphNodeView(
         node_id=node.node_id,
         name=node.name,
-        executor=node.executor.value,
-        session=node.session.value,
+        executor=node.executor,
+        session=node.session,
         session_source=node.session_source,
-        judged_by=node.judged_by.value,
+        judged_by=node.judged_by,
         retries_max=node.retries_max,
         retries_exhausted=node.retries_exhausted,
         prompt=node.prompt,

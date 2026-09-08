@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.wire.graph import ProducesEntry
+from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 
 
 class EnvelopeArtifact(BaseModel):
@@ -65,16 +65,6 @@ class EnvelopeChoice(BaseModel):
     description: str
     # Whether this choice is gated on green checks (issue #114); `False` leaves it ungated.
     requires_checks: bool = False
-
-
-class RotatePolicyView(BaseModel):
-    """The declared session's rotation bounds (issue #144), carried on ``NodeConfig``.
-    ``max_invocations`` counts **harness invocations** — spawn, resume, judge — not node-steps,
-    of which one burns two or three."""
-
-    max_context_tokens: int | None = None
-    max_transcript_bytes: int | None = None
-    max_invocations: int | None = None
 
 
 class NodeConfig(BaseModel):

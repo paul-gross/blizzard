@@ -81,10 +81,9 @@ from blizzard.wire.envelope import (
     GraphArtifact,
     NodeConfig,
     NodeEnvelope,
-    RotatePolicyView,
 )
 from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
-from blizzard.wire.graph import ProducesEntry
+from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimResponse, RouteTokenRekeyResponse

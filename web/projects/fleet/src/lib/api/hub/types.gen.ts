@@ -2441,14 +2441,8 @@ export type GraphNodeView = {
      * Choices
      */
     choices?: Array<GraphChoiceView>;
-    /**
-     * Executor
-     */
-    executor: string;
-    /**
-     * Judged By
-     */
-    judged_by: string;
+    executor: Executor;
+    judged_by: JudgedBy;
     /**
      * Judgement Prompt
      */
@@ -2481,10 +2475,7 @@ export type GraphNodeView = {
      * Retries Max
      */
     retries_max?: number | null;
-    /**
-     * Session
-     */
-    session: string;
+    session: SessionMode;
     /**
      * Session Source
      */
@@ -2535,7 +2526,7 @@ export type GraphSessionView = {
      * Name
      */
     name: string;
-    rotate?: BlizzardWireGraphRotatePolicyView | null;
+    rotate?: RotatePolicyView | null;
 };
 
 /**
@@ -3025,7 +3016,7 @@ export type NodeConfig = {
      * Session Name
      */
     session_name?: string | null;
-    session_rotate?: BlizzardWireEnvelopeRotatePolicyView | null;
+    session_rotate?: RotatePolicyView | null;
     /**
      * Session Source
      */
@@ -3525,6 +3516,29 @@ export type RoleAssignmentRequest = {
      * Role
      */
     role: string;
+};
+
+/**
+ * RotatePolicyView
+ *
+ * One declared session's rotation bounds (issue #144).
+ *
+ * Every threshold is independently optional; ``max_invocations`` counts **harness
+ * invocations**, not node-steps, one of which burns several.
+ */
+export type RotatePolicyView = {
+    /**
+     * Max Context Tokens
+     */
+    max_context_tokens?: number | null;
+    /**
+     * Max Invocations
+     */
+    max_invocations?: number | null;
+    /**
+     * Max Transcript Bytes
+     */
+    max_transcript_bytes?: number | null;
 };
 
 /**
@@ -5281,51 +5295,6 @@ export type WorkSourcesListView = {
      * Sources
      */
     sources?: Array<WorkSourceSummary>;
-};
-
-/**
- * RotatePolicyView
- *
- * The declared session's rotation bounds (issue #144), carried on ``NodeConfig``.
- * ``max_invocations`` counts **harness invocations** — spawn, resume, judge — not node-steps,
- * of which one burns two or three.
- */
-export type BlizzardWireEnvelopeRotatePolicyView = {
-    /**
-     * Max Context Tokens
-     */
-    max_context_tokens?: number | null;
-    /**
-     * Max Invocations
-     */
-    max_invocations?: number | null;
-    /**
-     * Max Transcript Bytes
-     */
-    max_transcript_bytes?: number | null;
-};
-
-/**
- * RotatePolicyView
- *
- * One declared session's rotation bounds (issue #144).
- *
- * Every threshold is independently optional; ``max_invocations`` counts **harness
- * invocations**, not node-steps, one of which burns several.
- */
-export type BlizzardWireGraphRotatePolicyView = {
-    /**
-     * Max Context Tokens
-     */
-    max_context_tokens?: number | null;
-    /**
-     * Max Invocations
-     */
-    max_invocations?: number | null;
-    /**
-     * Max Transcript Bytes
-     */
-    max_transcript_bytes?: number | null;
 };
 
 export type ListActivityApiActivityGetData = {
