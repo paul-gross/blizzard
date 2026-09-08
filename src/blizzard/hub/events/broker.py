@@ -128,7 +128,7 @@ class EventBroker(_EventBroker):
         return self.publish(RUNNER_CHANGED, payload)
 
     def publish_event_logged(
-        self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str, key: str | None = None
+        self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str | None, key: str | None = None
     ) -> int:
         """An operational event landed in the event log (issue #125). The frame carries
         only identifying fields; the row itself is read back off ``GET /api/events``.

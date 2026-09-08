@@ -7,8 +7,8 @@ import { asyncState } from '../query-state';
 import { FleetLiveUpdates, type HubEventPayload, type LoggedEvent, type RunnerChangeKind } from '../sse/fleet-live';
 import { formatClockTime } from '../when';
 import { injectHubActivityQuery } from './activity.query';
+import { ActivityFeedView, type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
-import { EventLogView, type LogRow } from './event-log-view';
 
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
  * as one. Only the pause family needs an entry: the registration and heartbeat kinds
@@ -116,8 +116,8 @@ function fromActivity(row: ActivityView, seq: number): LoggedEvent {
 }
 
 /**
- * The Event log panel's **container** (issue #213 Phase 4, split from the formerly
- * presentational `event-log-panel.ts` — `bzh:frontend-container-presentational`).
+ * The Activity feed panel's **container** (issue #213 Phase 4, split from the formerly
+ * presentational `activity-panel.ts` — `bzh:frontend-container-presentational`).
  *
  * Owns two independent reads of the same underlying feed and merges them into one
  * rendered list:
@@ -140,12 +140,12 @@ function fromActivity(row: ActivityView, seq: number): LoggedEvent {
  * assumptions to keep in sync.
  */
 @Component({
-  selector: 'fleet-event-log-panel',
+  selector: 'fleet-activity-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [EventLogView],
-  templateUrl: './event-log-panel.html',
+  imports: [ActivityFeedView],
+  templateUrl: './activity-panel.html',
 })
-export class EventLogPanel {
+export class ActivityPanel {
   private readonly live = inject(FleetLiveUpdates);
   protected readonly activityQuery = injectHubActivityQuery();
 
@@ -168,7 +168,7 @@ export class EventLogPanel {
   });
 
   /** The merged feed newest-first, each frame shaped into its display row. */
-  protected readonly rows = computed<readonly LogRow[]>(() =>
+  protected readonly rows = computed<readonly ActivityRow[]>(() =>
     this.merged()
       .map((event) => ({
         seq: event.seq,

@@ -120,6 +120,24 @@ describe('EventsPanel', () => {
     expect(el.querySelector('[data-testid="events-runner-filter-all"]')?.classList.contains('selected')).toBe(true);
   });
 
+  it('builds no blank runner chip from a real, hub-authored event_log row either', async () => {
+    // Distinct from the escalation case above: this is a real `event_log` row (a positive
+    // id, not a projection) that itself carries `runner_id: null` — a hub-authored event
+    // names no runner (blizzard-context:/domain/operations.md). Same stripping rule, same
+    // reset-sentinel hazard, a different source row.
+    const WITH_HUB_AUTHORED = [
+      { id: 3, recorded_at: '2026-07-16T00:00:03Z', severity: 'info', kind: 'work-item-closed', runner_id: null, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', message: 'closed' },
+      ...EVENTS,
+    ];
+    const fixture = await render(WITH_HUB_AUTHORED);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const chips = [...el.querySelectorAll('[data-testid="events-runner-filter"] .chip')];
+    expect(chips.map((c) => c.textContent?.trim())).toEqual(['All', 'R-01', 'R-02']);
+    expect(chips.filter((c) => c.classList.contains('selected'))).toHaveLength(1);
+    expect(el.querySelector('[data-testid="events-runner-filter-all"]')?.classList.contains('selected')).toBe(true);
+  });
+
   it('derives chunk filter chips from the feed and re-queries when a chunk is chosen', async () => {
     // A feed spanning two distinct chunks (plus a runner-scoped, chunk-less event to prove
     // the null chunk_id is stripped from the universe rather than becoming an empty chip).

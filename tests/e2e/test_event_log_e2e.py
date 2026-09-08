@@ -332,11 +332,11 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
 def _rail_messages(page: Page) -> list[str]:
     """The rail's rendered messages, less the live-only queue signal: no durable fact backs
     it, so `GET /api/activity` backfill cannot reproduce it after a restart."""
-    return [m for m in page.get_by_test_id("event-log-message").all_text_contents() if m != "ready queue changed"]
+    return [m for m in page.get_by_test_id("activity-message").all_text_contents() if m != "ready queue changed"]
 
 
 def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: Path, chromium_available: bool) -> None:
-    """Event log rail backfill (issue #213): after a hub restart (fresh replay ring, same
+    """Activity feed rail backfill (issue #213): after a hub restart (fresh replay ring, same
     on-disk store), a reload shows the same durable row count and chunk-ref set as before —
     proving `GET /api/activity` backfill, not leftover live replay."""
     if not chromium_available:
@@ -381,10 +381,10 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
 
                 page.goto(f"http://127.0.0.1:{hub_port}/", wait_until="load")
                 expect(page.get_by_test_id("board-shell")).to_be_visible()
-                expect(page.get_by_test_id("event-log-panel")).to_be_visible()
+                expect(page.get_by_test_id("activity-panel")).to_be_visible()
                 # Facts already landed before this subscribes, so the replay tail alone
                 # carries them — this is the baseline row set, not yet the restart assertion.
-                expect(page.get_by_test_id("event-log-row")).to_have_count(5)  # 3 durable + a queue signal per mint
+                expect(page.get_by_test_id("activity-row")).to_have_count(5)  # 3 durable + a queue signal per mint
                 first_load_messages = _rail_messages(page)
                 assert len(first_load_messages) == 3, first_load_messages
 
@@ -392,10 +392,10 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
             # ring is not — the next `_hub()` call starts a fresh, empty one over the same store.
             with _hub(hub_dir, forge_port, hub_port):
                 page.reload(wait_until="load")
-                expect(page.get_by_test_id("event-log-panel")).to_be_visible()
+                expect(page.get_by_test_id("activity-panel")).to_be_visible()
                 # The fresh broker's replay tail is empty — only `GET /api/activity`
                 # backfill can repopulate these rows, at the same count as the baseline.
-                expect(page.get_by_test_id("event-log-row")).to_have_count(3)
+                expect(page.get_by_test_id("activity-row")).to_have_count(3)
                 reload_messages = _rail_messages(page)
 
                 # The event-logged row carries the same severity/kind fields whichever

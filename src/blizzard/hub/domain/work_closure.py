@@ -25,8 +25,6 @@ _CP_CLOSE_AFTER_CLOSE_BEFORE_RECORD = crashpoint(
     "the close attempt returned; its outcome is not yet recorded and the intent is not yet retired",
 )
 
-_HUB_RUNNER_ID = "hub"
-
 _EVENT_CLOSED: EventLogKind = "work-item-closed"
 _EVENT_CLOSE_FAILED: EventLogKind = "work-item-close-failed"
 
@@ -81,7 +79,7 @@ class CloseIntentDrainer:
             if outcome is WorkItemCloseOutcome.CLOSED:
                 self._events.record(
                     kind=_EVENT_CLOSED,
-                    runner_id=_HUB_RUNNER_ID,
+                    runner_id=None,
                     chunk_id=intent.chunk_id,
                     lease_id=None,
                     node_name=None,
@@ -92,7 +90,7 @@ class CloseIntentDrainer:
             else:
                 self._events.record(
                     kind=_EVENT_CLOSE_FAILED,
-                    runner_id=_HUB_RUNNER_ID,
+                    runner_id=None,
                     chunk_id=intent.chunk_id,
                     lease_id=None,
                     node_name=None,

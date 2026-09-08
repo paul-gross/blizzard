@@ -17,7 +17,7 @@ export const hubQuestionsKey = ['hub', 'questions'] as const;
  * appends its filter set, so a filter change is its own cache entry and this prefix
  * closes every one of them on an SSE invalidation (TanStack's default prefix match). */
 export const hubEventsKey = ['hub', 'events'] as const;
-/** The Event log panel's backfill read (`GET /api/activity`, issue #213 Phase 4) — a
+/** The Activity feed panel's backfill read (`GET /api/activity`, issue #213 Phase 4) — a
  * one-shot read on mount, not re-invalidated by an SSE event: the live tee keeps the
  * feed current after mount, so nothing needs to re-GET this. */
 export const hubActivityKey = ['hub', 'activity'] as const;

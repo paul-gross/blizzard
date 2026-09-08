@@ -24,8 +24,8 @@ fleet-kit-panel.fill {
   min-height: 0;
   flex: 1;
 }
-/* Time-first columns, matching the in-rail Event log's leading dim stamp
-   (event-log-panel.ts). Every metadata track is FIXED, not content-sized:
+/* Time-first columns, matching the in-rail Activity feed's leading dim stamp
+   (activity-panel.ts). Every metadata track is FIXED, not content-sized:
    each row is its own grid container, so only a fixed track aligns down the
    feed — a content-sized one re-measures per row and the column wanders. That
    covers the whole metadata block (time, chunk, severity, kind, runner), so

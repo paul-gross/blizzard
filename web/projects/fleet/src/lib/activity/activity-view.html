@@ -1,0 +1,31 @@
+<fleet-kit-panel
+  class="fill"
+  aria-label="Activity feed"
+  data-testid="activity-panel"
+  label="Activity feed"
+>
+  <fleet-kit-async-state
+    [state]="state()"
+    placement="inline"
+    loadingText="CONNECTING…"
+    loadingTestid="activity-loading"
+    errorText="EVENT STREAM UNAVAILABLE"
+    errorTestid="activity-error"
+    emptyText="No events yet."
+    emptyTestid="activity-empty"
+  >
+    <div class="rows" data-testid="activity-rows">
+      @for (row of rows(); track row.seq) {
+        <div class="ev" data-testid="activity-row" [attr.data-kind]="row.type">
+          <span class="t" data-testid="activity-time">{{ row.time }}</span>
+          <div class="m-block">
+            <span class="m" data-testid="activity-message">{{ row.message }}</span>
+            @if (row.detail) {
+              <span class="d" data-testid="activity-detail">{{ row.detail }}</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </fleet-kit-async-state>
+</fleet-kit-panel>

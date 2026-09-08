@@ -505,7 +505,7 @@ class ChunkEventsStore:
         *,
         severity: str,
         kind: str,
-        runner_id: str,
+        runner_id: str | None,
         chunk_id: str | None,
         lease_id: str | None,
         node_name: str | None,

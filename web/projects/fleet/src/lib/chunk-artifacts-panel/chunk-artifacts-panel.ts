@@ -55,7 +55,7 @@ export class ChunkArtifactsPanel {
   /** Gates the nav list through {@link KitAsyncState} rather than a hand-rolled empty
    * line — not a query state (there is no read in flight here, just an empty store), but
    * `placement="inline"` is the app's own established convention for a list panel's empty
-   * copy (`questions-view.html`, `runner-view.html`, `event-log-view.html` all read it the
+   * copy (`questions-view.html`, `runner-view.html`, `activity-view.html` all read it the
    * same way), so an empty artifact store reads as a considered state, not an unstyled
    * fragment. */
   protected readonly navState = computed<KitAsyncStateValue>(() => (this.sortedArtifacts().length === 0 ? 'empty' : 'ready'));

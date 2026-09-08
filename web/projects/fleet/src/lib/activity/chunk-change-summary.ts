@@ -1,7 +1,7 @@
 import { compactRef } from '../compact-ref';
 import type { LoggedEvent } from '../sse/fleet-live';
 
-/** A `chunk-changed` frame shaped into the Event log's two-line block (issue #212). */
+/** A `chunk-changed` frame shaped into the Activity feed's two-line block (issue #212). */
 export interface ChunkChangeSummary {
   /** Line 1 — the chunk shortname and its transition, e.g. `C-1RJ1 review → failed → build`. */
   readonly transition: string;

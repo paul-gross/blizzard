@@ -23,8 +23,8 @@
   min-width: 0;
 }
 /* The rail runs the full height of the workspace: runners and asks size to
-   their content and the event log takes the remainder, scrolling its own body. */
-.rail-log {
+   their content and the activity feed takes the remainder, scrolling its own body. */
+.rail-activity {
   flex: 1;
   min-height: 0;
 }

@@ -118,10 +118,10 @@ class EventLoggedPayload(SseFramePayload):
     severity: str
     kind: str
     chunk_id: str | None
-    runner_id: str
+    runner_id: str | None
     key: str | None = None
 
-    _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id"})
+    _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "runner_id"})
 
 
 #: Keyed by the broker's own event-type constants, duplicated here as literals rather than

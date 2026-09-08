@@ -4,7 +4,7 @@ import {
   type BoardReposition,
   type BoardTopMove,
   ChunkDetail,
-  EventLogPanel,
+  ActivityPanel,
   QuestionsPanel,
   RunnerPanel,
   asyncState,
@@ -33,9 +33,9 @@ import {
  * - the **right rail** holds {@link RunnerPanel}, the registry with pause/resume
  *   (MVP criterion 11), then {@link QuestionsPanel}, the fleet's open agent asks —
  *   clicking one opens its chunk in the dock, where it is answered — then
- *   {@link EventLogPanel}'s live feed.
+ *   {@link ActivityPanel}'s live feed.
  *
- * The left rail that used to hold the ready queue over the event log is gone
+ * The left rail that used to hold the ready queue over the activity feed is gone
  * (issue #137): queue shaping — prioritize and
  * group — happens on the READY lane itself, so a ready chunk is a board card
  * like every other chunk instead of a row in a second surface. BACKLOG reorders
@@ -60,7 +60,7 @@ import {
 @Component({
   selector: 'app-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardShell, ChunkDetail, EventLogPanel, QuestionsPanel, RunnerPanel],
+  imports: [BoardShell, ChunkDetail, ActivityPanel, QuestionsPanel, RunnerPanel],
   templateUrl: './board-page.html',
   styleUrl: './board-page.css',
 })

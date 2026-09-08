@@ -70,6 +70,18 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
         detail=None,
         at=at(3),
     )
+    # A hub-authored row — names no runner (blizzard-context:/domain/operations.md).
+    store.events.record_event(
+        severity="info",
+        kind="work-item-closed",
+        runner_id=None,
+        chunk_id="ch_b",
+        lease_id=None,
+        node_name=None,
+        message="closed",
+        detail=None,
+        at=at(0),
+    )
 
     # ch_c: an OPEN escalation (projects into the feed as needs-human/critical).
     store.escalations.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=at(4))
@@ -79,12 +91,13 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
 
     feed = _events(hub)
     # Severity-then-recency: critical band first (worker-lost t3 vs needs-human t4 -> needs-human
-    # newer), then the warning, then the info. The superseded ch_a escalation is absent.
+    # newer), then warning, then the info band newest-first. The superseded ch_a escalation is absent.
     assert [(e["severity"], e["kind"]) for e in feed] == [
         ("critical", "needs-human"),
         ("critical", "worker-lost"),
         ("warning", "attempt-failed"),
         ("info", "attempt-abandoned"),
+        ("info", "work-item-closed"),
     ]
     # detail round-trips.
     assert next(e for e in feed if e["kind"] == "attempt-failed")["detail"] == {"via": "advance"}
@@ -93,8 +106,13 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     projected = next(e for e in feed if e["kind"] == "needs-human")
     assert projected["chunk_id"] == "ch_c"
     assert projected["runner_id"] is None
-    # Every real event_log row still names its reporting runner.
-    assert all(e["runner_id"] for e in feed if e["kind"] != "needs-human")
+    # A real, hub-authored event_log row reads back the same way — a null runner, not
+    # the retired `'hub'` sentinel — and a `runner_id=hub` filter matches nothing (D2).
+    hub_authored = next(e for e in feed if e["kind"] == "work-item-closed")
+    assert hub_authored["runner_id"] is None
+    assert _events(hub, runner_id="hub") == []
+    # Every other real event_log row still names its reporting runner.
+    assert all(e["runner_id"] for e in feed if e["kind"] not in ("needs-human", "work-item-closed"))
 
     # Filters.
     assert [e["kind"] for e in _events(hub, severity="critical")] == ["needs-human", "worker-lost"]
