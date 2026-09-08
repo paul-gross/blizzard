@@ -553,6 +553,69 @@ def test_runner_external_usage_slug_widens_the_primary_key_and_backfills_the_leg
     assert "name" in _columns()
 
 
+def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sentinel(tmp_path: Path) -> None:
+    """``event_log.runner_id`` (blizzard-context:/domain/operations.md) widens to nullable
+    — a hub-authored event names no runner. Reached forward from ``base``, never by
+    downgrading from head (``test_frozen_table_lacks_a_later_revisions_columns``'s own
+    stated reason): the pre-reshape shape is ``NOT NULL``, exactly what the frozen
+    creating revision now declares."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+
+    def _nullable() -> bool:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            columns = {c["name"]: c for c in sa.inspect(engine).get_columns("event_log")}
+            return bool(columns["runner_id"]["nullable"])
+        finally:
+            engine.dispose()
+
+    def _runner_ids() -> list[str | None]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            with engine.connect() as conn:
+                return [row[0] for row in conn.execute(sa.text("select runner_id from event_log")).all()]
+        finally:
+            engine.dispose()
+
+    # The pre-reshape shape — this reshape's own parent, frozen by 20260721_1600.
+    runner.downgrade("20260907_0900_drop_node_mode")
+    assert _nullable() is False
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "insert into event_log (recorded_at, severity, kind, runner_id, message) "
+                    "values (:recorded_at, 'info', 'work-item-closed', 'hub', 'closed')"
+                ),
+                {"recorded_at": "2026-08-01 12:00:00"},
+            )
+    finally:
+        engine.dispose()
+
+    runner.upgrade("head")
+    assert _nullable() is True
+    assert _runner_ids() == ["hub"]
+
+    # The nullability the upgrade grants — a hub-authored row can now be written null,
+    # exactly as `EventLogService.record` does post-change.
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(sa.text("update event_log set runner_id = null"))
+    finally:
+        engine.dispose()
+    assert _runner_ids() == [None]
+
+    runner.downgrade("20260907_0900_drop_node_mode")
+    assert _nullable() is False
+    assert _runner_ids() == ["hub"]
+
+    runner.upgrade("head")
+    assert _nullable() is True
+
+
 _SCHEMA_METADATA = {"hub": hub_schema.metadata, "runner": runner_schema.metadata}
 
 # chunks.model carries a migration-only server_default with no schema.py counterpart —

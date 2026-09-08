@@ -48,7 +48,7 @@ export class KitPanelHeader {}
  * renders them, so this is additive, not a restyle.
  *
  * `bodyScroll` (default `true`, today's behavior) gates whether `.p-body`
- * itself scrolls. The runners, asks, and event log rails leave it at the
+ * itself scrolls. The runners, asks, and activity feed rails leave it at the
  * default — a single scrolling body is right for them. The board panel
  * (issue #309) sets it `false`: its content manages its own per-lane
  * scrolling internally, and a second scroll container one level up is the

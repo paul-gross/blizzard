@@ -25,7 +25,7 @@ with a bounded default page — the cap keeps the most severe rows, so a `critic
 row, however much older. The board's Events tab renders the feed live over the SSE spine (`/api/events/stream`), each
 row linking to its chunk.
 
-`GET /api/activity` is a second read the board's Event log rail backfills from on page load, merging three durable
+`GET /api/activity` is a second read the board's Activity feed rail backfills from on page load, merging three durable
 sources — chunk status changes, the event log, and runner pause/resume — newest-first, bounded by `since` (default 24
 hours back) and `limit` (default and max 200), gated like `GET /api/events`. Activity orders by pure recency, the event
 log being the triage view; after backfill the rail continues live over the same stream, deduped by each frame's

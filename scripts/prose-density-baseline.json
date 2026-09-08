@@ -352,8 +352,8 @@
   },
   "blizzard_mock/mock_data/cli.py": {
    "comments": 16,
-   "docstrings": 123,
-   "total": 1273
+   "docstrings": 121,
+   "total": 1271
   },
   "blizzard_mock/mock_data/domain/__init__.py": {
    "comments": 0,
@@ -1725,7 +1725,7 @@
   "blizzard/hub/domain/work_closure.py": {
    "comments": 5,
    "docstrings": 10,
-   "total": 103
+   "total": 101
   },
   "blizzard/hub/domain/work_item_materialization.py": {
    "comments": 0,
@@ -2203,9 +2203,9 @@
    "total": 37
   },
   "blizzard/hub/store/migrations/versions/20260721_1600_hub_event_log.py": {
-   "comments": 0,
+   "comments": 2,
    "docstrings": 6,
-   "total": 33
+   "total": 56
   },
   "blizzard/hub/store/migrations/versions/20260722_1200_hub_artifact_forge.py": {
    "comments": 0,
@@ -2441,6 +2441,11 @@
    "comments": 2,
    "docstrings": 5,
    "total": 37
+  },
+  "blizzard/hub/store/migrations/versions/20260907_1000_event_log_runner_id_nullable.py": {
+   "comments": 8,
+   "docstrings": 6,
+   "total": 60
   },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
@@ -3259,8 +3264,8 @@
   },
   "blizzard/runner/loop/steps.py": {
    "comments": 62,
-   "docstrings": 114,
-   "total": 669
+   "docstrings": 121,
+   "total": 693
   },
   "blizzard/runner/loop/tick.py": {
    "comments": 12,
@@ -4840,9 +4845,9 @@
    "total": 230
   },
   "test_events_api.py": {
-   "comments": 20,
+   "comments": 23,
    "docstrings": 6,
-   "total": 176
+   "total": 194
   },
   "test_events_stream.py": {
    "comments": 10,
@@ -5800,9 +5805,9 @@
    "total": 160
   },
   "test_runner_escalation_closure.py": {
-   "comments": 15,
+   "comments": 22,
    "docstrings": 7,
-   "total": 154
+   "total": 214
   },
   "test_runner_event_emission.py": {
    "comments": 43,
@@ -6160,9 +6165,9 @@
    "total": 201
   },
   "test_store_migrations.py": {
-   "comments": 31,
-   "docstrings": 60,
-   "total": 703
+   "comments": 35,
+   "docstrings": 65,
+   "total": 766
   },
   "test_subprocess_check_runner.py": {
    "comments": 3,

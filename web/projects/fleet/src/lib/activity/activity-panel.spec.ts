@@ -8,9 +8,9 @@ import { FleetLiveUpdates, type LoggedEvent } from '../sse/fleet-live';
 import type { SseStatus } from '../sse/sse.service';
 import { settle } from '../testing/settle';
 import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
-import { EventLogPanel } from './event-log-panel';
+import { ActivityPanel } from './activity-panel';
 
-describe('EventLogPanel', () => {
+describe('ActivityPanel', () => {
   let log: WritableSignal<readonly LoggedEvent[]>;
   let status: WritableSignal<SseStatus>;
   let authFailed: WritableSignal<boolean>;
@@ -28,14 +28,14 @@ describe('EventLogPanel', () => {
     } as unknown as FleetLiveUpdates;
     stub = stubRequestClient(hubClient, (method, path) => (method === 'GET' && path === '/api/activity' ? { activity } : {}));
     await TestBed.configureTestingModule({
-      imports: [EventLogPanel],
+      imports: [ActivityPanel],
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         { provide: FleetLiveUpdates, useValue: fakeLive },
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(EventLogPanel);
+    const fixture = TestBed.createComponent(ActivityPanel);
     await settle(fixture);
     return fixture;
   };
@@ -46,7 +46,7 @@ describe('EventLogPanel', () => {
     const fixture = await render([]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="event-log-empty"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="activity-empty"]')).toBeTruthy();
   });
 
   it('renders a loading state while the backfill read is still in flight, not empty (AC)', async () => {
@@ -57,26 +57,26 @@ describe('EventLogPanel', () => {
     } as unknown as FleetLiveUpdates;
     stub = stubRequestClient(hubClient, () => ({ activity: [] }));
     await TestBed.configureTestingModule({
-      imports: [EventLogPanel],
+      imports: [ActivityPanel],
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         { provide: FleetLiveUpdates, useValue: fakeLive },
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(EventLogPanel);
+    const fixture = TestBed.createComponent(ActivityPanel);
     // A single, un-awaited detectChanges: the query has mounted but its microtask
     // fetch has not yet resolved, so this is the "first in-flight fetch" instant the
     // AC cares about — it must read as loading, never empty.
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="event-log-loading"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="event-log-empty"]')).toBeNull();
+    expect(el.querySelector('[data-testid="activity-loading"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="activity-empty"]')).toBeNull();
 
     await settle(fixture);
-    expect(el.querySelector('[data-testid="event-log-loading"]')).toBeNull();
-    expect(el.querySelector('[data-testid="event-log-empty"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="activity-loading"]')).toBeNull();
+    expect(el.querySelector('[data-testid="activity-empty"]')).toBeTruthy();
   });
 
   it('shows an error state on a terminal auth failure even though the backfill read succeeded', async () => {
@@ -86,7 +86,7 @@ describe('EventLogPanel', () => {
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="event-log-error"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="activity-error"]')).toBeTruthy();
   });
 
   it('renders the backfilled feed on load, before any live frame arrives', async () => {
@@ -95,8 +95,8 @@ describe('EventLogPanel', () => {
     ]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelectorAll('[data-testid="event-log-row"]')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-old → ready');
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-old → ready');
   });
 
   it('dedupes a backfilled row against a live frame naming the same key, preferring the live copy', async () => {
@@ -107,8 +107,8 @@ describe('EventLogPanel', () => {
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelectorAll('[data-testid="event-log-row"]')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-alp → running');
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-alp → running');
   });
 
   it('never collides two keyless live frames with each other (a hub older than Phase 2 stamps no key)', async () => {
@@ -120,7 +120,7 @@ describe('EventLogPanel', () => {
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelectorAll('[data-testid="event-log-row"]')).toHaveLength(2);
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(2);
   });
 
   it('orders the merged feed newest-first across backfill and live', async () => {
@@ -142,7 +142,7 @@ describe('EventLogPanel', () => {
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    const messages = [...el.querySelectorAll('[data-testid="event-log-message"]')].map((n) => n.textContent?.trim());
+    const messages = [...el.querySelectorAll('[data-testid="activity-message"]')].map((n) => n.textContent?.trim());
     expect(messages).toEqual(['C-new → running', 'C-old → ready']);
   });
 
@@ -152,7 +152,7 @@ describe('EventLogPanel', () => {
     ]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-1RJ1 review → build');
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-1RJ1 review → build');
   });
 
   // --- Delete's actor (D7a, issue #364) -------------------------------------
@@ -171,8 +171,8 @@ describe('EventLogPanel', () => {
     ]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-del → not_ready');
-    expect(el.querySelector('[data-testid="event-log-detail"]')?.textContent?.trim()).toBe('operator');
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-del → not_ready');
+    expect(el.querySelector('[data-testid="activity-detail"]')?.textContent?.trim()).toBe('operator');
   });
 
   it('renders a deleted-cause frame from the live tee, watched in real time, with its actor as line 2', async () => {
@@ -189,8 +189,8 @@ describe('EventLogPanel', () => {
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-del → not_ready');
-    expect(el.querySelector('[data-testid="event-log-detail"]')?.textContent?.trim()).toBe('operator');
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-del → not_ready');
+    expect(el.querySelector('[data-testid="activity-detail"]')?.textContent?.trim()).toBe('operator');
   });
 
   it('still renders the deleting actor from the live frame alone once it dedupes a same-key backfill row', async () => {
@@ -219,8 +219,8 @@ describe('EventLogPanel', () => {
 
     // Exactly one row (the live copy wins the dedup), and it still carries the actor —
     // proving the live ChunkChanged.by wiring alone, not just the backfill's, renders it.
-    expect(el.querySelectorAll('[data-testid="event-log-row"]')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="event-log-detail"]')?.textContent?.trim()).toBe('operator');
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="activity-detail"]')?.textContent?.trim()).toBe('operator');
   });
 
   it('renders a runner-changed frame from the live tee as what actually changed', async () => {
@@ -229,6 +229,6 @@ describe('EventLogPanel', () => {
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('runner runner-local paused by operator');
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('runner runner-local paused by operator');
   });
 });

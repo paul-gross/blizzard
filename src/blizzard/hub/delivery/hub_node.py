@@ -563,7 +563,7 @@ class HubNodeExecutor:
             if announced:
                 self._events.record(
                     kind=_EVENT_UNROUTABLE_OUTCOME,
-                    runner_id=_HUB_RUNNER_ID,
+                    runner_id=None,
                     chunk_id=chunk.chunk_id,
                     lease_id=None,
                     node_name=node.name,

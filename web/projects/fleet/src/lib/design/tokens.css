@@ -50,7 +50,7 @@
    */
   --fs-label: 11px; /* engraved uppercase labels (.lbl), raised from 9px */
   --fs-xs: 12px; /* dense secondary text — node names, counts, badges */
-  --fs-sm: 13px; /* list rows: event log, history, artifacts */
+  --fs-sm: 13px; /* list rows: activity feed, history, artifacts */
   --fs-base: 15px; /* body copy and controls */
   --fs-md: 16px; /* card ids, column counts, runner names */
   --fs-lg: 19px; /* the brand and header values */

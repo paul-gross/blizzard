@@ -1,14 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { type ActivityView } from '../api/hub';
+import { type ActivityView as ActivityViewRow } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import { asyncState } from '../query-state';
 import { FleetLiveUpdates, type HubEventPayload, type LoggedEvent, type RunnerChangeKind } from '../sse/fleet-live';
 import { formatClockTime } from '../when';
 import { injectHubActivityQuery } from './activity.query';
+import { ActivityView, type LogRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
-import { EventLogView, type LogRow } from './event-log-view';
 
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
  * as one. Only the pause family needs an entry: the registration and heartbeat kinds
@@ -92,11 +92,11 @@ const RENDER_LIMIT = 200;
  * the view has a stable `track` key, not for ordering (that's `at`). `at` is parsed
  * from the wire's ISO instant into the ms epoch {@link LoggedEvent.at} expects.
  *
- * Field-by-field rather than a blind spread: `ActivityView`'s optional fields are
+ * Field-by-field rather than a blind spread: `ActivityViewRow`'s optional fields are
  * `T | null | undefined` (an explicit "absent" from a JSON API), while
  * `HubEventPayload`'s are `T | undefined` (`Partial`) — the seam every present-when-
  * meaningful field needs `?? undefined` to cross. */
-function fromActivity(row: ActivityView, seq: number): LoggedEvent {
+function fromActivity(row: ActivityViewRow, seq: number): LoggedEvent {
   const data: HubEventPayload = {
     chunk_id: row.chunk_id ?? undefined,
     status: row.status ?? undefined,
@@ -116,8 +116,8 @@ function fromActivity(row: ActivityView, seq: number): LoggedEvent {
 }
 
 /**
- * The Event log panel's **container** (issue #213 Phase 4, split from the formerly
- * presentational `event-log-panel.ts` — `bzh:frontend-container-presentational`).
+ * The Activity feed panel's **container** (issue #213 Phase 4, split from the formerly
+ * presentational `activity-panel.ts` — `bzh:frontend-container-presentational`).
  *
  * Owns two independent reads of the same underlying feed and merges them into one
  * rendered list:
@@ -140,12 +140,12 @@ function fromActivity(row: ActivityView, seq: number): LoggedEvent {
  * assumptions to keep in sync.
  */
 @Component({
-  selector: 'fleet-event-log-panel',
+  selector: 'fleet-activity-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [EventLogView],
-  templateUrl: './event-log-panel.html',
+  imports: [ActivityView],
+  templateUrl: './activity-panel.html',
 })
-export class EventLogPanel {
+export class ActivityPanel {
   private readonly live = inject(FleetLiveUpdates);
   protected readonly activityQuery = injectHubActivityQuery();
 

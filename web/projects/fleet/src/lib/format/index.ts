@@ -21,7 +21,7 @@ export {
   type LocalClockWithDay,
   SKEW_TOLERANCE_MS,
 } from '../when';
-// formatSeenAgo (runner-view.ts) and formatClockTime (event-log-panel.ts) are
+// formatSeenAgo (runner-view.ts) and formatClockTime (activity-panel.ts) are
 // intentionally not re-exported here — each has exactly one fleet-internal
 // caller today, which imports it directly from `../when`; no consumer outside
 // this library needs them.

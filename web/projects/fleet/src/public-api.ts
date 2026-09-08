@@ -31,7 +31,7 @@ export * from './lib/chunk-blocked';
 export * from './lib/chunk-detail';
 export * from './lib/chunk-artifacts-panel';
 export * from './lib/chunk-issue-list';
-export * from './lib/event-log';
+export * from './lib/activity';
 export * from './lib/events';
 export * from './lib/queue';
 export * from './lib/runners';

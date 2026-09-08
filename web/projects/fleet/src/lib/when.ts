@@ -158,8 +158,8 @@ export function formatUtcYmd(iso: string | null | undefined): string {
   return new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');
 }
 
-/** Zero-padded local `HH:MM:SS` for an epoch-ms instant — the event log's
- * per-row arrival clock (`event-log-panel.ts`), and the time half of
+/** Zero-padded local `HH:MM:SS` for an epoch-ms instant — the Activity feed's
+ * per-row arrival clock (`activity-panel.ts`), and the time half of
  * {@link formatLocalClockWithDay} above. */
 export function formatClockTime(atMs: number): string {
   const d = new Date(atMs);

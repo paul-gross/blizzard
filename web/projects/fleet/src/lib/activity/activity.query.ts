@@ -11,7 +11,7 @@ import { hubActivityKey } from '../query-keys';
 export const ACTIVITY_LIMIT = 200;
 
 /**
- * Hub `GET /api/activity` read — the Event log panel's backfill-on-load (issue #213
+ * Hub `GET /api/activity` read — the Activity feed panel's backfill-on-load (issue #213
  * Phase 4), through TanStack Query and the generated hub client
  * (bzh:generated-client). Unfiltered (the rail always shows the whole recent feed), so
  * unlike {@link injectHubEventsQuery} this takes no filter accessor and rides one
@@ -19,7 +19,7 @@ export const ACTIVITY_LIMIT = 200;
  *
  * `limit` is hardcoded to {@link ACTIVITY_LIMIT} rather than left to the generated
  * client's own default, so the backfill cap and the panel's rendered-row cap
- * (`event-log-panel.ts`) stay the same number in one place.
+ * (`activity-panel.ts`) stay the same number in one place.
  *
  * No `refetchInterval`: this is a one-shot backfill, not a poll — the live SSE tee
  * ({@link FleetLiveUpdates}) is what keeps the feed current after the initial read.

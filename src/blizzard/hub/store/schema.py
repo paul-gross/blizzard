@@ -1124,7 +1124,7 @@ superuser_bootstrap = Table(
 )
 
 # --- Operational event log (event_log — issue #125) ---------------------------
-# ``chunk_id`` is nullable — some events are runner-scoped. ``detail`` is opaque JSON.
+# ``chunk_id``/``runner_id`` are nullable — runner-scoped/hub-authored, respectively. ``detail`` is opaque JSON.
 
 event_log = Table(
     "event_log",
@@ -1133,7 +1133,7 @@ event_log = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
     Column("severity", String, nullable=False),
     Column("kind", String, nullable=False),
-    Column("runner_id", String, nullable=False),
+    Column("runner_id", String, nullable=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=True),
     Column("lease_id", String, nullable=True),
     Column("node_name", String, nullable=True),

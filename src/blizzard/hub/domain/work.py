@@ -485,9 +485,9 @@ class UsageFact:
 @dataclass(frozen=True)
 class EventRow:
     """One ``event_log`` row — a durable, typed, severity-ranked operational fact (issue
-    #125). ``chunk_id`` is ``None`` for a runner-scoped event; ``detail`` is the
-    event-specific payload, already decoded from JSON. A negative ``id`` and a ``None``
-    ``runner_id`` mark a row :class:`EventFeed` synthesized rather than read."""
+    #125). ``chunk_id``/``runner_id`` are ``None`` for a runner-scoped/hub-authored event,
+    respectively; ``detail`` is the event-specific payload, already decoded from JSON. A
+    negative ``id`` marks a row :class:`EventFeed` synthesized rather than read."""
 
     id: int
     recorded_at: datetime

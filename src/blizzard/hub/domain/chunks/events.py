@@ -47,7 +47,7 @@ class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
         *,
         severity: str,
         kind: str,
-        runner_id: str,
+        runner_id: str | None,
         chunk_id: str | None,
         lease_id: str | None,
         node_name: str | None,
@@ -57,9 +57,9 @@ class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
     ) -> int:
         """Append one ``event_log`` row (issue #125) — never mutated once written.
 
-        ``chunk_id`` is ``None`` for a runner-scoped event; ``detail`` is an opaque
-        event-specific payload, serialized to JSON text by the store. Returns the
-        freshly-written ``event_log.id``."""
+        ``chunk_id``/``runner_id`` are ``None`` for a runner-scoped/hub-authored event,
+        respectively; ``detail`` is opaque, serialized to JSON text by the store. Returns
+        the freshly-written ``event_log.id``."""
         ...
 
 
@@ -69,7 +69,7 @@ class IEventLogPublisher(Protocol):
     :class:`~blizzard.hub.events.broker.EventBroker` satisfies this structurally."""
 
     def publish_event_logged(
-        self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str, key: str | None = None
+        self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str | None, key: str | None = None
     ) -> int:
         """Fan out one ``event-logged`` SSE frame."""
         ...

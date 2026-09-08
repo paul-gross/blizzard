@@ -179,11 +179,11 @@ describe('BoardPage', () => {
 
     expect(el.querySelector('fleet-board-shell')).toBeTruthy();
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    // The one rail composes beside the board: runners, asks, event log. The
+    // The one rail composes beside the board: runners, asks, activity feed. The
     // titlebar itself lives at the app root now.
     expect(el.querySelector('[data-testid="runner-panel"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="questions-panel"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="event-log-panel"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="activity-panel"]')).toBeTruthy();
   });
 
   it('lays the board out as two columns, the ready queue among the board lanes', async () => {
@@ -199,11 +199,11 @@ describe('BoardPage', () => {
     expect(el.querySelector('[data-testid="queue-panel"]')).toBeNull();
   });
 
-  it('stacks the event log under the asks in the right rail', async () => {
+  it('stacks the activity feed under the asks in the right rail', async () => {
     const { el } = await open();
 
     const rail = el.querySelector('[data-testid="runner-panel"]')?.closest('.col');
-    const log = el.querySelector('fleet-event-log-panel')!;
+    const log = el.querySelector('fleet-activity-panel')!;
     const questions = el.querySelector('fleet-questions-panel')!;
     expect(log.closest('.col')).toBe(rail);
     // Below the asks, not above them: runners → asks → log.
