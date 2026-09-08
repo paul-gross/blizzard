@@ -594,18 +594,10 @@ def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sen
     finally:
         engine.dispose()
 
+    # The upgrade both widens the column and backfills the sentinel already stored
+    # there — a pre-existing hub-authored row stops naming "hub" without a rewrite.
     runner.upgrade("head")
     assert _nullable() is True
-    assert _runner_ids() == ["hub"]
-
-    # The nullability the upgrade grants — a hub-authored row can now be written null,
-    # exactly as `EventLogService.record` does post-change.
-    engine = create_engine_from_url(config.db_url)
-    try:
-        with engine.begin() as conn:
-            conn.execute(sa.text("update event_log set runner_id = null"))
-    finally:
-        engine.dispose()
     assert _runner_ids() == [None]
 
     runner.downgrade("20260907_0900_drop_node_mode")

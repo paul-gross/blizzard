@@ -38,13 +38,16 @@ def _is_nullable(bind: sa.Connection) -> bool:
 
 def upgrade() -> None:
     bind = op.get_bind()
-    if _is_nullable(bind):
-        return  # already reshaped — this revision's own guard, not per-row
+    if not _is_nullable(bind):
+        # `recreate="always"` is dialect-agnostic (`bzh:sql-portable`): one copy-based
+        # rebuild widens the column on both sqlite and postgres, no dialect branch.
+        with op.batch_alter_table(_TABLE, recreate="always") as batch:
+            batch.alter_column("runner_id", nullable=True)
 
-    # `recreate="always"` is dialect-agnostic (`bzh:sql-portable`): one copy-based
-    # rebuild widens the column on both sqlite and postgres, no dialect branch.
-    with op.batch_alter_table(_TABLE, recreate="always") as batch:
-        batch.alter_column("runner_id", nullable=True)
+    # Backfill: every existing hub-authored row stops naming the synthetic sentinel,
+    # so live history stops producing the phantom runner filter chip too. Idempotent —
+    # a rerun with no remaining sentinel rows updates nothing.
+    bind.execute(_EVENT_LOG.update().where(_EVENT_LOG.c.runner_id == _HUB_RUNNER_ID).values(runner_id=None))
 
 
 def downgrade() -> None:
