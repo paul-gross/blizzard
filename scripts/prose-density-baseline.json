@@ -352,8 +352,8 @@
   },
   "blizzard_mock/mock_data/cli.py": {
    "comments": 16,
-   "docstrings": 121,
-   "total": 1271
+   "docstrings": 123,
+   "total": 1275
   },
   "blizzard_mock/mock_data/domain/__init__.py": {
    "comments": 0,
@@ -2443,9 +2443,9 @@
    "total": 37
   },
   "blizzard/hub/store/migrations/versions/20260907_1000_event_log_runner_id_nullable.py": {
-   "comments": 8,
+   "comments": 21,
    "docstrings": 6,
-   "total": 60
+   "total": 77
   },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
@@ -6165,9 +6165,9 @@
    "total": 201
   },
   "test_store_migrations.py": {
-   "comments": 35,
+   "comments": 37,
    "docstrings": 65,
-   "total": 766
+   "total": 761
   },
   "test_subprocess_check_runner.py": {
    "comments": 3,

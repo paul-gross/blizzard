@@ -559,11 +559,11 @@ def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sen
     downgrading from head (``test_frozen_table_lacks_a_later_revisions_columns``'s own
     stated reason): the pre-reshape shape is ``NOT NULL``, exactly what the frozen
     creating revision now declares."""
-    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
-    runner = hub_runtime.migration_runner(config)
+    url = f"sqlite:///{tmp_path / 'store.db'}"
+    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
 
     def _nullable() -> bool:
-        engine = create_engine_from_url(config.db_url)
+        engine = create_engine_from_url(url)
         try:
             columns = {c["name"]: c for c in sa.inspect(engine).get_columns("event_log")}
             return bool(columns["runner_id"]["nullable"])
@@ -571,17 +571,20 @@ def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sen
             engine.dispose()
 
     def _runner_ids() -> list[str | None]:
-        engine = create_engine_from_url(config.db_url)
+        engine = create_engine_from_url(url)
         try:
             with engine.connect() as conn:
                 return [row[0] for row in conn.execute(sa.text("select runner_id from event_log")).all()]
         finally:
             engine.dispose()
 
-    # The pre-reshape shape — this reshape's own parent, frozen by 20260721_1600.
-    runner.downgrade("20260907_0900_drop_node_mode")
+    # The pre-reshape shape — this reshape's own parent, frozen by 20260721_1600. Forward
+    # from base, never downgrade-from-head, on the same reasoning as
+    # test_frozen_table_lacks_a_later_revisions_columns: the reshaping revision's own
+    # downgrade() could mask a freeze that wrongly declared the column already nullable.
+    runner.upgrade("20260907_0900_drop_node_mode")
     assert _nullable() is False
-    engine = create_engine_from_url(config.db_url)
+    engine = create_engine_from_url(url)
     try:
         with engine.begin() as conn:
             conn.execute(

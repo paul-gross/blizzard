@@ -39,6 +39,7 @@ event_log = sa.Table(
     sa.Column("message", sa.Text, nullable=False),
     sa.Column("detail", sa.Text, nullable=True),
 )
+sa.Index("ix_event_log_recorded_at", event_log.c.recorded_at)
 
 _TABLES = (event_log,)
 
@@ -47,7 +48,6 @@ def upgrade() -> None:
     bind = op.get_bind()
     for table in _TABLES:
         table.create(bind, checkfirst=True)
-    sa.Index("ix_event_log_recorded_at", event_log.c.recorded_at).create(bind, checkfirst=True)
 
 
 def downgrade() -> None:
