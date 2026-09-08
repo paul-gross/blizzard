@@ -190,7 +190,13 @@ def test_pull_closes_an_escalation_an_operator_restart_moved(tmp_path):  # type:
     hub.chunks["ch_1"] = _chunk(status=ChunkStatus.WAITING_ON_HUMAN).model_copy(
         update={
             "restarts": [
-                RestartView(to_node_id="nd_build", graph_id="gr_1", epoch=1, restarted_by="op", recorded_at="2026-07-13T12:00:00Z")
+                RestartView(
+                    to_node_id="nd_build",
+                    graph_id="gr_1",
+                    epoch=1,
+                    restarted_by="op",
+                    recorded_at="2026-07-13T12:00:00Z",
+                )
             ]
         }
     )
