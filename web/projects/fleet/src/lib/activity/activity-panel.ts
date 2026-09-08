@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { type ActivityView as ActivityViewRow } from '../api/hub';
+import { type ActivityView } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import { asyncState } from '../query-state';
 import { FleetLiveUpdates, type HubEventPayload, type LoggedEvent, type RunnerChangeKind } from '../sse/fleet-live';
 import { formatClockTime } from '../when';
 import { injectHubActivityQuery } from './activity.query';
-import { ActivityView, type LogRow } from './activity-view';
+import { ActivityFeedView, type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
 
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
@@ -92,11 +92,11 @@ const RENDER_LIMIT = 200;
  * the view has a stable `track` key, not for ordering (that's `at`). `at` is parsed
  * from the wire's ISO instant into the ms epoch {@link LoggedEvent.at} expects.
  *
- * Field-by-field rather than a blind spread: `ActivityViewRow`'s optional fields are
+ * Field-by-field rather than a blind spread: `ActivityView`'s optional fields are
  * `T | null | undefined` (an explicit "absent" from a JSON API), while
  * `HubEventPayload`'s are `T | undefined` (`Partial`) — the seam every present-when-
  * meaningful field needs `?? undefined` to cross. */
-function fromActivity(row: ActivityViewRow, seq: number): LoggedEvent {
+function fromActivity(row: ActivityView, seq: number): LoggedEvent {
   const data: HubEventPayload = {
     chunk_id: row.chunk_id ?? undefined,
     status: row.status ?? undefined,
@@ -142,7 +142,7 @@ function fromActivity(row: ActivityViewRow, seq: number): LoggedEvent {
 @Component({
   selector: 'fleet-activity-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ActivityView],
+  imports: [ActivityFeedView],
   templateUrl: './activity-panel.html',
 })
 export class ActivityPanel {
@@ -168,7 +168,7 @@ export class ActivityPanel {
   });
 
   /** The merged feed newest-first, each frame shaped into its display row. */
-  protected readonly rows = computed<readonly LogRow[]>(() =>
+  protected readonly rows = computed<readonly ActivityRow[]>(() =>
     this.merged()
       .map((event) => ({
         seq: event.seq,

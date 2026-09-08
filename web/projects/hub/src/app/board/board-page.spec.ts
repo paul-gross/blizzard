@@ -203,11 +203,11 @@ describe('BoardPage', () => {
     const { el } = await open();
 
     const rail = el.querySelector('[data-testid="runner-panel"]')?.closest('.col');
-    const log = el.querySelector('fleet-activity-panel')!;
+    const activity = el.querySelector('fleet-activity-panel')!;
     const questions = el.querySelector('fleet-questions-panel')!;
-    expect(log.closest('.col')).toBe(rail);
-    // Below the asks, not above them: runners → asks → log.
-    expect(questions.compareDocumentPosition(log) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(activity.closest('.col')).toBe(rail);
+    // Below the asks, not above them: runners → asks → activity.
+    expect(questions.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('renders a ready chunk exactly once across the whole page (issue #22)', async () => {

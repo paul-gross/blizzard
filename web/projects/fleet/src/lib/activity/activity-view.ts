@@ -6,7 +6,7 @@ import { KitPanel } from '../kit/kit-panel';
 /** One rendered Activity feed row — the logged frame plus its display strings.
  * `detail` is the block row's second line (`chunk-changed` only, issue #212); every
  * other event type leaves it unset and renders as the single-line row it always has. */
-export interface LogRow {
+export interface ActivityRow {
   readonly seq: number;
   readonly type: string;
   readonly time: string;
@@ -30,9 +30,9 @@ export interface LogRow {
   templateUrl: './activity-view.html',
   styleUrl: './activity-view.css',
 })
-export class ActivityView {
+export class ActivityFeedView {
   /** The feed newest-first, already shaped into display rows. */
-  readonly rows = input.required<readonly LogRow[]>();
+  readonly rows = input.required<readonly ActivityRow[]>();
 
   /** The panel's async state (AC — loading vs. empty vs. error vs. ready). */
   readonly state = input.required<KitAsyncStateValue>();
