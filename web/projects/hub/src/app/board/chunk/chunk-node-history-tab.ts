@@ -6,6 +6,7 @@ import {
   type hubApi,
   KitAccordionSection,
   KitAsyncState,
+  KitBackBar,
   type KitAsyncStateValue,
   mergeLateLinks,
   type TranscriptSegmentContentView,
@@ -45,7 +46,7 @@ const GRAPH_LINK_BASE: readonly string[] = ['/graphs'];
 @Component({
   selector: 'app-chunk-node-history-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactBody, ChunkTimelineSelection, KitAccordionSection, KitAsyncState, TranscriptSegmentView],
+  imports: [ChunkArtifactBody, ChunkTimelineSelection, KitAccordionSection, KitAsyncState, KitBackBar, TranscriptSegmentView],
   templateUrl: './chunk-node-history-tab.html',
   styleUrl: './chunk-node-history-tab.css',
 })
@@ -55,6 +56,10 @@ export class ChunkNodeHistoryTab {
   /** The raw `?step` URL param — forwarded straight to {@link ChunkTimelineSelection} with
    * no lookup against the timeline's own rows here. */
   readonly selectedKey = input<string | null>(null);
+
+  /** Opt-in phone drill-down presentation. An unselected history renders only
+   * its timeline; a selected URL step renders only its detail state. */
+  readonly drilldown = input(false);
 
   /** The selected step's own artifacts, already filtered by the container (D8: exact
    * `(node_id, epoch)`, never latest-by-node). */
@@ -81,6 +86,10 @@ export class ChunkNodeHistoryTab {
   readonly pickSegment = output<string>();
 
   protected readonly graphLinkBase = GRAPH_LINK_BASE;
+
+  protected readonly hasSelection = computed(() => this.selectedKey() !== null);
+  protected readonly showTimeline = computed(() => !this.drilldown() || !this.hasSelection());
+  protected readonly showStep = computed(() => !this.drilldown() || this.hasSelection());
 
   protected readonly transcriptsExpanded = signal(true);
   protected readonly artifactsExpanded = signal(true);

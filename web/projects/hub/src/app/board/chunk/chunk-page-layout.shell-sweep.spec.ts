@@ -3,7 +3,7 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkGeneralTab, ChunkTranscriptsTab, hubClient, type hubApi } from 'fleet';
+import { ChunkGeneralTab, ChunkTranscriptsTab, hubClient, type hubApi, ViewportService } from 'fleet';
 import { OPERATOR_ME_RESPONSE, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
@@ -601,6 +601,141 @@ describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shel
           Math.abs(statusCenterY - hostCenterY),
           `status line centered on ${statusCenterY}, nearer the viewport's center (${viewportCenterY}) than the tab's own (${hostCenterY}) — it has no positioned ancestor`,
         ).toBeLessThan(Math.abs(statusCenterY - viewportCenterY));
+      } finally {
+        root.remove();
+      }
+    } finally {
+      stub.restore();
+    }
+  });
+});
+
+const DRILLDOWN_DETAIL: hubApi.ChunkDetail = {
+  ...CHAIN_DETAIL,
+  history: [{
+    choice_name: 'pass', epoch: 1, from_node_id: 'nd_build', from_node_name: 'build',
+    to_node_id: 'nd_review', to_node_name: 'review', recorded_at: '2026-08-09T00:00:00.000Z',
+  }],
+  artifacts: [{
+    key: 'build.plan.1', kind: 'asset', name: 'plan', node_id: 'nd_build', node_name: 'build', epoch: 1,
+    content: 'A deliberately long artifact body that must wrap inside the phone detail pane without widening it.',
+    recorded_at: '2026-08-09T00:00:00.000Z',
+  }],
+};
+
+function expectNoOverflow(element: HTMLElement, label: string): void {
+  const widest = Array.from(element.querySelectorAll<HTMLElement>('*'))
+    .filter((child) => child.scrollWidth > child.clientWidth)
+    .map((child) => `${child.tagName}.${child.className} ${child.scrollWidth}/${child.clientWidth}`)
+    .join(', ');
+  expect(
+    element.scrollWidth,
+    `${label} overflows horizontally (${element.scrollWidth} > ${element.clientWidth}); children: ${widest}`,
+  ).toBeLessThanOrEqual(element.clientWidth);
+}
+
+describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-sweep)', () => {
+  it('keeps General history-free and each selected tab list-only or detail-only without overflow at phone widths', async () => {
+    const stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) {
+        return {
+          chunk_id: CHUNK_ID,
+          segments: [{
+            segment_id: 'sg_1', node_id: 'nd_build', epoch: 1, spawn_generation: 0,
+            turn_range_start: 0, turn_range_end: 1, final: true, truncated: false, byte_count: 100,
+            normalizer_version: 'v1', harness_version: null, received_at: '2026-08-09T00:00:00.000Z',
+          }],
+        };
+      }
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts/sg_1`) {
+        return {
+          segment_id: 'sg_1', final: true, truncated: false,
+          turns: [{ index: 0, kind: 'asst', timestamp: null, tool: null, thinking_redacted: false, sidechain: null, truncated: false, text: 'A transcript turn long enough to prove the selected mobile pane lays out inside its own width.' }],
+        };
+      }
+      return DRILLDOWN_DETAIL;
+    });
+
+    try {
+      await TestBed.configureTestingModule({
+        providers: [
+          provideZonelessChangeDetection(),
+          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+          provideRouter(CHAIN_ROUTES),
+        ],
+      }).compileComponents();
+      TestBed.inject(ViewportService).setOverride('mobile');
+      const harness = await RouterTestingHarness.create();
+      const root = harness.fixture.nativeElement as HTMLElement;
+      mountInAppShell(root);
+
+      try {
+        for (const width of [390, 320]) {
+          await page.viewport(width, 700);
+          await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="chunk-general-tab"]') !== null);
+          const general = root.querySelector<HTMLElement>('[data-testid="chunk-general-tab"]')!;
+          expect(root.querySelector('[data-testid="section-node-history"]'), `${width}px: General still contains history`).toBeNull();
+          expectNoOverflow(general, `${width}px General`);
+
+          await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=node-history`);
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);
+          let nodeHistory = root.querySelector<HTMLElement>('[data-testid="chunk-node-history-tab"]')!;
+          expect(root.querySelector('.nh-step'), `${width}px: node history shows detail beside its list`).toBeNull();
+          expect(root.querySelector('[data-testid="node-history-back"]'), `${width}px: node history list has Back`).toBeNull();
+          expectNoOverflow(nodeHistory, `${width}px node history list`);
+          root.querySelector<HTMLElement>('[data-testid="selection-step"]')?.click();
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="node-history-back"]') !== null);
+          nodeHistory = root.querySelector<HTMLElement>('[data-testid="chunk-node-history-tab"]')!;
+          expect(root.querySelector('[data-testid="selection-step"]'), `${width}px: node history detail retains its list`).toBeNull();
+          expectNoOverflow(nodeHistory, `${width}px node history detail`);
+          root.querySelector<HTMLElement>('[data-testid="node-history-back"]')?.click();
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);
+
+          await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="artifacts-tab-nav-item"]') !== null);
+          let artifacts = root.querySelector<HTMLElement>('[data-testid="chunk-artifacts-panel"]')!;
+          expect(root.querySelector('[data-testid="artifacts-tab-artifact"]'), `${width}px: artifact list shows a detail`).toBeNull();
+          expect(root.querySelector('[data-testid="artifacts-tab-back"]'), `${width}px: artifact list has Back`).toBeNull();
+          expectNoOverflow(artifacts, `${width}px artifact list`);
+          root.querySelector<HTMLElement>('[data-testid="artifacts-tab-nav-item"]')?.click();
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="artifacts-tab-back"]') !== null);
+          artifacts = root.querySelector<HTMLElement>('[data-testid="chunk-artifacts-panel"]')!;
+          expect(root.querySelector('[data-testid="artifacts-tab-nav"]'), `${width}px: artifact detail retains its list`).toBeNull();
+          expectNoOverflow(artifacts, `${width}px artifact detail`);
+          root.querySelector<HTMLElement>('[data-testid="artifacts-tab-back"]')?.click();
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="artifacts-tab-nav-item"]') !== null);
+
+          await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="transcript-segment-item"]') !== null);
+          let transcripts = root.querySelector<HTMLElement>('[data-testid="chunk-transcripts-tab"]')!;
+          expect(root.querySelector('[data-testid="transcript-segment-body"]'), `${width}px: transcript list shows a detail`).toBeNull();
+          expect(root.querySelector('[data-testid="transcript-segment-back"]'), `${width}px: transcript list has Back`).toBeNull();
+          expectNoOverflow(transcripts, `${width}px transcript list`);
+          root.querySelector<HTMLElement>('[data-testid="transcript-segment-item"]')?.click();
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="transcript-segment-back"]') !== null);
+          transcripts = root.querySelector<HTMLElement>('[data-testid="chunk-transcripts-tab"]')!;
+          expect(root.querySelector('[data-testid="transcripts-tab-nav"]'), `${width}px: transcript detail retains its list`).toBeNull();
+          expectNoOverflow(transcripts, `${width}px transcript detail`);
+          root.querySelector<HTMLElement>('[data-testid="transcript-segment-back"]')?.click();
+          await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="transcript-segment-item"]') !== null);
+        }
+
+        TestBed.inject(ViewportService).setOverride('desktop');
+        await page.viewport(1024, 700);
+        await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+        await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="section-node-history"]') !== null);
+        await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=node-history`);
+        await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);
+        expect(root.querySelector('.nh-step'), 'desktop node history lost its simultaneous detail pane').not.toBeNull();
+        await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
+        await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="artifacts-tab-artifact"]') !== null);
+        expect(root.querySelector('[data-testid="artifacts-tab-nav"]'), 'desktop artifacts lost its nav').not.toBeNull();
+        await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
+        await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="transcript-segment-empty"]') !== null);
+        expect(root.querySelector('[data-testid="transcripts-tab-nav"]'), 'desktop transcripts lost its nav').not.toBeNull();
       } finally {
         root.remove();
       }

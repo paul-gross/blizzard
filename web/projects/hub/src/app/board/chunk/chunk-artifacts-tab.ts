@@ -27,6 +27,12 @@ export class ChunkArtifactsTab {
    * {@link ChunkArtifactsPanel} falls it back to the most recent entry. */
   readonly selectedKey = input<string | null>(null);
 
+  /** Opts the shared panel into the hub phone's list-or-detail presentation. */
+  readonly drilldown = input(false);
+
   /** Emitted with a nav row's key when the operator picks it. */
   readonly pickArtifact = output<string>();
+
+  /** Clears the URL-owned selection through the page container. */
+  readonly clearArtifact = output<void>();
 }

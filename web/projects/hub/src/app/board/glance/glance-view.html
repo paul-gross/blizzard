@@ -89,11 +89,43 @@
   </fleet-kit-panel>
 
   <fleet-kit-panel
+    aria-label="Up next"
+    data-testid="up-next-panel"
+    label="Up next"
+    accent="var(--amber-hi)"
+    [count]="upNext().length || null"
+    countTestid="up-next-count"
+  >
+    <fleet-kit-async-state
+      [state]="upNextState()"
+      loadingMode="content"
+      errorText="FAILED TO LOAD"
+      errorTestid="up-next-error"
+      emptyText="NOTHING UP NEXT"
+      emptyTestid="up-next-empty"
+    >
+      <div loading data-testid="up-next-loading"><fleet-kit-skeleton [rows]="2" /></div>
+      <ul class="rows">
+        @for (row of upNext(); track row.chunkId) {
+          <li class="row" data-testid="up-next-row" [attr.data-chunk]="row.chunkId">
+            <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId]" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
+            <fleet-kit-badge class="pill" tone="idle" variant="soft">ready</fleet-kit-badge>
+            <span class="grow">
+              <span class="cid">{{ row.shortId }}</span>
+              <span class="rid up-next-node">{{ row.node }}</span>
+            </span>
+          </li>
+        }
+      </ul>
+    </fleet-kit-async-state>
+  </fleet-kit-panel>
+
+  <fleet-kit-panel
     aria-label="Done today"
     data-testid="done-today-panel"
     label="Done today"
     accent="var(--green)"
-    [count]="doneToday().length || null"
+    [count]="doneTodayTotal() === null ? null : doneToday().length + '/' + doneTodayTotal()"
     countTestid="done-today-count"
   >
     <fleet-kit-async-state

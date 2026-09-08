@@ -17,6 +17,11 @@
   max-height: 35%;
   border-bottom: 1px solid var(--line);
 }
+.art-tab.list-only .art-nav {
+  flex: 1;
+  max-height: none;
+  border-bottom: none;
+}
 .art-list {
   flex: 1;
   min-height: 0;
@@ -85,6 +90,18 @@
   flex: 1;
   min-height: 0;
   padding: 8px;
+}
+.art-back {
+  flex: none;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.art-back fleet-kit-back-bar {
+  width: 100%;
+  box-sizing: border-box;
 }
 @media (min-width: 720px) {
   .art-tab {

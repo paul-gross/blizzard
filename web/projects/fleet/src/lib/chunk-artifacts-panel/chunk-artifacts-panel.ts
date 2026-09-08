@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import type { ArtifactView } from '../api/hub';
 import { ChunkArtifactBody, sortArtifacts } from '../chunk-detail';
-import { KitAsyncState, type KitAsyncStateValue } from '../kit';
+import { KitAsyncState, KitBackBar, type KitAsyncStateValue } from '../kit';
 import { FleetWhen } from '../when-display';
 
 /**
@@ -25,7 +25,7 @@ import { FleetWhen } from '../when-display';
 @Component({
   selector: 'fleet-chunk-artifacts-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactBody, FleetWhen, KitAsyncState],
+  imports: [ChunkArtifactBody, FleetWhen, KitAsyncState, KitBackBar],
   templateUrl: './chunk-artifacts-panel.html',
   styleUrl: './chunk-artifacts-panel.css',
 })
@@ -36,6 +36,11 @@ export class ChunkArtifactsPanel {
   /** The raw selection param — the requested entry, before this component falls it
    * back to the most recent one. */
   readonly selectedKey = input<string | null>(null);
+
+  /** Opt-in phone drill-down presentation. Without a URL selection, render only
+   * the list; with one (including a stale key), render only its detail state.
+   * The default retains the desktop and runner list-plus-viewer presentation. */
+  readonly drilldown = input(false);
 
   /** Roots every `data-testid` this component renders, the same convention
    * {@link ChunkArtifactBody}'s own `testid` input follows. Defaults to
@@ -50,7 +55,14 @@ export class ChunkArtifactsPanel {
   /** Emitted with a nav row's key when the operator picks it. */
   readonly pickArtifact = output<string>();
 
+  /** Clear the URL-held artifact selection. The mounting page remains the sole
+   * query-param writer. */
+  readonly clearArtifact = output<void>();
+
   protected readonly sortedArtifacts = computed(() => sortArtifacts(this.artifacts()));
+  protected readonly hasSelection = computed(() => this.selectedKey() !== null);
+  protected readonly showNav = computed(() => !this.drilldown() || !this.hasSelection());
+  protected readonly showView = computed(() => !this.drilldown() || this.hasSelection());
 
   /** Gates the nav list through {@link KitAsyncState} rather than a hand-rolled empty
    * line — not a query state (there is no read in flight here, just an empty store), but
@@ -67,6 +79,7 @@ export class ChunkArtifactsPanel {
   protected readonly effectiveKey = computed<string | null>(() => {
     const key = this.selectedKey();
     if (key !== null) return key;
+    if (this.drilldown()) return null;
     const sorted = this.sortedArtifacts();
     return sorted.length > 0 ? sorted[sorted.length - 1].key : null;
   });

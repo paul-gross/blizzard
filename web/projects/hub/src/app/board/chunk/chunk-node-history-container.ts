@@ -49,6 +49,8 @@ export class ChunkNodeHistoryContainer {
   readonly chunkId = input.required<string | null>();
   readonly detail = input.required<hubApi.ChunkDetail>();
   readonly selectedKey = input<string | null>(null);
+  /** Opts the presentational tab into the hub phone's list/detail presentation. */
+  readonly drilldown = input(false);
   readonly pickStep = output<string | null>();
 
   protected readonly indexQuery = injectHubChunkTranscriptsQuery(() => this.chunkId());

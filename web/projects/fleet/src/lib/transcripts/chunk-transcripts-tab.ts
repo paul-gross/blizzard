@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import type { TransitionView } from '../api/hub';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitBackBar } from '../kit/kit-back-bar';
 import { encodeSidechainPath, parseSidechainPath, resolveSidechainByPath } from './transcript-sidechain-path';
 import { deriveTranscriptSteps, resolveSegmentSeams, type TranscriptStep } from './transcript-steps';
 import type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry } from '../api/hub';
@@ -31,7 +32,7 @@ import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
 @Component({
   selector: 'fleet-chunk-transcripts-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, TranscriptSegmentView, TranscriptViewer],
+  imports: [KitAsyncState, KitBackBar, TranscriptSegmentView, TranscriptViewer],
   templateUrl: './chunk-transcripts-tab.html',
   styleUrl: './chunk-transcripts-tab.css',
 })
@@ -59,6 +60,11 @@ export class ChunkTranscriptsTab {
   /** The `?sidechain` URL param, raw (`review:F3`) — a dot-joined `SidechainPath` (`fleet`'s `transcript-sidechain-path.ts`), or `null`. */
   readonly sidechainPath = input<string | null>(null);
 
+  /** Opt-in phone drill-down presentation. An unselected tab is a segment list;
+   * a URL-selected segment (including a stale one) is its detail state only.
+   * The default retains simultaneous list and detail for desktop and runner. */
+  readonly drilldown = input(false);
+
   /** The `injectChunkTranscriptSegmentQuery` read: `'empty'` while {@link segmentId} names nothing, else loading/error/ready. */
   readonly segmentState = input.required<KitAsyncStateValue>();
 
@@ -70,6 +76,10 @@ export class ChunkTranscriptsTab {
 
   /** Emitted with an encoded `SidechainPath` (`review:F3`) when the operator opens a sidechain standalone, or `null` to return. */
   readonly pickSidechain = output<string | null>();
+
+  protected readonly hasSelection = computed(() => this.segmentId() !== null);
+  protected readonly showNav = computed(() => !this.drilldown() || !this.hasSelection());
+  protected readonly showView = computed(() => !this.drilldown() || this.hasSelection());
 
   protected readonly steps = computed<readonly TranscriptStep[]>(() =>
     deriveTranscriptSteps(this.segments(), this.history(), {

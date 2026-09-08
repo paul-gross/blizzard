@@ -17,6 +17,7 @@ interface Props {
   sidechainPath?: string | null;
   segmentState?: KitAsyncStateValue;
   segmentData?: TranscriptSegmentContentView;
+  drilldown?: boolean;
 }
 
 async function render(props: Props): Promise<{ el: HTMLElement; fixture: ComponentFixture<ChunkTranscriptsTab> }> {
@@ -36,6 +37,7 @@ async function render(props: Props): Promise<{ el: HTMLElement; fixture: Compone
   fixture.componentRef.setInput('sidechainPath', props.sidechainPath ?? null);
   fixture.componentRef.setInput('segmentState', props.segmentState ?? (props.segmentId ? 'ready' : 'empty'));
   fixture.componentRef.setInput('segmentData', props.segmentData);
+  fixture.componentRef.setInput('drilldown', props.drilldown ?? false);
   // This component is presentational — a URL-held selection, like `ChunkPage` owns for
   // real, is what turns a `pickSegment`/`pickSidechain` output into the next `segmentId`/
   // `sidechainPath` input, and `ChunkPage`'s own queries into the next `segmentState`/
@@ -97,6 +99,25 @@ describe('ChunkTranscriptsTab', () => {
     expect(el.querySelectorAll('[data-testid="transcript-step"]')).toHaveLength(1);
     expect(el.querySelector('[data-testid="transcript-segment-item"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="transcript-segment-empty"]')?.textContent).toContain('SELECT A SEGMENT');
+  });
+
+  it('opts into phone drill-down as a list without a segment and a detail with one', async () => {
+    const { el, fixture } = await render({ history: HISTORY, segments: [segment()], drilldown: true });
+
+    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-empty"]')).toBeNull();
+
+    fixture.componentRef.setInput('segmentId', 'seg-1');
+    fixture.componentRef.setInput('segmentState', 'ready');
+    fixture.componentRef.setInput('segmentData', { segment_id: 'seg-1', final: true, truncated: false, turns: [] });
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')).toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-back"]')).not.toBeNull();
+
+    const picked: (string | null)[] = [];
+    fixture.componentInstance.pickSegment.subscribe((id) => picked.push(id));
+    el.querySelector<HTMLButtonElement>('[data-testid="transcript-segment-back"]')?.click();
+    expect(picked).toContain(null);
   });
 
   it('emits pickSegment when a nav row is clicked, and renders the segment once its data arrives', async () => {

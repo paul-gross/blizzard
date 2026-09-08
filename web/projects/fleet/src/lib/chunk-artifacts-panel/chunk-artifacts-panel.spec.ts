@@ -69,6 +69,28 @@ describe('ChunkArtifactsPanel', () => {
     expect(active?.getAttribute('data-artifact-key')).toBe(NEWER.key);
   });
 
+  it('opts into phone drill-down as a list without a selection and a detail with one', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifactsPanel);
+    fixture.componentRef.setInput('artifacts', [OLDER, NEWER]);
+    fixture.componentRef.setInput('drilldown', true);
+    await fixture.whenStable();
+    let el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="artifacts-panel-nav"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="artifacts-panel-artifact"]')).toBeNull();
+
+    fixture.componentRef.setInput('selectedKey', OLDER.key);
+    await fixture.whenStable();
+    el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="artifacts-panel-nav"]')).toBeNull();
+    expect(el.querySelector('[data-testid="artifacts-panel-artifact"]')?.textContent).toContain('acme/widget');
+
+    let cleared = false;
+    fixture.componentInstance.clearArtifact.subscribe(() => (cleared = true));
+    el.querySelector<HTMLButtonElement>('[data-testid="artifacts-panel-back"]')?.click();
+    expect(cleared).toBe(true);
+  });
+
   it('renders the selected entry’s full content, and a git_commit’s ref rather than content', async () => {
     const fixture = TestBed.createComponent(ChunkArtifactsPanel);
     fixture.componentRef.setInput('artifacts', [OLDER, NEWER]);

@@ -14,10 +14,29 @@
   flex: none;
   border-bottom: 1px solid var(--line);
 }
+.nh-tab.list-only .nh-timeline {
+  flex: 1;
+  overflow-y: auto;
+  border-bottom: none;
+}
 .nh-step {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
   padding: 8px;
+}
+.nh-back {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.nh-back fleet-kit-back-bar {
+  width: 100%;
+  box-sizing: border-box;
 }
 .s-head {
   padding: 6px 8px 0;

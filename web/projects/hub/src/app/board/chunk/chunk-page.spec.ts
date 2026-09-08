@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import { hubClient, ViewportService } from 'fleet';
 import { stubError } from 'fleet/testing';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
@@ -103,6 +103,7 @@ describe('Mobile chunk drill-down', () => {
         provideRouter(ROUTES),
       ],
     });
+    TestBed.inject(ViewportService).setOverride('desktop');
   });
 
   afterEach(() => stub.restore());
@@ -126,7 +127,7 @@ describe('Mobile chunk drill-down', () => {
     return harness.fixture.nativeElement as HTMLElement;
   }
 
-  it('renders the General tab active by default, stacking its sections in attention order', async () => {
+  it('keeps Node history in the desktop General tab', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
     expect(el.querySelector('[data-testid="board-chunk-detail"]')).not.toBeNull();
@@ -142,6 +143,35 @@ describe('Mobile chunk drill-down', () => {
       'section-node-history',
       'section-asks',
     ]);
+  });
+
+  it('on mobile, keeps General free of Node history and shows an unselected Node history tab as its timeline only', async () => {
+    TestBed.inject(ViewportService).setOverride('mobile');
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=node-history`);
+    await settle(harness.fixture);
+    let el = harness.fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="section-node-history"]')).toBeNull();
+    expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
+    expect(el.querySelector('.nh-step')).toBeNull();
+
+    (el.querySelector<HTMLButtonElement>('[data-testid="selection-step"]'))?.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+
+    expect(TestBed.inject(Router).url).toContain('tab=node-history&step=nd_build:1');
+    expect(el.querySelector('[data-testid="selection-step"]')).toBeNull();
+    expect(el.querySelector('[data-testid="node-history-back"]')).not.toBeNull();
+    expect(document.activeElement).toBe(el.querySelector('[data-testid="node-history-back"]'));
+
+    el.querySelector<HTMLButtonElement>('[data-testid="node-history-back"]')?.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=node-history`);
+    expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
+    expect(el.querySelector('.nh-step')).toBeNull();
+    expect(document.activeElement).toBe(el.querySelector('[data-step-key="nd_build:1"]'));
   });
 
   it('names the chunk by its full id in the identity header, not the compact ref', async () => {
@@ -334,6 +364,44 @@ describe('Mobile chunk drill-down', () => {
 
     expect(el.querySelector('[data-testid="artifacts-tab-empty"]')?.textContent).toContain('NO SUCH ARTIFACT');
     expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')).toBeNull();
+  });
+
+  it('on mobile, makes Artifacts list-or-detail, honors stale deep links, and clears only artifact on back', async () => {
+    TestBed.inject(ViewportService).setOverride('mobile');
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=artifacts&artifact=gone.missing.9&step=nd_build%3A1`);
+    await settle(harness.fixture);
+    let el = harness.fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="artifacts-tab-nav"]')).toBeNull();
+    expect(el.querySelector('[data-testid="artifacts-tab-empty"]')?.textContent).toContain('NO SUCH ARTIFACT');
+    expect(el.querySelector('[data-testid="artifacts-tab-back"]')).not.toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="artifacts-tab-back"]')?.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=artifacts&step=nd_build:1`);
+    expect(el.querySelector('[data-testid="artifacts-tab-nav"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')).toBeNull();
+    expect(document.activeElement).toBe(el.querySelector('[data-testid="tab-artifacts"]'));
+  });
+
+  it('on mobile, moves focus from an artifact row to Back and then restores the row', async () => {
+    TestBed.inject(ViewportService).setOverride('mobile');
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
+    await settle(harness.fixture);
+    let el = harness.fixture.nativeElement as HTMLElement;
+    const row = el.querySelector<HTMLButtonElement>('[data-artifact-key="build.branch.1"]')!;
+    row.focus();
+    row.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+    expect(document.activeElement).toBe(el.querySelector('[data-testid="artifacts-tab-back"]'));
+
+    el.querySelector<HTMLButtonElement>('[data-testid="artifacts-tab-back"]')?.click();
+    await settle(harness.fixture);
+    expect(document.activeElement).toBe(el.querySelector('[data-artifact-key="build.branch.1"]'));
   });
 
   it('opens one asset artifact in full, one level deeper', async () => {
@@ -603,5 +671,68 @@ describe('Mobile chunk drill-down', () => {
 
     expect(el.querySelector('[data-testid="tab-transcripts"]')).toBeNull();
     expect(el.querySelector('[data-testid="transcripts-forbidden"]')?.textContent).toContain('NO PERMISSION');
+  });
+
+  it('on mobile, deep-links a sidechain as transcript detail only and clears segment plus sidechain on back', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) {
+        return {
+          chunk_id: CHUNK_ID,
+          segments: [{ segment_id: 'sg_1', node_id: 'nd_build', epoch: 1, spawn_generation: 0, turn_range_start: 0, turn_range_end: 1, final: true, truncated: false, byte_count: 40, normalizer_version: 'v1', harness_version: null, received_at: '2026-07-16T11:05:00.000Z' }],
+        };
+      }
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts/sg_1`) {
+        return {
+          segment_id: 'sg_1', final: true, truncated: false,
+          turns: [{ index: 0, kind: 'sidechain', text: null, timestamp: null, tool: null, thinking_redacted: false, truncated: false, sidechain: { agent_id: null, agent_type: null, link: 'unlinked', turns: [{ index: 0, kind: 'asst', text: 'sidechain deep link', timestamp: null, tool: null, thinking_redacted: false, truncated: false, sidechain: null }] } }],
+        };
+      }
+      return DETAIL;
+    });
+    TestBed.inject(ViewportService).setOverride('mobile');
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
+    await settle(harness.fixture);
+    let el = harness.fixture.nativeElement as HTMLElement;
+    const row = el.querySelector<HTMLButtonElement>('[data-testid="transcript-segment-item"]')!;
+    row.focus();
+    row.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+    expect(document.activeElement).toBe(el.querySelector('[data-testid="transcript-segment-back"]'));
+
+    const sidechainOpen = el.querySelector<HTMLButtonElement>('[data-testid="transcript-sidechain-open"]')!;
+    sidechainOpen.focus();
+    sidechainOpen.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+    expect(document.activeElement).toBe(el.querySelector('[data-testid="transcript-sidechain-back"]'));
+
+    el.querySelector<HTMLButtonElement>('[data-testid="transcript-sidechain-back"]')!.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+    expect(document.activeElement).toBe(el.querySelector('[data-testid="transcript-segment-back"]'));
+
+    el.querySelector<HTMLButtonElement>('[data-testid="transcript-segment-back"]')?.click();
+    await settle(harness.fixture);
+    expect(document.activeElement).toBe(el.querySelector('[data-testid="transcript-segment-item"]'));
+
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=transcripts&segment=sg_1&sidechain=0`);
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')).toBeNull();
+    expect(el.querySelector('[data-testid="transcript-sidechain-back"]')).not.toBeNull();
+    expect(el.textContent).toContain('sidechain deep link');
+
+    el.querySelector<HTMLButtonElement>('[data-testid="transcript-segment-back"]')?.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
+    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-body"]')).toBeNull();
   });
 });

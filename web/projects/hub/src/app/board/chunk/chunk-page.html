@@ -37,6 +37,7 @@
           [canAnswer]="canAnswer()"
           [canResolve]="canResolve()"
           [graphLinkBase]="['/graphs']"
+          [showNodeHistory]="!mobile()"
           (answerQuestion)="onAnswer($event)"
           (resolveDecision)="onResolve($event)"
           (editGraph)="onEditGraph($event)"
@@ -48,6 +49,7 @@
           [chunkId]="chunkId()"
           [detail]="d"
           [selectedKey]="selection.stepKey()"
+          [drilldown]="mobile()"
           (pickStep)="onSelectStep($event)"
         />
       }
@@ -55,7 +57,9 @@
         <app-chunk-artifacts-tab
           [artifacts]="d.artifacts ?? []"
           [selectedKey]="selection.artifactKey()"
+          [drilldown]="mobile()"
           (pickArtifact)="onSelectArtifact($event)"
+          (clearArtifact)="onSelectArtifact(null)"
         />
       }
       @case ('transcripts') {
@@ -69,6 +73,7 @@
           [latestEpoch]="d.latest_epoch"
           [segmentId]="selection.transcriptSegment()"
           [sidechainPath]="selection.transcriptSidechain()"
+          [drilldown]="mobile()"
           (pickSegment)="onSelectTranscriptSegment($event)"
           (pickSidechain)="onSelectTranscriptSidechain($event)"
         />

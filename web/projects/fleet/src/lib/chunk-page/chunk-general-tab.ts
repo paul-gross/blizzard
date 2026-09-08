@@ -76,6 +76,11 @@ export class ChunkGeneralTab {
    * detail route (issue #318). */
   readonly issuePanePlacement = input<'center' | 'inline'>('center');
 
+  /** Whether General includes its node-history summary. Defaults to the established
+   * desktop and runner presentation; the hub's mobile page opts out because the
+   * dedicated Node history tab is its drill-down entry point. */
+  readonly showNodeHistory = input(true);
+
   /** Emitted when the operator answers an open question. */
   readonly answerQuestion = output<AnswerQuestionEvent>();
 

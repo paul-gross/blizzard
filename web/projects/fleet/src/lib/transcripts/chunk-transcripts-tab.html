@@ -12,8 +12,9 @@
 } @else if (steps().length === 0) {
   <fleet-kit-async-state state="empty" emptyText="NO TRANSCRIPT SEGMENTS YET" emptyTestid="transcripts-empty" />
 } @else {
-  <div class="tx-tab" data-testid="chunk-transcripts-tab">
-    <nav class="tx-nav" data-testid="transcripts-tab-nav">
+  <div class="tx-tab" [class.list-only]="drilldown() && !hasSelection()" data-testid="chunk-transcripts-tab">
+    @if (showNav()) {
+      <nav class="tx-nav" data-testid="transcripts-tab-nav">
       @for (step of steps(); track step.key) {
         <div class="step" data-testid="transcript-step">
           <div class="step-head">
@@ -53,8 +54,15 @@
           }
         </div>
       }
-    </nav>
-    <section class="tx-view">
+      </nav>
+    }
+    @if (showView()) {
+      <section class="tx-view">
+        @if (drilldown()) {
+          <button type="button" class="tx-back" data-testid="transcript-segment-back" (click)="pickSegment.emit(null)">
+            <fleet-kit-back-bar label="Transcripts" />
+          </button>
+        }
       @if (segmentState() === 'empty') {
         <fleet-kit-async-state state="empty" emptyText="SELECT A SEGMENT" emptyTestid="transcript-segment-empty" />
       } @else if (segmentState() === 'loading') {
@@ -85,6 +93,7 @@
           }
         </div>
       }
-    </section>
+      </section>
+    }
   </div>
 }

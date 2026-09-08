@@ -23,6 +23,11 @@
   overflow-y: auto;
   border-bottom: 1px solid var(--line);
 }
+.tx-tab.list-only .tx-nav {
+  flex: 1;
+  max-height: none;
+  border-bottom: none;
+}
 /* Owns no horizontal padding (`design/tokens.css`'s `--surface-*` doc comment) — it
    wraps `.seg-item`, a full-bleed interactive row that carries its own, so that row's
    hover/active background reaches this container's full width rather than floating
@@ -115,6 +120,18 @@
   cursor: pointer;
   padding: 4px 0;
   margin-bottom: 4px;
+}
+.tx-back {
+  flex: none;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.tx-back fleet-kit-back-bar {
+  width: 100%;
+  box-sizing: border-box;
 }
 @media (min-width: 720px) {
   .tx-tab {

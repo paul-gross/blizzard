@@ -3,14 +3,17 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { GlanceBoard } from './glance-board';
 
+const NOW = Date.now();
+const completedAt = (ageMs: number) => new Date(NOW - ageMs).toISOString();
+
 /**
  * `chunk-lanes.ts`'s `STATUS_TONE` decides which section a chunk lands in — this
- * fixture picks one chunk per bucket, plus a `not_ready` chunk that must land in
- * neither (the ready rail's own concern on the desktop board, out of scope here).
+ * fixture picks chunks for every glance section plus terminal rows outside the
+ * rolling window and a `not_ready` chunk that must land in neither.
  */
 const CHUNKS = [
   {
@@ -42,13 +45,59 @@ const CHUNKS = [
     cost: { cost_usd: 2.03, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 },
   },
   {
-    chunk_id: 'ch_01donetoday00000000000000000',
+    chunk_id: 'ch_01readyfirst0000000000000000',
+    graph_id: 'gr_1',
+    status: 'ready',
+    current_node_id: 'nd_test',
+    current_node_name: 'test',
+    model: 'claude-opus-4-8',
+    runner_id: null,
+  },
+  {
+    chunk_id: 'ch_01readysecond000000000000000',
+    graph_id: 'gr_1',
+    status: 'ready',
+    current_node_id: 'nd_build',
+    current_node_name: 'build',
+    model: 'claude-opus-4-8',
+    runner_id: null,
+  },
+  {
+    chunk_id: 'ch_01donerecent0000000000000000',
     graph_id: 'gr_1',
     status: 'done',
+    completed_at: completedAt(60 * 60 * 1000),
     current_node_id: null,
     model: 'claude-opus-4-8',
     runner_id: null,
     work_refs: [{ label: 'blizzard#79' }],
+  },
+  {
+    chunk_id: 'ch_01stoppedrecent00000000000000',
+    graph_id: 'gr_1',
+    status: 'stopped',
+    completed_at: completedAt(2 * 60 * 60 * 1000),
+    current_node_id: null,
+    model: 'claude-opus-4-8',
+    runner_id: null,
+  },
+  {
+    chunk_id: 'ch_01doneold00000000000000000000',
+    graph_id: 'gr_1',
+    status: 'done',
+    completed_at: completedAt(25 * 60 * 60 * 1000),
+    current_node_id: null,
+    model: 'claude-opus-4-8',
+    runner_id: null,
+  },
+  {
+    chunk_id: 'ch_01donemissing000000000000000',
+    graph_id: 'gr_1',
+    status: 'done',
+    completed_at: null,
+    current_node_id: null,
+    model: 'claude-opus-4-8',
+    runner_id: null,
   },
   {
     chunk_id: 'ch_01notready00000000000000000',
@@ -58,6 +107,12 @@ const CHUNKS = [
     model: 'claude-opus-4-8',
     runner_id: null,
   },
+];
+
+// The API's dispatch order deliberately differs from the chunks list's order.
+const QUEUE = [
+  { chunk_id: 'ch_01readysecond000000000000000', graph_id: 'gr_1', position: 0 },
+  { chunk_id: 'ch_01readyfirst0000000000000000', graph_id: 'gr_1', position: 1 },
 ];
 
 // The open ask names the SAME chunk as the waiting_on_human fixture above — the
@@ -94,6 +149,7 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
   beforeEach(async () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/chunks') return CHUNKS;
+      if (method === 'GET' && path === '/api/queue') return { entries: QUEUE };
       if (method === 'GET' && path === '/api/questions') return QUESTIONS;
       if (method === 'GET' && path === '/api/runners') return { runners: RUNNERS };
       if (method === 'GET' && path === '/api/health') return { status: 'ok' };
@@ -144,17 +200,51 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     expect(row?.querySelector('[data-testid="in-motion-cost"]')?.textContent).toContain('$2.03');
   });
 
-  it('lands a completed chunk in "Done today" with its work ref', async () => {
+  it('lists every currently READY chunk in exact queue dispatch order', async () => {
+    const fixture = TestBed.createComponent(GlanceBoard);
+    await settle(fixture);
+    const rows = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="up-next-row"]')];
+
+    expect(rows.map((row) => row.getAttribute('data-chunk'))).toEqual([
+      'ch_01readysecond000000000000000',
+      'ch_01readyfirst0000000000000000',
+    ]);
+  });
+
+  it('lists only rolling-24-hour terminal chunks in newest-first order and shows visible/total', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    const rows = el.querySelectorAll('[data-testid="done-today-row"]');
-    expect(rows).toHaveLength(1);
-    expect(el.querySelector('[data-chunk="ch_01donetoday00000000000000000"]')?.textContent).toContain('blizzard#79');
+    const rows = [...el.querySelectorAll('[data-testid="done-today-row"]')];
+    expect(rows.map((row) => row.getAttribute('data-chunk'))).toEqual([
+      'ch_01donerecent0000000000000000',
+      'ch_01stoppedrecent00000000000000',
+    ]);
+    expect(el.querySelector('[data-chunk="ch_01donerecent0000000000000000"]')?.textContent).toContain('blizzard#79');
+    expect(el.querySelector('[data-testid="done-today-count"]')?.textContent).toContain('2/4');
   });
 
-  it('never buckets a not_ready chunk into any of the three attention sections', async () => {
+  it('withholds Done today\'s count when the chunks query fails', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/chunks') return stubError(503, { detail: 'unavailable' });
+      if (method === 'GET' && path === '/api/queue') return { entries: [] };
+      if (method === 'GET' && path === '/api/questions') return [];
+      if (method === 'GET' && path === '/api/runners') return { runners: [] };
+      if (method === 'GET' && path === '/api/health') return { status: 'ok' };
+      if (method === 'GET' && path === '/api/spend') return SPEND;
+      return {};
+    });
+    const fixture = TestBed.createComponent(GlanceBoard);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="done-today-error"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="done-today-count"]')).toBeNull();
+  });
+
+  it('never buckets a not_ready chunk into any glance section', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
@@ -188,14 +278,14 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    for (const testid of ['needs-you-row', 'in-motion-row', 'done-today-row']) {
+    for (const testid of ['needs-you-row', 'in-motion-row', 'up-next-row', 'done-today-row']) {
       const badge = el.querySelector(`[data-testid="${testid}"] .badge`);
       expect(badge?.classList.contains('soft')).toBe(true);
       expect(badge?.classList.contains('pill')).toBe(false);
     }
   });
 
-  it('colors each section header per the mock — red/cyan/green — with the count alongside it', async () => {
+  it('colors each section header and retains Done today\'s useful visible/total count', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
@@ -203,10 +293,12 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     const label = (panel: string) => el.querySelector(`[data-testid="${panel}"] .lbl`) as HTMLElement;
     expect(label('needs-you-panel').style.color).toBe('var(--red)');
     expect(label('in-motion-panel').style.color).toBe('var(--cyan)');
+    expect(label('up-next-panel').style.color).toBe('var(--amber-hi)');
     expect(label('done-today-panel').style.color).toBe('var(--green)');
 
     expect(el.querySelector('[data-testid="needs-you-count"]')?.textContent).toContain('2');
     expect(el.querySelector('[data-testid="in-motion-count"]')?.textContent).toContain('1');
-    expect(el.querySelector('[data-testid="done-today-count"]')?.textContent).toContain('1');
+    expect(el.querySelector('[data-testid="up-next-count"]')?.textContent).toContain('2');
+    expect(el.querySelector('[data-testid="done-today-count"]')?.textContent).toContain('2/4');
   });
 });

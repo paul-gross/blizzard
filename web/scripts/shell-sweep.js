@@ -36,6 +36,9 @@
  *     `ChunkArtifactsPanel` chain (review M1): a 40-artifact nav list genuinely
  *     scrolls inside a bounded box rather than clipping with no scroll
  *     container — the `height: 100%` percentage chain jsdom cannot resolve.
+ *   - projects/hub/src/app/board/glance/glance-view.shell-sweep.spec.ts — the
+ *     mobile glance board's attention-to-completion section ordering and no-overflow
+ *     layout at 390px and 320px.
  *   - projects/runner/src/app/nav/app-header.shell-sweep.spec.ts — the
  *     runner app root's own desktop header (`AppHeader`, moved out of
  *     `LocalPanelLayout` by issue #325), swept over width × signed-in
@@ -198,6 +201,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk/chunk-artifacts-tab-layout.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/glance/glance-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/nav/app-header.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/runners/runner-view.shell-sweep.spec.ts' },

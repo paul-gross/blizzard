@@ -40,7 +40,14 @@ export interface MotionRow {
   readonly costPartial: boolean;
 }
 
-/** One "Done today" row — a chunk whose tone is `done` (stopped or done). */
+/** One "Up next" row — a currently READY chunk in the hub's dispatch order. */
+export interface UpNextRow {
+  readonly chunkId: string;
+  readonly shortId: string;
+  readonly node: string;
+}
+
+/** One "Done today" row — a terminal chunk completed in the rolling previous 24 hours. */
 export interface DoneRow {
   readonly chunkId: string;
   readonly shortId: string;
@@ -63,7 +70,7 @@ export interface Vitals {
  * The mobile glance board's presentational half (mock screen C,
  * `../docs/designs/mobile/core-flows.html`) — one scrolling column, ordered by
  * attention rather than by entity: the vitals strip, then "Needs you", "In
- * motion", "Done today", and the comfort numbers ("Fleet spend · today") last.
+ * motion", "Up next", "Done today", and the comfort numbers ("Fleet spend · today") last.
  *
  * Presentational (`bzh:frontend-container-presentational`): renders exactly what
  * it is handed and injects no query. Each chunk row carries a whole-row
@@ -87,8 +94,12 @@ export class GlanceView {
   readonly needsYouState = input.required<KitAsyncStateValue>();
   readonly inMotion = input<readonly MotionRow[]>([]);
   readonly inMotionState = input.required<KitAsyncStateValue>();
+  readonly upNext = input<readonly UpNextRow[]>([]);
+  readonly upNextState = input.required<KitAsyncStateValue>();
   readonly doneToday = input<readonly DoneRow[]>([]);
   readonly doneTodayState = input.required<KitAsyncStateValue>();
+  /** The denominator in Done today's visible/total terminal header count. */
+  readonly doneTodayTotal = input<number | null>(0);
   readonly spend = input<FleetSpendView | null>(null);
   readonly spendState = input.required<KitAsyncStateValue>();
 

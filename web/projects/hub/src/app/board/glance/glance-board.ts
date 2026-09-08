@@ -2,20 +2,23 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import {
   FleetLiveUpdates,
   STATUS_TONE,
+  ageMs,
   asyncState,
   asyncStateOf,
   compactRef,
   injectHubChunksQuery,
   injectHubFleetSpendQuery,
   injectHubHealthQuery,
+  injectHubQueueQuery,
   injectHubQuestionsQuery,
   injectHubRunnersQuery,
+  injectNowSignal,
   type ChunkSummary,
   type KitAsyncStateValue,
 } from 'fleet';
 
 import { startOfLocalDayIso } from '../../local-day';
-import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type Vitals } from './glance-view';
+import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type UpNextRow, type Vitals } from './glance-view';
 
 /**
  * The mobile glance board (mock screen C, `../docs/designs/mobile/core-flows.html`)
@@ -31,19 +34,18 @@ import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type Vital
  * table rather than per-page (see `app.routes.ts`'s doc comment).
  *
  * Every number and row here comes from queries {@link BoardPage}'s desktop shell
- * already reads — `injectHubChunksQuery`, `injectHubQuestionsQuery`,
- * `injectHubRunnersQuery`, `injectHubHealthQuery`, `injectHubFleetSpendQuery` —
+   * already reads — `injectHubChunksQuery`, `injectHubQueueQuery`,
+   * `injectHubQuestionsQuery`, `injectHubRunnersQuery`, `injectHubHealthQuery`,
+   * `injectHubFleetSpendQuery` —
  * plus the same `FleetLiveUpdates` spine the app root starts: no new backend
  * plumbing, per the mobile README's shared-guts inventory ("Reuses chunks.query
  * … status vocabulary from chunk-lanes. New: attention-sort, vitals strip,
  * mobile board shell").
  *
- * `ChunkSummary` carries no per-row instant — no started-at or landed-at
- * timestamp, only `ChunkDetail`'s transition history does, and fetching that per
- * row would turn this glance read into an N+1 the desktop board doesn't pay
- * either. The mock's "age"/"landed time" cells are therefore not rendered here;
- * the section a chunk sorts into (and its status pill) carries that signal
- * instead of a fabricated instant.
+   * The ready queue supplies its own dispatch order, rather than asking the chunk
+   * list to invent one. Terminal chunks carry `completed_at`, so the rolling
+   * "Done today" window can remain a fleet-list read rather than an N+1 detail
+   * lookup.
  */
 @Component({
   selector: 'app-glance-board',
@@ -58,6 +60,7 @@ import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type Vital
 })
 export class GlanceBoard {
   private readonly chunksQuery = injectHubChunksQuery();
+  private readonly queueQuery = injectHubQueueQuery();
   private readonly questionsQuery = injectHubQuestionsQuery();
   private readonly runnersQuery = injectHubRunnersQuery();
   private readonly health = injectHubHealthQuery();
@@ -71,6 +74,7 @@ export class GlanceBoard {
   private readonly chunks = computed<readonly ChunkSummary[]>(() => this.chunksQuery.data() ?? []);
   private readonly questions = computed(() => this.questionsQuery.data() ?? []);
   private readonly runners = computed(() => this.runnersQuery.data() ?? []);
+  private readonly now = injectNowSignal(60_000);
 
   /**
    * Open asks first (the more specific "why"), then any chunk in a
@@ -123,26 +127,56 @@ export class GlanceBoard {
       })),
   );
 
-  /** Chunks whose tone is `done` (`stopped`/`done`) — the mock's "Done today". */
-  protected readonly doneToday = computed<readonly DoneRow[]>(() =>
-    this.chunks()
-      .filter((chunk) => STATUS_TONE[chunk.status] === 'done')
+  /** READY chunks in the hub's dispatch order. The queue is the ordering fact;
+   * the chunk list confirms each entry is still currently ready. */
+  protected readonly upNext = computed<readonly UpNextRow[]>(() => {
+    const chunksById = new Map(this.chunks().map((chunk) => [chunk.chunk_id, chunk]));
+    return (this.queueQuery.data() ?? [])
+      .map((entry) => chunksById.get(entry.chunk_id))
+      .filter((chunk): chunk is ChunkSummary => chunk?.status === 'ready')
       .map((chunk) => ({
         chunkId: chunk.chunk_id,
         shortId: compactRef(chunk.chunk_id),
-        // Only labeled pointers show — the same filter the desktop board's card applies
-        // (board-shell.ts). Unlike that card (issue #176), this row's own `DoneRow` type
-        // keeps its labels space-joined into one line: the "done today" glance is a
-        // denser, read-only summary, not the card these rows are a distinct type from.
-        pointerLabel: (chunk.work_refs ?? []).flatMap((p) => (p.label ? [p.label] : [])).join(' '),
-      })),
+        node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
+      }));
+  });
+
+  /** Terminal chunks completed in the rolling previous 24 hours, newest first.
+   * `ageMs` rejects missing, malformed, and meaningfully future instants; the
+   * injected clock makes the cutoff advance without a fresh fleet-list read. */
+  protected readonly doneToday = computed<readonly DoneRow[]>(() =>
+    this.chunks()
+      .flatMap((chunk) => {
+        const age = ageMs(chunk.completed_at, this.now());
+        if (STATUS_TONE[chunk.status] !== 'done' || age === null || age > 24 * 60 * 60 * 1000) return [];
+        return [{
+          age,
+          row: {
+            chunkId: chunk.chunk_id,
+            shortId: compactRef(chunk.chunk_id),
+            // Only labeled pointers show — the same filter the desktop board's card applies
+            // (board-shell.ts). Unlike that card (issue #176), this row's own `DoneRow` type
+            // keeps its labels space-joined into one line: the "done today" glance is a
+            // denser, read-only summary, not the card these rows are a distinct type from.
+            pointerLabel: (chunk.work_refs ?? []).flatMap((p) => (p.label ? [p.label] : [])).join(' '),
+          },
+        }];
+      })
+      .sort((left, right) => left.age - right.age)
+      .map(({ row }) => row),
   );
+
+  /** Every terminal chunk, including older rows and rows whose completion instant
+   * cannot be rendered in the rolling window. Used as Done today's visible/total
+   * header count, so an empty fleet still states `0/0`. */
+  protected readonly terminalCount = computed(() => this.chunks().filter((chunk) => STATUS_TONE[chunk.status] === 'done').length);
 
   /** Each panel's async state, derived independently (AC 4) — a panel withholds
    * its empty copy on its own reads' loading/error, regardless of the other
-   * three. "Needs you" folds in the questions read (an ask can arrive before
+   * panels. "Needs you" folds in the questions read (an ask can arrive before
    * or after the chunk list settles); "In motion" and "Done today" are both
-   * slices of the same chunks read alone; spend is its own query. */
+   * slices of the same chunks read alone; "Up next" owns both the chunk and
+   * queue reads; spend is its own query. */
   protected readonly needsYouState = computed<KitAsyncStateValue>(() =>
     asyncStateOf([this.chunksQuery, this.questionsQuery], this.needsYou().length === 0),
   );
@@ -151,8 +185,18 @@ export class GlanceBoard {
     asyncState(this.chunksQuery, this.inMotion().length === 0),
   );
 
+  protected readonly upNextState = computed<KitAsyncStateValue>(() =>
+    asyncStateOf([this.chunksQuery, this.queueQuery], this.upNext().length === 0),
+  );
+
   protected readonly doneTodayState = computed<KitAsyncStateValue>(() =>
     asyncState(this.chunksQuery, this.doneToday().length === 0),
+  );
+
+  /** The terminal denominator is meaningful only once the chunks read succeeded:
+   * before then its empty fallback would falsely advertise `0/0`. */
+  protected readonly doneTodayTotal = computed<number | null>(() =>
+    this.chunksQuery.isPending() || this.chunksQuery.isError() ? null : this.terminalCount(),
   );
 
   /** Never `'empty'`: the spend endpoint returns a zeroed aggregate rather than

@@ -12,7 +12,8 @@
         <div
           class="step"
           [class.selected]="row.key !== null && row.key === selectedKey()"
-          [attr.data-testid]="row.kind === 'migration' ? 'selection-migration-step' : 'selection-step'"
+           [attr.data-testid]="row.kind === 'migration' ? 'selection-migration-step' : 'selection-step'"
+           [attr.data-step-key]="row.key"
           [attr.data-choice]="row.kind === 'migration' ? 'migrated' : row.verdict"
           [attr.role]="row.key !== null ? 'button' : null"
           [attr.tabindex]="row.key !== null ? 0 : null"
@@ -68,7 +69,8 @@
       <li>
         <div
           class="step"
-          data-testid="selection-active"
+           data-testid="selection-active"
+           [attr.data-step-key]="a.key"
           [class.selected]="a.key !== null && a.key === selectedKey()"
           [attr.data-choice]="a.choice"
           [attr.role]="a.key !== null ? 'button' : null"

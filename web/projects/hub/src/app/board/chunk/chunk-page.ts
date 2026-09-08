@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, afterRenderEffect, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
@@ -18,6 +18,7 @@ import {
   type WorkItemsState,
   type ResolveDecisionEvent,
   STATUS_TONE,
+  ViewportService,
   errorMessage,
   hasPermission,
   injectAnswerQuestionMutation,
@@ -38,9 +39,9 @@ import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
  * both the mobile board's rows and the desktop dock's artifact links, on
  * desktop as well as mobile. One shell serves both widths: `app.routes.ts`
  * forks the mobile/desktop board shell in the route table, and only there —
- * so this page stays a single component tree, with the narrow case handled
- * entirely in the tab bodies' own CSS rather than a second viewport-scoped
- * page.
+   * so this page stays a single component tree. Its shared tab bodies retain
+   * their desktop presentation by default; this hub page explicitly opts them
+   * into the phone list/detail drill-down presentation.
  *
  * Four tabs, selected through {@link injectChunkDetailSelection} (`?tab`, so
  * the choice is a URL-held state of this one page, not a different page):
@@ -96,6 +97,47 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
 })
 export class ChunkPage {
   private readonly route = inject(ActivatedRoute);
+  private readonly viewport = inject(ViewportService);
+  private readonly element = inject(ElementRef<HTMLElement>);
+
+  /** The row to restore after its mobile-only detail view removes the focused
+   * control. This is focus continuity, not selection state: the URL remains the
+   * sole owner of the selected node, artifact, or transcript segment. */
+  private focusRequest:
+    | { kind: 'detail'; testid: string }
+    | { kind: 'list'; attribute: string; value: string }
+    | { kind: 'tab' }
+    | null = null;
+  private stepOrigin: string | null = null;
+  private artifactOrigin: string | null = null;
+  private transcriptOrigin: string | null = null;
+
+  protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
+
+  constructor() {
+    afterRenderEffect(() => {
+      // The URL inputs make this rerun only after the selected branch has actually
+      // entered or left the DOM. A deep link makes no request, so it never steals
+      // initial focus.
+      this.selection.stepKey();
+      this.selection.artifactKey();
+      this.selection.transcriptSegment();
+      this.selection.transcriptSidechain();
+      const request = this.focusRequest;
+      if (request === null) return;
+
+      const root = this.element.nativeElement as HTMLElement;
+      const target = request.kind === 'detail'
+        ? root.querySelector<HTMLElement>(`[data-testid="${request.testid}"]`)
+        : request.kind === 'list'
+          ? Array.from(root.querySelectorAll<HTMLElement>(`[${request.attribute}]`)).find(
+              (row) => row.getAttribute(request.attribute) === request.value,
+            ) ?? root.querySelector<HTMLElement>(`[data-testid="tab-${this.tab()}"]`)
+          : root.querySelector<HTMLElement>(`[data-testid="tab-${this.tab()}"]`);
+      target?.focus();
+      this.focusRequest = null;
+    });
+  }
 
   /** The plane seam {@link ChunkTranscriptsContainer} crosses (D5, runner-node-grouped-
    * transcripts) — exposed as an instance field so the template can bind it; a plain
@@ -124,13 +166,33 @@ export class ChunkPage {
    * history tab — both forward the same `pickStep`, a pure function of that param,
    * never their own selection state. */
   protected onSelectStep(stepKey: string | null): void {
+    if (this.mobile()) {
+      if (stepKey === null) {
+        this.focusRequest = this.stepOrigin === null
+          ? { kind: 'tab' }
+          : { kind: 'list', attribute: 'data-step-key', value: this.stepOrigin };
+      } else {
+        this.stepOrigin = stepKey;
+        this.focusRequest = { kind: 'detail', testid: 'node-history-back' };
+      }
+    }
     this.selection.selectStep(stepKey);
   }
 
   /** A nav row picked in the Artifacts tab writes its key back to the URL —
    * {@link ChunkArtifactsTab}'s viewer is a pure function of that param, never
    * its own selection state. */
-  protected onSelectArtifact(key: string): void {
+  protected onSelectArtifact(key: string | null): void {
+    if (this.mobile()) {
+      if (key === null) {
+        this.focusRequest = this.artifactOrigin === null
+          ? { kind: 'tab' }
+          : { kind: 'list', attribute: 'data-artifact-key', value: this.artifactOrigin };
+      } else {
+        this.artifactOrigin = key;
+        this.focusRequest = { kind: 'detail', testid: 'artifacts-tab-back' };
+      }
+    }
     this.selection.select('artifacts', key);
   }
 
@@ -138,6 +200,16 @@ export class ChunkPage {
    * {@link ChunkTranscriptsContainer} forwards it straight to the presentational tab,
    * a pure function of that param, never its own selection state (blizzard#248 D8). */
   protected onSelectTranscriptSegment(segmentId: string | null): void {
+    if (this.mobile()) {
+      if (segmentId === null) {
+        this.focusRequest = this.transcriptOrigin === null
+          ? { kind: 'tab' }
+          : { kind: 'list', attribute: 'data-segment-id', value: this.transcriptOrigin };
+      } else {
+        this.transcriptOrigin = segmentId;
+        this.focusRequest = { kind: 'detail', testid: 'transcript-segment-back' };
+      }
+    }
     this.selection.selectTranscriptSegment(segmentId);
   }
 
@@ -145,6 +217,12 @@ export class ChunkPage {
    * unlinked — writes its encoded `SidechainPath` back to the URL, so it is
    * deep-linkable (blizzard#248 D7, `review:F4`). */
   protected onSelectTranscriptSidechain(path: string | null): void {
+    if (this.mobile()) {
+      this.focusRequest = {
+        kind: 'detail',
+        testid: path === null ? 'transcript-segment-back' : 'transcript-sidechain-back',
+      };
+    }
     this.selection.selectTranscriptSidechain(path);
   }
 

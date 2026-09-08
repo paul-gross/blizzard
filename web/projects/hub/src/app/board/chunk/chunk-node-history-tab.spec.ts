@@ -41,6 +41,7 @@ const STEP_ARTIFACT: ArtifactView = {
 
 interface RenderOptions {
   selectedKey?: string | null;
+  drilldown?: boolean;
   stepArtifacts?: readonly ArtifactView[];
   indexState?: 'loading' | 'error' | 'empty' | 'ready';
   isForbidden?: boolean;
@@ -59,6 +60,7 @@ async function render(options: RenderOptions = {}) {
   const fixture = TestBed.createComponent(ChunkNodeHistoryTab);
   fixture.componentRef.setInput('detail', DETAIL);
   fixture.componentRef.setInput('selectedKey', options.selectedKey ?? null);
+  fixture.componentRef.setInput('drilldown', options.drilldown ?? false);
   fixture.componentRef.setInput('stepArtifacts', options.stepArtifacts ?? []);
   fixture.componentRef.setInput('indexState', options.indexState ?? 'ready');
   fixture.componentRef.setInput('isForbidden', options.isForbidden ?? false);
@@ -108,6 +110,24 @@ describe('ChunkNodeHistoryTab', () => {
 
     expect(el.querySelector('[data-testid="node-history-select-hint"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="node-history-artifacts-empty"]')).toBeNull();
+  });
+
+  it('opts into phone drill-down as timeline-only until a URL step is selected', async () => {
+    const fixture = await render({ drilldown: true });
+    let el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
+    expect(el.querySelector('.nh-step')).toBeNull();
+
+    fixture.componentRef.setInput('selectedKey', 'nd_build:1');
+    await fixture.whenStable();
+    el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="selection-step"]')).toBeNull();
+    expect(el.querySelector('[data-testid="node-history-back"]')).not.toBeNull();
+
+    const picked: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => picked.push(key));
+    el.querySelector<HTMLButtonElement>('[data-testid="node-history-back"]')?.click();
+    expect(picked).toEqual([null]);
   });
 
   it('renders both accordion sections open by default once a step is selected', async () => {

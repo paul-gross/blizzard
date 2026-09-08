@@ -1,6 +1,8 @@
 <fleet-chunk-artifacts-panel
   [artifacts]="artifacts()"
   [selectedKey]="selectedKey()"
+  [drilldown]="drilldown()"
   testidPrefix="artifacts-tab"
   (pickArtifact)="pickArtifact.emit($event)"
+  (clearArtifact)="clearArtifact.emit()"
 />
