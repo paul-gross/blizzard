@@ -11,6 +11,7 @@ import json
 from collections.abc import Container, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Protocol
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.crash import crashpoint
@@ -275,23 +276,35 @@ class Resume(Step):
             DormantSession(ctx, lease).restart_or_release()
 
 
+class _FenceRef(Protocol):
+    """The two facts :class:`Fenced` needs — from a live lease or a closed one behind an open
+    escalation, nothing else."""
+
+    @property
+    def chunk_id(self) -> str: ...
+
+    @property
+    def epoch(self) -> int: ...
+
+
 @dataclass(frozen=True)
 class Fenced:
-    """Whether the hub has fenced an active lease out from under the worker still on it (#370).
+    """Whether the hub has moved a chunk out from under a reference epoch still held here — an
+    active lease (#370) or a closed one behind an open escalation (#396).
 
-    The signal is the fence itself: an epoch above the lease's, or a restart AT it. The id set
+    The signal is the fence itself: an epoch above the reference's, or a restart AT it. The id set
     is the one place a higher one is somebody else's business — a takeover a person is in."""
 
     taken_over: Container[str]
 
-    def out(self, detail: ChunkDetail, lease: LeaseRecord) -> bool:
-        if lease.chunk_id in self.taken_over:
+    def out(self, detail: ChunkDetail, ref: _FenceRef) -> bool:
+        if ref.chunk_id in self.taken_over:
             return False
-        if detail.latest_epoch is not None and detail.latest_epoch > lease.epoch:
+        if detail.latest_epoch is not None and detail.latest_epoch > ref.epoch:
             return True
-        # A restart mints one above the newest epoch THE HUB knows, which excludes a lease whose
-        # `lease.minted` is still buffered here — so it can land LEVEL with what it displaces.
-        return any(restart.epoch >= lease.epoch for restart in detail.restarts)
+        # A restart mints one above the newest epoch THE HUB knows, which excludes a reference whose
+        # own mint is still buffered here — so it can land LEVEL with what it displaces.
+        return any(restart.epoch >= ref.epoch for restart in detail.restarts)
 
 
 class Pull(Step):
@@ -363,12 +376,17 @@ class Pull(Step):
                 Attempt(ctx, lease).preempt(via="pull")
 
     def _reconcile_escalations(self) -> None:
-        """Close a local escalation whose chunk the hub ended (#292, #293) — one ``get_chunk`` each.
-
-        An escalated lease is already closed, so ``_reconcile_leases`` above never sees it, and
-        the only local supersession is a later lease mint a stopped chunk never gets. The mark
-        is what keeps the read hub-free (``bzh:facts-not-status``)."""
+        """Close a local escalation on every arm that supersedes one (domain:
+        escalation.md#Supersession) — one ``get_chunk`` each. An escalated lease is already
+        closed, so ``_reconcile_leases`` above never sees it; the fourth arm, this runner's own
+        next lease mint, never reaches this read either, filtered out of ``open_escalations()`` by
+        ``LIVE_ESCALATION`` before it gets here. The remaining three collapse into one condition —
+        the hub no longer routes this chunk to this runner at this epoch — shared with the routing
+        and fencing reads ``_reconcile_leases`` makes for its own leases: requeued away (route
+        gone), reassigned to another runner (route moved), or an operator restart at or past this
+        epoch (``Fenced``). The mark is what keeps the read hub-free (``bzh:facts-not-status``)."""
         ctx = self.ctx
+        fenced = Fenced(ctx.stores.takeover.open_takeover_chunk_ids())
         for escalation in ctx.stores.escalations.open_escalations():
             try:
                 detail = ctx.hub.get_chunk(escalation.chunk_id)
@@ -376,7 +394,13 @@ class Pull(Step):
                 # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
                 _log.debug("escalation left open — hub unreadable", chunk_id=escalation.chunk_id, error=str(exc))
                 continue
-            if detail.status not in TERMINAL_STATUSES:
+            superseded = (
+                detail.status in TERMINAL_STATUSES
+                or detail.route is None
+                or detail.route.runner_id != ctx.config.runner_id
+                or fenced.out(detail, escalation)
+            )
+            if not superseded:
                 _log.debug("escalation left open", chunk_id=escalation.chunk_id, hub_status=detail.status.value)
                 continue
             ctx.stores.escalations.record_escalation_closure(

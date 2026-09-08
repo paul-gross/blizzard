@@ -15,7 +15,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Pull
-from blizzard.wire.chunk import ChunkDetail, RouteView
+from blizzard.wire.chunk import ChunkDetail, RestartView, RouteView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -138,6 +138,66 @@ def test_a_chunk_the_hub_does_not_know_is_not_a_resolution(tmp_path):  # type: i
     Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
 
     assert [e.chunk_id for e in store.open_escalations()] == ["ch_1"]
+
+
+@pytest.mark.unit
+def test_pull_closes_an_escalation_the_hub_requeued_away(tmp_path):  # type: ignore[no-untyped-def]
+    # Requeued and not yet re-claimed by anyone: no restart, no epoch bump, no terminal
+    # status — the only signal is that the hub no longer routes it here (#396).
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkDetail(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.READY,
+        current_node_id="nd_build",
+        latest_epoch=1,
+        route=None,
+    )
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert store.open_escalations() == []
+
+
+@pytest.mark.unit
+def test_pull_closes_an_escalation_the_hub_reassigned_to_another_runner(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkDetail(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.RUNNING,
+        current_node_id="nd_build",
+        latest_epoch=2,
+        route=RouteView(runner_id="r2", workspace_id="ws1", environment_ids=["e1"]),
+    )
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert store.open_escalations() == []
+
+
+@pytest.mark.unit
+def test_pull_closes_an_escalation_an_operator_restart_moved(tmp_path):  # type: ignore[no-untyped-def]
+    # Handed back at its own fresh epoch, still routed to this runner — the restart itself,
+    # not a route change, is the signal (#396).
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _chunk(status=ChunkStatus.WAITING_ON_HUMAN).model_copy(
+        update={
+            "restarts": [
+                RestartView(to_node_id="nd_build", graph_id="gr_1", epoch=1, restarted_by="op", recorded_at="2026-07-13T12:00:00Z")
+            ]
+        }
+    )
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert store.open_escalations() == []
 
 
 @pytest.mark.unit
