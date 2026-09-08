@@ -243,10 +243,10 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     # Constructed once here, ahead of the work-source registry and `build_services` below —
     # one instance each, shared by every write path (blizzard#358) and auth path (blizzard#362).
     clock = SystemClock()
-    user_store = UserRepository(engine, RepoErrorFactory(get_logger("blizzard.hub.auth")))
     # The hub-store seam (issue #413) — one collaborator shared by every
     # ``hub/store/internal/`` adapter constructed ahead of `build_services` below.
     store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
+    user_store = UserRepository(store_connections, RepoErrorFactory(get_logger("blizzard.hub.auth")))
     # Constructed once here too, so the built-in hub binding and `build_services` below
     # share one `WorkItemStore`/`DeleteService`/lock rather than each building its own.
     claim_lock = threading.Lock()

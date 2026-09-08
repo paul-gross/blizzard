@@ -378,14 +378,14 @@ def build_services(
     # The identity spine (issue #91) — one error factory shared by the SQLAlchemy
     # adapters, so the same instances back both the Write Protocols and the reads.
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
-    user_store = users or UserRepository(engine, auth_errors)
-    identity_store = IdentityRepository(engine, auth_errors)
-    session_store = SessionRepository(engine, auth_errors)
-    auth_state_store: IWriteAuthStateRepository = AuthStateRepository(engine, auth_errors)
-    superuser_bootstrap_store = SuperuserBootstrapRepository(engine)
+    user_store = users or UserRepository(store_connections, auth_errors)
+    identity_store = IdentityRepository(store_connections, auth_errors)
+    session_store = SessionRepository(store_connections, auth_errors)
+    auth_state_store: IWriteAuthStateRepository = AuthStateRepository(store_connections, auth_errors)
+    superuser_bootstrap_store = SuperuserBootstrapRepository(store_connections)
     # Built ahead of `auth` below (issue #94), which records role-change facts through
     # this service rather than a raw write repository.
-    auth_facts_service = AuthFactsService(facts=AuthFactsRepository(engine), clock=clock)
+    auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
     auth = AuthService(
         users=user_store,
         identities=identity_store,

@@ -7,6 +7,7 @@ from typing import Any
 import click
 
 from blizzard.hub.cli.context import DEFAULT_HUB_URL, ENV_HUB_URL, CliContext
+from blizzard.hub.cli.session_store import IReadSessionStore
 
 
 class HubCommand(click.Command):
@@ -34,12 +35,13 @@ class HubCommand(click.Command):
         """This verb's own parameters, with the connection options where the verb renders them."""
         raise NotImplementedError
 
-    def context(self, params: dict[str, Any]) -> CliContext:
+    def context(self, params: dict[str, Any], session_reader: IReadSessionStore) -> CliContext:
         """The context those options resolve to, consumed out of ``params``."""
         raise NotImplementedError
 
     def invoke(self, ctx: click.Context) -> Any:
-        ctx.params["cli"] = self.context(ctx.params)
+        # `ctx.obj` is the session-store seam the `hub` group's own callback built (issue #104).
+        ctx.params["cli"] = self.context(ctx.params, ctx.obj)
         return super().invoke(ctx)
 
 
@@ -49,8 +51,8 @@ class FleetCommand(HubCommand):
     def connected(self, params: list[click.Parameter]) -> list[click.Parameter]:
         return [*params, self.json_option, self.hub_url_option]
 
-    def context(self, params: dict[str, Any]) -> CliContext:
-        return CliContext.of(params.pop("hub_url"), params.pop("as_json"))
+    def context(self, params: dict[str, Any], session_reader: IReadSessionStore) -> CliContext:
+        return CliContext.of(params.pop("hub_url"), session_reader, params.pop("as_json"))
 
 
 class AuthCommand(HubCommand):
@@ -59,5 +61,15 @@ class AuthCommand(HubCommand):
     def connected(self, params: list[click.Parameter]) -> list[click.Parameter]:
         return [self.hub_url_option, *params]
 
-    def context(self, params: dict[str, Any]) -> CliContext:
-        return CliContext.of(params.pop("hub_url"))
+    def context(self, params: dict[str, Any], session_reader: IReadSessionStore) -> CliContext:
+        return CliContext.of(params.pop("hub_url"), session_reader)
+
+
+class SessionWriteCommand(AuthCommand):
+    """An ``AuthCommand`` with write capability over the local session store (issue
+    #96) — ``login``/``logout``, reached through ``ctx.params`` rather than
+    ``@click.pass_context`` so it stays outside the recorded CLI surface."""
+
+    def invoke(self, ctx: click.Context) -> Any:
+        ctx.params["session_store"] = ctx.obj
+        return super().invoke(ctx)

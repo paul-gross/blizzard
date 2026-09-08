@@ -558,7 +558,6 @@ def build_hub(
         work_sources if work_sources is not None else {"default": FakeWorkSource()}
     )
     clock = FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
-    user_store = UserRepository(engine, RepoErrorFactory(get_logger("blizzard.hub.auth")))
     editors: dict[str, IWorkEditor] = {}
     # The built-in `hub` source is seated as a closer unconditionally (issue #360),
     # mirroring `WorkSourceEntry.registry`'s production wiring.
@@ -567,6 +566,7 @@ def build_hub(
     # below — mirrors `build_hosted_app`'s own wiring (issue #364).
     claim_lock = threading.Lock()
     store_connections = hub_store_connections(engine)
+    user_store = UserRepository(store_connections, RepoErrorFactory(get_logger("blizzard.hub.auth")))
     work_item_store = WorkItemStore(store_connections)
     delete_service = DeleteService(
         facts=ChunkFactsStore(store_connections, clock),

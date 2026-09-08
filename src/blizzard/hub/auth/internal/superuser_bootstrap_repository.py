@@ -7,30 +7,31 @@ row at rest: :meth:`upsert` deletes-then-inserts in one transaction (``bzh:sql-p
 
 from __future__ import annotations
 
-from sqlalchemy import Engine, delete, insert, select
+from sqlalchemy import delete, insert, select
 
 from blizzard.hub.auth.models import SuperuserBootstrap
 from blizzard.hub.auth.superuser_bootstrap import IWriteSuperuserBootstrapRepository
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreConnections
 
 
 class SuperuserBootstrapRepository:
     """Read-write adapter over the ``superuser_bootstrap`` singleton row."""
 
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, store: HubStoreConnections) -> None:
+        self._store = store
 
     # --- reads ----------------------------------------------------------
 
     def get(self) -> SuperuserBootstrap | None:
-        with self._engine.connect() as conn:
+        with self._store.read("get") as conn:
             row = conn.execute(select(s.superuser_bootstrap)).first()
             return self._bootstrap(row) if row is not None else None
 
     # --- writes -----------------------------------------------------------
 
     def upsert(self, bootstrap: SuperuserBootstrap) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("upsert") as conn:
             conn.execute(delete(s.superuser_bootstrap))
             conn.execute(
                 insert(s.superuser_bootstrap).values(
@@ -41,7 +42,7 @@ class SuperuserBootstrapRepository:
             )
 
     def clear(self) -> None:
-        with self._engine.begin() as conn:
+        with self._store.write("clear") as conn:
             conn.execute(delete(s.superuser_bootstrap))
 
     # --- helpers ------------------------------------------------------------

@@ -11,7 +11,7 @@ from typing import Any, Protocol
 import click
 import httpx
 
-from blizzard.hub.cli import session_store
+from blizzard.hub.cli.session_store import IReadSessionStore
 
 
 class View(Protocol):
@@ -32,14 +32,20 @@ _FORBIDDEN_FALLBACK = "forbidden"
 
 @dataclass(frozen=True)
 class CliContext:
-    """One operator verb's invocation — the resolved hub, and whether to print JSON."""
+    """One operator verb's invocation — the resolved hub, the read-only local session
+    seam (issue #96, ``bzh:controller-read-only``), and whether to print JSON."""
 
     hub_url: str
+    session_reader: IReadSessionStore
     as_json: bool = False
 
     @classmethod
-    def of(cls, hub_url: str | None, as_json: bool = False) -> CliContext:
-        return cls(hub_url=hub_url or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL), as_json=as_json)
+    def of(cls, hub_url: str | None, session_reader: IReadSessionStore, as_json: bool = False) -> CliContext:
+        return cls(
+            hub_url=hub_url or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL),
+            session_reader=session_reader,
+            as_json=as_json,
+        )
 
     def get(
         self,
@@ -203,5 +209,5 @@ class CliContext:
     def _headers(self) -> dict[str, str]:
         """The ``Authorization: Bearer`` header for this hub (issue #96) — empty when the
         local session store holds none, so every verb keeps working with no login."""
-        token = session_store.SessionFile.of().load(self.hub_url)
+        token = self.session_reader.load(self.hub_url)
         return {"Authorization": f"Bearer {token}"} if token else {}
