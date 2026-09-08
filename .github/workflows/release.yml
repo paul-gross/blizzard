@@ -58,6 +58,9 @@ jobs:
       - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
         uses: jdx/mise-action@v2
         with:
+          # Pinned: mise's VERSION endpoint can advertise a release before that
+          # release's assets exist, and the unpinned action then 404s fetching one.
+          version: 2026.9.2
           install: false
       - name: git identity for fixture/forge git operations
         run: |
