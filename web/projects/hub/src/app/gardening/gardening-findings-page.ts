@@ -1,12 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
-import { Router, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import {
   asyncState,
   FleetFindingList,
+  KitBackBar,
   KitChips,
   KitPanel,
   type FindingListRowVm,
   type KitAsyncStateValue,
+  ViewportService,
 } from 'fleet';
 
 import { injectChildRouteParam } from '../route-state';
@@ -41,12 +43,19 @@ import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters
 @Component({
   selector: 'app-gardening-findings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetFindingList, KitChips, KitPanel, RouterOutlet],
+  imports: [FleetFindingList, KitBackBar, KitChips, KitPanel, RouterLink, RouterOutlet],
   templateUrl: './gardening-findings-page.html',
   styleUrl: './gardening-findings-page.css',
+  host: {
+    '[class.mobile]': 'mobile()',
+    '[class.detail-open]': 'findingId() !== null',
+  },
 })
 export class GardeningFindingsPage {
   private readonly router = inject(Router);
+  private readonly viewport = inject(ViewportService);
+
+  protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
 
   protected readonly filters = injectFindingsBucketFilters();
 

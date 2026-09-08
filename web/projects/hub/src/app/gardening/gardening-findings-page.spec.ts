@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import { hubClient, ViewportService } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { GardeningFindingsPage } from './gardening-findings-page';
@@ -122,7 +122,9 @@ describe('GardeningFindingsPage', () => {
 
   afterEach(() => stub?.restore());
 
-  async function mount(opts: { url?: string; routeOverride?: (method: string, path: string) => unknown } = {}) {
+  async function mount(
+    opts: { url?: string; routeOverride?: (method: string, path: string) => unknown; mobile?: boolean } = {},
+  ) {
     stub = stubRequestClient(hubClient, (method, path) => {
       const overridden = opts.routeOverride?.(method, path);
       if (overridden !== undefined) return overridden;
@@ -141,6 +143,7 @@ describe('GardeningFindingsPage', () => {
         provideRouter(routes),
       ],
     }).compileComponents();
+    TestBed.inject(ViewportService).setOverride(opts.mobile ? 'mobile' : 'desktop');
     const fixture = TestBed.createComponent(TestFindingsHost);
     const router = TestBed.inject(Router);
     await router.navigateByUrl(opts.url ?? '/gardening/findings');
@@ -177,6 +180,29 @@ describe('GardeningFindingsPage', () => {
     expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')?.classList.contains('selected')).toBe(
       false,
     );
+  });
+
+  it('drills into a finding and back to the filtered list in mobile mode', async () => {
+    const { fixture, router, el } = await mount({
+      url: '/gardening/findings?state=live',
+      routeOverride: withBucket,
+      mobile: true,
+    });
+
+    const page = el.querySelector('app-gardening-findings-page')!;
+    expect(page.classList).toContain('mobile');
+    expect(page.classList).not.toContain('detail-open');
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-finding-row-fnd_10"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/findings/fnd_10?state=live');
+    expect(page.classList).toContain('detail-open');
+    el.querySelector<HTMLAnchorElement>('[data-testid="gardening-findings-back"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/findings?state=live');
+    expect(page.classList).not.toContain('detail-open');
   });
 
   it('highlights the row the child route names', async () => {

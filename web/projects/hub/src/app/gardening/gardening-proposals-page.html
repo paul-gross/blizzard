@@ -21,6 +21,16 @@
     (proposalPick)="select($event)"
   />
   <div class="gp-panel">
+    @if (mobile() && proposalId() !== null) {
+      <a
+        class="back-row"
+        routerLink="/gardening/proposals"
+        queryParamsHandling="preserve"
+        data-testid="gardening-proposals-back"
+      >
+        <fleet-kit-back-bar label="Proposals" />
+      </a>
+    }
     <router-outlet />
   </div>
 </div>

@@ -41,21 +41,16 @@
   flex: 1;
   min-height: 0;
 }
-@media (max-width: 720px) {
-  .gp-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: none;
-    flex: none;
-    min-height: 0;
-  }
-  /* Stacked, `.body` is the scroller again (`gardening-page.css`) — a column
-   * bound to the grid row's height no longer applies once there is no row to
-   * bound it against. */
-  .gp-list,
-  .gp-panel {
-    max-height: none;
-    overflow-y: visible;
-  }
+:host(.mobile) .gp-layout {
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+:host(.mobile:not(.detail-open)) .gp-panel,
+:host(.mobile.detail-open) .gp-list,
+:host(.mobile.detail-open) .gp-filters {
+  display: none;
 }
 .gp-list,
 .gp-panel {
@@ -68,4 +63,9 @@
  * bare line of text collapsed to fit its content. */
 .gp-panel {
   min-height: 240px;
+}
+.back-row {
+  display: block;
+  flex: none;
+  text-decoration: none;
 }

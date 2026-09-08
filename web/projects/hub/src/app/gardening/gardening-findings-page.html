@@ -39,6 +39,16 @@
   </fleet-kit-panel>
 
   <fleet-kit-panel class="gf-detail" label="Finding">
+    @if (mobile() && findingId() !== null) {
+      <a
+        class="back-row"
+        routerLink="/gardening/findings"
+        queryParamsHandling="preserve"
+        data-testid="gardening-findings-back"
+      >
+        <fleet-kit-back-bar label="Findings" />
+      </a>
+    }
     <router-outlet />
   </fleet-kit-panel>
 </div>

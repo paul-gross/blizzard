@@ -22,13 +22,3 @@
   flex-direction: column;
   padding: 8px;
 }
-/* Below 720px every tab's own grid collapses to one stacked column (its own
- * `@media (max-width: 720px)` rule) — there is no per-column split left to
- * bound, so this goes back to being the one scroll container for the whole
- * tab, the way a single stacked page normally scrolls. */
-@media (max-width: 720px) {
-  .body {
-    display: block;
-    overflow-y: auto;
-  }
-}

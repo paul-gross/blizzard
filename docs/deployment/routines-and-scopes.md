@@ -17,6 +17,10 @@ own panel, which names the routines related to it — marking which of them defa
 place, and retires or re-enables it. Every one of those writes is gated on `graph:edit`; without it the panel reads,
 and offers nothing.
 
+On mobile, the Scopes, Routines, and Runs subtabs use a drill-down instead of the desktop side-by-side layout. Each
+opens on its list; selecting a row replaces that list with the row's full-width detail, and the Back row returns to the
+list. The selected child route remains in the URL, so a detail can still be opened directly or shared.
+
 ## Routines
 
 `blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort]`, `list`,

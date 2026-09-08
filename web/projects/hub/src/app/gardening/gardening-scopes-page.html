@@ -8,6 +8,16 @@
     />
   </fleet-kit-panel>
   <fleet-kit-panel class="gs-right" label="Scope">
+    @if (mobile() && scopeSlugParam() !== null) {
+      <a
+        class="back-row"
+        routerLink="/gardening/scopes"
+        queryParamsHandling="preserve"
+        data-testid="gardening-scopes-back"
+      >
+        <fleet-kit-back-bar label="Scopes" />
+      </a>
+    }
     <router-outlet />
   </fleet-kit-panel>
 </div>

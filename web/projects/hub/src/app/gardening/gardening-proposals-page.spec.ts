@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type MeResponse } from 'fleet';
+import { hubClient, type MeResponse, ViewportService } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { GardeningProposalsPage } from './gardening-proposals-page';
@@ -126,6 +126,7 @@ describe('GardeningProposalsPage', () => {
     proposals: readonly unknown[] = [WAITING_A, WAITING_B, PASSED],
     me: MeResponse = VIEWER_ME_RESPONSE,
     url = '/gardening/proposals',
+    mobile = false,
   ) {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/garden-proposals') return proposals;
@@ -141,6 +142,7 @@ describe('GardeningProposalsPage', () => {
         provideRouter(routes),
       ],
     }).compileComponents();
+    TestBed.inject(ViewportService).setOverride(mobile ? 'mobile' : 'desktop');
     const fixture = TestBed.createComponent(TestProposalsHost);
     const router = TestBed.inject(Router);
     await router.navigateByUrl(url);
@@ -156,6 +158,31 @@ describe('GardeningProposalsPage', () => {
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_3"]')).toBeNull();
     expect(router.url).toBe('/gardening/proposals/gp_1');
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')?.classList).toContain('selected');
+  });
+
+  it('rests on the list, drills into a proposal, and returns in mobile mode', async () => {
+    const { fixture, router, el } = await render(
+      [WAITING_A, WAITING_B, PASSED],
+      VIEWER_ME_RESPONSE,
+      '/gardening/proposals?show=all',
+      true,
+    );
+
+    const page = el.querySelector('app-gardening-proposals-page')!;
+    expect(router.url).toBe('/gardening/proposals?show=all');
+    expect(page.classList).toContain('mobile');
+    expect(page.classList).not.toContain('detail-open');
+
+    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-row-gp_1"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/proposals/gp_1?show=all');
+    expect(page.classList).toContain('detail-open');
+    el.querySelector<HTMLAnchorElement>('[data-testid="gardening-proposals-back"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/proposals?show=all');
+    expect(page.classList).not.toContain('detail-open');
   });
 
   it('leaves the bare route alone on an empty docket, rather than redirecting nowhere', async () => {

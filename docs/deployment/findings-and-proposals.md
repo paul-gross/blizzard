@@ -43,6 +43,10 @@ renders tinted but stays a normal, live, selectable row; an exited finding stays
 than removed. A finding named by an accepted-and-minted proposal shows that proposal's linked work item beside it.
 Neither the triage actions nor their dialog is offered without `chunk:control`.**
 
+On mobile, the Findings sub-tab opens on its filters and list alone. Selecting a finding replaces both with the
+full-width finding panel; its Back row restores the same filtered list because the filter query parameters remain in the
+URL throughout the drill-down.
+
 ## Garden proposals
 
 `blizzard hub garden-proposal list` and `show <proposal_id>` read every proposal, or one by id, each naming the findings
@@ -74,6 +78,11 @@ time, never a copy the proposal itself carries. Passing and accepting are each a
 reason and the mint/decline choice exposed the same way the CLI takes them; an accepted proposal's linked work item,
 once one exists, is read through the closure's own pointer and shown beside every finding it answers. Neither dialog is
 offered without `chunk:control`.**
+
+On mobile, the Proposals sub-tab likewise opens on its filters and docket rather than automatically selecting the first
+proposal. Selecting one replaces the filters and docket with its full-width detail; Back restores the same filtered
+docket, with its query parameters preserved. Desktop continues to select the first filtered proposal and show list and
+detail together.
 
 **Each evidence row also dispatches four of the exit verbs inline — `resolve`, `confirm-gone`, `wont-fix`,
 `not-a-finding` — so the findings a proposal names can be triaged from the docket without leaving it. These are the one

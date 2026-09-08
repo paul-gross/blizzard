@@ -2,7 +2,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import { hubClient, ViewportService } from 'fleet';
 import { settle, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
@@ -14,11 +14,10 @@ import { GardeningRoutinesPage } from './gardening-routines-page';
  * (`gardening-routines-page.css`) — the master/detail grid
  * `routine-panel.shell-sweep.spec.ts` never mounts, since it stands `FleetRoutinePanel`
  * up in isolation. A real, headless-Chromium proof that the `@media (max-width:
- * 720px)` rule collapses the grid to a single stacked column (`chunk-node-history-
- * tab.css`'s own 320px-at-720px master/detail breakpoint): jsdom parses the query
- * without ever evaluating it (`bzh:narrow-viewport-tier-rule`) — gardening sits in
- * the hub's mobile bottom tab bar, so the narrow width is load-bearing, not
- * incidental.
+ * 720px)` rule and the viewport-driven list/detail visibility turn it into a mobile
+ * drill-down: jsdom parses the CSS without ever evaluating it
+ * (`bzh:narrow-viewport-tier-rule`) — gardening sits in the hub's mobile bottom tab
+ * bar, so the narrow width is load-bearing, not incidental.
  *
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) because
  * it needs `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep`
@@ -113,7 +112,24 @@ const TREND = {
 })
 class TestRoutinesShellHost {}
 
+@Component({
+  selector: 'app-test-routine-detail',
+  template: '<span data-testid="routine-detail-stub"></span>',
+})
+class TestRoutineDetail {}
+
 const routes: Routes = [
+  {
+    path: 'gardening/routines',
+    component: GardeningRoutinesPage,
+    children: [
+      { path: '', component: TestRoutineDetail },
+      { path: ':routineName', component: TestRoutineDetail },
+    ],
+  },
+];
+
+const realDetailRoutes: Routes = [
   {
     path: 'gardening/routines',
     component: GardeningRoutinesPage,
@@ -130,6 +146,7 @@ async function render() {
     if (method === 'GET' && path === '/api/graphs') return [EFFECTIVE_GRAPH_SUMMARY];
     if (method === 'GET' && path === '/api/graphs/gr_1') return GRAPH_DETAIL;
     if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') return SWEEPS;
+    if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return [ROUTINE.default_scope_slug];
     if (method === 'GET' && path === '/api/routines/trend') return TREND;
     if (method === 'GET' && path === '/api/scopes') return SCOPES;
     if (method === 'GET' && path === '/api/me') return ME;
@@ -143,28 +160,31 @@ async function render() {
       provideRouter(routes),
     ],
   }).compileComponents();
+  const viewport = TestBed.inject(ViewportService);
+  viewport.setOverride('desktop');
   const fixture = TestBed.createComponent(TestRoutinesShellHost);
-  await TestBed.inject(Router).navigateByUrl('/gardening/routines');
+  const router = TestBed.inject(Router);
+  await router.navigateByUrl('/gardening/routines');
   await settle(fixture, 12);
-  return { fixture, stub };
+  return { fixture, router, stub, viewport };
 }
 
 describe('gardening routines page layout shell sweep (web:shell-sweep, blizzard#397)', () => {
-  it('sits the left column beside the right above 720px, and stacks them at 700px, 390px, and 320px', async () => {
+  it('sits list beside detail on desktop and drills from list to detail on mobile', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
     const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
 
-    const { fixture, stub } = await render();
+    const { fixture, router, stub, viewport } = await render();
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
     await fixture.whenStable();
 
     try {
       await page.viewport(1280, 800);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settle(fixture);
 
       let left = root.querySelector<HTMLElement>('.gr-left');
       let right = root.querySelector<HTMLElement>('.gr-right');
@@ -176,18 +196,25 @@ describe('gardening routines page layout shell sweep (web:shell-sweep, blizzard#
         '1280px: left and right do not sit side by side',
       ).toBeLessThanOrEqual(right!.getBoundingClientRect().left);
 
-      for (const width of [700, 390, 320]) {
+      for (const width of [740, 700, 390, 320]) {
         await page.viewport(width, 800);
-        await new Promise((resolve) => requestAnimationFrame(resolve));
+        viewport.setOverride('mobile');
+        await settle(fixture);
 
         left = root.querySelector<HTMLElement>('.gr-left');
         right = root.querySelector<HTMLElement>('.gr-right');
         expect(left, `${width}px: no .gr-left in the DOM`).not.toBeNull();
         expect(right, `${width}px: no .gr-right in the DOM`).not.toBeNull();
-        expect(
-          left!.getBoundingClientRect().top,
-          `${width}px: left and right share a top — the grid did not collapse`,
-        ).not.toBe(right!.getBoundingClientRect().top);
+        expect(left!.getBoundingClientRect().width, `${width}px: routine list is not visible`).toBeGreaterThan(0);
+        expect(right!.getBoundingClientRect().width, `${width}px: detail is visible on the bare route`).toBe(0);
+
+        await router.navigateByUrl('/gardening/routines/nightly');
+        await settle(fixture, 12);
+
+        expect(left!.getBoundingClientRect().width, `${width}px: routine list remains visible after selection`).toBe(0);
+        expect(right!.getBoundingClientRect().width, `${width}px: routine detail is not visible`).toBeGreaterThan(0);
+        const back = root.querySelector<HTMLAnchorElement>('[data-testid="gardening-routines-back"]');
+        expect(back, `${width}px: no mobile Back control`).not.toBeNull();
 
         const layout = root.querySelector<HTMLElement>('.gr-layout')!;
         expect(
@@ -195,15 +222,12 @@ describe('gardening routines page layout shell sweep (web:shell-sweep, blizzard#
           `${width}px: layout overflows horizontally (${layout.scrollWidth} > ${layout.clientWidth})`,
         ).toBeLessThanOrEqual(layout.clientWidth);
 
-        // Stacked, each column sizes to its own content and `.body` scrolls the
-        // whole tab (`gardening-page.css`) — a column must not still be clipped
-        // to a bounded box of its own at this width.
-        expect(
-          left!.scrollHeight,
-          `${width}px: .gr-left is still clipped to its own box below the collapse breakpoint`,
-        ).toBeLessThanOrEqual(left!.clientHeight + 1);
+        back!.click();
+        await settle(fixture);
+        expect(router.url).toBe('/gardening/routines');
       }
     } finally {
+      viewport.setOverride('auto');
       root.remove();
       stub.restore();
       window.removeEventListener('error', onError);
@@ -245,9 +269,10 @@ describe('gardening routines page independent-scroll shell sweep (web:shell-swee
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter(routes),
+        provideRouter(realDetailRoutes),
       ],
     }).compileComponents();
+    TestBed.inject(ViewportService).setOverride('desktop');
     const fixture = TestBed.createComponent(TestRoutinesShellHost);
     await TestBed.inject(Router).navigateByUrl('/gardening/routines/routine-0');
     await settle(fixture, 12);

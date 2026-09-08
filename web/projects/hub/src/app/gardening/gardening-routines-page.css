@@ -23,21 +23,15 @@
   flex: 1;
   min-height: 0;
 }
-@media (max-width: 720px) {
-  .gr-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: none;
-    flex: none;
-    min-height: 0;
-  }
-  /* Stacked, `.body` is the scroller again (`gardening-page.css`) — a column
-   * bound to the grid row's height no longer applies once there is no row to
-   * bound it against. */
-  .gr-left,
-  .gr-right {
-    max-height: none;
-    overflow-y: visible;
-  }
+:host(.mobile) .gr-layout {
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+:host(.mobile:not(.detail-open)) .gr-right,
+:host(.mobile.detail-open) .gr-left {
+  display: none;
 }
 .gr-left,
 .gr-right {
@@ -60,4 +54,9 @@
  * scrollport inside a panel would steal the drag from this one. */
 .gr-right {
   min-height: 240px;
+}
+.back-row {
+  display: block;
+  flex: none;
+  text-decoration: none;
 }

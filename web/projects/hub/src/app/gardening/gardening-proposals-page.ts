@@ -1,15 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
-import { Router, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import {
   asyncState,
   FleetProposalList,
   injectHubGardenProposalsQuery,
   isGardenProposalWaiting,
+  KitBackBar,
   KitChips,
   type GardenProposalView,
   type KitAsyncStateValue,
   type KitChipOption,
   type ProposalListRowVm,
+  ViewportService,
 } from 'fleet';
 
 import { injectChildRouteParam, injectQueryFilters } from '../route-state';
@@ -52,24 +54,29 @@ const ALL_ROUTINES = 'all';
  * opaque vocabulary, never a hardcoded list; `routine_name` likewise, though it is
  * blizzard's own vocabulary rather than the deployment's).
  *
- * This is the one tab whose bare route does not rest on an empty pane:
- * {@link reconcileSelection} sends it to the first row of the *filtered* set. The
- * docket is a work queue, and arriving at it with nothing to read would make the
- * operator click before reading anything — but the redirect is a real navigation
- * rather than a silent in-component default, so the URL always names exactly what
- * the panel is showing, and a reload or a shared link resurrects the same view.
+ * On desktop, this is the one tab whose bare route does not rest on an empty pane:
+ * {@link reconcileSelection} sends it to the first row of the *filtered* set. On
+ * mobile the bare route is deliberately the docket screen, and a row pick drills
+ * into its detail. Either way, the URL names exactly what the page is showing.
  */
 @Component({
   selector: 'app-gardening-proposals-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetProposalList, KitChips, RouterOutlet],
+  imports: [FleetProposalList, KitBackBar, KitChips, RouterLink, RouterOutlet],
   templateUrl: './gardening-proposals-page.html',
   styleUrl: './gardening-proposals-page.css',
+  host: {
+    '[class.mobile]': 'mobile()',
+    '[class.detail-open]': 'proposalId() !== null',
+  },
 })
 export class GardeningProposalsPage {
   private readonly router = inject(Router);
+  private readonly viewport = inject(ViewportService);
   private readonly url = injectQueryFilters();
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
+
+  protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
 
   private readonly proposals = computed<readonly GardenProposalView[]>(() => this.proposalsQuery.data() ?? []);
 
@@ -184,9 +191,10 @@ export class GardeningProposalsPage {
 
   /**
    * Keeps the URL's proposal and the docket's filters agreeing, in both
-   * directions: a selection the current filters exclude — or a bare route on a
-   * docket that has rows — resolves to the first filtered row, and only a docket
-   * with nothing in it leaves the route bare.
+   * directions. On desktop, a selection the current filters exclude — or a bare
+   * route on a docket that has rows — resolves to the first filtered row. On
+   * mobile, an excluded selection returns to the filtered docket and a bare route
+   * remains there until the operator picks a row.
    *
    * Gated on the list read having settled — while it is pending
    * {@link filteredProposals} reads empty, and a bare "id not in rows" check would
@@ -204,6 +212,14 @@ export class GardeningProposalsPage {
     const routed = this.proposalId();
     const rows = this.filteredProposals();
     if (routed !== null && rows.some((p) => p.proposal_id === routed)) return;
+    if (this.mobile()) {
+      if (routed === null) return;
+      void this.router.navigate(['/gardening', 'proposals'], {
+        replaceUrl: true,
+        queryParamsHandling: 'preserve',
+      });
+      return;
+    }
     const first = rows[0]?.proposal_id ?? null;
     if (routed === null && first === null) return;
     void this.router.navigate(

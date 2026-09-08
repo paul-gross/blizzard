@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import { hubClient, ViewportService } from 'fleet';
 import { settle, stubRequestClient, type RequestClientStub } from 'fleet/testing';
 
 import { GardeningRoutinesPage } from './gardening-routines-page';
@@ -65,7 +65,9 @@ describe('GardeningRoutinesPage', () => {
 
   afterEach(() => stub?.restore());
 
-  async function render(opts: { routines?: readonly unknown[]; graphs?: readonly unknown[]; url?: string } = {}) {
+  async function render(
+    opts: { routines?: readonly unknown[]; graphs?: readonly unknown[]; url?: string; mobile?: boolean } = {},
+  ) {
     const routines = opts.routines ?? [ROUTINE];
     const graphs = opts.graphs ?? [EFFECTIVE_GRAPH_SUMMARY];
     stub = stubRequestClient(hubClient, (method, path) => {
@@ -81,6 +83,7 @@ describe('GardeningRoutinesPage', () => {
         provideRouter(routes),
       ],
     }).compileComponents();
+    TestBed.inject(ViewportService).setOverride(opts.mobile ? 'mobile' : 'desktop');
     const fixture = TestBed.createComponent(TestRoutinesHost);
     const router = TestBed.inject(Router);
     await router.navigateByUrl(opts.url ?? '/gardening/routines');
@@ -105,12 +108,14 @@ describe('GardeningRoutinesPage', () => {
     );
   });
 
-  it('a routineName param naming an unknown routine highlights nothing, rather than a stale row', async () => {
-    const { el } = await render({ url: '/gardening/routines/ghost' });
+  it('keeps an unknown mobile routine route on its detail screen without a stale highlight', async () => {
+    const { el } = await render({ url: '/gardening/routines/ghost', mobile: true });
 
     expect(el.querySelector('[data-testid="gardening-routine-row-nightly"]')?.classList.contains('selected')).toBe(
       false,
     );
+    expect(el.querySelector('app-gardening-routines-page')?.classList).toContain('detail-open');
+    expect(el.querySelector('[data-testid="gardening-routines-back"]')).toBeTruthy();
   });
 
   it('marks a routine whose graph has no effective mint as blocked in the list', async () => {
@@ -134,5 +139,24 @@ describe('GardeningRoutinesPage', () => {
     expect(el.querySelector('[data-testid="gardening-routines-empty"]')?.textContent).toContain(
       'tending begins when there is growth worth pruning',
     );
+  });
+
+  it('drills into a routine and back to the list in mobile mode', async () => {
+    const { fixture, router, el } = await render({ mobile: true });
+
+    const page = el.querySelector('app-gardening-routines-page')!;
+    expect(page.classList).toContain('mobile');
+    expect(page.classList).not.toContain('detail-open');
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-row-nightly"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/routines/nightly');
+    expect(page.classList).toContain('detail-open');
+    el.querySelector<HTMLAnchorElement>('[data-testid="gardening-routines-back"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/routines');
+    expect(page.classList).not.toContain('detail-open');
   });
 });

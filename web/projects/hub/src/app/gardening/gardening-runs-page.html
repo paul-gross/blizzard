@@ -9,6 +9,16 @@
   </fleet-kit-panel>
 
   <fleet-kit-panel class="gr-detail" label="Run">
+    @if (mobile() && chunkId() !== null) {
+      <a
+        class="back-row"
+        routerLink="/gardening/runs"
+        queryParamsHandling="preserve"
+        data-testid="gardening-runs-back"
+      >
+        <fleet-kit-back-bar label="Runs" />
+      </a>
+    }
     <router-outlet />
   </fleet-kit-panel>
 </div>

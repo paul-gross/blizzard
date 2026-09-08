@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { Router, RouterOutlet } from '@angular/router';
-import { FleetRunList, KitPanel } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Router, RouterLink, RouterOutlet } from '@angular/router';
+import { FleetRunList, KitBackBar, KitPanel, ViewportService } from 'fleet';
 
 import { injectChildRouteParam } from '../route-state';
 import { GardeningRunsState } from './gardening-runs-state';
@@ -23,13 +23,20 @@ import { GardeningRunsState } from './gardening-runs-state';
 @Component({
   selector: 'app-gardening-runs-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRunList, KitPanel, RouterOutlet],
+  imports: [FleetRunList, KitBackBar, KitPanel, RouterLink, RouterOutlet],
   templateUrl: './gardening-runs-page.html',
   styleUrl: './gardening-runs-page.css',
   providers: [GardeningRunsState],
+  host: {
+    '[class.mobile]': 'mobile()',
+    '[class.detail-open]': 'chunkId() !== null',
+  },
 })
 export class GardeningRunsPage {
   private readonly router = inject(Router);
+  private readonly viewport = inject(ViewportService);
+
+  protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
 
   protected readonly runs = inject(GardeningRunsState);
 

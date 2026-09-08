@@ -1,15 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { Router, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import {
   asyncState,
   FleetRoutineList,
   injectHubGraphsQuery,
   injectHubRoutinesQuery,
+  KitBackBar,
   KitPanel,
   type GraphSummaryView,
   type KitAsyncStateValue,
   type RoutineListRowVm,
   type RoutineView,
+  ViewportService,
 } from 'fleet';
 
 import { injectChildRouteParam } from '../route-state';
@@ -35,12 +37,19 @@ import { isRoutineBlocked } from './gardening-effective-graph';
 @Component({
   selector: 'app-gardening-routines-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRoutineList, KitPanel, RouterOutlet],
+  imports: [FleetRoutineList, KitBackBar, KitPanel, RouterLink, RouterOutlet],
   templateUrl: './gardening-routines-page.html',
   styleUrl: './gardening-routines-page.css',
+  host: {
+    '[class.mobile]': 'mobile()',
+    '[class.detail-open]': 'routineNameParam() !== null',
+  },
 })
 export class GardeningRoutinesPage {
   private readonly router = inject(Router);
+  private readonly viewport = inject(ViewportService);
+
+  protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
 
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly graphsQuery = injectHubGraphsQuery();
@@ -49,7 +58,7 @@ export class GardeningRoutinesPage {
   private readonly graphs = computed<readonly GraphSummaryView[]>(() => this.graphsQuery.data() ?? []);
 
   /** The `routineName` the active detail child names (`route-state.ts`). */
-  private readonly routineNameParam = injectChildRouteParam('routineName');
+  protected readonly routineNameParam = injectChildRouteParam('routineName');
 
   /** The effective selection: the route param if it still names a routine the
    * loaded data actually has, else `null` — never a stale highlight left over from

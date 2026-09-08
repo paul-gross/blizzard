@@ -8,6 +8,16 @@
     />
   </fleet-kit-panel>
   <div class="gr-right">
+    @if (mobile() && routineNameParam() !== null) {
+      <a
+        class="back-row"
+        routerLink="/gardening/routines"
+        queryParamsHandling="preserve"
+        data-testid="gardening-routines-back"
+      >
+        <fleet-kit-back-bar label="Routines" />
+      </a>
+    }
     <router-outlet />
   </div>
 </div>

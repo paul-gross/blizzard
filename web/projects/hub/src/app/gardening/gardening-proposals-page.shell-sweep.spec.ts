@@ -2,7 +2,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import { hubClient, ViewportService } from 'fleet';
 import { OPERATOR_ME_RESPONSE, settle, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
@@ -12,10 +12,10 @@ import { GardeningProposalsPage } from './gardening-proposals-page';
 /**
  * The garden proposal docket container's own `.gp-layout` two-column split
  * (`gardening-proposals-page.css`) — a real-Chromium proof that the `@media
- * (max-width: 720px)` rule collapses the grid to a single stacked column
- * (`bzh:narrow-viewport-tier-rule`): jsdom parses the query without ever
- * evaluating it, and gardening sits in the hub's mobile bottom tab bar, so the
- * narrow width is load-bearing, not incidental.
+ * (max-width: 720px)` rule and viewport-driven visibility turn it into a mobile
+ * list/detail drill-down (`bzh:narrow-viewport-tier-rule`): jsdom parses the CSS
+ * without ever evaluating it, and gardening sits in the hub's mobile bottom tab
+ * bar, so the narrow width is load-bearing, not incidental.
  *
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) —
  * run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
@@ -80,7 +80,24 @@ const FINDING = {
 })
 class TestProposalsShellHost {}
 
+@Component({
+  selector: 'app-test-proposal-detail',
+  template: '<span data-testid="proposal-detail-stub"></span>',
+})
+class TestProposalDetail {}
+
 const routes: Routes = [
+  {
+    path: 'gardening/proposals',
+    component: GardeningProposalsPage,
+    children: [
+      { path: '', component: TestProposalDetail },
+      { path: ':proposalId', component: TestProposalDetail },
+    ],
+  },
+];
+
+const realDetailRoutes: Routes = [
   {
     path: 'gardening/proposals',
     component: GardeningProposalsPage,
@@ -106,28 +123,31 @@ async function render() {
       provideRouter(routes),
     ],
   }).compileComponents();
+  const viewport = TestBed.inject(ViewportService);
+  viewport.setOverride('desktop');
   const fixture = TestBed.createComponent(TestProposalsShellHost);
-  await TestBed.inject(Router).navigateByUrl('/gardening/proposals');
+  const router = TestBed.inject(Router);
+  await router.navigateByUrl('/gardening/proposals');
   await settle(fixture, 8);
-  return { fixture, stub };
+  return { fixture, router, stub, viewport };
 }
 
 describe('gardening proposals page layout shell sweep (web:shell-sweep)', () => {
-  it('sits the list beside the panel above 720px, and stacks them at 700px, 390px, and 320px', async () => {
+  it('sits list beside detail on desktop and drills from list to detail on mobile', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
     const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
 
-    const { fixture, stub } = await render();
+    const { fixture, router, stub, viewport } = await render();
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
     await fixture.whenStable();
 
     try {
       await page.viewport(1280, 800);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settle(fixture);
 
       let list = root.querySelector<HTMLElement>('.gp-list');
       let panel = root.querySelector<HTMLElement>('.gp-panel');
@@ -139,18 +159,27 @@ describe('gardening proposals page layout shell sweep (web:shell-sweep)', () => 
         '1280px: list and panel do not sit side by side',
       ).toBeLessThanOrEqual(panel!.getBoundingClientRect().left);
 
-      for (const width of [700, 390, 320]) {
+      for (const width of [740, 700, 390, 320]) {
         await page.viewport(width, 800);
-        await new Promise((resolve) => requestAnimationFrame(resolve));
+        viewport.setOverride('mobile');
+        await router.navigateByUrl('/gardening/proposals');
+        await settle(fixture, 8);
 
         list = root.querySelector<HTMLElement>('.gp-list');
         panel = root.querySelector<HTMLElement>('.gp-panel');
         expect(list, `${width}px: no .gp-list in the DOM`).not.toBeNull();
         expect(panel, `${width}px: no .gp-panel in the DOM`).not.toBeNull();
-        expect(
-          list!.getBoundingClientRect().top,
-          `${width}px: list and panel share a top — the grid did not collapse`,
-        ).not.toBe(panel!.getBoundingClientRect().top);
+        expect(list!.getBoundingClientRect().width, `${width}px: proposal list is not visible`).toBeGreaterThan(0);
+        expect(panel!.getBoundingClientRect().width, `${width}px: detail is visible on the bare route`).toBe(0);
+
+        await router.navigateByUrl('/gardening/proposals/gp_1');
+        await settle(fixture, 8);
+
+        expect(list!.getBoundingClientRect().width, `${width}px: proposal list remains visible after selection`).toBe(0);
+        expect(panel!.getBoundingClientRect().width, `${width}px: proposal detail is not visible`).toBeGreaterThan(0);
+        const back = root.querySelector<HTMLAnchorElement>('[data-testid="gardening-proposals-back"]');
+        expect(back, `${width}px: no mobile Back control`).not.toBeNull();
+        expect(back!.getAttribute('href')).toBe('/gardening/proposals');
 
         const layout = root.querySelector<HTMLElement>('.gp-layout')!;
         expect(
@@ -158,20 +187,9 @@ describe('gardening proposals page layout shell sweep (web:shell-sweep)', () => 
           `${width}px: layout overflows horizontally (${layout.scrollWidth} > ${layout.clientWidth})`,
         ).toBeLessThanOrEqual(layout.clientWidth);
 
-        const locus = root.querySelector<HTMLElement>('.pp-finding-locus');
-        expect(locus, `${width}px: no evidence row rendered in the panel`).not.toBeNull();
-        expect(
-          locus!.scrollWidth,
-          `${width}px: the evidence locus overflows its own column instead of wrapping`,
-        ).toBeLessThanOrEqual(panel!.clientWidth);
-
-        // Stacked, each column sizes to its own content and `.body` scrolls the
-        // whole tab (`gardening-page.css`) — a column must not still be clipped
-        // to a bounded box of its own at this width.
-        expect(
-          list!.scrollHeight,
-          `${width}px: .gp-list is still clipped to its own box below the collapse breakpoint`,
-        ).toBeLessThanOrEqual(list!.clientHeight + 1);
+        await router.navigateByUrl('/gardening/proposals');
+        await settle(fixture);
+        expect(router.url).toBe('/gardening/proposals');
       }
     } finally {
       root.remove();
@@ -207,9 +225,11 @@ describe('gardening proposals page independent-scroll shell sweep (web:shell-swe
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter(routes),
+        provideRouter(realDetailRoutes),
       ],
     }).compileComponents();
+    const viewport = TestBed.inject(ViewportService);
+    viewport.setOverride('desktop');
     const fixture = TestBed.createComponent(TestProposalsShellHost);
     await TestBed.inject(Router).navigateByUrl('/gardening/proposals');
     await settle(fixture, 8);
@@ -252,7 +272,19 @@ describe('gardening proposals page independent-scroll shell sweep (web:shell-swe
         list.scrollTop,
         'scrolling the panel moved the list back off where the operator left it',
       ).toBe(listScrollTop);
+
+      await page.viewport(390, 800);
+      viewport.setOverride('mobile');
+      await settle(fixture);
+
+      const locus = root.querySelector<HTMLElement>('.pp-finding-locus');
+      expect(locus, '390px: no evidence row rendered in the panel').not.toBeNull();
+      expect(locus!.scrollWidth, '390px: the evidence locus overflows instead of wrapping').toBeLessThanOrEqual(
+        panel.clientWidth,
+      );
     } finally {
+      await page.viewport(1280, 800);
+      viewport.setOverride('auto');
       root.remove();
       stub.restore();
     }

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import { hubClient, ViewportService } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { GardeningScopesPage } from './gardening-scopes-page';
@@ -51,7 +51,7 @@ describe('GardeningScopesPage', () => {
 
   afterEach(() => stub?.restore());
 
-  async function render(opts: { scopes?: readonly unknown[]; url?: string } = {}) {
+  async function render(opts: { scopes?: readonly unknown[]; url?: string; mobile?: boolean } = {}) {
     const scopes = opts.scopes ?? [SCOPE];
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/scopes') return scopes;
@@ -65,6 +65,7 @@ describe('GardeningScopesPage', () => {
         provideRouter(routes),
       ],
     }).compileComponents();
+    TestBed.inject(ViewportService).setOverride(opts.mobile ? 'mobile' : 'desktop');
     const fixture = TestBed.createComponent(TestScopesHost);
     const router = TestBed.inject(Router);
     await router.navigateByUrl(opts.url ?? '/gardening/scopes');
@@ -100,12 +101,14 @@ describe('GardeningScopesPage', () => {
     );
   });
 
-  it('a scopeSlug param naming an unknown scope highlights nothing, rather than a stale row', async () => {
-    const { el } = await render({ url: '/gardening/scopes/ghost' });
+  it('keeps an unknown mobile scope route on its detail screen without a stale highlight', async () => {
+    const { el } = await render({ url: '/gardening/scopes/ghost', mobile: true });
 
     expect(el.querySelector('[data-testid="gardening-scope-row-blizzard"]')?.classList.contains('selected')).toBe(
       false,
     );
+    expect(el.querySelector('app-gardening-scopes-page')?.classList).toContain('detail-open');
+    expect(el.querySelector('[data-testid="gardening-scopes-back"]')).toBeTruthy();
   });
 
   it('navigates to the scope route when a scope row is picked', async () => {
@@ -115,5 +118,25 @@ describe('GardeningScopesPage', () => {
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/scopes/blizzard');
+  });
+
+  it('drills into a scope and back to the filtered list in mobile mode', async () => {
+    const { fixture, router, el } = await render({ url: '/gardening/scopes?retired=false', mobile: true });
+
+    const page = el.querySelector('app-gardening-scopes-page')!;
+    expect(page.classList).toContain('mobile');
+    expect(page.classList).not.toContain('detail-open');
+    expect(el.querySelector('[data-testid="gardening-scopes-back"]')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-row-blizzard"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/scopes/blizzard?retired=false');
+    expect(page.classList).toContain('detail-open');
+    el.querySelector<HTMLAnchorElement>('[data-testid="gardening-scopes-back"]')!.click();
+    await settle(fixture);
+
+    expect(router.url).toBe('/gardening/scopes?retired=false');
+    expect(page.classList).not.toContain('detail-open');
   });
 });

@@ -1,13 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { Router, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import {
   asyncState,
   FleetScopeList,
   injectHubScopesQuery,
   KitPanel,
+  KitBackBar,
   type KitAsyncStateValue,
   type ScopeRowVm,
   type ScopeView,
+  ViewportService,
 } from 'fleet';
 
 import { injectChildRouteParam } from '../route-state';
@@ -32,12 +34,19 @@ import { injectChildRouteParam } from '../route-state';
 @Component({
   selector: 'app-gardening-scopes-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetScopeList, KitPanel, RouterOutlet],
+  imports: [FleetScopeList, KitBackBar, KitPanel, RouterLink, RouterOutlet],
   templateUrl: './gardening-scopes-page.html',
   styleUrl: './gardening-scopes-page.css',
+  host: {
+    '[class.mobile]': 'mobile()',
+    '[class.detail-open]': 'scopeSlugParam() !== null',
+  },
 })
 export class GardeningScopesPage {
   private readonly router = inject(Router);
+  private readonly viewport = inject(ViewportService);
+
+  protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
 
   private readonly scopesQuery = injectHubScopesQuery();
   private readonly scopes = computed<readonly ScopeView[]>(() => this.scopesQuery.data() ?? []);
@@ -45,7 +54,7 @@ export class GardeningScopesPage {
   /** The `scopeSlug` the active detail child names — the selection lives on that
    * child's route, not this one's (`route-state.ts`). A scope has no id of its own;
    * its slug *is* the id (`foundation/ids.py`). */
-  private readonly scopeSlugParam = injectChildRouteParam('scopeSlug');
+  protected readonly scopeSlugParam = injectChildRouteParam('scopeSlug');
 
   /** The effective selection: the route param if it still names a scope the loaded
    * data actually has, else `null` — never a stale highlight left over from a scope

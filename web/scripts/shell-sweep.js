@@ -117,9 +117,9 @@
  *     than its column, at 390/320px.
  *   - projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts —
  *     the gardening routines container's own list-beside-panel grid
- *     (blizzard#397): the list and panel sit side by side at 1280px, and
- *     genuinely collapse into a single stacked column at 390/320px, with no
- *     horizontal overflow of the layout itself.
+ *     (blizzard#397): the list and panel sit side by side at 1280px, while mobile
+ *     genuinely swaps from its list screen to its detail screen with no horizontal
+ *     overflow of the layout itself.
  *   - projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts — the modal
  *     shell (blizzard#399 D6): the scrim genuinely covers the full viewport,
  *     the panel centres itself and its own body scrolls a tall projection
@@ -136,9 +136,8 @@
  *     with neither overflowing the panel.
  *   - projects/hub/src/app/gardening/gardening-proposals-page.shell-sweep.spec.ts —
  *     the garden proposal docket container's own list-beside-panel grid: the
- *     list and panel sit side by side at 1280px, and genuinely collapse into
- *     a single stacked column at 390/320px, with no horizontal overflow of
- *     the layout itself.
+ *     list and panel sit side by side at 1280px, while mobile genuinely swaps from
+ *     its list screen to its detail screen with no horizontal overflow.
  *   - projects/hub/src/app/gardening/gardening-proposal-pass-dialog.shell-sweep.spec.ts —
  *     the Pass dialog's footer: Cancel/Pass genuinely sit side by side with
  *     neither overflowing the panel, at phone and desktop widths.
@@ -162,10 +161,9 @@
  *   - projects/hub/src/app/gardening/gardening-page-grids.shell-sweep.spec.ts —
  *     the three gardening sub-tabs the five-way split added (Scopes, Runs,
  *     Findings): each one's own master/detail grid sits list beside detail at
- *     1280px and genuinely collapses to a single stacked column at 700/390/320px
- *     with no horizontal overflow — the same `@media (max-width: 720px)` claim
- *     Routines and Proposals each carry, driven from one table rather than three
- *     copied files.
+ *     1280px and genuinely swaps from list to detail at 700/390/320px with no
+ *     horizontal overflow — the same mobile drill-down claim Routines and Proposals
+ *     each carry, driven from one table rather than three copied files.
  *   - projects/hub/src/app/gardening/gardening-findings-filters.shell-sweep.spec.ts —
  *     the findings tab widened to every routine and every scope (blizzard#486): the
  *     four filter chip rows (routine, scope, class, state), each now carrying a

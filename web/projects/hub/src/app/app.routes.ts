@@ -121,10 +121,10 @@ export const routes: Routes = [
         ],
       },
       // A proposal is keyed by its own id (`gprop_…`, rendered compactly as `GP-…`).
-      // The one place this tab diverges from its four siblings: on a docket with anything in it the list route sends
-      // the bare path to the first row of the *filtered* set rather than resting on
-      // an empty pane — the docket is a work queue, and arriving at it with nothing
-      // to read would make the operator click before reading anything.
+      // The one place this tab diverges from its four siblings on desktop: on a
+      // docket with anything in it the list route sends the bare path to the first
+      // row of the filtered set. Mobile leaves the bare path on the list so it can
+      // serve as the drill-down's first screen.
       {
         path: 'proposals',
         loadComponent: () => import('./gardening/gardening-proposals-page').then((m) => m.GardeningProposalsPage),

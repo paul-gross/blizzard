@@ -23,24 +23,15 @@
   flex: 1;
   min-height: 0;
 }
-/* `chunk-node-history-tab.css`'s own master/detail breakpoint, for the same shape:
- * a fixed-width list column beside a detail pane collapses to one column on a
- * narrow viewport rather than clipping the list. */
-@media (max-width: 720px) {
-  .gr-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: none;
-    flex: none;
-    min-height: 0;
-  }
-  /* Stacked, `.body` is the scroller again (`gardening-page.css`) — a column
-   * bound to the grid row's height no longer applies once there is no row to
-   * bound it against. */
-  .gr-list,
-  .gr-detail {
-    max-height: none;
-    overflow-y: visible;
-  }
+:host(.mobile) .gr-layout {
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+:host(.mobile:not(.detail-open)) .gr-detail,
+:host(.mobile.detail-open) .gr-list {
+  display: none;
 }
 .gr-list,
 .gr-detail {
@@ -53,4 +44,9 @@
  * bare line of text collapsed to fit its content. */
 .gr-detail {
   min-height: 240px;
+}
+.back-row {
+  display: block;
+  flex: none;
+  text-decoration: none;
 }
