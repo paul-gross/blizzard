@@ -25,5 +25,5 @@ class TranscriptResponse(BaseModel):
     #: Which side answered (D1) — always ``"local"`` for an open lease's read.
     provenance: TranscriptProvenance = "local"
     #: Set only when a closed lease's hub could not be asked *and* local cannot answer
-    #: either (D1) — distinct from an ordinary unavailable read.
+    #: either (D1).
     hub_unreachable: bool = False

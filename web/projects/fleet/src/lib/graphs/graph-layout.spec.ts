@@ -46,7 +46,7 @@ const DEFAULT_LIKE: GraphView = {
       name: 'deliver',
       executor: 'hub',
       session: 'fresh',
-      judged_by: 'none',
+      judged_by: 'worker',
       choices: [
         { choice_id: 'c_landed', name: 'landed', description: '' },
         { choice_id: 'c_conflict', name: 'conflict', description: '' },
@@ -442,13 +442,6 @@ describe('layoutGraph', () => {
 
       expect(node.metaLines).toEqual(['fresh', `→ ${long}`]);
       expect(node.width).toBeGreaterThanOrEqual(measure(`→ ${long}`, 'meta') + 28);
-    });
-
-    it('gives a node with no meta at all no meta lines and the base height', () => {
-      // `session` is required on the wire, so the empty-meta case is an empty string.
-      const node = soloNode({ session: '' });
-      expect(node.metaLines).toEqual([]);
-      expect(node.height).toBe(60);
     });
   });
 

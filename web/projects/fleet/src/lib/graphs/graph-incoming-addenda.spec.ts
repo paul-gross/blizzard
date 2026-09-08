@@ -12,7 +12,7 @@ const GRAPH: GraphView = {
       name: 'plan',
       executor: 'runner',
       session: 'fresh',
-      judged_by: 'none',
+      judged_by: 'worker',
       choices: [{ choice_id: 'c_advance', name: 'advance', description: '' }],
     },
     {
@@ -20,7 +20,7 @@ const GRAPH: GraphView = {
       name: 'review',
       executor: 'runner',
       session: 'fresh',
-      judged_by: 'none',
+      judged_by: 'worker',
       choices: [
         { choice_id: 'c_pass', name: 'pass', description: '' },
         { choice_id: 'c_failed', name: 'review-failed', description: '' },

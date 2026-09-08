@@ -21,8 +21,7 @@ class ToolCallSegmentView(BaseModel):
     tool_use_id: str | None
     output: str | None
     output_truncated: bool
-    # Defaulted like `TranscriptSegmentRecord.record_truncated`: a turn stored before this field
-    # existed must still validate on read-back through `_content_view`.
+    # Optional so a row missing this field still validates.
     input_truncated: bool = False
     #: This turn carries ONLY a result for the call `tool_use_id` names, shipped in an earlier
     #: window (blizzard#338) — a patch onto that earlier call, not new content of its own.
@@ -50,9 +49,8 @@ class TurnSegmentView(BaseModel):
     returned and slides with the recency window (blizzard#248 D1). ``kind`` is closed."""
 
     index: int
-    #: Closed to :data:`TurnKind`, unlike ``link``/``input_shape`` which stay open — an
-    #: out-of-vocabulary kind is a hard failure, never a silent round-trip; the cost is
-    #: ``docs/versioning.md``'s.
+    #: Closed to :data:`TurnKind` — an out-of-vocabulary kind is a hard failure, never a
+    #: silent round-trip (`docs/versioning.md`).
     kind: TurnKind
     timestamp: str | None
     text: str

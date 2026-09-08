@@ -63,9 +63,9 @@ def _unschemaed_wire_models() -> list[tuple[str, str, str]]:
     """Every documented `(file, class, docstring)` in `wire/` that no committed spec publishes.
 
     Discovered by base class, not by *a* base class: an SSE payload derives from
-    `SseFramePayload` and a history row from `HistoryRow`, and each is as publishable as a
-    direct `BaseModel`. A private class is skipped — a `_`-prefixed Protocol is a structural
-    alias no route can name, and its internal references are the point of it."""
+    `SseFramePayload`, not `BaseModel` directly, and is as publishable as one. A private
+    class is skipped — a `_`-prefixed Protocol is a structural alias no route can name, and
+    its internal references are the point of it."""
     schemas = {name for spec in _SPECS for name in json.loads(spec.read_text())["components"]["schemas"]}
     found = []
     for path in sorted(_WIRE.glob("*.py")):
@@ -93,8 +93,9 @@ def test_wire_models_no_spec_reaches_are_held_to_the_same_bar() -> None:
 
 
 def test_the_unschemaed_scan_is_not_restricted_to_direct_basemodel_subclasses() -> None:
-    """The reach `bzh:comment-locality` claims, pinned rather than trusted. `HistoryRow` is
-    documented and subclasses nothing; a discovery narrowed to `class X(BaseModel)` — the
-    obvious simplification — would drop it and every model shaped like it, silently."""
+    """The reach `bzh:comment-locality` claims, pinned rather than trusted. `FactChangedPayload`
+    is documented and subclasses `SseFramePayload`, not `BaseModel` directly; a discovery
+    narrowed to `class X(BaseModel)` — the obvious simplification — would drop it and every
+    model shaped like it, silently."""
     found = {(file, name) for file, name, _ in _unschemaed_wire_models()}
-    assert ("history.py", "HistoryRow") in found, sorted(found)
+    assert ("sse_runner.py", "FactChangedPayload") in found, sorted(found)

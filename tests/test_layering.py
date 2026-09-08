@@ -17,6 +17,7 @@ _HUB_STORE_INTERNAL_DIR = _HUB_DIR / "store" / "internal"
 _HUB_STORE_ERRORS_FILE = _HUB_DIR / "store" / "errors.py"
 _RUNNER_STORE_DIR = _RUNNER_DIR / "store"
 _RUNNER_DOMAIN_DIR = _RUNNER_DIR / "domain"
+_WIRE_DIR = _SRC_DIR / "wire"
 
 _MOVED_HOMES = {
     "ChunkStatus": "blizzard.foundation.chunk_status",
@@ -383,3 +384,43 @@ def test_runner_api_names_no_write_capable_store_or_bundle() -> None:
                 if alias.name == "RunnerStores" or is_write_repository:
                     violations.append(f"{path.relative_to(_REPO_ROOT)} imports {alias.name}")
     assert not violations, f"J — runner/api/ must name no write-capable store or bundle: {violations}"
+
+
+def _wire_model_names() -> set[str]:
+    names: set[str] = set()
+    for path in sorted(_WIRE_DIR.glob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                names.add(node.name)
+    return names
+
+
+def _wire_cross_model_constructions() -> list[str]:
+    wire_names = _wire_model_names()
+    violations: list[str] = []
+    for path in sorted(_WIRE_DIR.glob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for cls in tree.body:
+            if not isinstance(cls, ast.ClassDef):
+                continue
+            for method in cls.body:
+                if not isinstance(method, ast.FunctionDef | ast.AsyncFunctionDef):
+                    continue
+                for node in ast.walk(method):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    name = node.func.id if isinstance(node.func, ast.Name) else None
+                    if name is None or name not in wire_names or name == cls.name:
+                        continue
+                    violations.append(f"{path.relative_to(_REPO_ROOT)}::{cls.name}.{method.name} constructs {name}")
+    return violations
+
+
+def test_no_wire_model_projects_into_another() -> None:
+    """O (plan: hold wire/ to its stated contract, D3): a wire model is a pydantic shape,
+    never a projection — no method under ``wire/`` may instantiate another wire model,
+    only its own class (a classmethod's bare ``cls(...)``, or a ``default_factory``
+    supplying a sibling default outside any method body, are model config, not this)."""
+    violations = _wire_cross_model_constructions()
+    assert not violations, f"O — wire/ must declare no cross-model projection: {violations}"

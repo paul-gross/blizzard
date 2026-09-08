@@ -473,8 +473,8 @@ class ChunkDetail(BaseModel):
     # The chunk's questions, oldest first — open *and* answered (issue #165), an answered one still
     # carrying its return trail.
     questions: list[QuestionView] = []
-    # Open-pr delivery, kept for back-compat reads of a historical chunk (#67). No engine path writes
-    # these facts.
+    # True while delivery is parked on an open PR not yet merged — a `delivering` detail, not a
+    # distinct status (issue #67); derived on read, never engine-written.
     awaiting_external_merge: bool = False
     open_prs: list[PrView] = []
     # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.

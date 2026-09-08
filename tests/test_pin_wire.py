@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from blizzard.hub.app import create_app_for_export as create_hub_app_for_export
 from blizzard.runner.app import create_app_for_export
 from blizzard.wire.attachments import AttachmentRequest
 from blizzard.wire.chunk import ChunkDetail, ChunkIngestRequest
@@ -28,6 +29,12 @@ def _runner_schemas() -> dict[str, Any]:
     """The component schemas of the runner's exported OpenAPI spec — the same build the
     exporter (``blizzard.tools.openapi.export``) dumps for the generated TS client."""
     return create_app_for_export().openapi()["components"]["schemas"]
+
+
+def _hub_schemas() -> dict[str, Any]:
+    """The component schemas of the hub's exported OpenAPI spec — the same build the
+    exporter (``blizzard.tools.openapi.export``) dumps for the generated TS client."""
+    return create_hub_app_for_export().openapi()["components"]["schemas"]
 
 
 def test_git_commit_declaration_carries_no_forge_field() -> None:
@@ -129,6 +136,15 @@ def test_the_runner_spec_carries_both_escalation_views_under_distinct_names() ->
     assert "takeover_command" in schemas["ChunkEscalationView"]["properties"]
     assert "ChunkDetail" in schemas and "ChunkDetailView" not in schemas
     assert {"history", "artifacts", "escalation"} <= set(schemas["ChunkDetail"]["properties"])
+
+
+def test_the_hub_spec_carries_no_mangled_schema_name() -> None:
+    """Two same-named wire models reachable from different modules mangle both names in
+    the client (``RotatePolicyView`` duplicated across ``wire.envelope`` and ``wire.graph``,
+    consolidated onto the ``wire.graph`` declaration) — pinned so a reintroduced duplicate
+    fails here rather than surfacing as a broken generated type."""
+    schemas = _hub_schemas()
+    assert not [name for name in schemas if "__" in name]  # a collision mangles both names
 
 
 def test_the_runner_spec_serves_the_shared_segment_turn_shape_not_a_retired_turn_view() -> None:

@@ -8,9 +8,9 @@ const NODES: readonly GraphNodeView[] = [
   {
     node_id: 'n_build',
     name: 'build',
-    executor: 'claude',
+    executor: 'runner',
     session: 'fresh',
-    judged_by: 'reviewer',
+    judged_by: 'worker',
     checks: ['lint', 'test'],
     produces: [{ name: 'branch' }],
     retries_max: 3,
@@ -20,9 +20,9 @@ const NODES: readonly GraphNodeView[] = [
   {
     node_id: 'n_review',
     name: 'review',
-    executor: 'claude',
+    executor: 'runner',
     session: 'fresh',
-    judged_by: 'reviewer',
+    judged_by: 'worker',
     choices: [],
   },
 ];
@@ -47,7 +47,7 @@ describe('GraphNodeTable', () => {
 
     const buildRow = el.querySelector('[data-node-id="n_build"]') as HTMLElement;
     expect(buildRow.querySelector('[data-testid="graph-detail-entry-badge"]')).toBeTruthy();
-    expect(buildRow.textContent).toContain('claude');
+    expect(buildRow.textContent).toContain('runner');
     expect(buildRow.textContent).toContain('3');
     expect(buildRow.textContent).toContain('escalate');
     expect(buildRow.textContent).toContain('lint, test');

@@ -60,7 +60,7 @@ const GRAPH: GraphView = {
       name: 'c',
       executor: 'hub',
       session: 'fresh',
-      judged_by: 'none',
+      judged_by: 'worker',
       choices: [{ choice_id: 'c_done', name: 'landed', description: '' }],
     },
   ],

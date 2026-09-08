@@ -1535,7 +1535,7 @@
   "blizzard/hub/domain/envelope.py": {
    "comments": 2,
    "docstrings": 22,
-   "total": 224
+   "total": 223
   },
   "blizzard/hub/domain/errors.py": {
    "comments": 0,
@@ -2604,8 +2604,8 @@
   },
   "blizzard/runner/api/history.py": {
    "comments": 0,
-   "docstrings": 11,
-   "total": 28
+   "docstrings": 18,
+   "total": 99
   },
   "blizzard/runner/api/hub_proxy.py": {
    "comments": 12,
@@ -3804,8 +3804,8 @@
   },
   "blizzard/wire/envelope.py": {
    "comments": 25,
-   "docstrings": 21,
-   "total": 148
+   "docstrings": 18,
+   "total": 138
   },
   "blizzard/wire/events.py": {
    "comments": 2,
@@ -3855,12 +3855,12 @@
   "blizzard/wire/graph.py": {
    "comments": 7,
    "docstrings": 41,
-   "total": 174
+   "total": 175
   },
   "blizzard/wire/history.py": {
    "comments": 0,
-   "docstrings": 17,
-   "total": 106
+   "docstrings": 14,
+   "total": 42
   },
   "blizzard/wire/lease.py": {
    "comments": 0,
@@ -3933,9 +3933,9 @@
    "total": 29
   },
   "blizzard/wire/transcript_segment.py": {
-   "comments": 10,
+   "comments": 8,
    "docstrings": 36,
-   "total": 161
+   "total": 159
   },
   "blizzard/wire/user.py": {
    "comments": 0,
@@ -4147,7 +4147,7 @@
   "runner_fakes.py": {
    "comments": 72,
    "docstrings": 71,
-   "total": 1008
+   "total": 1007
   },
   "service/__init__.py": {
    "comments": 0,
@@ -5381,8 +5381,8 @@
   },
   "test_layering.py": {
    "comments": 10,
-   "docstrings": 35,
-   "total": 385
+   "docstrings": 39,
+   "total": 426
   },
   "test_lease_auth.py": {
    "comments": 0,
@@ -5436,8 +5436,8 @@
   },
   "test_openapi_descriptions.py": {
    "comments": 0,
-   "docstrings": 19,
-   "total": 100
+   "docstrings": 20,
+   "total": 101
   },
   "test_openapi_export.py": {
    "comments": 0,
@@ -5520,9 +5520,9 @@
    "total": 223
   },
   "test_pin_wire.py": {
-   "comments": 2,
-   "docstrings": 39,
-   "total": 144
+   "comments": 3,
+   "docstrings": 45,
+   "total": 160
   },
   "test_pkce.py": {
    "comments": 0,
@@ -5762,7 +5762,7 @@
   "test_runner_chunk_history_api.py": {
    "comments": 12,
    "docstrings": 21,
-   "total": 502
+   "total": 503
   },
   "test_runner_chunk_history_cli.py": {
    "comments": 1,
@@ -6012,7 +6012,7 @@
   "test_runner_session_pools.py": {
    "comments": 64,
    "docstrings": 53,
-   "total": 678
+   "total": 679
   },
   "test_runner_spawn_cwd.py": {
    "comments": 2,
