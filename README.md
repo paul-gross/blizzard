@@ -24,10 +24,11 @@
   <sub><em>Mission control: the chunk board, the runner registry, and one chunk's full node history.</em></sub>
 </p>
 
-Blizzard runs **the loop around the work**. It ingests items from your backlog, sequences and claims them, leases each
-worker an isolated environment in **your own workspace** ([winter](https://github.com/paul-gross/winter) enabled),
-judges what comes back, drives the result to delivery, and recovers correctly when any of that is interrupted. That loop
-— and the facts it records — is the whole product.
+Blizzard runs **the loops around the work**. Ingest items from your backlog, sequence them, and blizzard's runners take
+the work to completion — each leased an isolated environment in **your own workspace**
+([winter](https://github.com/paul-gross/winter) enabled), what it returns judged, the result driven to delivery, and
+every step recovered correctly when any of it is interrupted. Those loops — and the facts they record — are the whole
+product.
 
 <p align="center">
   <picture>
@@ -38,47 +39,53 @@ judges what comes back, drives the result to delivery, and recovers correctly wh
 
 One **hub** is shared by everyone: a single queue, a single set of workflows, and one truthful account of what the fleet
 has done. **Runners** are many — one on each engineer's machine, or on a spare box in the corner — all drawing from that
-same queue. A team grows its fleet by adding machines rather than by coordinating calendars, and every engineer's agents
-show up on the same board.
+same queue, and each configured on its own terms: how many agents it runs at once, what it may spend, and which nodes
+stop for a human. One engineer keeps a hand on every station and stays *in* the loop; the next tunes their box to run
+unattended and stays *on* it. A team grows its fleet by adding machines rather than by coordinating calendars, and every
+engineer's agents show up on the same board.
 
 📚 **Operator docs:** [`docs/index.md`](./docs/index.md) · 🐳 **Start here:** [`docs/install.md`](./docs/install.md)
 
 ## ✨ Features
 
-- **Unattended throughput** — queue work, close the laptop, come back to merged branches, chunks parked at exactly the
-  human gates you configured, or precise escalations. Never to a wedged fleet.
-- **Exactly-once delivery, structurally** — atomic leases and epochs, not retries and hope. No two agents ever hold the
-  same chunk, and a reaped-but-still-running worker can never overwrite its successor's delivery.
+- **Exactly-once delivery** — atomic leases and epochs, not retries and hope: work is parallelized across the whole
+  fleet without collisions, and a reaped-but-still-running worker can never overwrite its successor's delivery.
 - **Crash-equivalence** — `kill -9`, reboot, or power loss at any instant loses at most in-flight LLM tokens. Never
-  queue state, never delivered work, never truthful status. There is a runnable demo of it in
-  [`docs/deployment.md`](./docs/deployment.md).
-- **Workflow graphs you author** — immutable YAML graphs of nodes, judgements, choices, and gates, with cycles for the
-  fix loop. A packaged set ships in the box: a triage router that reads a chunk's work items and lands it in the lane
-  that fits, plus lanes ranging from a compact build → review → deliver loop to a full plan → plan-review → build →
-  verify → review → pre-push → deliver track.
-- **Human gates are a dial, not a doctrine** — the baseline graph involves no human at all. Insert a gate node, or have
-  a runner impose one by node name, and trust is tuned station by station as it is earned.
-- **Flexible work shapes — never 1:1:1:1** — a chunk wraps one *or more* backlog items, one agent may fan out to
-  subagents, and a single chunk may span several repositories and several feature environments at once.
+  queue state, never delivered work, never truthful status. Hub and runner are designed from ground zero to be restarted
+  at any moment and resume exactly where they left off.
+- **Workflow graphs you author** — bring your own graphs and do loop engineering on whatever terms you like. A packaged
+  set ships in the box to start from.
+- **Work shaped to fit an agent's conversation** — the unit of work is whatever one agent holds well in one session:
+  group related backlog items into a single chunk so they are reasoned about together rather than three times over, hand
+  that chunk as many repositories and feature environments as the change actually touches, and let the agent fan out to
+  subagents where the work splits.
 - **Cheap human takeover** — when the fleet escalates, one pasted command drops you into the stuck agent's full session
   context, not a cold reconstruction of what it was doing.
+- **Full control over work in flight** — every chunk is steerable from the hub: pause it and the worker is killed and
+  parked with its claim intact, resume it and that worker picks up in place, restart it onto any node — or onto a
+  different graph entirely — on a fresh session, requeue an escalated one where it stands, reprioritize it, make it wait
+  on another chunk, or stop it outright and release its environment. A control is recorded as a fact, and the runner
+  acts on it at its next contact, so an order given at the board reaches the agent on the machine doing the work.
 - **Metered, boundable spend** — every attempt's token usage and cost is recorded as a fact and surfaced per chunk and
   fleet-wide, with an optional per-chunk cap and a runner-level spend kill-switch.
-- **Mission control, embedded** — the board ships inside the wheel: a live fleet view with a mobile glance shell, a
-  graph explorer with retire/re-enable controls, and a durable, severity-ranked operational event log.
-- **Gardening — the fleet turned on your own codebase** — author a scope, point a routine at it, and each run records
-  findings anchored to a file, a line, and the rule id they violate. A finding carries its own fact history rather than
-  a stored flag — live, gone, first observed, last seen — and closes through explicit verbs. A garden proposal answers
-  one or more of them with an argument and the evidence attached.
-- **Everything external is a seam** — workspace, work source, coding harness, delivery, and human channel are all named
-  interfaces with pluggable providers. The reference stack is the first implementation, not a shortcut around them.
-- **One repo, one wheel** — a single distributable ships both daemons, the CLI, and the compiled Angular frontend as
-  embedded assets. No Node at install time or at runtime.
-- **sqlite by default** — postgres is a configuration knob (`db_url`), not a prerequisite.
+- **Mission control** — each daemon hosts its own UI: the hub a fleet-wide board over chunks, graphs, and a
+  severity-ranked event log; the runner a local panel for its own machine. Both are responsive down to a phone.
+- **Insights** — every node's result is visible at the hub: the artifacts it produced, the verdict it was given, and the
+  full history of the chunk's walk through the graph. A runner can opt into shipping the agent's own conversation
+  alongside it, so what a worker actually saw is readable fleet-wide rather than only on the machine that ran it.
+- **Gardening** — point packaged routines at your projects to track findings and raise proposals that answer them, so
+  the codebase is tended by autonomous routine maintenance rather than by remembering to.
+- **Authentication** — humans log in over SSO (GitHub or OIDC) with per-role permissions; runners authenticate
+  separately with an enrolled token. Both are off by default and enabled in config:
+  [`human-auth.md`](./docs/deployment/human-auth.md), [`runner-auth.md`](./docs/deployment/runner-auth.md).
+- **One box or a whole team** — hub and runner colocated on your own machine, over the default sqlite store, is a
+  complete deployment rather than a demo mode. The same two daemons become a shared hub on a server with a runner on
+  each engineer's laptop when you want that instead; nothing about the work changes shape in between.
+- **Intentionally modular, intentionally flexible to your proprietary needs** — workspace, work source, coding harness,
+  delivery, and human channel are all named interfaces with pluggable providers. The reference stack is the first
+  implementation, not a shortcut around them.
 
-## 📸 A look at the board
-
-The chunk board is above. Three more of the hub's surfaces:
+## 📸 Screenshots
 
 <details>
 <summary><b>Design and build your own workflow</b></summary>
@@ -107,8 +114,6 @@ passing or accepting each proposal on its argument and its evidence.</sub></p>
 
 ## 🚀 Quickstart
 
-The fastest look at a running hub — install the wheel, scaffold a store, serve the board:
-
 ```bash
 pip install https://github.com/paul-gross/blizzard/releases/download/v0.1.0-rc.1/blizzard-0.1.0rc1-py3-none-any.whl
 blizzard hub init .          # scaffold config + data dir + a migrated sqlite store
@@ -117,13 +122,43 @@ blizzard hub host .          # serve the API + the embedded mission-control boar
 
 Then open <http://127.0.0.1:8421/> — the default port from the `blizzard-hub.toml` that `blizzard hub init` writes.
 
-For anything past a first look, run the reference **container deployment** instead: hub, postgres, and a TLS-terminating
-Caddy via `docker compose`, walked end to end in [`docs/install.md`](./docs/install.md). The alternative — a colocated
-wheel + systemd install running both daemons side by side — is [`docs/deployment.md`](./docs/deployment.md).
+The packaged graphs ship in the wheel but are not minted until you say so. With the hub up, from a second shell:
 
-Milestone builds are published as [GitHub Releases](https://github.com/paul-gross/blizzard/releases) with the wheel
-attached and the image pushed; there is no package index for the wheel. Prerelease candidates are tagged `v0.1.0-rc.N`.
-[`docs/versioning.md`](./docs/versioning.md) states what a version number promises and the supported hub↔runner skew.
+```bash
+blizzard hub graph sync     # mint the packaged graphs; idempotent, re-run after every upgrade
+```
+
+Set up a runner on the machine that will run the agents — the same wheel carries it:
+
+```bash
+blizzard runner init .      # scaffold blizzard-runner.toml + its own sqlite store
+```
+
+Then point `blizzard-runner.toml` at the hub and at the workspace this runner leases environments out of. That is a
+[winter](https://github.com/paul-gross/winter) workspace — a root whose `.winter/config.toml` declares your repos, with
+`winter` on the box — not a bare checkout. Give it an absolute path, not `~`:
+
+```toml
+hub_url = "http://127.0.0.1:8421"
+workspace_root = "/home/you/projects/todo-mvc-workspace"
+workspace_envs = ["alpha", "beta"]   # the env pool; the runner creates each one on first use
+max_agents = 2
+```
+
+```bash
+blizzard runner host .      # register with the hub and start pulling work
+```
+
+Work does not need a forge to exist. The built-in `hub` work source is always seated, needs no credential, and authoring
+an item at it mints that item's chunk in the same call:
+
+```bash
+blizzard hub item create --title "One-shot a TODO MVC application in Rust." --body-file spec.md
+# created hub:1 → chunk 01JT…
+blizzard hub chunk promote 01JT…   # a minted chunk rests not_ready until promoted
+```
+
+Local blizzard instances have no authentication by default.
 
 ## 🧩 How it works
 
@@ -149,18 +184,16 @@ that PR merges. Landed chunks close their work items back at their own source.
 
 ### What Blizzard deliberately isn't
 
-Blizzard is **not** a build system, a test runner, or a code-review engine, and it holds no model of any application it
-drives. That absence is a design position, not a gap.
+Blizzard is **not** a build system, a test runner, or a code-review engine. Absence is by design.
 
 Blizzard assumes a **competent agent dropped into a poly-repo capable workspace** can discover and follow the
 conventions of the repos it finds there — how they build, how they test, what "verified" means, which surfaces a change
-owes. A worker is leased a whole feature environment rather than a checkout, and one unit of work may span several repos
-at once, so the repos are the only place those answers stay correct as toolchains diverge and change.
+owes. The effectiveness of that agent is derived from the harness supplied, amplified by the orchestration of blizzard.
 
 Two things follow, and they explain features you might otherwise expect to find:
 
 - **There is no per-application configuration.** No repo-convention registry, no per-app graph variants, no place to
-  tell Blizzard how your project is tested. If that seems missing, it is because the answer belongs in your repo, where
+  tell Blizzard how your project is tested. If that seems missing, it is because the answer belongs in your repos, where
   your agents will read it.
 - **There is no second backlog.** The work source owns what work *is*; the hub's chunks carry execution state and a
   workflow position, never a competing definition of the task.
@@ -169,10 +202,13 @@ What Blizzard does own is everything an agent cannot be trusted to do by being c
 recovery at any step boundary, fencing a zombie worker out of the merge queue, metering spend, and keeping a truthful
 account of what happened.
 
-## 🔌 Seams and the reference stack
+## 🔌 Interfaces and the reference stack
 
 Interoperability is the core of the design. Every external dependency is a named seam with a provider behind it — the
-reference binding is the first implementation of the interface, never a shortcut around it.
+reference binding is the first implementation of the interface.
+
+This is not a claim to have solved harness engineering, or to serve every part of it equally well. The aim is narrower:
+to solve one problem exceptionally well, and to stay replaceable everywhere else.
 
 | Seam               | What plugs in                                             | Reference binding                                                   |
 | ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------- |
@@ -180,80 +216,35 @@ reference binding is the first implementation of the interface, never a shortcut
 | **Work source**    | The system holding the backlog, ingested by item id       | GitHub issues                                                       |
 | **Coding harness** | The agent that actually does the work                     | Claude Code                                                         |
 | **Workflow**       | How work moves — graphs of nodes, judgements, and gates   | Hub-defined YAML workflow graphs                                    |
-| **Delivery**       | Integrates finished work, executed at the hub             | Merge to the main branch, or a pull request at a gate               |
+| **Delivery**       | Integrates finished work, executed at the hub             | Merge to the main branch, or a GitHub pull request at a gate        |
 | **Human channel**  | Reaches people for questions, escalations, and visibility | The mission-control board                                           |
 
-Winter matters more than the other bindings, and deliberately so: an orchestrator is only as capable as the chunks its
-agents can safely hold. A winter feature environment composes one git worktree per project repository on a shared
-branch, with its own ports and running services — which is what makes the many-to-many chunk executable at all. Two
-agents on different chunks never share a working tree, never collide on ports, never trip over each other's services.
-
-### Sibling repos
-
-- **[blizzard-context](https://github.com/paul-gross/blizzard-context)** — the conventions harness every change here is
-  held to: the domain model, the architecture rules, the code standards, and the verifiability matrix.
-- **[blizzard-mock](https://github.com/paul-gross/blizzard-mock)** — the mock fleet: mock coding harnesses, a mock
-  forge, mock hub and runner counterparts, and the mock-data CLI that the upper test tiers run against.
+Winter is the opinionated preference for the workspace, because it cuts both ways: a human uses it directly for
+efficient local development, and blizzard uses the same thing for efficient agent development. A winter feature
+environment composes one git worktree per project repository on a shared branch, with its own ports and running
+services, so two agents on different chunks never share a working tree, collide on ports, or trip over each other's
+services.
 
 ## 🧭 Principles
 
-- **Deterministic shell, intelligent core.** The queue, the lease protocol, the reconciliation loop, the fencing, and
-  the crash recovery are ordinary deterministic code. Models are invited in only where judgment is genuinely the job. An
-  LLM can be wrong in judgment and the system survives it; it is never handed a lever that lets it be wrong in
-  arithmetic.
-- **Facts, not status.** Nothing observable is a stored flag. A chunk's status, a runner's liveness, and every brake are
-  derived from an append-only fact log, which is why `kill -9` costs at most in-flight tokens.
-- **Application-agnostic graphs.** A workflow declares the shape of work, never a toolchain.
-- **Screaming architecture.** The top-level packages announce what Blizzard *is* — two daemons and the client that
-  speaks to them.
-- **Interoperable by construction.** Swapping a binding is an adapter's worth of work, never a rewrite.
-
-## 🛠️ Development
-
-The top-level packages:
-
-| Package                    | What it is                                                                                                                                                                                                                                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/blizzard/hub/`        | the `blizzard-hub` daemon — the work orchestrator. `api/` HTTP edge, `domain/` core, `store/` with its **own** Alembic tree. Prompt-authoring conventions for the packaged graphs: [graphs/advanced-development-workflow/README.md](./src/blizzard/hub/graphs/advanced-development-workflow/README.md). |
-| `src/blizzard/runner/`     | the `blizzard-runner` daemon — the supervisor. The same `api/` + `domain/` + `store/` shape, over an **independent** Alembic tree. Its `harness/prompts/` tree follows the same [prompt-authoring conventions](./src/blizzard/hub/graphs/advanced-development-workflow/README.md).                      |
-| `src/blizzard/cli/`        | the `blizzard` binary's root command group — verbs namespaced by target (`blizzard hub …`, `blizzard runner …`).                                                                                                                                                                                        |
-| `src/blizzard/foundation/` | the shared kernel both daemons compose: the injected clock, structlog wiring, the portable store engine, the Alembic migration runner plus its revision-mismatch guard, and the daemon-neutral vocabulary both daemons speak (chunk status, artifacts, node steps, tokens).                             |
-| `src/blizzard/static/`     | the wheel-embedded frontend assets seam — CI fills `hub/` and `runner/` with the compiled Angular apps ([static/README.md](./src/blizzard/static/README.md)).                                                                                                                                           |
-| `src/blizzard/tools/`      | dev and CI tooling — the OpenAPI exporter (`blizzard-export-openapi`) and the facts-level invariant checker.                                                                                                                                                                                            |
-
-```bash
-uv sync                        # install
-uv run ruff check .            # lint
-uv run ruff format --check .   # format
-uv run pyright                 # typecheck
-uv run pytest                  # unit + component tiers — hermetic and token-free
-mise run gate                  # the local equivalent of the PR-to-master merge gate
-mise run build                 # Angular apps -> embed -> wheel -> verify install (node-free)
-```
-
-A daemon **refuses to start on a store-revision mismatch**, naming the exact `migrate` command to run — migrations are
-never applied implicitly at startup.
-
-### The upper test tiers
-
-Both are skipped unless explicitly enabled, so the default `uv run pytest` gate stays hermetic and token-free.
-
-```bash
-mise run service-test   # one running daemon's HTTP API, exercised from outside the process,
-                        # with its counterpart bound to the mock fleet
-mise run e2e            # the standing end-to-end smoke suite — every seam real
-```
-
-`mise run e2e` mints its own disposable `blizzard-mock` fixture workspace, starts a real forge, hub, and runner, and
-drives the reconciliation loop one synchronous tick at a time — git over `file://`, the forge over HTTP, the coding
-harness behind its real CLI façade. Every delivery scenario is asserted at **both ends**: git truth on the bare origin
-*and* the hub's derived facts. It needs a provisioned sibling `blizzard-mock` worktree, and the browser scenarios need a
-Chromium (`uv run playwright install chromium`); any scenario whose prerequisites are absent skips cleanly.
-
-What each tier proves, scenario by scenario, is owned by the
-[verification matrix](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md) in
-`blizzard-context` — read there rather than here. The CI workflows and the exact local commands equal to the merge gate
-are in [`docs/ci.md`](./docs/ci.md).
+- **Harness engineering is the new core.** Every tool here exists to understand and control agent drift at each
+  altitude: inside one conversation — a node-step is a session scoped to a single job, and a running lease's context is
+  sampled against a warn line as it fills; inside a chunk of work — graphs, gates, and the loops that route a failed
+  verdict back into build; and inside a project — gardening routines, the findings they anchor, and the proposals that
+  answer them.
+- **Deterministic shell.** The queue, the lease protocol, the reconciliation loop, the fencing, and the crash recovery
+  are ordinary deterministic code. Agents are controlled deterministically so they can be run at scale, each on an
+  isolated concern: an LLM can be wrong in judgment and the system survives it; it is never handed a lever that lets it
+  be wrong in arithmetic.
+- **Human on the loop by default, in the loop by opt-in.** The baseline graph stops for nobody. Stepping in is
+  deliberate — a gate node in the graph, or a runner imposing one by node name — so oversight is added station by
+  station where it is wanted, never assumed everywhere.
+- **Application-agnostic.** A graph declares the shape of work, never a toolchain — and the work need not be software.
+  Anything a fleet of agents can solve together fits; repositories and git commits are optional parameters of one
+  application of blizzard, not primitives of it.
+- **Isolated value over ecosystem lock-in.** The industry is moving too fast for a software factory to be worth a dozen
+  adopted methodologies. Assemble the strongest component for each job and replace it when a better one appears, rather
+  than buying one generic answer to every question.
 
 ## 💭 Why "Blizzard"?
 
@@ -264,7 +255,8 @@ binding from, [winter](https://github.com/paul-gross/winter).
 
 ## Contributing
 
-Issues, bug reports, and ideas are welcome from anyone, any time. For changes to Blizzard itself, open an issue
-introducing what you'd like to work on before investing in a PR, so we can align on direction — the conventions any
-change is held to live in [blizzard-context](https://github.com/paul-gross/blizzard-context), and a change is expected
-to arrive proven against its verifiability matrix.
+Blizzard is built by Blizzard, and does not follow conventional open-source contribution practice. All work runs in a
+dark factory: chunks are ingested, agents build them, and the result lands — there is no PR queue here to join.
+
+Contribute ideas, plans, and thoughts to [blizzard-product](https://github.com/paul-gross/blizzard-product), the repo
+that drives the work. What is raised there becomes the intent the fleet builds from.

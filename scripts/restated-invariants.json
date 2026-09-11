@@ -307,7 +307,7 @@
       "owner": "blizzard-context:/domain/work/chunk.md#materialization",
       "owner_kind": "domain",
       "owner_assert": {
-        "quote": "best-effort, eventually convergent, and not atomic with the landing"
+        "quote": "best-effort, eventually convergent, and not atomic with the transition it keys on"
       },
       "markers": [
         "materializes every accumulated proposal of a chunk",
