@@ -20,6 +20,7 @@ from sqlalchemy import Engine, select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
+from blizzard.hub.app import CLOSE_DRAIN_INTERVAL_SECONDS
 from blizzard.hub.config import HubConfig
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.config import RunnerConfig
@@ -2570,7 +2571,12 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
         # (#65/#66) — no work for it to claim otherwise, since `land` is hub-executed.
         runner_proc = start_runner(runner_dir, crash_point=None)
 
-        code = wait_death(hub_proc)
+        # Unlike every other family here, this crash point fires inside a periodically
+        # jittered sweep (`Sweep.all`), not a synchronous request: its first pass runs
+        # before the intent exists, so reaching the point can wait up to a full
+        # `CLOSE_DRAIN_INTERVAL_SECONDS` for the jittered second pass. The default
+        # `wait_death` timeout equals that interval exactly, racing its own upper bound.
+        code = wait_death(hub_proc, timeout=CLOSE_DRAIN_INTERVAL_SECONDS + 60.0)
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
 

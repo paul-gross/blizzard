@@ -5,18 +5,19 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.work import UsageFact
+from blizzard.hub.domain.work import UsageTotal
 
 
 class IReadChunkUsageRepository(Protocol):
     """Read-only chunk-usage access."""
 
-    def usage_since(self, since: datetime, *, until: datetime | None = None) -> list[UsageFact]:
-        """Every usage fact recorded at or after ``since`` — and, when ``until`` is given,
-        strictly before it — across every chunk (issue #60, issue #183). ``since`` is
-        inclusive and ``until`` exclusive, so adjacent windows sharing a boundary instant
-        neither double-count nor drop a fact at it. Omitting ``until`` is the original
-        open-ended tail. The caller derives the total via ``UsageTotal.of``."""
+    def usage_total_since(self, since: datetime, *, until: datetime | None = None) -> UsageTotal:
+        """The usage/cost total across every chunk's facts recorded at or after ``since``
+        — and, when ``until`` is given, strictly before it (issue #60, issue #183,
+        blizzard#517). ``since`` is inclusive and ``until`` exclusive, so adjacent windows
+        sharing a boundary instant neither double-count nor drop a fact at it. Omitting
+        ``until`` is the original open-ended tail. Follows the lower-bound + PARTIAL cost
+        contract in ``UsageTotal.of_grouped_sums``."""
         ...
 
 

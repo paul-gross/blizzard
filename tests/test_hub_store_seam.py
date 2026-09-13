@@ -164,8 +164,8 @@ _ADAPTER_CASES = [
     _AdapterCase(
         "ChunkUsageStore",
         lambda store: ChunkUsageStore(store, FixedClock(_NOW)),
-        lambda a: a.usage_since(_NOW),
-        "usage_since",
+        lambda a: a.usage_total_since(_NOW),
+        "usage_total_since",
     ),
     _AdapterCase(
         "ChunkDeliveryStore",
