@@ -84,3 +84,6 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         app = build_hosted_app(config)
     click.echo(f"serving blizzard-hub on {config.host}:{config.port}")
     build_early_shutdown_server(app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown).run()
+    # Disposes the engine `build_hosted_app` carried on `app.state`, once the server
+    # has actually stopped serving and the sweeps have drained (D5).
+    app.state.engine.dispose()

@@ -9,6 +9,7 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -68,10 +69,15 @@ class LoopWiring:
         """Read the prompt files now, on the calling thread."""
         return cls(config, config.resolved_workspace_prompt(), config.resolved_runner_prompt(), broker)
 
-    def context(self, hub: IHubClient) -> LoopContext:
-        """Wire a :class:`LoopContext`; the caller owns the ``httpx.Client`` behind ``hub``."""
+    def context(self, hub: IHubClient, *, engine: Any = None) -> LoopContext:
+        """Wire a :class:`LoopContext`; the caller owns the ``httpx.Client`` behind ``hub``.
+
+        Builds its own engine (kept separate from ``host``'s own, D4) unless ``engine`` is
+        given — :class:`PeriodicDriver` passes its own so it can dispose it on thread exit
+        (D5) without threading it through :class:`LoopContext` for a step to see."""
         config = self.config
-        engine = create_engine_from_url(config.db_url)
+        if engine is None:
+            engine = create_engine_from_url(config.db_url)
         stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
         provider = WinterWorkspaceProvider(
             config.workspace_root, env_pool=config.workspace_envs, base_branch=config.base_branch
@@ -255,7 +261,10 @@ class PeriodicDriver:
     def _run(self) -> None:
         config = self._wiring.config
         self._client = httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers())
-        ctx = self._wiring.context(HttpHubClient(self._client))
+        # Built here, not inside `context()`, so this thread can dispose it on exit (D5) —
+        # a gracefully stopped runner is a single-file store again.
+        engine = create_engine_from_url(config.db_url)
+        ctx = self._wiring.context(HttpHubClient(self._client), engine=engine)
         _log.info("reconciliation loop started", runner_id=config.runner_id, interval=self._interval)
         try:
             while not self._stop.is_set():
@@ -266,4 +275,5 @@ class PeriodicDriver:
                 self._stop.wait(self._interval)
         finally:
             self._client.close()
+            engine.dispose()
             _log.info("reconciliation loop stopped", runner_id=config.runner_id)

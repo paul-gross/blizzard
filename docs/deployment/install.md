@@ -56,9 +56,9 @@ revision whose `upgrade()` deletes rows, and not a config change the new wheel r
 The `20260716_2206_hub_pr_opened_idempotent` migration is the first in either store whose `upgrade()` deletes rows: it
 deletes every `delivery_pr_opened` row but the earliest per (chunk_id, repo) before adding a unique constraint there;
 `downgrade()` only drops the constraint and never restores the rows. That delete removes only true duplicates of a
-forge-deduplicated `pr.opened` fact, but it is unconditional and irreversible — copy the hub's store file (sqlite
-`hub.db`, or the postgres equivalent) before restarting into a wheel carrying it; the revision-mismatch guard cannot
-catch it afterward.
+forge-deduplicated `pr.opened` fact, but it is unconditional and irreversible — stop the hub, then copy its store file
+(sqlite `hub.db` with any `hub.db-wal` beside it, or the postgres equivalent) before restarting into a wheel carrying
+it; the revision-mismatch guard cannot catch it afterward.
 
 ### The `[[work_source]]` rename
 
