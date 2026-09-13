@@ -67,6 +67,21 @@ class CandidacyRead:
 
 
 @dataclass(frozen=True)
+class DerivationSignature:
+    """A cheap aggregate fingerprint of every input :meth:`IReadTranscriptEvents.candidacy`
+    and its visibility read see today (blizzard#524 D5): the row count, the highest
+    ``transcript_segments.id``, and the latest ``received_at`` — plus the ``chunks`` row
+    count, since visibility also depends on a segment's chunk existing. No per-row content
+    is read to build it. The standing reconciler compares this pass's signature against the
+    previous pass's to decide whether a full pass has anything new to find."""
+
+    segment_count: int
+    max_segment_id: int | None
+    max_received_at: datetime | None
+    chunk_count: int
+
+
+@dataclass(frozen=True)
 class SegmentDerivationInput:
     """Everything a segment offers the derivation service: decoded once,
     fingerprinted once. ``complete`` is ``False`` when a record is a content hole (D6) —
@@ -103,6 +118,14 @@ class IReadTranscriptEvents(Protocol):
         of the visible set's stored digests against their current-version markers — no
         content byte is read and no statement runs per segment. A segment absent from the
         visible set is never a candidate even with no marker at all."""
+        ...
+
+    def derivation_signature(self) -> DerivationSignature:
+        """The standing reconciler's change probe (blizzard#524 D5): one constant-cost
+        aggregate read over every input :meth:`candidacy` and its visibility read see —
+        no per-row read, so its cost never grows with segment count. The reconciler
+        compares this against the previous pass's signature to decide whether to skip the
+        full pass (candidacy/derive/drop) entirely."""
         ...
 
     def segment_derivation_input(self, segment_id: str) -> SegmentDerivationInput | None:

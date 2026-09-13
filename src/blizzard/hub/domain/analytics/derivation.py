@@ -8,10 +8,16 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.analytics.events import CandidacyRead, IWriteTranscriptEvents, TranscriptEvent
+from blizzard.hub.domain.analytics.events import (
+    CandidacyRead,
+    DerivationSignature,
+    IWriteTranscriptEvents,
+    TranscriptEvent,
+)
 from blizzard.hub.domain.analytics.extraction import (
     DEFAULT_EXTRACTORS,
     EXTRACTOR_VERSION,
@@ -122,24 +128,51 @@ class EventDerivationService:
         return chunk.graph_id if chunk is not None else None
 
 
+#: The change probe's forced floor (blizzard#524 D5): the probe is an optimization only,
+#: so a full pass runs at least this often regardless of what the signature reports —
+#: this is what bounds staleness if the in-memory signature ever misses a change.
+_FORCED_FULL_PASS_FLOOR = timedelta(minutes=10)
+
+
 class EventDerivationReconciler:
     """The standing convergence pass (D1/D2), stepped by the existing ``Sweep`` driver.
     Derives each candidate through :class:`EventDerivationService`, then drops the rows
-    of any segment the store still remembers but the visible set no longer holds."""
+    of any segment the store still remembers but the visible set no longer holds.
 
-    def __init__(self, *, service: EventDerivationService, events: IWriteTranscriptEvents) -> None:
+    Holds, in memory, the last pass's :class:`~blizzard.hub.domain.analytics.events.DerivationSignature`
+    (blizzard#524 D5) — a cheap aggregate over every input :meth:`~EventDerivationService.candidacy`
+    and visibility read today. When this pass's signature matches, the full pass — candidacy,
+    derive, drop — is skipped entirely. This state is process-local and never persisted: a
+    fresh process always runs its first pass in full (which also covers an
+    ``EXTRACTOR_VERSION`` bump, since that changes derivation markers, not this signature),
+    and :data:`_FORCED_FULL_PASS_FLOOR` bounds how stale the in-memory signature can ever
+    leave reality, using the injected ``clock`` (``bzh:injected-clock``)."""
+
+    def __init__(self, *, service: EventDerivationService, events: IWriteTranscriptEvents, clock: IClock) -> None:
         self._service = service
         self._events = events
+        self._clock = clock
+        self._last_signature: DerivationSignature | None = None
+        self._last_full_pass_at: datetime | None = None
 
     def sweep(self) -> None:
-        """One convergence pass. A segment that raises is stepped over rather than ending
-        the tick, which would cost every later candidate its derivation and the drop pass
-        behind them, on every tick. The record names the segment and the fault but carries
-        no traceback: a store fault already logged one at its wrap site, and any other is
-        reproducible on demand through the segment-scoped re-derive route.
+        """One convergence pass, or a skip when the probe reports nothing changed and the
+        floor is not yet due (blizzard#524 D5). A segment that raises during derivation is
+        stepped over rather than ending the tick, which would cost every later candidate its
+        derivation and the drop pass behind them, on every tick. The record names the
+        segment and the fault but carries no traceback: a store fault already logged one at
+        its wrap site, and any other is reproducible on demand through the segment-scoped
+        re-derive route.
 
         ``candidacy()`` is this pass's one visibility evaluation (D2): the drop pass below
         reuses its ``visible_segment_ids`` rather than evaluating it a second time."""
+        signature = self._events.derivation_signature()
+        now = self._clock.now()
+        floor_due = self._last_full_pass_at is None or now - self._last_full_pass_at >= _FORCED_FULL_PASS_FLOOR
+        if not floor_due and signature == self._last_signature:
+            _log.info("transcript event derivation sweep skipped", reason="signature unchanged")
+            return
+
         read = self._service.candidacy()
         derived = 0
         failed = 0
@@ -154,6 +187,7 @@ class EventDerivationReconciler:
         stale = self._events.derived_segment_ids() - read.visible_segment_ids
         self._events.drop_segments(stale)
 
-        _log.info(
-            "transcript event derivation sweep completed", derived=derived, dropped=len(stale), failed=failed
-        )
+        self._last_signature = signature
+        self._last_full_pass_at = now
+
+        _log.info("transcript event derivation sweep completed", derived=derived, dropped=len(stale), failed=failed)

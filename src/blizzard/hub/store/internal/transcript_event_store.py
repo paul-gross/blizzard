@@ -15,11 +15,12 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Delete, Insert, Select, insert, select
+from sqlalchemy import Delete, Insert, Select, func, insert, select
 
 from blizzard.hub.domain.analytics.events import (
     CandidacyRead,
     DerivationMarker,
+    DerivationSignature,
     IWriteTranscriptEvents,
     SegmentDerivationInput,
     TranscriptEvent,
@@ -72,6 +73,22 @@ def _candidacy_digests_stmt(chunk_id: str | None = None) -> Select[Any]:
         )
         .where(s.transcript_segments.c.segment_id.in_(_visible_segment_ids_stmt(chunk_id)))
         .order_by(s.transcript_segments.c.segment_id, s.transcript_segments.c.turn_range_start)
+    )
+
+
+def _derivation_signature_stmt() -> Select[Any]:
+    """The change probe's one cheap aggregate read (blizzard#524 D5): row count, max
+    ``id``, and max ``received_at`` over ``transcript_segments`` — every input
+    :func:`_visible_segment_ids_stmt` and :func:`_candidacy_digests_stmt` read besides
+    content — plus the ``chunks`` row count as a scalar subquery, so the whole probe is
+    one statement rather than two. No per-row read: this is a fixed number of aggregates
+    regardless of corpus size."""
+    chunk_count = select(func.count()).select_from(s.chunks).scalar_subquery()
+    return select(
+        func.count(s.transcript_segments.c.id).label("segment_count"),
+        func.max(s.transcript_segments.c.id).label("max_segment_id"),
+        func.max(s.transcript_segments.c.received_at).label("max_received_at"),
+        chunk_count.label("chunk_count"),
     )
 
 
@@ -227,6 +244,16 @@ class TranscriptEventStore:
             if markers.get(segment_id) != fingerprint:
                 candidates.append(segment_id)
         return CandidacyRead(visible_segment_ids=frozenset(visible_segment_ids), candidate_segment_ids=candidates)
+
+    def derivation_signature(self) -> DerivationSignature:
+        with self._store.read("derivation_signature") as conn:
+            row = conn.execute(_derivation_signature_stmt()).one()
+        return DerivationSignature(
+            segment_count=row.segment_count,
+            max_segment_id=row.max_segment_id,
+            max_received_at=row.max_received_at,
+            chunk_count=row.chunk_count,
+        )
 
     def segment_derivation_input(self, segment_id: str) -> SegmentDerivationInput | None:
         with self._store.read("segment_derivation_input") as conn:

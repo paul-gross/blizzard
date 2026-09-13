@@ -127,6 +127,7 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_delete_all_markers_for_segments_stmt": m._delete_all_markers_for_segments_stmt(frozenset({"sg_1"})),
         "_candidacy_digests_stmt": m._candidacy_digests_stmt(),
         "_current_markers_stmt": m._current_markers_stmt(_EXTRACTOR_VERSION),
+        "_derivation_signature_stmt": m._derivation_signature_stmt(),
     }
 
 

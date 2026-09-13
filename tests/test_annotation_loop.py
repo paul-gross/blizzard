@@ -9,6 +9,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.hub.app import Sweep, _lifespan
 from blizzard.hub.config import HubConfig
@@ -130,9 +131,12 @@ class _FakeApp:
         self.state = _FakeState(services, config)
 
 
-async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_path: Path) -> None:
+async def test_lifespan_starts_the_event_derivation_loop_unconditionally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """blizzard#254 D1: no work source opts a chunk's transcript events into anything —
     the sweep is yielded and started regardless."""
+    monkeypatch.setattr("blizzard.hub.app.random.uniform", lambda _lo, _hi: 0.0)  # no jitter to wait out
     event_derivation = _CountingReconciler()
     services = _FakeServices(work_sources=_FakeWorkSources())
     services.event_derivation = event_derivation
@@ -144,10 +148,13 @@ async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_pat
     assert event_derivation.calls == 1
 
 
-async def test_lifespan_starts_the_work_item_materialization_loop_unconditionally(tmp_path: Path) -> None:
+async def test_lifespan_starts_the_work_item_materialization_loop_unconditionally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """blizzard#366 D9: materialization is idempotent inside one transaction against one
     store, so there is nothing a work-source opt-in would protect — the sweep is yielded
     and started regardless, the same ground ``event_derivation`` stands on."""
+    monkeypatch.setattr("blizzard.hub.app.random.uniform", lambda _lo, _hi: 0.0)  # no jitter to wait out
     materialization = _CountingReconciler()
     services = _FakeServices(work_sources=_FakeWorkSources())
     services.work_item_materialization = materialization
@@ -159,10 +166,13 @@ async def test_lifespan_starts_the_work_item_materialization_loop_unconditionall
     assert materialization.calls == 1
 
 
-async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Path) -> None:
+async def test_lifespan_starts_the_close_drain_loop_unconditionally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """blizzard#383 D3: the enqueue is source-agnostic, so the drain runs whether or not
     any source is close-capable today — the sweep is yielded and started regardless,
     like its two siblings above."""
+    monkeypatch.setattr("blizzard.hub.app.random.uniform", lambda _lo, _hi: 0.0)  # no jitter to wait out
     close_drain = _CountingReconciler()
     services = _FakeServices(work_sources=_FakeWorkSources())
     services.close_drain = close_drain
@@ -172,3 +182,102 @@ async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Pa
         await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
 
     assert close_drain.calls == 1
+
+
+# --------------------------------------------------------------------------- #
+# initial delay, elapsed-time logging, and overrun warning (blizzard#524 D8)
+
+
+async def test_initial_delay_is_honored_before_the_first_sweep() -> None:
+    reconciler = _CountingReconciler()
+    shutdown = asyncio.Event()
+
+    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test", initial_delay_seconds=3600).run())
+    await asyncio.sleep(0.05)
+    assert reconciler.calls == 0  # still waiting out the initial delay
+
+    shutdown.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    assert reconciler.calls == 0  # shutdown fired before the delay ever elapsed
+
+
+async def test_shutdown_during_the_initial_delay_returns_promptly() -> None:
+    reconciler = _CountingReconciler()
+    shutdown = asyncio.Event()
+
+    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test", initial_delay_seconds=3600).run())
+    await asyncio.sleep(0.05)
+    shutdown.set()
+
+    await asyncio.wait_for(task, timeout=1.0)  # returns almost immediately, not after the 3600s delay
+
+
+async def test_elapsed_time_is_logged_every_pass() -> None:
+    reconciler = _CountingReconciler()
+    shutdown = asyncio.Event()
+    ticks = iter([100.0, 100.25, 200.0, 200.1])  # (start, end) pairs for two passes
+
+    async def _stop_once_two_sweeps_land() -> None:
+        while reconciler.calls < 2:
+            await asyncio.sleep(0)
+        shutdown.set()
+
+    with capture_logs() as logs:
+        await asyncio.wait_for(
+            asyncio.gather(
+                Sweep(reconciler, 0, shutdown, "test", timer=lambda: next(ticks)).run(),
+                _stop_once_two_sweeps_land(),
+            ),
+            timeout=2.0,
+        )
+
+    completed = [entry for entry in logs if entry["event"] == "sweep pass completed"]
+    assert len(completed) >= 2
+    assert all("elapsed_seconds" in entry for entry in completed)
+
+
+async def test_a_pass_exceeding_its_interval_logs_a_warning_naming_the_sweep() -> None:
+    reconciler = _CountingReconciler()
+    shutdown = asyncio.Event()
+    ticks = iter([0.0, 10.0])  # a single 10s pass against a 1s interval — an overrun
+
+    async def _stop_once_one_sweep_lands() -> None:
+        while reconciler.calls < 1:
+            await asyncio.sleep(0)
+        shutdown.set()
+
+    with capture_logs() as logs:
+        await asyncio.wait_for(
+            asyncio.gather(
+                Sweep(reconciler, 1, shutdown, "sweep-under-test", timer=lambda: next(ticks)).run(),
+                _stop_once_one_sweep_lands(),
+            ),
+            timeout=2.0,
+        )
+
+    warnings = [entry for entry in logs if entry["log_level"] == "warning"]
+    assert len(warnings) == 1
+    assert warnings[0]["event"] == "sweep pass exceeded its own interval"
+    assert warnings[0]["sweep"] == "sweep-under-test"
+
+
+async def test_a_pass_within_its_interval_logs_no_overrun_warning() -> None:
+    reconciler = _CountingReconciler()
+    shutdown = asyncio.Event()
+    ticks = iter([0.0, 0.1])  # well inside a 60s interval
+
+    async def _stop_once_one_sweep_lands() -> None:
+        while reconciler.calls < 1:
+            await asyncio.sleep(0)
+        shutdown.set()
+
+    with capture_logs() as logs:
+        await asyncio.wait_for(
+            asyncio.gather(
+                Sweep(reconciler, 60, shutdown, "test", timer=lambda: next(ticks)).run(),
+                _stop_once_one_sweep_lands(),
+            ),
+            timeout=2.0,
+        )
+
+    assert not [entry for entry in logs if entry["log_level"] == "warning"]

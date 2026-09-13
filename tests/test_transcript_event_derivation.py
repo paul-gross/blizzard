@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import zlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -103,7 +103,7 @@ class _Fixture:
         self.service = EventDerivationService(
             events=self.events, facts=self.chunks.facts, record=self.chunks.record, clock=self.clock
         )
-        self.reconciler = EventDerivationReconciler(service=self.service, events=self.events)
+        self.reconciler = EventDerivationReconciler(service=self.service, events=self.events, clock=self.clock)
 
     def mint_chunk(self, chunk_id: str, *, node_id: str = "nd_build") -> None:
         self.chunks.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_mint", work_refs=[], minted_at=_NOW))
@@ -199,7 +199,7 @@ def test_a_version_bump_re_derives_history_leaving_the_prior_version_intact(fixt
         clock=fixture.clock,
         extractor_version=_NEXT_EXTRACTOR_VERSION,
     )
-    bumped_reconciler = EventDerivationReconciler(service=bumped_service, events=fixture.events)
+    bumped_reconciler = EventDerivationReconciler(service=bumped_service, events=fixture.events, clock=fixture.clock)
     bumped_reconciler.sweep()
 
     with fixture.engine.connect() as conn:
@@ -251,7 +251,11 @@ def test_a_content_hole_segment_derives_incomplete_then_re_derives_once_accepted
     assert marker.complete is False
     assert marker.event_count == 0
 
-    fixture.segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW)
+    # A later instant than the rejected insert's, not `_NOW` again: the change probe
+    # (blizzard#524 D5) reads `received_at` moving forward as its signal that this record
+    # was rewritten, so a re-adjudication landing at the same instant would need the
+    # probe's forced floor to catch it instead — covered separately below.
+    fixture.segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW + timedelta(seconds=1))
     fixture.reconciler.sweep()
 
     marker_after = fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION)
@@ -331,7 +335,7 @@ def test_one_underivable_segment_does_not_cost_the_rest_of_the_tick(fixture: _Fi
         clock=fixture.clock,
     )
 
-    EventDerivationReconciler(service=poisoned, events=fixture.events).sweep()
+    EventDerivationReconciler(service=poisoned, events=fixture.events, clock=fixture.clock).sweep()
 
     assert [row.segment_id for row in fixture.stored_events()] == ["sg_2"]
 
@@ -441,6 +445,76 @@ def test_an_extractor_version_bump_decodes_each_segment_at_most_once(
         clock=fixture.clock,
         extractor_version=f"{EXTRACTOR_VERSION}-next",
     )
-    EventDerivationReconciler(service=bumped_service, events=fixture.events).sweep()
+    EventDerivationReconciler(service=bumped_service, events=fixture.events, clock=fixture.clock).sweep()
 
     assert decompress_calls == 1
+
+
+# --- the change probe and its forced floor (blizzard#524 D5) ------------------
+
+
+def test_an_unchanged_signature_skips_the_pass_entirely(fixture: _Fixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Acceptance criterion 6 — a second pass over an unchanged store does not evaluate
+    candidacy at all, not merely find nothing to derive."""
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.reconciler.sweep()  # the first-ever pass always runs full and records the signature
+
+    def _boom(*_: object, **__: object) -> Any:
+        raise AssertionError("an unchanged signature must skip the full pass, not merely find no candidates")
+
+    monkeypatch.setattr(fixture.service, "candidacy", _boom)
+
+    fixture.reconciler.sweep()  # raises unless the skip is honored
+
+
+def test_a_changed_signature_triggers_a_full_pass(fixture: _Fixture) -> None:
+    """A new segment landing moves the signature's row count and max id — the probe must
+    catch it rather than treat it as steady state."""
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.reconciler.sweep()
+
+    fixture.mint_chunk("ch_2")
+    fixture.segments.insert_accepted(
+        _segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW
+    )
+    fixture.reconciler.sweep()
+
+    assert fixture.events.derivation_marker("sg_2", EXTRACTOR_VERSION) is not None
+
+
+def test_a_fresh_reconcilers_first_sweep_always_runs_full(fixture: _Fixture) -> None:
+    """A fresh process start holds no prior signature — it must never mistake that absence
+    for 'nothing changed' and skip its very first pass (this is also what covers an
+    ``EXTRACTOR_VERSION`` bump, which changes derivation markers, not this signature)."""
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+
+    fresh_reconciler = EventDerivationReconciler(service=fixture.service, events=fixture.events, clock=fixture.clock)
+    fresh_reconciler.sweep()
+
+    assert fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION) is not None
+
+
+def test_the_forced_floor_runs_a_full_pass_after_ten_minutes_despite_an_unchanged_signature(
+    fixture: _Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The probe is an optimization only — correctness rests on this floor, so a
+    same-instant rewrite the signature misses is still picked up within one floor period."""
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.reconciler.sweep()  # the first-ever pass — records the signature and the floor instant
+
+    calls = 0
+    real_candidacy = fixture.service.candidacy
+
+    def _counting(*args: object, **kwargs: object) -> Any:
+        nonlocal calls
+        calls += 1
+        return real_candidacy(*args, **kwargs)
+
+    monkeypatch.setattr(fixture.service, "candidacy", _counting)
+
+    fixture.reconciler.sweep()  # unchanged signature, floor not yet due — skipped
+    assert calls == 0
+
+    fixture.clock.advance(timedelta(minutes=10))
+    fixture.reconciler.sweep()  # unchanged signature, but the floor is now due
+    assert calls == 1
