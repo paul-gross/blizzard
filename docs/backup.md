@@ -12,8 +12,8 @@ the volumes resolve to fixed names — `blizzard_hub-data`, `blizzard_postgres-d
 ## What is durable
 
 **The store** is the only irreplaceable state — every chunk, fact, question, graph, and stored transcript segment the
-board reads; always back it up. It is the whole `postgres-data` volume by default, or `data/hub.db` on the `hub-data`
-volume if `BZ_HUB_DB_URL` was moved back to sqlite.
+board reads; always back it up. It is the whole `postgres-data` volume by default, or `data/hub.db` together with its
+`data/hub.db-wal` sidecar (when one exists) on the `hub-data` volume if `BZ_HUB_DB_URL` was moved back to sqlite.
 
 **Signing keys.** `data/auth/signing-keys/` on the `hub-data` volume holds the IdP RSA keypair(s) plus `meta.json`
 (`src/blizzard/hub/auth/signing.py`), populated only once `auth.mode = "oauth"` is configured — back it up from then on.

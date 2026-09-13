@@ -124,6 +124,9 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         # uvicorn closes a pre-bound socket but does not unlink its file; leaving it would
         # make the next start take the stale-corpse path in `Uds.bound` for nothing.
         Uds(config.socket_path).unlink()
+        # Disposed last, once the resume marking's own store write is done (D5): a
+        # gracefully stopped runner is a single-file store again.
+        hosted.engine.dispose()
 
 
 @click.command("tick")

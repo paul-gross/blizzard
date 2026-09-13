@@ -18,6 +18,7 @@ from urllib.parse import quote
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Request, params
 from fastapi.responses import RedirectResponse
+from sqlalchemy import Engine
 
 from blizzard import __version__
 from blizzard.foundation.clock import SystemClock
@@ -303,10 +304,13 @@ def create_app(
 class HostedApp:
     """The ``host`` composition root's return: the served app alongside the restart-resume
     hook, both wired from the one object graph :func:`build_hosted_app` builds (D4) — no
-    caller wires a second engine, store bundle, clock, or process probe to reach either."""
+    caller wires a second engine, store bundle, clock, or process probe to reach either.
+    ``engine`` (D5, disposed by ``host`` on shutdown) is typed ``Engine``: this is a
+    composition root, the one place besides ``runner/composition.py`` allowed to name it."""
 
     app: FastAPI
     resume: ResumeMarking
+    engine: Engine
 
 
 def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None) -> HostedApp:
@@ -314,7 +318,11 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
 
     Engine creation is connection-free, so this stays cheap; the connection is opened
     lazily on the first ``/api/ready`` read. ``events`` (D2) is the process-wide broker
-    ``host`` shares with the loop's ``PeriodicDriver``; absent for every other caller."""
+    ``host`` shares with the loop's ``PeriodicDriver``; absent for every other caller.
+
+    Kept separate from the loop's own engine (``runner/loop/build.py::LoopWiring``, D4):
+    every CLI verb is already its own process on the same store, so sqlite contention is
+    between connections, not engines, and WAL plus ``busy_timeout`` handles that directly."""
     engine = create_engine_from_url(config.db_url)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
@@ -416,7 +424,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         events=events,
     )
     resume = ResumeMarking(runner_stores, SystemClock(), LinuxProcessProbe())
-    return HostedApp(app=app, resume=resume)
+    return HostedApp(app=app, resume=resume, engine=engine)
 
 
 def create_app_for_export() -> FastAPI:

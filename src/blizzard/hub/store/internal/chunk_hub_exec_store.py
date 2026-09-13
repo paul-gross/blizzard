@@ -52,7 +52,7 @@ class ChunkHubExecStore:
         checker can assert at most one live slot and a ``kill -9`` mid-run leaves a
         stale, reclaimable row rather than a wedged fleet)."""
         with self._store.write("acquire_hub_exec_slot") as conn:
-            # Force sqlite's whole-database write lock BEFORE the read-then-insert below,
+            # Force sqlite's single-writer lock BEFORE the read-then-insert below,
             # closing the race a bare SELECT leaves open (see ``next_route_seq``).
             conn.execute(update(s.hub_exec_slot).values(node_id=s.hub_exec_slot.c.node_id))
             live_rows = conn.execute(select(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))).all()

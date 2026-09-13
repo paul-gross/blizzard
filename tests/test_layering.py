@@ -223,6 +223,8 @@ _RUNNER_STORE_SCHEMA_FILE = _RUNNER_STORE_DIR / "schema.py"
 _RUNNER_STORE_ERRORS_FILE = _RUNNER_STORE_DIR / "errors.py"
 _RUNNER_STORE_MIGRATIONS_DIR = _RUNNER_STORE_DIR / "migrations"
 _RUNNER_COMPOSITION_FILE = _RUNNER_DIR / "composition.py"
+_RUNNER_APP_FILE = _RUNNER_DIR / "app.py"
+_RUNNER_LOOP_BUILD_FILE = _RUNNER_DIR / "loop" / "build.py"
 
 # AC3 (blizzard#410, Phases 4-5): every file outside the store's own package that still
 # names ``sqlalchemy`` — each an accepted, individually-justified exception, not the
@@ -230,8 +232,12 @@ _RUNNER_COMPOSITION_FILE = _RUNNER_DIR / "composition.py"
 # a tuple narrows to only those names.
 _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     # Engine only, for DI typing — shared with hub/composition.py, permanently out of
-    # scope (plan's "Out of scope": "Engine in a composition root").
+    # scope (plan's "Out of scope": "Engine in a composition root"). ``app.py`` and
+    # ``loop/build.py`` are composition roots too (each opens its own engine, D4/D5), so
+    # the same exception covers the handles they hand their own callers to dispose.
     _RUNNER_COMPOSITION_FILE: ("Engine",),
+    _RUNNER_APP_FILE: ("Engine",),
+    _RUNNER_LOOP_BUILD_FILE: ("Engine",),
     # IntegrityError only, for the replay-check catch (D6): the collision itself IS the
     # business-logic check, so this one name stays local instead of the table-bound form.
     _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": ("IntegrityError",),

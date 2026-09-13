@@ -315,7 +315,11 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     if readiness.evaluate().ready:
         OrphanedProviders.of(config, services).check()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
-    return create_app(config, readiness=readiness, services=services)
+    app = create_app(config, readiness=readiness, services=services)
+    # `host` disposes this on `app.state` (D5) — carried here rather than widening this
+    # function's return type, which existing direct test call sites depend on.
+    app.state.engine = engine
+    return app
 
 
 @dataclass(frozen=True)
