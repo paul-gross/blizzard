@@ -351,6 +351,32 @@ def test_candidacy_includes_a_segment_whose_content_changed_since_its_marker(tmp
     assert read.candidate_segment_ids == ["sg_1"]
 
 
+def test_candidacy_includes_a_segment_after_a_late_record_lands(tmp_path: Path) -> None:
+    """A late record landing under an already-derived segment (blizzard#513 acceptance
+    criterion 2) — a second record arrives at a new ``turn_range_start`` for a segment
+    id whose earlier record already made it visible and derived."""
+    engine = _migrated_engine(tmp_path)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(
+        _segment_record(turn_range_start=0, turn_range_end=0), byte_count=10, codec="zlib", at=_NOW
+    )
+    store = TranscriptEventStore(hub_store_connections(engine))
+    derived = store.segment_derivation_input("sg_1")
+    assert derived is not None
+    store.replace_segment_events(
+        "sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint=derived.content_fingerprint, at=_NOW
+    )
+    assert store.candidacy(_EXTRACTOR_VERSION).candidate_segment_ids == []
+
+    segments.insert_accepted(
+        _segment_record(turn_range_start=1, turn_range_end=1), byte_count=10, codec="zlib", at=_NOW
+    )
+
+    read = store.candidacy(_EXTRACTOR_VERSION)
+
+    assert read.candidate_segment_ids == ["sg_1"]
+
+
 def test_candidacy_narrows_to_the_given_chunk(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     segments = TranscriptSegmentStore(hub_store_connections(engine))
