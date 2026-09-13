@@ -58,6 +58,17 @@ _INTERNAL_BOOKKEEPING = (
     "internal bookkeeping with no client-facing read surface; no kind in the vocabulary represents it."
 )
 
+#: The three retention prunes' shared reason (Decision 4, issue #520) — each compacts or
+#: trims an append-only lane no client-facing read surface renders row-for-row; the reads
+#: those lanes DO back (`latest_heartbeat`, `last_external_usage_attempt_at`,
+#: `recent_outbound`/`pending_outbound`) answer identically before and after a prune, so
+#: there is nothing for a kind to announce.
+_RETENTION_PRUNE = (
+    "Retention.run (runner/loop/steps.py), every tick (Decision 4, issue #520) — compacts or "
+    "trims an append-only lane with no client-facing read surface rendering it row-for-row; "
+    "the reads it backs answer identically before and after, so no kind announces it."
+)
+
 #: The full census over ``IWriteRunnerStore``'s own-declared members (D5) — keyed by the
 #: method names ``tests/test_runner_write_protocol_census.py`` introspects at runtime.
 WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
@@ -184,6 +195,9 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     # --- liveness/usage/context — the elapsed-time-derived samplers (D7) ------------
     "record_daemon_liveness": Silent(_ELAPSED_TIME_DERIVED + " (the daemon's own tick beat)"),
     "record_heartbeat": Silent(_ELAPSED_TIME_DERIVED + " (a worker's tool-call beat, named explicitly in D7)"),
+    "prune_outbound": Silent(_RETENTION_PRUNE),
+    "prune_heartbeats": Silent(_RETENTION_PRUNE),
+    "prune_external_usage_samples": Silent(_RETENTION_PRUNE),
     "record_usage": Published(
         FACT_CHANGED,
         "UsageRecorder.record_sample (runner/loop/usage.py) — kind='usage.recorded'. D7 names the "

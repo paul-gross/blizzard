@@ -63,10 +63,13 @@ outbound_buffer = Table(
     Column("payload", Text, nullable=False),  # the JSON body posted to the matching hub route
     Column("created_at", UtcDateTime, nullable=False),
     Column("acked_at", UtcDateTime, nullable=True),  # NULL = pending; set when the hub acks the seq
-    # This table never deletes rows (unlike its sibling `transcript_outbound_buffer`), so it
-    # carries no sqlite rowid-reuse hazard on its own — this pragma is here only so a fresh
-    # store's `sqlite_sequence` seed matches a migrated one row-for-row (`bzh:sql-portable`
-    # exemption in blizzard-context:/standards/persistence.md).
+    # Retention (Decision 4, issue #520): an acked row older than `_OUTBOUND_RETENTION_WINDOW`
+    # (store/internal/outbound_store.py) is pruned, but only when its seq is below the lowest
+    # still-pending seq — an acked row interleaved above a pending one always survives, so the
+    # retained buffer stays gapless from the pending floor upward (`GaplessOutboundSeq`). That
+    # prune carries the same sqlite rowid-reuse hazard as its sibling `transcript_outbound_buffer`'s
+    # own pruning, hence the same pragma (`bzh:sql-portable` exemption in
+    # blizzard-context:/standards/persistence.md).
     sqlite_autoincrement=True,
 )
 
@@ -78,6 +81,10 @@ Index("ix_outbound_buffer_acked_at_seq", outbound_buffer.c.acked_at, outbound_bu
 
 # --- Heartbeats (progress detection, machine-local — never leaves the box) ----
 # Append-only: a lease's last heartbeat is ``max(beat_at)`` (``bzh:facts-not-status``).
+# Retention (Decision 4, issue #520): compacted to each lease's newest beat past
+# `_HEARTBEAT_RETENTION_WINDOW` (store/internal/lease_liveness_store.py) — `max(beat_at)` per
+# lease is unchanged by the prune, so `latest_heartbeat` and REAP's staleness probe answer
+# identically before and after.
 
 heartbeats = Table(
     "heartbeats",
@@ -515,6 +522,10 @@ session_preamble_facts = Table(
 # One row per sampling *attempt*: a NULL payload still counts toward the cadence.
 # `slug` joins a row to its declared subscription (blizzard#436) — every pre-slug row is
 # backfilled to the legacy Anthropic slug by the reshape that added the column.
+# Retention (Decision 4, issue #520): compacted to each slug's newest attempt past
+# `_EXTERNAL_USAGE_SAMPLE_RETENTION_WINDOW` (store/internal/usage_store.py) —
+# `max(sampled_at)` per slug is unchanged by the prune, so `last_external_usage_attempt_at`
+# answers identically before and after.
 
 external_usage_samples = Table(
     "external_usage_samples",
@@ -524,6 +535,11 @@ external_usage_samples = Table(
     Column("sampled_at", UtcDateTime, nullable=False),
     Column("payload", Text, nullable=True),  # NULL = this attempt sampled nothing
 )
+
+# `prune_external_usage_samples`'s per-slug newest-attempt lookup (issue #520) reads
+# `max(sampled_at) WHERE slug = ?` — trailing `sampled_at` lets that MAX come off the index
+# alone, mirroring `ix_heartbeats_lease_id_beat_at`.
+Index("ix_external_usage_samples_slug_sampled_at", external_usage_samples.c.slug, external_usage_samples.c.sampled_at)
 
 # --- Live session-context samples (the warn lane) ----------------------------
 # Append-only, one row per successful sample of a running lease's session context.

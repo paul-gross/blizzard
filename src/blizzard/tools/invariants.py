@@ -119,17 +119,27 @@ class UniqueEnvBinding(QueryCheck):
 
 
 class GaplessOutboundSeq(QueryCheck):
-    """A hole in the outbound buffer's seqs would break FIFO idempotent replay."""
+    """A hole in the outbound buffer's retained seqs would break FIFO idempotent replay —
+    scoped to the lowest still-pending seq upward, not every seq ever minted (Decision 4,
+    issue #520): retention prunes an acked row below that floor outright, and an interleaved
+    acked row above it is by construction never pruned, so the retained buffer stays gapless
+    from the floor up. Mirrors `GaplessTranscriptOutboundSeq`'s own scoping for its lane."""
 
     def run(self) -> list[Violation]:
-        seqs = sorted(row[0] for row in self.conn.execute(select(runner.outbound_buffer.c.seq)))
+        floor = self.conn.execute(
+            select(func.min(runner.outbound_buffer.c.seq)).where(runner.outbound_buffer.c.acked_at.is_(None))
+        ).scalar_one()
+        stmt = select(runner.outbound_buffer.c.seq)
+        if floor is not None:
+            stmt = stmt.where(runner.outbound_buffer.c.seq >= floor)
+        seqs = sorted(row[0] for row in self.conn.execute(stmt))
         if not seqs:
             return []
         expected = list(range(seqs[0], seqs[0] + len(seqs)))
         if seqs == expected:
             return []
         missing = sorted(set(expected) - set(seqs))
-        return [Violation("runner:gapless-outbound-seq", f"outbound seqs not gapless; missing {missing}")]
+        return [Violation("runner:gapless-outbound-seq", f"retained outbound seqs not gapless; missing {missing}")]
 
 
 class GaplessTranscriptOutboundSeq(QueryCheck):

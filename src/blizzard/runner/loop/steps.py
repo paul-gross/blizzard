@@ -51,6 +51,7 @@ __all__ = [
     "Reap",
     "Resume",
     "ResumeIntents",
+    "Retention",
     "SpendCeiling",
     "Step",
 ]
@@ -528,6 +529,33 @@ class Advance(Step):
             judgement.run()
 
         # Every other shape keeps its binding and is polled again next tick.
+
+
+class Retention(Step):
+    """Prune the runner store's append-only observation/report lanes (Decision 4, issue
+    #520) — every tick, so none of them grows without bound. Each lane's own store module
+    holds its retention window as a constant beside the prune writer, not a config knob; no
+    reader needs it tuned. Every prune is one transaction, so a crash mid-tick leaves the
+    store exactly as it was before or after, never half pruned."""
+
+    def run(self) -> None:
+        """One prune per lane; a failure pruning one must not skip the others (mirrors
+        ContextSample/ExternalUsageSample's own per-item isolation), and this step gates
+        nothing else in the tick either way."""
+        ctx = self.ctx
+        now = ctx.clock.now()
+        try:
+            ctx.stores.outbound.prune_outbound(now=now)
+        except Exception as exc:  # one lane's prune failure must not skip the others
+            _log.warning("outbound buffer retention failed", detail=str(exc))
+        try:
+            ctx.stores.liveness.prune_heartbeats(now=now)
+        except Exception as exc:
+            _log.warning("heartbeat retention failed", detail=str(exc))
+        try:
+            ctx.stores.usage.prune_external_usage_samples(now=now)
+        except Exception as exc:
+            _log.warning("external usage sample retention failed", detail=str(exc))
 
 
 class ContextSample(Step):

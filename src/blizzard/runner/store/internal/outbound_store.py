@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 
 from blizzard.runner.domain.outbound import BufferedFact, IWriteOutboundRepository, OutboundFactRecord
 from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.store.schema import outbound_buffer
+
+# Retention (Decision 4, issue #520): an acked row survives at least this long, so a hub
+# outage this short never costs `recent_outbound`'s own week of local fact-log history.
+_OUTBOUND_RETENTION_WINDOW = timedelta(days=7)
 
 
 class OutboundStore:
@@ -70,6 +74,23 @@ class OutboundStore:
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
         with self._store.begin() as conn:
             conn.execute(outbound_buffer.update().where(outbound_buffer.c.seq == seq).values(acked_at=acked_at))
+
+    def prune_outbound(self, *, now: datetime) -> int:
+        cutoff = now - _OUTBOUND_RETENTION_WINDOW
+        with self._store.begin() as conn:
+            # The pending floor, read in the SAME transaction as the delete below — a fact
+            # enqueued between the two would otherwise risk being read as "no pending row"
+            # and pruning an acked row that ought to have stayed below it.
+            floor = conn.execute(
+                select(func.min(outbound_buffer.c.seq)).where(outbound_buffer.c.acked_at.is_(None))
+            ).scalar_one()
+            stmt = outbound_buffer.delete().where(
+                and_(outbound_buffer.c.acked_at.is_not(None), outbound_buffer.c.acked_at < cutoff)
+            )
+            if floor is not None:
+                stmt = stmt.where(outbound_buffer.c.seq < floor)
+            result = conn.execute(stmt)
+        return result.rowcount
 
 
 def _conforms_outbound_store(x: OutboundStore) -> IWriteOutboundRepository:

@@ -71,3 +71,10 @@ class IWriteOutboundRepository(IReadOutboundRepository, Protocol):
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
         """Mark a buffered fact delivered — a semantic rejection acks too."""
         ...
+
+    def prune_outbound(self, *, now: datetime) -> int:
+        """Delete acked rows older than the store's own retention window (Decision 4,
+        issue #520), but only below the lowest still-pending seq — an acked row interleaved
+        above a pending one always survives, so the retained buffer stays gapless from the
+        pending floor upward. Returns the number of rows pruned."""
+        ...

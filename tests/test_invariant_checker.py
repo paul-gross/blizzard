@@ -89,6 +89,46 @@ def test_gapped_outbound_seq_is_a_violation(tmp_path: Path) -> None:
     assert "runner:gapless-outbound-seq" in slugs
 
 
+def test_a_pruned_acked_outbound_seq_below_the_pending_floor_is_not_a_violation(tmp_path: Path) -> None:
+    """Retention (Decision 4, issue #520) prunes an acked outbound row below the lowest
+    still-pending seq — the ordinary case after a prune, not a lost record."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.outbound_buffer).values(
+                seq=1, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW, acked_at=_NOW
+            )
+        )
+        # seq 2 is deliberately absent — the acked-and-pruned row it once was.
+        conn.execute(
+            insert(runner.outbound_buffer).values(
+                seq=3, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
+            )
+        )
+    assert RunnerInvariants(engine).run() == []
+
+
+def test_a_hole_at_or_above_the_pending_floor_in_outbound_seq_is_still_a_violation(tmp_path: Path) -> None:
+    """The rescoped check (Decision 4, issue #520) still catches a real hole at or above the
+    pending floor — a seq that never arrived there is the lost-record case the check exists
+    for, whatever retention has already pruned further back."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.outbound_buffer).values(
+                seq=1, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW, acked_at=_NOW
+            )
+        )
+        for seq in (2, 4):  # 3 is missing at/above the pending floor (2)
+            conn.execute(
+                insert(runner.outbound_buffer).values(
+                    seq=seq, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
+                )
+            )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:gapless-outbound-seq" in slugs
+
+
 def test_gapped_transcript_outbound_seq_is_a_violation(tmp_path: Path) -> None:
     """The transcript lane's own gapless-seq check — never `outbound_buffer`'s (D3)."""
     engine = _runner_engine(tmp_path)

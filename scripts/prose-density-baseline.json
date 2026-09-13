@@ -2884,8 +2884,8 @@
   },
   "blizzard/runner/domain/leases/liveness.py": {
    "comments": 0,
-   "docstrings": 28,
-   "total": 73
+   "docstrings": 32,
+   "total": 80
   },
   "blizzard/runner/domain/leases/record.py": {
    "comments": 0,
@@ -2904,8 +2904,8 @@
   },
   "blizzard/runner/domain/outbound.py": {
    "comments": 0,
-   "docstrings": 15,
-   "total": 73
+   "docstrings": 19,
+   "total": 80
   },
   "blizzard/runner/domain/pause.py": {
    "comments": 0,
@@ -2929,8 +2929,8 @@
   },
   "blizzard/runner/domain/usage.py": {
    "comments": 2,
-   "docstrings": 32,
-   "total": 113
+   "docstrings": 37,
+   "total": 121
   },
   "blizzard/runner/environments/__init__.py": {
    "comments": 0,
@@ -3273,14 +3273,14 @@
    "total": 278
   },
   "blizzard/runner/loop/steps.py": {
-   "comments": 62,
-   "docstrings": 121,
-   "total": 693
+   "comments": 63,
+   "docstrings": 129,
+   "total": 721
   },
   "blizzard/runner/loop/tick.py": {
-   "comments": 12,
+   "comments": 16,
    "docstrings": 6,
-   "total": 49
+   "total": 55
   },
   "blizzard/runner/loop/transcript_backfill.py": {
    "comments": 18,
@@ -3413,9 +3413,9 @@
    "total": 66
   },
   "blizzard/runner/store/internal/lease_liveness_store.py": {
-   "comments": 10,
+   "comments": 15,
    "docstrings": 6,
-   "total": 123
+   "total": 144
   },
   "blizzard/runner/store/internal/lease_record_store.py": {
    "comments": 14,
@@ -3433,9 +3433,9 @@
    "total": 138
   },
   "blizzard/runner/store/internal/outbound_store.py": {
-   "comments": 0,
+   "comments": 5,
    "docstrings": 2,
-   "total": 76
+   "total": 97
   },
   "blizzard/runner/store/internal/pause_store.py": {
    "comments": 2,
@@ -3463,9 +3463,9 @@
    "total": 382
   },
   "blizzard/runner/store/internal/usage_store.py": {
-   "comments": 13,
+   "comments": 18,
    "docstrings": 3,
-   "total": 215
+   "total": 241
   },
   "blizzard/runner/store/internal/workspace_prompt_store.py": {
    "comments": 0,
@@ -3667,15 +3667,25 @@
    "docstrings": 6,
    "total": 58
   },
+  "blizzard/runner/store/migrations/versions/20260913_1100_runner_store_indexes.py": {
+   "comments": 8,
+   "docstrings": 8,
+   "total": 80
+  },
+  "blizzard/runner/store/migrations/versions/20260913_1200_runner_store_retention_index.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "total": 39
+  },
   "blizzard/runner/store/migrations/versions/__init__.py": {
    "comments": 0,
    "docstrings": 0,
    "total": 0
   },
   "blizzard/runner/store/schema.py": {
-   "comments": 154,
+   "comments": 198,
    "docstrings": 5,
-   "total": 581
+   "total": 649
   },
   "blizzard/runner/stores.py": {
    "comments": 0,
@@ -3774,8 +3784,8 @@
   },
   "blizzard/tools/invariants.py": {
    "comments": 23,
-   "docstrings": 80,
-   "total": 892
+   "docstrings": 84,
+   "total": 902
   },
   "blizzard/tools/openapi.py": {
    "comments": 0,
@@ -4155,9 +4165,9 @@
    "total": 623
   },
   "runner_event_census.py": {
-   "comments": 18,
+   "comments": 23,
    "docstrings": 10,
-   "total": 234
+   "total": 248
   },
   "runner_fakes.py": {
    "comments": 72,
@@ -5370,9 +5380,9 @@
    "total": 505
   },
   "test_invariant_checker.py": {
-   "comments": 21,
-   "docstrings": 95,
-   "total": 1096
+   "comments": 23,
+   "docstrings": 100,
+   "total": 1136
   },
   "test_is_retryable_push_error.py": {
    "comments": 0,
@@ -5530,9 +5540,9 @@
    "total": 203
   },
   "test_pin_runner_store.py": {
-   "comments": 9,
-   "docstrings": 25,
-   "total": 223
+   "comments": 12,
+   "docstrings": 29,
+   "total": 253
   },
   "test_pin_wire.py": {
    "comments": 3,
@@ -6009,6 +6019,11 @@
    "docstrings": 14,
    "total": 346
   },
+  "test_runner_retention_step.py": {
+   "comments": 14,
+   "docstrings": 15,
+   "total": 142
+  },
   "test_runner_roles.py": {
    "comments": 2,
    "docstrings": 4,
@@ -6045,9 +6060,14 @@
    "total": 224
   },
   "test_runner_store.py": {
-   "comments": 120,
-   "docstrings": 75,
-   "total": 1135
+   "comments": 137,
+   "docstrings": 88,
+   "total": 1286
+  },
+  "test_runner_store_indexes.py": {
+   "comments": 13,
+   "docstrings": 11,
+   "total": 204
   },
   "test_runner_subscription_sampler_factory.py": {
    "comments": 4,
