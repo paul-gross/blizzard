@@ -58,7 +58,9 @@ deletes every `delivery_pr_opened` row but the earliest per (chunk_id, repo) bef
 `downgrade()` only drops the constraint and never restores the rows. That delete removes only true duplicates of a
 forge-deduplicated `pr.opened` fact, but it is unconditional and irreversible — stop the hub, then copy its store file
 (sqlite `hub.db` with any `hub.db-wal` beside it, or the postgres equivalent) before restarting into a wheel carrying
-it; the revision-mismatch guard cannot catch it afterward.
+it; the revision-mismatch guard cannot catch it afterward. Restore the pair as one unit — `hub.db` and its `-wal`
+sidecar together — and remove any `hub.db-wal` already at the destination first, or its stale frames replay over the
+restored file.
 
 ### The `[[work_source]]` rename
 

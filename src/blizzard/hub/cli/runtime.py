@@ -99,7 +99,10 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
 
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
-    server.run()
-    # Disposes the engine `build_hosted_app` carried on `app.state`, once the server
-    # has actually stopped serving and the sweeps have drained (D5).
-    app.state.engine.dispose()
+    try:
+        server.run()
+    finally:
+        # Disposes the engine `build_hosted_app` carried on `app.state`, once the server
+        # has actually stopped serving and the sweeps have drained (D5). In `finally` so
+        # an exception out of `run()` still disposes it rather than leaking `-wal`.
+        app.state.engine.dispose()

@@ -9,9 +9,9 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import httpx
+from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
@@ -69,7 +69,7 @@ class LoopWiring:
         """Read the prompt files now, on the calling thread."""
         return cls(config, config.resolved_workspace_prompt(), config.resolved_runner_prompt(), broker)
 
-    def context(self, hub: IHubClient, *, engine: Any = None) -> LoopContext:
+    def context(self, hub: IHubClient, *, engine: Engine | None = None) -> LoopContext:
         """Wire a :class:`LoopContext`; the caller owns the ``httpx.Client`` behind ``hub``.
 
         Builds its own engine (kept separate from ``host``'s own, D4) unless ``engine`` is
@@ -262,11 +262,12 @@ class PeriodicDriver:
         config = self._wiring.config
         self._client = httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers())
         # Built here, not inside `context()`, so this thread can dispose it on exit (D5) —
-        # a gracefully stopped runner is a single-file store again.
+        # a gracefully stopped runner is a single-file store again. Inside the `try` below,
+        # not before it: a raising `context()` call must still reach `finally`'s dispose.
         engine = create_engine_from_url(config.db_url)
-        ctx = self._wiring.context(HttpHubClient(self._client), engine=engine)
-        _log.info("reconciliation loop started", runner_id=config.runner_id, interval=self._interval)
         try:
+            ctx = self._wiring.context(HttpHubClient(self._client), engine=engine)
+            _log.info("reconciliation loop started", runner_id=config.runner_id, interval=self._interval)
             while not self._stop.is_set():
                 try:
                     tick(ctx)

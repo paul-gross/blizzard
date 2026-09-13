@@ -13,12 +13,12 @@ import time
 from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Request, params
 from fastapi.responses import RedirectResponse
+from sqlalchemy import Engine
 
 from blizzard import __version__
 from blizzard.foundation.clock import SystemClock
@@ -305,12 +305,12 @@ class HostedApp:
     """The ``host`` composition root's return: the served app alongside the restart-resume
     hook, both wired from the one object graph :func:`build_hosted_app` builds (D4) — no
     caller wires a second engine, store bundle, clock, or process probe to reach either.
-    ``engine`` (D5, disposed by ``host`` on shutdown) is typed ``Any``: this module stays
-    outside the sqlalchemy seam, and disposal is all this handle is ever used for."""
+    ``engine`` (D5, disposed by ``host`` on shutdown) is typed ``Engine``: this is a
+    composition root, the one place besides ``runner/composition.py`` allowed to name it."""
 
     app: FastAPI
     resume: ResumeMarking
-    engine: Any
+    engine: Engine
 
 
 def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None) -> HostedApp:
