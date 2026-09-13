@@ -18,7 +18,6 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import UsageTotal
 from blizzard.wire.fleet import FleetSpendView
 
 router = APIRouter(prefix="/api", tags=["spend"], dependencies=[Depends(reject_runner_principal)])
@@ -57,7 +56,7 @@ def fleet_spend(
     over every usage fact recorded at or after it, across every chunk. An optional
     ``until`` bounds the window's other edge, exclusive."""
     window = SpendWindow.of(since, until)
-    usage = UsageTotal.of(services.chunks.usage.usage_since(window.since, until=window.until))
+    usage = services.chunks.usage.usage_total_since(window.since, until=window.until)
     return FleetSpendView(
         since=since,
         until=until,

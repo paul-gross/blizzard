@@ -355,3 +355,10 @@ def test_spend_reconciles_with_usage_total_and_the_fleet_spend_route(tmp_path: P
     assert summed_cache_create == domain_total.cache_create_tokens == fleet_spend["cache_create_tokens"]
     assert summed_cost == pytest.approx(domain_total.cost_usd) == pytest.approx(fleet_spend["cost_usd"])
     assert summed_partial == domain_total.cost_partial == fleet_spend["cost_partial"] is True
+
+    # blizzard#517: an empty window folds to zeros, never a fabricated PARTIAL.
+    empty_since = (hub.clock.now() + timedelta(days=1)).isoformat()
+    empty_spend = hub.client.get("/api/spend", params={"since": empty_since}, headers=_cookie(token)).json()
+    assert empty_spend["input_tokens"] == 0
+    assert empty_spend["cost_usd"] == 0
+    assert empty_spend["cost_partial"] is False
