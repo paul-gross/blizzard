@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import signal
+import types
 from functools import partial
 from pathlib import Path
 
@@ -83,7 +85,21 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     with click_exception_on(ConfigError):
         app = build_hosted_app(config)
     click.echo(f"serving blizzard-hub on {config.host}:{config.port}")
-    build_early_shutdown_server(app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown).run()
+    server = build_early_shutdown_server(app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown)
+
+    # uvicorn's own signal handling restores whatever handler was registered before its
+    # `capture_signals()` window and re-raises the caught signal through it once `run()`'s
+    # internal shutdown completes (see uvicorn.Server._capture_signals). Left at the
+    # Python default, that re-raise terminates the process outright — skipping every line
+    # after `run()`, `dispose()` (D5) included. Pre-installing a handler here, mirroring
+    # the runner's `host` (`runner/cli/runtime.py`), makes the re-raise a no-op signal
+    # delivery instead, so `run()` actually returns and disposal below runs.
+    def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
+        server.handle_exit(signum, frame)
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+    server.run()
     # Disposes the engine `build_hosted_app` carried on `app.state`, once the server
     # has actually stopped serving and the sweeps have drained (D5).
     app.state.engine.dispose()
