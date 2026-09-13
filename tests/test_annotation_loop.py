@@ -9,6 +9,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.hub.app import Sweep, _lifespan
 from blizzard.hub.config import HubConfig
@@ -132,7 +133,8 @@ class _FakeApp:
 
 async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_path: Path) -> None:
     """blizzard#254 D1: no work source opts a chunk's transcript events into anything —
-    the sweep is yielded and started regardless."""
+    the sweep is yielded and started regardless. Its jitter never delays this first pass
+    (blizzard#524 D8), so no jitter override is needed here."""
     event_derivation = _CountingReconciler()
     services = _FakeServices(work_sources=_FakeWorkSources())
     services.event_derivation = event_derivation
@@ -172,3 +174,105 @@ async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Pa
         await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
 
     assert close_drain.calls == 1
+
+
+# --------------------------------------------------------------------------- #
+# jitter, elapsed-time logging, and overrun warning (blizzard#524 D8)
+
+
+async def test_the_first_pass_runs_immediately_even_with_a_large_jitter() -> None:
+    """A freshly booted or crash-recovered process must not wait out a sweep's own
+    jitter before its first, convergence-critical pass (blizzard#524 D8) — only its
+    second pass onward is offset."""
+    reconciler = _CountingReconciler()
+    shutdown = asyncio.Event()
+
+    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test", jitter_seconds=3600).run())
+    await asyncio.sleep(0.05)
+    assert reconciler.calls == 1  # the first pass never waits out the jitter
+
+    shutdown.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    assert reconciler.calls == 1  # shutdown fired before the post-first-pass jitter elapsed
+
+
+async def test_shutdown_during_the_post_first_pass_jitter_returns_promptly() -> None:
+    reconciler = _CountingReconciler()
+    shutdown = asyncio.Event()
+
+    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test", jitter_seconds=3600).run())
+    await asyncio.sleep(0.05)  # let the immediate first pass land
+    shutdown.set()
+
+    await asyncio.wait_for(task, timeout=1.0)  # returns almost immediately, not after the 3600s jitter
+
+
+async def test_elapsed_time_is_logged_every_pass() -> None:
+    reconciler = _CountingReconciler()
+    shutdown = asyncio.Event()
+    ticks = iter([100.0, 100.25, 200.0, 200.1])  # (start, end) pairs for two passes
+
+    async def _stop_once_two_sweeps_land() -> None:
+        while reconciler.calls < 2:
+            await asyncio.sleep(0)
+        shutdown.set()
+
+    with capture_logs() as logs:
+        await asyncio.wait_for(
+            asyncio.gather(
+                Sweep(reconciler, 0, shutdown, "test", timer=lambda: next(ticks)).run(),
+                _stop_once_two_sweeps_land(),
+            ),
+            timeout=2.0,
+        )
+
+    completed = [entry for entry in logs if entry["event"] == "sweep pass completed"]
+    assert len(completed) >= 2
+    assert all("elapsed_seconds" in entry for entry in completed)
+
+
+async def test_a_pass_exceeding_its_interval_logs_a_warning_naming_the_sweep() -> None:
+    reconciler = _CountingReconciler()
+    shutdown = asyncio.Event()
+    ticks = iter([0.0, 10.0])  # a single 10s pass against a 1s interval — an overrun
+
+    async def _stop_once_one_sweep_lands() -> None:
+        while reconciler.calls < 1:
+            await asyncio.sleep(0)
+        shutdown.set()
+
+    with capture_logs() as logs:
+        await asyncio.wait_for(
+            asyncio.gather(
+                Sweep(reconciler, 1, shutdown, "sweep-under-test", timer=lambda: next(ticks)).run(),
+                _stop_once_one_sweep_lands(),
+            ),
+            timeout=2.0,
+        )
+
+    warnings = [entry for entry in logs if entry["log_level"] == "warning"]
+    assert len(warnings) == 1
+    assert warnings[0]["event"] == "sweep pass exceeded its own interval"
+    assert warnings[0]["sweep"] == "sweep-under-test"
+
+
+async def test_a_pass_within_its_interval_logs_no_overrun_warning() -> None:
+    reconciler = _CountingReconciler()
+    shutdown = asyncio.Event()
+    ticks = iter([0.0, 0.1])  # well inside a 60s interval
+
+    async def _stop_once_one_sweep_lands() -> None:
+        while reconciler.calls < 1:
+            await asyncio.sleep(0)
+        shutdown.set()
+
+    with capture_logs() as logs:
+        await asyncio.wait_for(
+            asyncio.gather(
+                Sweep(reconciler, 60, shutdown, "test", timer=lambda: next(ticks)).run(),
+                _stop_once_one_sweep_lands(),
+            ),
+            timeout=2.0,
+        )
+
+    assert not [entry for entry in logs if entry["log_level"] == "warning"]

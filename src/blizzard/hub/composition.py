@@ -344,7 +344,7 @@ def build_services(
     event_derivation_service = EventDerivationService(
         events=event_store, facts=chunk_facts, record=chunk_record, clock=clock
     )
-    event_derivation = EventDerivationReconciler(service=event_derivation_service, events=event_store)
+    event_derivation = EventDerivationReconciler(service=event_derivation_service, events=event_store, clock=clock)
     analytics_event_queries = AnalyticsEventQueryStore(store_connections)
     operational_analytics = AnalyticsOperationalStore(store_connections)
     marker_authority = MarkerAuthority()

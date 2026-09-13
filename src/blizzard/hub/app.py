@@ -10,8 +10,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import random
 import threading
-from collections.abc import AsyncIterator, Iterator
+import time
+from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -80,17 +82,16 @@ ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
 DEFAULT_FORGE_BASE_BRANCH = "main"
 
 #: The transcript-event derivation sweep's own interval (blizzard#254 D1) — a module
-#: constant, not an operator config key, in this slice.
-EVENT_DERIVATION_INTERVAL_SECONDS = 30
+#: constant; its own change probe (blizzard#524 D5) skips the pass when nothing changed.
+EVENT_DERIVATION_INTERVAL_SECONDS = 60
 
-#: The delivery-materialization sweep's own interval (blizzard#366 D9) — unconditional,
-#: like the event-derivation sweep, so it earns its own dedicated constant rather than
-#: sharing the work-source-gated ``annotation_interval_seconds``.
-WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS = 30
+#: The delivery-materialization sweep's own interval (blizzard#366 D9) — always started,
+#: not yet gated by a change probe of its own, so every pass today runs in full.
+WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS = 60
 
-#: The close-intent drain sweep's own interval — unconditional like its two siblings
-#: above, so it runs whether or not any source is close-capable today.
-CLOSE_DRAIN_INTERVAL_SECONDS = 30
+#: The close-intent drain sweep's own interval — always started like its two siblings
+#: above; not yet gated by a change probe of its own, so every pass today runs in full.
+CLOSE_DRAIN_INTERVAL_SECONDS = 60
 
 
 class _Sweepable(Protocol):
@@ -102,51 +103,92 @@ class _Sweepable(Protocol):
 
 @dataclass(frozen=True)
 class Sweep:
-    """One reconciler stepped once per interval until shutdown (``bzh:steppable-loop``)."""
+    """One reconciler stepped once per interval until shutdown (``bzh:steppable-loop``).
+    The first pass runs immediately, unjittered; ``jitter_seconds`` offsets only the
+    second pass, so sibling sweeps synchronize once at boot then decorrelate for good
+    (blizzard#524 D8). ``timer`` is the injectable monotonic clock ``run`` measures each pass's elapsed time with."""
 
     reconciler: _Sweepable
     interval_seconds: int
     shutdown: asyncio.Event
     logger_name: str
+    jitter_seconds: float | None = None
+    timer: Callable[[], float] = time.monotonic
 
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
         """The forge-status sweep a work source opts into, plus the always-on
         event-derivation, delivery-materialization, and close-drain sweeps — none on the
-        store-free app."""
+        store-free app. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
+        here (blizzard#524 D8) so their recurring cadence decorrelates from its second pass
+        on."""
         services: HubServices | None = app.state.services
         if services is None:
             return
         interval = app.state.config.annotation_interval_seconds
         if services.work_sources.annotating_names():
             annotator = AnnotationReconciler(work_refs=services.chunks.work_refs, work_sources=services.work_sources)
-            yield cls(annotator, interval, app.state.shutdown, "blizzard.hub.forge_status")
+            yield cls(
+                annotator,
+                interval,
+                app.state.shutdown,
+                "blizzard.hub.forge_status",
+                jitter_seconds=random.uniform(0, interval),
+            )
         yield cls(
             services.event_derivation,
             EVENT_DERIVATION_INTERVAL_SECONDS,
             app.state.shutdown,
             "blizzard.hub.transcript_events",
+            jitter_seconds=random.uniform(0, EVENT_DERIVATION_INTERVAL_SECONDS),
         )
         yield cls(
             services.work_item_materialization,
             WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS,
             app.state.shutdown,
             "blizzard.hub.work_item_materialization",
+            jitter_seconds=random.uniform(0, WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS),
         )
-        yield cls(services.close_drain, CLOSE_DRAIN_INTERVAL_SECONDS, app.state.shutdown, "blizzard.hub.work_closure")
+        yield cls(
+            services.close_drain,
+            CLOSE_DRAIN_INTERVAL_SECONDS,
+            app.state.shutdown,
+            "blizzard.hub.work_closure",
+            jitter_seconds=random.uniform(0, CLOSE_DRAIN_INTERVAL_SECONDS),
+        )
+
+    async def _wait(self, timeout: float) -> None:
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(self.shutdown.wait(), timeout=timeout)
 
     async def run(self) -> None:
-        """Call ``sweep()``, then wait out the interval. Races ``shutdown`` so it wakes
-        immediately instead of holding a graceful drain. A sweep that raises is logged and
-        swallowed — a bad tick must never kill the loop, only skip a cycle."""
+        """Call ``sweep()`` immediately, then after ``jitter_seconds`` (default: plain
+        ``interval_seconds``), then every ``interval_seconds`` after that, until shutdown.
+        Every wait races ``shutdown``. A sweep that raises is logged and swallowed — a bad
+        tick skips a cycle, never kills the loop. Every pass logs its elapsed time; an
+        overrun logs a warning naming this sweep."""
         log = get_logger(self.logger_name)
+        first = True
         while not self.shutdown.is_set():
+            started = self.timer()
             try:
                 await asyncio.to_thread(self.reconciler.sweep)
             except Exception:
                 log.exception("sweep failed")
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(self.shutdown.wait(), timeout=self.interval_seconds)
+            elapsed = self.timer() - started
+            log.info("sweep pass completed", elapsed_seconds=elapsed)
+            if elapsed > self.interval_seconds:
+                log.warning(
+                    "sweep pass exceeded its own interval",
+                    sweep=self.logger_name,
+                    elapsed_seconds=elapsed,
+                    interval_seconds=self.interval_seconds,
+                )
+            if first and self.jitter_seconds is not None:
+                await self._wait(self.jitter_seconds)
+            else:
+                await self._wait(self.interval_seconds)
+            first = False
 
 
 @contextlib.asynccontextmanager

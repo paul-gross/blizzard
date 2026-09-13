@@ -636,6 +636,19 @@ close_intents = Table(
     UniqueConstraint("chunk_id", "source", "ref", name="uq_close_intents_chunk_source_ref"),
 )
 
+# --- Close-intent drain attempts (close_intent_attempts, blizzard#524 D7) ------------
+# Append-only (`bzh:facts-not-status`): a terminal outcome retires the intent instead of writing a row here.
+
+close_intent_attempts = Table(
+    "close_intent_attempts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("intent_id", Integer, ForeignKey("close_intents.id"), nullable=False),
+    Column("attempted_at", UtcDateTime, nullable=False),
+    Column("outcome", String, nullable=False),  # skipped | failed
+)
+Index("ix_close_intent_attempts_intent_id", close_intent_attempts.c.intent_id)
+
 # --- Delivery kick-backs (chunk_bounces — #64) --------------------------------
 # Contention, not failure: consumes no node retry, natural-keyed ``(chunk_id, epoch)``.
 
@@ -1179,6 +1192,9 @@ transcript_segments = Table(
     Column("supersedes", String, nullable=True),
     # Hub-stamped receipt instant — the D3 rolling 24h window anchors here, never on the runner's.
     Column("received_at", UtcDateTime, nullable=False),
+    # A per-record fingerprint of `(turn_range_start, rejected, content)` (blizzard#513 D1),
+    # so a bulk candidacy read detects a content change without reading `content` at all.
+    Column("content_digest", String, nullable=False),
     UniqueConstraint("segment_id", "turn_range_start", name="uq_transcript_segments_segment_turn_start"),
 )
 

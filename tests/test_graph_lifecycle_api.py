@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
-from tests.support import build_hub
+from tests.support import build_hub, count_queries
 
 pytestmark = pytest.mark.component
 
@@ -202,3 +202,25 @@ def test_retiring_every_version_of_the_default_graph_survives_a_restart(tmp_path
     resp = restarted.client.post("/api/chunks", json={"tokens": ["default:1"]})
     assert resp.status_code == 503, resp.text
     assert doc.name in resp.json()["detail"]
+
+
+def test_ensure_default_disambiguates_a_retirement_with_a_cheap_existence_probe_not_a_full_listing(
+    tmp_path: Path,
+) -> None:
+    """blizzard#524 D6: the old disambiguation called ``list_all()``, fully reifying
+    every graph for a question that is really "does any graph of this name exist".
+    ``any_minted`` answers it in one statement, independent of graph count."""
+    hub = build_hub(tmp_path)
+    for i in range(10):
+        _mint(hub, _GRAPH_A.replace("name: alpha", f"name: other-{i}"))
+    doc = hub.services.default_graph_doc
+    graph = hub.services.graph_mint.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
+    hub.services.graph_lifecycle.retire(graph, by="operator")
+
+    def _retry() -> None:
+        with pytest.raises(DefaultGraphRetired):
+            hub.services.graph_mint.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
+
+    # get_enabled_by_name's row fetch (1) + its one retired-graph's own is_retired check
+    # (1) + any_minted (1) — flat, never a query per other graph the hub holds.
+    assert count_queries(hub.engine, _retry) == 3

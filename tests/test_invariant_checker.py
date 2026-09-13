@@ -888,6 +888,7 @@ def _segment_values(**overrides: object) -> dict[str, object]:
         "byte_count": 10,
         "codec": "zlib",
         "content": b"",
+        "content_digest": "dg_test",  # this suite inserts the raw row directly, bypassing the adapter that derives it
         "normalizer_version": "claude-code-jsonl/2",
         "received_at": _NOW,
     }

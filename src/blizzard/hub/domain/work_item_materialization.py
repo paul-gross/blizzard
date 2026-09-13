@@ -14,7 +14,7 @@ import json
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
-from blizzard.hub.domain.graph import GraphDoc
+from blizzard.hub.domain.graph import Graph, GraphDoc
 from blizzard.hub.domain.graph_authoring import GraphMintService
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.proposals import WorkItemProposalRow
@@ -61,14 +61,25 @@ class WorkItemMaterializationReconciler:
 
     def sweep(self) -> None:
         """One complete reconciliation pass over every not-yet-judged proposal of a
-        delivered chunk. A proposal whose own ``data`` fails to parse or is missing a
-        field it needs is recorded unresolved rather than raised, so one malformed row
-        never wedges every proposal behind it (``bzh:crash-exemptions-hub`` §The
-        delivery-materialization sweep). One aggregate INFO summary per pass
+        delivered chunk. An empty candidate set ends the pass immediately (blizzard#524
+        D6) — no default-graph resolution, which the loop below would otherwise repeat
+        for nothing on every steady-state tick. A proposal whose own ``data`` fails to
+        parse or is missing a field it needs is recorded unresolved rather than raised, so
+        one malformed row never wedges every proposal behind it (``bzh:crash-exemptions-hub``
+        §The delivery-materialization sweep). One aggregate INFO summary per pass
         (``bzh:structlog-logging``)."""
+        proposals = self._delivery.unmaterialized_proposals()
+        if not proposals:
+            _log.info("work item materialization sweep completed", created=0, updated=0, unresolved=0, deferred=0)
+            return
+        # Resolved once per pass (blizzard#524 D6), not once per create-kind proposal —
+        # invariant across one pass, since nothing inside the loop mints or retires a graph.
+        default_graph = self._graph_mint.ensure_default_or_none(
+            self._default_graph_doc, definition_yaml=self._default_graph_yaml
+        )
         created = updated = unresolved = deferred = 0
-        for row in self._delivery.unmaterialized_proposals():
-            outcome = self._materialize_one(row)
+        for row in proposals:
+            outcome = self._materialize_one(row, default_graph)
             if outcome is WorkItemMaterializationOutcome.CREATED:
                 created += 1
             elif outcome is WorkItemMaterializationOutcome.UPDATED:
@@ -85,29 +96,32 @@ class WorkItemMaterializationReconciler:
             deferred=deferred,
         )
 
-    def _materialize_one(self, row: WorkItemProposalRow) -> WorkItemMaterializationOutcome | None:
+    def _materialize_one(
+        self, row: WorkItemProposalRow, default_graph: Graph | None
+    ) -> WorkItemMaterializationOutcome | None:
         try:
             data = json.loads(row.data)
             if row.kind == "create":
-                return self._materialize_create(row, data)
+                return self._materialize_create(row, data, default_graph)
             return self._materialize_update(row, data)
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             _log.warning("work item proposal has malformed data", proposal_id=row.proposal_id, error=str(exc))
             return self._record_unresolved(row.proposal_id, pointer=None, reason=f"malformed proposal data: {exc}")
 
-    def _materialize_create(self, row: WorkItemProposalRow, data: dict) -> WorkItemMaterializationOutcome | None:
+    def _materialize_create(
+        self, row: WorkItemProposalRow, data: dict, default_graph: Graph | None
+    ) -> WorkItemMaterializationOutcome | None:
         """D7: always the reserved hub source. ``None`` means a transient failure — the
-        default graph was retired mid-mint, or an out-of-band ingest pre-empted the
-        allocated ref — left unjudged for the next pass, not recorded terminal."""
+        default graph was retired (resolved once for the whole pass, blizzard#524 D6), or
+        an out-of-band ingest pre-empted the allocated ref — left unjudged for the next
+        pass, not recorded terminal."""
         if row.runner_id is None:
             return self._record_unresolved(
                 row.proposal_id, pointer=None, reason="no proposing runner recorded for this proposal"
             )
-        graph = self._graph_mint.ensure_default_or_none(
-            self._default_graph_doc, definition_yaml=self._default_graph_yaml
-        )
-        if graph is None:
+        if default_graph is None:
             return None
+        graph = default_graph
         author = WorkItemAuthor.fleet(runner_id=row.runner_id, chunk_id=row.chunk_id, node_name=row.node_name)
         try:
             minted = self._edits.materialize_create(

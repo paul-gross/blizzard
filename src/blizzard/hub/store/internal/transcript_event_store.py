@@ -8,16 +8,19 @@ engine and schema module is established, not a coupling between them. All
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import zlib
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Delete, Insert, Select, insert, select
+from sqlalchemy import Delete, Insert, Select, func, insert, select
 
 from blizzard.hub.domain.analytics.events import (
+    CandidacyRead,
     DerivationMarker,
+    DerivationSignature,
     IWriteTranscriptEvents,
     SegmentDerivationInput,
     TranscriptEvent,
@@ -28,6 +31,10 @@ from blizzard.wire.transcript_segment import TurnSegmentView
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
+
+#: `drop_segments`'s own batch size — an unbounded `IN (...)` over a mass, simultaneous
+#: visibility loss has no ceiling; this bounds each DELETE regardless of stale-set size.
+_DROP_SEGMENTS_BATCH_SIZE = 1000
 
 
 def _minted_chunk_ids_subselect() -> Select[Any]:
@@ -53,6 +60,43 @@ def _visible_segment_ids_stmt(chunk_id: str | None = None) -> Select[Any]:
 
 def _derived_segment_ids_stmt() -> Select[Any]:
     return select(s.transcript_event_derivations.c.segment_id).distinct()
+
+
+def _candidacy_digests_stmt(chunk_id: str | None = None) -> Select[Any]:
+    """One row per visible segment's own stored ``content_digest`` alone (blizzard#513
+    D2), joined against the visibility subselect so this read IS the pass's one
+    visibility evaluation, at a constant statement count. No ``content`` column named —
+    the candidacy read's whole point, that it never touches a content byte.
+    Ordered so each segment's digests arrive in range order for the fingerprint fold."""
+    return (
+        select(
+            s.transcript_segments.c.segment_id,
+            s.transcript_segments.c.turn_range_start,
+            s.transcript_segments.c.content_digest,
+        )
+        .where(s.transcript_segments.c.segment_id.in_(_visible_segment_ids_stmt(chunk_id)))
+        .order_by(s.transcript_segments.c.segment_id, s.transcript_segments.c.turn_range_start)
+    )
+
+
+def _derivation_signature_stmt() -> Select[Any]:
+    """The change probe's one cheap aggregate read (blizzard#524 D5): row count, max
+    ``id``, and max ``received_at`` over ``transcript_segments``, plus the ``chunks`` row
+    count as a scalar subquery, so the whole probe is one statement. No per-row read: a
+    fixed number of aggregates regardless of corpus size."""
+    chunk_count = select(func.count()).select_from(s.chunks).scalar_subquery()
+    return select(
+        func.count(s.transcript_segments.c.id).label("segment_count"),
+        func.max(s.transcript_segments.c.id).label("max_segment_id"),
+        func.max(s.transcript_segments.c.received_at).label("max_received_at"),
+        chunk_count.label("chunk_count"),
+    )
+
+
+def _current_markers_stmt(extractor_version: str) -> Select[Any]:
+    return select(
+        s.transcript_event_derivations.c.segment_id, s.transcript_event_derivations.c.content_fingerprint
+    ).where(s.transcript_event_derivations.c.extractor_version == extractor_version)
 
 
 def _segment_records_stmt(segment_id: str) -> Select[Any]:
@@ -129,28 +173,29 @@ def _upsert_marker_stmt(
     )
 
 
-def _delete_all_events_for_segment_stmt(segment_id: str) -> Delete:
-    return s.transcript_events.delete().where(s.transcript_events.c.segment_id == segment_id)
+def _delete_all_events_for_segments_stmt(segment_ids: Collection[str]) -> Delete:
+    return s.transcript_events.delete().where(s.transcript_events.c.segment_id.in_(segment_ids))
 
 
-def _delete_all_markers_for_segment_stmt(segment_id: str) -> Delete:
-    return s.transcript_event_derivations.delete().where(s.transcript_event_derivations.c.segment_id == segment_id)
+def _delete_all_markers_for_segments_stmt(segment_ids: Collection[str]) -> Delete:
+    return s.transcript_event_derivations.delete().where(s.transcript_event_derivations.c.segment_id.in_(segment_ids))
+
+
+def _fingerprint_from_digests(digests: Sequence[str]) -> str:
+    digest = hashlib.sha256()
+    for d in digests:
+        digest.update(d.encode("ascii"))
+        digest.update(b"\x01")
+    return digest.hexdigest()
 
 
 def content_fingerprint(records: Sequence[Any]) -> str:
-    """A deterministic fingerprint of a segment's stored content — every record's
-    ``(turn_range_start, rejected, content)`` in range order — so the derivation marker
-    can tell a later re-adjudication (a rejected record accepted, a late record landing)
-    from an unchanged segment (D6)."""
-    digest = hashlib.sha256()
-    for row in records:
-        digest.update(str(row.turn_range_start).encode("utf-8"))
-        digest.update(b"\x00")
-        digest.update(b"1" if row.rejected else b"0")
-        digest.update(b"\x00")
-        digest.update(row.content or b"")
-        digest.update(b"\x01")
-    return digest.hexdigest()
+    """A deterministic fingerprint of a segment's stored content — every record's own
+    ``content_digest`` (blizzard#513 D1), in range order — so the derivation marker can
+    tell a later re-adjudication (a rejected record accepted, a late record landing) from
+    an unchanged segment (D6). Rebased onto the persisted per-record digest rather than
+    raw content: recomputing it never reads a content byte."""
+    return _fingerprint_from_digests([row.content_digest for row in records])
 
 
 def _decode_turns(records: Sequence[Any]) -> list[TurnSegmentView]:
@@ -184,6 +229,32 @@ class TranscriptEventStore:
         with self._store.read("derived_segment_ids") as conn:
             rows = conn.execute(_derived_segment_ids_stmt()).all()
         return frozenset(row.segment_id for row in rows)
+
+    def candidacy(self, extractor_version: str, *, chunk_id: str | None = None) -> CandidacyRead:
+        with self._store.read("candidacy") as conn:
+            digest_rows = conn.execute(_candidacy_digests_stmt(chunk_id)).all()
+            markers = {
+                row.segment_id: row.content_fingerprint
+                for row in conn.execute(_current_markers_stmt(extractor_version))
+            }
+        visible_segment_ids: set[str] = set()
+        candidates: list[str] = []
+        for segment_id, rows in itertools.groupby(digest_rows, key=lambda r: r.segment_id):
+            visible_segment_ids.add(segment_id)
+            fingerprint = _fingerprint_from_digests([row.content_digest for row in rows])
+            if markers.get(segment_id) != fingerprint:
+                candidates.append(segment_id)
+        return CandidacyRead(visible_segment_ids=frozenset(visible_segment_ids), candidate_segment_ids=candidates)
+
+    def derivation_signature(self) -> DerivationSignature:
+        with self._store.read("derivation_signature") as conn:
+            row = conn.execute(_derivation_signature_stmt()).one()
+        return DerivationSignature(
+            segment_count=row.segment_count,
+            max_segment_id=row.max_segment_id,
+            max_received_at=row.max_received_at,
+            chunk_count=row.chunk_count,
+        )
 
     def segment_derivation_input(self, segment_id: str) -> SegmentDerivationInput | None:
         with self._store.read("segment_derivation_input") as conn:
@@ -245,10 +316,13 @@ class TranscriptEventStore:
                 )
             )
 
-    def drop_segment(self, segment_id: str) -> None:
-        with self._store.write("drop_segment") as conn:
-            conn.execute(_delete_all_events_for_segment_stmt(segment_id))
-            conn.execute(_delete_all_markers_for_segment_stmt(segment_id))
+    def drop_segments(self, segment_ids: frozenset[str]) -> None:
+        if not segment_ids:
+            return
+        with self._store.write("drop_segments") as conn:
+            for batch in itertools.batched(segment_ids, _DROP_SEGMENTS_BATCH_SIZE):
+                conn.execute(_delete_all_events_for_segments_stmt(batch))
+                conn.execute(_delete_all_markers_for_segments_stmt(batch))
 
 
 def _conforms_transcript_event_store(x: TranscriptEventStore) -> IWriteTranscriptEvents:

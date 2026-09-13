@@ -32,6 +32,7 @@ from tests.support import (
     HubHarness,
     build_hub,
     chunk_stores,
+    count_queries,
     hub_store_connections,
     migrate_to,
     seed_chunk,
@@ -414,6 +415,41 @@ def test_candidate_read_excludes_an_already_judged_proposal(tmp_path: Path) -> N
     )
 
     assert chunks.delivery.unmaterialized_proposals() == []
+
+
+def test_candidate_read_issues_one_statement_regardless_of_how_many_proposals_are_already_judged(
+    tmp_path: Path,
+) -> None:
+    """blizzard#524 D6: every exclusion (delivered, ephemeral, judged, struck) is pushed
+    into the one SQL statement as a subquery, so a backlog of already-judged proposals
+    never costs the read a re-fetch-and-re-filter pass in Python."""
+    hub = build_hub(tmp_path)
+    chunks = chunk_stores(hub.engine, hub.clock)
+
+    def _deliver_and_judge(n: int) -> None:
+        chunk = mint_chunk([], graph_id="gr_x", at=_T0)
+        chunks.record.mint(chunk)
+        chunks.movement.record_transition(
+            transition_id=f"tr_judged_{n}",
+            chunk_id=chunk.chunk_id,
+            from_node_id="nd_1",
+            to_node_id="done",
+            choice_name="pass",
+            epoch=1,
+            runner_id="r1",
+            at=_T0,
+            artifacts=[],
+            proposals=[_proposal_row(chunk.chunk_id, f"wip_judged_{n}")],
+        )
+        chunks.delivery.record_work_item_materialization(
+            f"wip_judged_{n}", outcome=WorkItemMaterializationOutcome.UNRESOLVED, pointer=None, reason="x", at=_T0
+        )
+
+    for n in range(25):
+        _deliver_and_judge(n)
+
+    count = count_queries(hub.engine, chunks.delivery.unmaterialized_proposals)
+    assert count == 1
 
 
 # --- D8's two composite writes: all-or-nothing, idempotent per proposal_id ----

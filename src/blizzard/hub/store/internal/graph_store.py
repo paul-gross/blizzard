@@ -319,6 +319,10 @@ class GraphStore:
             rows = conn.execute(select(graphs).order_by(graphs.c.created_at.desc())).all()
             return [self._reify(conn, row) for row in rows]
 
+    def any_minted(self, name: str) -> bool:
+        with self._store.read("any_minted") as conn:
+            return conn.execute(select(graphs.c.graph_id).where(graphs.c.name == name).limit(1)).first() is not None
+
     def is_retired(self, graph_id: str) -> bool:
         with self._store.read("is_retired") as conn:
             return self._is_retired(conn, graph_id)

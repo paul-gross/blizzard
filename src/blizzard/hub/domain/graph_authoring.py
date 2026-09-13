@@ -210,12 +210,14 @@ class GraphMintService:
         """Mint the configured default graph if no graph of its name has ever existed.
 
         Idempotent by name. A ``None`` from ``get_enabled_by_name`` is ambiguous, so
-        :meth:`list_all` disambiguates (issue #101) — pinned by
+        :meth:`~blizzard.hub.domain.graph.IReadGraphRepository.any_minted` disambiguates
+        (issue #101) — a cheap existence probe, not the full :meth:`list_all` reification
+        this used to call just to check membership by name (blizzard#524 D6) — pinned by
         tests/test_graph_lifecycle_api.py::test_retiring_every_version_of_the_default_graph_survives_a_restart"""
         existing = self._graphs.get_enabled_by_name(doc.name)
         if existing is not None:
             return existing
-        if any(g.name == doc.name for g in self._graphs.list_all()):
+        if self._graphs.any_minted(doc.name):
             raise DefaultGraphRetired(doc.name)
         graph, _ = self.mint(doc, definition_yaml=definition_yaml)
         return graph

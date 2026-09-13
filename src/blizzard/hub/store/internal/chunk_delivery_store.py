@@ -12,18 +12,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, insert, select, update
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import PendingCloseIntent, WorkItemCloseOutcome, WorkItemMaterializationOutcome, WorkRef
+from blizzard.hub.domain.work_closure import close_intent_is_due
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
-    ephemeral_ids,
     graph_id_of,
     insert_materialization_row,
     next_route_seq,
@@ -56,39 +56,66 @@ class ChunkDeliveryStore:
             ).scalar_one()
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
+        """Every pending, non-ephemeral intent's own backoff history in one flat, outer-
+        joined, already-aggregated read (blizzard#524 D7) — never one query per intent.
+        ``close_intent_is_due`` applies the domain's own due rule to each row."""
+        ephemeral = select(s.chunk_grouped.c.chunk_id).union(select(s.chunk_deleted.c.chunk_id))
+        attempts = (
+            select(
+                s.close_intent_attempts.c.intent_id,
+                func.count(s.close_intent_attempts.c.id).label("attempt_count"),
+                func.max(s.close_intent_attempts.c.attempted_at).label("last_attempt_at"),
+            )
+            .group_by(s.close_intent_attempts.c.intent_id)
+            .subquery()
+        )
         with self._store.read("pending_close_intents") as conn:
-            ephemeral = ephemeral_ids(conn)
             rows = conn.execute(
-                select(s.close_intents.c.chunk_id, s.close_intents.c.source, s.close_intents.c.ref)
+                select(
+                    s.close_intents.c.id,
+                    s.close_intents.c.chunk_id,
+                    s.close_intents.c.source,
+                    s.close_intents.c.ref,
+                    attempts.c.attempt_count,
+                    attempts.c.last_attempt_at,
+                )
+                .select_from(s.close_intents.outerjoin(attempts, attempts.c.intent_id == s.close_intents.c.id))
                 .where(s.close_intents.c.retired_at.is_(None))
+                .where(s.close_intents.c.chunk_id.not_in(ephemeral))
                 .order_by(s.close_intents.c.id)  # D2's explicit total order (`bzh:sql-portable`)
             ).all()
+        now = self._clock.now()
         return [
-            PendingCloseIntent(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref))
+            PendingCloseIntent(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref), intent_id=row.id)
             for row in rows
-            if row.chunk_id not in ephemeral  # grouped away or deleted since it enqueued; owes nothing
+            if close_intent_is_due(now, attempt_count=row.attempt_count, last_attempt_at=row.last_attempt_at)
         ]
 
+    def record_close_attempt_skipped(self, intent_id: int, *, at: datetime) -> None:
+        with self._store.write("record_close_attempt_skipped") as conn:
+            conn.execute(
+                insert(s.close_intent_attempts).values(intent_id=intent_id, attempted_at=at, outcome="skipped")
+            )
+
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
-        with self._store.write("unmaterialized_proposals") as conn:
-            ephemeral = ephemeral_ids(conn)
-            delivered = {
-                r.chunk_id
-                for r in conn.execute(
-                    select(s.transitions.c.chunk_id).where(s.transitions.c.to_node_id == RESERVED_TERMINAL).distinct()
-                ).all()
-            }
-            judged = {r.proposal_id for r in conn.execute(select(s.work_item_materializations.c.proposal_id)).all()}
-            struck = {r.proposal_id for r in conn.execute(select(s.work_item_strikes.c.proposal_id)).all()}
-            rows = conn.execute(select(s.work_item_proposals)).all()
-        return [
-            proposal_row(row)
-            for row in rows
-            if row.chunk_id in delivered
-            and row.chunk_id not in ephemeral
-            and row.proposal_id not in judged
-            and row.proposal_id not in struck
-        ]
+        """Every not-yet-judged proposal of a delivered, non-ephemeral chunk (blizzard#524
+        D6) — all four exclusions (delivered, ephemeral, judged, struck) pushed into SQL as
+        subqueries the engine plans once, rather than re-fetching and re-filtering every
+        proposal ever written, payload included, on every pass. A read transaction: this
+        writes nothing."""
+        delivered = select(s.transitions.c.chunk_id).where(s.transitions.c.to_node_id == RESERVED_TERMINAL)
+        ephemeral = select(s.chunk_grouped.c.chunk_id).union(select(s.chunk_deleted.c.chunk_id))
+        judged = select(s.work_item_materializations.c.proposal_id)
+        struck = select(s.work_item_strikes.c.proposal_id)
+        with self._store.read("unmaterialized_proposals") as conn:
+            rows = conn.execute(
+                select(s.work_item_proposals)
+                .where(s.work_item_proposals.c.chunk_id.in_(delivered))
+                .where(s.work_item_proposals.c.chunk_id.not_in(ephemeral))
+                .where(s.work_item_proposals.c.proposal_id.not_in(judged))
+                .where(s.work_item_proposals.c.proposal_id.not_in(struck))
+            ).all()
+        return [proposal_row(row) for row in rows]
 
     def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None:
         with self._store.write("record_delivery_repo_landed") as conn:
@@ -157,8 +184,11 @@ class ChunkDeliveryStore:
         ``ChunkArtifactsStore.record_hub_artifact``'s own already-existed-row contract. A
         ``closed``/``gone`` outcome also retires the matching pending ``close_intents``
         row, same transaction, whether or not this call wrote a fresh outcome row — a
-        replay finishes an interrupted retirement. See
-        ``blizzard-context/architecture/crash-correctness/hub.md``."""
+        replay finishes an interrupted retirement. A ``failed`` outcome instead appends a
+        ``close_intent_attempts`` row for its matching intent, same transaction, on
+        *every* call — never gated by ``wrote``, since the backoff ledger is its own
+        append-only fact, not idempotency-guarded like the outcome row above (blizzard#524
+        D7). See ``blizzard-context/architecture/crash-correctness/hub.md``."""
         with self._store.write("record_work_item_closure") as conn:
             already = conn.execute(
                 select(s.work_item_closures.c.id).where(
@@ -191,6 +221,19 @@ class ChunkDeliveryStore:
                     )
                     .values(retired_at=at)
                 )
+            elif outcome is WorkItemCloseOutcome.FAILED:
+                intent_id = conn.execute(
+                    select(s.close_intents.c.id).where(
+                        (s.close_intents.c.chunk_id == chunk_id)
+                        & (s.close_intents.c.source == pointer.source)
+                        & (s.close_intents.c.ref == pointer.ref)
+                        & (s.close_intents.c.retired_at.is_(None))
+                    )
+                ).scalar_one_or_none()
+                if intent_id is not None:  # never enqueued (or already retired) — no backoff to tick
+                    conn.execute(
+                        insert(s.close_intent_attempts).values(intent_id=intent_id, attempted_at=at, outcome="failed")
+                    )
             return wrote
 
     def record_work_item_materialization(
