@@ -19,6 +19,7 @@ from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import PendingCloseIntent, WorkItemCloseOutcome, WorkItemMaterializationOutcome, WorkRef
+from blizzard.hub.domain.work_closure import close_intent_is_due
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
@@ -28,26 +29,6 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     proposal_row,
 )
-
-#: The close-drain sweep's own backoff base (blizzard#524 D7) — a store-owned constant,
-#: not imported from the composition root's ``Sweep`` wiring (``bzh:dependency-inversion``:
-#: this adapter must not depend on ``blizzard.hub.app``). Mirrors
-#: ``CLOSE_DRAIN_INTERVAL_SECONDS`` there; pinned equal by
-#: ``tests/test_work_closure.py``.
-_CLOSE_DRAIN_BACKOFF_BASE_SECONDS = 60
-#: The backoff's cap — never wait longer than this between due-checks of the same intent.
-_CLOSE_DRAIN_BACKOFF_CAP_SECONDS = 3600
-
-
-def _is_due(now: datetime, *, attempt_count: int | None, last_attempt_at: datetime | None) -> bool:
-    """blizzard#524 D7: due with no prior attempt at all; otherwise due once
-    ``min(base x 2^(n-1), cap)`` seconds have passed since the last one. Not pure SQL
-    (``bzh:sql-portable`` admits no portable exponent) — the one piece of arithmetic this
-    read does in Python, over the flat, already-aggregated row the query below returns."""
-    if not attempt_count or last_attempt_at is None:
-        return True
-    threshold = min(_CLOSE_DRAIN_BACKOFF_BASE_SECONDS * (2 ** (attempt_count - 1)), _CLOSE_DRAIN_BACKOFF_CAP_SECONDS)
-    return (now - last_attempt_at).total_seconds() >= threshold
 
 
 class ChunkDeliveryStore:
@@ -77,7 +58,7 @@ class ChunkDeliveryStore:
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         """Every pending, non-ephemeral intent's own backoff history in one flat, outer-
         joined, already-aggregated read (blizzard#524 D7) — never one query per intent.
-        ``_is_due`` applies the one bit of non-portable arithmetic this read needs."""
+        ``close_intent_is_due`` applies the domain's own due rule to each row."""
         ephemeral = select(s.chunk_grouped.c.chunk_id).union(select(s.chunk_deleted.c.chunk_id))
         attempts = (
             select(
@@ -107,7 +88,7 @@ class ChunkDeliveryStore:
         return [
             PendingCloseIntent(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref), intent_id=row.id)
             for row in rows
-            if _is_due(now, attempt_count=row.attempt_count, last_attempt_at=row.last_attempt_at)
+            if close_intent_is_due(now, attempt_count=row.attempt_count, last_attempt_at=row.last_attempt_at)
         ]
 
     def record_close_attempt_skipped(self, intent_id: int, *, at: datetime) -> None:

@@ -251,10 +251,8 @@ def test_a_content_hole_segment_derives_incomplete_then_re_derives_once_accepted
     assert marker.complete is False
     assert marker.event_count == 0
 
-    # A later instant than the rejected insert's, not `_NOW` again: the change probe
-    # (blizzard#524 D5) reads `received_at` moving forward as its signal that this record
-    # was rewritten, so a re-adjudication landing at the same instant would need the
-    # probe's forced floor to catch it instead — covered separately below.
+    # A later instant than the rejected insert's, not `_NOW` again: the change probe reads
+    # `received_at` moving forward as its signal a record was rewritten (blizzard#524 D5).
     fixture.segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW + timedelta(seconds=1))
     fixture.reconciler.sweep()
 
@@ -358,6 +356,11 @@ def test_a_steady_state_pass_decompresses_no_content_and_holds_a_flat_statement_
     def _boom(*_: object, **__: object) -> bytes:
         raise AssertionError("a steady-state pass must not decompress any content")
 
+    # Past the derivation change probe's forced floor (blizzard#524 D5), so each timed
+    # sweep below runs the real candidacy read rather than the probe's cheap
+    # unchanged-signature skip — the skip alone would make small_count == large_count
+    # trivially true without ever exercising the bulk read this test targets.
+    fixture.clock.advance(timedelta(minutes=11))
     monkeypatch.setattr(zlib, "decompress", _boom)
     small_count = count_queries(fixture.engine, fixture.reconciler.sweep)
     monkeypatch.undo()
@@ -369,6 +372,7 @@ def test_a_steady_state_pass_decompresses_no_content_and_holds_a_flat_statement_
         )
     fixture.reconciler.sweep()  # builds the 50 new markers too — still not the timed pass
 
+    fixture.clock.advance(timedelta(minutes=11))
     monkeypatch.setattr(zlib, "decompress", _boom)
     large_count = count_queries(fixture.engine, fixture.reconciler.sweep)
 

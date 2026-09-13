@@ -128,25 +128,16 @@ class EventDerivationService:
         return chunk.graph_id if chunk is not None else None
 
 
-#: The change probe's forced floor (blizzard#524 D5): the probe is an optimization only,
-#: so a full pass runs at least this often regardless of what the signature reports —
-#: this is what bounds staleness if the in-memory signature ever misses a change.
+#: The change probe's forced floor (blizzard#524 D5): an optimization only, so a full
+#: pass still runs at least this often, bounding how stale a missed signature can leave reality.
 _FORCED_FULL_PASS_FLOOR = timedelta(minutes=10)
 
 
 class EventDerivationReconciler:
-    """The standing convergence pass (D1/D2), stepped by the existing ``Sweep`` driver.
-    Derives each candidate through :class:`EventDerivationService`, then drops the rows
-    of any segment the store still remembers but the visible set no longer holds.
-
-    Holds, in memory, the last pass's :class:`~blizzard.hub.domain.analytics.events.DerivationSignature`
-    (blizzard#524 D5) — a cheap aggregate over every input :meth:`~EventDerivationService.candidacy`
-    and visibility read today. When this pass's signature matches, the full pass — candidacy,
-    derive, drop — is skipped entirely. This state is process-local and never persisted: a
-    fresh process always runs its first pass in full (which also covers an
-    ``EXTRACTOR_VERSION`` bump, since that changes derivation markers, not this signature),
-    and :data:`_FORCED_FULL_PASS_FLOOR` bounds how stale the in-memory signature can ever
-    leave reality, using the injected ``clock`` (``bzh:injected-clock``)."""
+    """The standing convergence pass, stepped by the existing ``Sweep`` driver: derives
+    each candidate, then drops rows for any segment no longer visible. Holds, in memory
+    only, the last pass's :class:`~blizzard.hub.domain.analytics.events.DerivationSignature`;
+    a fresh process always runs full, and :data:`_FORCED_FULL_PASS_FLOOR` bounds staleness."""
 
     def __init__(self, *, service: EventDerivationService, events: IWriteTranscriptEvents, clock: IClock) -> None:
         self._service = service
@@ -157,15 +148,10 @@ class EventDerivationReconciler:
 
     def sweep(self) -> None:
         """One convergence pass, or a skip when the probe reports nothing changed and the
-        floor is not yet due (blizzard#524 D5). A segment that raises during derivation is
-        stepped over rather than ending the tick, which would cost every later candidate its
-        derivation and the drop pass behind them, on every tick. The record names the
-        segment and the fault but carries no traceback: a store fault already logged one at
-        its wrap site, and any other is reproducible on demand through the segment-scoped
-        re-derive route.
-
-        ``candidacy()`` is this pass's one visibility evaluation (D2): the drop pass below
-        reuses its ``visible_segment_ids`` rather than evaluating it a second time."""
+        floor isn't due. A segment that raises during derivation is stepped over rather
+        than ending the tick, so one bad segment doesn't cost every later candidate its
+        derivation and the drop pass behind it. ``candidacy()`` is this pass's one
+        visibility evaluation; the drop pass below reuses its ``visible_segment_ids`` instead of re-evaluating it."""
         signature = self._events.derivation_signature()
         now = self._clock.now()
         floor_due = self._last_full_pass_at is None or now - self._last_full_pass_at >= _FORCED_FULL_PASS_FLOOR

@@ -25,13 +25,10 @@ class IReadChunkDeliveryRepository(Protocol):
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         """Every ``(chunk_id, ref)`` pair carrying a pending, **due** ``close_intents`` row
-        (blizzard#383, backoff blizzard#524 D7) — the enqueue side (D1) is the sole gate for
-        pending-ness, so this reads what a landing or completion transaction already
-        decided; a chunk in the ephemeral set is excluded even if its intent enqueued
-        before it was grouped or deleted. An intent with no prior attempt is always due; one
-        with prior attempts backs off exponentially, capped at an hour, from its own
-        ``close_intent_attempts`` history — so a persistently skipped or failing ref is not
-        retried on every sweep forever."""
+        (blizzard#383, backoff blizzard#524 D7); a chunk in the ephemeral set is excluded
+        even if its intent enqueued before it was grouped or deleted. An intent with no
+        prior attempt is always due; one with prior attempts backs off exponentially,
+        capped at an hour, from its own ``close_intent_attempts`` history."""
         ...
 
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:

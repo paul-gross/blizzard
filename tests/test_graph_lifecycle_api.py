@@ -207,10 +207,9 @@ def test_retiring_every_version_of_the_default_graph_survives_a_restart(tmp_path
 def test_ensure_default_disambiguates_a_retirement_with_a_cheap_existence_probe_not_a_full_listing(
     tmp_path: Path,
 ) -> None:
-    """blizzard#524 D6: the retirement disambiguation used to call ``list_all()``, which
-    fully reifies every graph — nodes, edges, choices, sessions — for a question that is
-    really just "does any graph of this name exist". ``any_minted`` answers it in one
-    statement, independent of how many other graphs the hub holds."""
+    """blizzard#524 D6: the old disambiguation called ``list_all()``, fully reifying
+    every graph for a question that is really "does any graph of this name exist".
+    ``any_minted`` answers it in one statement, independent of graph count."""
     hub = build_hub(tmp_path)
     for i in range(10):
         _mint(hub, _GRAPH_A.replace("name: alpha", f"name: other-{i}"))

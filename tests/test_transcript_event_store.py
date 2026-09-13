@@ -501,6 +501,29 @@ def test_drop_segments_is_a_set_scoped_no_op_for_an_empty_set(tmp_path: Path) ->
     assert store.derived_segment_ids() == frozenset({"sg_1"})
 
 
+def test_drop_segments_batches_a_stale_set_larger_than_one_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """blizzard#513 D4 — an unbounded ``IN (...)`` over a mass, simultaneous visibility
+    loss has no ceiling; ``drop_segments`` batches instead, and every segment in a stale
+    set spanning several batches is still dropped."""
+    monkeypatch.setattr(store_module, "_DROP_SEGMENTS_BATCH_SIZE", 2)
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    segment_ids = [f"sg_{i}" for i in range(5)]
+    for segment_id in segment_ids:
+        store.replace_segment_events(
+            segment_id, _EXTRACTOR_VERSION, [_event()], complete=True, content_fingerprint="fp", at=_NOW
+        )
+
+    store.drop_segments(frozenset(segment_ids))
+
+    with engine.connect() as conn:
+        assert conn.execute(select(s.transcript_events)).all() == []
+        assert conn.execute(select(s.transcript_event_derivations)).all() == []
+    assert store.derived_segment_ids() == frozenset()
+
+
 def test_derived_segment_ids_reflects_every_segment_with_a_marker(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))

@@ -1,10 +1,5 @@
-"""``transcript_segments.content_digest`` (blizzard#513 D1) — a per-record fingerprint of
-``(turn_range_start, rejected, content)``, backfilled from raw stored bytes with no
-decompression, so a later candidacy read never re-decodes content to detect a change.
-
-Carries forward every marker whose stored ``content_fingerprint`` still matches the old
-whole-segment formula recomputed from current rows, onto the new digest-based formula
-(blizzard#513 D3) — a marker that doesn't match stays stale and is simply re-derived.
+"""``transcript_segments.content_digest`` (blizzard#513 D1): backfilled from raw stored bytes
+with no decompression; carries forward any marker matching the retired whole-segment formula (D3).
 
 Revision ID: 20260913_1000_transcript_segments_content_digest
 Revises: 20260907_1000_event_log_runner_id_nullable
@@ -26,9 +21,8 @@ depends_on: str | Sequence[str] | None = None
 
 _SEGMENTS_TABLE = "transcript_segments"
 
-# Read/write-only references, not creates — the frozen shape is the narrow stub of
-# columns this revision's selects and updates name (``bzh:frozen-revisions``). Never
-# created, never dropped.
+# Read/write-only references, never created or dropped — the frozen shape is the narrow
+# stub of columns this revision's selects and updates name (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 
 _segments = sa.Table(
@@ -55,8 +49,11 @@ _derivations = sa.Table(
 _FLUSH_EVERY = 1000
 
 
-def _has_column(bind: sa.Connection) -> bool:
-    return "content_digest" in {c["name"] for c in sa.inspect(bind).get_columns(_SEGMENTS_TABLE)}
+def _column_info(bind: sa.Connection) -> sa.engine.interfaces.ReflectedColumn | None:
+    return next(
+        (c for c in sa.inspect(bind).get_columns(_SEGMENTS_TABLE) if c["name"] == "content_digest"),
+        None,
+    )
 
 
 def _row_digest(*, turn_range_start: int, rejected: bool, content: bytes | None) -> str:
@@ -100,11 +97,15 @@ def _old_formula_fingerprint(rows: Sequence[sa.engine.Row]) -> str:
 
 def upgrade() -> None:
     bind = op.get_bind()
-    if _has_column(bind):
-        return  # already reshaped — this revision's own guard, not per-row
+    col = _column_info(bind)
+    if col is not None and not col["nullable"]:
+        return  # already fully reshaped, including the closing NOT NULL — this revision's own guard, not per-row
 
-    with op.batch_alter_table(_SEGMENTS_TABLE) as batch:
-        batch.add_column(sa.Column("content_digest", sa.String, nullable=True))
+    if col is None:
+        with op.batch_alter_table(_SEGMENTS_TABLE) as batch:
+            batch.add_column(sa.Column("content_digest", sa.String, nullable=True))
+    # Else: a prior run was interrupted before the closing NOT NULL below — the backfill
+    # reruns from scratch, a pure recompute that overwrites every row with the same value.
 
     markers_by_segment: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for r in bind.execute(
@@ -151,7 +152,9 @@ def upgrade() -> None:
 
     current_segment_id: str | None = None
     current_rows: list = []  # type: ignore[type-arg]
-    rows_iter = bind.execute(
+    # Streamed, like the write side's own `_FLUSH_EVERY` batching below — `content` at
+    # production scale (~178 MB compressed) must never sit in memory as one result set.
+    rows_iter = bind.execution_options(yield_per=_FLUSH_EVERY).execute(
         sa.select(
             _segments.c.id,
             _segments.c.segment_id,
@@ -178,7 +181,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    if not _has_column(bind):
+    if _column_info(bind) is None:
         return  # already the pre-reshape shape
     # Markers are left as they are (D3): a stale one only costs a re-derive next pass.
     with op.batch_alter_table(_SEGMENTS_TABLE) as batch:

@@ -72,9 +72,8 @@ class WorkItemMaterializationReconciler:
         if not proposals:
             _log.info("work item materialization sweep completed", created=0, updated=0, unresolved=0, deferred=0)
             return
-        # Resolved once per pass (blizzard#524 D6), not once per create-kind proposal: the
-        # answer — the enabled default graph, or its retirement — is invariant across one
-        # pass, since nothing inside the loop mints or retires a graph.
+        # Resolved once per pass (blizzard#524 D6), not once per create-kind proposal —
+        # invariant across one pass, since nothing inside the loop mints or retires a graph.
         default_graph = self._graph_mint.ensure_default_or_none(
             self._default_graph_doc, definition_yaml=self._default_graph_yaml
         )

@@ -25,7 +25,7 @@ from blizzard.hub.domain.work import (
     WorkItemClosure,
     WorkRef,
 )
-from blizzard.hub.domain.work_closure import CloseIntentDrainer
+from blizzard.hub.domain.work_closure import CLOSE_DRAIN_BACKOFF_BASE_SECONDS, CloseIntentDrainer
 from blizzard.hub.events.broker import EVENT_LOGGED
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
@@ -202,6 +202,15 @@ def test_a_skipped_attempt_ticks_the_same_backoff_clock_as_a_failed_one(tmp_path
     assert pointer not in {i.ref for i in delivery.pending_close_intents()}
     hub.clock.advance(timedelta(seconds=60))
     assert pointer in {i.ref for i in delivery.pending_close_intents()}
+
+
+def test_the_backoff_base_matches_the_sweep_interval() -> None:
+    """The backoff's base second is meant to mirror the close-drain sweep's own tick
+    (blizzard#524 D7); a drift between the two constants would silently change the
+    backoff's real cadence relative to the sweep that drives it."""
+    from blizzard.hub.app import CLOSE_DRAIN_INTERVAL_SECONDS
+
+    assert CLOSE_DRAIN_BACKOFF_BASE_SECONDS == CLOSE_DRAIN_INTERVAL_SECONDS
 
 
 @pytest.mark.component

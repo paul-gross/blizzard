@@ -646,10 +646,9 @@ def _old_formula_fingerprint(rows: list[tuple[int, bool, bytes]]) -> str:
 
 
 def test_transcript_segments_content_digest_backfills_and_carries_markers_forward(tmp_path: Path) -> None:
-    """blizzard#513 D1/D3 — the backfill computes every record's digest from raw stored
-    bytes with no decompression, and a marker whose stored fingerprint still matches the
-    retired whole-segment formula is carried forward onto the new digest-based one; a
-    marker that doesn't match is left stale, for the next pass to correctly re-derive."""
+    """blizzard#513 D1/D3 — the backfill computes every digest from raw stored bytes with
+    no decompression; a marker matching the retired whole-segment formula carries forward,
+    one that doesn't stays stale for the next pass to correctly re-derive."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
     runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
     runner.upgrade("20260907_1000_event_log_runner_id_nullable")
@@ -741,6 +740,80 @@ def test_transcript_segments_content_digest_backfills_and_carries_markers_forwar
         assert "content_digest" not in {c["name"] for c in sa.inspect(engine).get_columns("transcript_segments")}
     finally:
         engine.dispose()
+
+
+def test_transcript_segments_content_digest_resumes_after_an_interrupted_first_pass(tmp_path: Path) -> None:
+    """blizzard#513 D3 — a crash between `add_column` and the closing `alter_column(...,
+    nullable=False)` leaves the column present but still nullable and unbackfilled; a
+    retried `upgrade()` must finish the backfill and the NOT NULL close, not short-circuit
+    on column presence alone the way a bare `_has_column` guard would."""
+    url = f"sqlite:///{tmp_path / 'store.db'}"
+    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
+    runner.upgrade("20260907_1000_event_log_runner_id_nullable")
+
+    rows = [(0, False, b"AAAA"), (1, False, b"BBBB")]
+    engine = create_engine_from_url(url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "insert into graphs (graph_id, name, entry_node_id, definition_yaml, created_at) "
+                    "values ('gr_1', 'g', 'nd_build', '', :at)"
+                ),
+                {"at": "2026-08-01 00:00:00"},
+            )
+            conn.execute(
+                sa.text("insert into chunks (chunk_id, graph_id, minted_at, model) values ('ch_1', 'gr_1', :at, '')"),
+                {"at": "2026-08-01 00:00:00"},
+            )
+            for turn_range_start, rejected, content in rows:
+                conn.execute(
+                    sa.text(
+                        "insert into transcript_segments (segment_id, chunk_id, node_id, epoch, spawn_generation, "
+                        "runner_id, turn_range_start, turn_range_end, final, rejected, rejection_reason, byte_count, "
+                        "codec, content, normalizer_version, harness_version, record_truncated, supersedes, received_at) "
+                        "values ('sg_1', 'ch_1', 'nd_build', 1, 1, 'r1', :trs, :trs, :final, :rejected, NULL, 10, "
+                        "'zlib', :content, 'norm/1', 'harness/1', 0, NULL, :at)"
+                    ),
+                    {
+                        "trs": turn_range_start,
+                        "final": 1 if turn_range_start == rows[-1][0] else 0,
+                        "rejected": rejected,
+                        "content": content,
+                        "at": "2026-08-01 00:00:00",
+                    },
+                )
+            # Simulate a crash after this revision's own `add_column` but before its
+            # backfill or closing NOT NULL ever ran: the column exists, is nullable, and
+            # every row's digest is still unset.
+            conn.execute(sa.text("alter table transcript_segments add column content_digest varchar"))
+    finally:
+        engine.dispose()
+
+    cols_before = {c["name"]: c for c in sa.inspect(create_engine_from_url(url)).get_columns("transcript_segments")}
+    assert cols_before["content_digest"]["nullable"] is True
+
+    runner.upgrade("head")
+
+    engine = create_engine_from_url(url)
+    try:
+        with engine.connect() as conn:
+            segment_rows = conn.execute(
+                sa.text(
+                    "select turn_range_start, rejected, content, content_digest from transcript_segments order by turn_range_start"
+                )
+            ).all()
+        cols_after = {c["name"]: c for c in sa.inspect(engine).get_columns("transcript_segments")}
+    finally:
+        engine.dispose()
+
+    expected_digests = [
+        _row_digest(turn_range_start=r.turn_range_start, rejected=bool(r.rejected), content=r.content)
+        for r in segment_rows
+    ]
+    assert [r.content_digest for r in segment_rows] == expected_digests
+    assert all(d is not None for d in expected_digests)
+    assert cols_after["content_digest"]["nullable"] is False
 
 
 _SCHEMA_METADATA = {"hub": hub_schema.metadata, "runner": runner_schema.metadata}

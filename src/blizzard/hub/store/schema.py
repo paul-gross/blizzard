@@ -637,10 +637,7 @@ close_intents = Table(
 )
 
 # --- Close-intent drain attempts (close_intent_attempts, blizzard#524 D7) ------------
-# Append-only, the `hub_node_poll` shape (`bzh:facts-not-status`): one row per skipped or
-# failed drain attempt against a pending intent — never a mutable counter on
-# `close_intents` itself. A `closed`/`gone` outcome records no row here; it retires the
-# intent instead, so it is never due again.
+# Append-only (`bzh:facts-not-status`): a terminal outcome retires the intent instead of writing a row here.
 
 close_intent_attempts = Table(
     "close_intent_attempts",
@@ -1196,9 +1193,7 @@ transcript_segments = Table(
     # Hub-stamped receipt instant — the D3 rolling 24h window anchors here, never on the runner's.
     Column("received_at", UtcDateTime, nullable=False),
     # A per-record fingerprint of `(turn_range_start, rejected, content)` (blizzard#513 D1),
-    # computed by the same statement that writes those columns — so a bulk candidacy read can
-    # tell a segment's content changed since it was last derived without reading `content` at
-    # all. Backfilled by `20260913_1000_transcript_segments_content_digest`.
+    # so a bulk candidacy read detects a content change without reading `content` at all.
     Column("content_digest", String, nullable=False),
     UniqueConstraint("segment_id", "turn_range_start", name="uq_transcript_segments_segment_turn_start"),
 )

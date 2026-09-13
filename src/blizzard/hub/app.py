@@ -82,20 +82,15 @@ ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
 DEFAULT_FORGE_BASE_BRANCH = "main"
 
 #: The transcript-event derivation sweep's own interval (blizzard#254 D1) — a module
-#: constant, not an operator config key, in this slice. Always started (no work-source
-#: gate), but its own change probe (blizzard#524 D5) now skips the expensive pass when
-#: nothing in the store has changed since the last one.
+#: constant; its own change probe (blizzard#524 D5) skips the pass when nothing changed.
 EVENT_DERIVATION_INTERVAL_SECONDS = 60
 
 #: The delivery-materialization sweep's own interval (blizzard#366 D9) — always started,
-#: like the event-derivation sweep, so it earns its own dedicated constant rather than
-#: sharing the work-source-gated ``annotation_interval_seconds``. Not yet gated by a
-#: change probe of its own (a later phase adds one); every pass today runs in full.
+#: not yet gated by a change probe of its own, so every pass today runs in full.
 WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS = 60
 
 #: The close-intent drain sweep's own interval — always started like its two siblings
-#: above, so it runs whether or not any source is close-capable today. Not yet gated by a
-#: change probe of its own (a later phase adds one); every pass today runs in full.
+#: above; not yet gated by a change probe of its own, so every pass today runs in full.
 CLOSE_DRAIN_INTERVAL_SECONDS = 60
 
 
@@ -109,20 +104,9 @@ class _Sweepable(Protocol):
 @dataclass(frozen=True)
 class Sweep:
     """One reconciler stepped once per interval until shutdown (``bzh:steppable-loop``).
-
-    The first pass always runs immediately on ``run()`` entry — never jittered — so a
-    freshly booted or crash-recovered process converges without waiting out a sweep's own
-    interval first. ``jitter_seconds``, when given, instead offsets the one pass right
-    after that first one (blizzard#524 D8): each sweep's second pass lands at its own
-    ``jitter_seconds``, and every pass from the third on returns to the plain
-    ``interval_seconds`` cadence from there — so sibling sweeps share one synchronized
-    pass at boot, then decorrelate for good, rather than colliding every cycle forever.
-    ``None`` (the default, what every test-constructed ``Sweep`` gets unless it says
-    otherwise) means every wait uses ``interval_seconds``, jitter or not — so no RNG
-    leaks into a test-constructed ``Sweep``; only :meth:`all` draws a real value, once,
-    at the composition root. ``timer`` is the injectable monotonic clock ``run`` uses to
-    measure and log each pass's elapsed time; it defaults to ``time.monotonic`` and a
-    test overrides it with a fake for deterministic overrun assertions."""
+    The first pass runs immediately, unjittered; ``jitter_seconds`` offsets only the
+    second pass, so sibling sweeps synchronize once at boot then decorrelate for good
+    (blizzard#524 D8). ``timer`` is the injectable monotonic clock ``run`` measures each pass's elapsed time with."""
 
     reconciler: _Sweepable
     interval_seconds: int
@@ -178,13 +162,11 @@ class Sweep:
             await asyncio.wait_for(self.shutdown.wait(), timeout=timeout)
 
     async def run(self) -> None:
-        """Call ``sweep()`` immediately, then again after ``jitter_seconds`` (or, with none
-        given, after another plain ``interval_seconds``), then every ``interval_seconds``
-        after that, until shutdown. Every wait races ``shutdown`` so it wakes immediately
-        instead of holding a graceful drain. A sweep that raises is logged and swallowed —
-        a bad tick must never kill the loop, only skip a cycle. Every pass's elapsed time is
-        logged (blizzard#524 D8); a pass that overruns its own interval logs a warning
-        naming this sweep, since an overrun sweep is otherwise invisible."""
+        """Call ``sweep()`` immediately, then after ``jitter_seconds`` (default: plain
+        ``interval_seconds``), then every ``interval_seconds`` after that, until shutdown.
+        Every wait races ``shutdown``. A sweep that raises is logged and swallowed — a bad
+        tick skips a cycle, never kills the loop. Every pass logs its elapsed time; an
+        overrun logs a warning naming this sweep."""
         log = get_logger(self.logger_name)
         first = True
         while not self.shutdown.is_set():

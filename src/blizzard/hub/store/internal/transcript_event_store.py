@@ -11,7 +11,7 @@ import hashlib
 import itertools
 import json
 import zlib
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -31,6 +31,10 @@ from blizzard.wire.transcript_segment import TurnSegmentView
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
+
+#: `drop_segments`'s own batch size — an unbounded `IN (...)` over a mass, simultaneous
+#: visibility loss has no ceiling; this bounds each DELETE regardless of stale-set size.
+_DROP_SEGMENTS_BATCH_SIZE = 1000
 
 
 def _minted_chunk_ids_subselect() -> Select[Any]:
@@ -59,12 +63,11 @@ def _derived_segment_ids_stmt() -> Select[Any]:
 
 
 def _candidacy_digests_stmt(chunk_id: str | None = None) -> Select[Any]:
-    """One row per visible segment's own stored record, its ``content_digest`` alone
-    (blizzard#513 D2) — joined against the visibility subselect so this read IS the
-    pass's one visibility evaluation, at a constant statement count with no bind list
-    that grows with segment count. No ``content`` column named: this is the candidacy
-    read's whole point, that it never touches a content byte. Ordered so each segment's
-    digests arrive in range order, ready for the fingerprint fold."""
+    """One row per visible segment's own stored ``content_digest`` alone (blizzard#513
+    D2), joined against the visibility subselect so this read IS the pass's one
+    visibility evaluation, at a constant statement count. No ``content`` column named —
+    the candidacy read's whole point, that it never touches a content byte.
+    Ordered so each segment's digests arrive in range order for the fingerprint fold."""
     return (
         select(
             s.transcript_segments.c.segment_id,
@@ -78,11 +81,9 @@ def _candidacy_digests_stmt(chunk_id: str | None = None) -> Select[Any]:
 
 def _derivation_signature_stmt() -> Select[Any]:
     """The change probe's one cheap aggregate read (blizzard#524 D5): row count, max
-    ``id``, and max ``received_at`` over ``transcript_segments`` — every input
-    :func:`_visible_segment_ids_stmt` and :func:`_candidacy_digests_stmt` read besides
-    content — plus the ``chunks`` row count as a scalar subquery, so the whole probe is
-    one statement rather than two. No per-row read: this is a fixed number of aggregates
-    regardless of corpus size."""
+    ``id``, and max ``received_at`` over ``transcript_segments``, plus the ``chunks`` row
+    count as a scalar subquery, so the whole probe is one statement. No per-row read: a
+    fixed number of aggregates regardless of corpus size."""
     chunk_count = select(func.count()).select_from(s.chunks).scalar_subquery()
     return select(
         func.count(s.transcript_segments.c.id).label("segment_count"),
@@ -172,11 +173,11 @@ def _upsert_marker_stmt(
     )
 
 
-def _delete_all_events_for_segments_stmt(segment_ids: frozenset[str]) -> Delete:
+def _delete_all_events_for_segments_stmt(segment_ids: Collection[str]) -> Delete:
     return s.transcript_events.delete().where(s.transcript_events.c.segment_id.in_(segment_ids))
 
 
-def _delete_all_markers_for_segments_stmt(segment_ids: frozenset[str]) -> Delete:
+def _delete_all_markers_for_segments_stmt(segment_ids: Collection[str]) -> Delete:
     return s.transcript_event_derivations.delete().where(s.transcript_event_derivations.c.segment_id.in_(segment_ids))
 
 
@@ -319,8 +320,9 @@ class TranscriptEventStore:
         if not segment_ids:
             return
         with self._store.write("drop_segments") as conn:
-            conn.execute(_delete_all_events_for_segments_stmt(segment_ids))
-            conn.execute(_delete_all_markers_for_segments_stmt(segment_ids))
+            for batch in itertools.batched(segment_ids, _DROP_SEGMENTS_BATCH_SIZE):
+                conn.execute(_delete_all_events_for_segments_stmt(batch))
+                conn.execute(_delete_all_markers_for_segments_stmt(batch))
 
 
 def _conforms_transcript_event_store(x: TranscriptEventStore) -> IWriteTranscriptEvents:

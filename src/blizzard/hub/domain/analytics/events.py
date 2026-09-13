@@ -69,11 +69,9 @@ class CandidacyRead:
 @dataclass(frozen=True)
 class DerivationSignature:
     """A cheap aggregate fingerprint of every input :meth:`IReadTranscriptEvents.candidacy`
-    and its visibility read see today (blizzard#524 D5): the row count, the highest
-    ``transcript_segments.id``, and the latest ``received_at`` — plus the ``chunks`` row
-    count, since visibility also depends on a segment's chunk existing. No per-row content
-    is read to build it. The standing reconciler compares this pass's signature against the
-    previous pass's to decide whether a full pass has anything new to find."""
+    and its visibility read see today (blizzard#524 D5): row count, highest
+    ``transcript_segments.id``, latest ``received_at``, and ``chunks`` row count. No
+    per-row content is read; the reconciler compares this against the previous pass's signature."""
 
     segment_count: int
     max_segment_id: int | None
