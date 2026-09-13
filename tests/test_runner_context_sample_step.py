@@ -90,7 +90,7 @@ def _ctx(store, *, tokens: int | None, clock: FixedClock, warn: int | None = 300
 
 
 def _warnings(store) -> list[dict]:  # type: ignore[no-untyped-def]
-    return [json.loads(f.payload) for f in store.pending_outbound() if f.kind == EVENT_RECORDED]
+    return [json.loads(f.payload) for f in store.pending_outbound(10_000) if f.kind == EVENT_RECORDED]
 
 
 @pytest.mark.unit

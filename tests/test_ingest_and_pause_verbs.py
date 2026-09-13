@@ -683,7 +683,7 @@ def test_pause_reports_itself_upward_atomically(tmp_path: Path, monkeypatch: pyt
 
     store = _store(root)
     assert store.local_paused("runner-local") is True
-    pending = store.pending_outbound()
+    pending = store.pending_outbound(10_000)
     assert [f.kind for f in pending] == ["runner.locally_paused"]
     # Runner-scoped: it is about the runner, so it correlates to no chunk or lease.
     assert (pending[0].chunk_id, pending[0].lease_id) == (None, None)
@@ -699,7 +699,7 @@ def test_start_reports_the_resume_upward(tmp_path: Path, monkeypatch: pytest.Mon
         assert CliRunner().invoke(runner_group, ["pause", "--dir", str(root)]).exit_code == 0
         assert CliRunner().invoke(runner_group, ["start", "--dir", str(root)]).exit_code == 0
 
-    kinds = [f.kind for f in _store(root).pending_outbound()]
+    kinds = [f.kind for f in _store(root).pending_outbound(10_000)]
     assert kinds == ["runner.locally_paused", "runner.locally_resumed"]
 
 

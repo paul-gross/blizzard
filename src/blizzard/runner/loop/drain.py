@@ -1,4 +1,6 @@
-"""Draining the outbound buffer: one fact at a time, in order, until one will not deliver."""
+"""Draining the outbound buffer: contiguous runs of generic-kind facts batched into one
+``push_facts`` call each, completions and decisions still delivered one at a time — in
+order, until one will not deliver (issue #522)."""
 
 from __future__ import annotations
 
@@ -21,6 +23,10 @@ from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 
 _log = get_logger("blizzard.runner.loop")
 
+#: This drain's own per-``run()`` slice bound (issue #522) — a large backlog drains over
+#: several ticks rather than one run holding the whole buffer's payload set in memory.
+_DRAIN_LIMIT = 100
+
 # Submit -> ack -> apply-response. The after-submit.before-ack window is the lost-ack replay
 # the hub's idempotency must absorb.
 _CP_BEFORE_SUBMIT = crashpoint("flush.before-submit", "completion at head of buffer; not submitted")
@@ -42,32 +48,41 @@ class OutboundDrain:
     ctx: LoopContext
 
     def run(self) -> None:
-        for fact in self.ctx.stores.outbound.pending_outbound():
-            if not self._deliver(fact):
-                break  # transport failure — stop; retry the backlog next tick
+        """Walk this tick's own bounded slice in seq order, batching every contiguous
+        run of generic-kind facts into one ``push_facts`` call; a completion or decision
+        fact first flushes the run collected so far, then routes to its own arm unchanged."""
+        run: list[BufferedFact] = []
+        for fact in self.ctx.stores.outbound.pending_outbound(_DRAIN_LIMIT):
+            if fact.kind not in (COMPLETION_KIND, DECISION_KIND):
+                run.append(fact)
+                continue
+            if run:
+                if not self._flush_run(run):
+                    return  # transport failure — stop; retry the backlog next tick
+                run = []
+            handler = self._completion if fact.kind == COMPLETION_KIND else self._decision
+            if not handler(fact):
+                return  # transport failure — stop; retry the backlog next tick
+        if run:
+            self._flush_run(run)
 
-    def _deliver(self, fact: BufferedFact) -> bool:
-        if fact.kind == COMPLETION_KIND:
-            return self._completion(fact)
-        if fact.kind == DECISION_KIND:
-            return self._decision(fact)
-        return self._event(fact)
-
-    def _event(self, fact: BufferedFact) -> bool:
-        """Push one buffered fact to POST /events — the generic arm."""
+    def _flush_run(self, run: list[BufferedFact]) -> bool:
+        """Push one contiguous run of generic-kind facts to POST /events in a single
+        request, then ack every seq the run carried."""
         batch = RunnerFactBatch(
             runner_id=self.ctx.config.runner_id,
-            facts=[RunnerFact(seq=fact.seq, kind=fact.kind, payload=json.loads(fact.payload))],
+            facts=[RunnerFact(seq=fact.seq, kind=fact.kind, payload=json.loads(fact.payload)) for fact in run],
         )
         try:
             ack = self.ctx.hub.push_facts(batch)
         except HubClientError:
-            return False  # hub unreachable — the fact stays buffered, retried next tick
-        if fact.seq in ack.rejected:
-            # A contract rejection is not idempotency — surface it, but do not wedge the FIFO
-            # drain on a fact the hub will never accept: ack and move on.
-            _log.error("hub rejected buffered fact", seq=fact.seq, kind=fact.kind)
-        self._ack(fact)
+            return False  # hub unreachable — the whole run stays buffered, retried next tick
+        for fact in run:
+            if fact.seq in ack.rejected:
+                # A contract rejection is not idempotency — surface it, but do not wedge the
+                # FIFO drain on a fact the hub will never accept: ack and move on.
+                _log.error("hub rejected buffered fact", seq=fact.seq, kind=fact.kind)
+        self._ack_run(run)
         return True
 
     def _completion(self, fact: BufferedFact) -> bool:
@@ -172,3 +187,16 @@ class OutboundDrain:
                 chunk_id=fact.chunk_id,
                 lease_id=fact.lease_id,
             )
+
+    def _ack_run(self, run: list[BufferedFact]) -> None:
+        """One store transaction acks every seq the delivered run carried."""
+        acked_at = self.ctx.clock.now()
+        self.ctx.stores.outbound.ack_outbound_batch([fact.seq for fact in run], acked_at=acked_at)
+        if self.ctx.events is not None:
+            for fact in run:
+                self.ctx.events.publish_fact_changed(
+                    seq=fact.seq,
+                    kind=fact.kind,
+                    chunk_id=fact.chunk_id,
+                    lease_id=fact.lease_id,
+                )

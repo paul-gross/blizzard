@@ -256,10 +256,15 @@ class FakeHub:
         # untracked here; nothing in `src/` calls this route (push_facts carries it instead).
         self.pushed: list[RunnerFact] = []
         self.high_water: dict[str, int] = {}
+        # One entry per `push_facts` call, naming the seqs it carried — lets a test assert
+        # on batching, distinct from `pushed`'s own flattened what-eventually-landed log.
+        self.push_facts_calls: list[list[int]] = []
         # The transcript lane's own push log and mark — structurally separate from the
         # fact lane's above (D3, issue #246).
         self.transcripts_pushed: list[TranscriptSegmentRecord] = []
         self.transcript_high_water: dict[str, int] = {}
+        # One entry per `push_transcripts` call, naming the seqs it carried (issue #522).
+        self.push_transcripts_calls: list[list[int]] = []
         # Seqs to cap-reject-but-ack, scripted (review F8) — the real ingest service's own
         # size/budget/rate rejection (blizzard#247), which no fake could otherwise surface to a test.
         self.reject_transcript_seqs: set[int] = set()
@@ -303,6 +308,7 @@ class FakeHub:
     def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
         if self.down:
             raise HubClientError("fake hub is down")
+        self.push_facts_calls.append([fact.seq for fact in batch.facts])
         mark = self.high_water.get(batch.runner_id, 0)
         applied, already = [], []
         for fact in sorted(batch.facts, key=lambda f: f.seq):
@@ -318,6 +324,7 @@ class FakeHub:
     def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
         if self.down:
             raise HubClientError("fake hub is down")
+        self.push_transcripts_calls.append([record.seq for record in batch.records])
         mark = self.transcript_high_water.get(batch.runner_id, 0)
         applied, already, capped = [], [], []
         for record in sorted(batch.records, key=lambda r: r.seq):

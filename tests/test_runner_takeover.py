@@ -125,7 +125,7 @@ def test_takeover_opens_over_an_ask_parked_chunk(tmp_path) -> None:  # type: ign
     assert record.session_id == "sess-a"
     assert record.fence_epoch is None  # nothing live to fence
     assert "ch_1" in store.open_takeover_chunk_ids()
-    assert store.pending_outbound() == []  # no fence bump enqueued — a dormant lease needs none
+    assert store.pending_outbound(10_000) == []  # no fence bump enqueued — a dormant lease needs none
 
 
 def test_takeover_opens_over_a_needs_human_chunk(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -185,7 +185,7 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path) -> None:  # type
 
     # Refusing must not touch anything: no takeover fact, no kill, no fence.
     assert store.open_takeover_for_chunk("ch_1") is None
-    assert store.pending_outbound() == []
+    assert store.pending_outbound(10_000) == []
 
 
 def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_no_retry(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -220,7 +220,7 @@ def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_n
 
     # The fence rides the outbound buffer as an ordinary lease.minted fact, so a late
     # completion from the killed worker's session lands on a stale epoch.
-    pending = store.pending_outbound()
+    pending = store.pending_outbound(10_000)
     assert len(pending) == 1
     assert pending[0].kind == LEASE_MINTED
     assert '"epoch": 2' in pending[0].payload
@@ -255,7 +255,7 @@ def test_forced_takeover_refuses_a_lease_with_a_pending_submission(tmp_path) -> 
     # Refusing must not touch anything: no takeover fact, no kill, no fresh fence
     # enqueued — the buffer holds only the pre-existing completion.
     assert store.open_takeover_for_chunk("ch_1") is None
-    pending = store.pending_outbound()
+    pending = store.pending_outbound(10_000)
     assert len(pending) == 1
     assert pending[0].kind == "completion.submitted"
 
@@ -358,7 +358,7 @@ def test_advance_skips_judgement_and_the_held_chunk_poll_under_an_open_takeover(
     Advance(ctx).run()
 
     assert harness.judged == []  # never resumed to elicit a verdict
-    assert store.pending_outbound() == []  # no completion buffered
+    assert store.pending_outbound(10_000) == []  # no completion buffered
     assert store.active_lease("lease_1") is not None  # left exactly as it was
 
 

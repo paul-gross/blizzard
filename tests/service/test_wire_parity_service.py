@@ -191,7 +191,7 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
 def _pending_outbound(config: RunnerConfig) -> int:
     engine = create_engine_from_url(config.db_url)
     try:
-        return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound())
+        return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound(10_000))
     finally:
         engine.dispose()
 

@@ -101,7 +101,7 @@ def test_pending_outbound_plans_as_an_index_search(tmp_path: Path) -> None:
     store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
 
     with _capture_selects(engine) as statements:
-        store.pending_outbound()
+        store.pending_outbound(10_000)
 
     plan = _plan(engine, *_one(statements))
     assert any("ix_outbound_buffer_acked_at_seq" in str(row) for row in plan), plan

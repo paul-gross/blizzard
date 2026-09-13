@@ -336,6 +336,6 @@ def test_crash_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore
     tick(ctx)
 
     assert harness.judged == []  # never elicited a verdict
-    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == "completion.submitted"] == []
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.pid == 4321

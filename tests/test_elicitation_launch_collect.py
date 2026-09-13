@@ -88,12 +88,12 @@ def test_advance_launches_then_collects_across_two_passes(tmp_path):  # type: ig
     elicitation = store.in_flight_elicitation("lease_1", 1)
     assert elicitation is not None
     assert elicitation.pid == 8888  # FakeHarness's default judge pid
-    assert store.pending_outbound() == []  # nothing buffered yet — not collected
+    assert store.pending_outbound(10_000) == []  # nothing buffered yet — not collected
 
     Advance(ctx).run()  # collect — the fake elicitation pid reads dead by default
 
     assert store.in_flight_elicitation("lease_1", 1) is None
-    kinds = [b.kind for b in store.pending_outbound()]
+    kinds = [b.kind for b in store.pending_outbound(10_000)]
     assert "completion.submitted" in kinds
 
 
@@ -112,7 +112,7 @@ def test_collect_passes_over_a_still_running_elicitation(tmp_path):  # type: ign
     Advance(ctx).run()  # would-be collect pass — must be a no-op
 
     assert store.in_flight_elicitation("lease_1", 1) is not None
-    assert store.pending_outbound() == []
+    assert store.pending_outbound(10_000) == []
 
 
 def test_lost_elicitation_relaunches_without_consuming_a_retry(tmp_path):  # type: ignore[no-untyped-def]

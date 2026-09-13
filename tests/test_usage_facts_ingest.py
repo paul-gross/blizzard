@@ -102,6 +102,55 @@ def test_usage_ingest_is_idempotent_by_seq_high_water(tmp_path: Path) -> None:
     assert detail["cost"]["cost_usd"] == pytest.approx(0.10)
 
 
+def test_a_mid_batch_crash_persists_the_high_water_mark_at_the_last_applied_seq(tmp_path: Path) -> None:
+    """The mark is written after every applied fact, not once after the whole batch: a crash
+    partway through a multi-fact push leaves it at the last fact whose write actually landed,
+    bounding a lost-ack replay to one fact regardless of how many rode in the same batch."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    real_record_usage = hub.services.facts._usage.record_usage
+    calls = {"n": 0}
+
+    def _crash_on_second_call(*args, **kwargs):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("simulated crash mid-batch")
+        return real_record_usage(*args, **kwargs)
+
+    hub.services.facts._usage.record_usage = _crash_on_second_call  # type: ignore[method-assign]
+    try:
+        payloads = [_usage_payload(node_id, epoch=1, cost_usd=cost) for cost in (0.10, 0.20, 0.30)]
+        for payload in payloads:
+            payload["chunk_id"] = chunk_id
+        with pytest.raises(RuntimeError):
+            hub.client.post(
+                "/api/fleet/events",
+                json={
+                    "runner_id": "r1",
+                    "facts": [
+                        {"seq": 2, "kind": "usage.recorded", "payload": payloads[0]},
+                        {"seq": 3, "kind": "usage.recorded", "payload": payloads[1]},
+                        {"seq": 4, "kind": "usage.recorded", "payload": payloads[2]},
+                    ],
+                },
+            )
+    finally:
+        hub.services.facts._usage.record_usage = real_record_usage  # type: ignore[method-assign]
+
+    # Seq 2's write and mark both landed before the crash; seq 3 raised before its own mark
+    # write, and seq 4 was never attempted — so seq 2 replays as already_applied and seq 3 applies fresh.
+    replay = _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, cost_usd=0.10)
+    assert replay["applied"] == [] and replay["already_applied"] == [2]
+
+    resume = _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=3, cost_usd=0.20)
+    assert resume["applied"] == [3]
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert len(detail["usage"]) == 2  # seq 2 and seq 3's rows only — seq 4 never landed
+
+
 def test_stale_epoch_usage_is_recorded_and_attributed_not_dropped(tmp_path: Path) -> None:
     """A usage row minted at an epoch behind the chunk's latest is real spend — it must
     land and be attributed to its own epoch, never dropped (unlike a stale completion,

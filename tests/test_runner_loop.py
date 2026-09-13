@@ -148,7 +148,7 @@ def test_fill_claims_acquires_binds_and_spawns(tmp_path):  # type: ignore[no-unt
     assert store.held_environment_ids() == ["e1"]
     # The spawn buffered a lease.minted fact for the flusher, naming the lease
     # and carrying its epoch — the fence input the hub consumes.
-    buffered = store.pending_outbound()
+    buffered = store.pending_outbound(10_000)
     assert [b.kind for b in buffered] == [LEASE_MINTED]
     assert buffered[0].lease_id == lease.lease_id
 
@@ -227,7 +227,7 @@ def test_fill_reports_lease_mint_to_hub(tmp_path):  # type: ignore[no-untyped-de
 
     # The lease.minted rides the outbound buffer (store-and-forward); PULL's
     # flusher reports it up to POST /events, so it is not pushed inline at spawn.
-    buffered = [b for b in store.pending_outbound() if b.kind == LEASE_MINTED]
+    buffered = [b for b in store.pending_outbound(10_000) if b.kind == LEASE_MINTED]
     assert len(buffered) == 1
     assert json.loads(buffered[0].payload) == {"chunk_id": "ch_1", "epoch": 1, "route_token": "rtok_test"}
     Pull(ctx).run()
@@ -295,7 +295,7 @@ def test_completion_and_decision_submissions_carry_the_stashed_route_token(tmp_p
     Advance(ctx).run()  # worker "exited" (FakeProbe reports it dead) — launches the elicitation
     Advance(ctx).run()  # collects it — judged and buffered
 
-    buffered = [b for b in store.pending_outbound() if b.kind == "completion.submitted"]
+    buffered = [b for b in store.pending_outbound(10_000) if b.kind == "completion.submitted"]
     assert len(buffered) == 1
     submission = json.loads(buffered[0].payload)["submission"]
     assert submission["route_token"] == "rtok-abc123"
@@ -317,7 +317,7 @@ def test_same_runner_requeue_after_failure_reuses_the_same_route_token(tmp_path)
     Advance(ctx).run()  # launches the detached elicitation
     Advance(ctx).run()  # collects it — verdict-less exit -> fail attempt -> requeue in place (epoch 2)
 
-    lease_mints = [json.loads(b.payload) for b in store.pending_outbound() if b.kind == LEASE_MINTED]
+    lease_mints = [json.loads(b.payload) for b in store.pending_outbound(10_000) if b.kind == LEASE_MINTED]
     assert [m["epoch"] for m in lease_mints] == [1, 2]
     assert all(m["route_token"] == "rtok-abc123" for m in lease_mints)  # same token both times
 
@@ -635,7 +635,7 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
         ("file:///origins/toy-api.git", "e1", "abc123"),
     ]
     assert hub.completions == []
-    buffered = [b for b in store.pending_outbound() if b.kind == "completion.submitted"]
+    buffered = [b for b in store.pending_outbound(10_000) if b.kind == "completion.submitted"]
     assert len(buffered) == 1 and buffered[0].lease_id == "lease_1"
     assert store.active_lease_for_chunk("ch_1") is not None  # still open, awaiting flush
 
@@ -763,7 +763,7 @@ def test_advance_elicits_verdict_exactly_once_while_flush_pending(tmp_path):  # 
     Advance(ctx).run()  # completion already buffered -> the lease is skipped
 
     assert len(harness.judged) == 1  # judged once
-    buffered = [b for b in store.pending_outbound() if b.kind == "completion.submitted"]
+    buffered = [b for b in store.pending_outbound(10_000) if b.kind == "completion.submitted"]
     assert len(buffered) == 1
 
 
@@ -790,7 +790,7 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-unty
     # The review node-step's fresh epoch is buffered for the flusher to report up so the
     # hub's fence advances — it rides the store-and-forward buffer, not an inline push.
     review_mints = [
-        b for b in store.pending_outbound() if b.kind == LEASE_MINTED and json.loads(b.payload)["epoch"] == 2
+        b for b in store.pending_outbound(10_000) if b.kind == LEASE_MINTED and json.loads(b.payload)["epoch"] == 2
     ]
     assert len(review_mints) == 1
 
@@ -1472,7 +1472,7 @@ def test_advance_skips_running_worker(tmp_path):  # type: ignore[no-untyped-def]
 
     Advance(ctx).run()  # worker alive -> nothing judged, nothing polled
 
-    assert store.pending_outbound() == []
+    assert store.pending_outbound(10_000) == []
     assert store.active_lease_for_chunk("ch_1") is not None
 
 
@@ -1501,7 +1501,7 @@ def test_completion_survives_hub_outage_and_applies_once(tmp_path):  # type: ign
     hub.down = True
     Pull(ctx).run()  # flush fails — the completion stays buffered
     assert hub.completions == []
-    assert [b.kind for b in store.pending_outbound()] == ["completion.submitted"]
+    assert [b.kind for b in store.pending_outbound(10_000)] == ["completion.submitted"]
     assert store.active_lease_for_chunk("ch_1") is not None  # not advanced
 
     hub.down = False
@@ -1509,7 +1509,7 @@ def test_completion_survives_hub_outage_and_applies_once(tmp_path):  # type: ign
     Pull(ctx).run()  # a redundant extra drain must not resubmit (buffer already acked)
 
     assert len(hub.completions) == 1  # applied exactly once
-    assert store.pending_outbound() == []
+    assert store.pending_outbound(10_000) == []
     assert store.active_lease_for_chunk("ch_1") is None
 
 
@@ -1832,7 +1832,7 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
         Advance(ctx).run()  # collects it — verdict-less -> fails -> retries/escalates
 
     assert store.active_lease_for_chunk("ch_1") is None  # no more retries
-    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    escalations = [b for b in store.pending_outbound(10_000) if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
     assert store.held_environment_ids() == ["e1"]  # envs held for takeover
     assert provider.released == []
@@ -1886,7 +1886,7 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
 
     Attempt(ctx, lease).escalate()
 
-    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    escalations = [b for b in store.pending_outbound(10_000) if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
     payload = json.loads(escalations[0].payload)
     assert payload["takeover_command"] == ""
@@ -1929,7 +1929,7 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
 
     Attempt(ctx, lease).escalate()
 
-    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    escalations = [b for b in store.pending_outbound(10_000) if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
     payload = json.loads(escalations[0].payload)
     assert payload["takeover_command"] == ""
@@ -1977,7 +1977,7 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path): 
     with capture_logs() as logs:
         Attempt(ctx, lease).escalate()
 
-    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    escalations = [b for b in store.pending_outbound(10_000) if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
     payload = json.loads(escalations[0].payload)
     assert payload["chunk_id"] == "ch_1"
@@ -2026,7 +2026,7 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
     # No next attempt spawned — the cap parked before `Spawner.spawn`, not by killing anyone.
     assert harness.spawns == []
     assert store.active_lease_for_chunk("ch_1") is None
-    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    escalations = [b for b in store.pending_outbound(10_000) if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
     payload = json.loads(escalations[0].payload)
     assert payload["chunk_id"] == "ch_1"
@@ -2066,7 +2066,7 @@ def test_cost_cap_park_leaves_wrapped_empty_without_runner_dir(tmp_path):  # typ
     Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
-    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    escalations = [b for b in store.pending_outbound(10_000) if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
     payload = json.loads(escalations[0].payload)
     assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume sess-a" in payload["takeover_command"]
@@ -2121,7 +2121,7 @@ def test_cost_cap_never_kills_a_live_worker(tmp_path):  # type: ignore[no-untype
 
     # ADVANCE never even looked at this lease — still running, no judgement, no park.
     assert harness.judged == []
-    assert store.pending_outbound() == []
+    assert store.pending_outbound(10_000) == []
     assert store.active_lease_for_chunk("ch_1") is not None
     assert probe.killed == []
 
@@ -2154,7 +2154,7 @@ def test_cost_cap_under_cap_continues_normally(tmp_path):  # type: ignore[no-unt
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.node_name == "review" and lease.epoch == 2
-    assert ESCALATION_RECORDED not in [b.kind for b in store.pending_outbound()]
+    assert ESCALATION_RECORDED not in [b.kind for b in store.pending_outbound(10_000)]
 
 
 @pytest.mark.unit
@@ -2178,7 +2178,7 @@ def test_cost_cap_absent_never_parks_regardless_of_spend(tmp_path):  # type: ign
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.node_name == "review"
-    assert ESCALATION_RECORDED not in [b.kind for b in store.pending_outbound()]
+    assert ESCALATION_RECORDED not in [b.kind for b in store.pending_outbound(10_000)]
 
 
 @pytest.mark.unit
@@ -2211,7 +2211,7 @@ def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path)
         Pull(ctx).run()
 
     assert store.active_lease_for_chunk("ch_1") is None  # parked despite being only a lower bound
-    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    escalations = [b for b in store.pending_outbound(10_000) if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
     park_events = [e for e in captured if "spend cap exceeded" in e.get("event", "")]
     assert len(park_events) == 1

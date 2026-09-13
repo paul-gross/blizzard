@@ -49,7 +49,7 @@ def test_the_driver_error_wrap_is_substitutable_by_injection(tmp_path: Path) -> 
     store = SqlAlchemyRunnerStore(engine, errors)
 
     with pytest.raises(RunnerStoreError):
-        store.pending_outbound()
+        store.pending_outbound(10_000)
 
     assert errors.wrapped == ["query"]
 

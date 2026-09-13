@@ -302,11 +302,11 @@ def test_outbound_buffer_is_fifo_and_ackable(tmp_path):  # type: ignore[no-untyp
         kind="completion.submitted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW
     )
     assert s1 < s2
-    assert [f.seq for f in store.pending_outbound()] == [s1, s2]
-    assert store.pending_outbound()[1].lease_id == "lease_1"
+    assert [f.seq for f in store.pending_outbound(10_000)] == [s1, s2]
+    assert store.pending_outbound(10_000)[1].lease_id == "lease_1"
     assert store.pending_submission_lease_ids() == {"lease_1"}
     store.ack_outbound(s1, acked_at=_NOW)
-    assert [f.seq for f in store.pending_outbound()] == [s2]
+    assert [f.seq for f in store.pending_outbound(10_000)] == [s2]
 
 
 @pytest.mark.unit
@@ -387,7 +387,7 @@ def test_record_usage_lands_fact_and_buffers_outbound(tmp_path):  # type: ignore
     assert totals.input_tokens == 10
     assert totals.cost_usd == 1.5
     assert totals.cost_partial is False
-    pending = store.pending_outbound()
+    pending = store.pending_outbound(10_000)
     assert len(pending) == 1
     assert pending[0].kind == "usage.recorded"
     assert pending[0].chunk_id == "ch_1"
@@ -419,7 +419,7 @@ def test_record_usage_is_idempotent_per_lease_generation_kind(tmp_path):  # type
     )
     totals = store.usage_since(_NOW)
     assert totals.input_tokens == 10  # not doubled
-    assert len(store.pending_outbound()) == 1  # not buffered twice
+    assert len(store.pending_outbound(10_000)) == 1  # not buffered twice
 
 
 @pytest.mark.unit
@@ -447,7 +447,7 @@ def test_record_usage_appends_a_new_row_for_a_new_generation(tmp_path):  # type:
     )
     totals = store.usage_since(_NOW)
     assert totals.input_tokens == 20  # both rows summed
-    assert len(store.pending_outbound()) == 2
+    assert len(store.pending_outbound(10_000)) == 2
 
 
 @pytest.mark.unit
@@ -1001,7 +1001,7 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
     store.ack_transcript_outbound(t1, acked_at=_NOW)
     assert [d.seq for d in store.pending_transcript_outbound()] == [t2]
     # The fact lane's own buffer is untouched by the transcript lane's ack.
-    assert len(store.pending_outbound()) == 1
+    assert len(store.pending_outbound(10_000)) == 1
 
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
@@ -1100,7 +1100,7 @@ def test_record_closure_finalizes_every_open_segment_and_marks_it_atomically(tmp
     assert {d.segment_id for d in pending} == segment_ids
     assert all(d.final for d in pending)
     # The fact lane's own buffer carries no marker — D3's structural separation.
-    assert store.pending_outbound() == []
+    assert store.pending_outbound(10_000) == []
 
 
 @pytest.mark.unit
@@ -1167,7 +1167,7 @@ def test_prune_outbound_deletes_old_acked_rows_below_the_pending_floor(tmp_path)
 
     assert pruned == 1
     assert _outbound_row_seqs(tmp_path) == {pending, above_floor}
-    assert [f.seq for f in store.pending_outbound()] == [pending]
+    assert [f.seq for f in store.pending_outbound(10_000)] == [pending]
 
 
 @pytest.mark.component

@@ -192,6 +192,11 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "flush marker reads `acked_at` off the row this re-read fetches, so leaving this "
         "silent stales that marker until the next backstop poll.",
     ),
+    "ack_outbound_batch": Published(
+        FACT_CHANGED,
+        "OutboundDrain._ack_run (runner/loop/drain.py) — every seq in one delivered generic-"
+        "kind run, re-announced the same as `ack_outbound`'s own single-seq case (issue #522).",
+    ),
     # --- liveness/usage/context — the elapsed-time-derived samplers (D7) ------------
     "record_daemon_liveness": Silent(_ELAPSED_TIME_DERIVED + " (the daemon's own tick beat)"),
     "record_heartbeat": Silent(_ELAPSED_TIME_DERIVED + " (a worker's tool-call beat, named explicitly in D7)"),

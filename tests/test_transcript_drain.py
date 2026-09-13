@@ -18,7 +18,7 @@ from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, 
 from blizzard.runner.loop import transcript_drain as transcript_drain_module
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.transcript_drain import TranscriptDrain
-from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
+from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -346,7 +346,7 @@ def test_drain_surfaces_a_hub_cap_rejection_never_silently() -> None:
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "hub_capped"
-    fact_events = ctx.stores.outbound.pending_outbound()
+    fact_events = ctx.stores.outbound.pending_outbound(10_000)
     assert len(fact_events) == 1
     payload = json.loads(fact_events[0].payload)
     assert payload["kind"] == "transcript-truncated"
@@ -378,7 +378,7 @@ def test_drain_marks_a_hub_cap_rejection_on_replay_after_a_lost_ack() -> None:
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "hub_capped"
-    fact_events = ctx.stores.outbound.pending_outbound()
+    fact_events = ctx.stores.outbound.pending_outbound(10_000)
     assert len(fact_events) == 1
     assert json.loads(fact_events[0].payload)["kind"] == "transcript-truncated"
 
@@ -412,6 +412,108 @@ def test_drain_bounds_its_own_per_run_record_count() -> None:
 
     assert len(hub.transcripts_pushed) == transcript_drain_module._MAX_RECORDS_PER_RUN
     assert len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 5  # the rest waits for the next tick
+
+
+def test_drain_ships_a_full_ticks_worth_of_records_in_one_request() -> None:
+    """A tick with a full `_MAX_RECORDS_PER_RUN` backlog makes exactly one
+    `push_transcripts` call, not one per record."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    for i in range(transcript_drain_module._MAX_RECORDS_PER_RUN):
+        _enqueue_delta(ctx, segment_id, cursor=f"pos-{i}")
+
+    TranscriptDrain(ctx).run()
+
+    assert len(hub.push_transcripts_calls) == 1
+    assert len(hub.push_transcripts_calls[0]) == transcript_drain_module._MAX_RECORDS_PER_RUN
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+
+
+def test_drain_splits_a_batch_when_accumulated_payload_exceeds_the_byte_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Records are packed FIFO into as few requests as fit under the byte cap — split only
+    when the next record would push the accumulated batch over it, never mid-batch."""
+    monkeypatch.setattr(transcript_drain_module, "TRANSCRIPT_RECORD_MAX_BYTES", 900)
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    seqs = [_enqueue_delta(ctx, segment_id, cursor=f"pos-{i}") for i in range(5)]
+
+    TranscriptDrain(ctx).run()
+
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+    assert len(hub.push_transcripts_calls) > 1  # split across more than one request
+    assert [seq for call in hub.push_transcripts_calls for seq in call] == seqs  # FIFO, nothing dropped or reordered
+    for call in hub.push_transcripts_calls:
+        assert len(call) >= 1  # never an empty batch
+
+
+def test_drain_ships_a_single_oversized_record_alone_rather_than_blocking(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A record that alone exceeds the byte cap still ships, alone, rather than wedging
+    the drain forever waiting for a batch that could never fit."""
+    monkeypatch.setattr(transcript_drain_module, "TRANSCRIPT_RECORD_MAX_BYTES", 1)
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+
+    TranscriptDrain(ctx).run()
+
+    assert hub.push_transcripts_calls == [[seq]]
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+
+
+def test_drain_acks_a_batch_mixing_applied_and_capped_records() -> None:
+    """A capped record inside an otherwise-applied batch is acked and marked truncated
+    alongside its batch-mates landing normally — the per-record ack loop over one shared
+    request, not one request per record."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    ok_seq_1 = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    capped_seq = _enqueue_delta(ctx, segment_id, cursor="pos-2")
+    ok_seq_2 = _enqueue_delta(ctx, segment_id, cursor="pos-3")
+    hub.reject_transcript_seqs = {capped_seq}
+
+    TranscriptDrain(ctx).run()
+
+    assert len(hub.push_transcripts_calls) == 1
+    assert hub.push_transcripts_calls[0] == [ok_seq_1, capped_seq, ok_seq_2]
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []  # every seq acked, capped included
+    assert [f.seq for f in hub.transcripts_pushed] == [ok_seq_1, ok_seq_2]  # the capped one never actually applied
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "hub_capped"
+
+
+def test_drain_makes_one_request_against_a_slow_hub_and_stays_within_the_tick_budget() -> None:
+    """A slow-but-healthy hub costs one round-trip's latency for the whole tick's backlog,
+    not one per record — a hub that advances the injected clock on every `push_transcripts`
+    call still lands ten records in one call, well inside the run's own wall-clock budget."""
+
+    class _SlowHub(FakeHub):
+        def __init__(self, clock: FixedClock, step: timedelta) -> None:
+            super().__init__()
+            self._clock = clock
+            self._step = step
+
+        def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
+            ack = super().push_transcripts(batch)
+            self._clock.advance(self._step)
+            return ack
+
+    clock = FixedClock(_NOW)
+    hub = _SlowHub(clock, timedelta(seconds=3))
+    ctx = _ctx(hub, clock=clock)
+    segment_id = _spawn_one_segment(ctx)
+    seqs = [_enqueue_delta(ctx, segment_id, cursor=f"pos-{i}") for i in range(10)]
+
+    TranscriptDrain(ctx).run()
+
+    assert len(hub.push_transcripts_calls) == 1
+    assert hub.push_transcripts_calls[0] == seqs
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+    assert clock.now() < _NOW + timedelta(seconds=transcript_drain_module._MAX_SECONDS_PER_RUN)
 
 
 def test_drain_bounds_its_own_per_run_wall_clock() -> None:

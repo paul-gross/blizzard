@@ -374,7 +374,7 @@ def test_restart_resume_suppressed_then_advance_does_not_judge_or_spawn(tmp_path
     assert store.resume_intent_lease_ids() == {"lease_1"}
     lease = store.active_lease("lease_1")  # still active — a closed lease would read None here
     assert lease is not None and lease.pid == 100
-    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == "completion.submitted"] == []
 
     # Unpause; RESUME re-attaches it in place, then ADVANCE leaves the now-live worker alone.
     _pause_locally(store, ctx, paused=False)
@@ -416,7 +416,7 @@ def test_answer_resume_suppressed_while_locally_paused(tmp_path):  # type: ignor
     # Suppressed before the poll: nothing resumed, the park stays open, no answer.delivered.
     assert harness.resumed == []
     assert store.parked_lease_ids() == {"lease_1"}
-    assert [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == ANSWER_DELIVERED] == []
 
     # Unpause; ADVANCE re-polls the same open park and resumes it around the answer.
     _pause_locally(store, ctx, paused=False)
@@ -424,7 +424,7 @@ def test_answer_resume_suppressed_while_locally_paused(tmp_path):  # type: ignor
 
     assert harness.resumed == [("/ws/e1", "sess-a", "# Answer from alice. Continue.\nrest")]
     assert store.parked_lease_ids() == set()
-    assert [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
+    assert [f for f in store.pending_outbound(10_000) if f.kind == ANSWER_DELIVERED]
 
 
 def test_exited_worker_judgement_suppressed_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
@@ -445,7 +445,7 @@ def test_exited_worker_judgement_suppressed_while_locally_paused(tmp_path):  # t
     # Suppressed before the judge call: no verdict elicited, no completion buffered, the
     # lease is left exactly as it was.
     assert harness.judged == []
-    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == "completion.submitted"] == []
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.pid == 100
 
@@ -455,7 +455,7 @@ def test_exited_worker_judgement_suppressed_while_locally_paused(tmp_path):  # t
     Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     assert len(harness.judged) == 1
-    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
+    assert [f for f in store.pending_outbound(10_000) if f.kind == "completion.submitted"]
 
 
 def test_apply_response_next_spawn_suppressed_then_adopted_at_unpause(tmp_path):  # type: ignore[no-untyped-def]
@@ -620,7 +620,7 @@ def test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause(tmp_path
     assert store.active_lease("lease_1") is None
     assert store.active_lease_for_chunk("ch_1") is None
     assert store.attempt_count("ch_1", "nd_build") == 1
-    assert [f for f in store.pending_outbound() if f.kind == LEASE_MINTED] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == LEASE_MINTED] == []
     assert store.held_environment_ids() == ["e1"]
 
     # Unpause; FILL's reconcile pass sees the same shape a crashed FILL would
@@ -674,14 +674,14 @@ def test_reap_orphan_at_exhausted_retries_defers_escalation_while_locally_paused
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.pid is None
     assert store.attempt_count("ch_1", "nd_build") == 1
-    assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == ESCALATION_RECORDED] == []
 
     # Unpause; the next REAP escalates it exactly as it would have.
     _pause_locally(store, ctx, paused=False)
     Reap(ctx).run()
 
     assert store.active_lease("lease_1") is None  # closed — escalated, not requeued
-    assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED]
+    assert [f for f in store.pending_outbound(10_000) if f.kind == ESCALATION_RECORDED]
 
 
 def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
@@ -722,7 +722,7 @@ def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_pa
     survivor = store.active_lease_for_chunk("ch_1")
     assert survivor is not None and survivor.lease_id == exhausted.lease_id
     assert store.attempt_count("ch_1", "nd_build") == 3  # unmoved — no requeue, no escalation
-    assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == ESCALATION_RECORDED] == []
 
     # The deferral is not silent (issue #45 review) — one line, naming the runner and how
     # many leases it held off on this tick.
@@ -778,8 +778,8 @@ def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):
     assert probe.killed == []  # and nothing killed: a pause is not a drain
     # The chunk does not transition on a phantom verdict, and the session is not consumed.
     assert hub.completions == []
-    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
-    assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == "completion.submitted"] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == ESCALATION_RECORDED] == []
     assert store.attempt_count("ch_1", "nd_build") == 1  # unmoved — no retry burned
     # The lease is left exactly as it was, still RESUME's to own.
     assert store.resume_intent_lease_ids() == {"lease_1"}
@@ -828,7 +828,7 @@ def test_advance_does_not_judge_a_lease_resume_left_open_after_a_hub_blip(tmp_pa
     # The hub is reachable again, so ADVANCE's own envelope fetch succeeds — the skip, not
     # a hub error, is what has to stop the judgement here.
     assert harness.judged == []
-    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == "completion.submitted"] == []
     assert store.attempt_count("ch_1", "nd_build") == 1  # no verdict-less failure either
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.pid == 100
@@ -876,13 +876,13 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
 
     Advance(ctx).run()  # launches the detached elicitation
     Advance(ctx).run()  # collects it — judged, completion buffered (not paused yet)
-    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
+    assert [f for f in store.pending_outbound(10_000) if f.kind == "completion.submitted"]
 
     _pause_locally(store, ctx, paused=True)
     Pull(ctx).run()  # flushes it; the hub rejects; the exhausted budget reaches the escalate branch
 
     # The one-way door stayed shut: nothing handed to a human, the lease left open.
-    assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == ESCALATION_RECORDED] == []
     assert hub.escalations == []
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.lease_id == "lease_1"  # not closed
@@ -894,7 +894,7 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
     Advance(ctx).run()  # collects it — completion buffered again
     Pull(ctx).run()
 
-    assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED]
+    assert [f for f in store.pending_outbound(10_000) if f.kind == ESCALATION_RECORDED]
     assert store.active_lease("lease_1") is None  # closed — escalated
 
 
@@ -1068,7 +1068,7 @@ def test_ceiling_crossing_engages_the_local_brake_and_logs_ceiling_and_spend(tmp
         SpendCeiling(ctx).run()
 
     assert store.local_paused("r1") is True
-    reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
+    reports = [f for f in store.pending_outbound(10_000) if f.kind == RUNNER_LOCALLY_PAUSED]
     assert len(reports) == 1
     payload = json.loads(reports[0].payload)
     assert payload["by"] == "runner-ceiling"
@@ -1097,7 +1097,7 @@ def test_ceiling_absent_never_engages_regardless_of_spend(tmp_path):  # type: ig
     SpendCeiling(ctx).run()
 
     assert store.local_paused("r1") is False
-    assert [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED] == []
+    assert [f for f in store.pending_outbound(10_000) if f.kind == RUNNER_LOCALLY_PAUSED] == []
 
 
 @pytest.mark.unit
@@ -1142,7 +1142,7 @@ def test_ceiling_partial_total_trips_the_lower_bound_and_flags_partial(tmp_path)
     warnings = [e for e in logs if "runner locally paused" in e["event"]]
     assert warnings[0]["cost_partial"] is True
     assert "PARTIAL" in warnings[0]["event"]
-    reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
+    reports = [f for f in store.pending_outbound(10_000) if f.kind == RUNNER_LOCALLY_PAUSED]
     assert "PARTIAL" in json.loads(reports[0].payload)["reason"]
 
 
@@ -1165,7 +1165,7 @@ def test_ceiling_engages_once_no_thrash_on_later_ticks(tmp_path):  # type: ignor
 
     SpendCeiling(ctx).run()
     assert store.local_paused("r1") is True
-    assert len([f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]) == 1
+    assert len([f for f in store.pending_outbound(10_000) if f.kind == RUNNER_LOCALLY_PAUSED]) == 1
 
     with capture_logs() as logs:
         SpendCeiling(ctx).run()  # a second, and later a third, tick's check
@@ -1173,7 +1173,7 @@ def test_ceiling_engages_once_no_thrash_on_later_ticks(tmp_path):  # type: ignor
 
     assert [e for e in logs if "runner locally paused" in e["event"]] == []  # not re-logged
     # Still exactly one pause report ever buffered — no re-engage fact either.
-    assert len([f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]) == 1
+    assert len([f for f in store.pending_outbound(10_000) if f.kind == RUNNER_LOCALLY_PAUSED]) == 1
 
 
 @pytest.mark.unit
