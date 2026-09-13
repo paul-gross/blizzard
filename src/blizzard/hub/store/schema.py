@@ -636,6 +636,22 @@ close_intents = Table(
     UniqueConstraint("chunk_id", "source", "ref", name="uq_close_intents_chunk_source_ref"),
 )
 
+# --- Close-intent drain attempts (close_intent_attempts, blizzard#524 D7) ------------
+# Append-only, the `hub_node_poll` shape (`bzh:facts-not-status`): one row per skipped or
+# failed drain attempt against a pending intent — never a mutable counter on
+# `close_intents` itself. A `closed`/`gone` outcome records no row here; it retires the
+# intent instead, so it is never due again.
+
+close_intent_attempts = Table(
+    "close_intent_attempts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("intent_id", Integer, ForeignKey("close_intents.id"), nullable=False),
+    Column("attempted_at", UtcDateTime, nullable=False),
+    Column("outcome", String, nullable=False),  # skipped | failed
+)
+Index("ix_close_intent_attempts_intent_id", close_intent_attempts.c.intent_id)
+
 # --- Delivery kick-backs (chunk_bounces — #64) --------------------------------
 # Contention, not failure: consumes no node retry, natural-keyed ``(chunk_id, epoch)``.
 

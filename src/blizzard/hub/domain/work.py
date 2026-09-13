@@ -136,10 +136,16 @@ class PendingCloseIntent:
     """One ``(chunk_id, ref)`` pair carrying a pending ``close_intents`` row (blizzard#383)
     — :meth:`~blizzard.hub.domain.chunks.delivery.IReadChunkDeliveryRepository.pending_close_intents`'s
     own row shape. Pairs, not a ``WorkRef``-keyed dict: two chunks can name the same ref, and a
-    dict would silently drop one."""
+    dict would silently drop one.
+
+    ``intent_id`` is the backing ``close_intents.id`` (blizzard#524 D7) — the key a
+    skipped attempt's own ``close_intent_attempts`` row is recorded against. Excluded from
+    equality so every existing ``(chunk_id, ref)``-keyed comparison keeps working unchanged;
+    it defaults to ``0`` for a test double that only ever cared about the pair."""
 
     chunk_id: str
     ref: WorkRef
+    intent_id: int = field(default=0, compare=False)
 
 
 class MigrationMode(StrEnum):

@@ -55,7 +55,11 @@ class CloseIntentDrainer:
             closer = self._work_sources.closer(intent.ref.source)
             if closer is None:
                 skipped += 1
-                continue  # D4: no closer bound for this source today — stays pending
+                # D4: no closer bound for this source today — stays pending. Ticks the
+                # backoff clock (blizzard#524 D7) so a persistently source-less intent is
+                # not re-considered on every sweep forever.
+                self._delivery.record_close_attempt_skipped(intent.intent_id, at=self._clock.now())
+                continue
             at = self._clock.now()
             try:
                 closer.close(intent.ref)

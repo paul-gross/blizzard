@@ -110,26 +110,34 @@ class _Sweepable(Protocol):
 class Sweep:
     """One reconciler stepped once per interval until shutdown (``bzh:steppable-loop``).
 
-    ``initial_delay_seconds`` staggers this sweep's first tick (blizzard#524 D8) so that
-    sweeps sharing an interval don't phase-lock and collide every cycle — drawn once, at
-    the composition root (:meth:`all`), never inside this class, so no RNG leaks into a
-    test-constructed ``Sweep``. ``timer`` is the injectable monotonic clock ``run`` uses
-    to measure and log each pass's elapsed time; it defaults to ``time.monotonic`` and a
+    The first pass always runs immediately on ``run()`` entry — never jittered — so a
+    freshly booted or crash-recovered process converges without waiting out a sweep's own
+    interval first. ``jitter_seconds``, when given, instead offsets the one pass right
+    after that first one (blizzard#524 D8): each sweep's second pass lands at its own
+    ``jitter_seconds``, and every pass from the third on returns to the plain
+    ``interval_seconds`` cadence from there — so sibling sweeps share one synchronized
+    pass at boot, then decorrelate for good, rather than colliding every cycle forever.
+    ``None`` (the default, what every test-constructed ``Sweep`` gets unless it says
+    otherwise) means every wait uses ``interval_seconds``, jitter or not — so no RNG
+    leaks into a test-constructed ``Sweep``; only :meth:`all` draws a real value, once,
+    at the composition root. ``timer`` is the injectable monotonic clock ``run`` uses to
+    measure and log each pass's elapsed time; it defaults to ``time.monotonic`` and a
     test overrides it with a fake for deterministic overrun assertions."""
 
     reconciler: _Sweepable
     interval_seconds: int
     shutdown: asyncio.Event
     logger_name: str
-    initial_delay_seconds: float = 0
+    jitter_seconds: float | None = None
     timer: Callable[[], float] = time.monotonic
 
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
         """The forge-status sweep a work source opts into, plus the always-on
         event-derivation, delivery-materialization, and close-drain sweeps — none on the
-        store-free app. Each sweep's initial delay is drawn uniformly from
-        ``[0, interval_seconds)`` here (blizzard#524 D8) so their first ticks decorrelate."""
+        store-free app. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
+        here (blizzard#524 D8) so their recurring cadence decorrelates from its second pass
+        on."""
         services: HubServices | None = app.state.services
         if services is None:
             return
@@ -141,28 +149,28 @@ class Sweep:
                 interval,
                 app.state.shutdown,
                 "blizzard.hub.forge_status",
-                initial_delay_seconds=random.uniform(0, interval),
+                jitter_seconds=random.uniform(0, interval),
             )
         yield cls(
             services.event_derivation,
             EVENT_DERIVATION_INTERVAL_SECONDS,
             app.state.shutdown,
             "blizzard.hub.transcript_events",
-            initial_delay_seconds=random.uniform(0, EVENT_DERIVATION_INTERVAL_SECONDS),
+            jitter_seconds=random.uniform(0, EVENT_DERIVATION_INTERVAL_SECONDS),
         )
         yield cls(
             services.work_item_materialization,
             WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS,
             app.state.shutdown,
             "blizzard.hub.work_item_materialization",
-            initial_delay_seconds=random.uniform(0, WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS),
+            jitter_seconds=random.uniform(0, WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS),
         )
         yield cls(
             services.close_drain,
             CLOSE_DRAIN_INTERVAL_SECONDS,
             app.state.shutdown,
             "blizzard.hub.work_closure",
-            initial_delay_seconds=random.uniform(0, CLOSE_DRAIN_INTERVAL_SECONDS),
+            jitter_seconds=random.uniform(0, CLOSE_DRAIN_INTERVAL_SECONDS),
         )
 
     async def _wait(self, timeout: float) -> None:
@@ -170,15 +178,15 @@ class Sweep:
             await asyncio.wait_for(self.shutdown.wait(), timeout=timeout)
 
     async def run(self) -> None:
-        """Wait out the initial delay, then call ``sweep()`` and wait out the interval,
-        repeating until shutdown. Every wait races ``shutdown`` so it wakes immediately
+        """Call ``sweep()`` immediately, then again after ``jitter_seconds`` (or, with none
+        given, after another plain ``interval_seconds``), then every ``interval_seconds``
+        after that, until shutdown. Every wait races ``shutdown`` so it wakes immediately
         instead of holding a graceful drain. A sweep that raises is logged and swallowed —
         a bad tick must never kill the loop, only skip a cycle. Every pass's elapsed time is
         logged (blizzard#524 D8); a pass that overruns its own interval logs a warning
         naming this sweep, since an overrun sweep is otherwise invisible."""
         log = get_logger(self.logger_name)
-        if self.initial_delay_seconds > 0:
-            await self._wait(self.initial_delay_seconds)
+        first = True
         while not self.shutdown.is_set():
             started = self.timer()
             try:
@@ -194,7 +202,11 @@ class Sweep:
                     elapsed_seconds=elapsed,
                     interval_seconds=self.interval_seconds,
                 )
-            await self._wait(self.interval_seconds)
+            if first and self.jitter_seconds is not None:
+                await self._wait(self.jitter_seconds)
+            else:
+                await self._wait(self.interval_seconds)
+            first = False
 
 
 @contextlib.asynccontextmanager

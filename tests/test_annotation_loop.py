@@ -131,12 +131,10 @@ class _FakeApp:
         self.state = _FakeState(services, config)
 
 
-async def test_lifespan_starts_the_event_derivation_loop_unconditionally(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_path: Path) -> None:
     """blizzard#254 D1: no work source opts a chunk's transcript events into anything —
-    the sweep is yielded and started regardless."""
-    monkeypatch.setattr("blizzard.hub.app.random.uniform", lambda _lo, _hi: 0.0)  # no jitter to wait out
+    the sweep is yielded and started regardless. Its jitter never delays this first pass
+    (blizzard#524 D8), so no jitter override is needed here."""
     event_derivation = _CountingReconciler()
     services = _FakeServices(work_sources=_FakeWorkSources())
     services.event_derivation = event_derivation
@@ -148,13 +146,10 @@ async def test_lifespan_starts_the_event_derivation_loop_unconditionally(
     assert event_derivation.calls == 1
 
 
-async def test_lifespan_starts_the_work_item_materialization_loop_unconditionally(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_lifespan_starts_the_work_item_materialization_loop_unconditionally(tmp_path: Path) -> None:
     """blizzard#366 D9: materialization is idempotent inside one transaction against one
     store, so there is nothing a work-source opt-in would protect — the sweep is yielded
     and started regardless, the same ground ``event_derivation`` stands on."""
-    monkeypatch.setattr("blizzard.hub.app.random.uniform", lambda _lo, _hi: 0.0)  # no jitter to wait out
     materialization = _CountingReconciler()
     services = _FakeServices(work_sources=_FakeWorkSources())
     services.work_item_materialization = materialization
@@ -166,13 +161,10 @@ async def test_lifespan_starts_the_work_item_materialization_loop_unconditionall
     assert materialization.calls == 1
 
 
-async def test_lifespan_starts_the_close_drain_loop_unconditionally(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Path) -> None:
     """blizzard#383 D3: the enqueue is source-agnostic, so the drain runs whether or not
     any source is close-capable today — the sweep is yielded and started regardless,
     like its two siblings above."""
-    monkeypatch.setattr("blizzard.hub.app.random.uniform", lambda _lo, _hi: 0.0)  # no jitter to wait out
     close_drain = _CountingReconciler()
     services = _FakeServices(work_sources=_FakeWorkSources())
     services.close_drain = close_drain
@@ -185,31 +177,34 @@ async def test_lifespan_starts_the_close_drain_loop_unconditionally(
 
 
 # --------------------------------------------------------------------------- #
-# initial delay, elapsed-time logging, and overrun warning (blizzard#524 D8)
+# jitter, elapsed-time logging, and overrun warning (blizzard#524 D8)
 
 
-async def test_initial_delay_is_honored_before_the_first_sweep() -> None:
+async def test_the_first_pass_runs_immediately_even_with_a_large_jitter() -> None:
+    """A freshly booted or crash-recovered process must not wait out a sweep's own
+    jitter before its first, convergence-critical pass (blizzard#524 D8) — only its
+    second pass onward is offset."""
     reconciler = _CountingReconciler()
     shutdown = asyncio.Event()
 
-    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test", initial_delay_seconds=3600).run())
+    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test", jitter_seconds=3600).run())
     await asyncio.sleep(0.05)
-    assert reconciler.calls == 0  # still waiting out the initial delay
+    assert reconciler.calls == 1  # the first pass never waits out the jitter
 
     shutdown.set()
     await asyncio.wait_for(task, timeout=1.0)
-    assert reconciler.calls == 0  # shutdown fired before the delay ever elapsed
+    assert reconciler.calls == 1  # shutdown fired before the post-first-pass jitter elapsed
 
 
-async def test_shutdown_during_the_initial_delay_returns_promptly() -> None:
+async def test_shutdown_during_the_post_first_pass_jitter_returns_promptly() -> None:
     reconciler = _CountingReconciler()
     shutdown = asyncio.Event()
 
-    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test", initial_delay_seconds=3600).run())
-    await asyncio.sleep(0.05)
+    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test", jitter_seconds=3600).run())
+    await asyncio.sleep(0.05)  # let the immediate first pass land
     shutdown.set()
 
-    await asyncio.wait_for(task, timeout=1.0)  # returns almost immediately, not after the 3600s delay
+    await asyncio.wait_for(task, timeout=1.0)  # returns almost immediately, not after the 3600s jitter
 
 
 async def test_elapsed_time_is_logged_every_pass() -> None:
