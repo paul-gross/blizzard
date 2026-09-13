@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import CompoundSelect, Select, case, func, select, tuple_, union
+from sqlalchemy import CompoundSelect, Select, func, select, tuple_, union
 
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.foundation.node_steps import Executor
@@ -37,6 +37,7 @@ from blizzard.hub.domain.analytics.operational import (
 from blizzard.hub.domain.work import UsageTotal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
@@ -150,21 +151,10 @@ def _spend_filtered_stmt(base: Select[Any], criteria: OperationalCriteria) -> Se
 
 
 def _spend_group_stmt(criteria: OperationalCriteria, *, group_col: Any) -> Select[Any]:
-    """Usage/cost summed in SQL, grouped by ``group_col`` (D6) — the sums
-    :meth:`~blizzard.hub.domain.work.UsageTotal.of_grouped_sums` applies the lower-bound
-    + PARTIAL contract to: a null ``cost_usd`` is skipped from the sum (``coalesce``
-    never substitutes a fabricated zero into the total itself), and ``null_cost_rows``
-    counts how many of the group's rows lacked one."""
-    u = s.usage_facts
-    stmt = select(
-        group_col.label("key"),
-        func.coalesce(func.sum(u.c.input_tokens), 0).label("input_tokens"),
-        func.coalesce(func.sum(u.c.output_tokens), 0).label("output_tokens"),
-        func.coalesce(func.sum(u.c.cache_read_tokens), 0).label("cache_read_tokens"),
-        func.coalesce(func.sum(u.c.cache_create_tokens), 0).label("cache_create_tokens"),
-        func.coalesce(func.sum(u.c.cost_usd), 0.0).label("cost_usd"),
-        func.coalesce(func.sum(case((u.c.cost_usd.is_(None), 1), else_=0)), 0).label("null_cost_rows"),
-    )
+    """Usage/cost summed in SQL, grouped by ``group_col`` (D6) — the aggregate columns
+    ``usage_aggregate_columns`` owns, the sums :meth:`~blizzard.hub.domain.work.UsageTotal.of_grouped_sums`
+    applies the lower-bound + PARTIAL contract to."""
+    stmt = select(group_col.label("key"), *usage_aggregate_columns())
     stmt = _spend_filtered_stmt(stmt, criteria)
     return stmt.group_by(group_col).order_by(group_col.asc())
 
@@ -178,9 +168,9 @@ def _spend_by_graph_stmt(criteria: OperationalCriteria) -> Select[Any]:
 
 
 def _spend_by_chunk_stmt(criteria: OperationalCriteria, *, cursor: str | None, limit: int) -> Select[Any]:
-    """Deliberate deferral: each page re-runs a full ``GROUP BY`` with no supporting
-    ``usage_facts.chunk_id`` index — adding one needs a migration, and this change
-    carries none (D1); left for whatever next touches this table's schema."""
+    """Each page re-runs a full ``GROUP BY chunk_id`` — served by the existing
+    ``ix_usage_facts_chunk_id``, which already covers both the grouping and the
+    ``ORDER BY`` with no temp B-tree."""
     u = s.usage_facts
     stmt = _spend_group_stmt(criteria, group_col=u.c.chunk_id)
     if cursor is not None:

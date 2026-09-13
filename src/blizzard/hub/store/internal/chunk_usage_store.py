@@ -9,29 +9,21 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, select
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.work import UsageTotal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
 
 
 def _usage_total_stmt(since: datetime, until: datetime | None) -> Select[Any]:
     """The fold ``usage_total_since`` executes (blizzard#517 D2) — one row of aggregates,
-    modeled on ``analytics_operational_store.py``'s ``_spend_group_stmt``: a null
-    ``cost_usd`` is skipped from the sum (``coalesce`` never substitutes a fabricated zero
-    into the total itself), and ``null_cost_rows`` counts how many rows lacked one."""
+    modeled on ``analytics_operational_store.py``'s ``_spend_group_stmt``."""
     u = s.usage_facts
-    stmt = select(
-        func.coalesce(func.sum(u.c.input_tokens), 0).label("input_tokens"),
-        func.coalesce(func.sum(u.c.output_tokens), 0).label("output_tokens"),
-        func.coalesce(func.sum(u.c.cache_read_tokens), 0).label("cache_read_tokens"),
-        func.coalesce(func.sum(u.c.cache_create_tokens), 0).label("cache_create_tokens"),
-        func.coalesce(func.sum(u.c.cost_usd), 0.0).label("cost_usd"),
-        (func.count() - func.count(u.c.cost_usd)).label("null_cost_rows"),
-    ).where(u.c.recorded_at >= since)
+    stmt = select(*usage_aggregate_columns()).where(u.c.recorded_at >= since)
     if until is not None:
         stmt = stmt.where(u.c.recorded_at < until)
     return stmt

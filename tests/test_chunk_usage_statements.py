@@ -1,7 +1,8 @@
 """The chunk-usage store's own statement, ``_usage_total_stmt`` (blizzard#517, unit
 tier): it compiles under both dialects, stays on the portable expression surface, and
 selects only ungrouped aggregates — so it returns one row by construction, never a
-per-fact object. Mirrors ``test_analytics_operational_statements.py``'s sweep shape."""
+per-fact object. Mirrors ``test_analytics_operational_statements.py``'s sweep shape.
+One case migrates a real store and reads the planner (component tier)."""
 
 from __future__ import annotations
 
@@ -53,9 +54,12 @@ def test_usage_total_stmt_selects_only_ungrouped_aggregates() -> None:
         assert isinstance(element, Function | BinaryExpression), column
 
 
+@pytest.mark.component
 def test_spend_range_query_plans_as_an_index_search(tmp_path: Path) -> None:
     """The spend read's range predicate (blizzard#517) plans through
-    ``ix_usage_facts_recorded_at`` rather than a full table scan."""
+    ``ix_usage_facts_recorded_at`` rather than a full table scan. Migrates a real
+    disk-backed sqlite file and reads the query planner — component tier, unlike the
+    rest of this file (`blizzard-context`'s tier rules)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)

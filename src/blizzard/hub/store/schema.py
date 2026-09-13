@@ -249,8 +249,10 @@ chunk_work_refs = Table(
     Column("ref", String, nullable=False),
 )
 Index("ix_chunk_work_refs_chunk_id", chunk_work_refs.c.chunk_id)
+# Both real `source`-only readers (`analytics_operational_store.py`,
+# `analytics_event_query_store.py`) are already served by this composite's leading
+# column — no separate single-column `source` index (blizzard#519 D5's own reasoning).
 Index("ix_chunk_work_refs_source_ref", chunk_work_refs.c.source, chunk_work_refs.c.ref)
-Index("ix_chunk_work_refs_source", chunk_work_refs.c.source)
 
 # --- Movement record (transition.recorded) ------------------------------------
 
@@ -594,9 +596,9 @@ route_released = Table(
     Column("seq", Integer, nullable=False),
 )
 Index("ix_route_released_chunk_id", route_released.c.chunk_id)
-# The activity feed's own bounded read (D6) — route_released's integer id is its own
-# tie-break (sqlite appends the rowid to an index's keys).
-Index("ix_route_released_released_at", route_released.c.released_at)
+# The activity feed's own bounded read (D6) — released_at/id, portable across sqlite and
+# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+Index("ix_route_released_released_at_id", route_released.c.released_at, route_released.c.id)
 
 # --- Route capability tokens (route_token_minted — issue #84a) ----------------
 # Only the sha256 digest is persisted; ``seq`` shares the per-chunk route counter.
@@ -767,9 +769,9 @@ chunk_promoted = Table(
     Column("promoted_at", UtcDateTime, nullable=False),  # not_ready -> ready
 )
 Index("ix_chunk_promoted_chunk_id", chunk_promoted.c.chunk_id)
-# The activity feed's own bounded read (D6) — chunk_promoted's integer id is its own
-# tie-break (sqlite appends the rowid to an index's keys).
-Index("ix_chunk_promoted_promoted_at", chunk_promoted.c.promoted_at)
+# The activity feed's own bounded read (D6) — promoted_at/id, portable across sqlite and
+# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+Index("ix_chunk_promoted_promoted_at_id", chunk_promoted.c.promoted_at, chunk_promoted.c.id)
 
 # --- Facts that make the derivation precedence correct (shaped) -------------
 
@@ -783,7 +785,9 @@ chunk_stopped = Table(
     Column("stopped_by", String, nullable=True),
 )
 Index("ix_chunk_stopped_chunk_id", chunk_stopped.c.chunk_id)
-Index("ix_chunk_stopped_stopped_at", chunk_stopped.c.stopped_at)
+# The activity feed's own bounded read (D6) — stopped_at/id, portable across sqlite and
+# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+Index("ix_chunk_stopped_stopped_at_id", chunk_stopped.c.stopped_at, chunk_stopped.c.id)
 
 # An operator's manual completion (issue #294) — outranks a ``chunk_stopped`` row recorded
 # at or before it (``ChunkFacts._operator_completion_outranks_stop``), the motivating case.
@@ -796,7 +800,9 @@ chunk_completed = Table(
     Column("completed_by", String, nullable=False),
 )
 Index("ix_chunk_completed_chunk_id", chunk_completed.c.chunk_id)
-Index("ix_chunk_completed_completed_at", chunk_completed.c.completed_at)
+# The activity feed's own bounded read (D6) — completed_at/id, portable across sqlite
+# and postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+Index("ix_chunk_completed_completed_at_id", chunk_completed.c.completed_at, chunk_completed.c.id)
 
 # The fact that makes an unacquired chunk ephemeral by deletion (issue #364) — a
 # ``chunk_grouped``-shaped sibling; ``deleted_by`` is non-null, with no legacy row predating it.
@@ -808,7 +814,9 @@ chunk_deleted = Table(
     Column("deleted_at", UtcDateTime, nullable=False),
     Column("deleted_by", String, nullable=False),
 )
-Index("ix_chunk_deleted_deleted_at", chunk_deleted.c.deleted_at)
+# The activity feed's own bounded read (D6) — deleted_at/id, portable across sqlite and
+# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+Index("ix_chunk_deleted_deleted_at_id", chunk_deleted.c.deleted_at, chunk_deleted.c.id)
 
 # --- Chunk dependency edges (issue #456) --------------------------------------
 # One row per edge; ``released_at``/``released_by`` set once, together — never deleted.
@@ -843,7 +851,9 @@ escalations = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_escalations_chunk_id", escalations.c.chunk_id)
-Index("ix_escalations_recorded_at", escalations.c.recorded_at)
+# The activity feed's own bounded read (D6) — recorded_at/id, portable across sqlite and
+# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+Index("ix_escalations_recorded_at_id", escalations.c.recorded_at, escalations.c.id)
 
 # --- Usage facts (usage.recorded — issue #59) --------------------------------
 # One row per harness invocation. **Not** epoch-fenced: a zombie's spend is real spend.
@@ -964,7 +974,9 @@ requeues = Table(
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
 )
 Index("ix_requeues_chunk_id", requeues.c.chunk_id)
-Index("ix_requeues_requeued_at", requeues.c.requeued_at)
+# The activity feed's own bounded read (D6) — requeued_at/id, portable across sqlite and
+# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+Index("ix_requeues_requeued_at_id", requeues.c.requeued_at, requeues.c.id)
 
 # An operator's forced move of a chunk onto a node, now (issue #370) — a movement fact of
 # its own, never a transition: nothing judged it and no edge was taken.
@@ -988,7 +1000,9 @@ chunk_restarts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_chunk_restarts_chunk_id", chunk_restarts.c.chunk_id)
-Index("ix_chunk_restarts_recorded_at", chunk_restarts.c.recorded_at)
+# The activity feed's own bounded read (D6) — recorded_at/id, portable across sqlite and
+# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+Index("ix_chunk_restarts_recorded_at_id", chunk_restarts.c.recorded_at, chunk_restarts.c.id)
 
 # --- Chunk pause facts (chunk.paused / chunk.resumed — issue #46) -----------
 # An operator-level brake over one chunk: append-only, newest-fact-wins.
@@ -1003,7 +1017,9 @@ chunk_pause_facts = Table(
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
 )
 Index("ix_chunk_pause_facts_chunk_id", chunk_pause_facts.c.chunk_id)
-Index("ix_chunk_pause_facts_set_at", chunk_pause_facts.c.set_at)
+# The activity feed's own bounded read (D6) — set_at/id, portable across sqlite and
+# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+Index("ix_chunk_pause_facts_set_at_id", chunk_pause_facts.c.set_at, chunk_pause_facts.c.id)
 
 # --- Store-and-forward high-water mark (per-runner idempotency) ---------------
 # The greatest per-runner seq already applied; a fact at or below it is re-acked, not applied.
@@ -1039,7 +1055,9 @@ chunk_grouped = Table(
     Column("grouped_into", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the survivor
     Column("grouped_at", UtcDateTime, nullable=False),
 )
-Index("ix_chunk_grouped_grouped_at", chunk_grouped.c.grouped_at)
+# The activity feed's own bounded read (D6) — grouped_at/id, portable across sqlite and
+# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+Index("ix_chunk_grouped_grouped_at_id", chunk_grouped.c.grouped_at, chunk_grouped.c.id)
 
 # --- The fleet registry (runner.registered / paused / resumed) ----------------
 # The registration row is an upsert; liveness derives from ``last_seen_at``.

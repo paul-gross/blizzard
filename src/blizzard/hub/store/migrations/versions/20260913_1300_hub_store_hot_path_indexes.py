@@ -20,8 +20,9 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 # (index name, table, columns) — blizzard#519's hot-path predicates, plus
-# blizzard#517's `usage_facts.recorded_at`, plus one `(ts[, pk])` index per
-# `activity_facts_since` source (D6), matching its `_bounded` ordering.
+# blizzard#517's `usage_facts.recorded_at`, plus one `(ts, pk)` index per
+# `activity_facts_since` source (D6), matching its `_bounded` ordering — portable
+# across sqlite and postgres alike (`bzh:sql-portable`).
 _CREATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("ix_artifacts_chunk_id_node_id_epoch", "artifacts", ("chunk_id", "node_id", "epoch")),
     ("ix_graph_nodes_graph_id", "graph_nodes", ("graph_id",)),
@@ -33,7 +34,6 @@ _CREATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("ix_transcript_segments_final_chunk_id", "transcript_segments", ("final", "chunk_id")),
     ("ix_chunk_work_refs_chunk_id", "chunk_work_refs", ("chunk_id",)),
     ("ix_chunk_work_refs_source_ref", "chunk_work_refs", ("source", "ref")),
-    ("ix_chunk_work_refs_source", "chunk_work_refs", ("source",)),
     ("ix_usage_facts_node_id", "usage_facts", ("node_id",)),
     ("ix_usage_facts_recorded_at", "usage_facts", ("recorded_at",)),
     ("ix_work_item_proposals_chunk_id", "work_item_proposals", ("chunk_id",)),
@@ -56,17 +56,19 @@ _CREATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ),
     ("ix_questions_asked_at_question_id", "questions", ("asked_at", "question_id")),
     ("ix_question_answers_answered_at_question_id", "question_answers", ("answered_at", "question_id")),
-    # activity_facts_since — integer-id sources: (ts) alone (sqlite appends the rowid).
-    ("ix_chunk_promoted_promoted_at", "chunk_promoted", ("promoted_at",)),
-    ("ix_chunk_grouped_grouped_at", "chunk_grouped", ("grouped_at",)),
-    ("ix_chunk_restarts_recorded_at", "chunk_restarts", ("recorded_at",)),
-    ("ix_escalations_recorded_at", "escalations", ("recorded_at",)),
-    ("ix_requeues_requeued_at", "requeues", ("requeued_at",)),
-    ("ix_route_released_released_at", "route_released", ("released_at",)),
-    ("ix_chunk_pause_facts_set_at", "chunk_pause_facts", ("set_at",)),
-    ("ix_chunk_stopped_stopped_at", "chunk_stopped", ("stopped_at",)),
-    ("ix_chunk_completed_completed_at", "chunk_completed", ("completed_at",)),
-    ("ix_chunk_deleted_deleted_at", "chunk_deleted", ("deleted_at",)),
+    # activity_facts_since — integer-id sources: (ts, id). sqlite would serve the
+    # tie-break off a bare (ts) index by implicitly appending the rowid, but postgres
+    # doesn't, so the id column rides explicitly for both (`bzh:sql-portable`).
+    ("ix_chunk_promoted_promoted_at_id", "chunk_promoted", ("promoted_at", "id")),
+    ("ix_chunk_grouped_grouped_at_id", "chunk_grouped", ("grouped_at", "id")),
+    ("ix_chunk_restarts_recorded_at_id", "chunk_restarts", ("recorded_at", "id")),
+    ("ix_escalations_recorded_at_id", "escalations", ("recorded_at", "id")),
+    ("ix_requeues_requeued_at_id", "requeues", ("requeued_at", "id")),
+    ("ix_route_released_released_at_id", "route_released", ("released_at", "id")),
+    ("ix_chunk_pause_facts_set_at_id", "chunk_pause_facts", ("set_at", "id")),
+    ("ix_chunk_stopped_stopped_at_id", "chunk_stopped", ("stopped_at", "id")),
+    ("ix_chunk_completed_completed_at_id", "chunk_completed", ("completed_at", "id")),
+    ("ix_chunk_deleted_deleted_at_id", "chunk_deleted", ("deleted_at", "id")),
 )
 
 # Superseded by a composite created above — dropped in the same migration (net-neutral
