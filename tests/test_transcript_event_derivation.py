@@ -7,6 +7,7 @@ component tier)."""
 from __future__ import annotations
 
 import json
+import zlib
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
-from tests.support import chunk_stores, hub_store_connections
+from tests.support import chunk_stores, count_queries, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -333,3 +334,113 @@ def test_one_underivable_segment_does_not_cost_the_rest_of_the_tick(fixture: _Fi
     EventDerivationReconciler(service=poisoned, events=fixture.events).sweep()
 
     assert [row.segment_id for row in fixture.stored_events()] == ["sg_2"]
+
+
+# --- bulk candidacy, zero decode, batched drop (blizzard#513) -----------------
+
+
+def test_a_steady_state_pass_decompresses_no_content_and_holds_a_flat_statement_count(
+    fixture: _Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Acceptance criterion 1 — a steady-state pass decompresses zero bytes and issues a
+    statement count independent of segment count."""
+    for i in range(5):
+        fixture.mint_chunk(f"ch_small_{i}")
+        fixture.segments.insert_accepted(
+            _segment_record(segment_id=f"sg_small_{i}", chunk_id=f"ch_small_{i}"), byte_count=10, codec="zlib", at=_NOW
+        )
+    fixture.reconciler.sweep()  # builds every marker — not the steady-state pass under test
+
+    def _boom(*_: object, **__: object) -> bytes:
+        raise AssertionError("a steady-state pass must not decompress any content")
+
+    monkeypatch.setattr(zlib, "decompress", _boom)
+    small_count = count_queries(fixture.engine, fixture.reconciler.sweep)
+    monkeypatch.undo()
+
+    for i in range(5, 55):
+        fixture.mint_chunk(f"ch_large_{i}")
+        fixture.segments.insert_accepted(
+            _segment_record(segment_id=f"sg_large_{i}", chunk_id=f"ch_large_{i}"), byte_count=10, codec="zlib", at=_NOW
+        )
+    fixture.reconciler.sweep()  # builds the 50 new markers too — still not the timed pass
+
+    monkeypatch.setattr(zlib, "decompress", _boom)
+    large_count = count_queries(fixture.engine, fixture.reconciler.sweep)
+
+    assert small_count == large_count
+
+
+def test_the_drop_pass_never_calls_visible_segment_ids_a_second_time(
+    fixture: _Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Acceptance criterion 4 — ``visible_segment_ids`` is evaluated once per pass: the
+    candidacy read's own bulk statement is the pass's only visibility evaluation, and the
+    drop pass reuses its result rather than calling ``visible_segment_ids`` again."""
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.reconciler.sweep()
+
+    def _boom(*_: object, **__: object) -> frozenset[str]:
+        raise AssertionError("the drop pass must reuse candidacy's visible set, not recompute it")
+
+    monkeypatch.setattr(TranscriptEventStore, "visible_segment_ids", _boom)
+
+    fixture.reconciler.sweep()  # raises if the drop pass re-evaluates visibility
+
+
+def test_stale_segments_drop_in_one_batched_pass_not_one_per_segment(fixture: _Fixture) -> None:
+    """Acceptance criterion 4 — stale segments drop in one transaction regardless of how
+    many there are."""
+    for i in range(3):
+        fixture.mint_chunk(f"ch_drop_{i}")
+        fixture.segments.insert_accepted(
+            _segment_record(segment_id=f"sg_drop_{i}", chunk_id=f"ch_drop_{i}"), byte_count=10, codec="zlib", at=_NOW
+        )
+    fixture.reconciler.sweep()
+    for i in range(3):
+        fixture.drop_chunk_row(f"ch_drop_{i}")
+    small_count = count_queries(fixture.engine, fixture.reconciler.sweep)
+    assert fixture.events.derived_segment_ids() == frozenset()
+
+    for i in range(3, 33):
+        fixture.mint_chunk(f"ch_drop_{i}")
+        fixture.segments.insert_accepted(
+            _segment_record(segment_id=f"sg_drop_{i}", chunk_id=f"ch_drop_{i}"), byte_count=10, codec="zlib", at=_NOW
+        )
+    fixture.reconciler.sweep()
+    for i in range(3, 33):
+        fixture.drop_chunk_row(f"ch_drop_{i}")
+    large_count = count_queries(fixture.engine, fixture.reconciler.sweep)
+
+    assert small_count == large_count
+    assert fixture.events.derived_segment_ids() == frozenset()
+
+
+def test_an_extractor_version_bump_decodes_each_segment_at_most_once(
+    fixture: _Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Acceptance criterion 3 — the candidate pass never decodes, so the only decode a
+    version bump's full-corpus re-derive pays is `derive_segment`'s own, once per segment."""
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    fixture.reconciler.sweep()
+
+    decompress_calls = 0
+    real_decompress = zlib.decompress
+
+    def _counting(*args: object, **kwargs: object) -> bytes:
+        nonlocal decompress_calls
+        decompress_calls += 1
+        return real_decompress(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(zlib, "decompress", _counting)
+
+    bumped_service = EventDerivationService(
+        events=fixture.events,
+        facts=fixture.chunks.facts,
+        record=fixture.chunks.record,
+        clock=fixture.clock,
+        extractor_version=f"{EXTRACTOR_VERSION}-next",
+    )
+    EventDerivationReconciler(service=bumped_service, events=fixture.events).sweep()
+
+    assert decompress_calls == 1

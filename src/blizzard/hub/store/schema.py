@@ -1179,6 +1179,11 @@ transcript_segments = Table(
     Column("supersedes", String, nullable=True),
     # Hub-stamped receipt instant — the D3 rolling 24h window anchors here, never on the runner's.
     Column("received_at", UtcDateTime, nullable=False),
+    # A per-record fingerprint of `(turn_range_start, rejected, content)` (blizzard#513 D1),
+    # computed by the same statement that writes those columns — so a bulk candidacy read can
+    # tell a segment's content changed since it was last derived without reading `content` at
+    # all. Backfilled by `20260913_1000_transcript_segments_content_digest`.
+    Column("content_digest", String, nullable=False),
     UniqueConstraint("segment_id", "turn_range_start", name="uq_transcript_segments_segment_turn_start"),
 )
 

@@ -6,6 +6,7 @@ back; compression (D10) is a storage detail the domain never sees."""
 
 from __future__ import annotations
 
+import hashlib
 import itertools
 import zlib
 from datetime import datetime
@@ -25,6 +26,22 @@ from blizzard.hub.store.errors import HubStoreConnections
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
+
+
+def content_digest(*, turn_range_start: int, rejected: bool, content: bytes | None) -> str:
+    """One record's own fingerprint of ``(turn_range_start, rejected, content)``
+    (blizzard#513 D1) — computed here, by the same statement that writes those columns,
+    so a bulk candidacy read can compare stored digests without ever reading `content`.
+    The migration that backfilled ``content_digest`` restates this formula frozen
+    (``bzh:frozen-revisions``); a future change here does not reach already-migrated rows."""
+    digest = hashlib.sha256()
+    digest.update(str(turn_range_start).encode("utf-8"))
+    digest.update(b"\x00")
+    digest.update(b"1" if rejected else b"0")
+    digest.update(b"\x00")
+    digest.update(content or b"")
+    digest.update(b"\x01")
+    return digest.hexdigest()
 
 
 def _identity_values(record: SegmentRecord) -> dict[str, object]:
@@ -167,6 +184,7 @@ def _insert_accepted_stmt(
         codec=codec,
         content=content,
         received_at=at,
+        content_digest=content_digest(turn_range_start=record.turn_range_start, rejected=False, content=content),
     )
 
 
@@ -179,6 +197,7 @@ def _insert_rejected_stmt(record: SegmentRecord, *, byte_count: int, reason: str
         codec=None,
         content=None,
         received_at=at,
+        content_digest=content_digest(turn_range_start=record.turn_range_start, rejected=True, content=None),
     )
 
 
@@ -203,6 +222,7 @@ def _update_to_accepted_stmt(
         codec=codec,
         content=content,
         received_at=at,
+        content_digest=content_digest(turn_range_start=record.turn_range_start, rejected=False, content=content),
     )
 
 
@@ -214,6 +234,7 @@ def _update_still_rejected_stmt(record: SegmentRecord, *, byte_count: int, reaso
         rejection_reason=reason,
         byte_count=byte_count,
         received_at=at,
+        content_digest=content_digest(turn_range_start=record.turn_range_start, rejected=True, content=None),
     )
 
 

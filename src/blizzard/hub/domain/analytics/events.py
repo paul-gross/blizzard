@@ -56,6 +56,17 @@ class DerivationMarker:
 
 
 @dataclass(frozen=True)
+class CandidacyRead:
+    """One candidacy pass's whole visibility evaluation (blizzard#513 D2): the visible
+    segment set, and which of those segments' stored digests disagree with their current-
+    version marker (or carry none at all). The reconciler's drop pass reuses
+    ``visible_segment_ids`` rather than evaluating it a second time."""
+
+    visible_segment_ids: frozenset[str]
+    candidate_segment_ids: list[str]
+
+
+@dataclass(frozen=True)
 class SegmentDerivationInput:
     """Everything a segment offers the derivation service: decoded once,
     fingerprinted once. ``complete`` is ``False`` when a record is a content hole (D6) —
@@ -79,9 +90,7 @@ class IReadTranscriptEvents(Protocol):
     def visible_segment_ids(self, *, chunk_id: str | None = None) -> frozenset[str]:
         """Every segment id the hub's own read path would show today (D1) — final, not
         superseded, and pointing at a chunk that exists — narrowed to ``chunk_id`` when given
-        (the re-derive route's chunk-scoped call, D7). The candidate set is this, filtered
-        against :meth:`derivation_marker`; the reconciler drops whatever
-        :meth:`derived_segment_ids` holds beyond it."""
+        (the re-derive route's chunk-scoped call, D7)."""
         ...
 
     def derived_segment_ids(self) -> frozenset[str]:
@@ -89,10 +98,19 @@ class IReadTranscriptEvents(Protocol):
         version — the reconciler's own bookkeeping of what it has ever derived."""
         ...
 
+    def candidacy(self, extractor_version: str, *, chunk_id: str | None = None) -> CandidacyRead:
+        """The pass's one visibility evaluation (D2): a bulk, constant-statement-count read
+        of the visible set's stored digests against their current-version markers — no
+        content byte is read and no statement runs per segment. A segment absent from the
+        visible set is never a candidate even with no marker at all."""
+        ...
+
     def segment_derivation_input(self, segment_id: str) -> SegmentDerivationInput | None:
         """``segment_id``'s decoded turns and content fingerprint, or ``None`` when the
         segment no longer exists at all (superseded segments still resolve; only the
-        caller's own visible-set check decides whether to derive)."""
+        caller's own visible-set check decides whether to derive). Called only by
+        :meth:`~blizzard.hub.domain.analytics.derivation.EventDerivationService.derive_segment`
+        (D2) — :meth:`candidacy` never decodes content, so this is the sweep's one decode."""
         ...
 
     def derivation_marker(self, segment_id: str, extractor_version: str) -> DerivationMarker | None: ...
@@ -116,8 +134,9 @@ class IWriteTranscriptEvents(IReadTranscriptEvents, Protocol):
         the marker (D6). Rows at *other* extractor versions are untouched."""
         ...
 
-    def drop_segment(self, segment_id: str) -> None:
-        """One transaction: delete every row and marker this segment ever produced, at
-        every extractor version — the reconciler's own response to a segment leaving the
-        visible set (D1, D6)."""
+    def drop_segments(self, segment_ids: frozenset[str]) -> None:
+        """One transaction: delete every row and marker every one of ``segment_ids`` ever
+        produced, at every extractor version, set-scoped rather than one transaction per
+        segment (D4) — the reconciler's own response to segments leaving the visible set
+        (D1, D6). A no-op for an empty set."""
         ...

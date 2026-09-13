@@ -123,8 +123,10 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_upsert_marker_stmt": m._upsert_marker_stmt(
             "sg_1", _EXTRACTOR_VERSION, content_fingerprint="fp", event_count=1, complete=True, at=_NOW
         ),
-        "_delete_all_events_for_segment_stmt": m._delete_all_events_for_segment_stmt("sg_1"),
-        "_delete_all_markers_for_segment_stmt": m._delete_all_markers_for_segment_stmt("sg_1"),
+        "_delete_all_events_for_segments_stmt": m._delete_all_events_for_segments_stmt(frozenset({"sg_1"})),
+        "_delete_all_markers_for_segments_stmt": m._delete_all_markers_for_segments_stmt(frozenset({"sg_1"})),
+        "_candidacy_digests_stmt": m._candidacy_digests_stmt(),
+        "_current_markers_stmt": m._current_markers_stmt(_EXTRACTOR_VERSION),
     }
 
 
@@ -297,6 +299,70 @@ def test_content_fingerprint_changes_when_a_rejected_record_is_later_accepted(tm
     assert after.content_fingerprint != before.content_fingerprint
 
 
+# --- bulk candidacy (blizzard#513 D2) ---------------------------------------
+
+
+def test_candidacy_treats_a_segment_with_no_marker_as_a_candidate(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    store = TranscriptEventStore(hub_store_connections(engine))
+
+    read = store.candidacy(_EXTRACTOR_VERSION)
+
+    assert read.visible_segment_ids == frozenset({"sg_1"})
+    assert read.candidate_segment_ids == ["sg_1"]
+
+
+def test_candidacy_excludes_a_segment_whose_marker_matches_its_current_digests(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    current = store.segment_derivation_input("sg_1")
+    assert current is not None
+    store.replace_segment_events(
+        "sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint=current.content_fingerprint, at=_NOW
+    )
+
+    read = store.candidacy(_EXTRACTOR_VERSION)
+
+    assert read.visible_segment_ids == frozenset({"sg_1"})
+    assert read.candidate_segment_ids == []
+
+
+def test_candidacy_includes_a_segment_whose_content_changed_since_its_marker(tmp_path: Path) -> None:
+    """A rejected record later accepted (blizzard#513 acceptance criterion 2)."""
+    engine = _migrated_engine(tmp_path)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    record = _segment_record()
+    segments.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    stale = store.segment_derivation_input("sg_1")
+    assert stale is not None
+    store.replace_segment_events(
+        "sg_1", _EXTRACTOR_VERSION, [], complete=False, content_fingerprint=stale.content_fingerprint, at=_NOW
+    )
+
+    segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW)
+    read = store.candidacy(_EXTRACTOR_VERSION)
+
+    assert read.candidate_segment_ids == ["sg_1"]
+
+
+def test_candidacy_narrows_to_the_given_chunk(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_NOW)
+    segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW)
+    store = TranscriptEventStore(hub_store_connections(engine))
+
+    read = store.candidacy(_EXTRACTOR_VERSION, chunk_id="ch_1")
+
+    assert read.visible_segment_ids == frozenset({"sg_1"})
+    assert read.candidate_segment_ids == ["sg_1"]
+
+
 # --- scoped replacement (D6) ------------------------------------------------
 
 
@@ -378,7 +444,7 @@ def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
             conn.execute(store_module._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()]))
 
 
-def test_drop_segment_removes_events_and_markers_at_every_extractor_version(tmp_path: Path) -> None:
+def test_drop_segments_removes_events_and_markers_at_every_extractor_version(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
@@ -388,12 +454,24 @@ def test_drop_segment_removes_events_and_markers_at_every_extractor_version(tmp_
         "sg_1", "blizzard-analytics/2", [_event(turn_path="1")], complete=True, content_fingerprint="fp2", at=_NOW
     )
 
-    store.drop_segment("sg_1")
+    store.drop_segments(frozenset({"sg_1"}))
 
     with engine.connect() as conn:
         assert conn.execute(select(s.transcript_events)).all() == []
         assert conn.execute(select(s.transcript_event_derivations)).all() == []
     assert store.derived_segment_ids() == frozenset()
+
+
+def test_drop_segments_is_a_set_scoped_no_op_for_an_empty_set(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    store.replace_segment_events(
+        "sg_1", _EXTRACTOR_VERSION, [_event()], complete=True, content_fingerprint="fp1", at=_NOW
+    )
+
+    store.drop_segments(frozenset())
+
+    assert store.derived_segment_ids() == frozenset({"sg_1"})
 
 
 def test_derived_segment_ids_reflects_every_segment_with_a_marker(tmp_path: Path) -> None:

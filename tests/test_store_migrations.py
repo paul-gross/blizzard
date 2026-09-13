@@ -6,6 +6,7 @@ mismatch, naming its exact migrate command."""
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -611,6 +612,137 @@ def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sen
     assert _nullable() is True
 
 
+def _row_digest(*, turn_range_start: int, rejected: bool, content: bytes | None) -> str:
+    """Restates ``transcript_segment_store.content_digest``, frozen, so this test pins the
+    migration's own backfill against a fixed formula rather than the production module."""
+    digest = hashlib.sha256()
+    digest.update(str(turn_range_start).encode("utf-8"))
+    digest.update(b"\x00")
+    digest.update(b"1" if rejected else b"0")
+    digest.update(b"\x00")
+    digest.update(content or b"")
+    digest.update(b"\x01")
+    return digest.hexdigest()
+
+
+def _digests_fingerprint(digests: list[str]) -> str:
+    digest = hashlib.sha256()
+    for d in digests:
+        digest.update(d.encode("ascii"))
+        digest.update(b"\x01")
+    return digest.hexdigest()
+
+
+def _old_formula_fingerprint(rows: list[tuple[int, bool, bytes]]) -> str:
+    digest = hashlib.sha256()
+    for turn_range_start, rejected, content in rows:
+        digest.update(str(turn_range_start).encode("utf-8"))
+        digest.update(b"\x00")
+        digest.update(b"1" if rejected else b"0")
+        digest.update(b"\x00")
+        digest.update(content or b"")
+        digest.update(b"\x01")
+    return digest.hexdigest()
+
+
+def test_transcript_segments_content_digest_backfills_and_carries_markers_forward(tmp_path: Path) -> None:
+    """blizzard#513 D1/D3 — the backfill computes every record's digest from raw stored
+    bytes with no decompression, and a marker whose stored fingerprint still matches the
+    retired whole-segment formula is carried forward onto the new digest-based one; a
+    marker that doesn't match is left stale, for the next pass to correctly re-derive."""
+    url = f"sqlite:///{tmp_path / 'store.db'}"
+    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
+    runner.upgrade("20260907_1000_event_log_runner_id_nullable")
+
+    rows = [(0, False, b"AAAA"), (1, False, b"BBBB")]
+    engine = create_engine_from_url(url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "insert into graphs (graph_id, name, entry_node_id, definition_yaml, created_at) "
+                    "values ('gr_1', 'g', 'nd_build', '', :at)"
+                ),
+                {"at": "2026-08-01 00:00:00"},
+            )
+            conn.execute(
+                sa.text("insert into chunks (chunk_id, graph_id, minted_at, model) values ('ch_1', 'gr_1', :at, '')"),
+                {"at": "2026-08-01 00:00:00"},
+            )
+            for turn_range_start, rejected, content in rows:
+                conn.execute(
+                    sa.text(
+                        "insert into transcript_segments (segment_id, chunk_id, node_id, epoch, spawn_generation, "
+                        "runner_id, turn_range_start, turn_range_end, final, rejected, rejection_reason, byte_count, "
+                        "codec, content, normalizer_version, harness_version, record_truncated, supersedes, received_at) "
+                        "values ('sg_1', 'ch_1', 'nd_build', 1, 1, 'r1', :trs, :trs, :final, :rejected, NULL, 10, "
+                        "'zlib', :content, 'norm/1', 'harness/1', 0, NULL, :at)"
+                    ),
+                    {
+                        "trs": turn_range_start,
+                        "final": 1 if turn_range_start == rows[-1][0] else 0,
+                        "rejected": rejected,
+                        "content": content,
+                        "at": "2026-08-01 00:00:00",
+                    },
+                )
+            # A marker whose stored fingerprint matches the retired whole-segment formula
+            # over these current rows exactly — carried forward onto the new formula.
+            conn.execute(
+                sa.text(
+                    "insert into transcript_event_derivations (segment_id, extractor_version, content_fingerprint, "
+                    "derived_at, event_count, complete) values ('sg_1', 'v1', :fp, :at, 0, 1)"
+                ),
+                {"fp": _old_formula_fingerprint(rows), "at": "2026-08-01 00:00:00"},
+            )
+            # A second marker whose stored fingerprint does NOT match — left untouched.
+            conn.execute(
+                sa.text(
+                    "insert into transcript_event_derivations (segment_id, extractor_version, content_fingerprint, "
+                    "derived_at, event_count, complete) values ('sg_1', 'v2', 'stale-fp', :at, 0, 1)"
+                ),
+                {"at": "2026-08-01 00:00:00"},
+            )
+    finally:
+        engine.dispose()
+
+    runner.upgrade("head")
+
+    engine = create_engine_from_url(url)
+    try:
+        with engine.connect() as conn:
+            segment_rows = conn.execute(
+                sa.text(
+                    "select turn_range_start, rejected, content, content_digest from transcript_segments order by turn_range_start"
+                )
+            ).all()
+            markers = {
+                row.extractor_version: row.content_fingerprint
+                for row in conn.execute(
+                    sa.text("select extractor_version, content_fingerprint from transcript_event_derivations")
+                )
+            }
+    finally:
+        engine.dispose()
+
+    expected_digests = [
+        _row_digest(turn_range_start=r.turn_range_start, rejected=bool(r.rejected), content=r.content)
+        for r in segment_rows
+    ]
+    assert [r.content_digest for r in segment_rows] == expected_digests
+
+    assert markers["v1"] == _digests_fingerprint(expected_digests)  # carried forward
+    assert markers["v2"] == "stale-fp"  # left stale — correctly re-derived next pass
+
+    # downgrade() drops the column and leaves markers as they are (D3).
+    runner.downgrade("20260907_1000_event_log_runner_id_nullable")
+    engine = create_engine_from_url(url)
+    try:
+        assert "content_digest" not in {c["name"] for c in sa.inspect(engine).get_columns("transcript_segments")}
+    finally:
+        engine.dispose()
+
+
 _SCHEMA_METADATA = {"hub": hub_schema.metadata, "runner": runner_schema.metadata}
 
 # chunks.model carries a migration-only server_default with no schema.py counterpart —
@@ -692,6 +824,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260825_1100_work_item_proposals", "work_item_proposals", ("runner_id",)),
     ("hub", "20260830_1835_work_item_runs", "garden_proposals", ("source_artifact_id", "ref")),
     ("hub", "20260906_1130_routine_scopes_join", "graph_nodes", ("mode",), "removed"),
+    ("hub", "20260907_1000_event_log_runner_id_nullable", "transcript_segments", ("content_digest",)),
     # runner tree — instance 6
     (
         "runner",
