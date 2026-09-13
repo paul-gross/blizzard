@@ -153,9 +153,9 @@ def _question_answers_activity_stmt(deleted: Select[Any]) -> Select[Any]:
             s.chunks.c.graph_id,
         )
         .select_from(
-            s.question_answers.join(
-                s.questions, s.questions.c.question_id == s.question_answers.c.question_id
-            ).join(s.chunks, s.chunks.c.chunk_id == s.questions.c.chunk_id)
+            s.question_answers.join(s.questions, s.questions.c.question_id == s.question_answers.c.question_id).join(
+                s.chunks, s.chunks.c.chunk_id == s.questions.c.chunk_id
+            )
         )
         .where(s.questions.c.chunk_id.not_in(deleted))
     )
