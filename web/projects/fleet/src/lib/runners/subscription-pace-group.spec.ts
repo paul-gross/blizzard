@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { SubscriptionPace } from './runner-panel';
+import type { SubscriptionPace } from './runner-rows';
 import { SubscriptionPaceGroup } from './subscription-pace-group';
 
 async function render(subscriptionPaces: readonly SubscriptionPace[]): Promise<HTMLElement> {

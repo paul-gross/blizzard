@@ -123,3 +123,64 @@ describe('the board route (route-table mobile/desktop fork)', () => {
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
   });
 });
+
+/**
+ * The route table's `/fleet` entry: mobile-only, with no desktop counterpart —
+ * a desktop-width hit redirects to `/board`. Exercised through the real
+ * router rather than by rendering `FleetPage` directly, so a regression that
+ * breaks the guard or redirect wiring itself is caught here.
+ */
+describe('the fleet route (mobile-only, redirects to /board on desktop)', () => {
+  let authStub: RequestClientStub;
+
+  beforeEach(async () => {
+    localStorage.clear();
+    authStub = stubRequestClient(hubClient, (method, path) => {
+      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (path === '/api/auth/providers') return [];
+      if (path === '/api/chunks' || path === '/api/questions' || path === '/api/graphs') return [];
+      if (path === '/api/runners') return { runners: [] };
+      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
+        provideViewportRenavigation(),
+        { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
+      ],
+    }).compileComponents();
+  });
+
+  afterEach(() => authStub.restore());
+
+  it('renders the mobile Fleet screen at /fleet when forced to mobile', async () => {
+    TestBed.inject(ViewportService).setOverride('mobile');
+    const fixture = TestBed.createComponent(App);
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/fleet');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="mobile-fleet-panel"]')).toBeTruthy();
+    expect(router.url).toBe('/fleet');
+  });
+
+  it('redirects to /board when /fleet is hit at desktop width', async () => {
+    TestBed.inject(ViewportService).setOverride('desktop');
+    const fixture = TestBed.createComponent(App);
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/fleet');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(router.url).toBe('/board');
+    expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="mobile-fleet-panel"]')).toBeNull();
+  });
+});

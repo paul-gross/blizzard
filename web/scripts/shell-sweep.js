@@ -191,6 +191,11 @@
  *     explorer's two row levels once rebuilt on `KitSelectRow`, their content now
  *     projected into another component's button: a long graph name, its version count,
  *     and its right-anchored short id stay inside the list's own edge at 520/390/320px.
+ *   - projects/hub/src/app/fleet/fleet-view.shell-sweep.spec.ts — the hub's mobile
+ *     Fleet screen (the bottom-nav Fleet tab): each runner card genuinely stacks below
+ *     the last with no horizontal overflow at 390/320px, and a card carrying claims, a
+ *     slot bar, and a grouped subscription pace bar with a long name stays inside its
+ *     own width.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -230,6 +235,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-explorer-list.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/fleet/fleet-view.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.

@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
-import type { RunnerRow } from './runner-panel';
+import type { RunnerRow } from './runner-rows';
 import { RunnerPanelView } from './runner-view';
 
 const NOW = new Date().toISOString();

@@ -39,6 +39,15 @@ export const routes: Routes = [
   { path: 'graphs', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'graphs/:graphId', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'events', loadComponent: () => import('./events/events-page').then((m) => m.EventsPage) },
+  // The mobile Fleet tab, mobile-only by `canMatch`. A desktop-width hit on
+  // this path (a shared link opened on a laptop, or a live viewport flip)
+  // redirects to `board` instead of mounting a desktop-only `FleetPage`.
+  {
+    path: 'fleet',
+    canMatch: [matchesMobileViewport],
+    loadComponent: () => import('./fleet/fleet-page').then((m) => m.FleetPage),
+  },
+  { path: 'fleet', redirectTo: 'board' },
   // The gardening tab (blizzard#397) — a top-level peer of board/graphs/events, not a
   // panel inside any of them. Five deep-linkable children, one per noun the garden
   // machinery itself has: scopes, routines, runs, findings, proposals — every one of

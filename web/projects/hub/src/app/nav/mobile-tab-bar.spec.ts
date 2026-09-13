@@ -30,19 +30,26 @@ describe('MobileTabBar', () => {
     return fixture;
   }
 
-  it('renders Board, Asks, and Fleet, with Asks and Fleet inert', async () => {
+  it('renders Board and Asks, with Asks inert', async () => {
     const fixture = await render([]);
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="tab-board"]')?.textContent).toContain('Board');
     const asks = el.querySelector('[data-testid="tab-asks"]');
-    const fleetTab = el.querySelector('[data-testid="tab-fleet"]');
     expect(asks?.textContent).toContain('Asks');
-    expect(fleetTab?.textContent).toContain('Fleet');
     expect(asks?.hasAttribute('disabled')).toBe(true);
-    expect(fleetTab?.hasAttribute('disabled')).toBe(true);
     expect(asks?.classList.contains('inert')).toBe(true);
-    expect(fleetTab?.classList.contains('inert')).toBe(true);
+  });
+
+  it('renders a routed Fleet tab', async () => {
+    const fixture = await render([]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const fleetTab = el.querySelector('[data-testid="tab-fleet"]');
+    expect(fleetTab?.textContent).toContain('Fleet');
+    expect(fleetTab?.hasAttribute('disabled')).toBe(false);
+    expect(fleetTab?.classList.contains('inert')).toBe(false);
+    expect(fleetTab?.getAttribute('href')).toBe('/fleet');
   });
 
   it('omits the Asks badge when there are no open questions', async () => {

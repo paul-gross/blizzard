@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 import { KitPaceBar } from '../kit/kit-pace-bar';
-import type { SubscriptionPace } from './runner-panel';
+import type { SubscriptionPace } from './runner-rows';
 
 /**
  * The runner registry's per-subscription pace render (blizzard#478) — one group per

@@ -23,5 +23,6 @@ export class KitButton {
   readonly size = input<'default' | 'cta'>('default');
   readonly disabled = input(false);
   readonly ariaLabel = input<string | null>(null);
+  readonly title = input<string | null>(null);
   readonly testid = input<string | null>(null);
 }

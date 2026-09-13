@@ -13,13 +13,12 @@ import { injectHubQuestionsQuery, MobileTabBar as FleetMobileTabBar, type Mobile
  * {@link MobileTabItem}s: Board, Events (blizzard#125 Phase 4), and Gardening
  * (blizzard#397) are wired to a route today
  * (`routerLink`/`routerLinkActive`, same idiom as the desktop {@link AppNav});
- * Asks and Fleet are the mock's other two tabs but have no screen of their own
- * yet (the next mobile-shells chunk's work per the mock's footnote) — they
- * render dimmed and inert so they read as "not yet", not as broken links.
- * Asks still carries a live open-count badge off the same
+ * Asks is the mock's remaining tab with no screen of its own yet (the mock's
+ * footnote) — it renders dimmed and inert so it reads as "not yet", not as a
+ * broken link, and still carries a live open-count badge off the same
  * {@link injectHubQuestionsQuery} read the glance board's "Needs you" bucket
  * folds in, so the number an operator sees here always agrees with the
- * board's own count.
+ * board's own count. Fleet is routed to `/fleet`.
  */
 @Component({
   selector: 'app-mobile-tab-bar',
@@ -43,7 +42,7 @@ export class MobileTabBar {
       badge: this.askCount(),
       badgeTestid: 'tab-asks-badge',
     },
-    { testid: 'tab-fleet', label: 'Fleet', inert: true },
+    { testid: 'tab-fleet', label: 'Fleet', route: '/fleet' },
     { testid: 'tab-events', label: 'Events', route: '/events' },
     { testid: 'tab-gardening', label: 'Gardening', route: '/gardening' },
   ]);

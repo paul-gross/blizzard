@@ -9,7 +9,7 @@ import { KitPanel } from '../kit/kit-panel';
 import { KitSlotBar } from '../kit/kit-slot-bar';
 import type { Tone } from '../kit/tone';
 import { formatSeenAgo } from '../when';
-import type { RunnerRow } from './runner-panel';
+import { localPauseHint, runnerToggleHint, type RunnerRow } from './runner-rows';
 import { SubscriptionPaceGroup } from './subscription-pace-group';
 
 /**
@@ -61,22 +61,9 @@ export class RunnerPanelView {
    * the native DOM `toggle` event. */
   readonly togglePause = output<RunnerRow>();
 
-  /**
-   * Why the runner stopped itself (issue #61): a spend-ceiling crossing names the ceiling
-   * and the spend it reported (`locally_paused_reason`); a manual `blizzard runner pause`
-   * carries none, so this falls back to the generic clear-it-yourself hint.
-   */
-  protected localPauseHint(row: RunnerRow): string {
-    return row.locally_paused_reason ?? 'This runner paused itself. Clear it on the runner: blizzard runner start';
-  }
+  protected readonly localPauseHint = localPauseHint;
 
-  /** Why resuming at the hub may not start a runner: its own brake is not ours to clear. */
-  protected toggleHint(row: RunnerRow): string {
-    if (row.hub_paused && row.locally_paused) {
-      return 'Resuming here clears the hub brake only — this runner also paused itself.';
-    }
-    return row.hub_paused ? 'Resume this runner at the hub' : 'Pause this runner at the hub';
-  }
+  protected readonly toggleHint = runnerToggleHint;
 
   /**
    * A compact "seen 12s ago" liveness label from `last_seen_at` (`bzh:utc-instants`).

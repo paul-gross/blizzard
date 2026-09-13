@@ -15,13 +15,13 @@ export {
   formatAbsolute,
   formatAge,
   formatHeldFor,
+  formatSeenAgo,
   ageMs,
   formatUtcYmd,
   formatLocalClockWithDay,
   type LocalClockWithDay,
   SKEW_TOLERANCE_MS,
 } from '../when';
-// formatSeenAgo (runner-view.ts) and formatClockTime (activity-panel.ts) are
-// intentionally not re-exported here — each has exactly one fleet-internal
-// caller today, which imports it directly from `../when`; no consumer outside
-// this library needs them.
+// formatClockTime (activity-panel.ts) is intentionally not re-exported here — it
+// has exactly one fleet-internal caller today, which imports it directly from
+// `../when`; no consumer outside this library needs it.

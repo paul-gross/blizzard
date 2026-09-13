@@ -8,7 +8,7 @@ import { client as hubClient } from '../api/hub/client.gen';
 import { toneColor } from '../kit/kit-badge';
 import { OPERATOR_ME_RESPONSE } from '../testing/auth-fixtures';
 import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
-import { RunnerPanel, windowElapsedPct } from './runner-panel';
+import { RunnerPanel } from './runner-panel';
 
 /** A `contributor`'s `/api/me` — every day-to-day operating permission, but not the
  * admin-tier `runner:pause` (#93). Drives the brake-gating assertion. */
@@ -342,44 +342,6 @@ describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
   it('falls through to offline (not "0s ago") for a stale runner behind a stamp hours in the future', async () => {
     const el = await render('2026-07-16T17:00:00.000Z', false); // 5h after REF
     expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('offline');
-  });
-});
-
-describe('windowElapsedPct (issue #218)', () => {
-  const FIVE_H_SECONDS = 5 * 60 * 60;
-
-  it('reads ~0 right at the window\'s own start (just reset)', () => {
-    const resetsAt = '2026-07-16T17:00:00.000Z';
-    const nowMs = Date.parse('2026-07-16T12:00:00.000Z'); // exactly resetsAt - 5h
-    expect(windowElapsedPct(nowMs, resetsAt, FIVE_H_SECONDS)).toBe(0);
-  });
-
-  it('reads ~100 right at the instant the window resets (about to reset)', () => {
-    const resetsAt = '2026-07-16T17:00:00.000Z';
-    const nowMs = Date.parse(resetsAt);
-    expect(windowElapsedPct(nowMs, resetsAt, FIVE_H_SECONDS)).toBe(100);
-  });
-
-  it('reads the midpoint at half the window elapsed', () => {
-    const resetsAt = '2026-07-16T17:00:00.000Z';
-    const nowMs = Date.parse('2026-07-16T14:30:00.000Z'); // resetsAt - 2.5h
-    expect(windowElapsedPct(nowMs, resetsAt, FIVE_H_SECONDS)).toBe(50);
-  });
-
-  it('clamps to 0 for a window that has not started yet', () => {
-    const resetsAt = '2026-07-16T17:00:00.000Z';
-    const nowMs = Date.parse('2026-07-16T11:00:00.000Z'); // an hour before the window starts
-    expect(windowElapsedPct(nowMs, resetsAt, FIVE_H_SECONDS)).toBe(0);
-  });
-
-  it('clamps to 100 for a resets_at already in the past (a stale sample)', () => {
-    const resetsAt = '2026-07-16T17:00:00.000Z';
-    const nowMs = Date.parse('2026-07-16T18:00:00.000Z'); // an hour past reset
-    expect(windowElapsedPct(nowMs, resetsAt, FIVE_H_SECONDS)).toBe(100);
-  });
-
-  it('reads 0 for an unparseable resets_at rather than throwing', () => {
-    expect(windowElapsedPct(Date.now(), 'not-a-date', FIVE_H_SECONDS)).toBe(0);
   });
 });
 
