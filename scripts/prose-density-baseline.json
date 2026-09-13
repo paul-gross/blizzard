@@ -809,8 +809,8 @@
   },
   "blizzard/foundation/store/engine.py": {
    "comments": 1,
-   "docstrings": 7,
-   "total": 19
+   "docstrings": 13,
+   "total": 39
   },
   "blizzard/foundation/store/internal/__init__.py": {
    "comments": 0,
@@ -1038,9 +1038,9 @@
    "total": 262
   },
   "blizzard/hub/app.py": {
-   "comments": 29,
+   "comments": 31,
    "docstrings": 40,
-   "total": 391
+   "total": 395
   },
   "blizzard/hub/auth/__init__.py": {
    "comments": 0,
@@ -1278,9 +1278,9 @@
    "total": 99
   },
   "blizzard/hub/cli/runtime.py": {
-   "comments": 4,
+   "comments": 14,
    "docstrings": 9,
-   "total": 86
+   "total": 108
   },
   "blizzard/hub/cli/scope.py": {
    "comments": 0,
@@ -2699,8 +2699,8 @@
   },
   "blizzard/runner/app.py": {
    "comments": 49,
-   "docstrings": 28,
-   "total": 424
+   "docstrings": 34,
+   "total": 432
   },
   "blizzard/runner/auth/__init__.py": {
    "comments": 0,
@@ -2803,9 +2803,9 @@
    "total": 204
   },
   "blizzard/runner/cli/runtime.py": {
-   "comments": 17,
+   "comments": 19,
    "docstrings": 13,
-   "total": 147
+   "total": 150
   },
   "blizzard/runner/cli/transcript.py": {
    "comments": 3,
@@ -3163,9 +3163,9 @@
    "total": 391
   },
   "blizzard/runner/loop/build.py": {
-   "comments": 20,
-   "docstrings": 34,
-   "total": 269
+   "comments": 23,
+   "docstrings": 38,
+   "total": 280
   },
   "blizzard/runner/loop/checks.py": {
    "comments": 2,
@@ -5395,9 +5395,9 @@
    "total": 1009
   },
   "test_layering.py": {
-   "comments": 10,
+   "comments": 12,
    "docstrings": 39,
-   "total": 426
+   "total": 432
   },
   "test_lease_auth.py": {
    "comments": 0,
@@ -6173,6 +6173,11 @@
    "comments": 13,
    "docstrings": 12,
    "total": 201
+  },
+  "test_store_engine.py": {
+   "comments": 6,
+   "docstrings": 6,
+   "total": 77
   },
   "test_store_migrations.py": {
    "comments": 46,
