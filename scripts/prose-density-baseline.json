@@ -1039,8 +1039,8 @@
   },
   "blizzard/hub/app.py": {
    "comments": 29,
-   "docstrings": 39,
-   "total": 390
+   "docstrings": 40,
+   "total": 391
   },
   "blizzard/hub/auth/__init__.py": {
    "comments": 0,
