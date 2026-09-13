@@ -4,7 +4,7 @@ replace the three single-column ``chunk_id`` indexes the new ``(chunk_id, epoch)
 composites supersede.
 
 Revision ID: 20260913_1300_hub_store_hot_path_indexes
-Revises: 20260907_1000_event_log_runner_id_nullable
+Revises: 20260913_1200_close_intent_attempts
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260913_1300_hub_store_hot_path_indexes"
-down_revision: str | None = "20260907_1000_event_log_runner_id_nullable"
+down_revision: str | None = "20260913_1200_close_intent_attempts"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
