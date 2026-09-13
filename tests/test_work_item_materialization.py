@@ -7,6 +7,7 @@ and a transient failure leaves the proposal for the next pass. Inverts
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import select
@@ -285,3 +286,45 @@ def test_a_pre_empted_ref_leaves_the_create_proposal_unjudged(tmp_path: Path) ->
 
     titles = {item["title"] for item in _hub_items(hub)}
     assert "loses the race" in titles
+
+
+# --- default-graph resolution, once per pass (blizzard#524 D6) ------------------
+
+
+def test_the_default_graph_resolves_once_per_pass_not_once_per_create_proposal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _ingest(hub)
+    _deliver(
+        hub,
+        chunk_id,
+        node_id,
+        proposals=[_create_proposal(title="one"), _create_proposal(title="two"), _create_proposal(title="three")],
+    )
+
+    calls = 0
+    real_ensure = hub.services.graph_mint.ensure_default_or_none
+
+    def _counting(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        return real_ensure(*args, **kwargs)
+
+    monkeypatch.setattr(hub.services.graph_mint, "ensure_default_or_none", _counting)
+
+    hub.services.work_item_materialization.sweep()
+
+    assert calls == 1
+    assert {item["title"] for item in _hub_items(hub)} == {"one", "two", "three"}
+
+
+def test_an_empty_candidate_set_resolves_no_default_graph(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+
+    def _boom(*_: object, **__: object) -> object:
+        raise AssertionError("an empty pass must never resolve the default graph")
+
+    monkeypatch.setattr(hub.services.graph_mint, "ensure_default_or_none", _boom)
+
+    hub.services.work_item_materialization.sweep()  # no proposals at all — must return early

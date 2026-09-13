@@ -70,25 +70,24 @@ class ChunkDeliveryStore:
         ]
 
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
-        with self._store.write("unmaterialized_proposals") as conn:
-            ephemeral = ephemeral_ids(conn)
-            delivered = {
-                r.chunk_id
-                for r in conn.execute(
-                    select(s.transitions.c.chunk_id).where(s.transitions.c.to_node_id == RESERVED_TERMINAL).distinct()
-                ).all()
-            }
-            judged = {r.proposal_id for r in conn.execute(select(s.work_item_materializations.c.proposal_id)).all()}
-            struck = {r.proposal_id for r in conn.execute(select(s.work_item_strikes.c.proposal_id)).all()}
-            rows = conn.execute(select(s.work_item_proposals)).all()
-        return [
-            proposal_row(row)
-            for row in rows
-            if row.chunk_id in delivered
-            and row.chunk_id not in ephemeral
-            and row.proposal_id not in judged
-            and row.proposal_id not in struck
-        ]
+        """Every not-yet-judged proposal of a delivered, non-ephemeral chunk (blizzard#524
+        D6) — all four exclusions (delivered, ephemeral, judged, struck) pushed into SQL as
+        subqueries the engine plans once, rather than re-fetching and re-filtering every
+        proposal ever written, payload included, on every pass. A read transaction: this
+        writes nothing."""
+        delivered = select(s.transitions.c.chunk_id).where(s.transitions.c.to_node_id == RESERVED_TERMINAL)
+        ephemeral = select(s.chunk_grouped.c.chunk_id).union(select(s.chunk_deleted.c.chunk_id))
+        judged = select(s.work_item_materializations.c.proposal_id)
+        struck = select(s.work_item_strikes.c.proposal_id)
+        with self._store.read("unmaterialized_proposals") as conn:
+            rows = conn.execute(
+                select(s.work_item_proposals)
+                .where(s.work_item_proposals.c.chunk_id.in_(delivered))
+                .where(s.work_item_proposals.c.chunk_id.not_in(ephemeral))
+                .where(s.work_item_proposals.c.proposal_id.not_in(judged))
+                .where(s.work_item_proposals.c.proposal_id.not_in(struck))
+            ).all()
+        return [proposal_row(row) for row in rows]
 
     def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None:
         with self._store.write("record_delivery_repo_landed") as conn:

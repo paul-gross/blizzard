@@ -682,6 +682,13 @@ class IReadGraphRepository(Protocol):
 
     def list_all(self) -> list[Graph]: ...
 
+    def any_minted(self, name: str) -> bool:
+        """Whether any graph of ``name`` has ever been minted, retired or not (blizzard#524
+        D6) — the cheap existence probe :meth:`~blizzard.hub.domain.graph_authoring.
+        GraphMintService.ensure_default`'s retirement disambiguation needs, in place of a full
+        :meth:`list_all` reification it only ever used to check membership by name."""
+        ...
+
     def newest_definition_yaml(self, name: str) -> str | None:
         """The newest-minted graph of ``name``'s source YAML, ``None`` if never minted.
 
