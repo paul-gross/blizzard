@@ -222,6 +222,13 @@ def ephemeral_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
     return grouped | deleted
 
 
+def is_ephemeral_id(conn, chunk_id: str) -> bool:  # type: ignore[no-untyped-def]
+    """Whether ``chunk_id`` alone is grouped-away or deleted — a single-id call site's
+    narrow sibling of :func:`ephemeral_ids`, two targeted existence checks rather than
+    that helper's unfiltered scan of both tables."""
+    return row_exists(conn, s.chunk_grouped, chunk_id) or row_exists(conn, s.chunk_deleted, chunk_id)
+
+
 def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
     """:meth:`~blizzard.hub.store.internal.chunk_route_store.ChunkRouteStore.route_of`'s
     query body, taking an already-open ``conn`` so a write transaction elsewhere (the
@@ -335,7 +342,7 @@ def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> N
     artifacts/hub_exec seams. A chunk in the ephemeral set enqueues nothing; a ref
     already carrying a terminal ``work_item_closures`` outcome is skipped; a replayed
     landing writes nothing new (unique on ``chunk_id, source, ref``)."""
-    if chunk_id in ephemeral_ids(conn):
+    if is_ephemeral_id(conn, chunk_id):
         return
     refs = conn.execute(
         select(s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref).where(s.chunk_work_refs.c.chunk_id == chunk_id)

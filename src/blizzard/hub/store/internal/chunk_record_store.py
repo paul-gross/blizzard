@@ -24,6 +24,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     chunk_row,
     ephemeral_ids,
     insert_chunk_rows,
+    is_ephemeral_id,
 )
 
 
@@ -38,7 +39,7 @@ class ChunkRecordStore:
     def get(self, chunk_id: str) -> Chunk | None:
         with self._store.read("get") as conn:
             row = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
-            if row is None or chunk_id in ephemeral_ids(conn):
+            if row is None or is_ephemeral_id(conn, chunk_id):
                 return None  # a grouped-away or deleted chunk is ephemeral — gone from every read
             return chunk_row(conn, row)
 

@@ -16,7 +16,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
-    ephemeral_ids,
+    is_ephemeral_id,
     next_route_seq,
     route_of_conn,
 )
@@ -31,7 +31,7 @@ class ChunkLifecycleStore:
 
     def is_ephemeral(self, chunk_id: str) -> bool:
         with self._store.read("is_ephemeral") as conn:
-            return chunk_id in ephemeral_ids(conn)
+            return is_ephemeral_id(conn, chunk_id)
 
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""

@@ -76,6 +76,12 @@ class _FakeChunkFacts:
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         return dict(self.facts)
 
+    def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        return {chunk_id: f for chunk_id in chunk_ids if (f := self.facts.get(chunk_id)) is not None}
+
+    def load_all_statuses(self) -> dict[str, ChunkStatus]:
+        return {chunk_id: f.status() for chunk_id, f in self.facts.items()}
+
 
 @dataclass
 class _FakeFindings:
