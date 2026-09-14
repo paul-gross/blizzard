@@ -18,6 +18,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.hub import HubClientError, RouteClaimOutcome
@@ -262,7 +263,13 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=pid, process_start_time=start, session_id=session, spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=pid,
+        process_start_time=start,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -290,7 +297,13 @@ def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -397,7 +410,7 @@ def test_answer_resume_suppressed_while_locally_paused(tmp_path):  # type: ignor
         question_id="qn_1",
         question="Q",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -856,7 +869,13 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
     hub = FakeHub()

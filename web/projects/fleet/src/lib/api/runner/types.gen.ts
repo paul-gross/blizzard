@@ -142,6 +142,10 @@ export type AskView = {
      */
     chunk_id: string;
     /**
+     * Harness Id
+     */
+    harness_id?: string | null;
+    /**
      * Lease Id
      */
     lease_id: string;
@@ -794,6 +798,10 @@ export type EscalationView = {
      */
     epoch: number;
     /**
+     * Harness Id
+     */
+    harness_id?: string | null;
+    /**
      * Lease Id
      */
     lease_id: string;
@@ -1281,6 +1289,10 @@ export type LeaseView = {
      */
     graph_id: string;
     /**
+     * Harness Id
+     */
+    harness_id?: string | null;
+    /**
      * Last Heartbeat At
      */
     last_heartbeat_at: string | null;
@@ -1407,6 +1419,10 @@ export type OpenTakeoverView = {
      * Chunk Id
      */
     chunk_id: string;
+    /**
+     * Harness Id
+     */
+    harness_id?: string | null;
     /**
      * Held Since
      */
@@ -1537,6 +1553,10 @@ export type QuestionView = {
      * Epoch
      */
     epoch: number;
+    /**
+     * Harness Id
+     */
+    harness_id?: string | null;
     /**
      * Node Id
      */
@@ -1926,6 +1946,10 @@ export type TakeoverOpenResponse = {
         [key: string]: string;
     };
     /**
+     * Harness Id
+     */
+    harness_id?: string | null;
+    /**
      * Takeover Id
      */
     takeover_id: string;
@@ -1996,7 +2020,8 @@ export type ToolCallSegmentView = {
 /**
  * TranscriptResponse
  *
- * A lease's parsed transcript — always 200 when the lease exists.
+ * A lease's parsed transcript — 200 when the lease exists and its recorded harness
+ * owner is known and available; 503 when that owner is unknown or unavailable.
  */
 export type TranscriptResponse = {
     /**
@@ -2079,6 +2104,10 @@ export type TranscriptSegmentIndexEntry = {
      * Final
      */
     final: boolean;
+    /**
+     * Harness Id
+     */
+    harness_id?: string | null;
     /**
      * Harness Version
      */
@@ -2842,6 +2871,10 @@ export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors = 
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * The recorded harness owner is unavailable.
+     */
+    503: unknown;
 };
 
 export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetError = GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors[keyof GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors];
@@ -3451,6 +3484,10 @@ export type GetTranscriptApiLeasesLeaseIdTranscriptGetErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * The recorded harness owner is unavailable.
+     */
+    503: unknown;
 };
 
 export type GetTranscriptApiLeasesLeaseIdTranscriptGetError = GetTranscriptApiLeasesLeaseIdTranscriptGetErrors[keyof GetTranscriptApiLeasesLeaseIdTranscriptGetErrors];
@@ -3533,6 +3570,10 @@ export type StartSelftestApiSelftestsPostErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * The requested harness is known but unavailable.
+     */
+    503: unknown;
 };
 
 export type StartSelftestApiSelftestsPostError = StartSelftestApiSelftestsPostErrors[keyof StartSelftestApiSelftestsPostErrors];

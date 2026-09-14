@@ -10,6 +10,7 @@ from typing import Literal
 EventLogKind = Literal[
     "needs-human",
     "worker-lost",
+    "owner-unresolvable",
     "hub-node-unroutable-outcome",
     "attempt-failed",
     "command-failed",
@@ -25,6 +26,7 @@ EventLogKind = Literal[
 EVENT_LOG_SEVERITY: Mapping[EventLogKind, str] = {
     "needs-human": "critical",
     "worker-lost": "critical",
+    "owner-unresolvable": "critical",
     "hub-node-unroutable-outcome": "critical",
     "attempt-failed": "warning",
     "command-failed": "warning",

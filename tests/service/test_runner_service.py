@@ -549,6 +549,18 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
                 transcript = runner_client.get(f"/api/leases/{lease_id}/transcript")
                 assert transcript.status_code == 200, transcript.text
                 body = transcript.json()
+
+                # A persisted owner the hosted runner does not bind is an explicit service
+                # outcome, never permission to retry this raw id through Claude Code.
+                engine = create_engine_from_url(config.db_url)
+                try:
+                    with engine.begin() as conn:
+                        conn.exec_driver_sql("UPDATE leases SET harness_id = 'missing' WHERE lease_id = ?", (lease_id,))
+                finally:
+                    engine.dispose()
+                unknown_owner = runner_client.get(f"/api/leases/{lease_id}/transcript")
+                assert unknown_owner.status_code == 503, unknown_owner.text
+                assert "unknown coding harness 'missing'" in unknown_owner.json()["detail"]
             finally:
                 runner_client.close()
 

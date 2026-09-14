@@ -16,6 +16,7 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.outbound import COMPLETION_KIND
 from blizzard.runner.loop.tick import tick
@@ -59,7 +60,13 @@ def _seed_active_lease(store, *, chunk: str, lease: str, pid: int, start: str): 
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=pid, process_start_time=start, session_id=f"sess-{chunk}", spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=pid,
+        process_start_time=start,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{chunk}"),
+        spawned_at=_NOW,
+    )
 
 
 def _seed_escalated(store, *, chunk: str, lease: str):  # type: ignore[no-untyped-def]
@@ -77,7 +84,13 @@ def _seed_escalated(store, *, chunk: str, lease: str):  # type: ignore[no-untype
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=200, process_start_time="start-200", session_id=f"sess-{chunk}", spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{chunk}"),
+        spawned_at=_NOW,
+    )
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason="escalated", closed_at=_NOW)
 
 
@@ -88,7 +101,7 @@ def _seed_taken_over(store, *, chunk: str, lease: str):  # type: ignore[no-untyp
         takeover_id=f"tko_{lease}",
         chunk_id=chunk,
         lease_id=lease,
-        session_id=f"sess-{chunk}",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{chunk}"),
         workdir="/ws/e_tko",
         fence_epoch=None,
         opened_at=_NOW,

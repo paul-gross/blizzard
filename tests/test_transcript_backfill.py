@@ -12,6 +12,8 @@ import pytest
 
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.transcript_backfill import TranscriptBackfill, TranscriptReshipError
@@ -87,6 +89,21 @@ def _ctx(*, sessions: dict[str, list[NormalizedTurn]], on_disk: set[str] | None 
     return ctx, source
 
 
+def _with_source(ctx, source: FakeTranscriptSource):  # type: ignore[no-untyped-def]
+    """Replace the production-shaped exact-owner source as well as the legacy sentinel."""
+    return replace(
+        ctx,
+        transcripts_wired=True,
+        harnesses=HarnessRegistry(
+            {
+                CLAUDE_CODE_HARNESS_ID: HarnessBinding(
+                    adapter=ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID), transcript_source=source
+                )
+            }
+        ),
+    )
+
+
 def _historical_lease(ctx, *, lease_id: str, session_id: str, epoch: int, node_id: str = "nd_build", at=_NOW) -> None:  # type: ignore[no-untyped-def]
     """A closed lease that ran ``session_id`` and left no segment — the pre-lane shape."""
     ctx.stores.lease_record.record_lease(
@@ -102,9 +119,38 @@ def _historical_lease(ctx, *, lease_id: str, session_id: str, epoch: int, node_i
             created_at=at,
         )
     )
-    ctx.stores.liveness.record_spawn(lease_id, pid=1, process_start_time="1", session_id=session_id, spawned_at=at)
+    ctx.stores.liveness.record_spawn(
+        lease_id,
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session_id),
+        spawned_at=at,
+    )
     ctx.stores.lease_record.record_closure(
         lease_id=lease_id, chunk_id="ch_1", node_id=node_id, reason="transitioned", closed_at=at
+    )
+
+
+def _foreign_owner_lease(ctx, *, lease_id: str, session_id: str, epoch: int, at=_NOW) -> None:  # type: ignore[no-untyped-def]
+    """A closed lease whose session's recorded owner this run's registry does not bind."""
+    ctx.stores.lease_record.record_lease(
+        NewLease(
+            lease_id=lease_id,
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=epoch,
+            runner_id="r1",
+            retries_max=2,
+            created_at=at,
+        )
+    )
+    ctx.stores.liveness.record_spawn(
+        lease_id, pid=1, process_start_time="1", session=SessionReference("foreign", session_id), spawned_at=at
+    )
+    ctx.stores.lease_record.record_closure(
+        lease_id=lease_id, chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=at
     )
 
 
@@ -228,6 +274,21 @@ def test_a_session_whose_file_is_gone_is_reported_not_errored() -> None:
     assert {b["epoch"] for b in bodies} == {1}
 
 
+def test_a_session_whose_owner_is_unresolvable_is_reported_not_errored() -> None:
+    """A recorded owner this run's registry cannot resolve is skipped, the same bucket a
+    rotated-away file gets — never an exception that aborts the rest of the sweep."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "kept")]})
+    _historical_lease(ctx, lease_id="lease_1", session_id="sess-a", epoch=1)
+    _foreign_owner_lease(ctx, lease_id="lease_2", session_id="sess-b", epoch=2, at=_NOW + timedelta(hours=1))
+    strip_transcript_segments(ctx.stores.transcript_ledger)
+
+    report = TranscriptBackfill(ctx).run()
+
+    assert (report.imported, report.already_present, report.gone) == (1, 0, 1)
+    bodies = _shipped_bodies(ctx)
+    assert len({b["segment_id"] for b in bodies}) == 1
+
+
 def test_a_dry_run_classifies_without_writing_or_shipping() -> None:
     ctx, source = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
     _historical_lease(ctx, lease_id="lease_1", session_id="sess-a", epoch=1)
@@ -253,7 +314,7 @@ def test_an_interrupted_run_finishes_its_own_unfinalized_segment() -> None:
         epoch=1,
         generation=1,
         lease_id="lease_1",
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         stamped_at=_NOW,
     )
 
@@ -281,7 +342,13 @@ def test_a_live_leases_open_segment_is_left_to_the_tick() -> None:
             created_at=_NOW,
         )
     )
-    ctx.stores.liveness.record_spawn("lease_live", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn(
+        "lease_live",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
 
     report = TranscriptBackfill(ctx).run()
 
@@ -482,15 +549,26 @@ def test_reship_refuses_a_session_no_longer_readable() -> None:
     first = _import_one(ctx)
     # The batch is still scriptable; only the on-disk probe is gone — exactly the rotated-away
     # shape, where a bare `turns_since` would still answer and quietly ship an empty segment.
-    rotated = replace(
+    rotated = _with_source(
         ctx,
-        transcripts=FakeTranscriptSource(
-            batches_by_session={"sess-a": _batch("sess-a", [_turn(0, "hello")])}, sizes_by_session={}
-        ),
+        FakeTranscriptSource(batches_by_session={"sess-a": _batch("sess-a", [_turn(0, "hello")])}, sizes_by_session={}),
     )
 
     with pytest.raises(TranscriptReshipError, match="not readable by this runner"):
         TranscriptBackfill(rotated).reship(first)
+
+    assert ctx.stores.transcript_ledger.open_transcript_segments() == []
+
+
+def test_reship_refuses_a_session_whose_owner_is_unresolvable() -> None:
+    """The raw harness-registry error converts to the verb's own refusal — never a bare
+    ``UnknownHarnessError`` escaping ``reship``."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    first = _import_one(ctx)
+    unresolved = replace(ctx, harnesses=HarnessRegistry({}))
+
+    with pytest.raises(TranscriptReshipError, match="not resolvable"):
+        TranscriptBackfill(unresolved).reship(first)
 
     assert ctx.stores.transcript_ledger.open_transcript_segments() == []
 
@@ -535,7 +613,7 @@ def test_reship_resumes_its_own_unfinished_segment_instead_of_stranding_it() -> 
     open segment as a lease still streaming."""
     ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
     first = _import_one(ctx)
-    stalled = replace(ctx, transcripts=FakeTranscriptSource(sizes_by_session={"sess-a": 1024}))
+    stalled = _with_source(ctx, FakeTranscriptSource(sizes_by_session={"sess-a": 1024}))
 
     incomplete = TranscriptBackfill(stalled).reship(first)  # source unreadable mid-drain -> stays open
     assert not incomplete.complete
@@ -565,7 +643,11 @@ def test_reship_refuses_a_segment_whose_lease_is_still_active() -> None:
         )
     )
     ctx.stores.liveness.record_spawn(
-        "lease_live", pid=2, process_start_time="2", session_id="sess-live", spawned_at=_NOW
+        "lease_live",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-live"),
+        spawned_at=_NOW,
     )
     live = next(s for s in ctx.stores.transcript_ledger.open_transcript_segments() if s.lease_id == "lease_live")
 

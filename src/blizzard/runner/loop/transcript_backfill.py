@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.transcript_drain import HUB_CAPPED, TranscriptDrain
@@ -74,15 +76,14 @@ class TranscriptBackfill:
         """Import every session-bearing lease's transcript still on disk and not already
         segmented, at most ``limit`` of them. ``dry_run`` classifies without opening,
         draining or shipping anything, so its counts are what a real run would attempt."""
-        source = self.ctx.transcripts
-        if source is None or not self.ctx.config.transcripts_ship:
+        if not self.ctx.transcripts_wired or not self.ctx.config.transcripts_ship:
             # The gate `TranscriptPump.run`/`pump_lease` hold too: the CLI's own refusal is
             # the operator's message, never the enforcement (`bzh:controller-read-only`).
             return TranscriptBackfillReport(imported=0, already_present=0, gone=0, deferred=0, capped=0)
 
         unfinished = self._unfinished()
         imported = already = gone = deferred = capped = 0
-        seen = {segment.session_id for segment in unfinished}
+        seen = {segment.session for segment in unfinished}
         for segment in unfinished:
             if dry_run:
                 imported += 1
@@ -94,14 +95,13 @@ class TranscriptBackfill:
 
         backpressured = False
         for lease in self.ctx.stores.transcript_ledger.transcript_backfill_leases():
-            if lease.session_id in seen:
+            if lease.session in seen:
                 continue
-            seen.add(lease.session_id)
+            seen.add(lease.session)
             if lease.has_segment:
                 already += 1
-            elif source.size_bytes(lease.session_id, spawn_cwd=self._spawn_cwd(lease.chunk_id)) is None:
-                # *Not readable by this run* — usually a rotated-away file, but a wrong
-                # transcripts root or user reads alike. Nothing is written, so a rerun retries it.
+            elif self._unreadable(lease.session, chunk_id=lease.chunk_id):
+                # Not readable by this run. Nothing is written, so a rerun retries it.
                 gone += 1
             elif limit is not None and imported >= limit:
                 deferred += 1
@@ -144,7 +144,7 @@ class TranscriptBackfill:
         source = self.ctx.stores.transcript_ledger.transcript_segment(source_segment_id)
         if source is None:
             raise TranscriptReshipError(f"no such transcript segment: {source_segment_id}")
-        if self.ctx.transcripts is None or not self.ctx.config.transcripts_ship:
+        if not self.ctx.transcripts_wired or not self.ctx.config.transcripts_ship:
             # The same gate `run` holds — the CLI's refusal is the message, not the enforcement.
             raise TranscriptReshipError("[transcripts] ship is false — the lane is off")
         if self.ctx.stores.lease_record.active_lease(source.lease_id) is not None:
@@ -154,7 +154,14 @@ class TranscriptBackfill:
                 f"lease {source.lease_id} is still active — its segment belongs to the running "
                 "pump; re-ship it once the lease closes"
             )
-        if self.ctx.transcripts.size_bytes(source.session_id, spawn_cwd=self._spawn_cwd(source.chunk_id)) is None:
+        try:
+            readable = self.ctx.transcript_source_for(source.session)
+        except (UnknownHarnessError, UnavailableHarnessError) as exc:
+            raise TranscriptReshipError(
+                f"session {source.session_id}'s recorded owner {source.harness_id!r} is not "
+                f"resolvable by this runner right now: {exc}"
+            ) from exc
+        if readable.size_bytes(source.session_id, spawn_cwd=self._spawn_cwd(source.chunk_id)) is None:
             # Nothing is written on this path, so a rerun retries once the root is right.
             raise TranscriptReshipError(
                 f"session {source.session_id} is not readable by this runner — "
@@ -191,7 +198,7 @@ class TranscriptBackfill:
         """An earlier re-ship's own still-open segment for this session, if one was left
         behind. Never ``source`` itself, which is finalized and stays as it shipped."""
         return next(
-            (s for s in self._unfinished() if s.session_id == source.session_id and s.segment_id != source.segment_id),
+            (s for s in self._unfinished() if s.session == source.session and s.segment_id != source.segment_id),
             None,
         )
 
@@ -205,7 +212,7 @@ class TranscriptBackfill:
             epoch=source.epoch,
             generation=source.generation,
             lease_id=source.lease_id,
-            session_id=source.session_id,
+            session=source.session,
             stamped_at=self.ctx.clock.now(),
             supersedes=source.segment_id,
         )
@@ -217,7 +224,7 @@ class TranscriptBackfill:
             epoch=lease.epoch,
             generation=_MERGED_GENERATION,
             lease_id=lease.lease_id,
-            session_id=lease.session_id,
+            session=lease.session,
             stamped_at=self.ctx.clock.now(),
         )
 
@@ -257,3 +264,19 @@ class TranscriptBackfill:
     def _spawn_cwd(self, chunk_id: str) -> str | None:
         bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)
         return SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
+
+    def _unreadable(self, session: SessionReference, *, chunk_id: str) -> bool:
+        """True when ``session``'s transcript cannot be read right now — a rotated-away
+        file, a wrong transcripts root, or a recorded owner this run's registry cannot
+        resolve. Never raises, so one such session is skipped rather than aborting the run."""
+        try:
+            source = self.ctx.transcript_source_for(session)
+        except (UnknownHarnessError, UnavailableHarnessError) as exc:
+            _log.warning(
+                "transcript backfill skipped a session — recorded owner unresolvable",
+                session_id=session.session_id,
+                harness_id=session.harness_id,
+                detail=str(exc),
+            )
+            return True
+        return source.size_bytes(session.session_id, spawn_cwd=self._spawn_cwd(chunk_id)) is None

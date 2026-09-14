@@ -18,6 +18,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.steps import Advance, Fill, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store import schema as runner_schema
@@ -61,7 +62,13 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=pid, process_start_time=start, session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=pid,
+        process_start_time=start,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 

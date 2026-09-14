@@ -19,7 +19,9 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from tests.runner_fakes import FakeHarness, make_read_stores, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
@@ -43,12 +45,12 @@ def _app_with_status(
     service = RunnerStatusService(
         make_read_stores(store),
         clock or FixedClock(_NOW),
-        _harness,
         runner_id=config.runner_id,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         hub_url=config.hub_url,
         env_pool=config.workspace_envs if env_pool is None else env_pool,
+        harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness)}),
     )
     return create_app(config, runner_stores=make_stores(store), runner_status=service), store
 
@@ -290,7 +292,7 @@ def test_open_asks_lists_an_unforwarded_ask(tmp_path: Path) -> None:
         question_id="qn_1",
         question="which branch?",
         options=["main", "dev"],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
 
@@ -307,6 +309,7 @@ def test_open_asks_lists_an_unforwarded_ask(tmp_path: Path) -> None:
         "question": "which branch?",
         "options": ["main", "dev"],
         "session_id": "sess-a",
+        "harness_id": "claude_code",
         "asked_at": _NOW.isoformat(),
     }
 
@@ -321,7 +324,7 @@ def test_open_asks_includes_a_forwarded_and_parked_ask(tmp_path: Path) -> None:
         question_id="qn_1",
         question="which branch?",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -342,7 +345,7 @@ def test_an_answered_ask_does_not_appear(tmp_path: Path) -> None:
         question_id="qn_1",
         question="which branch?",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -366,7 +369,7 @@ def test_an_ask_whose_lease_closed_without_a_park_resume_does_not_appear(tmp_pat
         question_id="qn_1",
         question="which branch?",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -402,7 +405,13 @@ def test_open_false_is_refused_rather_than_answered_wrong(tmp_path: Path) -> Non
 def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> None:
     app, store = _app_with_status(tmp_path)
     _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     closed_at = _NOW + timedelta(minutes=5)
     store.record_closure(
@@ -427,6 +436,7 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         "session_name": None,
         "model": None,
         "effort": None,
+        "harness_id": "claude_code",
     }
 
 
@@ -439,15 +449,27 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
     service = RunnerStatusService(
         make_read_stores(store),
         FixedClock(_NOW),
-        ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions"),
         runner_id="runner-local",
         workspace_id="workspace-local",
         max_agents=2,
         hub_url="http://hub",
         env_pool=("e1",),
+        harnesses=HarnessRegistry(
+            {
+                CLAUDE_CODE_HARNESS_ID: HarnessBinding(
+                    adapter=ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions")
+                )
+            }
+        ),
     )
     _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
 
@@ -462,7 +484,13 @@ def test_a_superseded_escalation_does_not_appear(tmp_path: Path) -> None:
     """A later lease mint for the same chunk closes the escalation by supersession."""
     app, store = _app_with_status(tmp_path)
     _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     _seed_lease(store, lease_id="lease_2", chunk_id="ch_1", epoch=2, created_at=_NOW + timedelta(minutes=1))
@@ -497,7 +525,7 @@ def test_an_open_takeover_appears_with_its_id_and_held_since(tmp_path: Path) -> 
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=opened_at,
@@ -509,7 +537,12 @@ def test_an_open_takeover_appears_with_its_id_and_held_since(tmp_path: Path) -> 
     assert resp.status_code == 200, resp.text
     items = resp.json()["items"]
     assert len(items) == 1
-    assert items[0] == {"chunk_id": "ch_1", "takeover_id": "tko_1", "held_since": opened_at.isoformat()}
+    assert items[0] == {
+        "chunk_id": "ch_1",
+        "takeover_id": "tko_1",
+        "held_since": opened_at.isoformat(),
+        "harness_id": "claude_code",
+    }
     assert_all_timestamps_utc(resp.json())
 
 
@@ -521,7 +554,7 @@ def test_a_closed_takeover_does_not_appear(tmp_path: Path) -> None:
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,
@@ -615,7 +648,13 @@ def test_an_escalation_carries_the_parked_sessions_own_configuration(tmp_path: P
         resolved_model="opus",
         resolved_effort="high",
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_closure(
         lease_id="lease_1",

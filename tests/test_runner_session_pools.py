@@ -7,20 +7,31 @@ here at all."""
 
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import update
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.loop.attempt import FAILED, Attempt
+from blizzard.runner.loop.session import SessionResolver
+from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull
+from blizzard.runner.store.schema import leases
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED
 from blizzard.wire.graph import RotatePolicyView
 from tests.runner_fakes import (
     FakeHarness,
@@ -462,7 +473,13 @@ def _seed_head(store, *, session_id: str = "sess-head", model: str = "sonnet") -
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_head", pid=1, process_start_time="t", session_id=session_id, spawned_at=_NOW)
+    store.record_spawn(
+        "lease_head",
+        pid=1,
+        process_start_time="t",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session_id),
+        spawned_at=_NOW,
+    )
     return session_id
 
 
@@ -508,7 +525,8 @@ def _resolve(
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
     )
-    return ctx.sessions.resume_target("ch_1", envelope.node, "/ws/e1")
+    target = ctx.sessions.resolve_resume("ch_1", envelope.node, "/ws/e1")
+    return target.session.session_id if target.session is not None else None
 
 
 @pytest.mark.component
@@ -644,6 +662,225 @@ def test_no_drift_when_the_resolved_model_still_matches_the_stamp(tmp_path):  # 
     head = _seed_head(store, model="sonnet")
 
     assert _resolve(store, _bounded(SessionMode.RESUME), resolved_model="sonnet") == head
+
+
+@pytest.mark.component
+def test_rotation_mints_under_the_head_owner_and_resolves_its_model_there(tmp_path):  # type: ignore[no-untyped-def]
+    """A non-default pool head rotates into its own harness lineage, never Claude Code."""
+    store = _store(tmp_path)
+    _seed_head(store, model="sonnet")
+    with store._engine.begin() as conn:
+        conn.execute(update(leases).values(harness_id="other"))
+
+    default = FakeHarness(
+        handle=WorkerHandle(session_id="default", pid=100, process_start_time="default"), verdict="pass"
+    )
+    other = FakeHarness(handle=WorkerHandle(session_id="rotated", pid=200, process_start_time="other"), verdict="pass")
+    other.resolved_model = "opus"
+    registry = HarnessRegistry(
+        {
+            "claude_code": HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+            "other": HarnessBinding(adapter=other, transcript_source=other.transcript_source()),
+        }
+    )
+    ctx = _ctx(store, FakeHub(), FakeProvider({"e1": "/ws/e1"}), default, minutes=1)
+    ctx = replace(
+        ctx,
+        harnesses=registry,
+        sessions=SessionResolver(
+            leases=store,
+            harnesses=registry,
+            transcripts_wired=True,
+        ),
+    )
+    envelope = _bounded(SessionMode.RESUME, model=["blizzard:basic"])
+
+    Spawner(ctx).enter_node("ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test")
+
+    assert default.spawns == []
+    assert other.resume_froms == [None]
+    assert other.spawn_model_effort == [("opus", None)]
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.session == SessionReference("other", "rotated")
+
+
+@pytest.mark.component
+def test_a_head_whose_owner_has_no_transcript_source_is_still_resumed(tmp_path):  # type: ignore[no-untyped-def]
+    """An unresolvable *transcript source* is an unreadable signal, never a breach — distinct
+    from the owner's own adapter being unresolvable, which does escalate. A rotate declaration
+    leaves every check it cannot measure unmeasured, not forced every node entry."""
+    store = _store(tmp_path)
+    head = _seed_head(store, model="sonnet")
+    with store._engine.begin() as conn:
+        conn.execute(update(leases).values(harness_id="other"))
+
+    default = FakeHarness(
+        handle=WorkerHandle(session_id="default", pid=100, process_start_time="default"), verdict="pass"
+    )
+    other = FakeHarness(handle=WorkerHandle(session_id="rotated", pid=200, process_start_time="other"), verdict="pass")
+    other.resolved_model = "sonnet"
+    registry = HarnessRegistry(
+        {
+            "claude_code": HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+            # The owner's own adapter resolves fine; only its transcript source does not.
+            "other": HarnessBinding(adapter=other, transcript_source=None),
+        }
+    )
+    ctx = _ctx(store, FakeHub(), FakeProvider({"e1": "/ws/e1"}), default, minutes=1)
+    ctx = replace(
+        ctx,
+        harnesses=registry,
+        sessions=SessionResolver(
+            leases=store,
+            harnesses=registry,
+            transcripts_wired=True,  # the lane is on
+        ),
+    )
+    envelope = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=1000), model=["blizzard:basic"])
+
+    Spawner(ctx).enter_node("ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test")
+
+    assert default.spawns == []
+    assert other.resume_froms == [head]  # resumed — no rotation forced by the unmeasured check
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.session == SessionReference("other", head)
+
+
+@pytest.mark.component
+@pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
+def test_a_pool_heads_unresolvable_owner_escalates_node_entry_in_place(tmp_path, unavailable):  # type: ignore[no-untyped-def]
+    """An existing-session operation: the pool's head owner cannot be
+    dispatched to, so the chunk escalates in place at node entry — never a blocked mint
+    that loops forever, and never a substituted default harness."""
+    store = _store(tmp_path)
+    _seed_head(store, model="sonnet")
+    with store._engine.begin() as conn:
+        conn.execute(update(leases).values(harness_id="foreign"))
+    store.record_closure(
+        lease_id="lease_head", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+
+    default = FakeHarness(
+        handle=WorkerHandle(session_id="default", pid=100, process_start_time="default"), verdict="pass"
+    )
+    bindings = {
+        CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+    }
+    if unavailable:
+        bindings["foreign"] = HarnessBinding(adapter=None, transcript_source=default.transcript_source())
+    registry = HarnessRegistry(bindings)
+    ctx = _ctx(store, FakeHub(), FakeProvider({"e1": "/ws/e1"}), default, minutes=1)
+    ctx = replace(
+        ctx,
+        harnesses=registry,
+        sessions=SessionResolver(leases=store, harnesses=registry, transcripts_wired=True),
+    )
+    envelope = _bounded(SessionMode.RESUME, model=["blizzard:basic"])
+
+    Spawner(ctx).enter_node("ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test")
+
+    assert default.spawns == []  # never a substituted default harness
+    assert store.active_lease_for_chunk("ch_1") is None  # escalated, not open
+    escalations = [e for e in store.open_escalations() if e.chunk_id == "ch_1"]
+    assert len(escalations) == 1
+
+    events = [b for b in store.pending_outbound() if b.kind == EVENT_RECORDED and b.chunk_id == "ch_1"]
+    assert len(events) == 1
+    payload = json.loads(events[0].payload)
+    assert payload["kind"] == "owner-unresolvable"
+    assert payload["detail"] == {
+        "via": "resume-owner",
+        "harness_id": "foreign",
+        "owner_status": "unavailable" if unavailable else "unknown",
+    }
+
+    escalation_events = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED and b.chunk_id == "ch_1"]
+    assert len(escalation_events) == 1
+    escalation_payload = json.loads(escalation_events[0].payload)
+    assert escalation_payload["takeover_command"] == ""
+    assert escalation_payload["wrapped_takeover_command"] == ""
+
+    # Replay after a crash (or this same node simply re-entered) never double-escalates —
+    # supersession (a later lease minted for the chunk) is the only way an escalation closes.
+    Spawner(ctx).enter_node("ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test")
+    assert default.spawns == []
+    assert len([e for e in store.open_escalations() if e.chunk_id == "ch_1"]) == 1
+    assert len([b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED and b.chunk_id == "ch_1"]) == 1
+
+
+@pytest.mark.component
+def test_the_escalation_mints_never_spawned_lease_costs_a_later_real_attempt_no_retry(tmp_path):  # type: ignore[no-untyped-def]
+    """The owner-unresolvable escalation mints a zero-budget, never-spawned lease at the SAME
+    node a later real attempt resumes at. Once the owner is restored, that mint must not have
+    spent any of the node's own retry budget — real attempts still get their full count."""
+    store = _store(tmp_path)
+    _seed_head(store, model="sonnet")
+    with store._engine.begin() as conn:
+        conn.execute(update(leases).values(harness_id="foreign"))
+    store.record_closure(
+        lease_id="lease_head", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+    default = FakeHarness(
+        handle=WorkerHandle(session_id="default", pid=100, process_start_time="default"), verdict="pass"
+    )
+    registry = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=default, transcript_source=default.transcript_source())}
+    )
+    hub = FakeHub()
+    envelope = _bounded(SessionMode.RESUME, model=["blizzard:basic"])
+    hub.envelopes["ch_1"] = envelope  # `Attempt.fail`'s own requeue re-reads it idempotently
+    ctx = _ctx(store, hub, FakeProvider({"e1": "/ws/e1"}), default, minutes=1)
+    ctx = replace(
+        ctx,
+        harnesses=registry,
+        sessions=SessionResolver(leases=store, harnesses=registry, transcripts_wired=True),
+    )
+
+    Spawner(ctx).enter_node(
+        "ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test"
+    )  # `foreign` unresolvable
+
+    assert len([e for e in store.open_escalations() if e.chunk_id == "ch_1"]) == 1
+    mint = store.latest_lease_for_chunk("ch_1")
+    assert mint is not None and mint.node_id == "nd_verify" and mint.retries_max == 0
+    # The zero-budget mint never spawned — excluded from `verify`'s own retry budget.
+    assert store.attempt_count("ch_1", "nd_verify") == 0
+
+    # The owner is restored and a real attempt resumes at that same node, so `attempt_count`
+    # reads exactly one — were the never-spawned mint still counted, `fail` would escalate.
+    now2 = _NOW + timedelta(minutes=5)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_real",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_verify",
+            node_name="verify",
+            epoch=mint.epoch + 1,
+            runner_id="r1",
+            retries_max=1,
+            created_at=now2,
+        )
+    )
+    store.record_spawn(
+        "lease_real",
+        pid=5,
+        process_start_time="t5",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-real"),
+        spawned_at=now2,
+    )
+    real_lease = store.active_lease("lease_real")
+    assert real_lease is not None
+    assert store.attempt_count("ch_1", "nd_verify") == 1  # the mint still costs nothing
+
+    # It fails — with its full budget available (`retried == 0 < retries_max == 1`), `fail`
+    # retries rather than escalating a second time.
+    Attempt(replace(ctx, clock=FixedClock(now2)), real_lease).fail(reason=FAILED, via="test")
+    requeued = store.active_lease_for_chunk("ch_1")
+    assert requeued is not None and requeued.lease_id != "lease_real"  # a genuine retry, not an escalation
+    assert requeued.session == SessionReference(CLAUDE_CODE_HARNESS_ID, "default")  # the requeue's own fresh spawn
 
 
 @pytest.mark.component

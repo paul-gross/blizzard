@@ -110,6 +110,7 @@ from blizzard.runner.domain.takeover import IReadTakeoverRepository
 from blizzard.runner.domain.usage import IReadUsageRepository
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -156,7 +157,7 @@ class RunnerWorld:
     lease_5: str
     lease_7: str
     lease_8: str
-    session_1: str
+    session_1: SessionReference
     transcript_segment_id: str
     workspace_id: str
     usage_slug: str
@@ -192,7 +193,13 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
             resolved_effort="medium",
         )
     )
-    stores.liveness.record_spawn(lease_1, pid=100, process_start_time="st-100", session_id="sess-1", spawned_at=_t(1))
+    stores.liveness.record_spawn(
+        lease_1,
+        pid=100,
+        process_start_time="st-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+        spawned_at=_t(1),
+    )
     stores.liveness.record_heartbeat(lease_id=lease_1, beat_at=_t(2))
     stores.usage.record_usage(
         lease_id=lease_1,
@@ -212,7 +219,11 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         recorded_at=_t(3),
     )
     stores.usage.record_context_sample(
-        lease_id=lease_1, chunk_id=chunk_1, session_id="sess-1", context_tokens=500, sampled_at=_t(3)
+        lease_id=lease_1,
+        chunk_id=chunk_1,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+        context_tokens=500,
+        sampled_at=_t(3),
     )
     stores.session.record_session_end(lease_id=lease_1, ended_at=_t(4))
     stores.lease_record.record_closure(
@@ -240,7 +251,13 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
     )
     # Same session id as lease_1: a resume, which finalizes lease_1's still-open segment
     # and opens a fresh one for lease_2 (``LeaseLivenessStore.record_spawn``'s own D1).
-    stores.liveness.record_spawn(lease_2, pid=200, process_start_time="st-200", session_id="sess-1", spawned_at=_t(8))
+    stores.liveness.record_spawn(
+        lease_2,
+        pid=200,
+        process_start_time="st-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+        spawned_at=_t(8),
+    )
     stores.liveness.record_heartbeat(lease_id=lease_2, beat_at=_t(9))
     stores.usage.record_usage(
         lease_id=lease_2,
@@ -260,7 +277,9 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         recorded_at=_t(9),
     )
     stores.session.record_session_preamble(
-        "sess-1", fingerprint=PreambleFingerprint(blizzard="digest-b", workspace="digest-w"), at=_t(9)
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+        fingerprint=PreambleFingerprint(blizzard="digest-b", workspace="digest-w"),
+        at=_t(9),
     )
     stores.attachments.record_attachment(
         lease_id=lease_2,
@@ -321,7 +340,7 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         question_id="qn_open1",
         question="need input?",
         options=["yes", "no"],
-        session_id="sess-1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
         asked_at=_t(13),
     )
     stores.tokens.record_lease_token(lease_2, "hash-lease2", _t(13))
@@ -355,7 +374,13 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
             created_at=_t(20),
         )
     )
-    stores.liveness.record_spawn(lease_3, pid=300, process_start_time="st-300", session_id="sess-2", spawned_at=_t(21))
+    stores.liveness.record_spawn(
+        lease_3,
+        pid=300,
+        process_start_time="st-300",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-2"),
+        spawned_at=_t(21),
+    )
     stores.environments.record_binding(chunk_id=chunk_2, environment_id="env-2", workdir="/ws/env-2", bound_at=_t(21))
     stores.asks.record_ask(
         lease_id=lease_3,
@@ -363,7 +388,7 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         question_id="qn_parked1",
         question="parked?",
         options=[],
-        session_id="sess-2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-2"),
         asked_at=_t(22),
     )
     stores.asks.record_park(lease_id=lease_3, chunk_id=chunk_2, question_id="qn_parked1", parked_at=_t(23))
@@ -403,12 +428,18 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
             session_name="pool-d",
         )
     )
-    stores.liveness.record_spawn(lease_5, pid=400, process_start_time="st-400", session_id="sess-4", spawned_at=_t(41))
+    stores.liveness.record_spawn(
+        lease_5,
+        pid=400,
+        process_start_time="st-400",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-4"),
+        spawned_at=_t(41),
+    )
     stores.takeover.record_takeover(
         takeover_id="tko_1",
         chunk_id=chunk_4,
         lease_id=lease_5,
-        session_id="sess-4",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-4"),
         workdir="/ws/env-4",
         fence_epoch=None,
         opened_at=_t(42),
@@ -518,7 +549,7 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         lease_5=lease_5,
         lease_7=lease_7,
         lease_8=lease_8,
-        session_1="sess-1",
+        session_1=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
         transcript_segment_id=open_segment.segment_id,
         workspace_id=workspace_id,
         usage_slug=usage_slug,
@@ -537,12 +568,15 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadLeaseRecordRepository, "latest_lease_for_chunk"): lambda w: w.read.lease_record.latest_lease_for_chunk(
         w.chunk_1
     ),
+    (IReadLeaseRecordRepository, "latest_lease_with_session_for_chunk"): lambda w: (
+        w.read.lease_record.latest_lease_with_session_for_chunk(w.chunk_1)
+    ),
     (IReadLeaseRecordRepository, "lease"): lambda w: w.read.lease_record.lease(w.lease_1),
     (IReadLeaseRecordRepository, "list_closed_leases"): lambda w: w.read.lease_record.list_closed_leases(10),
     (IReadLeaseRecordRepository, "attempt_count"): lambda w: w.read.lease_record.attempt_count(w.chunk_1, w.node_a),
     (IReadLeaseRecordRepository, "latest_epoch"): lambda w: w.read.lease_record.latest_epoch(w.chunk_1),
     (IReadLeaseRecordRepository, "lease_ids_for_chunk"): lambda w: w.read.lease_record.lease_ids_for_chunk(w.chunk_1),
-    (IReadLeaseSessionRepository, "latest_session_id"): lambda w: w.read.session.latest_session_id(w.chunk_1, None),
+    (IReadLeaseSessionRepository, "latest_session"): lambda w: w.read.session.latest_session(w.chunk_1, None),
     (IReadLeaseSessionRepository, "pool_head"): lambda w: w.read.session.pool_head(w.chunk_1, "pool-a"),
     (IReadLeaseSessionRepository, "session_invocation_count"): lambda w: w.read.session.session_invocation_count(
         w.session_1

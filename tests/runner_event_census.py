@@ -94,6 +94,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "record_resume_intent": Silent(_INTERNAL_BOOKKEEPING + " (restart-resume marking)"),
     "record_resume_clear": Silent(_INTERNAL_BOOKKEEPING + " (restart-resume marking)"),
+    "record_mint_owner": Silent(_INTERNAL_BOOKKEEPING + " (a mint's harness owner, read back by a retry)"),
     "record_session_end": Silent(_INTERNAL_BOOKKEEPING + " (crash-recovery's declared-done fact)"),
     "record_lease_token": Silent(_INTERNAL_BOOKKEEPING + " (capability-token hash)"),
     "record_session_preamble": Silent(_INTERNAL_BOOKKEEPING + " (prompt-fingerprint cache)"),

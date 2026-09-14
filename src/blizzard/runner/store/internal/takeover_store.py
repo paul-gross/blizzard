@@ -9,6 +9,7 @@ from sqlalchemy import select
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.takeover import IWriteTakeoverRepository, TakeoverRecord
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.store.internal.base import RunnerStoreConnections, Unclosed, lease_select, row_to_lease
 from blizzard.runner.store.schema import leases, takeover_ends, takeovers
 
@@ -57,10 +58,10 @@ class TakeoverStore:
         takeover_id: str,
         chunk_id: str,
         lease_id: str | None,
-        session_id: str | None,
         workdir: str,
         fence_epoch: int | None,
         opened_at: datetime,
+        session: SessionReference,
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
@@ -68,7 +69,8 @@ class TakeoverStore:
                     takeover_id=takeover_id,
                     chunk_id=chunk_id,
                     lease_id=lease_id,
-                    session_id=session_id,
+                    session_id=session.session_id,
+                    harness_id=session.harness_id,
                     workdir=workdir,
                     fence_epoch=fence_epoch,
                     opened_at=opened_at,
@@ -91,6 +93,7 @@ class TakeoverStore:
             workdir=str(r.workdir),
             fence_epoch=int(r.fence_epoch) if r.fence_epoch is not None else None,
             opened_at=r.opened_at,
+            harness_id=str(r.harness_id) if r.harness_id is not None else None,
         )
 
 

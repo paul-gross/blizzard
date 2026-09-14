@@ -20,6 +20,8 @@ from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle, WorkerPreamble
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.wire.facts import LEASE_MINTED
 
@@ -62,6 +64,15 @@ class TakeoverRecord:
     workdir: str
     fence_epoch: int | None
     opened_at: datetime
+    harness_id: str | None = None
+
+    @property
+    def session(self) -> SessionReference | None:
+        if self.session_id is None:
+            return None
+        if self.harness_id is None:
+            raise ValueError(f"takeover {self.takeover_id} has session_id {self.session_id!r} but no harness_id")
+        return SessionReference(self.harness_id, self.session_id)
 
 
 @dataclass(frozen=True)
@@ -76,7 +87,7 @@ class TakeoverOpenScope:
     open_takeover: TakeoverRecord | None
     bindings: list[EnvBindingRecord]
     active_lease: LeaseRecord | None
-    latest_lease: LeaseRecord | None
+    latest_lease_with_session: LeaseRecord | None
     latest_epoch: int
 
 
@@ -133,10 +144,10 @@ class IWriteTakeoverRepository(IReadTakeoverRepository, Protocol):
         takeover_id: str,
         chunk_id: str,
         lease_id: str | None,
-        session_id: str | None,
         workdir: str,
         fence_epoch: int | None,
         opened_at: datetime,
+        session: SessionReference,
     ) -> None:
         """Open a takeover — recorded before any kill and before the interactive command
         is returned (issue #52), so no later tick can race the human for the chunk."""
@@ -196,13 +207,14 @@ class OpenedTakeover:
     # The declared pool this session belongs to (issue #144); ``None`` when it belongs to
     # no pool, or predates the stamps.
     session_name: str | None = None
+    harness_id: str | None = None
     # The bounded takeover env (issue #258), layered over the operator's terminal on exec.
     # Carries the re-minted lease token — env only, never the printable ``command``.
     env: dict[str, str] = field(default_factory=dict)
 
 
 class TakeoverService:
-    """Composition-root-wired: the clock, harness, and process probe (issue #52).
+    """Composition-root-wired: the clock, harness registry, and process probe.
 
     Spans five concepts (takeover, asks, outbound, tokens, elicitations), so it holds the
     :class:`~blizzard.runner.stores.RunnerStores` bundle (D4) — the chunk-keyed reads
@@ -212,15 +224,15 @@ class TakeoverService:
         self,
         stores: RunnerStores,
         clock: IClock,
-        harness: IHarnessWorkerLifecycle,
         process: IProcessProbe,
         *,
         local_api_url: str,
+        harnesses: IHarnessRegistry,
         events: IRunnerEventPublisher | None = None,
     ) -> None:
         self._stores = stores
         self._clock = clock
-        self._harness = harness
+        self._harnesses = harnesses
         self._process = process
         self._local_api_url = local_api_url
         # The SSE publish seam (D2), typed against the Protocol (``bzh:dependency-inversion``);
@@ -249,10 +261,13 @@ class TakeoverService:
         ):
             raise SubmissionPending(f"chunk {chunk_id}'s attempt already submitted — let it land, then `requeue`")
 
-        reference: LeaseRecord | None = active if active is not None else scope.latest_lease
-        if reference is None or reference.session_id is None:
+        reference: LeaseRecord | None = active if active is not None else scope.latest_lease_with_session
+        if reference is None or reference.session is None:
             raise ChunkNotTakeable(f"chunk {chunk_id} has no resumable session to take over")
-        session_id = reference.session_id
+        session = reference.session
+        # Resolve before the fact-before-command write: an unavailable recorded owner blocks
+        # this takeover rather than opening it and then offering no usable command.
+        harness = self._resolved_harness(session)
 
         now = self._clock.now()
         takeover_id = Id.mint(TAKEOVER_PREFIX, self._clock).value
@@ -264,7 +279,7 @@ class TakeoverService:
             takeover_id=takeover_id,
             chunk_id=chunk_id,
             lease_id=reference.lease_id,
-            session_id=session_id,
+            session=session,
             workdir=workdir,
             fence_epoch=fence_epoch,
             opened_at=now,
@@ -297,9 +312,9 @@ class TakeoverService:
 
         # Read the reference lease's stamps (issue #144) rather than re-resolving, so the
         # operator continues under exactly the configuration the session ran with.
-        command = self._harness.resume_command(
+        command = harness.resume_command(
             workdir,
-            session_id,
+            session.session_id,
             model=reference.resolved_model,
             effort=reference.resolved_effort,
             attended=True,
@@ -318,7 +333,7 @@ class TakeoverService:
         )
         # Bound what leaves the daemon: never the whole allowlisted child env, which
         # carries terminal vars that would clobber the operator's and any secret.
-        full_env = self._harness.identity_env(preamble, chunk_id, session_id)
+        full_env = harness.identity_env(preamble, chunk_id, session.session_id)
         env = {
             name: value
             for name, value in full_env.items()
@@ -329,6 +344,7 @@ class TakeoverService:
             command=command,
             workdir=workdir,
             session_name=reference.session_name,
+            harness_id=session.harness_id,
             env=env,
         )
 
@@ -346,3 +362,6 @@ class TakeoverService:
         self._stores.takeover.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())
         if self._events is not None:
             self._events.publish_takeover_changed(scope.chunk_id, takeover_id, cause="closed")
+
+    def _resolved_harness(self, session: SessionReference) -> IHarnessWorkerLifecycle:
+        return self._harnesses.adapter(session.harness_id)

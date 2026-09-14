@@ -105,6 +105,100 @@ def test_answers_unknown_question_is_404(tmp_path: Path) -> None:
     assert resp.status_code == 404
 
 
+def test_question_harness_owner_reaches_the_runner_answer_read(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    assert (
+        hub.client.post(
+            "/api/fleet/routes",
+            json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+        ).status_code
+        == 201
+    )
+
+    asked = hub.client.post(
+        "/api/questions",
+        json={
+            "question_id": "qn_owner",
+            "chunk_id": chunk_id,
+            "runner_id": "r1",
+            "epoch": 1,
+            "session_id": "sess-1",
+            "harness_id": "claude_code",
+            "question": "Which API?",
+            "asked_at": "2026-07-13T00:00:00+00:00",
+        },
+    )
+    assert asked.status_code == 201, asked.text
+
+    delivered = hub.client.get("/api/fleet/questions/qn_owner")
+    assert delivered.status_code == 200, delivered.text
+    assert delivered.json()["session_id"] == "sess-1"
+    assert delivered.json()["harness_id"] == "claude_code"
+
+
+def test_equal_raw_session_ids_are_isolated_across_harnesses(tmp_path: Path) -> None:
+    """Two harnesses sharing one raw session-id text never collide:
+    each question is keyed by its own ``question_id``, so both land distinctly, each
+    keeps its own recorded owner, and answering one never touches the other's state."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
+    chunk_a = hub.client.post(
+        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "434a"})]}
+    ).json()["chunk_id"]
+    chunk_b = hub.client.post(
+        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "434b"})]}
+    ).json()["chunk_id"]
+    for chunk_id in (chunk_a, chunk_b):
+        assert (
+            hub.client.post(
+                "/api/fleet/routes",
+                json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+            ).status_code
+            == 201
+        )
+
+    for question_id, chunk_id, harness_id in (
+        ("qn_claude", chunk_a, "claude_code"),
+        ("qn_other", chunk_b, "other_harness"),
+    ):
+        asked = hub.client.post(
+            "/api/questions",
+            json={
+                "question_id": question_id,
+                "chunk_id": chunk_id,
+                "runner_id": "r1",
+                "epoch": 1,
+                "session_id": "shared-raw-session",
+                "harness_id": harness_id,
+                "question": "Which API?",
+                "asked_at": "2026-07-13T00:00:00+00:00",
+            },
+        )
+        assert asked.status_code == 201, asked.text
+
+    claude_view = hub.client.get("/api/fleet/questions/qn_claude").json()
+    other_view = hub.client.get("/api/fleet/questions/qn_other").json()
+    assert claude_view["session_id"] == other_view["session_id"] == "shared-raw-session"
+    assert claude_view["harness_id"] == "claude_code"
+    assert other_view["harness_id"] == "other_harness"
+    assert claude_view["chunk_id"] == chunk_a
+    assert other_view["chunk_id"] == chunk_b
+
+    # Answering one never delivers or answers the other, despite the shared raw session id.
+    answered = hub.client.post("/api/questions/qn_claude/answers", json={"answer": "rest", "answered_by": "alice"})
+    assert answered.status_code == 201, answered.text
+
+    assert hub.client.get("/api/fleet/questions/qn_claude").json()["answered"] is True
+    still_open = hub.client.get("/api/fleet/questions/qn_other").json()
+    assert still_open["answered"] is False
+    # Chunk A's own question was answered; chunk B's — same raw session id, different
+    # harness — stays exactly as it was, unaffected by the other's answer.
+    assert hub.client.get(f"/api/chunks/{chunk_a}").json()["status"] == "running"
+    assert hub.client.get(f"/api/chunks/{chunk_b}").json()["status"] == "waiting_on_human"
+
+
 # --- Runner principal is still rejected on the answers route ----------------
 
 

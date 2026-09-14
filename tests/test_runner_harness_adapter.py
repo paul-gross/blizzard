@@ -93,6 +93,44 @@ def test_resume_command_without_a_permission_mode_stays_bare() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# `observe_version` (bounded and non-raising — read AFTER a worker is already live).
+
+
+@pytest.mark.unit
+def test_observe_version_reads_the_binarys_version_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **kw: subprocess.CompletedProcess(a[0], 0, stdout="claude-code 1.2.3\n", stderr=""),
+    )
+    assert ClaudeCodeAdapter(binary="claude").observe_version() == "claude-code 1.2.3"
+
+
+@pytest.mark.unit
+def test_observe_version_times_out_to_none_rather_than_raising(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _hung(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(subprocess, "run", _hung)
+
+    with capture_logs() as logs:
+        assert ClaudeCodeAdapter(binary="claude").observe_version() is None
+    assert any(entry["event"] == "harness version probe failed" for entry in logs)
+
+
+@pytest.mark.unit
+def test_observe_version_missing_binary_reads_none_rather_than_raising(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _missing(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise OSError("no such file or directory: 'claude'")
+
+    monkeypatch.setattr(subprocess, "run", _missing)
+
+    with capture_logs() as logs:
+        assert ClaudeCodeAdapter(binary="claude").observe_version() is None
+    assert any(entry["event"] == "harness version probe failed" for entry in logs)
+
+
+# --------------------------------------------------------------------------- #
 # Node-entry resume (issue #115): the CLI flag branch, with ``subprocess.Popen`` faked.
 
 
@@ -537,6 +575,64 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path) -> None:
     assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")  # ran in the acquired workdir
     assert "--permission-mode" not in (workdir / "argv.txt").read_text()  # omitted when unset
     assert "--model claude-opus-5" in (workdir / "argv.txt").read_text()  # pinned Opus, not the ambient default
+
+
+_VERSION_HANGS_HARNESS = """#!/usr/bin/env python3
+import sys, json, time
+args = sys.argv[1:]
+if args == ["--version"]:
+    time.sleep(30)
+    sys.exit(0)
+session = resume = prompt = None
+i = 0
+while i < len(args):
+    a = args[i]
+    if a == "--session-id": session = args[i + 1]; i += 2
+    elif a == "--resume": resume = args[i + 1]; i += 2
+    elif a == "--output-format": i += 2
+    elif a == "--settings": i += 2
+    elif a == "--permission-mode": i += 2
+    elif a == "--model": i += 2
+    elif a in ("-p", "--print"): i += 1
+    else: prompt = a; i += 1
+sid = resume or session or "auto"
+if resume is None:
+    open("spawned-here.txt", "w").write(prompt or "")
+    result = ""
+else:
+    result = "Assessed. <Choice>pass</Choice>"
+print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": result, "session_id": sid}))
+"""
+
+
+@pytest.mark.component
+def test_a_hung_version_probe_reads_none_and_the_spawn_right_after_still_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``observe_version``, read immediately BEFORE the spawn, hangs past its own bound and
+    reads back ``None`` instead of blocking — the spawn right after it, on the same binary,
+    is entirely unaffected."""
+    monkeypatch.setattr("blizzard.runner.harness.internal.claude_code_adapter._VERSION_PROBE_TIMEOUT_SECONDS", 0.2)
+    script = tmp_path / "hung-version-claude"
+    script.write_text(_VERSION_HANGS_HARNESS)
+    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=str(script))
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    assert adapter.observe_version() is None  # bounded — never waits out the hang
+
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    os.waitpid(handle.pid, 0)
+
+    assert handle.pid > 0
+    assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")
 
 
 @pytest.mark.component

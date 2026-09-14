@@ -23,6 +23,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.artifacts import GraphArtifactRecord
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from tests.runner_fakes import make_store, make_stores, no_retry_delay
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
@@ -219,7 +220,7 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) ->
         takeover_id="tko_1",
         chunk_id=_CHUNK,
         lease_id="lease_1",
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,

@@ -14,6 +14,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.steps import Pull
 from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import (
@@ -49,7 +50,13 @@ def _seed_escalated(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW): 
             created_at=at,
         )
     )
-    store.record_spawn(lease, pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=at)
+    store.record_spawn(
+        lease,
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=at,
+    )
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason="escalated", closed_at=at)
 
 

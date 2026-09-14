@@ -19,23 +19,36 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from tests.runner_fakes import FakeHarness, FakeProbe, make_store, make_stores
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
 
-def _app_with_takeover(tmp_path: Path, *, clock: FixedClock | None = None, probe: FakeProbe | None = None):  # type: ignore[no-untyped-def]
+def _app_with_takeover(
+    tmp_path: Path,
+    *,
+    clock: FixedClock | None = None,
+    probe: FakeProbe | None = None,
+    harnesses: HarnessRegistry | None = None,
+):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict=None
     )
+    resolved_harnesses = (
+        harnesses
+        if harnesses is not None
+        else HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)})
+    )
     service = TakeoverService(
         make_stores(store),
         clock or FixedClock(_NOW),
-        harness,
         probe or FakeProbe(),
         local_api_url="http://127.0.0.1:8431",
+        harnesses=resolved_harnesses,
     )
     return create_app(config, runner_stores=make_stores(store), takeover=service), store
 
@@ -54,7 +67,13 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
     }
     fields.update(overrides)
     store.record_lease(NewLease(**fields))  # type: ignore[arg-type]
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -79,6 +98,7 @@ def test_open_over_a_parked_chunk_returns_the_interactive_command(tmp_path: Path
     body = resp.json()
     assert body["command"] == "cd /ws/e1 && claude --resume sess-a"
     assert body["workdir"] == "/ws/e1"
+    assert body["harness_id"] == "claude_code"
     assert body["takeover_id"]
     # The bounded takeover env rides the response (issue #258) — BLIZZARD_* identity
     # plus PATH/HOME, never the daemon's full child env or the printable command.
@@ -102,6 +122,22 @@ def test_open_without_force_over_a_live_worker_is_409(tmp_path: Path) -> None:
         resp = client.post("/api/chunks/ch_1/takeovers", json={})
 
     assert resp.status_code == 409, resp.text
+    assert store.open_takeover_for_chunk("ch_1") is None
+
+
+@pytest.mark.component
+def test_unknown_recorded_owner_blocks_takeover_as_409_without_opening_one(tmp_path: Path) -> None:
+    app, store = _app_with_takeover(tmp_path, harnesses=HarnessRegistry({}))
+    _seed_lease(store)
+    with store._engine.begin() as conn:
+        conn.exec_driver_sql("UPDATE leases SET harness_id = 'missing' WHERE lease_id = 'lease_1'")
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    with TestClient(app) as client:
+        resp = client.post("/api/chunks/ch_1/takeovers", json={})
+
+    assert resp.status_code == 409
+    assert "unknown coding harness 'missing'" in resp.json()["detail"]
     assert store.open_takeover_for_chunk("ch_1") is None
 
 

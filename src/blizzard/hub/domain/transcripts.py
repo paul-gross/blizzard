@@ -68,6 +68,7 @@ class SegmentRecord:
     turns_json: str
     #: Re-ship only: the segment this replaces, which a lease read drops (blizzard#250).
     supersedes: str | None = None
+    harness_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,7 @@ class SegmentIndexRow:
     normalizer_version: str
     harness_version: str | None
     received_at: datetime
+    harness_id: str | None = None
 
 
 @dataclass(frozen=True)

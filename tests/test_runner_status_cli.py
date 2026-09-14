@@ -24,6 +24,7 @@ from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.listeners import Listeners, Uds
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 
@@ -100,7 +101,13 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_ask(
@@ -109,7 +116,7 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
         question_id="qn_1",
         question="which branch?",
         options=["main", "dev"],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
 
@@ -132,7 +139,13 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_2", pid=200, process_start_time="start-200", session_id="sess-b", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_2",
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
     store.record_closure(
         lease_id="lease_2",
@@ -149,7 +162,7 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
         takeover_id="tko_1",
         chunk_id="ch_3",
         lease_id=None,
-        session_id="sess-c",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-c"),
         workdir="/ws/e3",
         fence_epoch=None,
         opened_at=_NOW + timedelta(minutes=2),

@@ -103,6 +103,19 @@ def test_transcript_high_water_ddl_compiles_under_both_dialects() -> None:
         assert "transcript_high_water" in sql
 
 
+def test_index_projection_keeps_harness_identity_distinct_from_its_versions(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
+    record = _record(harness_id="claude_code", harness_version="2.1", normalizer_version="normalizer/3")
+
+    store.insert_accepted(record, byte_count=10, codec="zlib", at=_NOW)
+
+    [index] = store.segments_for_chunk(record.chunk_id)
+    assert index.harness_id == "claude_code"
+    assert index.harness_version == "2.1"
+    assert index.normalizer_version == "normalizer/3"
+
+
 def test_every_statement_the_store_executes_compiles_under_both_dialects() -> None:
     for name, stmt in _executed_statements().items():
         for dialect in (postgresql.dialect(), sqlite.dialect()):

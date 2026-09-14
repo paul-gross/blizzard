@@ -11,10 +11,10 @@ the not-held message even while the session is alive elsewhere.
 
 Every refusal is a 409. `ChunkNotTakeable` when this runner does not hold the chunk, when no resumable session sits
 behind its most recent lease, or when a takeover is already open; `LiveWorkerConflict` when the chunk has a live worker
-attempt — pass `--force` to supersede the attempt instead of refusing; and `SubmissionPending` when, even under
-`--force`, the attempt has already submitted — let it land, then `requeue`. The check is against the runner's actual
-held session state, never the escalation's composed commands — a takeover can succeed against an escalation carrying
-neither.
+attempt — pass `--force` to supersede the attempt instead of refusing; `SubmissionPending` when, even under `--force`,
+the attempt has already submitted — let it land, then `requeue`; and `UnknownHarnessError` or `UnavailableHarnessError`
+when the recorded session's owner is unresolvable on this runner. The check is against the runner's actual held session
+state, never the escalation's composed commands — a takeover can succeed against an escalation carrying neither.
 
 ## What the daemon does
 
@@ -56,3 +56,6 @@ blizzard-context's
 Only when no runner can enter the session does resolving an escalation mean acting on the chunk directly — reading its
 bounce history or migration guidance — and requeuing. For work finished outside the fleet, stop the chunk instead,
 closing the escalation with it — [control-verbs.md](../control-verbs.md) owns the verb.
+
+An `owner-unresolvable` escalation refuses a takeover the same 409 way while its recorded harness stays unresolvable —
+[observability.md](../observability.md) owns why and the remedy.

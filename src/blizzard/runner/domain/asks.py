@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import QUESTION_PREFIX, Id
 from blizzard.runner.events.publisher import IRunnerEventPublisher
+from blizzard.runner.harness.identity import SessionReference
 
 if TYPE_CHECKING:
     from blizzard.runner.domain.leases import LeaseRecord
@@ -34,6 +35,15 @@ class AskRecord:
     options: list[str]
     session_id: str | None
     asked_at: datetime
+    harness_id: str | None = None
+
+    @property
+    def session(self) -> SessionReference | None:
+        if self.session_id is None:
+            return None
+        if self.harness_id is None:
+            raise ValueError(f"ask on lease {self.lease_id} has session_id {self.session_id!r} but no harness_id")
+        return SessionReference(self.harness_id, self.session_id)
 
 
 @dataclass(frozen=True)
@@ -94,8 +104,8 @@ class IWriteAskRepository(IReadAskRepository, Protocol):
         question_id: str,
         question: str,
         options: list[str],
-        session_id: str | None,
         asked_at: datetime,
+        session: SessionReference | None = None,
     ) -> None:
         """Persist the worker's local open-ask fact."""
         ...
@@ -131,7 +141,7 @@ class AskService:
             question_id=question_id,
             question=question,
             options=options,
-            session_id=lease.session_id,
+            session=lease.session,
             asked_at=self._clock.now(),
         )
         if self._events is not None:

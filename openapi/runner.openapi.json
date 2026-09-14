@@ -197,6 +197,17 @@
             "title": "Chunk Id",
             "type": "string"
           },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
           "lease_id": {
             "title": "Lease Id",
             "type": "string"
@@ -1267,6 +1278,17 @@
             "title": "Epoch",
             "type": "integer"
           },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
           "lease_id": {
             "title": "Lease Id",
             "type": "string"
@@ -2026,6 +2048,17 @@
             "title": "Graph Id",
             "type": "string"
           },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
           "last_heartbeat_at": {
             "anyOf": [
               {
@@ -2270,6 +2303,17 @@
             "title": "Chunk Id",
             "type": "string"
           },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
           "held_since": {
             "title": "Held Since",
             "type": "string"
@@ -2441,6 +2485,17 @@
           "epoch": {
             "title": "Epoch",
             "type": "integer"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
           },
           "node_id": {
             "anyOf": [
@@ -3028,6 +3083,17 @@
             "title": "Env",
             "type": "object"
           },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
           "takeover_id": {
             "title": "Takeover Id",
             "type": "string"
@@ -3134,7 +3200,7 @@
         "type": "object"
       },
       "TranscriptResponse": {
-        "description": "A lease's parsed transcript \u2014 always 200 when the lease exists.",
+        "description": "A lease's parsed transcript \u2014 200 when the lease exists and its recorded harness\nowner is known and available; 503 when that owner is unknown or unavailable.",
         "properties": {
           "available": {
             "title": "Available",
@@ -3254,6 +3320,17 @@
           "final": {
             "title": "Final",
             "type": "boolean"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
           },
           "harness_version": {
             "anyOf": [
@@ -4458,7 +4535,7 @@
     },
     "/api/chunks/{chunk_id}/transcripts/{segment_id}": {
       "get": {
-        "description": "One segment's turns, read from its session file, local-only (D1) \u2014 404 iff no such\nsegment exists under this chunk on this runner's own store.",
+        "description": "One segment's turns, local-only (D1) \u2014 404 iff absent; 503 iff its owner is unavailable.",
         "operationId": "get_transcript_segment_api_chunks__chunk_id__transcripts__segment_id__get",
         "parameters": [
           {
@@ -4500,6 +4577,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "The recorded harness owner is unavailable."
           }
         },
         "summary": "Get Transcript Segment",
@@ -5410,7 +5490,7 @@
     },
     "/api/leases/{lease_id}/transcript": {
       "get": {
-        "description": "The lease's resolved transcript \u2014 404 iff no lease with this id ever existed.",
+        "description": "The lease's resolved transcript \u2014 404 iff absent; 503 iff its owner is unavailable.",
         "operationId": "get_transcript_api_leases__lease_id__transcript_get",
         "parameters": [
           {
@@ -5443,6 +5523,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "The recorded harness owner is unavailable."
           }
         },
         "summary": "Get Transcript",
@@ -5568,6 +5651,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "The requested harness is known but unavailable."
           }
         },
         "summary": "Start Selftest",

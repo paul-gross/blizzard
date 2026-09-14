@@ -60,6 +60,7 @@ class OutboundFacts:
             "chunk_id": lease.chunk_id,
             "node_id": lease.node_id,
             "session_id": ask.session_id or lease.session_id,
+            "harness_id": ask.harness_id or lease.harness_id,
             "epoch": lease.epoch,
             "question": ask.question,
             "options": ask.options,

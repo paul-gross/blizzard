@@ -240,6 +240,7 @@ class FactIngestService:
                 chunk_id=fact.require_text("chunk_id"),
                 node_id=fact.text("node_id"),
                 session_id=fact.text("session_id"),
+                harness_id=fact.text("harness_id"),
                 runner_id=runner_id,
                 epoch=fact.require_number("epoch"),
                 question=fact.require_text("question"),

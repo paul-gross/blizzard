@@ -5045,6 +5045,17 @@
             "title": "Epoch",
             "type": "integer"
           },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
           "node_id": {
             "anyOf": [
               {
@@ -5167,6 +5178,17 @@
           "epoch": {
             "title": "Epoch",
             "type": "integer"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
           },
           "node_id": {
             "anyOf": [
@@ -7017,6 +7039,17 @@
             "title": "Final",
             "type": "boolean"
           },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
           "harness_version": {
             "anyOf": [
               {
@@ -7114,6 +7147,17 @@
           "final": {
             "title": "Final",
             "type": "boolean"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
           },
           "harness_version": {
             "anyOf": [

@@ -60,6 +60,7 @@ class ChunkQuestionsStore:
         question: str,
         options: list[str],
         asked_at: datetime,
+        harness_id: str | None = None,
     ) -> None:
         # Idempotent by question_id: a store-and-forward replay re-lands the same row.
         with self._store.write("record_question") as conn:
@@ -74,6 +75,7 @@ class ChunkQuestionsStore:
                     chunk_id=chunk_id,
                     node_id=node_id,
                     session_id=session_id,
+                    harness_id=harness_id,
                     runner_id=runner_id,
                     epoch=epoch,
                     question=question,

@@ -104,6 +104,7 @@ class QuestionQuery:
             chunk_id=q.chunk_id,
             node_id=q.node_id,
             session_id=q.session_id,
+            harness_id=q.harness_id,
             runner_id=q.runner_id,
             epoch=q.epoch,
             question=q.question,

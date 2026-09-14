@@ -26,7 +26,9 @@ from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.listeners import Listeners, Uds
@@ -94,7 +96,8 @@ def _fake_binary(tmp_path: Path, source: str = _FAKE_HARNESS) -> str:
 def _app_with_harness(tmp_path: Path, binary: str) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
     adapter = ClaudeCodeAdapter(binary=binary)
-    return TestClient(create_app(config, harness=adapter))
+    harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
+    return TestClient(create_app(config, harnesses=harnesses))
 
 
 def _poll_until_done(client: TestClient, selftest_id: str, timeout: float = 20.0) -> dict:
@@ -244,6 +247,9 @@ class _HangingAdapter:
     shape a real drifted/hung CLI can produce, and the run-budget timeout exists to
     catch."""
 
+    def observe_version(self) -> str | None:
+        return "test"
+
     def spawn(
         self,
         envelope: object,
@@ -334,7 +340,7 @@ def test_selftest_run_that_exceeds_its_budget_fails_loudly_instead_of_hanging(tm
     # The wedged check (`spawn` blocks forever) never returns on its own — the fix
     # under test is the service's own wall-clock budget resolving the run anyway.
     service = SelfTestService(
-        adapters={"claude_code": _HangingAdapter()},
+        harnesses=HarnessRegistry({"claude_code": HarnessBinding(adapter=_HangingAdapter())}),
         scratch_git=_StubScratchGit(tmp_path / "scratch"),
         process=_NeverAliveProcessProbe(),
         clock=SystemClock(),
@@ -352,6 +358,25 @@ def test_selftest_run_that_exceeds_its_budget_fails_loudly_instead_of_hanging(tm
     assert run["error"] is not None and "budget" in run["error"]
 
 
+@pytest.mark.component
+def test_unavailable_harness_adapter_is_rejected_as_service_unavailable(tmp_path: Path) -> None:
+    # `claude_code` is registered but its binding carries no adapter (known-but-adapterless)
+    # — a recorded owner this runner cannot currently serve, never a default substitute.
+    registry = HarnessRegistry({"claude_code": HarnessBinding(adapter=None)})
+    service = SelfTestService(
+        harnesses=registry,
+        scratch_git=_StubScratchGit(tmp_path / "scratch"),
+        process=_NeverAliveProcessProbe(),
+        clock=SystemClock(),
+    )
+    client = TestClient(create_app(RunnerConfig(root=tmp_path / "runner", db_url="sqlite://"), selftests=service))
+
+    resp = client.post("/api/selftests", json={"harness": "claude_code"})
+
+    assert resp.status_code == 503, resp.text
+    assert "claude_code" in resp.json()["detail"]
+
+
 class _FixedPidAdapter:
     """Spawns and resumes as fast, well-behaved subprocess mechanics honoring fixed
     pids — isolates the automated-resume reap behavior from real process spawning."""
@@ -359,6 +384,9 @@ class _FixedPidAdapter:
     def __init__(self, spawn_pid: int, resume_pid: int) -> None:
         self.spawn_pid = spawn_pid
         self.resume_pid = resume_pid
+
+    def observe_version(self) -> str | None:
+        return "test"
 
     def spawn(
         self,

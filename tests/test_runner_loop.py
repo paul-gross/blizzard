@@ -10,10 +10,12 @@ from __future__ import annotations
 import hashlib
 import json
 import shlex
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_status import ChunkStatus
@@ -24,6 +26,7 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.preamble import (
     DEFAULT_BLIZZARD_PREAMBLE,
     RESUME_BLIZZARD_UNCHANGED,
@@ -33,14 +36,18 @@ from blizzard.runner.harness.preamble import (
     PreambleFingerprint,
     resume_cross_node,
 )
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.produces import ProducesReconciler
+from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.schema import lease_spawns
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.wire.chunk import ChunkStatusView, ChunkUsageTotalView
 from blizzard.wire.completion import SubmittedArtifact
@@ -92,7 +99,13 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=pid, process_start_time=start, session_id=session, spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=pid,
+        process_start_time=start,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -149,6 +162,249 @@ def test_fill_claims_acquires_binds_and_spawns(tmp_path):  # type: ignore[no-unt
     buffered = store.pending_outbound()
     assert [b.kind for b in buffered] == [LEASE_MINTED]
     assert buffered[0].lease_id == lease.lease_id
+
+
+@pytest.mark.unit
+def test_existing_session_spawn_dispatches_to_exact_owner_and_preserves_it(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    default = FakeHarness(handle=_HANDLE, verdict="pass")
+    owner = FakeHarness(
+        handle=WorkerHandle(session_id="shared", pid=200, process_start_time="other-start"), verdict="pass"
+    )
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=default,
+        probe=FakeProbe(),
+    )
+    ctx = replace(
+        ctx,
+        harnesses=HarnessRegistry(
+            {
+                "claude_code": HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+                "other": HarnessBinding(adapter=owner, transcript_source=owner.transcript_source()),
+            }
+        ),
+    )
+
+    Spawner(ctx).spawn(
+        "ch_1",
+        _build_envelope(),
+        [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        via="test",
+        resume_from=SessionReference("other", "shared"),
+    )
+
+    assert default.spawns == []
+    assert owner.resume_froms == ["shared"]
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.session == SessionReference("other", "shared")
+    assert store.session_preamble_fingerprint(SessionReference("other", "shared")) is not None
+    assert store.session_preamble_fingerprint(SessionReference("claude_code", "shared")) is None
+
+
+@pytest.mark.unit
+def test_unknown_existing_session_owner_blocks_before_lease_mint(tmp_path):  # type: ignore[no-untyped-def]
+    """An unresolvable recorded owner blocks this one spawn — logged, never raised, and
+    never a fresh lease minted under a substituted harness — so the caller's own sweep
+    (FILL's remaining slots, ADVANCE's held-chunk poll) still reaches every other chunk."""
+    store = _store(tmp_path)
+    default = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=default,
+        probe=FakeProbe(),
+    )
+
+    Spawner(ctx).spawn(
+        "ch_1",
+        _build_envelope(),
+        [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        via="test",
+        resume_from=SessionReference("missing", "shared"),
+    )
+
+    assert default.spawns == []
+    assert store.active_lease_for_chunk("ch_1") is None
+
+
+@pytest.mark.unit
+def test_requeue_mints_a_fresh_session_under_the_failed_sessions_exact_owner(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    with store._engine.begin() as conn:
+        conn.exec_driver_sql("UPDATE leases SET harness_id = 'other' WHERE lease_id = 'lease_1'")
+    default = FakeHarness(handle=_HANDLE, verdict="pass")
+    other = FakeHarness(
+        handle=WorkerHandle(session_id="other-fresh", pid=200, process_start_time="other-start"), verdict="pass"
+    )
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    registry = HarnessRegistry(
+        {
+            "claude_code": HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+            "other": HarnessBinding(adapter=other, transcript_source=other.transcript_source()),
+        }
+    )
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=default, probe=FakeProbe())
+    ctx = replace(
+        ctx,
+        harnesses=registry,
+        sessions=SessionResolver(
+            leases=store,
+            harnesses=registry,
+            transcripts_wired=True,
+        ),
+    )
+    failed = store.active_lease("lease_1")
+    assert failed is not None
+
+    Attempt(ctx, failed).requeue()
+
+    assert default.spawns == []
+    assert other.resume_froms == [None]
+    retried = store.lease_for_session(SessionReference("other", "other-fresh"))
+    assert retried is not None and retried.session == SessionReference("other", "other-fresh")
+
+
+@pytest.mark.unit
+def test_requeue_after_a_pre_spawn_failure_keeps_the_minted_owner(tmp_path):  # type: ignore[no-untyped-def]
+    """A mint under a non-default owner that fails before spawn records no session — its
+    retry must still requeue under that same minted owner, never the default harness a
+    session-keyed read would fall back to once ``session_id`` stays null."""
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_mint_owner("lease_1", "other")
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    default = FakeHarness(handle=_HANDLE, verdict="pass")
+    other = FakeHarness(
+        handle=WorkerHandle(session_id="other-fresh", pid=200, process_start_time="other-start"), verdict="pass"
+    )
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    registry = HarnessRegistry(
+        {
+            "claude_code": HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+            "other": HarnessBinding(adapter=other, transcript_source=other.transcript_source()),
+        }
+    )
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=default, probe=FakeProbe())
+    ctx = replace(
+        ctx,
+        harnesses=registry,
+        sessions=SessionResolver(leases=store, harnesses=registry, transcripts_wired=True),
+    )
+    failed = store.active_lease("lease_1")
+    assert failed is not None and failed.session is None  # minted, never spawned
+
+    Attempt(ctx, failed).requeue()
+
+    assert default.spawns == []
+    assert other.resume_froms == [None]
+
+
+@pytest.mark.unit
+def test_new_spawn_generations_record_their_bindings_actual_harness_version(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.harness_version = "fresh-1.0"
+    probe = FakeProbe(alive={(100, "start-100"), (201, "start-201")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    Spawner(ctx).spawn(
+        "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=0)
+    harness.harness_version = "resume-2.0"
+    harness.resume_pid = 201
+
+    Resume(ctx).run()
+
+    with store._engine.connect() as conn:
+        generations = conn.execute(
+            select(lease_spawns.c.harness_id, lease_spawns.c.harness_version).order_by(lease_spawns.c.id)
+        ).all()
+    assert generations == [("claude_code", "fresh-1.0"), ("claude_code", "resume-2.0")]
+
+
+@pytest.mark.unit
+def test_a_version_probe_that_comes_back_empty_still_spawns_and_records_no_version(tmp_path):  # type: ignore[no-untyped-def]
+    """``observe_version`` is read BEFORE the spawn and is bounded and non-raising at the
+    adapter, so a lease still gets its pid recorded with no version at all, never an
+    unrecorded worker or a blocked tick."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.harness_version = None  # the adapter's own catch already reduced a hang/raise to this
+    probe = FakeProbe(alive={(100, "start-100")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    Spawner(ctx).spawn(
+        "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+    )
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.pid == 100  # the spawn itself is entirely unaffected
+    with store._engine.connect() as conn:
+        (harness_id, version) = conn.execute(select(lease_spawns.c.harness_id, lease_spawns.c.harness_version)).one()
+    assert (harness_id, version) == ("claude_code", None)
+
+
+@pytest.mark.unit
+def test_judgement_collection_checks_output_with_the_recorded_owner(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    with store._engine.begin() as conn:
+        conn.exec_driver_sql("UPDATE leases SET harness_id = 'other' WHERE lease_id = 'lease_1'")
+    default = FakeHarness(handle=_HANDLE, verdict="pass", judge_output_usable=True)
+    owner = FakeHarness(handle=_HANDLE, verdict="pass", judge_output_usable=False)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=default,
+        probe=FakeProbe(),
+    )
+    ctx = replace(
+        ctx,
+        harnesses=HarnessRegistry(
+            {
+                "claude_code": HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+                "other": HarnessBinding(adapter=owner, transcript_source=owner.transcript_source()),
+            }
+        ),
+    )
+    output_path = ctx.elicitation_files.output_path("lease_1", 1, attempt=0)
+    store.record_elicitation_launch("lease_1", 1, output_path=output_path, at=_NOW)
+    Path(output_path).write_text("candidate output")
+    elicitation = store.in_flight_elicitation("lease_1", 1)
+    lease = store.active_lease("lease_1")
+    assert elicitation is not None and lease is not None
+
+    Judgement(ctx, lease, _build_envelope(), store.bindings_for_chunk("ch_1")).collect(elicitation)
+
+    # The owner rejected the output, so collection relaunched through that same owner. The
+    # default would have accepted it and must remain entirely untouched.
+    assert len(owner.judged) == 1
+    assert default.judged == []
 
 
 @pytest.mark.unit
@@ -1125,7 +1381,7 @@ def test_fresh_spawn_sends_all_three_layers_and_records_a_fingerprint(tmp_path):
             "| environment workdir | `/ws/e1` |"
         )
     )
-    assert store.session_preamble_fingerprint("sess-build-1") is not None
+    assert store.session_preamble_fingerprint(SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-build-1")) is not None
 
 
 @pytest.mark.component
@@ -1288,7 +1544,7 @@ def test_an_announced_change_is_announced_once_and_then_elided(tmp_path):  # typ
     assert "REPLACED-POLICY" not in p3
 
     # The store-level fact behind it: the newest row for the session is what spawn 2 sent.
-    settled = store.session_preamble_fingerprint("sess-build-1")
+    settled = store.session_preamble_fingerprint(SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-build-1"))
     assert settled is not None
     assert settled.workspace == hashlib.sha256(b"REPLACED-POLICY").hexdigest()
 
@@ -1338,7 +1594,13 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_r", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_r",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
     hub = FakeHub()
@@ -1392,7 +1654,13 @@ def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path): 
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_r", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_r",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     # No `record_git_commit_declaration` call — a review-only worker declares nothing.
 
@@ -1970,7 +2238,13 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.session_id == "sess-a"  # spawned, but no binding recorded
 
@@ -2013,7 +2287,13 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path): 
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
     lease = store.active_lease_for_chunk("ch_1")
@@ -2462,9 +2742,9 @@ class _CountingPreambleStore(SqlAlchemyRunnerStore):
         super().__init__(engine, errors)
         self.fingerprint_reads: list[str] = []
 
-    def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
-        self.fingerprint_reads.append(session_id)
-        return super().session_preamble_fingerprint(session_id)
+    def session_preamble_fingerprint(self, session: SessionReference) -> PreambleFingerprint | None:
+        self.fingerprint_reads.append(session.session_id)
+        return super().session_preamble_fingerprint(session)
 
 
 @pytest.mark.unit
@@ -2511,31 +2791,6 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
 
     assert harness2.resume_froms == ["sess-build-1"]
     assert store.fingerprint_reads == ["sess-build-1"]  # exactly one, for the resumed session
-
-
-@pytest.mark.unit
-def test_an_empty_resume_from_is_not_treated_as_a_resume(tmp_path):  # type: ignore[no-untyped-def]
-    """The core's "is this a resume?" predicate matches the ADAPTER's (issue #149): the
-    adapter treats an empty `resume_from` as a brand-new session, while a core keyed on
-    `is not None` would look up a fingerprint for `""` and could wrongly elide."""
-    store = _CountingPreambleStore(_engine_for(tmp_path), runner_store_errors())
-    hub = FakeHub()
-    envelope = _build_envelope()
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-    )
-
-    Spawner(ctx).spawn("ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test", resume_from="")
-
-    assert store.fingerprint_reads == [], "an empty resume_from was treated as a resume"
-    # And the prefix is a full fresh render, not a collapse banner.
-    assert RESUME_STANDING_UNCHANGED not in harness.spawns[0][1].prompt_prefix
 
 
 @pytest.mark.unit

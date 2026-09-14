@@ -19,6 +19,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (
@@ -62,7 +63,13 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
         )
     )
     store.record_lease_token("lease_r", TokenHash(_TOKEN).hex, _NOW)
-    store.record_spawn("lease_r", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_r",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
     # `review-diary` is left un-attached to prove the fallback still fires.

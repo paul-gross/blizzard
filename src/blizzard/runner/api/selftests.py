@@ -12,6 +12,7 @@ from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.harness.registry import UnavailableHarnessError
 from blizzard.runner.selftest.model import SelfTestRun
 from blizzard.runner.selftest.service import UnknownHarnessError
 
@@ -52,7 +53,12 @@ def _view(run: SelfTestRun) -> SelfTestView:
     )
 
 
-@router.post("/selftests", response_model=SelfTestView, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/selftests",
+    response_model=SelfTestView,
+    status_code=status.HTTP_201_CREATED,
+    responses={503: {"description": "The requested harness is known but unavailable."}},
+)
 def start_selftest(request_body: SelfTestStartRequest, request: Request) -> SelfTestView:
     """Mint a selftest run against ``harness`` and begin it off the request thread."""
     service = RunnerWiring.of(request).selftests()
@@ -62,8 +68,10 @@ def start_selftest(request_body: SelfTestStartRequest, request: Request) -> Self
         known = ", ".join(exc.known) or "(none configured)"
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"unknown coding harness {exc.harness!r} — configured harnesses: {known}",
+            detail=f"unknown coding harness {exc.harness_id!r} — configured harnesses: {known}",
         ) from exc
+    except UnavailableHarnessError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return _view(run)
 
 

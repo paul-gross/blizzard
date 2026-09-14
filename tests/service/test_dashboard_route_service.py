@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.service.support import mint_fixture, mock_hub, require_mock_fleet, require_winter_source, service_gate
@@ -46,7 +47,7 @@ def _seed_all_local_sections(store: SqlAlchemyRunnerStore) -> None:
         question_id="qn_1",
         question="which branch?",
         options=["main", "dev"],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
@@ -54,7 +55,7 @@ def _seed_all_local_sections(store: SqlAlchemyRunnerStore) -> None:
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,
@@ -73,7 +74,13 @@ def _seed_all_local_sections(store: SqlAlchemyRunnerStore) -> None:
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_2", pid=200, process_start_time="start-200", session_id="sess-b", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_2",
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_2", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_closure(
         lease_id="lease_2",

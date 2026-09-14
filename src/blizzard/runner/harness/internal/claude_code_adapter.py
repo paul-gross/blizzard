@@ -63,6 +63,9 @@ _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 # CLI's own 100k-1M range (enforced CLI-side, never re-implemented here).
 _COMPACTION_WINDOW_RE = re.compile(r"auto|[0-9]+[kK]?")
 
+# Bounds `observe_version`'s probe so a wedged binary costs one skipped read, not a hang.
+_VERSION_PROBE_TIMEOUT_SECONDS = 5
+
 
 @dataclass(frozen=True)
 class ResultEnvelope:
@@ -158,6 +161,25 @@ class ClaudeCodeAdapter:
         # The pid-liveness seam (`bzh:pluggable-seams`); the Linux `/proc` reference binding
         # serves the construction sites that need no substitute.
         self._process: IProcessProbe = process or LinuxProcessProbe()
+
+    def observe_version(self) -> str | None:
+        """The configured executable's version, observed right now — bounded and
+        non-raising: a timeout, a missing binary, or empty output all read as ``None``,
+        logged rather than propagated, since a caller reads this BEFORE the worker
+        launches and must never let a wedged or absent binary delay that launch.
+        Uncached, so a self-updated binary is reflected on the very next call."""
+        try:
+            result = subprocess.run(
+                [self._binary, "--version"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=_VERSION_PROBE_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            _log.warning("harness version probe failed", binary=self._binary, detail=str(exc))
+            return None
+        return result.stdout.strip() or result.stderr.strip() or None
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         """Left-to-right; first entry that resolves wins; unresolvable entries skipped."""

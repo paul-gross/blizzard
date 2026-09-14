@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.runner.harness.identity import SessionReference
+
 __all__ = ["EscalationRecord", "IReadEscalationRepository", "IWriteEscalationRepository"]
 
 
@@ -25,6 +27,17 @@ class EscalationRecord:
     session_name: str | None = None
     resolved_model: str | None = None
     resolved_effort: str | None = None
+    harness_id: str | None = None
+
+    @property
+    def session(self) -> SessionReference | None:
+        if self.session_id is None:
+            return None
+        if self.harness_id is None:
+            raise ValueError(
+                f"escalation on lease {self.lease_id} has session_id {self.session_id!r} but no harness_id"
+            )
+        return SessionReference(self.harness_id, self.session_id)
 
 
 class IReadEscalationRepository(Protocol):

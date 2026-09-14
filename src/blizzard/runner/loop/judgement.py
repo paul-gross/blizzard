@@ -12,6 +12,9 @@ from blizzard.runner.domain.checks import CheckResultRecord
 from blizzard.runner.domain.elicitation import ElicitationRecord
 from blizzard.runner.domain.leases import LeaseRecord, as_utc
 from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.loop.attempt import FAILED, Attempt
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
@@ -192,7 +195,16 @@ class Judgement:
         if _elicitation_alive(self.ctx, elicitation):
             return
         output = self.ctx.elicitation_files.read(elicitation.output_path)
-        if not output or not self.ctx.harness.has_usable_output(output):
+        session = lease.session
+        if not output or session is None:
+            self._lost(elicitation)
+            return
+        harness = self._resolve_harness(session, via="collect")
+        if harness is None:
+            # `_resolve_harness` already escalated — unlike a lost write, no other runner can
+            # resume this exact session, so relaunching would only stall a chunk not coming back.
+            return
+        if not harness.has_usable_output(output):
             self._lost(elicitation)
             return
         self._judged(output)
@@ -309,9 +321,17 @@ class Judgement:
         lease = self.lease
         checks = self.checks()
         message = JudgementPrompt(self.envelope, checks).render()
-        handle = self.ctx.harness.judge(
+        session = lease.session
+        if session is None:
+            return
+        harness = self._resolve_harness(session, via="elicit")
+        if harness is None:
+            # `_resolve_harness` already escalated, clearing the in-flight record as part of
+            # that closure — no other runner can resume this exact session to relaunch on.
+            return
+        handle = harness.judge(
             self.bindings[0].workdir,
-            lease.session_id or "",
+            session.session_id,
             message,
             output_path,
             preamble=Spawner(self.ctx).preamble(lease, self.bindings),
@@ -326,13 +346,19 @@ class Judgement:
 
     def _judged(self, output: str) -> None:
         """Continue from a collected reply — usage, verdict, the checks gate, the completion —
-        in the same order the once-synchronous elicitation left them in (D3)."""
+        in the same order the once-synchronous elicitation left them in (D3). Reached only
+        from :meth:`collect`, which already resolved this exact session's owner as its own
+        guard, so the resolution below can never be reached with an unresolvable one."""
         lease = self.lease
         # Record this attempt's harness usage (issue #58) *before* the verdict is parsed, so a
         # verdict-less fail does not discard the spend the attempt genuinely burned.
         self.ctx.usage.record_attempt(lease, self.bindings, judge_output=output)
 
-        choice = self.ctx.harness.parse_verdict(output)
+        session = lease.session
+        if session is None:
+            return
+        harness = self.ctx.adapter_for(session)
+        choice = harness.parse_verdict(output)
         if choice is None:
             # Ask-during-judgement: the worker escalated instead of returning a verdict. The
             # pre-elicitation check in `_advance_exited_worker` cannot see this one — it was
@@ -356,7 +382,7 @@ class Judgement:
         # durable store so a restart between attach and completion still sees it.
         produces = ProducesReconciler(self.envelope)
         artifacts = DeclaredCommits(self.ctx, lease, self.bindings).verify()
-        assessment = self.ctx.harness.parse_assessment(output)
+        assessment = harness.parse_assessment(output)
         attachments = self.ctx.stores.attachments.attachments_for_lease(lease.lease_id)
         artifacts += produces.collect_assets(artifacts, assessment, attachments)
         self._buffer_completion(choice, checks, artifacts)
@@ -410,3 +436,15 @@ class Judgement:
         OutboundFacts(self.ctx).completion(lease, submission, at=self.ctx.clock.now())
         _CP_AFTER_BUFFER.reached()
         _log.info("completion buffered", chunk_id=lease.chunk_id, lease_id=lease.lease_id, choice=choice)
+
+    def _resolve_harness(self, session: SessionReference, *, via: str) -> IHarnessLifecycleAndVerdict | None:
+        """Resolve this judgement's recorded owner; escalate the chunk in place and return
+        ``None`` — never raising — when it is unknown or unavailable: the same
+        guard :meth:`DormantSession._resolve_harness` gives a blocked wake, so an unresolvable
+        owner blocks only this lease's judging for the tick, never the rest of ``Advance``'s
+        sweep over the other active leases."""
+        try:
+            return self.ctx.adapter_for(session)
+        except (UnknownHarnessError, UnavailableHarnessError) as exc:
+            Attempt(self.ctx, self.lease).escalate_owner_unresolvable(session=session, exc=exc, via=via)
+            return None

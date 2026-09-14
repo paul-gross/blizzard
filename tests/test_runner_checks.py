@@ -16,6 +16,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.checks import CheckResultRecord
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.judgement_prompt import JudgementPrompt
@@ -56,7 +57,13 @@ def _seed_exited_lease(
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease_id, pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        lease_id,
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir=workdir, bound_at=_NOW)
 
 

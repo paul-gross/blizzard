@@ -177,6 +177,7 @@ def _final_record(seq: int, segment: TranscriptSegmentLedgerRow) -> TranscriptSe
         turn_range_start=segment.shipped_turns,
         turn_range_end=segment.shipped_turns - 1,  # empty range — a final marker claims no new turns
         final=True,
+        harness_id=segment.harness_id,
         normalizer_version=segment.normalizer_version,
         harness_version=segment.harness_version,
         record_truncated=record_truncated,

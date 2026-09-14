@@ -38,7 +38,7 @@ def resolved_takeover_open_scope(chunk_id: str, request: Request) -> TakeoverOpe
         open_takeover=stores.takeover.open_takeover_for_chunk(chunk_id),
         bindings=stores.environments.bindings_for_chunk(chunk_id),
         active_lease=stores.lease_record.active_lease_for_chunk(chunk_id),
-        latest_lease=stores.lease_record.latest_lease_for_chunk(chunk_id),
+        latest_lease_with_session=stores.lease_record.latest_lease_with_session_for_chunk(chunk_id),
         latest_epoch=stores.lease_record.latest_epoch(chunk_id),
     )
 

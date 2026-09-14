@@ -207,6 +207,7 @@ def _segment_row(**overrides: object) -> dict:
         "generation": 1,
         "lease_id": "lease_1",
         "session_id": "sess_1",
+        "harness_id": "claude_code",
         "cursor": None,
         "shipped_bytes": 0,
         "shipped_turns": 0,

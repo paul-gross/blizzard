@@ -55,6 +55,7 @@ def _identity_values(record: SegmentRecord) -> dict[str, object]:
         "turn_range_start": record.turn_range_start,
         "turn_range_end": record.turn_range_end,
         "final": record.final,
+        "harness_id": record.harness_id,
         "normalizer_version": record.normalizer_version,
         "harness_version": record.harness_version,
         "record_truncated": record.record_truncated,
@@ -377,6 +378,7 @@ class TranscriptSegmentStore:
             # Cap-rejected (this hub) OR runner-declared `record_truncated`.
             truncated=any(r.rejected or bool(r.record_truncated) for r in rows),
             byte_count=sum(r.byte_count for r in rows),
+            harness_id=rows[0].harness_id,
             normalizer_version=rows[0].normalizer_version,
             harness_version=rows[0].harness_version,
             received_at=max(r.received_at for r in rows),

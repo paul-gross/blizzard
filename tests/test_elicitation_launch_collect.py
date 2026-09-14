@@ -14,6 +14,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.judgement import ELICITATION_STALENESS_THRESHOLD
@@ -58,7 +59,13 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=pid, process_start_time=start, session_id=session, spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=pid,
+        process_start_time=start,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 

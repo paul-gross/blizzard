@@ -27,6 +27,8 @@ from blizzard.runner.environments.provider import (
 )
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
@@ -72,6 +74,7 @@ from blizzard.runner.stores import (
 )
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot, ISubscriptionSampler
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
+from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.tools.invariants import RunnerInvariants, Violation
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.completion import CompletionSubmission
@@ -568,6 +571,17 @@ class FakeArchivedTranscriptRepository:
         return ArchivedTranscript(status="empty", turns=[], truncated=False)
 
 
+class StaticTranscriptRepositoryResolver:
+    """A stub :class:`ITranscriptRepositoryResolver` returning the same repository regardless
+    of harness id — the shape a test driving exactly one recorded owner needs."""
+
+    def __init__(self, repository: IReadTranscriptRepository) -> None:
+        self._repository = repository
+
+    def transcript_repository(self, harness_id: str) -> IReadTranscriptRepository:
+        return self._repository
+
+
 class FakeHarness:
     """A scriptable :class:`IHarnessAdapter`: canned spawn handle + verdict.
 
@@ -640,6 +654,7 @@ class FakeHarness:
         # Scripted `resolve_model`/`resolve_effort` replies (issue #144); default echoes
         # the input verbatim for a test that doesn't care about resolution.
         self.resolved_model = "fake-model"
+        self.harness_version: str | None = None
         self.resolved_effort: str | None = None
         self.resolved_compaction_window: str | None = None
         # Scriptable, not the null source (blizzard#245); defaults to an empty
@@ -758,6 +773,9 @@ class FakeHarness:
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
         return self.resolved_compaction_window if self.resolved_compaction_window is not None else value
+
+    def observe_version(self) -> str | None:
+        return self.harness_version
 
     def parse_verdict(self, output: str) -> str | None:
         return self.verdict
@@ -896,7 +914,10 @@ def make_context(
     _hub: IHubClient = hub
     _chunk_views: IChunkViews = chunk_views if chunk_views is not None else ReadThroughChunkViews(hub=_hub)
     _provider: IWorkspaceProvider = provider
-    _harness: IHarnessAdapter = harness
+    _harnesses = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
+    )
+    _transcripts_wired = harness.transcript_source() is not None
     _probe: IProcessProbe = probe
     _wt: IWorktreeGit = worktree_git if worktree_git is not None else FakeWorktreeGit()
     _check_runner: ICheckRunner = check_runner if check_runner is not None else FakeCheckRunner()
@@ -914,7 +935,6 @@ def make_context(
         hub=_hub,
         chunk_views=_chunk_views,
         provider=_provider,
-        harness=_harness,
         process=_probe,
         subscriptions=subscriptions,
         worktree_git=_wt,
@@ -926,20 +946,38 @@ def make_context(
             leases=store,
             usage=store,
             clock=_clock,
-            harness=_harness,
             worker_files=_files,
             workspace_root=resolved_config.workspace_root,
-            transcripts=harness.transcript_source(),
+            harnesses=_harnesses,
+            transcripts_wired=_transcripts_wired,
             events=events,
         ),
-        sessions=SessionResolver(leases=store, harness=_harness, transcripts=harness.transcript_source()),
+        sessions=SessionResolver(
+            leases=store,
+            harnesses=_harnesses,
+            transcripts_wired=_transcripts_wired,
+        ),
         env_release=EnvironmentRelease(
             environments=store, leases=store, clock=_clock, provider=_provider, worker_files=_files, events=events
         ),
-        # Mirrors `LoopWiring.context`'s own composition: the same source `harness`
-        # itself holds, resolved once here rather than reached through `ctx.harness`.
-        transcripts=harness.transcript_source(),
+        # Mirrors `LoopWiring.context`'s own composition: wired exactly when `harness`
+        # itself holds a transcript source, resolved once here.
+        transcripts_wired=_transcripts_wired,
         events=events,
+        harnesses=_harnesses,
+    )
+
+
+def _default_harness_registry(harness: IHarnessAdapter | None) -> HarnessRegistry:
+    """The single-``claude_code``-binding registry both helpers below default to — a fresh
+    :class:`FakeHarness` unless the caller names its own."""
+    _harness = (
+        harness
+        if harness is not None
+        else FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None)
+    )
+    return HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness, transcript_source=_harness.transcript_source())}
     )
 
 
@@ -951,11 +989,9 @@ def make_usage_recorder(
         leases=store,
         usage=store,
         clock=clock,
-        harness=harness
-        if harness is not None
-        else FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None),
         worker_files=WorkerStdoutFiles("", store),
         workspace_root="",
+        harnesses=_default_harness_registry(harness),
     )
 
 
@@ -963,9 +999,7 @@ def make_session_resolver(store: IReadRunnerStore, *, harness: IHarnessAdapter |
     """A resolver for a context assembled without :func:`make_context`."""
     return SessionResolver(
         leases=store,
-        harness=harness
-        if harness is not None
-        else FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None),
+        harnesses=_default_harness_registry(harness),
     )
 
 

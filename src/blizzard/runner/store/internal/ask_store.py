@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.asks import AskRecord, IWriteAskRepository, ParkRecord
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.store.internal.base import PAUSE_PARKED_LEASE_IDS, RunnerStoreConnections
 from blizzard.runner.store.schema import asks, lease_closures, park_facts, park_resumes
 
@@ -82,8 +83,8 @@ class AskStore:
         question_id: str,
         question: str,
         options: list[str],
-        session_id: str | None,
         asked_at: datetime,
+        session: SessionReference | None = None,
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
@@ -93,7 +94,8 @@ class AskStore:
                     question_id=question_id,
                     question=question,
                     options=json.dumps(options),
-                    session_id=session_id,
+                    session_id=session.session_id if session is not None else None,
+                    harness_id=session.harness_id if session is not None else None,
                     asked_at=asked_at,
                 )
             )
@@ -125,6 +127,7 @@ class AskStore:
             options=json.loads(r.options) if r.options else [],
             session_id=str(r.session_id) if r.session_id is not None else None,
             asked_at=r.asked_at,
+            harness_id=str(r.harness_id) if r.harness_id is not None else None,
         )
 
 

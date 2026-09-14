@@ -13,6 +13,8 @@ from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.loop.checks import ICheckRunner
 from blizzard.runner.loop.chunk_status_cache import IChunkViews
@@ -120,7 +122,6 @@ class LoopContext:
     #: see :mod:`blizzard.runner.loop.chunk_status_cache`.
     chunk_views: IChunkViews
     provider: IWorkspaceProvider
-    harness: IHarnessLifecycleAndVerdict
     process: IProcessProbe
     worktree_git: IWorktreeGit
     config: LoopConfig
@@ -129,15 +130,28 @@ class LoopContext:
     usage: UsageRecorder
     sessions: SessionResolver
     env_release: EnvironmentRelease
+    #: Required; every recorded session's owner resolves through it, with no single-harness fallback.
+    harnesses: IHarnessRegistry
     #: The check-runner seam (issue #114) — ``None`` when not wired, so a node with no
     #: ``checks:`` still ticks; a node that declares ``checks:`` needs it.
     check_runner: ICheckRunner | None = None
-    #: The harness transcript source (blizzard#245) — a declared field so the loop's own
-    #: dependency is visible here; ``None`` when not wired.
-    transcripts: IHarnessTranscriptSource | None = None
+    #: Coarse "any transcript source wired" flag; a read still resolves per-owner via ``transcript_source_for``.
+    transcripts_wired: bool = False
     #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on ``blizzard runner tick``, a no-op there.
     events: IRunnerEventPublisher | None = None
     #: Every declared provider subscription, resolved (blizzard#436) — each sampled when
     #: due against its own ``sample_interval_seconds`` and ``slug``-keyed anchor.
     subscriptions: tuple[ResolvedSubscription, ...] = ()
+
+    def adapter_for(self, session: SessionReference) -> IHarnessLifecycleAndVerdict:
+        """Resolve an existing session's adapter from its recorded owner — may raise
+        ``UnknownHarnessError``/``UnavailableHarnessError``; every caller guards it (see
+        e.g. ``DormantSession._resolve_harness``), never lets it reach the tick's own
+        catch-all."""
+        return self.harnesses.adapter(session.harness_id)
+
+    def transcript_source_for(self, session: SessionReference) -> IHarnessTranscriptSource:
+        """Resolve an existing session's transcript source from its recorded owner — same
+        raise/guard contract as :meth:`adapter_for`."""
+        return self.harnesses.transcript_source(session.harness_id)

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import UsageSample
 
 __all__ = [
@@ -90,9 +91,9 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         *,
         lease_id: str,
         chunk_id: str,
-        session_id: str,
         context_tokens: int | None,
         sampled_at: datetime,
+        session: SessionReference,
         report_kind: str = "",
         report_payload: str = "",
     ) -> int | None:

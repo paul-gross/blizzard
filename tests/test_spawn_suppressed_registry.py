@@ -34,14 +34,14 @@ _GATED_METHODS = frozenset({"spawn", "resume_with_message", "judge"})
 
 
 def _is_harness_spawn_call(node: ast.AST) -> bool:
-    """True for a call shaped ``ctx.harness.spawn(...)``, ``ctx.harness.resume_with_message(...)``,
-    or ``ctx.harness.judge(...)``."""
+    """True for a harness start call, whether the exact-owner adapter is local or inline."""
     return (
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and node.func.attr in _GATED_METHODS
-        and isinstance(node.func.value, ast.Attribute)
-        and node.func.value.attr == "harness"
+        # Exclude calls to the Spawner funnel itself (``self.spawn``); the adapter receivers
+        # are either a resolved local name or ``ctx.adapter_for(session)``.
+        and not (isinstance(node.func.value, ast.Name) and node.func.value.id == "self")
     )
 
 
@@ -89,7 +89,7 @@ def _ungated_spawn_functions(path: Path) -> list[str]:
 def test_every_harness_spawn_call_site_is_gated() -> None:
     violations = [name for path in _SCANNED for name in _ungated_spawn_functions(path)]
     assert not violations, (
-        "function(s) call `ctx.harness.spawn`/`ctx.harness.resume_with_message` without also "
+        "function(s) call a harness spawn/resume/judge primitive without also "
         f"calling `Spawner.{_GATE_NAME}` — a runner told to spawn no workers would spawn one "
         f"(issue #45/#46): {violations}"
     )
@@ -131,5 +131,5 @@ def test_scan_is_not_vacuous() -> None:
     """Guard against either half of the scan silently matching nothing (e.g. a renamed method
     or gate drifting the AST shape out from under it) and the test above passing vacuously."""
     nodes = [n for path in _SCANNED for n in ast.walk(ast.parse(path.read_text(), filename=str(path)))]
-    assert any(_is_harness_spawn_call(n) for n in nodes), "no ctx.harness.spawn/resume_with_message call site matched"
+    assert any(_is_harness_spawn_call(n) for n in nodes), "no harness spawn/resume/judge call site matched"
     assert any(_is_gate_call(n) for n in nodes), f"no `Spawner.{_GATE_NAME}` call site matched"

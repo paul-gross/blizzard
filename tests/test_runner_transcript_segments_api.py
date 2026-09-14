@@ -17,10 +17,11 @@ from fastapi.testclient import TestClient
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
-from tests.runner_fakes import make_store, make_stores
+from tests.runner_fakes import StaticTranscriptRepositoryResolver, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -56,7 +57,7 @@ def _app_with_segments(tmp_path: Path, *, repo: FakeTranscriptRepository | None 
         leases=store,
         transcript_ledger=store,
         environments=store,
-        transcripts=repo or FakeTranscriptRepository(),
+        transcripts=StaticTranscriptRepositoryResolver(repo or FakeTranscriptRepository()),
         archived=RaisingArchivedTranscriptRepository(),
         workspace_root="",
     )
@@ -83,7 +84,13 @@ def _mint(store, *, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1", run
 def test_index_returns_the_chunks_segments(tmp_path: Path) -> None:
     app, store = _app_with_segments(tmp_path)
     _mint(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
 
     resp = TestClient(app).get("/api/chunks/ch_1/transcripts")
 
@@ -92,6 +99,7 @@ def test_index_returns_the_chunks_segments(tmp_path: Path) -> None:
     assert body["chunk_id"] == "ch_1"
     [entry] = body["segments"]
     assert (entry["node_id"], entry["epoch"], entry["spawn_generation"]) == ("nd_build", 1, 1)
+    assert entry["harness_id"] == "claude_code"
     assert (entry["turn_range_start"], entry["turn_range_end"]) == (0, 0)
     assert entry["final"] is False
     assert_all_timestamps_utc(body)
@@ -101,7 +109,13 @@ def test_index_returns_the_chunks_segments(tmp_path: Path) -> None:
 def test_index_is_empty_for_a_chunk_this_runner_never_held(tmp_path: Path) -> None:
     app, store = _app_with_segments(tmp_path)
     _mint(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
 
     resp = TestClient(app).get("/api/chunks/ch_other/transcripts")
 
@@ -118,9 +132,21 @@ def test_index_includes_every_segment_under_the_chunk_regardless_of_which_runner
     every segment this store holds; confinement is the physical store, never a filter on ``runner_id``."""
     app, store = _app_with_segments(tmp_path)
     _mint(store, lease="lease_1", node="nd_build", epoch=1, runner_id="r1")
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     _mint(store, lease="lease_2", node="nd_verify", epoch=1, runner_id="r2")
-    store.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_2",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW,
+    )
 
     resp = TestClient(app).get("/api/chunks/ch_1/transcripts")
 
@@ -146,7 +172,13 @@ def test_content_returns_turns_for_a_known_segment(tmp_path: Path) -> None:
     )
     app, store = _app_with_segments(tmp_path, repo=repo)
     _mint(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     [segment] = store.transcript_segments_for_chunk("ch_1")
 
     resp = TestClient(app).get(f"/api/chunks/ch_1/transcripts/{segment.segment_id}")
@@ -183,7 +215,13 @@ def test_content_windows_a_same_session_resume_to_each_segments_own_turns(tmp_pa
     )
     app, store = _app_with_segments(tmp_path, repo=repo)
     _mint(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     [gen1] = store.transcript_segments_for_chunk("ch_1")
     store.record_transcript_deltas(
         segment_id=gen1.segment_id,
@@ -197,7 +235,11 @@ def test_content_windows_a_same_session_resume_to_each_segments_own_turns(tmp_pa
         created_at=_NOW,
     )
     store.record_spawn(
-        "lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+        "lease_1",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW + timedelta(minutes=1),
     )
     [gen2] = store.open_transcript_segments()
     # gen2 ships further turns after gen1 is already finalized — gen1's own bound must stay
@@ -226,7 +268,13 @@ def test_content_windows_a_same_session_resume_to_each_segments_own_turns(tmp_pa
 def test_content_reports_unavailability_rather_than_404_when_the_session_file_is_gone(tmp_path: Path) -> None:
     app, store = _app_with_segments(tmp_path)  # no fake entry for "sess-a" -> not_found
     _mint(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     [segment] = store.transcript_segments_for_chunk("ch_1")
 
     resp = TestClient(app).get(f"/api/chunks/ch_1/transcripts/{segment.segment_id}")
@@ -250,7 +298,13 @@ def test_content_404s_for_an_unknown_segment_id(tmp_path: Path) -> None:
 def test_content_404s_when_the_segment_belongs_to_a_different_chunk_in_the_url(tmp_path: Path) -> None:
     app, store = _app_with_segments(tmp_path)
     _mint(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     [segment] = store.transcript_segments_for_chunk("ch_1")
 
     resp = TestClient(app).get(f"/api/chunks/ch_other/transcripts/{segment.segment_id}")

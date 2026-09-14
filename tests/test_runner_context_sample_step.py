@@ -19,6 +19,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import ContextSample
 from blizzard.wire.facts import EVENT_RECORDED
@@ -62,7 +63,13 @@ def _seed_running_lease(store, *, lease_id: str = "lease_1", session_id: str | N
         )
     )
     if session_id is not None:
-        store.record_spawn(lease_id, pid=1, process_start_time="t", session_id=session_id, spawned_at=_NOW)
+        store.record_spawn(
+            lease_id,
+            pid=1,
+            process_start_time="t",
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, session_id),
+            spawned_at=_NOW,
+        )
     return lease_id
 
 

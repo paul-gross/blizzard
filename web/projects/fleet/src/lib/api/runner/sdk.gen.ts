@@ -137,8 +137,7 @@ export const listTranscriptSegmentsApiChunksChunkIdTranscriptsGet = <ThrowOnErro
 /**
  * Get Transcript Segment
  *
- * One segment's turns, read from its session file, local-only (D1) — 404 iff no such
- * segment exists under this chunk on this runner's own store.
+ * One segment's turns, local-only (D1) — 404 iff absent; 503 iff its owner is unavailable.
  */
 export const getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet = <ThrowOnError extends boolean = false>(options: Options<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetData, ThrowOnError>): RequestResult<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/transcripts/{segment_id}', ...options });
 
@@ -344,7 +343,7 @@ export const sessionEndApiLeasesLeaseIdSessionEndPost = <ThrowOnError extends bo
 /**
  * Get Transcript
  *
- * The lease's resolved transcript — 404 iff no lease with this id ever existed.
+ * The lease's resolved transcript — 404 iff absent; 503 iff its owner is unavailable.
  */
 export const getTranscriptApiLeasesLeaseIdTranscriptGet = <ThrowOnError extends boolean = false>(options: Options<GetTranscriptApiLeasesLeaseIdTranscriptGetData, ThrowOnError>): RequestResult<GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, ThrowOnError> => (options.client ?? client).get<GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/transcript', ...options });
 

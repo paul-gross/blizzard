@@ -35,6 +35,7 @@ leases = Table(
     Column("pid", Integer, nullable=True),  # filled at spawn-return
     Column("process_start_time", String, nullable=True),  # stable across pid reuse; REAP keys on it
     Column("session_id", String, nullable=True),  # harness-assigned, recorded at spawn-return
+    Column("harness_id", String, nullable=True),  # owner of session_id; together they identify a concrete session
     Column("created_at", UtcDateTime, nullable=False),
 )
 
@@ -120,6 +121,10 @@ lease_spawns = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),  # the attempt this process was spawned for
     Column("spawned_at", UtcDateTime, nullable=False),  # injected-clock stamp of the spawn-return
+    # Observations at this invocation boundary.  A session's owner lives on `leases`; a
+    # generation records the executable/version that actually started it.
+    Column("harness_id", String, nullable=True),
+    Column("harness_version", String, nullable=True),
 )
 
 # --- Lease closures (closed iff a closure fact exists — facts-not-status) -----
@@ -173,6 +178,7 @@ asks = Table(
     Column("question", Text, nullable=False),
     Column("options", Text, nullable=False),  # JSON list[str] (may be empty)
     Column("session_id", String, nullable=True),  # the session to resume around the answer
+    Column("harness_id", String, nullable=True),
     Column("asked_at", UtcDateTime, nullable=False),
 )
 
@@ -305,6 +311,7 @@ takeovers = Table(
     Column("chunk_id", String, nullable=False),
     Column("lease_id", String, nullable=True),  # the lease taken over, if any
     Column("session_id", String, nullable=True),  # the session the interactive command resumes
+    Column("harness_id", String, nullable=True),
     Column("workdir", String, nullable=False),
     Column("fence_epoch", Integer, nullable=True),  # set only when a live worker was force-killed
     Column("opened_at", UtcDateTime, nullable=False),
@@ -502,6 +509,7 @@ session_preamble_facts = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("session_id", String, nullable=False),
+    Column("harness_id", String, nullable=False),
     Column("blizzard_digest", String, nullable=False),  # sha256 of the resolved layer 1
     Column("workspace_digest", String, nullable=False),  # sha256 of the resolved layer 2
     Column("recorded_at", UtcDateTime, nullable=False),
@@ -539,6 +547,7 @@ context_samples = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False, index=True),
     Column("session_id", String, nullable=False),
+    Column("harness_id", String, nullable=False),
     # The last main-chain turn's prompt size; NULL = attempted but unmeasurable.
     Column("context_tokens", Integer, nullable=True),
     Column("sampled_at", UtcDateTime, nullable=False),
@@ -557,6 +566,7 @@ transcript_segments = Table(
     Column("generation", Integer, nullable=False),  # this lease's spawn ordinal (1 = initial spawn)
     Column("lease_id", String, nullable=False),
     Column("session_id", String, nullable=False),
+    Column("harness_id", String, nullable=False),
     Column("cursor", String, nullable=True),  # opaque TranscriptPosition.token; NULL = unread from the start
     Column("shipped_bytes", Integer, nullable=False),
     # Also this segment's next `turn_range_start` (blizzard#247's wire key) — turn indices

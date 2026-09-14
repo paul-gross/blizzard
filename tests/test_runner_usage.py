@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.dormant import DormantSession
@@ -60,7 +61,13 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", session="sess-a
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=100, process_start_time="start-100", session_id=session, spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -130,7 +137,13 @@ def test_advance_records_resume_kind_on_a_later_generation(tmp_path):  # type: i
     store = _store(tmp_path)
     _seed_running_lease(store)
     # Simulate a restart/answer/pause resume: a second spawn generation, same lease.
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     stdout_dir = tmp_path / "stdout"
     stdout_dir.mkdir()
     _write_stdout(stdout_dir, "lease_1", 2)
@@ -170,7 +183,13 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
     store = _store(tmp_path)
     _seed_running_lease(store)
     # Simulate a restart/answer/pause resume that landed generation 2, same lease.
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     stdout_dir = tmp_path / "stdout"
     stdout_dir.mkdir()
     hub = FakeHub()
@@ -345,7 +364,7 @@ def test_ask_and_exit_records_the_worker_usage_before_parking(tmp_path):  # type
         question_id="qn_1",
         question="Which API?",
         options=["rest", "graphql"],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     stdout_dir = tmp_path / "stdout"
@@ -418,7 +437,7 @@ def test_ask_park_worker_usage_is_idempotent_across_a_re_park(tmp_path):  # type
         question_id="qn_1",
         question="Q",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     ask = store.unforwarded_ask("lease_1")
@@ -532,7 +551,13 @@ def test_release_all_cleans_up_every_lease_stdout_file(tmp_path):  # type: ignor
     store = _store(tmp_path)
     _seed_running_lease(store, lease="lease_1", epoch=1)
     # lease_1 resumed once (generation 2) before it closed — both its files must go.
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="reaped", closed_at=_NOW)
     _seed_running_lease(store, lease="lease_2", epoch=2)
     stdout_dir = tmp_path / "stdout"

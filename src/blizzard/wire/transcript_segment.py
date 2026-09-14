@@ -78,6 +78,8 @@ class TranscriptSegmentRecord(BaseModel):
     turn_range_start: int
     turn_range_end: int
     final: bool
+    # Optional for previous-minor runners; the producing family, distinct from its version.
+    harness_id: str | None = None
     normalizer_version: str
     harness_version: str | None
     record_truncated: bool = False
@@ -123,6 +125,7 @@ class TranscriptSegmentIndexEntry(BaseModel):
     final: bool
     truncated: bool
     byte_count: int
+    harness_id: str | None = None
     normalizer_version: str
     harness_version: str | None
     received_at: str
