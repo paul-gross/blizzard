@@ -46,6 +46,7 @@ from blizzard.hub.domain.pause import ChunkNotPausable
 from blizzard.hub.domain.restart import ChunkNotRestartable, RestartCurrentNodeUnknown, RestartNodeUnknown
 from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
+    Chunk,
     ChunkFacts,
     FleetSummary,
     WorkItemPriority,
@@ -148,7 +149,7 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
     Reads the fleet's facts and routes with one bulk query each rather than fanning
     `load_facts`/`route_of` out per chunk (issue #421) — the `FleetPulse.view()` shape
     (issue #374), extended to routes and to the rendered row."""
-    names = GraphNames(services.graphs.get)
+    names = GraphNames(services.graphs)
     facts = services.chunks.facts.load_all_facts()
     routes = services.chunks.route.load_all_routes()
     # The dependency edges join the same bulk facts pass at this call site rather than
@@ -156,6 +157,9 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
     markings = derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
     chunks = services.chunks.record.list_all()
+    # One priming call resolves every chunk's pinned graph's name/entry-node/node-names
+    # up front, rather than once per chunk (issue #421/bulk-read adoption).
+    names.prime(chunk.graph_id for chunk in chunks)
     # The live-holder map derives from the chunks and statuses already loaded above — no
     # further fact load, unlike calling `live_holders` itself (issue #421/bulk-read
     # adoption); `list_all` already excludes ephemeral chunks, so every candidate here is
@@ -244,7 +248,30 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
     chunk_status = facts.status()
     blocked, neighborhood = _dependency_views_for_chunk(services, chunk_id, status=chunk_status)
-    return ChunkView.of(services, chunk, blocked=blocked, facts=facts, neighborhood=neighborhood).detail()
+    # Primed once with every graph id this chunk's history, restarts, migrations and
+    # intended migration ever name — its statement count does not grow with history
+    # length (issue #421/bulk-read adoption).
+    names = GraphNames(services.graphs)
+    names.prime(_detail_graph_ids(chunk, facts))
+    return ChunkView.of(services, chunk, names=names, blocked=blocked, facts=facts, neighborhood=neighborhood).detail()
+
+
+def _detail_graph_ids(chunk: Chunk, facts: ChunkFacts) -> set[str]:
+    """Every graph id ``GraphNames`` must prime for one chunk detail read: the current
+    pin, every transition's/restart's/migration's own graph, and the intended
+    migration's target — the full set the detail render's history walks against."""
+    graph_ids = {chunk.graph_id}
+    graph_ids.update(t.graph_id for t in facts.transitions if t.graph_id is not None)
+    for r in facts.restarts:
+        graph_ids.add(r.graph_id)
+        if r.from_graph_id is not None:
+            graph_ids.add(r.from_graph_id)
+    for m in facts.migrations:
+        graph_ids.add(m.from_graph_id)
+        graph_ids.add(m.to_graph_id)
+    if chunk.intended_migration is not None:
+        graph_ids.add(chunk.intended_migration.graph_id)
+    return graph_ids
 
 
 @router.post(

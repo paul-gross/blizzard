@@ -732,15 +732,17 @@ class IReadGraphRepository(Protocol):
         """
         ...
 
-    def load_graph_names(self, graph_ids: Sequence[str]) -> dict[str, str]:
-        """``{graph_id: name}`` for every requested id that exists — a narrow projection
-        that never reifies a whole :class:`Graph`, for a sibling call site batching a
-        name lookup over several ids at once."""
+    def load_graph_summaries(self, graph_ids: Sequence[str]) -> dict[str, GraphSummary]:
+        """``{graph_id: GraphSummary}`` for every requested id that exists — a narrow
+        projection that never reifies a whole :class:`Graph`, for :class:`GraphNames`'s
+        own batched priming over several ids at once. The entry node rides along on
+        :class:`GraphSummary` itself, so a caller needing it never reifies for that alone."""
         ...
 
-    def load_node_names(self, graph_ids: Sequence[str]) -> dict[str, str]:
-        """``{node_id: name}`` for every node belonging to any of the requested graphs —
-        the node-level sibling of :meth:`load_graph_names`."""
+    def load_node_names(self, graph_ids: Sequence[str]) -> dict[str, dict[str, str]]:
+        """``{graph_id: {node_id: name}}`` for every node belonging to any of the
+        requested graphs — the node-level sibling of :meth:`load_graph_summaries`, keyed
+        per graph so a node id is never looked up against the wrong one."""
         ...
 
     def list_summaries(self) -> list[GraphSummary]:

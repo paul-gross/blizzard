@@ -140,7 +140,7 @@ class ChunkView:
             facts=facts
             if facts is not None
             else (services.chunks.facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)),
-            names=names or GraphNames(services.graphs.get),
+            names=names or GraphNames(services.graphs),
             blocked=blocked,
             neighborhood=neighborhood,
         )
@@ -219,8 +219,7 @@ class ChunkView:
         """The chunk's current node as ``(id, name)`` — the newest transition's target, or the
         pinned graph's entry node before the first transition (a nicer board value than ``None``).
         The name rides along so the board is legible without reassembly."""
-        graph = self.names.graph(self.chunk.graph_id)
-        node_id = self.facts.current_node_id() or (graph.entry_node_id if graph is not None else None)
+        node_id = self.facts.current_node_id() or self.names.entry_node_id(self.chunk.graph_id)
         return node_id, self.names.node_name(self.chunk.graph_id, node_id)
 
     def pointer_views(self) -> list[WorkRefView]:
@@ -249,14 +248,14 @@ class ChunkView:
 
     def detail(self) -> ChunkDetail:
         node_id, node_name = self.current_node()
-        graph = self.names.graph(self.chunk.graph_id)
+        graph_created_at = self.names.created_at(self.chunk.graph_id)
         artifacts = self.services.chunks.artifacts.load_artifacts(self.chunk.chunk_id)
         history = ChunkHistoryView(self.facts, self.names)
         return ChunkDetail(
             chunk_id=self.chunk.chunk_id,
             graph_id=self.chunk.graph_id,
             graph_name=self.names.graph_name(self.chunk.graph_id),
-            graph_created_at=iso_utc(graph.created_at) if graph is not None else None,
+            graph_created_at=iso_utc(graph_created_at) if graph_created_at is not None else None,
             status=self.facts.status(),
             current_node_id=node_id,
             current_node_name=node_name,
@@ -313,10 +312,15 @@ class ChunkView:
         return to_decision_view(decision) if decision is not None else None
 
     def _pending(self) -> PendingView | None:
+        """The only place a whole-fleet or whole-history read still reifies a full
+        :class:`Graph` (issue #421/bulk-read adoption) — the poll policy it needs lives
+        only on a :class:`Node`, not the :class:`GraphSummary`/name projection
+        :attr:`names` otherwise resolves through, and it's reached only when a hub-node
+        poll is actually pending."""
         pending = self.facts.hub_node_pending()
         if pending is None:
             return None
-        graph = self.names.graph(self.chunk.graph_id)
+        graph = self.services.graphs.get(self.chunk.graph_id)
         node = graph.node_by_id(pending.node_id) if graph is not None else None
         if node is None:
             return None

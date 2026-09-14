@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from fastapi import HTTPException, status
 
-from blizzard.hub.domain.graph import Graph, IReadGraphRepository
+from blizzard.hub.domain.graph import Graph, GraphSummary, IReadGraphRepository
 
 
 def graph_by_ref(graphs: IReadGraphRepository, ref: str) -> Graph:
@@ -23,28 +24,57 @@ def graph_by_ref(graphs: IReadGraphRepository, ref: str) -> Graph:
 
 @dataclass
 class GraphNames:
-    """The graphs one read resolves, memoised by id — including the misses.
+    """The graph summaries and node names one read resolves, primed in bulk and
+    memoised by id — including the misses. Backed by :class:`IReadGraphRepository`'s
+    narrow projections, never :meth:`IReadGraphRepository.get`: a full :class:`Graph`
+    is never held here (issue #421/bulk-read adoption).
 
-    A whole-fleet read shares one instance so each graph is fetched once however many
-    chunks or history steps name it; a single-chunk read makes its own."""
+    A whole-fleet or whole-history read calls :meth:`prime` once with every graph id
+    it will need, so a fleet's or a chunk's distinct graphs are read once each rather
+    than once per chunk or history step; an id nothing primed still resolves lazily,
+    one graph at a time, the first time it's asked for."""
 
-    lookup: Callable[[str], Graph | None]
-    _resolved: dict[str | None, Graph | None] = field(default_factory=dict)
+    graphs: IReadGraphRepository
+    _summaries: dict[str, GraphSummary | None] = field(default_factory=dict)
+    _node_names: dict[str, dict[str, str]] = field(default_factory=dict)
 
-    def graph(self, graph_id: str | None) -> Graph | None:
-        if graph_id not in self._resolved:
-            self._resolved[graph_id] = self.lookup(graph_id) if graph_id is not None else None
-        return self._resolved[graph_id]
+    def prime(self, graph_ids: Iterable[str | None]) -> None:
+        """Resolve every id in ``graph_ids`` not already resolved, through one
+        ``load_graph_summaries`` call and one ``load_node_names`` call. ``None``
+        entries (an unset pin) are dropped rather than looked up."""
+        unresolved = sorted({graph_id for graph_id in graph_ids if graph_id is not None} - self._summaries.keys())
+        if not unresolved:
+            return
+        summaries = self.graphs.load_graph_summaries(unresolved)
+        node_names = self.graphs.load_node_names(unresolved)
+        for graph_id in unresolved:
+            self._summaries[graph_id] = summaries.get(graph_id)
+            self._node_names[graph_id] = node_names.get(graph_id, {})
+
+    def _summary(self, graph_id: str | None) -> GraphSummary | None:
+        if graph_id is None:
+            return None
+        if graph_id not in self._summaries:
+            self.prime([graph_id])
+        return self._summaries[graph_id]
 
     def graph_name(self, graph_id: str | None) -> str | None:
-        graph = self.graph(graph_id)
-        return graph.name if graph is not None else None
+        summary = self._summary(graph_id)
+        return summary.name if summary is not None else None
+
+    def entry_node_id(self, graph_id: str | None) -> str | None:
+        summary = self._summary(graph_id)
+        return summary.entry_node_id if summary is not None else None
+
+    def created_at(self, graph_id: str | None) -> datetime | None:
+        summary = self._summary(graph_id)
+        return summary.created_at if summary is not None else None
 
     def node_name(self, graph_id: str | None, node_id: str | None) -> str | None:
         """``node_id``'s human name *in the graph that named it* (issue #90) — ``None`` when
         either is unresolvable, so a step from a graph since deleted degrades to its raw id."""
-        graph = self.graph(graph_id)
-        if graph is None or node_id is None:
+        if graph_id is None or node_id is None:
             return None
-        node = graph.node_by_id(node_id)
-        return node.name if node is not None else None
+        if graph_id not in self._summaries:
+            self.prime([graph_id])
+        return self._node_names.get(graph_id, {}).get(node_id)

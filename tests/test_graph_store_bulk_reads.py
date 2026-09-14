@@ -1,4 +1,4 @@
-"""``GraphStore``'s narrow projections — ``load_graph_names``, ``load_node_names``,
+"""``GraphStore``'s narrow projections — ``load_graph_summaries``, ``load_node_names``,
 ``list_summaries``, and ``graph_id_of_enabled_name`` (component tier).
 
 Each agrees with its fully-reified sibling (``get``/``get_enabled_by_name``/``list_all``)
@@ -61,39 +61,41 @@ def _mint(
     return graph
 
 
-# --- load_graph_names --------------------------------------------------------- #
+# --- load_graph_summaries ------------------------------------------------------ #
 
 
-def test_load_graph_names_matches_get_across_two_graphs_including_a_retired_one(tmp_path: Path) -> None:
+def test_load_graph_summaries_matches_get_across_two_graphs_including_a_retired_one(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     alpha = _mint(store, "gr_1", "alpha", created_at=_T0)
     beta = _mint(store, "gr_2", "beta", created_at=_T0)
     store.record_lifecycle(beta.graph_id, retired=True, at=_T0, by="op")
 
-    result = store.load_graph_names([alpha.graph_id, beta.graph_id, "gr_never_minted"])
+    result = store.load_graph_summaries([alpha.graph_id, beta.graph_id, "gr_never_minted"])
 
     # Graphs are immutable/insert-only — retirement does not exclude a graph here,
     # unlike the ephemeral-chunk exclusion `chunk_rows.graph_id_of_batch` performs.
-    assert result == {alpha.graph_id: alpha.name, beta.graph_id: beta.name}
-    for graph_id, name in result.items():
+    assert {gid: s.name for gid, s in result.items()} == {alpha.graph_id: alpha.name, beta.graph_id: beta.name}
+    for graph_id, summary in result.items():
         loaded = store.get(graph_id)
         assert loaded is not None
-        assert loaded.name == name
+        assert loaded.name == summary.name
+        assert loaded.entry_node_id == summary.entry_node_id
+        assert loaded.created_at == summary.created_at
 
 
-def test_load_graph_names_of_no_ids_is_empty(tmp_path: Path) -> None:
+def test_load_graph_summaries_of_no_ids_is_empty(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    assert store.load_graph_names([]) == {}
+    assert store.load_graph_summaries([]) == {}
 
 
-def test_load_graph_names_matches_across_a_batch_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_graph_summaries_matches_across_a_batch_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
     store, _ = _store(tmp_path)
     graphs = [_mint(store, f"gr_batch_{i}", f"name_{i}", created_at=_T0) for i in range(7)]
 
-    result = store.load_graph_names([g.graph_id for g in graphs])
+    result = store.load_graph_summaries([g.graph_id for g in graphs])
 
-    assert result == {g.graph_id: g.name for g in graphs}
+    assert {gid: s.name for gid, s in result.items()} == {g.graph_id: g.name for g in graphs}
 
 
 # --- load_node_names ----------------------------------------------------------- #
@@ -106,13 +108,29 @@ def test_load_node_names_matches_node_by_id_across_two_graphs(tmp_path: Path) ->
 
     result = store.load_node_names([alpha.graph_id, beta.graph_id])
 
-    assert result == {n.node_id: n.name for n in [*alpha.nodes, *beta.nodes]}
+    assert result == {
+        alpha.graph_id: {n.node_id: n.name for n in alpha.nodes},
+        beta.graph_id: {n.node_id: n.name for n in beta.nodes},
+    }
     loaded_alpha = store.get(alpha.graph_id)
     assert loaded_alpha is not None
     for node in alpha.nodes:
         found = loaded_alpha.node_by_id(node.node_id)
         assert found is not None
-        assert found.name == result[node.node_id]
+        assert found.name == result[alpha.graph_id][node.node_id]
+
+
+def test_load_node_names_keys_a_shared_node_id_per_graph_so_the_wrong_graph_misses(tmp_path: Path) -> None:
+    """A node id looked up against a graph that doesn't hold it must not fall back to
+    another graph's node of the same id — the reshape's whole point (issue #421/
+    bulk-read adoption)."""
+    store, _ = _store(tmp_path)
+    alpha = _mint(store, "gr_1", "alpha", node_names=["build"], created_at=_T0)
+    other_graph_id = "gr_2"
+    result = store.load_node_names([alpha.graph_id])
+
+    assert result[alpha.graph_id][alpha.nodes[0].node_id] == "build"
+    assert result.get(other_graph_id, {}).get(alpha.nodes[0].node_id) is None
 
 
 def test_load_node_names_of_no_ids_is_empty(tmp_path: Path) -> None:
@@ -127,7 +145,7 @@ def test_load_node_names_matches_across_a_batch_boundary(tmp_path: Path, monkeyp
 
     result = store.load_node_names([g.graph_id for g in graphs])
 
-    assert result == {g.nodes[0].node_id: g.nodes[0].name for g in graphs}
+    assert result == {g.graph_id: {g.nodes[0].node_id: g.nodes[0].name} for g in graphs}
 
 
 # --- list_summaries ------------------------------------------------------------- #
