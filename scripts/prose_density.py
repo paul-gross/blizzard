@@ -38,7 +38,21 @@ def _docstring_lines(tree: ast.Module) -> int:
 
 # The `bzh:prose-budget` cap table.
 _DOCSTRING_CAPS = {"module": 6, "class": 4, "function": 5, "test": 3}
-_COMMENT_RUN_CAP = 2
+_CONSTANT_COMMENT_CAP = 1
+_INLINE_COMMENT_CAP = 2
+
+
+def _constant_comment_lines(tree: ast.Module) -> set[int]:
+    """First line of every module- or class-body `Assign`/`AnnAssign` — a comment run
+    landing immediately above one is a field/column/constant comment, capped at 1 rather
+    than an inline block's 2."""
+    lines: set[int] = set()
+    bodies = [tree.body, *(n.body for n in ast.walk(tree) if isinstance(n, ast.ClassDef))]
+    for body in bodies:
+        for stmt in body:
+            if isinstance(stmt, ast.Assign | ast.AnnAssign):
+                lines.add(stmt.lineno)
+    return lines
 
 
 def _docstring_blocks(tree: ast.Module) -> list[tuple[int, str, int]]:
@@ -89,16 +103,23 @@ def _comment_runs(src: str) -> list[tuple[int, int]]:
 def _over_cap_blocks(path: Path) -> list[str]:
     src = path.read_text(encoding="utf-8")
     violations = []
+    constant_lines: set[int] = set()
     try:
-        for lineno, kind, count in _docstring_blocks(ast.parse(src)):
+        tree = ast.parse(src)
+        constant_lines = _constant_comment_lines(tree)
+        for lineno, kind, count in _docstring_blocks(tree):
             cap = _DOCSTRING_CAPS[kind]
             if count > cap:
                 violations.append(f"{path}:{lineno}: {kind} docstring {count} lines (cap {cap})")
     except SyntaxError:
         pass
     for lineno, count in _comment_runs(src):
-        if count > _COMMENT_RUN_CAP:
-            violations.append(f"{path}:{lineno}: comment block {count} lines (cap {_COMMENT_RUN_CAP})")
+        if (lineno + count) in constant_lines:
+            label, cap = "constant comment", _CONSTANT_COMMENT_CAP
+        else:
+            label, cap = "comment block", _INLINE_COMMENT_CAP
+        if count > cap:
+            violations.append(f"{path}:{lineno}: {label} {count} lines (cap {cap})")
     return violations
 
 

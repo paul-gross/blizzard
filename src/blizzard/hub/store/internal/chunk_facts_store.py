@@ -44,8 +44,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import graph_id_of_batch
 
-#: Every fact family `ChunkFacts` carries — the default family selection for
-#: `load_facts`/`load_all_facts`/`load_facts_for`.
+#: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
 _ALL_FAMILIES: frozenset[str] = frozenset(
     {
         "promoted",
@@ -73,8 +72,7 @@ _ALL_FAMILIES: frozenset[str] = frozenset(
     }
 )
 
-#: Exactly the families `ChunkFacts.status()` reaches — pinned against `.status()` itself
-#: by `test_status_is_insensitive_to_every_non_status_family`, not just this comment.
+#: Exactly the families `ChunkFacts.status()` reaches — pinned by a mechanical equivalence test.
 _STATUS_FAMILIES: frozenset[str] = frozenset(
     {
         "promoted",

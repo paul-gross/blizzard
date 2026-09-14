@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 
-#: Read live, by name, rather than captured as a default argument, so a test can lower it
-#: via `monkeypatch.setattr` instead of seeding hundreds of rows to hit a batch boundary.
+#: Read live (not a default arg) so a test can `monkeypatch.setattr` it, not seed hundreds of rows.
 BATCH_SIZE = 500
 
 
