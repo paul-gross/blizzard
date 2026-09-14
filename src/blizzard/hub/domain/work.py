@@ -1288,6 +1288,12 @@ class IReadWorkItemRepository(Protocol):
         feed in this hub is (the activity feed, ``/api/events``)."""
         ...
 
+    def get_many(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, WorkItemRecord]:
+        """``get``'s batched sibling — every requested pointer's item, keyed by pointer,
+        in a bounded number of queries per id batch rather than one query per pointer. A
+        pointer naming no item is absent, the same as ``get`` returning ``None`` for it."""
+        ...
+
 
 class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
     """Read-write variant — ``allocate_ref``, ``create_with_chunk``, ``edit`` and

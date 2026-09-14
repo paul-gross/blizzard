@@ -6,6 +6,8 @@ Timestamps arrive already stamped (``bzh:injected-clock``).
 from __future__ import annotations
 
 import json
+from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import Connection, desc, insert, select, update
@@ -27,6 +29,7 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_dependencies_store import release_outgoing_edges_conn
 from blizzard.hub.store.internal.chunk_rows import (
     insert_chunk_rows,
@@ -64,6 +67,28 @@ class WorkItemStore:
                 .limit(limit)
             ).all()
         return [self._record(row) for row in rows]
+
+    def get_many(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, WorkItemRecord]:
+        """``get``'s batched sibling — ``work_items`` carries no cross-source uniqueness
+        on ``ref`` alone, so pointers are grouped by ``source`` first and each source's
+        refs batched through a plain single-column ``IN`` (``bzh:sql-portable``), the same
+        shape ``chunk_work_refs_store.py``'s ``live_holders`` uses."""
+        if not pointers:
+            return {}
+        refs_by_source: dict[str, list[str]] = defaultdict(list)
+        for pointer in pointers:
+            refs_by_source[pointer.source].append(pointer.ref)
+
+        result: dict[WorkRef, WorkItemRecord] = {}
+        with self._store.read("get_many") as conn:
+            for source, refs in refs_by_source.items():
+                for batch in id_batches(refs):
+                    rows = conn.execute(
+                        select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref.in_(batch))
+                    ).all()
+                    for row in rows:
+                        result[WorkRef(source=row.source, ref=row.ref)] = self._record(row)
+        return result
 
     def create_with_chunk(
         self,

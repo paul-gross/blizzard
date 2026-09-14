@@ -8,6 +8,7 @@ newest-fact-wins per ``graph_id`` (issue #101)."""
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -22,6 +23,7 @@ from blizzard.hub.domain.graph import (
     Edge,
     Graph,
     GraphArtifact,
+    GraphSummary,
     IWriteGraphRepository,
     Node,
     ProducesSpec,
@@ -30,6 +32,7 @@ from blizzard.hub.domain.graph import (
     SessionDecl,
 )
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.schema import (
     graph_artifacts,
     graph_choices,
@@ -302,6 +305,50 @@ class GraphStore:
                     return self._reify(conn, row)
             return None
 
+    def graph_id_of_enabled_name(self, name: str) -> str | None:
+        """``get_enabled_by_name``'s narrow sibling — the same tie-break and
+        retired-skip, selecting only ``graph_id`` and never reifying a row."""
+        with self._store.read("graph_id_of_enabled_name") as conn:
+            rows = conn.execute(
+                select(graphs.c.graph_id)
+                .where(graphs.c.name == name)
+                .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
+            ).all()
+            for row in rows:
+                if not self._is_retired(conn, row.graph_id):
+                    return row.graph_id
+            return None
+
+    def load_graph_names(self, graph_ids: Sequence[str]) -> dict[str, str]:
+        """``{graph_id: name}`` for every requested id that exists. Graphs are
+        immutable/insert-only — no ephemeral concept to exclude, just "exists or
+        doesn't"."""
+        if not graph_ids:
+            return {}
+        result: dict[str, str] = {}
+        with self._store.read("load_graph_names") as conn:
+            for batch in id_batches(graph_ids):
+                rows = conn.execute(select(graphs.c.graph_id, graphs.c.name).where(graphs.c.graph_id.in_(batch))).all()
+                result.update({row.graph_id: row.name for row in rows})
+        return result
+
+    def load_node_names(self, graph_ids: Sequence[str]) -> dict[str, str]:
+        """``{node_id: name}`` for every node belonging to any of ``graph_ids``. Keyed by
+        bare ``node_id``: unlike ``chunk_facts_store.py``'s executor map — which merges
+        chunks pointing at *different* graphs and so keys by ``(graph_id, node_id)`` — a
+        node id is a freshly-minted, globally-unique ULID, and the caller already knows
+        which graphs it asked about."""
+        if not graph_ids:
+            return {}
+        result: dict[str, str] = {}
+        with self._store.read("load_node_names") as conn:
+            for batch in id_batches(graph_ids):
+                rows = conn.execute(
+                    select(graph_nodes.c.node_id, graph_nodes.c.name).where(graph_nodes.c.graph_id.in_(batch))
+                ).all()
+                result.update({row.node_id: row.name for row in rows})
+        return result
+
     def newest_definition_yaml(self, name: str) -> str | None:
         # Same ordering as get_enabled_by_name, minus the retired filter — see the
         # protocol docstring for why reconciliation compares against the newest *minted*.
@@ -318,6 +365,22 @@ class GraphStore:
         with self._store.read("list_all") as conn:
             rows = conn.execute(select(graphs).order_by(graphs.c.created_at.desc())).all()
             return [self._reify(conn, row) for row in rows]
+
+    def list_summaries(self) -> list[GraphSummary]:
+        """``list_all``'s narrow sibling — every minted graph's listing-shape fields,
+        newest first, with no per-graph fan-out into nodes/edges/sessions/artifacts."""
+        with self._store.read("list_summaries") as conn:
+            rows = conn.execute(
+                select(graphs.c.graph_id, graphs.c.name, graphs.c.entry_node_id, graphs.c.created_at).order_by(
+                    graphs.c.created_at.desc()
+                )
+            ).all()
+            return [
+                GraphSummary(
+                    graph_id=row.graph_id, name=row.name, entry_node_id=row.entry_node_id, created_at=row.created_at
+                )
+                for row in rows
+            ]
 
     def any_minted(self, name: str) -> bool:
         with self._store.read("any_minted") as conn:

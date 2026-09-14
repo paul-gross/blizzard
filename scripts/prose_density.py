@@ -1,9 +1,10 @@
 """Comment/docstring density: per-root growth ratchet + per-block caps (issue #270).
 
-measure [--write-baseline] ROOTS...  report (or record) per-root prose totals.
+measure [--write-baseline] ROOTS...  report (or record) per-root prose totals, including
+                                      each file's `bzh:prose-budget` over-cap block count.
 check ROOTS...                       exit 1 when a root's prose grows over the baseline.
-check --blocks ROOTS...              additionally exit 1 on any block over its
-`bzh:prose-budget` cap, each named as file:line.
+check --blocks ROOTS...              additionally exit 1 when a file's over-cap block
+count grows past its baseline, naming every current violation in that file as file:line.
 """
 
 from __future__ import annotations
@@ -37,7 +38,21 @@ def _docstring_lines(tree: ast.Module) -> int:
 
 # The `bzh:prose-budget` cap table.
 _DOCSTRING_CAPS = {"module": 6, "class": 4, "function": 5, "test": 3}
-_COMMENT_RUN_CAP = 2
+_CONSTANT_COMMENT_CAP = 1
+_INLINE_COMMENT_CAP = 2
+
+
+def _constant_comment_lines(tree: ast.Module) -> set[int]:
+    """First line of every module- or class-body `Assign`/`AnnAssign` — a comment run
+    landing immediately above one is a field/column/constant comment, capped at 1 rather
+    than an inline block's 2."""
+    lines: set[int] = set()
+    bodies = [tree.body, *(n.body for n in ast.walk(tree) if isinstance(n, ast.ClassDef))]
+    for body in bodies:
+        for stmt in body:
+            if isinstance(stmt, ast.Assign | ast.AnnAssign):
+                lines.add(stmt.lineno)
+    return lines
 
 
 def _docstring_blocks(tree: ast.Module) -> list[tuple[int, str, int]]:
@@ -88,16 +103,23 @@ def _comment_runs(src: str) -> list[tuple[int, int]]:
 def _over_cap_blocks(path: Path) -> list[str]:
     src = path.read_text(encoding="utf-8")
     violations = []
+    constant_lines: set[int] = set()
     try:
-        for lineno, kind, count in _docstring_blocks(ast.parse(src)):
+        tree = ast.parse(src)
+        constant_lines = _constant_comment_lines(tree)
+        for lineno, kind, count in _docstring_blocks(tree):
             cap = _DOCSTRING_CAPS[kind]
             if count > cap:
                 violations.append(f"{path}:{lineno}: {kind} docstring {count} lines (cap {cap})")
     except SyntaxError:
         pass
     for lineno, count in _comment_runs(src):
-        if count > _COMMENT_RUN_CAP:
-            violations.append(f"{path}:{lineno}: comment block {count} lines (cap {_COMMENT_RUN_CAP})")
+        if (lineno + count) in constant_lines:
+            label, cap = "constant comment", _CONSTANT_COMMENT_CAP
+        else:
+            label, cap = "comment block", _INLINE_COMMENT_CAP
+        if count > cap:
+            violations.append(f"{path}:{lineno}: {label} {count} lines (cap {cap})")
     return violations
 
 
@@ -115,7 +137,12 @@ def _measure_file(path: Path) -> dict[str, int]:
         docstrings = _docstring_lines(ast.parse(src))
     except SyntaxError:
         docstrings = 0
-    return {"total": total, "comments": len(comment_lines), "docstrings": docstrings}
+    return {
+        "total": total,
+        "comments": len(comment_lines),
+        "docstrings": docstrings,
+        "over_cap": len(_over_cap_blocks(path)),
+    }
 
 
 def _measure_root(root: Path) -> dict[str, dict[str, int]]:
@@ -157,15 +184,18 @@ def main() -> int:
             print(f"baseline written: {BASELINE}")
         return 0
 
+    baseline = json.loads(BASELINE.read_text())
+
     over_cap = False
     if args.blocks:
-        for root in args.roots:
-            for f in sorted(Path(root).rglob("*.py")):
-                for violation in _over_cap_blocks(f):
-                    print(violation)
+        for root, files in report.items():
+            base_files = baseline.get(root, {})
+            for name, m in files.items():
+                base_over = base_files.get(name, {}).get("over_cap", 0)
+                if m["over_cap"] > base_over:
                     over_cap = True
-
-    baseline = json.loads(BASELINE.read_text())
+                    for violation in _over_cap_blocks(Path(root) / name):
+                        print(violation)
     grew = False
     for root, files in report.items():
         base_files = baseline.get(root)

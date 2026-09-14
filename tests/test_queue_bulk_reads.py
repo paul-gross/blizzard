@@ -13,6 +13,7 @@ from typing import cast
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.queue import QueueService
@@ -62,11 +63,16 @@ class _CountingFactsStore(ChunkFactsStore):
     def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_all_facts_calls = 0
+        self.load_all_statuses_calls = 0
         self.load_facts_calls = 0
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         self.load_all_facts_calls += 1
         return super().load_all_facts()
+
+    def load_all_statuses(self) -> dict[str, ChunkStatus]:
+        self.load_all_statuses_calls += 1
+        return super().load_all_statuses()
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         self.load_facts_calls += 1
@@ -98,7 +104,8 @@ def test_peek_reads_facts_in_bulk_and_never_per_chunk(tmp_path: Path, path: str,
 
     assert resp.status_code == 200, resp.text
     assert len(resp.json()["entries"]) == 2
-    # One bulk read resolves the candidate list, a second derives each entry's blocked
-    # marking (issue #457) — both bulk, neither per-chunk.
-    assert counting.load_all_facts_calls == 2
+    # The candidate list resolves via `load_all_statuses` now, not `load_all_facts` — it
+    # only needs each chunk's derived status; blocked marking still needs the full history.
+    assert counting.load_all_statuses_calls == 1
+    assert counting.load_all_facts_calls == 1
     assert counting.load_facts_calls == 0

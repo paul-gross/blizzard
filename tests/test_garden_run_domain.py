@@ -8,7 +8,7 @@ composition over already-loaded facts."""
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -56,10 +56,16 @@ class _FakeChunkRecords:
     def get(self, chunk_id: str) -> Chunk | None:
         return self.chunks.get(chunk_id)
 
-    def list_ready(self) -> list[Chunk]:
+    def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
+        return {chunk_id: c for chunk_id in chunk_ids if (c := self.chunks.get(chunk_id)) is not None}
+
+    def graph_id_of_many(self, chunk_ids: Sequence[str]) -> dict[str, str]:
+        return {chunk_id: c.graph_id for chunk_id in chunk_ids if (c := self.chunks.get(chunk_id)) is not None}
+
+    def list_ready(self, *, statuses: Mapping[str, ChunkStatus] | None = None) -> list[Chunk]:
         return []
 
-    def list_not_ready(self) -> list[Chunk]:
+    def list_not_ready(self, *, statuses: Mapping[str, ChunkStatus] | None = None) -> list[Chunk]:
         return []
 
     def list_all(self) -> list[Chunk]:
@@ -75,6 +81,12 @@ class _FakeChunkFacts:
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         return dict(self.facts)
+
+    def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        return {chunk_id: f for chunk_id in chunk_ids if (f := self.facts.get(chunk_id)) is not None}
+
+    def load_all_statuses(self) -> dict[str, ChunkStatus]:
+        return {chunk_id: f.status() for chunk_id, f in self.facts.items()}
 
 
 @dataclass

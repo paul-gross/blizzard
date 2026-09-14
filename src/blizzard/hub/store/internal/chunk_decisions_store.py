@@ -7,6 +7,7 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 
@@ -20,6 +21,7 @@ from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, enqueue_close_intents, insert_proposals, proposal_row
 
 
@@ -64,6 +66,57 @@ class ChunkDecisionsStore:
             rows = conn.execute(select(s.decisions).order_by(s.decisions.c.submitted_at)).all()
             decisions = [self._decision_row(conn, row) for row in rows]
             return [d for d in decisions if not d.resolved]
+
+    def dockets_for_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[DocketEntry]]:
+        """Every requested chunk's docket, exactly what ``_pending_proposals`` would
+        return for that id — a chunk with no pending proposals gets an empty list, not
+        an absent key (this reads the proposal table, it isn't chunk-existence-gated).
+        Deduplicated before batching: a repeated id would otherwise fall into two
+        different batches and double its own entries."""
+        if not chunk_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(chunk_ids))
+        result: dict[str, list[DocketEntry]] = {chunk_id: [] for chunk_id in unique_ids}
+        with self._store.read("dockets_for_chunks") as conn:
+            # Already unfiltered/global — read once total across every batch, not once
+            # per batch, since it doesn't depend on which chunks a batch names.
+            judged = {r.proposal_id for r in conn.execute(select(s.work_item_materializations.c.proposal_id)).all()}
+            for batch in id_batches(unique_ids):
+                result.update(self._docket_entries(conn, judged, batch))
+        return result
+
+    @staticmethod
+    def _docket_entries(conn: Connection, judged: set[str], chunk_ids: Sequence[str]) -> dict[str, list[DocketEntry]]:
+        """``chunk_ids``' own docket rows, given a precomputed ``judged`` set — the one
+        construction rule :meth:`_pending_proposals` (one chunk) and
+        :meth:`dockets_for_chunks` (id-batched) both build on, rather than each keeping
+        its own copy of the judged-exclusion/strike-join/``DocketEntry`` shape."""
+        strikes = {
+            r.proposal_id: r
+            for r in conn.execute(
+                select(s.work_item_strikes).where(
+                    s.work_item_strikes.c.proposal_id.in_(
+                        select(s.work_item_proposals.c.proposal_id).where(
+                            s.work_item_proposals.c.chunk_id.in_(chunk_ids)
+                        )
+                    )
+                )
+            ).all()
+        }
+        rows = conn.execute(select(s.work_item_proposals).where(s.work_item_proposals.c.chunk_id.in_(chunk_ids))).all()
+        result: dict[str, list[DocketEntry]] = defaultdict(list)
+        for row in rows:
+            if row.proposal_id in judged:
+                continue
+            result[row.chunk_id].append(
+                DocketEntry(
+                    proposal=proposal_row(row),
+                    struck=row.proposal_id in strikes,
+                    struck_by=strikes[row.proposal_id].struck_by if row.proposal_id in strikes else None,
+                    struck_at=strikes[row.proposal_id].struck_at if row.proposal_id in strikes else None,
+                )
+            )
+        return result
 
     def record_decision(
         self,
@@ -187,29 +240,10 @@ class ChunkDecisionsStore:
     @staticmethod
     def _pending_proposals(conn: Connection, chunk_id: str) -> list[DocketEntry]:
         """The docket read, on a caller-supplied ``conn`` so :meth:`_decision_row` can
-        fold it into its own already-open read."""
+        fold it into its own already-open read — :meth:`_docket_entries` narrowed to one
+        chunk."""
         judged = {r.proposal_id for r in conn.execute(select(s.work_item_materializations.c.proposal_id)).all()}
-        strikes = {
-            r.proposal_id: r
-            for r in conn.execute(
-                select(s.work_item_strikes).where(
-                    s.work_item_strikes.c.proposal_id.in_(
-                        select(s.work_item_proposals.c.proposal_id).where(s.work_item_proposals.c.chunk_id == chunk_id)
-                    )
-                )
-            ).all()
-        }
-        rows = conn.execute(select(s.work_item_proposals).where(s.work_item_proposals.c.chunk_id == chunk_id)).all()
-        return [
-            DocketEntry(
-                proposal=proposal_row(row),
-                struck=row.proposal_id in strikes,
-                struck_by=strikes[row.proposal_id].struck_by if row.proposal_id in strikes else None,
-                struck_at=strikes[row.proposal_id].struck_at if row.proposal_id in strikes else None,
-            )
-            for row in rows
-            if row.proposal_id not in judged
-        ]
+        return ChunkDecisionsStore._docket_entries(conn, judged, [chunk_id]).get(chunk_id, [])
 
 
 def _conforms_decisions(x: ChunkDecisionsStore) -> IWriteChunkDecisionsRepository:

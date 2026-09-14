@@ -3,6 +3,7 @@ holds, and merge-group survivorship over them."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Protocol
 
@@ -15,6 +16,12 @@ class IReadChunkWorkRefsRepository(Protocol):
 
     def find_live_holder(self, pointer: WorkRef) -> str | None:
         """The chunk_id of a live (non-terminal) chunk holding ``pointer``, or None."""
+        ...
+
+    def live_holders(self, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:
+        """`find_live_holder`'s batched sibling — every pointer with a live (non-terminal)
+        chunk holding it, keyed by pointer; a pointer with no live holder has no entry
+        at all, never mapped to None."""
         ...
 
     def live_work_refs(self) -> dict[WorkRef, ChunkStatus]:

@@ -23,10 +23,22 @@ from blizzard.hub.api.chunks import FleetPulse
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import Chunk, ChunkFacts, DecisionChoice, FleetSummary, MigrationSource
+from blizzard.hub.domain.work import (
+    BounceFact,
+    Chunk,
+    ChunkFacts,
+    DecisionChoice,
+    FleetSummary,
+    HubNodePollFact,
+    MigrationSource,
+    PrOpenedFact,
+    RouteTokenMintedFact,
+    UsageFact,
+)
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal import chunk_facts_store as chunk_facts_store_module
-from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal import batching as batching_module
+from blizzard.hub.store.internal import chunk_rows as chunk_rows_module
+from blizzard.hub.store.internal.chunk_facts_store import _ALL_FAMILIES, _STATUS_FAMILIES, ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from tests.support import build_hub, chunk_stores, count_queries, hub_store_connections, ingest, migrate_to, seed_graph
@@ -332,13 +344,15 @@ def test_ephemeral_ids_evaluated_at_most_once_per_bulk_read(tmp_path: Path, monk
     _seed_fixture(store, engine)
 
     calls = {"n": 0}
-    original = chunk_facts_store_module.ephemeral_ids
+    original = chunk_rows_module.ephemeral_ids
 
     def counting(conn: sa.Connection) -> set[str]:
         calls["n"] += 1
         return original(conn)
 
-    monkeypatch.setattr(chunk_facts_store_module, "ephemeral_ids", counting)
+    # `load_all_facts`'s exclusion runs through `chunk_rows.graph_id_of_batch` now,
+    # so this patches `chunk_rows`, not this module's own former staticmethod.
+    monkeypatch.setattr(chunk_rows_module, "ephemeral_ids", counting)
 
     store.facts.load_all_facts()
 
@@ -402,3 +416,161 @@ def test_fleet_pulse_view_calls_load_all_facts_and_never_load_facts_or_list_all(
     assert counting_facts.load_facts_calls == 0
     assert counting_record.list_all_calls == 0
     assert view.ready == 2
+
+
+def test_load_facts_for_matches_per_id_load_facts(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    _seed_fixture(store, engine)
+
+    result = store.facts.load_facts_for(_LIVE_CHUNK_IDS)
+
+    assert set(result) == set(_LIVE_CHUNK_IDS)
+    for chunk_id in _LIVE_CHUNK_IDS:
+        assert result[chunk_id] == store.facts.load_facts(chunk_id)
+
+
+def test_load_facts_for_drops_ephemeral_and_unknown_ids(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    _seed_fixture(store, engine)
+
+    result = store.facts.load_facts_for(["ch_ready", "ch_grouped", "ch_deleted", "ch_never_minted"])
+
+    assert set(result) == {"ch_ready"}
+
+
+def test_load_facts_for_of_no_ids_is_empty(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    _seed_fixture(store, engine)
+
+    assert store.facts.load_facts_for([]) == {}
+
+
+def test_load_all_statuses_matches_load_all_facts_status_across_every_derived_status(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    _seed_fixture(store, engine)
+
+    statuses = store.facts.load_all_statuses()
+    bulk = store.facts.load_all_facts()
+
+    assert set(statuses) == set(_LIVE_CHUNK_IDS)
+    assert statuses == {chunk_id: facts.status() for chunk_id, facts in bulk.items()}
+    assert set(statuses.values()) == set(ChunkStatus)  # the fixture spans every derived status
+
+
+def test_status_is_insensitive_to_every_non_status_family(tmp_path: Path) -> None:
+    """Every family `_ALL_FAMILIES` carries beyond `_STATUS_FAMILIES` is populated with a
+    value that would change `.status()` if it were (incorrectly) read; `.status()` must come
+    back unchanged, mechanically pinning `_STATUS_FAMILIES` against `.status()`'s own reach."""
+    non_status = _ALL_FAMILIES - _STATUS_FAMILIES
+    assert non_status == {
+        "delivery_landed",
+        "landed_repos",
+        "route_tokens_minted",
+        "pr_opened",
+        "usage",
+        "bounces",
+        "hub_node_polls",
+    }
+
+    baseline = ChunkFacts(minted=True, promoted=True)
+    loud = replace(
+        baseline,
+        delivery_landed=True,
+        landed_repos=frozenset({"acme/widget"}),
+        route_tokens_minted=[RouteTokenMintedFact(token_hash="h", minted_at=_T0, seq=1)],
+        pr_opened=[PrOpenedFact(repo="acme/widget", number=1, url="u", commit_hash="c", opened_at=_T0)],
+        usage=[
+            UsageFact(
+                node_id="nd_1",
+                epoch=1,
+                kind="build",
+                model="m",
+                input_tokens=1,
+                output_tokens=1,
+                cache_read_tokens=0,
+                cache_create_tokens=0,
+                cost_usd=None,
+                recorded_at=_T0,
+            )
+        ],
+        bounces=[BounceFact(epoch=1, cause="c", envelope="{}", recorded_at=_T0)],
+        hub_node_polls=[HubNodePollFact(node_id="nd_1", epoch=1, polled_at=_T0)],
+    )
+
+    assert baseline.status() is ChunkStatus.READY
+    assert loud.status() == baseline.status()
+
+
+def test_load_all_statuses_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small, small_engine = _store(tmp_path / "small")
+    small.record.mint(Chunk(chunk_id="ch_a", graph_id="gr_1", work_refs=[], minted_at=_T0))
+    small.queue.record_promote("ch_a", at=_T0)
+
+    large, large_engine = _store(tmp_path / "large")
+    for i in range(40):
+        large.record.mint(Chunk(chunk_id=f"ch_{i}", graph_id="gr_1", work_refs=[], minted_at=_T0))
+        large.queue.record_promote(f"ch_{i}", at=_T0)
+
+    small_count = count_queries(small_engine, small.facts.load_all_statuses)
+    large_count = count_queries(large_engine, large.facts.load_all_statuses)
+
+    assert small_count == large_count
+    assert large_count < 40  # bounded by table count, not chunk count
+
+
+def test_load_all_statuses_reads_fewer_statements_than_load_all_facts(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    _seed_fixture(store, engine)
+
+    statuses_count = count_queries(engine, store.facts.load_all_statuses)
+    all_facts_count = count_queries(engine, store.facts.load_all_facts)
+
+    # load_all_statuses skips every family status() never reaches (pr_opened, usage,
+    # landed_repos, delivery_landed, route_tokens_minted, hub_node_polls).
+    assert statuses_count < all_facts_count
+
+
+def _seed_promoted_with_open_decision(store: ChunkStores, chunk_id: str) -> None:
+    """A promoted chunk carrying one unresolved decision — enough to give every family
+    the shared batching helper touches at least one row per seeded id, so a
+    per-batch query count stays identical across batches regardless of which id lands
+    in which batch."""
+    store.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
+    store.queue.record_promote(chunk_id, at=_T0)
+    store.decisions.record_decision(
+        decision_id=f"dec_{chunk_id}",
+        chunk_id=chunk_id,
+        node_id="nd_g1_hub",
+        node_name="n",
+        epoch=1,
+        choices=[DecisionChoice(name="ok", description="d")],
+        at=_T0,
+        artifacts=[],
+        proposals=[],
+    )
+
+
+def test_load_facts_for_query_count_scales_with_batch_count_not_id_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    store, engine = _store(tmp_path)
+    ids = [f"ch_batch_{i}" for i in range(7)]  # 3 batches of size 3, 3, 1 under the lowered cap
+    for chunk_id in ids:
+        _seed_promoted_with_open_decision(store, chunk_id)
+
+    one_batch_count = count_queries(engine, lambda: store.facts.load_facts_for(ids[:3]))
+    two_batch_count = count_queries(engine, lambda: store.facts.load_facts_for(ids[:6]))
+    three_batch_count = count_queries(engine, lambda: store.facts.load_facts_for(ids))
+
+    per_batch_cost = two_batch_count - one_batch_count
+    assert per_batch_cost > 0
+    assert two_batch_count == one_batch_count + per_batch_cost
+    assert three_batch_count == one_batch_count + 2 * per_batch_cost  # the trailing size-1 batch costs the same
+
+    result = store.facts.load_facts_for(ids)
+    assert set(result) == set(ids)
+    for chunk_id in ids:
+        assert result[chunk_id] == store.facts.load_facts(chunk_id)

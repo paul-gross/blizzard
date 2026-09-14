@@ -58,6 +58,12 @@ class IReadScopeRepository(Protocol):
         starts enabled."""
         ...
 
+    def retired_slugs(self) -> set[str]:
+        """Every slug whose newest lifecycle fact reads retired (issue #389) — the bulk
+        counterpart to :meth:`is_retired`, mirroring
+        ``IReadGraphRepository.retired_graph_ids``."""
+        ...
+
 
 class IWriteScopeRepository(IReadScopeRepository, Protocol):
     """Read-write scope access. Only the domain layer depends on this variant."""

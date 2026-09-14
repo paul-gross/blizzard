@@ -11,6 +11,7 @@ package-private — imported by the adapters in this directory, never by a domai
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -222,6 +223,48 @@ def ephemeral_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
     return grouped | deleted
 
 
+def is_ephemeral_id(conn, chunk_id: str) -> bool:  # type: ignore[no-untyped-def]
+    """Whether ``chunk_id`` alone is grouped-away or deleted — a single-id call site's
+    narrow sibling of :func:`ephemeral_ids`, two targeted existence checks rather than
+    that helper's unfiltered scan of both tables."""
+    return row_exists(conn, s.chunk_grouped, chunk_id) or row_exists(conn, s.chunk_deleted, chunk_id)
+
+
+def ephemeral_ids_in(conn, batch: Sequence[str]) -> set[str]:  # type: ignore[no-untyped-def]
+    """Which of ``batch``'s ids are grouped-away or deleted — :func:`graph_id_of_batch`'s
+    own exclusion, factored out so a caller already holding ``batch``'s full ``chunks``
+    rows doesn't pay for a second, narrower read of the same ids just to get it. A
+    singleton batch excludes via :func:`is_ephemeral_id`'s two targeted checks; a larger
+    one via two id-batch-bounded ``IN`` queries."""
+    if len(batch) == 1:
+        (chunk_id,) = batch
+        return {chunk_id} if is_ephemeral_id(conn, chunk_id) else set()
+    return {
+        r.chunk_id
+        for r in conn.execute(select(s.chunk_grouped.c.chunk_id).where(s.chunk_grouped.c.chunk_id.in_(batch))).all()
+    } | {
+        r.chunk_id
+        for r in conn.execute(select(s.chunk_deleted.c.chunk_id).where(s.chunk_deleted.c.chunk_id.in_(batch))).all()
+    }
+
+
+def graph_id_of_batch(conn, batch: Sequence[str] | None) -> dict[str, str]:  # type: ignore[no-untyped-def]
+    """A selection's chunk id -> graph id pins, ephemeral ids excluded — lifted out of
+    ``ChunkFactsStore`` so ``ChunkRecordStore``'s own batch reads share this exclusion
+    rather than re-deriving it. ``None`` (the whole live fleet) keeps
+    :func:`ephemeral_ids`'s own single unfiltered scan; a bounded batch delegates to
+    :func:`ephemeral_ids_in`."""
+    if batch is None:
+        ephemeral = ephemeral_ids(conn)
+        rows = conn.execute(select(s.chunks.c.chunk_id, s.chunks.c.graph_id)).all()
+    else:
+        rows = conn.execute(
+            select(s.chunks.c.chunk_id, s.chunks.c.graph_id).where(s.chunks.c.chunk_id.in_(batch))
+        ).all()
+        ephemeral = ephemeral_ids_in(conn, batch)
+    return {r.chunk_id: r.graph_id for r in rows if r.chunk_id not in ephemeral}
+
+
 def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
     """:meth:`~blizzard.hub.store.internal.chunk_route_store.ChunkRouteStore.route_of`'s
     query body, taking an already-open ``conn`` so a write transaction elsewhere (the
@@ -335,7 +378,7 @@ def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> N
     artifacts/hub_exec seams. A chunk in the ephemeral set enqueues nothing; a ref
     already carrying a terminal ``work_item_closures`` outcome is skipped; a replayed
     landing writes nothing new (unique on ``chunk_id, source, ref``)."""
-    if chunk_id in ephemeral_ids(conn):
+    if is_ephemeral_id(conn, chunk_id):
         return
     refs = conn.execute(
         select(s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref).where(s.chunk_work_refs.c.chunk_id == chunk_id)

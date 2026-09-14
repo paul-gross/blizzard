@@ -7,6 +7,7 @@ saw, so the sweep can tell a segment's stored content changed since."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -97,6 +98,22 @@ class SegmentDerivationInput:
     content_fingerprint: str
 
 
+@dataclass(frozen=True)
+class SegmentContext:
+    """:class:`SegmentDerivationInput` with ``turns`` dropped — every field a caller can
+    have without ever decoding a segment's stored content, for a sibling that needs a
+    segment's node-step context or fingerprint but not its decoded turns."""
+
+    segment_id: str
+    chunk_id: str
+    node_id: str
+    epoch: int
+    spawn_generation: int
+    normalizer_version: str
+    complete: bool
+    content_fingerprint: str
+
+
 class IReadTranscriptEvents(Protocol):
     """Read-only operations over the derived event store and its derivation markers."""
 
@@ -135,6 +152,28 @@ class IReadTranscriptEvents(Protocol):
         ...
 
     def derivation_marker(self, segment_id: str, extractor_version: str) -> DerivationMarker | None: ...
+
+    def derivation_markers(self, extractor_version: str) -> dict[str, DerivationMarker]:
+        """``derivation_marker``'s bulk sibling — every segment's own marker at
+        ``extractor_version``, keyed by ``segment_id``. A segment with no marker at this
+        version is absent, the same as ``derivation_marker`` returning ``None`` for it."""
+        ...
+
+    def segment_derivation_inputs(self, segment_ids: Sequence[str]) -> dict[str, SegmentDerivationInput]:
+        """``segment_derivation_input``'s batched sibling — every requested id's decoded
+        turns and content fingerprint, in a bounded number of queries per id batch. An id
+        that doesn't exist is absent, the same as ``segment_derivation_input`` returning
+        ``None``. A segment whose content fails to decode is *also* absent — unlike the
+        singular, which lets that failure raise."""
+        ...
+
+    def segment_contexts(self, segment_ids: Sequence[str]) -> dict[str, SegmentContext]:
+        """Every requested id's :class:`SegmentContext`, in a bounded number of queries
+        per id batch — ``segment_derivation_inputs``'s sibling for a caller that needs a
+        segment's node-step context and fingerprint but never its decoded turns; no
+        statement this method issues names the ``content`` column. An id that doesn't
+        exist is absent."""
+        ...
 
 
 class IWriteTranscriptEvents(IReadTranscriptEvents, Protocol):

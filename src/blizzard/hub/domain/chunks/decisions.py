@@ -9,7 +9,7 @@ from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.proposals import WorkItemProposalRow
-from blizzard.hub.domain.work import DecisionChoice, DecisionRow
+from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 
 
 class IReadChunkDecisionsRepository(Protocol):
@@ -30,6 +30,12 @@ class IReadChunkDecisionsRepository(Protocol):
 
     def list_open_decisions(self) -> list[DecisionRow]:
         """Every unresolved decision across the fleet."""
+        ...
+
+    def dockets_for_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[DocketEntry]]:
+        """Every requested chunk's docket, keyed by chunk id, as ``decision_for_chunk``
+        would carry it — a chunk with no pending proposals maps to an empty list, never
+        an absent key."""
         ...
 
 

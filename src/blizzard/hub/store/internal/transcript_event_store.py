@@ -22,11 +22,13 @@ from blizzard.hub.domain.analytics.events import (
     DerivationMarker,
     DerivationSignature,
     IWriteTranscriptEvents,
+    SegmentContext,
     SegmentDerivationInput,
     TranscriptEvent,
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.wire.transcript_segment import TurnSegmentView
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
@@ -111,6 +113,39 @@ def _marker_stmt(segment_id: str, extractor_version: str) -> Select[Any]:
     return select(s.transcript_event_derivations).where(
         s.transcript_event_derivations.c.segment_id == segment_id,
         s.transcript_event_derivations.c.extractor_version == extractor_version,
+    )
+
+
+def _markers_stmt(extractor_version: str) -> Select[Any]:
+    return select(s.transcript_event_derivations).where(
+        s.transcript_event_derivations.c.extractor_version == extractor_version
+    )
+
+
+def _segment_records_for_ids_stmt(segment_ids: Sequence[str]) -> Select[Any]:
+    return (
+        select(s.transcript_segments)
+        .where(s.transcript_segments.c.segment_id.in_(segment_ids))
+        .order_by(s.transcript_segments.c.segment_id, s.transcript_segments.c.turn_range_start)
+    )
+
+
+def _segment_contexts_stmt(segment_ids: Sequence[str]) -> Select[Any]:
+    """``_segment_records_for_ids_stmt``'s content-free sibling — every column
+    :meth:`TranscriptEventStore.segment_contexts` needs, minus ``content``."""
+    return (
+        select(
+            s.transcript_segments.c.segment_id,
+            s.transcript_segments.c.chunk_id,
+            s.transcript_segments.c.node_id,
+            s.transcript_segments.c.epoch,
+            s.transcript_segments.c.spawn_generation,
+            s.transcript_segments.c.normalizer_version,
+            s.transcript_segments.c.rejected,
+            s.transcript_segments.c.content_digest,
+        )
+        .where(s.transcript_segments.c.segment_id.in_(segment_ids))
+        .order_by(s.transcript_segments.c.segment_id, s.transcript_segments.c.turn_range_start)
     )
 
 
@@ -287,6 +322,72 @@ class TranscriptEventStore:
             event_count=row.event_count,
             complete=row.complete,
         )
+
+    def derivation_markers(self, extractor_version: str) -> dict[str, DerivationMarker]:
+        with self._store.read("derivation_markers") as conn:
+            rows = conn.execute(_markers_stmt(extractor_version)).all()
+        return {
+            row.segment_id: DerivationMarker(
+                segment_id=row.segment_id,
+                extractor_version=row.extractor_version,
+                content_fingerprint=row.content_fingerprint,
+                derived_at=row.derived_at,
+                event_count=row.event_count,
+                complete=row.complete,
+            )
+            for row in rows
+        }
+
+    def segment_derivation_inputs(self, segment_ids: Sequence[str]) -> dict[str, SegmentDerivationInput]:
+        """See :meth:`~blizzard.hub.domain.analytics.events.IReadTranscriptEvents.segment_derivation_inputs`.
+        Unlike :meth:`segment_derivation_input`, a decode failure here does not raise —
+        it drops that one id from the result. This adapter stays a pure read (no logger:
+        ``bzh:dependency-inversion``), so a caller that needs to observe a dropped id
+        diffs the requested ``segment_ids`` against this result's keys itself."""
+        result: dict[str, SegmentDerivationInput] = {}
+        if not segment_ids:
+            return result
+        with self._store.read("segment_derivation_inputs") as conn:
+            for batch in id_batches(list(segment_ids)):
+                rows = conn.execute(_segment_records_for_ids_stmt(batch)).all()
+                for segment_id, group in itertools.groupby(rows, key=lambda row: row.segment_id):
+                    group_rows = list(group)
+                    try:
+                        result[segment_id] = SegmentDerivationInput(
+                            segment_id=segment_id,
+                            chunk_id=group_rows[0].chunk_id,
+                            node_id=group_rows[0].node_id,
+                            epoch=group_rows[0].epoch,
+                            spawn_generation=group_rows[0].spawn_generation,
+                            normalizer_version=group_rows[0].normalizer_version,
+                            turns=_decode_turns(group_rows),
+                            complete=not any(row.rejected for row in group_rows),
+                            content_fingerprint=content_fingerprint(group_rows),
+                        )
+                    except Exception:
+                        continue  # decode failure: this id is dropped, unlike the singular's raise
+        return result
+
+    def segment_contexts(self, segment_ids: Sequence[str]) -> dict[str, SegmentContext]:
+        result: dict[str, SegmentContext] = {}
+        if not segment_ids:
+            return result
+        with self._store.read("segment_contexts") as conn:
+            for batch in id_batches(list(segment_ids)):
+                rows = conn.execute(_segment_contexts_stmt(batch)).all()
+                for segment_id, group in itertools.groupby(rows, key=lambda row: row.segment_id):
+                    group_rows = list(group)
+                    result[segment_id] = SegmentContext(
+                        segment_id=segment_id,
+                        chunk_id=group_rows[0].chunk_id,
+                        node_id=group_rows[0].node_id,
+                        epoch=group_rows[0].epoch,
+                        spawn_generation=group_rows[0].spawn_generation,
+                        normalizer_version=group_rows[0].normalizer_version,
+                        complete=not any(row.rejected for row in group_rows),
+                        content_fingerprint=content_fingerprint(group_rows),
+                    )
+        return result
 
     # --- writes -----------------------------------------------------------------
 

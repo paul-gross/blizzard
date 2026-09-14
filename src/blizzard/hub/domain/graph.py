@@ -7,7 +7,7 @@ compiles into at mint. Every type is dependency-free (``bzh:domain-core``)."""
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -596,6 +596,17 @@ class Graph:
         return next((e for e in self.edges if e.from_node_id == node_id and e.choice_id in choice_ids), None)
 
 
+@dataclass(frozen=True)
+class GraphSummary:
+    """One minted graph's listing-shape fields — :meth:`IReadGraphRepository.list_summaries`'s
+    narrow sibling of a fully reified :class:`Graph`, with no nodes/edges/sessions/artifacts."""
+
+    graph_id: str
+    name: str
+    entry_node_id: str
+    created_at: datetime
+
+
 # --- Mint selection (which mint of a name a chunk sees) ---------------------
 
 
@@ -719,6 +730,28 @@ class IReadGraphRepository(Protocol):
         ``None`` — the value for a graph with no policy fact — inherits the hub-level
         setting (:class:`FollowLatest`). Newest-fact-wins.
         """
+        ...
+
+    def load_graph_names(self, graph_ids: Sequence[str]) -> dict[str, str]:
+        """``{graph_id: name}`` for every requested id that exists — a narrow projection
+        that never reifies a whole :class:`Graph`, for a sibling call site batching a
+        name lookup over several ids at once."""
+        ...
+
+    def load_node_names(self, graph_ids: Sequence[str]) -> dict[str, str]:
+        """``{node_id: name}`` for every node belonging to any of the requested graphs —
+        the node-level sibling of :meth:`load_graph_names`."""
+        ...
+
+    def list_summaries(self) -> list[GraphSummary]:
+        """Every minted graph's listing-shape fields, newest first — :meth:`list_all`'s
+        narrow sibling, reading only what a summary needs off the ``graphs`` table
+        itself, with no per-graph fan-out."""
+        ...
+
+    def graph_id_of_enabled_name(self, name: str) -> str | None:
+        """:meth:`get_enabled_by_name`'s narrow sibling — just the ``graph_id`` of the
+        newest non-retired graph with ``name``, without reifying it."""
         ...
 
 
