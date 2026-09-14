@@ -7,6 +7,7 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy import select
@@ -18,6 +19,7 @@ from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import RouteCreatedFact, RouteHistory, RouteReleasedFact
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import next_route_seq, route_of_conn
 
 _ROUTE_PREFIX = "route"
@@ -40,57 +42,92 @@ class ChunkRouteStore:
         (issue #421) — one bounded query per route table, grouped by chunk id in Python the
         way the facts seam's ``load_all_facts`` is, deferring liveness to the same
         :class:`~blizzard.hub.domain.work.RouteHistory.newest` tie-break :func:`route_of_conn`
-        uses."""
+        uses. Row construction and grouping are shared with :meth:`routes_for` via
+        :meth:`_routes`."""
         with self._store.read("load_all_routes") as conn:
-            newest_created: dict[str, RouteCreatedFact] = {}
-            route_id_of: dict[str, str] = {}
-            runner_of: dict[str, str] = {}
-            workspace_of: dict[str, str] = {}
-            for r in conn.execute(select(s.route_created)).all():
-                existing = newest_created.get(r.chunk_id)
-                if existing is None or (r.created_at, r.seq) > (existing.created_at, existing.seq):
-                    newest_created[r.chunk_id] = RouteCreatedFact(created_at=r.created_at, seq=r.seq)
-                    route_id_of[r.chunk_id] = r.route_id
-                    runner_of[r.chunk_id] = r.runner_id
-                    workspace_of[r.chunk_id] = r.workspace_id
+            return self._routes(conn, None)
 
-            newest_released: dict[str, RouteReleasedFact] = {}
-            for r in conn.execute(
-                select(s.route_released.c.chunk_id, s.route_released.c.released_at, s.route_released.c.seq)
-            ).all():
-                existing = newest_released.get(r.chunk_id)
-                if existing is None or (r.released_at, r.seq) > (existing.released_at, existing.seq):
-                    newest_released[r.chunk_id] = RouteReleasedFact(released_at=r.released_at, seq=r.seq)
+    def routes_for(self, chunk_ids: Iterable[str]) -> dict[str, Route]:
+        """See :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.routes_for`
+        (blizzard#521) — :meth:`load_all_routes`'s own shape, scoped to ``ids`` via
+        :meth:`_routes`'s ``chunk_id.in_(ids)`` filters rather than a fleet-wide read."""
+        ids = list(chunk_ids)
+        if not ids:
+            return {}
+        with self._store.read("routes_for") as conn:
+            return self._routes(conn, ids)
 
-            live_chunk_ids = {
-                chunk_id
-                for chunk_id, created in newest_created.items()
-                if RouteHistory([created], [newest_released[chunk_id]] if chunk_id in newest_released else []).newest
-                is not None
-            }
-            if not live_chunk_ids:
-                return {}
+    def _routes(self, conn, chunk_ids: list[str] | None) -> dict[str, Route]:  # type: ignore[no-untyped-def]
+        """:meth:`load_all_routes`/:meth:`routes_for`'s shared entry — ``chunk_ids=None``
+        reads fleet-wide in one pass; otherwise batches through :func:`id_batches` so no
+        single ``IN (...)`` grows with the caller's own id count (``batching.py``'s
+        mandatory cap, the same discipline :meth:`~ChunkFactsStore._load` follows)."""
+        if chunk_ids is None:
+            return self._routes_batch(conn, None)
+        result: dict[str, Route] = {}
+        for batch in id_batches(chunk_ids):
+            result.update(self._routes_batch(conn, batch))
+        return result
 
-            route_ids = {route_id_of[chunk_id] for chunk_id in live_chunk_ids}
-            env_ids: dict[str, list[str]] = defaultdict(list)
-            for e in conn.execute(
-                select(s.route_environments.c.route_id, s.route_environments.c.environment_id).where(
-                    s.route_environments.c.route_id.in_(route_ids)
-                )
-            ).all():
-                env_ids[e.route_id].append(e.environment_id)
+    def _routes_batch(self, conn, chunk_ids: Sequence[str] | None) -> dict[str, Route]:  # type: ignore[no-untyped-def]
+        """Row construction and grouping for one batch (or the whole fleet, when
+        ``chunk_ids`` is ``None``) — shared by both of :meth:`_routes`'s branches."""
 
-            return {
-                chunk_id: Route(
-                    chunk_id=chunk_id,
-                    runner_id=runner_of[chunk_id],
-                    workspace_id=workspace_of[chunk_id],
-                    environment_ids=env_ids[route_id_of[chunk_id]],
-                    created_at=newest_created[chunk_id].created_at,
-                    route_id=route_id_of[chunk_id],
-                )
-                for chunk_id in live_chunk_ids
-            }
+        def scoped(query, column):  # type: ignore[no-untyped-def]
+            return query if chunk_ids is None else query.where(column.in_(chunk_ids))
+
+        newest_created: dict[str, RouteCreatedFact] = {}
+        route_id_of: dict[str, str] = {}
+        runner_of: dict[str, str] = {}
+        workspace_of: dict[str, str] = {}
+        for r in conn.execute(scoped(select(s.route_created), s.route_created.c.chunk_id)).all():
+            existing = newest_created.get(r.chunk_id)
+            if existing is None or (r.created_at, r.seq) > (existing.created_at, existing.seq):
+                newest_created[r.chunk_id] = RouteCreatedFact(created_at=r.created_at, seq=r.seq)
+                route_id_of[r.chunk_id] = r.route_id
+                runner_of[r.chunk_id] = r.runner_id
+                workspace_of[r.chunk_id] = r.workspace_id
+
+        newest_released: dict[str, RouteReleasedFact] = {}
+        for r in conn.execute(
+            scoped(
+                select(s.route_released.c.chunk_id, s.route_released.c.released_at, s.route_released.c.seq),
+                s.route_released.c.chunk_id,
+            )
+        ).all():
+            existing = newest_released.get(r.chunk_id)
+            if existing is None or (r.released_at, r.seq) > (existing.released_at, existing.seq):
+                newest_released[r.chunk_id] = RouteReleasedFact(released_at=r.released_at, seq=r.seq)
+
+        live_chunk_ids = {
+            chunk_id
+            for chunk_id, created in newest_created.items()
+            if RouteHistory([created], [newest_released[chunk_id]] if chunk_id in newest_released else []).newest
+            is not None
+        }
+        if not live_chunk_ids:
+            return {}
+
+        route_ids = {route_id_of[chunk_id] for chunk_id in live_chunk_ids}
+        env_ids: dict[str, list[str]] = defaultdict(list)
+        for e in conn.execute(
+            select(s.route_environments.c.route_id, s.route_environments.c.environment_id).where(
+                s.route_environments.c.route_id.in_(route_ids)
+            )
+        ).all():
+            env_ids[e.route_id].append(e.environment_id)
+
+        return {
+            chunk_id: Route(
+                chunk_id=chunk_id,
+                runner_id=runner_of[chunk_id],
+                workspace_id=workspace_of[chunk_id],
+                environment_ids=env_ids[route_id_of[chunk_id]],
+                created_at=newest_created[chunk_id].created_at,
+                route_id=route_id_of[chunk_id],
+            )
+            for chunk_id in live_chunk_ids
+        }
 
     def runner_high_water(self, runner_id: str) -> int:
         with self._store.read("runner_high_water") as conn:

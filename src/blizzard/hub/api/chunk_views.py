@@ -16,7 +16,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import Chunk, ChunkFacts, holds_claim
+from blizzard.hub.domain.work import Chunk, ChunkFacts, PauseFact, UsageTotal, holds_claim
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
     ArtifactView,
@@ -50,6 +50,25 @@ class _RouteNotInjected(Enum):
 
 #: :meth:`ChunkView.of`'s default, distinct from an *injected* ``None`` (issue #421).
 _ROUTE_NOT_INJECTED: Final = _RouteNotInjected.TOKEN
+
+
+def pause_view(pause: PauseFact | None) -> PauseView | None:
+    """A chunk's open pause fact, wired (shared with ``ChunkStatusView``'s own builder —
+    the two must always agree, so this is the one place the mapping is written)."""
+    return PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None
+
+
+def usage_total_view(usage: UsageTotal) -> ChunkUsageTotalView:
+    """A chunk's summed usage, wired (shared with ``ChunkStatusView``'s own builder — see
+    :func:`pause_view`)."""
+    return ChunkUsageTotalView(
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cache_read_tokens=usage.cache_read_tokens,
+        cache_create_tokens=usage.cache_create_tokens,
+        cost_usd=usage.cost_usd,
+        cost_partial=usage.cost_partial,
+    )
 
 
 def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedView | None:
@@ -190,15 +209,7 @@ class ChunkView:
         return views
 
     def usage_total(self) -> ChunkUsageTotalView:
-        usage = self.facts.usage_total()
-        return ChunkUsageTotalView(
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cache_read_tokens=usage.cache_read_tokens,
-            cache_create_tokens=usage.cache_create_tokens,
-            cost_usd=usage.cost_usd,
-            cost_partial=usage.cost_partial,
-        )
+        return usage_total_view(self.facts.usage_total())
 
     def detail(self) -> ChunkDetail:
         node_id, node_name = self.current_node()
@@ -259,8 +270,7 @@ class ChunkView:
         )
 
     def _pause(self) -> PauseView | None:
-        pause = self.facts.open_pause()
-        return PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None
+        return pause_view(self.facts.open_pause())
 
     def _decision(self) -> DecisionView | None:
         decision = self.services.chunks.decisions.decision_for_chunk(self.chunk.chunk_id)

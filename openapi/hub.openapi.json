@@ -1000,6 +1000,46 @@
         "title": "ChunkCompleteRequest",
         "type": "object"
       },
+      "ChunkDecisionStatusView": {
+        "description": "The slice of a live gate decision the runner tick reads (blizzard#521) \u2014 no\n``choices``, no ``docket``: those drive a person's own read, not the loop's.",
+        "properties": {
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "resolved_choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Choice"
+          },
+          "transitioned": {
+            "default": false,
+            "title": "Transitioned",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "decision_id",
+          "node_id",
+          "epoch"
+        ],
+        "title": "ChunkDecisionStatusView",
+        "type": "object"
+      },
       "ChunkDeleteRequest": {
         "description": "Delete a chunk \u2014 records who deleted it (issue #364).",
         "properties": {
@@ -1695,6 +1735,77 @@
         ],
         "title": "ChunkStatus",
         "type": "string"
+      },
+      "ChunkStatusView": {
+        "description": "One chunk's tick-relevant status (blizzard#521) \u2014 the slim batch projection\n``GET /api/fleet/chunk-statuses`` returns. Not ``ChunkSummary``: a narrower, runner-facing\nstatus read rather than a fleet-wide listing projection.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/ChunkUsageTotalView"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChunkDecisionStatusView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Epoch"
+          },
+          "pause": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PauseView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "restart_epochs": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Restart Epochs",
+            "type": "array"
+          },
+          "route_runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Runner Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChunkStatus"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "status"
+        ],
+        "title": "ChunkStatusView",
+        "type": "object"
       },
       "ChunkStopRequest": {
         "description": "Terminally abandon a chunk \u2014 records who stopped it (issue #118).",
@@ -12169,6 +12280,56 @@
         "summary": "Get Finding",
         "tags": [
           "findings"
+        ]
+      }
+    },
+    "/api/fleet/chunk-statuses": {
+      "get": {
+        "description": "The runner tick's slim batch status read (blizzard#521) \u2014 repeatable ``chunk_id``;\nan unknown or ephemeral id is omitted, never a 404.",
+        "operationId": "get_chunk_statuses_api_fleet_chunk_statuses_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Chunk Id",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChunkStatusView"
+                  },
+                  "title": "Response Get Chunk Statuses Api Fleet Chunk Statuses Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk Statuses",
+        "tags": [
+          "fleet"
         ]
       }
     },

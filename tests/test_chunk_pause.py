@@ -21,7 +21,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Advance, Fill, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store import schema as runner_schema
-from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
+from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.facts import ESCALATION_RECORDED, RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 from blizzard.wire.question import QuestionView
 from tests.runner_fakes import (
@@ -70,26 +70,22 @@ def _paused_chunk(chunk="ch_1", *, runner_id="r1", status=ChunkStatus.PAUSED):  
     runner must key on the pause fact, not the derived status, since a paused+asked chunk
     derives ``waiting_on_human`` while still carrying ``pause``.
     """
-    return ChunkDetail(
+    return ChunkStatusView(
         chunk_id=chunk,
-        graph_id="gr_1",
         status=status,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id=runner_id, workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id=runner_id,
         pause=PauseView(by="operator", set_at="2026-07-16T12:00:00Z"),
     )
 
 
 def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]
     """The same chunk unpaused — no ``pause`` view."""
-    return ChunkDetail(
+    return ChunkStatusView(
         chunk_id=chunk,
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id=runner_id, workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id=runner_id,
     )
 
 
@@ -176,7 +172,7 @@ def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path):  # type:
 
     hub = FakeHub()
     detached = _paused_chunk()
-    detached.route = None  # detached at the hub, and paused too
+    detached.route_runner_id = None  # detached at the hub, and paused too
     hub.chunks["ch_1"] = detached
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     provider = FakeProvider({"e1": "/ws/e1"})

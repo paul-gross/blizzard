@@ -10,8 +10,8 @@ from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.spawn import Environments, Spawner
+from blizzard.wire.chunk import ChunkDecisionStatusView
 from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.decision import DecisionView
 from blizzard.wire.envelope import ApplyOutcome, NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")
@@ -50,31 +50,31 @@ class HeldChunk:
         Four shapes share this poll, all holding environments: a hub node polled toward its
         terminal outcome, a resolved gate, a chunk moved to a higher epoch, and an unknown one."""
         try:
-            detail = self.ctx.hub.get_chunk(self.chunk_id)
+            view = self.ctx.chunk_views.get(self.chunk_id)
         except ChunkNotFoundError:
             _log.warning("hub reports held chunk unknown — releasing envs", chunk_id=self.chunk_id)
             self.ctx.env_release.release_chunk(self.chunk_id)
             return
         except HubClientError:
             return
-        if detail.status == ChunkStatus.DONE:
+        if view.status == ChunkStatus.DONE:
             _log.info("delivery landed — releasing envs", chunk_id=self.chunk_id)
             self.ctx.env_release.release_chunk(self.chunk_id)
             return
-        decision = detail.decision
+        decision = view.decision
         if decision is not None and decision.resolved_choice is not None and not decision.transitioned:
             self._resolve_gate(decision)
             return
-        hub_epoch = detail.latest_epoch
+        hub_epoch = view.latest_epoch
         if (
-            detail.status == ChunkStatus.RUNNING
+            view.status == ChunkStatus.RUNNING
             and hub_epoch is not None
             and hub_epoch > self.ctx.stores.lease_record.latest_epoch(self.chunk_id)
         ):
             # The strictly-higher epoch is load-bearing: a just-escalated chunk still derives
             # `running` at the SAME epoch until its fact flushes, and would re-spawn forever (#63).
             self._spawn_advanced_node()
-        elif detail.status == ChunkStatus.DELIVERING:
+        elif view.status == ChunkStatus.DELIVERING:
             # A chunk parked at a hub node — drive it one step; a no-op leaves this binding
             # held and polled again next tick (#65/#66).
             self._poll_hub_node()
@@ -89,6 +89,7 @@ class HeldChunk:
             self.ctx.hub.hub_advance(self.chunk_id)
         except HubClientError:
             return  # hub unreachable — retried next tick
+        self.ctx.chunk_views.invalidate(self.chunk_id)  # D5 — a later get() this tick sees the step
 
     def _spawn_advanced_node(self) -> None:
         """Spawn the held chunk's current node into its already-bound, warm environment.
@@ -110,7 +111,7 @@ class HeldChunk:
         _log.info("hub advanced held chunk into a fresh node — spawning", chunk_id=self.chunk_id)
         Spawner(self.ctx).enter_node(self.chunk_id, envelope, Environments(bindings).acquired, via="advance")
 
-    def _resolve_gate(self, decision: DecisionView) -> None:
+    def _resolve_gate(self, decision: ChunkDecisionStatusView) -> None:
         """Record the resolving transition for a decided gate and continue in place.
 
         Reuses the parked step's epoch — no new lease was minted while parked — and references
@@ -132,6 +133,7 @@ class HeldChunk:
         if response.outcome == ApplyOutcome.FAILURE:
             _log.warning("resolving transition rejected", chunk_id=self.chunk_id, detail=response.detail or "")
             return
+        self.ctx.chunk_views.invalidate(self.chunk_id)  # D5 — a later get() this tick sees the resolution
         _log.info("gate resolved — advancing chunk", chunk_id=self.chunk_id, choice=decision.resolved_choice)
         self.apply(
             response.outcome, response.next_envelope, self.ctx.stores.environments.bindings_for_chunk(self.chunk_id)

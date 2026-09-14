@@ -9,7 +9,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
+from blizzard.runner.loop.hub import HubClientError
+from blizzard.runner.loop.internal import http_hub as http_hub_module
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.route import RouteClaim
@@ -234,22 +235,44 @@ def test_hub_advance_posts_to_the_fleet_path() -> None:
 
 
 @pytest.mark.unit
-def test_get_chunk_parses_status() -> None:
+def test_chunk_statuses_parses_the_batch_response() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/fleet/chunks/ch_1"
-        return httpx.Response(
-            200,
-            json={
-                "chunk_id": "ch_1",
-                "graph_id": "gr_1",
-                "status": "done",
-                "current_node_id": "deliver",
-                "latest_epoch": 1,
-                "model": "claude-opus-4-8",
-            },
-        )
+        assert request.url.path == "/api/fleet/chunk-statuses"
+        assert request.url.params.get_list("chunk_id") == ["ch_1", "ch_2"]
+        return httpx.Response(200, json=[{"chunk_id": "ch_1", "status": "done", "latest_epoch": 1}])
 
-    assert _client(handler).get_chunk("ch_1").status == "done"
+    found = _client(handler).chunk_statuses(["ch_1", "ch_2"])
+    assert set(found) == {"ch_1"}
+    assert found["ch_1"].status == "done"
+
+
+@pytest.mark.unit
+def test_chunk_statuses_batches_across_the_query_param_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A primed id set larger than the per-request cap becomes more than one GET, each
+    within the cap — never one URL whose query string grows with the caller's own id
+    count (`drain.py`'s ``_DRAIN_LIMIT`` precedent, applied to the outbound HTTP edge)."""
+    monkeypatch.setattr(http_hub_module, "_CHUNK_STATUSES_BATCH_LIMIT", 2)
+    seen_batches: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        batch = request.url.params.get_list("chunk_id")
+        seen_batches.append(batch)
+        return httpx.Response(200, json=[{"chunk_id": cid, "status": "done", "latest_epoch": 1} for cid in batch])
+
+    found = _client(handler).chunk_statuses(["ch_1", "ch_2", "ch_3"])
+    assert seen_batches == [["ch_1", "ch_2"], ["ch_3"]]
+    assert set(found) == {"ch_1", "ch_2", "ch_3"}
+
+
+@pytest.mark.unit
+def test_chunk_statuses_omits_an_id_the_hub_does_not_know() -> None:
+    """The batch route never 404s (blizzard#521) — an unknown id is simply absent from
+    the response, unlike the single-chunk-identified reads."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[])
+
+    assert _client(handler).chunk_statuses(["ch_missing"]) == {}
 
 
 @pytest.mark.unit
@@ -331,29 +354,18 @@ def test_transport_failure_raises_hub_client_error() -> None:
 
 
 @pytest.mark.unit
-def test_get_chunk_404_is_chunk_not_found() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(404, text="no such chunk")
-
-    with pytest.raises(ChunkNotFoundError):
-        _client(handler).get_chunk("ch_1")
-
-
-@pytest.mark.unit
-def test_get_chunk_500_is_hub_client_error_not_chunk_not_found() -> None:
+def test_chunk_statuses_5xx_raises_hub_client_error_for_the_whole_call() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="boom")
 
-    with pytest.raises(HubClientError) as exc_info:
-        _client(handler).get_chunk("ch_1")
-    assert not isinstance(exc_info.value, ChunkNotFoundError)
+    with pytest.raises(HubClientError):
+        _client(handler).chunk_statuses(["ch_1"])
 
 
 @pytest.mark.unit
-def test_get_chunk_transport_failure_raises_plain_hub_client_error() -> None:
+def test_chunk_statuses_transport_failure_raises_hub_client_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused", request=request)
 
-    with pytest.raises(HubClientError) as exc_info:
-        _client(handler).get_chunk("ch_1")
-    assert not isinstance(exc_info.value, ChunkNotFoundError)
+    with pytest.raises(HubClientError):
+        _client(handler).chunk_statuses(["ch_1"])

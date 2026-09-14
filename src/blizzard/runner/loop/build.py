@@ -23,6 +23,7 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
+from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
@@ -152,6 +153,8 @@ class LoopWiring:
             stores=stores,
             clock=_clock,
             hub=hub,
+            # The non-memoizing default (D4) — only `tick()` itself upgrades this per call.
+            chunk_views=ReadThroughChunkViews(hub),
             provider=provider,
             harness=harness,
             subscriptions=resolved_subscriptions,

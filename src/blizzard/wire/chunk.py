@@ -493,6 +493,34 @@ class ChunkDetail(BaseModel):
     escalation: ChunkEscalationView | None = None
 
 
+class ChunkDecisionStatusView(BaseModel):
+    """The slice of a live gate decision the runner tick reads (blizzard#521) — no
+    ``choices``, no ``docket``: those drive a person's own read, not the loop's."""
+
+    decision_id: str
+    node_id: str
+    epoch: int
+    resolved_choice: str | None = None
+    transitioned: bool = False
+
+
+class ChunkStatusView(BaseModel):
+    """One chunk's tick-relevant status (blizzard#521) — the slim batch projection
+    ``GET /api/fleet/chunk-statuses`` returns. Not ``ChunkSummary``: a narrower, runner-facing
+    status read rather than a fleet-wide listing projection."""
+
+    chunk_id: str
+    status: ChunkStatus
+    route_runner_id: str | None = None
+    pause: PauseView | None = None
+    latest_epoch: int | None = None
+    # The chunk's operator restarts' epochs (issue #370), oldest first — mirrors
+    # ``ChunkDetail.restarts``, narrowed to the one field ``Fenced.out`` reads.
+    restart_epochs: list[int] = []
+    cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
+    decision: ChunkDecisionStatusView | None = None
+
+
 class WorkItemEntry(BaseModel):
     """One pointer's pass-through work item, vendor-native — title, body, comments, and,
     only when the source has them to give (blizzard#362), ``author``/``stated_priority``.

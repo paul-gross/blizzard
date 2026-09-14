@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy import Connection, select
@@ -16,13 +16,20 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.artifacts import ArtifactRow
-from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, enqueue_close_intents, insert_proposals, proposal_row
+
+#: Every fact table whose ``decision_id`` column closes a decision — the resolving
+#: transition, the migration (#90), the unresolvable-target escalation (#110), or the
+#: restart (#370). The one source both :meth:`ChunkDecisionsStore._decision_row` (one
+#: decision) and :meth:`ChunkDecisionsStore.live_decisions_for` (bulk) read, so a fifth
+#: closure fact only needs adding here.
+_DECISION_CLOSURE_TABLES = (s.transitions, s.chunk_migrations, s.escalations, s.chunk_restarts)
 
 
 class ChunkDecisionsStore:
@@ -60,6 +67,72 @@ class ChunkDecisionsStore:
                 if not decision.transitioned:
                     return decision
             return None
+
+    def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
+        """See :meth:`~blizzard.hub.domain.chunks.decisions.IReadChunkDecisionsRepository.live_decisions_for`
+        (blizzard#521) — set-based throughout, unlike :meth:`_decision_row`'s per-decision
+        docket/choices reads, sharing its closure rule via :meth:`_decision_closure_ids`
+        rather than keeping its own copy. Newest-first per chunk, same "newest
+        not-yet-transitioned" semantics as :meth:`decision_for_chunk`. Batches through
+        :func:`id_batches` on both ``chunk_ids`` and every id set derived from it, so no
+        single ``IN (...)`` grows with the caller's own count."""
+        ids = list(chunk_ids)
+        if not ids:
+            return {}
+        with self._store.read("live_decisions_for") as conn:
+            result: dict[str, LiveDecisionStatus] = {}
+            for batch in id_batches(ids):
+                result.update(self._live_decisions_batch(conn, batch))
+            return result
+
+    def _live_decisions_batch(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, LiveDecisionStatus]:
+        rows = conn.execute(
+            select(s.decisions).where(s.decisions.c.chunk_id.in_(chunk_ids)).order_by(s.decisions.c.submitted_at.desc())
+        ).all()
+        if not rows:
+            return {}
+        decision_ids = [row.decision_id for row in rows]
+        resolved_choice_of: dict[str, str] = {}
+        for id_batch in id_batches(decision_ids):
+            resolved_choice_of.update(
+                {
+                    r.decision_id: r.choice
+                    for r in conn.execute(
+                        select(s.decision_resolutions.c.decision_id, s.decision_resolutions.c.choice).where(
+                            s.decision_resolutions.c.decision_id.in_(id_batch)
+                        )
+                    ).all()
+                }
+            )
+        transitioned_ids = self._decision_closure_ids(conn, decision_ids)
+        result: dict[str, LiveDecisionStatus] = {}
+        for row in rows:  # newest-first; the newest not-yet-transitioned decision is live
+            if row.chunk_id in result or row.decision_id in transitioned_ids:
+                continue
+            result[row.chunk_id] = LiveDecisionStatus(
+                decision_id=row.decision_id,
+                node_id=row.node_id,
+                epoch=row.epoch,
+                resolved_choice=resolved_choice_of.get(row.decision_id),
+                transitioned=False,
+            )
+        return result
+
+    @staticmethod
+    def _decision_closure_ids(conn: Connection, decision_ids: Sequence[str]) -> set[str]:
+        """The ids among ``decision_ids`` closed by a fact in :data:`_DECISION_CLOSURE_TABLES`
+        — the one closure rule both :meth:`_decision_row` and :meth:`live_decisions_for` read.
+        Batches both the input and each table's own ``.in_()`` through :func:`id_batches`."""
+        if not decision_ids:
+            return set()
+        closed: set[str] = set()
+        for batch in id_batches(decision_ids):
+            for table in _DECISION_CLOSURE_TABLES:
+                closed |= {
+                    r.decision_id
+                    for r in conn.execute(select(table.c.decision_id).where(table.c.decision_id.in_(batch))).all()
+                }
+        return closed
 
     def list_open_decisions(self) -> list[DecisionRow]:
         with self._store.read("list_open_decisions") as conn:
@@ -199,28 +272,7 @@ class ChunkDecisionsStore:
         resolution = conn.execute(
             select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
         ).one_or_none()
-        # Closed by whichever fact carries this decision_id: the resolving transition, the
-        # migration (#90), the unresolvable-target escalation (#110), or the restart (#370).
-        transitioned = (
-            conn.execute(
-                select(s.transitions.c.transition_id).where(s.transitions.c.decision_id == row.decision_id).limit(1)
-            ).first()
-            is not None
-            or conn.execute(
-                select(s.chunk_migrations.c.migration_id)
-                .where(s.chunk_migrations.c.decision_id == row.decision_id)
-                .limit(1)
-            ).first()
-            is not None
-            or conn.execute(
-                select(s.escalations.c.id).where(s.escalations.c.decision_id == row.decision_id).limit(1)
-            ).first()
-            is not None
-            or conn.execute(
-                select(s.chunk_restarts.c.id).where(s.chunk_restarts.c.decision_id == row.decision_id).limit(1)
-            ).first()
-            is not None
-        )
+        transitioned = row.decision_id in self._decision_closure_ids(conn, [row.decision_id])
         choices = [DecisionChoice(name=c["name"], description=c["description"]) for c in json.loads(row.choices)]
         return DecisionRow(
             decision_id=row.decision_id,

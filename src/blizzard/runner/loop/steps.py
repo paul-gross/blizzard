@@ -30,11 +30,11 @@ from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.held_chunk import HeldChunk
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
-from blizzard.runner.loop.judgement import Judgement
+from blizzard.runner.loop.judgement import Judgement, elicitation_still_pending
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot
-from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import (
     EVENT_RECORDED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
@@ -298,14 +298,14 @@ class Fenced:
 
     taken_over: Container[str]
 
-    def out(self, detail: ChunkDetail, ref: _FenceRef) -> bool:
+    def out(self, view: ChunkStatusView, ref: _FenceRef) -> bool:
         if ref.chunk_id in self.taken_over:
             return False
-        if detail.latest_epoch is not None and detail.latest_epoch > ref.epoch:
+        if view.latest_epoch is not None and view.latest_epoch > ref.epoch:
             return True
         # A restart mints one above the newest epoch THE HUB knows, which excludes a reference whose
         # own mint is still buffered here — so it can land LEVEL with what it displaces.
-        return any(restart.epoch >= ref.epoch for restart in detail.restarts)
+        return any(epoch >= ref.epoch for epoch in view.restart_epochs)
 
 
 class Pull(Step):
@@ -346,15 +346,16 @@ class Pull(Step):
     def _reconcile_leases(self) -> None:
         """Reconcile every active lease against the hub's view of its chunk — abandon it if the hub
         no longer routes it here, park it if the operator paused it (issue #46), preempt it if a
-        restart moved the chunk out from under it (#370). All three share **one** ``get_chunk``
-        per lease, and a transport failure reads as none of them. The pause branch keys on the
+        restart moved the chunk out from under it (#370). All three share **one** ``ctx.chunk_views.get``
+        per lease — a per-tick cache primed at tick start (blizzard#521), not a fresh hub round trip
+        each time — and a transport failure reads as none of them. The pause branch keys on the
         pause *fact*, which an ask-park masks."""
         ctx = self.ctx
         pause_parked = ctx.stores.pause.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
         fenced = Fenced(ctx.stores.takeover.open_takeover_chunk_ids())
         for lease in ctx.stores.lease_record.list_active_leases():
             try:
-                detail = ctx.hub.get_chunk(lease.chunk_id)
+                view = ctx.chunk_views.get(lease.chunk_id)
             except ChunkNotFoundError:
                 # Terminal, not retryable (blizzard#9). Ordered before the HubClientError arm
                 # because it subclasses it, or the 404 would be swallowed as "hub unreachable".
@@ -362,23 +363,24 @@ class Pull(Step):
                 continue
             except HubClientError:
                 continue  # hub unreachable — last-known directive holds; keep working
-            if detail.status == ChunkStatus.STOPPED:
+            if view.status == ChunkStatus.STOPPED:
                 # Honor the terminal fact directly (issue #118), rather than waiting on the
                 # route check below to observe the release.
                 Attempt(ctx, lease).abandon(via="pull")
-            elif detail.route is None or detail.route.runner_id != ctx.config.runner_id:
+            elif view.route_runner_id != ctx.config.runner_id:
                 Attempt(ctx, lease).abandon(via="pull")
-            elif detail.pause is not None:
+            elif view.pause is not None:
                 # A pause outranks a move: the paused chunk keeps its lease, route and epoch, and
                 # the re-entry happens on the tick after the pause lifts.
                 if lease.lease_id not in pause_parked:
                     Attempt(ctx, lease).park_paused(via="pull")
-            elif fenced.out(detail, lease):
+            elif fenced.out(view, lease):
                 Attempt(ctx, lease).preempt(via="pull")
 
     def _reconcile_escalations(self) -> None:
         """Close a local escalation on every arm that supersedes one (domain:
-        escalation.md#Supersession) — one ``get_chunk`` each. An escalated lease is already
+        escalation.md#Supersession) — one ``ctx.chunk_views.get`` each, the same per-tick cache
+        read ``_reconcile_leases`` above makes (blizzard#521). An escalated lease is already
         closed, so ``_reconcile_leases`` above never sees it; the fourth arm, this runner's own
         next lease mint, never reaches this read either, filtered out of ``open_escalations()`` by
         ``LIVE_ESCALATION`` before it gets here. The remaining three collapse into one condition —
@@ -390,22 +392,21 @@ class Pull(Step):
         fenced = Fenced(ctx.stores.takeover.open_takeover_chunk_ids())
         for escalation in ctx.stores.escalations.open_escalations():
             try:
-                detail = ctx.hub.get_chunk(escalation.chunk_id)
+                view = ctx.chunk_views.get(escalation.chunk_id)
             except HubClientError as exc:
                 # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
                 _log.debug("escalation left open — hub unreadable", chunk_id=escalation.chunk_id, error=str(exc))
                 continue
             superseded = (
-                detail.status in TERMINAL_STATUSES
-                or detail.route is None
-                or detail.route.runner_id != ctx.config.runner_id
-                or fenced.out(detail, escalation)
+                view.status in TERMINAL_STATUSES
+                or view.route_runner_id != ctx.config.runner_id
+                or fenced.out(view, escalation)
             )
             if not superseded:
-                _log.debug("escalation left open", chunk_id=escalation.chunk_id, hub_status=detail.status.value)
+                _log.debug("escalation left open", chunk_id=escalation.chunk_id, hub_status=view.status.value)
                 continue
             ctx.stores.escalations.record_escalation_closure(
-                chunk_id=escalation.chunk_id, reason=detail.status.value, at=ctx.clock.now()
+                chunk_id=escalation.chunk_id, reason=view.status.value, at=ctx.clock.now()
             )
             if ctx.events is not None:
                 ctx.events.publish_escalation_changed(
@@ -415,21 +416,22 @@ class Pull(Step):
                 )
 
     def _reconcile_takeovers(self) -> None:
-        """Close an open takeover whose chunk the hub has ended (issue #291) — one ``get_chunk``
-        each. The takeover fact now authorizes the resumed session's worker verbs (D1), so a
-        chunk the hub ends mid-takeover must not leave that authorization standing forever; this
-        is the second, no-person-drives closer alongside the CLI's own end-PATCH. The mark is
-        what keeps the read hub-free (``bzh:facts-not-status``)."""
+        """Close an open takeover whose chunk the hub has ended (issue #291) — one
+        ``ctx.chunk_views.get`` each, the same per-tick cache read the other two reconcile
+        sweeps make (blizzard#521). The takeover fact now authorizes the resumed session's
+        worker verbs (D1), so a chunk the hub ends mid-takeover must not leave that
+        authorization standing forever; this is the second, no-person-drives closer alongside
+        the CLI's own end-PATCH. The mark is what keeps the read hub-free (``bzh:facts-not-status``)."""
         ctx = self.ctx
         for takeover in ctx.stores.takeover.open_takeovers():
             try:
-                detail = ctx.hub.get_chunk(takeover.chunk_id)
+                view = ctx.chunk_views.get(takeover.chunk_id)
             except HubClientError as exc:
                 # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
                 _log.debug("takeover left open — hub unreadable", chunk_id=takeover.chunk_id, error=str(exc))
                 continue
-            if detail.status not in TERMINAL_STATUSES:
-                _log.debug("takeover left open", chunk_id=takeover.chunk_id, hub_status=detail.status.value)
+            if view.status not in TERMINAL_STATUSES:
+                _log.debug("takeover left open", chunk_id=takeover.chunk_id, hub_status=view.status.value)
                 continue
             ctx.stores.takeover.record_takeover_end(takeover_id=takeover.takeover_id, ended_at=ctx.clock.now())
             if ctx.events is not None:
@@ -456,7 +458,7 @@ class Fill(Step):
             )
             return
         slots = ctx.config.max_agents - len(ctx.stores.lease_record.list_active_leases())
-        queue = ReadyQueue(ctx)
+        queue = ReadyQueue.peeked(ctx)  # one hub peek for the whole fill (blizzard#459)
         for _ in range(max(slots, 0)):
             if not queue.claim_one():
                 break
@@ -514,6 +516,10 @@ class Advance(Step):
             return  # not spawned — REAP's residue (guarded by the caller too)
         elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
         if elicitation is not None:
+            if elicitation_still_pending(self.ctx, elicitation):
+                # Live and under the staleness bound — the steady-state case. `collect`
+                # would early-return here anyway; skip the envelope/binding fetch it never uses.
+                return
             judgement = Judgement.of(self.ctx, lease)
             if judgement is not None:
                 judgement.collect(elicitation)

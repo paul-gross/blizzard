@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
@@ -35,17 +35,30 @@ _CP_AFTER_BIND = crashpoint("fill.after-bind.before-claim", "binding recorded; r
 _CP_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds the route; lease not minted")
 
 
-@dataclass(frozen=True)
+@dataclass
 class ReadyQueue:
     """The hub's ready queue, as the source FILL takes work from — peek the head, acquire its
-    environments all-or-nothing, bind them locally, then race for the route."""
+    environments all-or-nothing, bind them locally, then race for the route.
+
+    ``_entries`` is this one ``Fill.run()`` call's own local peeked snapshot (blizzard#459):
+    peeked ONCE via :meth:`peeked`, then selected from and dropped in place by each
+    ``claim_one()`` this run makes, rather than re-peeking the hub per attempt."""
 
     ctx: LoopContext
+    _entries: list[QueuePeekEntry] = field(default_factory=list)
+
+    @classmethod
+    def peeked(cls, ctx: LoopContext) -> ReadyQueue:
+        try:
+            peeked = ctx.hub.peek_queue()
+        except HubClientError:
+            return cls(ctx, _entries=[])
+        return cls(ctx, _entries=list(peeked.entries))
 
     def claim_one(self) -> bool:
         """Claim and start one chunk. ``False`` when nothing more can be filled this tick;
         ``True`` when the caller should peek fresh, whether or not this one started."""
-        entry = self._peek()
+        entry = self._next()
         if entry is None:
             return False
         acquired = self._acquire(entry)
@@ -59,6 +72,15 @@ class ReadyQueue:
             # Ambiguous — the claim may or may not have committed. Releasing the binding here
             # could strand the chunk, so leave it; the next tick resolves it authoritatively.
             return False
+        if outcome.won:
+            self.ctx.chunk_views.invalidate(chunk_id)  # D5 — a later get() this tick sees the win
+        # A dependency block discovered only here, at claim time, is invisible to the peeked
+        # snapshot's own `blocked` field — strict mode must hold at it exactly as it holds at
+        # a statically-known block (F3), so `entry` stays in `_entries` rather than being
+        # dropped before the outcome that would have vetoed the drop was known.
+        strict_dependency_hold = self.ctx.config.queue_strict and outcome.denied_dependency is not None
+        if not strict_dependency_hold:
+            self._entries.remove(entry)
         if outcome.denied_paused is not None:
             # Refused outright, not beaten in the race (issue #44) — stop filling this tick
             # rather than burn the remaining slots on claims that will be refused the same way.
@@ -77,14 +99,16 @@ class ReadyQueue:
             return True
         if outcome.denied_dependency is not None:
             # Stands on an unmet prerequisite (blizzard#458) — not a race loss either.
-            # Undo the binding and move on; it may become claimable again later.
+            # Undo the binding; reach-ahead moves on since it may become claimable again
+            # later, but strict mode stops the whole run here instead of falling through
+            # past a head that is (dynamically) still blocked.
             _log.info(
                 "route claim denied — unmet prerequisite",
                 chunk_id=chunk_id,
                 prerequisite_chunk_id=outcome.denied_dependency.prerequisite_chunk_id,
             )
             self.ctx.env_release.release_binding(chunk_id, acquired)
-            return True
+            return not strict_dependency_hold
         if outcome.conflict is not None or outcome.claimed is None:
             _log.info("route claim lost the race", chunk_id=chunk_id)
             self.ctx.env_release.release_binding(chunk_id, acquired)  # someone else won — undo our binding
@@ -96,25 +120,20 @@ class ReadyQueue:
         Spawner(self.ctx).enter_node(chunk_id, outcome.claimed.envelope, acquired, via="fill")
         return True
 
-    def _peek(self) -> QueuePeekEntry | None:
-        try:
-            peek = self.ctx.hub.peek_queue()
-        except HubClientError:
-            return None  # hub unreachable — try next tick
-        return self._select(peek.entries)
-
-    def _select(self, entries: list[QueuePeekEntry]) -> QueuePeekEntry | None:
-        """Pick this runner's entry out of the whole peeked list (blizzard#459).
-
-        Strict holds at a marked head and yields nothing rather than falling through — an
-        idle tick reads the same as an empty queue at this seam. Reach-ahead (the default)
-        scans the whole list for the first unmarked entry, at any depth."""
-        if not entries:
+    def _next(self) -> QueuePeekEntry | None:
+        """Pick this runner's entry out of this fill's one peeked snapshot (blizzard#459),
+        left in place until ``claim_one()`` knows the outcome and drops it itself (F3) —
+        a later ``claim_one()`` this same ``Fill.run()`` must not silently move past an
+        entry whose outcome is still undetermined. Strict holds at a marked head and
+        yields nothing rather than falling through, exactly as before — an idle tick reads
+        the same as an empty queue at this seam. Reach-ahead (the default) scans for the
+        first unmarked entry."""
+        if not self._entries:
             return None
         if self.ctx.config.queue_strict:
-            head = entries[0]
-            return None if head.blocked is not None else head
-        for entry in entries:
+            head = self._entries[0]
+            return None if head.blocked is not None else head  # not attempted — left in place
+        for entry in self._entries:
             if entry.blocked is None:
                 return entry
         return None
@@ -197,14 +216,14 @@ class InterruptedClaims:
 
     def _reconcile_one(self, chunk_id: str, *, requeued: bool) -> None:
         try:
-            detail = self.ctx.hub.get_chunk(chunk_id)
+            view = self.ctx.chunk_views.get(chunk_id)
         except ChunkNotFoundError:
             _log.warning("hub reports interrupted-claim chunk unknown — releasing envs", chunk_id=chunk_id)
             self.ctx.env_release.release_chunk(chunk_id)
             return
         except HubClientError:
             return  # hub unreachable — the binding is durable; retry next tick
-        ours = detail.route is not None and detail.route.runner_id == self.ctx.config.runner_id
+        ours = view.route_runner_id == self.ctx.config.runner_id
         if requeued:
             # An explicit human decision (issue #53) outranks every other branch below —
             # nothing here should second-guess it.
@@ -213,26 +232,26 @@ class InterruptedClaims:
             else:
                 self._release(chunk_id, "releasing binding — chunk requeued locally but no longer routed here")
             return
-        if detail.decision is not None:
+        if view.decision is not None:
             # A resolved gate keeps its route live, so it looks exactly like an interrupted
             # claim; without this guard the adopt branch would bump the epoch under the human.
             return
         bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)
         if not bindings:
             return
-        if detail.status == ChunkStatus.RUNNING and ours:
+        if view.status == ChunkStatus.RUNNING and ours:
             self._adopt(chunk_id)  # route ours — just spawn the current node
-        elif detail.status == ChunkStatus.READY:
+        elif view.status == ChunkStatus.READY:
             self._reclaim(chunk_id, bindings)  # claim never landed — claim now, reuse the binding
-        elif detail.route is not None and not ours:
+        elif view.route_runner_id is not None and not ours:
             self._release(chunk_id, "releasing binding — another runner won the chunk")
-        elif detail.route is None:
+        elif view.route_runner_id is None:
             # No live route, and neither claimable nor ours to adopt (blizzard#202). Release
             # explicitly instead of matching no branch and leaking the binding forever.
             self._release(
                 chunk_id,
                 "releasing binding — hub reports no live route in a non-ready, non-running state",
-                hub_status=str(detail.status),
+                hub_status=str(view.status),
             )
 
     def _adopt(self, chunk_id: str) -> None:
@@ -253,6 +272,7 @@ class InterruptedClaims:
                 return
             except HubClientError:
                 return  # hub unreachable — the binding is durable; retry next tick
+            self.ctx.chunk_views.invalidate(chunk_id)  # D5 — named alongside the other writes
             self.ctx.stores.tokens.set_route_token(chunk_id, token=rekeyed.route_token, at=self.ctx.clock.now())
         envelope = self._envelope(chunk_id, "adopted")
         if envelope is None:
@@ -293,6 +313,8 @@ class InterruptedClaims:
             outcome = self.ctx.hub.claim_route(claim)
         except HubClientError:
             return  # hub unreachable — the binding is durable; retry next tick
+        if outcome.won:
+            self.ctx.chunk_views.invalidate(chunk_id)  # D5 — a later get() this tick sees the win
         if outcome.denied_paused is not None:
             # Refused outright because this runner is paused upstream, not lost to another
             # runner (issue #44).

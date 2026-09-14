@@ -294,12 +294,12 @@ class Attempt:
         Unreachable hub → ``False``: a transport failure is never read as a detach. A 404 is the
         one exception — terminal, not something to wait out."""
         try:
-            detail = self.ctx.hub.get_chunk(self.lease.chunk_id)
+            view = self.ctx.chunk_views.get(self.lease.chunk_id)
         except ChunkNotFoundError:
             return True  # the chunk no longer exists at the hub — terminal, not retryable
         except HubClientError:
             return False  # hub unreachable — last-known directive holds; keep working
-        return detail.route is None or detail.route.runner_id != self.ctx.config.runner_id
+        return view.route_runner_id != self.ctx.config.runner_id
 
     def close(self, reason: LeaseChangeCause, at: datetime, event: dict[str, object] | None = None) -> None:
         """Close this lease. An ``event`` lands in the outbound buffer in the same transaction

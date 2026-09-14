@@ -94,6 +94,12 @@ _STATUS_FAMILIES: frozenset[str] = frozenset(
 )
 
 
+#: The families a :class:`~blizzard.wire.chunk.ChunkStatusView` reaches — :attr:`_STATUS_FAMILIES`
+#: plus ``usage`` (for :meth:`~blizzard.hub.domain.work.ChunkFacts.usage_total`, the one
+#: reach ``status()`` itself doesn't make). :meth:`ChunkFactsStore.status_facts_for`'s narrowing.
+_TICK_STATUS_FAMILIES: frozenset[str] = _STATUS_FAMILIES | frozenset({"usage"})
+
+
 def _rows(conn, table, batch: Sequence[str] | None, *columns):  # type: ignore[no-untyped-def]
     stmt = select(*columns) if columns else select(table)
     if batch is not None:
@@ -132,6 +138,19 @@ class ChunkFactsStore:
             return {}
         with self._store.read("load_facts_for") as conn:
             return self._load(conn, chunk_ids)
+
+    def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        """`load_facts_for`'s status-only sibling — every id's :class:`ChunkFacts`, keyed
+        by chunk id, reading only :attr:`_STATUS_FAMILIES` plus ``usage`` (the families a
+        :class:`~blizzard.wire.chunk.ChunkStatusView` actually reaches, across
+        :meth:`~blizzard.hub.domain.work.ChunkFacts.status`, ``open_pause``,
+        ``latest_epoch``, ``restarts``, and ``usage_total``) rather than every family
+        :meth:`load_facts_for` loads. An id that doesn't exist or is ephemeral is silently
+        dropped, the same as :meth:`load_facts_for`."""
+        if not chunk_ids:
+            return {}
+        with self._store.read("status_facts_for") as conn:
+            return self._load(conn, chunk_ids, families=_TICK_STATUS_FAMILIES)
 
     def load_all_statuses(self) -> dict[str, ChunkStatus]:
         """Every non-ephemeral chunk's derived :class:`ChunkStatus`, keyed by chunk id —

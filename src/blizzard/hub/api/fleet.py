@@ -10,12 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
+from blizzard.hub.api import chunk_statuses as chunk_statuses_api
 from blizzard.hub.api import chunks as chunks_api
 from blizzard.hub.api import questions as questions_api
 from blizzard.hub.api import queue as queue_api
@@ -37,7 +38,14 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
 )
-from blizzard.wire.chunk import ChunkDetail, ChunkPauseRequest, ChunkSummary, HubAdvanceResponse, WorkItemsView
+from blizzard.wire.chunk import (
+    ChunkDetail,
+    ChunkPauseRequest,
+    ChunkStatusView,
+    ChunkSummary,
+    HubAdvanceResponse,
+    WorkItemsView,
+)
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
@@ -212,6 +220,15 @@ def get_system_artifact_route(name: str, services: Annotated[HubServices, Depend
 def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkDetail:
     """The runner's chunk-status poll — the same aggregate as ``GET /api/chunks/{chunk_id}``."""
     return chunks_api.get_chunk(chunk_id, services)
+
+
+@router.get("/chunk-statuses", response_model=list[ChunkStatusView])
+def get_chunk_statuses(
+    chunk_id: Annotated[list[str], Query()], services: Annotated[HubServices, Depends(get_services)]
+) -> list[ChunkStatusView]:
+    """The runner tick's slim batch status read (blizzard#521) — repeatable ``chunk_id``;
+    an unknown or ephemeral id is omitted, never a 404."""
+    return chunk_statuses_api.chunk_statuses(chunk_id, services)
 
 
 @router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView)

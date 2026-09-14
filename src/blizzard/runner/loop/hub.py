@@ -6,10 +6,11 @@ under ``internal/`` is the reference binding, and a test injects a fake.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
-from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse
+from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
@@ -38,7 +39,10 @@ class HubClientError(RuntimeError):
 class ChunkNotFoundError(HubClientError):
     """The hub reports a chunk unknown (404) — terminal, not transient (blizzard#9).
 
-    Raised only by the two chunk-identified GET reads. Still a
+    Raised by :meth:`IHubClient.get_envelope` and, at the chunk-view cache layer
+    (:mod:`blizzard.runner.loop.chunk_status_cache`, not ``IHubClient`` itself —
+    ``IHubClient.chunk_statuses`` never raises it for an unknown id), by
+    :meth:`~blizzard.runner.loop.chunk_status_cache.IChunkViews.get`. Still a
     :class:`HubClientError`, so an unaware caller degrades to the retry behavior."""
 
 
@@ -60,7 +64,23 @@ class RouteClaimOutcome:
         return self.claimed is not None
 
 
-class IHubClient(Protocol):
+class IChunkStatusReader(Protocol):
+    """The narrow seam :mod:`blizzard.runner.loop.chunk_status_cache`'s two ``IChunkViews``
+    bindings actually call — one method of :class:`IHubClient`'s thirteen (the seam-size
+    ceiling: a new consumer re-types to the capability it calls, not the whole wide client).
+    ``IHubClient`` composes this rather than re-declaring the method (one contract, not two
+    copies free to drift); ``HttpHubClient``/``FakeHub`` satisfy it structurally, with no
+    changes of their own."""
+
+    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
+        """``GET /api/fleet/chunk-statuses`` (repeatable ``chunk_id``) — every requested id
+        present in the store, keyed by ``chunk_id``; an id the hub doesn't know is simply
+        absent, never an error. A transport/5xx failure raises ``HubClientError`` for the
+        whole call."""
+        ...
+
+
+class IHubClient(IChunkStatusReader, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
     def peek_queue(self) -> QueuePeekResponse:
@@ -97,10 +117,6 @@ class IHubClient(Protocol):
         """``GET /api/fleet/chunks/{id}/envelope`` — the idempotent envelope re-read."""
         ...
 
-    def get_chunk(self, chunk_id: str) -> ChunkDetail:
-        """``GET /api/fleet/chunks/{id}`` — the chunk's derived status, polled at a hub node."""
-        ...
-
     def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
         """``POST /api/fleet/chunks/{id}/hub-advance`` — drive a chunk parked at a generic
         hub command node one step (#65/#66).
@@ -133,21 +149,6 @@ class IHubClient(Protocol):
         """``GET /api/fleet/runners/{id}`` — the runner's declarative pause brake.
 
         Read on the outbound pull; never a push into the box."""
-        ...
-
-    def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
-        """``POST /api/fleet/chunks/{id}/leases`` — a ``lease.minted`` fact.
-
-        Reported at every node-step spawn so the hub's epoch fence tracks the runner's."""
-        ...
-
-    def report_escalation(
-        self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str, wrapped_takeover_command: str = ""
-    ) -> None:
-        """``POST /api/fleet/chunks/{id}/escalations`` — retries exhausted.
-
-        Lands the escalation at the hub so the chunk derives ``needs_human`` fleet-wide,
-        carrying the pasteable takeover command and its wrapped equivalent."""
         ...
 
     def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:

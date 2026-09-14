@@ -23,7 +23,7 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.hub import HubClientError, RouteClaimOutcome
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents, SpendCeiling
 from blizzard.runner.loop.tick import tick
-from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
+from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
@@ -59,7 +59,7 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
 
 
 class _BlipOnceHub(FakeHub):
-    """A ``FakeHub`` whose first ``get_chunk`` raises, then serves normally.
+    """A ``FakeHub`` whose first ``chunk_statuses`` raises, then serves normally.
 
     ``FakeHub.down`` is all-or-nothing, which cannot express RESUME's ownership check
     failing while ADVANCE's envelope fetch, a moment later, succeeds."""
@@ -68,11 +68,11 @@ class _BlipOnceHub(FakeHub):
         super().__init__()
         self.get_chunk_calls = 0
 
-    def get_chunk(self, chunk_id: str) -> ChunkDetail:
+    def chunk_statuses(self, chunk_ids):  # type: ignore[no-untyped-def]
         self.get_chunk_calls += 1
         if self.get_chunk_calls == 1:
             raise HubClientError("transient blip during the ownership check")
-        return super().get_chunk(chunk_id)
+        return super().chunk_statuses(chunk_ids)
 
 
 def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
@@ -267,13 +267,11 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
 
 
 def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]
-    return ChunkDetail(
+    return ChunkStatusView(
         chunk_id=chunk,
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id=runner_id, workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id=runner_id,
     )
 
 
@@ -484,13 +482,11 @@ def test_apply_response_next_spawn_suppressed_then_adopted_at_unpause(tmp_path):
     # Unpause; the next FILL's reconcile pass sees the same shape a crashed FILL
     # would leave and adopts it — no deferred-spawn state was needed.
     _pause_locally(store, ctx, paused=False)
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_review",
         latest_epoch=2,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
     )
     hub.envelopes["ch_1"] = next_env
     Fill(ctx).run()
@@ -883,7 +879,6 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
 
     # The one-way door stayed shut: nothing handed to a human, the lease left open.
     assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED] == []
-    assert hub.escalations == []
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.lease_id == "lease_1"  # not closed
 
@@ -911,13 +906,11 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
     probe = FakeProbe(alive={(100, "start-100")})  # a live worker for the pause to kill
     hub = FakeHub()
     hub.paused = False  # the hub's *runner* brake (D-043) is off — not the lever under test
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.PAUSED,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
         pause=PauseView(by="operator", set_at="2026-07-13T12:00:00Z"),
     )
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -943,13 +936,11 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
 
     # The other order proves independence rather than luck: re-pause the chunk, clear the LOCAL
     # brake instead, and it must still not resume.
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.PAUSED,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
         pause=PauseView(by="operator", set_at="2026-07-13T12:05:00Z"),
     )
     _pause_locally(store, ctx, paused=False)

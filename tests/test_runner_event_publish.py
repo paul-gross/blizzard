@@ -34,7 +34,7 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
 )
-from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
+from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.facts import (
     EVENT_RECORDED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
@@ -209,13 +209,11 @@ def test_pull_abandon_publishes_environment_released(tmp_path: Path) -> None:
     events = EventBroker()
     _seed_lease(store, retries_max=2)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.STOPPED,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=None,
+        route_runner_id=None,
     )
     ctx = make_context(
         store,
@@ -351,13 +349,11 @@ def test_attempt_abandon_retiring_an_open_park_does_not_publish_ask_answered(tmp
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.STOPPED,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=None,
+        route_runner_id=None,
     )
     ctx = make_context(
         store,
@@ -425,13 +421,11 @@ def test_pull_reconcile_leases_publishes_lease_changed_dormant_on_operator_pause
     events = EventBroker()
     _seed_lease(store, retries_max=2)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.PAUSED,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
         pause=PauseView(by="operator", set_at="2026-07-16T12:00:00Z"),
     )
     ctx = make_context(
@@ -475,13 +469,11 @@ def test_pull_reconcile_escalations_publishes_escalation_closed(tmp_path: Path) 
     store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.STOPPED,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
     )
     ctx = make_context(
         store,
@@ -573,13 +565,11 @@ def test_pull_reconcile_takeovers_publishes_takeover_closed(tmp_path: Path) -> N
         opened_at=_NOW,
     )
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.STOPPED,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
     )
     ctx = make_context(
         store,

@@ -70,6 +70,28 @@ _CP_AFTER_BUFFER = crashpoint("advance.after-buffer.before-flush", "completion b
 ELICITATION_STALENESS_THRESHOLD = timedelta(minutes=15)
 
 
+def _elicitation_stale(ctx: LoopContext, elicitation: ElicitationRecord) -> bool:
+    return ctx.clock.now() - as_utc(elicitation.first_launched_at) > ELICITATION_STALENESS_THRESHOLD
+
+
+def _elicitation_alive(ctx: LoopContext, elicitation: ElicitationRecord) -> bool:
+    pid, start_time = elicitation.pid, elicitation.process_start_time or ""
+    return pid is not None and ctx.process.is_alive(pid, start_time)
+
+
+def elicitation_still_pending(ctx: LoopContext, elicitation: ElicitationRecord) -> bool:
+    """Read-only mirror of `Judgement.collect`'s own staleness-then-liveness order, for a
+    caller that wants to know whether `collect` would trivially early-return WITHOUT paying
+    for a `Judgement` — the hub envelope fetch and binding read `Judgement.of` unconditionally
+    performs. ``True`` only in the live-and-under-the-bound steady state; stale or exited both
+    return ``False``, the two cases that genuinely need a full `Judgement` to proceed. Shares
+    `_elicitation_stale`/`_elicitation_alive` with `Judgement.collect`, so the two can never
+    diverge on order or thresholds."""
+    if _elicitation_stale(ctx, elicitation):
+        return False
+    return _elicitation_alive(ctx, elicitation)
+
+
 @dataclass(frozen=True)
 class Judgement:
     """One exited worker's node-step, judged — its declared commits confirmed, its ``checks:``
@@ -115,8 +137,10 @@ class Judgement:
             return
 
         produces = ProducesReconciler(self.envelope)
-        attachments = self.ctx.stores.attachments.attachments_for_lease(lease.lease_id)
-        missing = produces.missing(artifacts, attachments)
+        # Names only — this check never reads content (Phase 3 hoist); `_judged` below
+        # still fetches the full `attachments_for_lease` where content is genuinely needed.
+        attached_names = self.ctx.stores.attachments.attachment_names_for_lease(lease.lease_id)
+        missing = produces.missing(artifacts, attached_names)
         if missing and not self.ctx.stores.checks.nudge_fired(lease.lease_id, lease.epoch):
             # Resume-once (issues #113, #422): an exit with `produces:` unmet is resumed, not
             # judged — no verdict elicited, no attempt failed, and no `checks:` run.
@@ -154,8 +178,7 @@ class Judgement:
         because usage recording and completion buffering are already idempotent replays
         under a crash, the same guarantee the once-synchronous elicitation always leaned on."""
         lease = self.lease
-        now = self.ctx.clock.now()
-        if now - as_utc(elicitation.first_launched_at) > ELICITATION_STALENESS_THRESHOLD:
+        if _elicitation_stale(self.ctx, elicitation):
             _log.warning(
                 "elicitation past its staleness bound — failing attempt",
                 chunk_id=lease.chunk_id,
@@ -166,8 +189,7 @@ class Judgement:
             # record itself (D7) — no separate write of our own precedes it.
             Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
             return
-        pid, start_time = elicitation.pid, elicitation.process_start_time or ""
-        if pid is not None and self.ctx.process.is_alive(pid, start_time):
+        if _elicitation_alive(self.ctx, elicitation):
             return
         output = self.ctx.elicitation_files.read(elicitation.output_path)
         if not output or not self.ctx.harness.has_usable_output(output):

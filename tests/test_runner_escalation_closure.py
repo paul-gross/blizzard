@@ -15,7 +15,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Pull
-from blizzard.wire.chunk import ChunkDetail, RestartView, RouteView
+from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -54,13 +54,11 @@ def _seed_escalated(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW): 
 
 
 def _chunk(chunk="ch_1", *, status: ChunkStatus):  # type: ignore[no-untyped-def]
-    return ChunkDetail(
+    return ChunkStatusView(
         chunk_id=chunk,
-        graph_id="gr_1",
         status=status,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
     )
 
 
@@ -147,13 +145,11 @@ def test_pull_closes_an_escalation_the_hub_requeued_away(tmp_path):  # type: ign
     store = _store(tmp_path)
     _seed_escalated(store)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.READY,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=None,
+        route_runner_id=None,
     )
 
     Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
@@ -166,13 +162,11 @@ def test_pull_closes_an_escalation_the_hub_reassigned_to_another_runner(tmp_path
     store = _store(tmp_path)
     _seed_escalated(store)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_build",
         latest_epoch=2,
-        route=RouteView(runner_id="r2", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r2",
     )
 
     Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
@@ -187,19 +181,7 @@ def test_pull_closes_an_escalation_an_operator_restart_moved(tmp_path):  # type:
     store = _store(tmp_path)
     _seed_escalated(store)
     hub = FakeHub()
-    hub.chunks["ch_1"] = _chunk(status=ChunkStatus.WAITING_ON_HUMAN).model_copy(
-        update={
-            "restarts": [
-                RestartView(
-                    to_node_id="nd_build",
-                    graph_id="gr_1",
-                    epoch=1,
-                    restarted_by="op",
-                    recorded_at="2026-07-13T12:00:00Z",
-                )
-            ]
-        }
-    )
+    hub.chunks["ch_1"] = _chunk(status=ChunkStatus.WAITING_ON_HUMAN).model_copy(update={"restart_epochs": [1]})
 
     Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
 

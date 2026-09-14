@@ -16,7 +16,7 @@ from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
-from blizzard.wire.chunk import ChunkDetail, RouteView
+from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -57,13 +57,11 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
 
 
 def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]
-    return ChunkDetail(
+    return ChunkStatusView(
         chunk_id=chunk,
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id=runner_id, workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id=runner_id,
     )
 
 
@@ -244,13 +242,11 @@ def test_resume_abandons_detached_chunk(tmp_path):  # type: ignore[no-untyped-de
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(  # detached: re-derived ready, route released
+    hub.chunks["ch_1"] = ChunkStatusView(  # detached: re-derived ready, route released
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.READY,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=None,
+        route_runner_id=None,
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(

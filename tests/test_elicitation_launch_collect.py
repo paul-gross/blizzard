@@ -102,17 +102,24 @@ def test_collect_passes_over_a_still_running_elicitation(tmp_path):  # type: ign
     _seed_running_lease(store)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     probe = FakeProbe()
-    ctx = _ctx(store, harness=harness, probe=probe)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    hub.claim_outcome = claimed_outcome("ch_1", _build_envelope())
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
 
     Advance(ctx).run()  # launch
     elicitation = store.in_flight_elicitation("lease_1", 1)
     assert elicitation is not None and elicitation.pid is not None
     probe.alive = {(elicitation.pid, elicitation.process_start_time)}  # now script it as running
+    envelope_calls_before = len(hub.get_envelope_calls)
 
     Advance(ctx).run()  # would-be collect pass — must be a no-op
 
     assert store.in_flight_elicitation("lease_1", 1) is not None
     assert store.pending_outbound() == []
+    # Phase 3 hoist: a live, still-pending elicitation collects nothing on this pass, so it
+    # must never pay for `Judgement.of`'s envelope fetch — `collect` would early-return anyway.
+    assert len(hub.get_envelope_calls) == envelope_calls_before
 
 
 def test_lost_elicitation_relaunches_without_consuming_a_retry(tmp_path):  # type: ignore[no-untyped-def]

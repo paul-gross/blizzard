@@ -90,7 +90,7 @@ class DormantSession:
         It is conjoined with ``ours``, so a detached-then-paused chunk still abandons."""
         lease = self.lease
         try:
-            detail = self.ctx.hub.get_chunk(lease.chunk_id)
+            view = self.ctx.chunk_views.get(lease.chunk_id)
         except ChunkNotFoundError:
             # The chunk is gone outright (e.g. a store reset) — terminal, not retryable; abandon
             # now rather than leave the intent open for PULL's lease reconcile to find later.
@@ -100,10 +100,10 @@ class DormantSession:
             # Hub unreachable — the intent is durable and the envs stay held. Resuming blind
             # would risk re-asserting authority over a chunk that may have been reassigned.
             return
-        ours = detail.route is not None and detail.route.runner_id == self.ctx.config.runner_id
-        if ours and detail.pause is not None:
+        ours = view.route_runner_id == self.ctx.config.runner_id
+        if ours and view.pause is not None:
             Attempt(self.ctx, lease).park_paused(via="resume")
-        elif detail.status == ChunkStatus.RUNNING and ours:
+        elif view.status == ChunkStatus.RUNNING and ours:
             self._restart()
         else:
             Attempt(self.ctx, lease).abandon(via="resume")
@@ -153,16 +153,16 @@ class DormantSession:
         if Spawner(self.ctx).suppressed(via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
             return
         try:
-            detail = self.ctx.hub.get_chunk(lease.chunk_id)
+            view = self.ctx.chunk_views.get(lease.chunk_id)
         except ChunkNotFoundError:
             # The chunk is gone outright — not this step's abandon to make; the reconcile sweep
             # owns it and runs ahead of this step in the same tick.
             return
         except HubClientError:
             return  # hub unreachable — the park is durable; retry next tick
-        if detail.pause is not None:
+        if view.pause is not None:
             return  # still paused — the reap clock stays stopped
-        if detail.route is None or detail.route.runner_id != self.ctx.config.runner_id:
+        if view.route_runner_id != self.ctx.config.runner_id:
             return  # detached/reassigned while parked — PULL's sweep abandons it, not this step
         now = self.ctx.clock.now()
         if lease.lease_id in self.ctx.stores.asks.ask_parked_lease_ids():

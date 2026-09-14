@@ -18,7 +18,7 @@ from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLeas
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.loop.steps import Advance, Fill, Reap
-from blizzard.wire.chunk import ChunkDetail, RouteView
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
@@ -167,13 +167,11 @@ def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  # t
     hub = FakeHub()
     hub.envelopes = {"ch_1": make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])}
     # The hub now routes ch_1 to a DIFFERENT runner — a reassignment, not a detach.
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="r2", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r2",
     )
     ctx = make_context(
         store,

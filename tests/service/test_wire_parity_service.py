@@ -41,55 +41,29 @@ def _seed(hub) -> str:
     return resp.json()["chunk_id"]
 
 
-# 1. Dedicated lease report
+# 1. The batch chunk-status read (blizzard#521)
 
 
-def test_report_lease_advances_the_mock_hubs_fence() -> None:
-    bin_dir = require_mock_fleet()
-    hub_port = _free_port()
-    with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:
-        chunk_id = _seed(hub)
-        before = hub.get(f"/api/fleet/chunks/{chunk_id}")
-        assert before.status_code == 200, before.text
-        assert before.json()["latest_epoch"] is None  # a freshly seeded chunk fences at 0
-
-        client.report_lease(chunk_id, epoch=5, runner_id="runner-parity")
-
-        after = hub.get(f"/api/fleet/chunks/{chunk_id}")
-        assert after.status_code == 200, after.text
-        assert after.json()["latest_epoch"] == 5, after.text
-
-
-# 2. Escalation reporting
-
-
-def test_report_escalation_lands_on_the_chunk_detail() -> None:
+def test_chunk_statuses_reads_a_seeded_chunk_and_omits_an_unknown_one() -> None:
     bin_dir = require_mock_fleet()
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:
         chunk_id = _seed(hub)
 
-        client.report_escalation(
-            chunk_id,
-            epoch=3,
-            runner_id="runner-parity",
-            takeover_command="take over",
-            wrapped_takeover_command=f"blizzard runner takeover {chunk_id} --dir /tmp/runner",
-        )
+        found = client.chunk_statuses([chunk_id, "ch_unseeded"])
 
-        detail = hub.get(f"/api/fleet/chunks/{chunk_id}")
-        assert detail.status_code == 200, detail.text
-        escalation = detail.json()["escalation"]
-        assert escalation is not None, detail.text
-        assert escalation["epoch"] == 3
-        assert escalation["takeover_command"] == "take over"
-        assert escalation["wrapped_takeover_command"] == f"blizzard runner takeover {chunk_id} --dir /tmp/runner"
+        assert set(found) == {chunk_id}  # the unknown id is silently absent, never a 404
+        assert found[chunk_id].chunk_id == chunk_id
+
+
+# 2. Escalation reporting, via the fact-push lane
 
 
 def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -> None:
-    """The escalation wire round trip through ``push_facts`` -> ``POST /api/fleet/events``,
-    not the dedicated route above. Real ingest is pinned by
-    ``tests/test_store_and_forward.py`` and ``tests/test_runner_loop.py``."""
+    """The escalation wire round trip through ``push_facts`` -> ``POST /api/fleet/events``
+    — the runner's only path to it (``IHubClient.report_escalation`` had no callers and
+    is gone, blizzard#521). Real ingest is pinned by ``tests/test_store_and_forward.py``
+    and ``tests/test_runner_loop.py``."""
     bin_dir = require_mock_fleet()
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:

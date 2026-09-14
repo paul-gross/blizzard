@@ -16,7 +16,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Advance, Pull, Reap
-from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import ANSWER_DELIVERED, QUESTION_ASKED
 from blizzard.wire.question import QuestionView
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
@@ -347,13 +347,11 @@ def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(t
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.STOPPED,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=None,
+        route_runner_id=None,
     )
     ctx = _ctx(store, hub=hub)
 

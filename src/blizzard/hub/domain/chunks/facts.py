@@ -39,3 +39,11 @@ class IReadChunkFactsRepository(Protocol):
         :meth:`ChunkFacts.status` reaches rather than every family `load_all_facts`
         loads."""
         ...
+
+    def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        """`load_facts_for`'s status-only sibling — every id's :class:`ChunkFacts`, keyed
+        by chunk id, reading only the fact families a
+        :class:`~blizzard.wire.chunk.ChunkStatusView` reaches rather than every family
+        `load_facts_for` loads. An id that doesn't exist or is ephemeral is silently
+        dropped, the same as `load_facts_for`."""
+        ...

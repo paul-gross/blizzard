@@ -3,6 +3,7 @@ a chunk, its capability token, and the per-runner applied-seq high-water mark.""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Protocol
 
@@ -20,6 +21,14 @@ class IReadChunkRouteRepository(Protocol):
         """Every chunk's live route, keyed by chunk id — the bulk counterpart to
         :meth:`route_of` (issue #421), bounded the way ``load_all_facts`` is. A chunk
         with no live route is absent from the dict, as :meth:`route_of` returns ``None``."""
+        ...
+
+    def routes_for(self, chunk_ids: Iterable[str]) -> dict[str, Route]:
+        """The given chunks' live routes, keyed by chunk id — the by-id-set bulk read
+        the runner tick's slim status batch reaches for (blizzard#521), between
+        :meth:`route_of`'s one-chunk read and :meth:`load_all_routes`'s whole-fleet
+        one. A chunk with no live route is absent from the dict, as :meth:`route_of`
+        returns ``None``."""
         ...
 
     def runner_high_water(self, runner_id: str) -> int:

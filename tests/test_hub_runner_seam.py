@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
@@ -117,10 +118,12 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
     # in-process, end to end.
     provider = FakeProvider({"e1": "/ws/e1"})
     probe = FakeProbe(alive={(100, "start-100")})
+    _hub_client = HttpHubClient(hub.client)
     ctx = LoopContext(
         stores=make_stores(store),
         clock=hub.clock,
-        hub=HttpHubClient(hub.client),
+        hub=_hub_client,
+        chunk_views=ReadThroughChunkViews(_hub_client),
         provider=provider,
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         process=probe,
@@ -197,10 +200,12 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
 
     provider = FakeProvider({"e1": "/ws/e1"})
     probe = FakeProbe(alive={(100, "start-100")})
+    _hub_client = HttpHubClient(hub.client)
     ctx = LoopContext(
         stores=make_stores(store),
         clock=hub.clock,
-        hub=HttpHubClient(hub.client),
+        hub=_hub_client,
+        chunk_views=ReadThroughChunkViews(_hub_client),
         provider=provider,
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         process=probe,

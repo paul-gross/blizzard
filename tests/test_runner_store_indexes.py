@@ -23,7 +23,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.tick import tick
-from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
@@ -184,9 +184,7 @@ def test_runner_loop_scenario_never_plans_an_automatic_covering_index(tmp_path: 
         tick(ctx)  # PULL flushes lease.minted; ADVANCE launches the detached elicitation
         tick(ctx)  # ADVANCE collects the elicitation and buffers the completion
         tick(ctx)  # PULL flushes the completion -> deliver hub node; envs held
-        hub.chunks["ch_1"] = ChunkDetail(
-            chunk_id="ch_1", graph_id="gr_1", status=ChunkStatus.DONE, current_node_id="deliver", latest_epoch=1
-        )
+        hub.chunks["ch_1"] = ChunkStatusView(chunk_id="ch_1", status=ChunkStatus.DONE, latest_epoch=1)
         hub.queue = []
         tick(ctx)  # the hub-node poll sees `done` and releases the environment
 

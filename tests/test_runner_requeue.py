@@ -22,7 +22,7 @@ from blizzard.runner.domain.requeue import (
 )
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Fill
-from blizzard.wire.chunk import ChunkDetail, RouteView
+from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
 
 pytestmark = pytest.mark.component
@@ -204,13 +204,11 @@ def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_her
     _service(store).requeue(_scope(store))
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.NEEDS_HUMAN,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="some-other-runner", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="some-other-runner",
     )
     harness = FakeHarness(handle=_HANDLE, verdict=None)
     ctx = make_context(

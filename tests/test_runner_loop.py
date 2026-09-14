@@ -42,7 +42,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
-from blizzard.wire.chunk import ChunkDetail, ChunkUsageTotalView, RouteView
+from blizzard.wire.chunk import ChunkStatusView, ChunkUsageTotalView
 from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import ESCALATION_RECORDED, LEASE_MINTED
@@ -105,14 +105,12 @@ def _chunk_with_cost(  # type: ignore[no-untyped-def]
     route_runner_id="r1",
     epoch=1,
 ):
-    """A hub-derived ``ChunkDetail`` carrying a scripted usage/cost total (issue #61a)."""
-    return ChunkDetail(
+    """A hub-derived ``ChunkStatusView`` carrying a scripted usage/cost total (issue #61a)."""
+    return ChunkStatusView(
         chunk_id=chunk_id,
-        graph_id="gr_1",
         status=status,
-        current_node_id="nd_build",
         latest_epoch=epoch,
-        route=RouteView(runner_id=route_runner_id, workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id=route_runner_id,
         cost=ChunkUsageTotalView(
             input_tokens=0,
             output_tokens=0,
@@ -420,6 +418,43 @@ def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path):  # type: i
 
 
 @pytest.mark.unit
+def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(tmp_path):  # type: ignore[no-untyped-def]
+    """review F3: a dependency block discovered only at claim time — not reflected in the
+    peeked snapshot's own ``blocked`` field, unlike ``test_fill_strict_holds_at_a_marked_head``'s
+    statically-known one — must still hold strict mode at that head. With two open slots and
+    a second, unmarked entry behind it, the whole run must stop at the first claim rather
+    than falling through to attempt the second."""
+    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.wire.route import RouteClaimDependencyDenial
+
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [
+        QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0),
+        QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=1),
+    ]
+    hub.claim_outcome = RouteClaimOutcome(
+        denied_dependency=RouteClaimDependencyDenial(chunk_id="ch_1", prerequisite_chunk_id="ch_0")
+    )
+    provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=2, queue_strict=True),
+    )
+
+    Fill(ctx).run()
+
+    assert [c.chunk_id for c in hub.claims] == ["ch_1"]  # ch_2 never attempted — held behind ch_1
+    assert store.list_active_leases() == []
+    assert harness.spawns == []
+
+
+@pytest.mark.unit
 def test_fill_reaches_past_a_marked_head_by_default(tmp_path):  # type: ignore[no-untyped-def]
     """Reach-ahead (blizzard#459), the default: a marked head is skipped for the first
     unmarked entry, at whatever depth in the peeked list."""
@@ -571,13 +606,11 @@ def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path
     # (e.g. `transitioned`), the observed-in-production shape.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.DONE,
-        current_node_id=None,
         latest_epoch=1,
-        route=None,  # no live route — terminal, hub-side
+        route_runner_id=None,  # no live route — terminal, hub-side
     )
     hub.queue = []  # nothing new to fill — the reconciler is the only path that could act
     ctx = make_context(
@@ -592,6 +625,43 @@ def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path
 
     assert store.held_environment_ids() == []
     assert store.live_tenure_chunk_ids() == []
+
+
+@pytest.mark.unit
+def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills(tmp_path):  # type: ignore[no-untyped-def]
+    """Phase 3 hoist (blizzard#459): one ``Fill.run()`` call peeks the hub ONCE, filling every
+    open slot it can off that one snapshot — not one fresh peek per ``claim_one()`` attempt."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    env = _build_envelope()
+    hub.queue = [
+        QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0),
+        QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=1),
+    ]
+    # `claim_route`'s scripted outcome is the same object for every call, but `claim_one`
+    # only ever reads `entry.chunk_id` (the peeked entry) and `outcome.claimed.envelope`/
+    # `.route_token` off it — never `outcome.claimed.chunk_id` — so one scripted outcome
+    # correctly claims each distinct peeked chunk.
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=2),
+    )
+
+    Fill(ctx).run()
+
+    assert hub.peek_queue_calls == 1  # one hub peek for the whole fill, not one per claim
+    assert len(hub.claims) == 2  # both slots still filled off the one peeked snapshot
+    assert len(harness.spawns) == 2
+    assert store.active_lease_for_chunk("ch_1") is not None
+    assert store.active_lease_for_chunk("ch_2") is not None
+    assert set(store.held_environment_ids()) == {"e1", "e2"}
 
 
 # ADVANCE — exited worker (buffer) + PULL flush (deliver)
@@ -1158,13 +1228,11 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
 
     # --- The graceful-restart re-attach, interleaved: mark, then RESUME in place.
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW + timedelta(seconds=30))
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
     )
     resume_harness = FakeHarness(handle=_HANDLE, verdict="pass")
     Resume(
@@ -1522,11 +1590,9 @@ def test_poll_hub_node_releases_on_done(tmp_path):  # type: ignore[no-untyped-de
     # A chunk held at a hub node: a binding but no active lease.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.DONE,
-        current_node_id="deliver",
         latest_epoch=1,
     )
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -1545,11 +1611,9 @@ def test_poll_hub_node_waits_while_delivering(tmp_path):  # type: ignore[no-unty
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.DELIVERING,
-        current_node_id="deliver",
         latest_epoch=1,
     )
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -1592,12 +1656,9 @@ def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  # type: igno
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_verify",
-        current_node_name="verify",
         latest_epoch=2,  # the coordinator's hub_epoch — ahead of the runner's minted epoch 1
     )
     hub.envelopes["ch_1"] = make_envelope("ch_1", "verify", node_id="nd_verify", choices=_CHOICES)
@@ -1642,12 +1703,9 @@ def test_advance_held_chunk_does_not_respawn_a_buffered_escalation(tmp_path):  #
     hub = FakeHub()
     # The hub has NOT advanced: it still reads running at the SAME epoch the runner minted (2),
     # because the escalation.recorded fact has not flushed yet.
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_build",
-        current_node_name="build",
         latest_epoch=2,
     )
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -2315,11 +2373,9 @@ def test_full_happy_path_across_ticks(tmp_path):  # type: ignore[no-untyped-def]
     assert store.held_environment_ids() == ["e1"]
 
     # The hub's merge queue lands the delivery; nothing left to peek.
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.DONE,
-        current_node_id="deliver",
         latest_epoch=1,
     )
     hub.queue = []
