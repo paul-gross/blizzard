@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
 import { KitButton } from '../kit/kit-button';
+import { KitConfirmDialog } from '../kit/kit-confirm-dialog';
 
 /**
  * The graph detail panel's own header content — the lifecycle text, graph id,
@@ -25,7 +26,7 @@ import { KitButton } from '../kit/kit-button';
 @Component({
   selector: 'fleet-graph-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton],
+  imports: [KitButton, KitConfirmDialog],
   templateUrl: './graph-detail-header.html',
   styleUrl: './graph-detail-header.css',
 })
@@ -43,22 +44,46 @@ export class GraphDetailHeader {
   /** Emitted with the graph id once the operator confirms Enable. */
   readonly enable = output<string>();
 
-  /** Confirm, then emit `retire` for the container's mutation to fire (issue #101). */
+  protected readonly pendingConfirm = signal<{
+    readonly heading: string;
+    readonly message: string;
+    readonly confirmLabel: string;
+    readonly variant: 'primary' | 'danger';
+    readonly run: () => void;
+  } | null>(null);
+
+  /** Open a confirmation before emitting `retire` for the container's mutation to fire (issue #101). */
   protected onRetire(): void {
-    const confirmed = globalThis.confirm(
-      `Retire graph ${this.graphId()}? It is excluded from name resolution and refuses new ` +
+    const graphId = this.graphId();
+    this.pendingConfirm.set({
+      heading: `Retire graph ${graphId}`,
+      message: `Retire graph ${graphId}? It is excluded from name resolution and refuses new ` +
         `re-pins; any chunk already running on it is left to run out.`,
-    );
-    if (!confirmed) return;
-    this.retire.emit(this.graphId());
+      confirmLabel: 'Retire',
+      variant: 'danger',
+      run: () => this.retire.emit(graphId),
+    });
   }
 
-  /** Confirm, then emit `enable` for the container's mutation to fire (issue #101). */
+  /** Open a confirmation before emitting `enable` for the container's mutation to fire (issue #101). */
   protected onEnable(): void {
-    const confirmed = globalThis.confirm(
-      `Re-enable graph ${this.graphId()}? It resumes normal newest-per-name derivation.`,
-    );
-    if (!confirmed) return;
-    this.enable.emit(this.graphId());
+    const graphId = this.graphId();
+    this.pendingConfirm.set({
+      heading: `Re-enable graph ${graphId}`,
+      message: `Re-enable graph ${graphId}? It resumes normal newest-per-name derivation.`,
+      confirmLabel: 'Re-enable',
+      variant: 'primary',
+      run: () => this.enable.emit(graphId),
+    });
+  }
+
+  protected onConfirmed(): void {
+    const pending = this.pendingConfirm();
+    this.pendingConfirm.set(null);
+    pending?.run();
+  }
+
+  protected onCancelled(): void {
+    this.pendingConfirm.set(null);
   }
 }

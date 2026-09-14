@@ -1,7 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { vi } from 'vitest';
 
 import type { ChunkDetail } from '../api/hub';
 import { ChunkDetailHeader } from './chunk-detail-header';
@@ -168,7 +167,6 @@ describe('ChunkDetailHeader', () => {
   });
 
   it('emits detach with the chunk id once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -178,14 +176,13 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe('ch_01routed000000000000000000');
-    confirmSpy.mockRestore();
   });
 
   it('emits nothing when the operator declines the detach confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -195,10 +192,10 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe(false);
-    confirmSpy.mockRestore();
   });
 
   it('still shows a Detach action for a needs_human chunk that still carries a live route (not requeue)', async () => {
@@ -212,7 +209,6 @@ describe('ChunkDetailHeader', () => {
   });
 
   it('does not promise the ready queue in the confirm copy for a needs_human chunk', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ESCALATED_ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -221,10 +217,9 @@ describe('ChunkDetailHeader', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
-    const message = confirmSpy.mock.calls[0][0];
+    await fixture.whenStable();
+    const message = el.querySelector('[data-testid="confirm-dialog"]')?.textContent ?? '';
     expect(message).not.toContain('ready queue');
-    confirmSpy.mockRestore();
   });
 
   // --- Pause / Resume (issue #46) -------------------------------------------
@@ -281,7 +276,6 @@ describe('ChunkDetailHeader', () => {
     fixture.componentRef.setInput('canControl', true);
     let resumed: string | undefined;
     fixture.componentInstance.resumeChunk.subscribe((id) => (resumed = id));
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -291,12 +285,12 @@ describe('ChunkDetailHeader', () => {
     expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
 
     el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     expect(resumed).toBe(ROUTED_DETAIL.chunk_id);
-    confirmSpy.mockRestore();
   });
 
   it('emits pauseChunk with the chunk id once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -306,14 +300,13 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
-    confirmSpy.mockRestore();
   });
 
   it('emits nothing when the operator declines the pause confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -323,14 +316,13 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe(false);
-    confirmSpy.mockRestore();
   });
 
   it('emits nothing when the operator declines the resume confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', pausedDetail('paused'));
     fixture.componentRef.setInput('canControl', true);
@@ -340,14 +332,13 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe(false);
-    confirmSpy.mockRestore();
   });
 
   it('does not claim the claim is given up in the pause confirm copy — that is detach', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -356,10 +347,10 @@ describe('ChunkDetailHeader', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
 
-    const message = confirmSpy.mock.calls[0][0];
+    await fixture.whenStable();
+    const message = el.querySelector('[data-testid="confirm-dialog"]')?.textContent ?? '';
     expect(message).toContain('keeps the');
     expect(message).toContain('claim');
-    confirmSpy.mockRestore();
   });
 
   // --- Complete (issue #294) -------------------------------------------
@@ -404,7 +395,6 @@ describe('ChunkDetailHeader', () => {
   });
 
   it('emits complete with the chunk id once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -414,14 +404,13 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
-    confirmSpy.mockRestore();
   });
 
   it('emits nothing when the operator declines the complete confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -431,14 +420,13 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe(false);
-    confirmSpy.mockRestore();
   });
 
   it('warns there is no un-complete verb in the complete confirm copy', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -447,9 +435,9 @@ describe('ChunkDetailHeader', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
 
-    const message = confirmSpy.mock.calls[0][0];
+    await fixture.whenStable();
+    const message = el.querySelector('[data-testid="confirm-dialog"]')?.textContent ?? '';
     expect(message).toContain('no un-complete verb');
-    confirmSpy.mockRestore();
   });
 
   it('names no edge on the identity line for a chunk carrying none', async () => {
@@ -583,7 +571,6 @@ describe('ChunkDetailHeader', () => {
   });
 
   it('emits declareDependency with the field value once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', DECLARABLE_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -597,16 +584,16 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
     expect(emitted).toEqual({
       chunkId: DECLARABLE_DETAIL.chunk_id,
       prerequisiteChunkId: 'ch_01prereq00000000000000000',
     });
-    confirmSpy.mockRestore();
   });
 
   it('emits nothing when the operator declines the declare confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', DECLARABLE_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -620,14 +607,13 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe(false);
-    confirmSpy.mockRestore();
   });
 
   it('emits releaseDependency with the field value once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', {
       ...ISSUE_DETAIL,
@@ -640,13 +626,13 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="release-dependency"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
     expect(emitted).toEqual({ chunkId: ISSUE_DETAIL.chunk_id, prerequisiteChunkId: 'ch_01prereq00000000000000000' });
-    confirmSpy.mockRestore();
   });
 
-  it('emits nothing when Declare is clicked with a blank field, without prompting to confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+  it('emits nothing when Declare is clicked with a blank field, without opening a dialog', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', DECLARABLE_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -657,9 +643,8 @@ describe('ChunkDetailHeader', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
 
-    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(el.querySelector('[data-testid="confirm-dialog"]')).toBeNull();
     expect(emitted).toBe(false);
-    confirmSpy.mockRestore();
   });
 
   it('keeps an in-progress edit through a same-chunk marking change, but resets on an actual chunk switch (round 3 F1)', async () => {
@@ -741,7 +726,6 @@ describe('ChunkDetailHeader', () => {
   });
 
   it('emits delete with the chunk id once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'ready' });
     fixture.componentRef.setInput('canControl', true);
@@ -751,14 +735,13 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe(ISSUE_DETAIL.chunk_id);
-    confirmSpy.mockRestore();
   });
 
   it('emits nothing when the operator declines the delete confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready' });
     fixture.componentRef.setInput('canControl', true);
@@ -768,14 +751,13 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe(false);
-    confirmSpy.mockRestore();
   });
 
   it('withdraws the hub item(s) with no undo, in the delete confirm copy', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready' });
     fixture.componentRef.setInput('canControl', true);
@@ -784,9 +766,9 @@ describe('ChunkDetailHeader', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
 
-    const message = confirmSpy.mock.calls[0][0];
+    await fixture.whenStable();
+    const message = el.querySelector('[data-testid="confirm-dialog"]')?.textContent ?? '';
     expect(message).toContain('withdraws its hub item(s)');
     expect(message).toContain('no undo');
-    confirmSpy.mockRestore();
   });
 });

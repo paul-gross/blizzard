@@ -5,7 +5,6 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { hubClient, type MeResponse } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
-import { vi } from 'vitest';
 
 import { GardeningScopeDetail } from './gardening-scope-detail';
 
@@ -148,15 +147,15 @@ describe('GardeningScopeDetail', () => {
   });
 
   it('retires a scope through POST /api/scopes/{slug}/retire once confirmed', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { scopeSlug: 'blizzard' } });
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
     expect(stub.forRoute('/api/scopes/blizzard/retire', 'POST')).toHaveLength(1);
-    confirmSpy.mockRestore();
   });
 
   it('reports a failed edit through the panel action-error line rather than swallowing it', async () => {

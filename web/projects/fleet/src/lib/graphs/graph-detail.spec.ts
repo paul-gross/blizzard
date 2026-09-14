@@ -1,7 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { vi } from 'vitest';
 
 import { settle } from '../testing/settle';
 import { client as hubClient } from '../api/hub/client.gen';
@@ -75,7 +74,6 @@ describe('GraphDetail', () => {
   // --- Retire / re-enable mutation wiring (issue #101) -----------------------------
 
   it('fires the retire client call once the header emits retire (operator confirmed)', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await mount('gr_build_v2', (method, path) => {
       if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
       return {};
@@ -83,16 +81,16 @@ describe('GraphDetail', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
     const calls = stub.forRoute('/api/graphs/gr_build_v2/retire', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toMatchObject({ by: 'operator' });
-    confirmSpy.mockRestore();
   });
 
   it('fires the enable client call for a retired graph once the header emits enable (operator confirmed)', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await mount('gr_build_v2', (method, path) => {
       if (method === 'GET' && path === '/api/graphs/gr_build_v2') return { ...GRAPH, enabled: false, retired: true };
       return {};
@@ -100,16 +98,16 @@ describe('GraphDetail', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-enable"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
     const calls = stub.forRoute('/api/graphs/gr_build_v2/enable', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toMatchObject({ by: 'operator' });
-    confirmSpy.mockRestore();
   });
 
   it('surfaces a 409 refusal from retire rather than swallowing it', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await mount('gr_build_v2', (method, path) => {
       if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
       if (method === 'POST' && path === '/api/graphs/gr_build_v2/retire') {
@@ -120,11 +118,12 @@ describe('GraphDetail', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="graph-detail-lifecycle-error"]')?.textContent).toContain(
       'already retired somehow',
     );
-    confirmSpy.mockRestore();
   });
 });

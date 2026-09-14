@@ -278,9 +278,6 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
         with _runner_api(config), sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
             page = browser.new_page()
-            # Dock actions are guarded by a native `confirm()`; Playwright dismisses
-            # dialogs by default, so accept them here or every guarded action no-ops.
-            page.on("dialog", lambda dialog: dialog.accept())
             expect.set_options(timeout=20_000)
             try:
                 # Load the board ONCE; never reloaded. Same-instant chunk ids share a
@@ -476,6 +473,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
                 expect(page.get_by_test_id("detail-id")).to_have_text(chunk_a)
                 page.get_by_test_id("pause-chunk").click()
+                page.get_by_test_id("confirm-dialog-confirm").click()
 
                 # The chip flips to `paused` live, no reload, and the card relocates from
                 # RUNNING to WAIT/HUMAN.
@@ -500,6 +498,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # Pause is gone and Resume stands in its place.
                 expect(page.get_by_test_id("pause-chunk")).to_have_count(0)
                 page.get_by_test_id("resume-chunk").click()
+                page.get_by_test_id("confirm-dialog-confirm").click()
                 expect(page.get_by_test_id("chunk-pause-by")).to_have_count(0)  # the dock live-updates too
 
                 # A few bounded ticks — enough to see forward progress again (issue #46),

@@ -147,7 +147,6 @@ describe('MachineDetail header', () => {
 
   afterEach(() => {
     stub.restore();
-    vi.restoreAllMocks();
   });
 
   it('shows the full chunk id, not the compact shortname or a "chunk detail" label', async () => {
@@ -209,21 +208,20 @@ describe('MachineDetail header', () => {
   });
 
   it('offers Pause for an unpaused, pausable chunk and fires the mutation once confirmed', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const rendered = await render([NEWEST()], HEADER({ status: 'running', pause: null }));
     stub = rendered.stub;
     const { el, fixture } = rendered;
 
     expect(el.querySelector('[data-testid="resume-chunk"]')).toBeNull();
     el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(stub.forRoute(`/api/chunks/${NEWEST().chunk_id}/pause`, 'POST')).toHaveLength(1);
   });
 
   it('offers Resume for a paused chunk and fires the mutation once confirmed', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const rendered = await render(
       [NEWEST()],
       HEADER({ status: 'paused', pause: { by: 'operator', set_at: '2026-07-16T11:00:00.000Z' } }),
@@ -233,22 +231,23 @@ describe('MachineDetail header', () => {
 
     expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
     el.querySelector<HTMLElement>('[data-testid="resume-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(stub.forRoute(`/api/chunks/${NEWEST().chunk_id}/resume`, 'POST')).toHaveLength(1);
   });
 
   it('does not fire the pause mutation when the operator declines the confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const rendered = await render([NEWEST()], HEADER({ status: 'running', pause: null }));
     stub = rendered.stub;
     const { el, fixture } = rendered;
 
     el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="confirm-dialog-cancel"]')?.click();
     await settle(fixture);
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(stub.forRoute(`/api/chunks/${NEWEST().chunk_id}/pause`, 'POST')).toHaveLength(0);
   });
 

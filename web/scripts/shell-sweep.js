@@ -129,6 +129,9 @@
  *     while the page behind it does not, and `CdkTrapFocus` keeps repeated
  *     real `Tab` presses cycling inside the panel rather than escaping to the
  *     page — real layout and focus-management claims jsdom cannot make.
+ *   - projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts — the
+ *     shared confirmation dialog: its Cancel and confirm controls render together
+ *     in the dialog footer and the real focus trap keeps keyboard focus inside the prompt.
  *   - projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts —
  *     the gardening run dialog's own three fields (blizzard#399 D6), at the
  *     phone and desktop widths the dialog is reachable at: the scope field's
@@ -223,6 +226,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposals-page.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },

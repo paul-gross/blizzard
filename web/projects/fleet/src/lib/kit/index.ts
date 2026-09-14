@@ -6,6 +6,7 @@
 export { KitAccordionSection } from './kit-accordion-section';
 export { KitCountBadge } from './kit-count-badge';
 export { KitDialog } from './kit-dialog';
+export { KitConfirmDialog } from './kit-confirm-dialog';
 export { KitFactList, type KitFact } from './kit-fact-list';
 export { KitPanel, KitPanelHeader } from './kit-panel';
 export { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';

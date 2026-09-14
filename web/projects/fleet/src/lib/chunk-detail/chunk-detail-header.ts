@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import type { ChunkDetail, ChunkStatus, PauseView, WorkRefView, RouteView } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { KitButton } from '../kit/kit-button';
+import { KitConfirmDialog } from '../kit/kit-confirm-dialog';
 import { KitTextInput } from '../kit/kit-text-input';
 
 /** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
@@ -70,14 +71,13 @@ export interface DependencyEvent {
  *
  * Presentational only: it holds the detail input and emits `dismiss`,
  * `detach`, `pauseChunk`, `resumeChunk`, `complete`, `delete`,
- * `declareDependency`, and `releaseDependency` (every write but `dismiss`
- * guarded by a `confirm()` — the one browser affordance this dock reaches
- * for); the mutations those events drive live in the container.
+ * `declareDependency`, and `releaseDependency`; the mutations those events
+ * drive live in the container.
  */
 @Component({
   selector: 'fleet-chunk-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitTextInput, RouterLink],
+  imports: [KitButton, KitConfirmDialog, KitTextInput, RouterLink],
   templateUrl: './chunk-detail-header.html',
   styleUrl: './chunk-detail-header.css',
 })
@@ -127,6 +127,14 @@ export class ChunkDetailHeader {
   /** Emitted when the operator confirms releasing the standing dependency on
    * {@link prerequisiteInput} (issue #461). */
   readonly releaseDependency = output<DependencyEvent>();
+
+  protected readonly pendingConfirm = signal<{
+    readonly heading: string;
+    readonly message: string;
+    readonly confirmLabel: string;
+    readonly variant: 'primary' | 'danger';
+    readonly run: () => void;
+  } | null>(null);
 
   /** The chunk's work refs, for the header — each linked out to its source's web
    * address when the configured binding rendered one (a null `web_url` degrades to
@@ -217,85 +225,115 @@ export class ChunkDetailHeader {
     });
   }
 
-  /** Confirm, then emit `detach` for the container's mutation to fire. */
+  /** Open a confirmation before emitting `detach` for the container's mutation to fire. */
   protected onDetach(): void {
     if (!this.route()) return;
-    const confirmed = globalThis.confirm(
-      `Detach chunk ${this.detail().chunk_id} from its runner? This releases the runner; ` +
+    const chunkId = this.detail().chunk_id;
+    this.pendingConfirm.set({
+      heading: `Detach chunk ${chunkId}`,
+      message: `Detach chunk ${chunkId} from its runner? This releases the runner; ` +
         `the chunk keeps its current status (this is not requeue).`,
-    );
-    if (!confirmed) return;
-    this.detach.emit(this.detail().chunk_id);
+      confirmLabel: 'Detach',
+      variant: 'primary',
+      run: () => this.detach.emit(chunkId),
+    });
   }
 
-  /** Confirm, then emit `pauseChunk` for the container's mutation to fire (issue #46). */
+  /** Open a confirmation before emitting `pauseChunk` for the container's mutation to fire (issue #46). */
   protected onPause(): void {
     if (this.pause() || !this.pausable()) return;
-    const confirmed = globalThis.confirm(
-      `Pause chunk ${this.detail().chunk_id}? This kills its active worker but keeps the ` +
+    const chunkId = this.detail().chunk_id;
+    this.pendingConfirm.set({
+      heading: `Pause chunk ${chunkId}`,
+      message: `Pause chunk ${chunkId}? This kills its active worker but keeps the ` +
         `claim (this is not detach); resume it later to pick the work back up.`,
-    );
-    if (!confirmed) return;
-    this.pauseChunk.emit(this.detail().chunk_id);
+      confirmLabel: 'Pause',
+      variant: 'primary',
+      run: () => this.pauseChunk.emit(chunkId),
+    });
   }
 
-  /** Confirm, then emit `resumeChunk` for the container's mutation to fire (issue #46).
+  /** Open a confirmation before emitting `resumeChunk` for the container's mutation to fire (issue #46).
    * Guarded on the pause **fact**, never on `status`. */
   protected onResume(): void {
     if (!this.pause()) return;
-    const confirmed = globalThis.confirm(
-      `Resume chunk ${this.detail().chunk_id}? Its runner picks the work back up from ` +
+    const chunkId = this.detail().chunk_id;
+    this.pendingConfirm.set({
+      heading: `Resume chunk ${chunkId}`,
+      message: `Resume chunk ${chunkId}? Its runner picks the work back up from ` +
         `where the pause stopped it.`,
-    );
-    if (!confirmed) return;
-    this.resumeChunk.emit(this.detail().chunk_id);
+      confirmLabel: 'Resume',
+      variant: 'primary',
+      run: () => this.resumeChunk.emit(chunkId),
+    });
   }
 
-  /** Confirm, then emit `complete` for the container's mutation to fire (issue #294).
+  /** Open a confirmation before emitting `complete` for the container's mutation to fire (issue #294).
    * Unlike Detach/Pause/Resume, this is a one-way door: there is no un-complete verb,
    * and the confirmation says so. */
   protected onComplete(): void {
     if (!this.completable()) return;
-    const confirmed = globalThis.confirm(
-      `Complete chunk ${this.detail().chunk_id}? This marks it done by hand; there is no ` +
-        `un-complete verb.`,
-    );
-    if (!confirmed) return;
-    this.complete.emit(this.detail().chunk_id);
+    const chunkId = this.detail().chunk_id;
+    this.pendingConfirm.set({
+      heading: `Complete chunk ${chunkId}`,
+      message: `Complete chunk ${chunkId}? This marks it done by hand; there is no ` + `un-complete verb.`,
+      confirmLabel: 'Complete',
+      variant: 'danger',
+      run: () => this.complete.emit(chunkId),
+    });
   }
 
-  /** Confirm, then emit `delete` for the container's mutation to fire (D8, issue
+  /** Open a confirmation before emitting `delete` for the container's mutation to fire (D8, issue
    * #364). Withdraws the chunk's hub item(s); there is no undo. */
   protected onDelete(): void {
     if (!this.deletable()) return;
-    const confirmed = globalThis.confirm(
-      `Delete chunk ${this.detail().chunk_id}? This withdraws its hub item(s); there is no undo.`,
-    );
-    if (!confirmed) return;
-    this.delete.emit(this.detail().chunk_id);
+    const chunkId = this.detail().chunk_id;
+    this.pendingConfirm.set({
+      heading: `Delete chunk ${chunkId}`,
+      message: `Delete chunk ${chunkId}? This withdraws its hub item(s); there is no undo.`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+      run: () => this.delete.emit(chunkId),
+    });
   }
 
-  /** Confirm, then emit `declareDependency` for the container's mutation to fire (issue
+  /** Open a confirmation before emitting `declareDependency` for the container's mutation to fire (issue
    * #461). A blank field emits nothing — the hub has no chunk id to resolve. */
   protected onDeclareDependency(): void {
     const prerequisiteChunkId = this.prerequisiteInput().trim();
     if (!prerequisiteChunkId) return;
-    const confirmed = globalThis.confirm(
-      `Declare that chunk ${this.detail().chunk_id} depends on ${prerequisiteChunkId}?`,
-    );
-    if (!confirmed) return;
-    this.declareDependency.emit({ chunkId: this.detail().chunk_id, prerequisiteChunkId });
+    const chunkId = this.detail().chunk_id;
+    this.pendingConfirm.set({
+      heading: `Declare dependency for ${chunkId}`,
+      message: `Declare that chunk ${chunkId} depends on ${prerequisiteChunkId}?`,
+      confirmLabel: 'Declare',
+      variant: 'primary',
+      run: () => this.declareDependency.emit({ chunkId, prerequisiteChunkId }),
+    });
   }
 
-  /** Confirm, then emit `releaseDependency` for the container's mutation to fire (issue
+  /** Open a confirmation before emitting `releaseDependency` for the container's mutation to fire (issue
    * #461). */
   protected onReleaseDependency(): void {
     const prerequisiteChunkId = this.prerequisiteInput().trim();
     if (!prerequisiteChunkId) return;
-    const confirmed = globalThis.confirm(
-      `Release chunk ${this.detail().chunk_id}'s dependency on ${prerequisiteChunkId}?`,
-    );
-    if (!confirmed) return;
-    this.releaseDependency.emit({ chunkId: this.detail().chunk_id, prerequisiteChunkId });
+    const chunkId = this.detail().chunk_id;
+    this.pendingConfirm.set({
+      heading: `Release dependency for ${chunkId}`,
+      message: `Release chunk ${chunkId}'s dependency on ${prerequisiteChunkId}?`,
+      confirmLabel: 'Release',
+      variant: 'primary',
+      run: () => this.releaseDependency.emit({ chunkId, prerequisiteChunkId }),
+    });
+  }
+
+  protected onConfirmed(): void {
+    const pending = this.pendingConfirm();
+    this.pendingConfirm.set(null);
+    pending?.run();
+  }
+
+  protected onCancelled(): void {
+    this.pendingConfirm.set(null);
   }
 }

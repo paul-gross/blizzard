@@ -1,0 +1,14 @@
+:host {
+  display: contents;
+}
+
+.message {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

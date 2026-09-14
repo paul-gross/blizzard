@@ -1,6 +1,5 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { vi } from 'vitest';
 
 import { FleetScopePanel, type ScopePanelVm } from './scope-panel';
 
@@ -80,45 +79,42 @@ describe('FleetScopePanel', () => {
   });
 
   it('emits retire with the slug once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await mount({ canEdit: true });
     const el = fixture.nativeElement as HTMLElement;
     let emitted: string | undefined;
     fixture.componentInstance.retire.subscribe((slug) => (emitted = slug));
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe('blizzard');
-    confirmSpy.mockRestore();
   });
 
   it('emits nothing when the operator cancels the retire confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = await mount({ canEdit: true });
     const el = fixture.nativeElement as HTMLElement;
     let emitted = false;
     fixture.componentInstance.retire.subscribe(() => (emitted = true));
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe(false);
-    confirmSpy.mockRestore();
   });
 
   it('emits enable with the slug once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await mount({ vm: { ...VM, retired: true }, canEdit: true });
     const el = fixture.nativeElement as HTMLElement;
     let emitted: string | undefined;
     fixture.componentInstance.enable.subscribe((slug) => (emitted = slug));
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-enable"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe('blizzard');
-    confirmSpy.mockRestore();
   });
 
   it('lists the routines related to this scope, marking the one that defaults here', async () => {

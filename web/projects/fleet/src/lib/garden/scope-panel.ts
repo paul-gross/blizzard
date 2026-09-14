@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBadge } from '../kit/kit-badge';
 import { KitButton } from '../kit/kit-button';
+import { KitConfirmDialog } from '../kit/kit-confirm-dialog';
 import type { ScopeDescriptionEditEvent } from './scope-list';
 
 /** One routine related to the selected scope — `isDefault` marks whether this scope
@@ -38,7 +39,7 @@ export interface ScopePanelVm {
 @Component({
   selector: 'fleet-scope-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitButton],
+  imports: [KitAsyncState, KitBadge, KitButton, KitConfirmDialog],
   templateUrl: './scope-panel.html',
   styleUrl: './scope-panel.css',
 })
@@ -57,6 +58,14 @@ export class FleetScopePanel {
   readonly retire = output<string>();
   readonly enable = output<string>();
 
+  protected readonly pendingConfirm = signal<{
+    readonly heading: string;
+    readonly message: string;
+    readonly confirmLabel: string;
+    readonly variant: 'primary' | 'danger';
+    readonly run: () => void;
+  } | null>(null);
+
   /** Emit a description edit — no-op on a blank value (`FleetScopeList`'s own
    * guard). */
   protected submitDescription(description: string): void {
@@ -66,23 +75,39 @@ export class FleetScopePanel {
     this.editDescription.emit({ slug, description: trimmed });
   }
 
-  /** Confirm, then emit `retire` for the container's mutation to fire. */
+  /** Open a confirmation before emitting `retire` for the container's mutation to fire. */
   protected onRetire(): void {
     const slug = this.vm()?.slug;
     if (slug === undefined) return;
-    const confirmed = globalThis.confirm(
-      `Retire scope ${slug}? It is removed from every picker; its findings stay live, queryable, and attributable.`,
-    );
-    if (!confirmed) return;
-    this.retire.emit(slug);
+    this.pendingConfirm.set({
+      heading: `Retire scope ${slug}`,
+      message: `Retire scope ${slug}? It is removed from every picker; its findings stay live, queryable, and attributable.`,
+      confirmLabel: 'Retire',
+      variant: 'danger',
+      run: () => this.retire.emit(slug),
+    });
   }
 
-  /** Confirm, then emit `enable` for the container's mutation to fire. */
+  /** Open a confirmation before emitting `enable` for the container's mutation to fire. */
   protected onEnable(): void {
     const slug = this.vm()?.slug;
     if (slug === undefined) return;
-    const confirmed = globalThis.confirm(`Re-enable scope ${slug}? It resumes appearing in every picker.`);
-    if (!confirmed) return;
-    this.enable.emit(slug);
+    this.pendingConfirm.set({
+      heading: `Re-enable scope ${slug}`,
+      message: `Re-enable scope ${slug}? It resumes appearing in every picker.`,
+      confirmLabel: 'Re-enable',
+      variant: 'primary',
+      run: () => this.enable.emit(slug),
+    });
+  }
+
+  protected onConfirmed(): void {
+    const pending = this.pendingConfirm();
+    this.pendingConfirm.set(null);
+    pending?.run();
+  }
+
+  protected onCancelled(): void {
+    this.pendingConfirm.set(null);
   }
 }

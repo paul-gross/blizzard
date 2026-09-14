@@ -1,6 +1,5 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { vi } from 'vitest';
 
 import { GraphDetailHeader } from './graph-detail-header';
 
@@ -56,44 +55,41 @@ describe('GraphDetailHeader', () => {
   });
 
   it('emits retire with the graph id once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await mount({ retired: false });
     const el = fixture.nativeElement as HTMLElement;
     let emitted: string | undefined;
     fixture.componentInstance.retire.subscribe((graphId) => (emitted = graphId));
 
     el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe('gr_build_v2');
-    confirmSpy.mockRestore();
   });
 
   it('emits nothing when the operator cancels the retire confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = await mount({ retired: false });
     const el = fixture.nativeElement as HTMLElement;
     let emitted = false;
     fixture.componentInstance.retire.subscribe(() => (emitted = true));
 
     el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe(false);
-    confirmSpy.mockRestore();
   });
 
   it('emits enable with the graph id once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = await mount({ retired: true });
     const el = fixture.nativeElement as HTMLElement;
     let emitted: string | undefined;
     fixture.componentInstance.enable.subscribe((graphId) => (emitted = graphId));
 
     el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-enable"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(emitted).toBe('gr_build_v2');
-    confirmSpy.mockRestore();
   });
 });

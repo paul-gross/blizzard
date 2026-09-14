@@ -1,0 +1,12 @@
+<fleet-kit-dialog [open]="open()" [ariaLabel]="heading()" [testid]="testid()" (closed)="onCancelled()">
+  <h2 fleetKitDialogHeader>{{ heading() }}</h2>
+
+  <p class="message">{{ message() }}</p>
+
+  <div fleetKitDialogFooter class="footer">
+    <fleet-kit-button [testid]="testid() + '-cancel'" (click)="onCancelled()">Cancel</fleet-kit-button>
+    <fleet-kit-button [variant]="variant()" [testid]="testid() + '-confirm'" (click)="onConfirmed()">
+      {{ confirmLabel() }}
+    </fleet-kit-button>
+  </div>
+</fleet-kit-dialog>

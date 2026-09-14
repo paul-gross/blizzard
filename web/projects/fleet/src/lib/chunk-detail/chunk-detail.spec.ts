@@ -2,7 +2,6 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { vi } from 'vitest';
 
 import type { ChunkDetail as ChunkDetailModel } from '../api/hub';
 import { settle } from '../testing/settle';
@@ -122,6 +121,18 @@ const DELETABLE_DETAIL: ChunkDetailModel = {
   history: [],
   artifacts: [],
 };
+
+async function confirmAction(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>): Promise<void> {
+  await fixture.whenStable();
+  (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')!.click();
+  await fixture.whenStable();
+}
+
+async function cancelAction(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>): Promise<void> {
+  await fixture.whenStable();
+  (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="confirm-dialog-cancel"]')!.click();
+  await fixture.whenStable();
+}
 
 describe('ChunkDetail container', () => {
   let stub: RequestClientStub;
@@ -279,44 +290,42 @@ describe('ChunkDetail container', () => {
   // --- Detach (issue #42) ---------------------------------------------
 
   it('fires the detach client call for a routed chunk once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_routed/detach', 'POST')).toHaveLength(1);
-    confirmSpy.mockRestore();
   });
 
   it('surfaces the 409 "no live route" response rather than swallowing it', async () => {
     detachResponse = stubError(409, { detail: 'chunk ch_routed has no live route' });
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_routed/detach', 'POST')).toHaveLength(1);
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('has no live route');
-    confirmSpy.mockRestore();
   });
 
   it('clears a stale detach error when a different chunk is opened', async () => {
     detachResponse = stubError(409, { detail: 'chunk ch_routed has no live route' });
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
     let el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
     expect(el.querySelector('[data-testid="action-error"]')).not.toBeNull();
 
@@ -324,39 +333,36 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
     el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
-    confirmSpy.mockRestore();
   });
 
   // --- Complete (issue #294) -------------------------------------------
 
   it('fires the complete client call for a chunk once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_routed/complete', 'POST')).toHaveLength(1);
-    confirmSpy.mockRestore();
   });
 
   it('surfaces a complete failure rather than swallowing it', async () => {
     completeResponse = stubError(404, { detail: 'unknown chunk ch_routed' });
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_routed/complete', 'POST')).toHaveLength(1);
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown chunk');
-    confirmSpy.mockRestore();
   });
 
   // --- Declare/release (issue #461) -------------------------------------
@@ -375,148 +381,138 @@ describe('ChunkDetail container', () => {
   }
 
   it('fires the declare client call once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_ready'); // not_ready — a status Declare is actually offered on
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     const calls = stub.forRoute('/api/chunks/ch_ready/dependencies', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ prerequisite_chunk_id: 'ch_prereq', by: 'operator' });
-    confirmSpy.mockRestore();
   });
 
   it('emits nothing when the operator declines the declare confirm', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+    await cancelAction(fixture);
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_ready/dependencies', 'POST')).toHaveLength(0);
-    confirmSpy.mockRestore();
   });
 
   it('fires the release client call once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
     el.querySelector<HTMLButtonElement>('[data-testid="release-dependency"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     const calls = stub.forRoute('/api/chunks/ch_routed/dependencies/release', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ prerequisite_chunk_id: 'ch_prereq', by: 'operator' });
-    confirmSpy.mockRestore();
   });
 
   it('surfaces the dependent-not-editable 409 refusal in the action notice', async () => {
     declareResponse = stubError(409, { detail: 'dependent chunk is not editable at this status' });
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('not editable at this status');
-    confirmSpy.mockRestore();
   });
 
   it('surfaces the would-close-a-cycle 409 refusal in the action notice', async () => {
     declareResponse = stubError(409, {
       detail: 'declaring this edge would close a cycle in the standing dependency graph',
     });
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('would close a cycle');
-    confirmSpy.mockRestore();
   });
 
   it('surfaces the ephemeral-prerequisite 409 refusal in the action notice', async () => {
     declareResponse = stubError(409, {
       detail: 'prerequisite chunk is ephemeral and cannot be named as a prerequisite',
     });
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('ephemeral');
-    confirmSpy.mockRestore();
   });
 
   it('surfaces the unknown-chunk 404 refusal in the action notice', async () => {
     declareResponse = stubError(404, { detail: 'unknown chunk ch_prereq' });
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
     el.querySelector<HTMLButtonElement>('[data-testid="declare-dependency"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown chunk ch_prereq');
-    confirmSpy.mockRestore();
   });
 
   it('surfaces the no-standing-dependency 409 refusal from release in the action notice', async () => {
     releaseResponse = stubError(409, { detail: 'no standing dependency to release' });
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
     const el = await enterPrerequisite(fixture, 'ch_prereq');
 
     el.querySelector<HTMLButtonElement>('[data-testid="release-dependency"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('no standing dependency');
-    confirmSpy.mockRestore();
   });
 
   // --- Delete (D8, issue #364) ------------------------------------------
 
   it('fires the delete client call for an unacquired chunk once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_deletable');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
-    confirmSpy.mockRestore();
   });
 
   it('dismisses the dock on a successful delete, rather than sitting on the now-gone chunk', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_deletable');
     let dismissed = false;
@@ -525,16 +521,15 @@ describe('ChunkDetail container', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
     expect(dismissed).toBe(true);
-    confirmSpy.mockRestore();
   });
 
   it('surfaces a delete failure rather than swallowing it, and does not dismiss', async () => {
     deleteResponse = stubError(409, { detail: 'chunk ch_deletable is already acquired' });
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_deletable');
     let dismissed = false;
@@ -543,12 +538,12 @@ describe('ChunkDetail container', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already acquired');
     expect(dismissed).toBe(false);
-    confirmSpy.mockRestore();
   });
 
   // --- Answering a question, and losing the race for it (issue #165) ---------
@@ -655,25 +650,23 @@ describe('ChunkDetail container', () => {
   // --- Pause / Resume (issue #46) --------------------------------------------
 
   it('fires the pause client call for a running chunk once the operator confirms', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     const calls = stub.forRoute('/api/chunks/ch_routed/pause', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toMatchObject({ by: 'operator' });
-    confirmSpy.mockRestore();
   });
 
   it('fires the resume client call for a paused chunk whose status reads waiting_on_human (issue #46)', async () => {
     // The overlap, end to end through the generated client: the dock reads the pause
     // fact off ChunkDetail, so it offers Resume for a chunk whose status hides the pause.
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_paused');
     await settle(fixture);
@@ -683,25 +676,24 @@ describe('ChunkDetail container', () => {
     expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
 
     el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_paused/resume', 'POST')).toHaveLength(1);
-    confirmSpy.mockRestore();
   });
 
   it('surfaces a 409 refusal from pause in the shared notice rather than swallowing it', async () => {
     pauseResponse = stubError(409, { detail: 'chunk ch_routed is not pausable (delivering)' });
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await confirmAction(fixture);
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('not pausable');
-    confirmSpy.mockRestore();
   });
 
   // --- Graph edit (issue #27; the model edit beside it retired with `Chunk.model`,

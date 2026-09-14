@@ -77,3 +77,16 @@
     </section>
   }
 </fleet-kit-async-state>
+
+@if (pendingConfirm(); as confirm) {
+  <fleet-kit-confirm-dialog
+    [open]="true"
+    [heading]="confirm.heading"
+    [message]="confirm.message"
+    [confirmLabel]="confirm.confirmLabel"
+    [variant]="confirm.variant"
+    testid="confirm-dialog"
+    (confirmed)="onConfirmed()"
+    (cancelled)="onCancelled()"
+  />
+}

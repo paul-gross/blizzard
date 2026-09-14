@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { KitButton, type runnerApi, type Tone } from 'fleet';
+import { KitButton, KitConfirmDialog, type runnerApi, type Tone } from 'fleet';
 
 /**
  * The machine detail dock's header (issue #185) — matches the hub board's own
@@ -18,13 +18,13 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
  * Presentational (`bzh:frontend-container-presentational`): {@link MachineDetail}
  * owns the severable `ChunkDetail` read and the pause mutation, and forwards
  * their data down as plain inputs; this component only renders and, mirroring the
- * hub header's own `onPause`/`onResume`, guards the mutating verbs behind a
- * `confirm()` before emitting {@link pauseChunk}/{@link resumeChunk} upward.
+ * hub header's own `onPause`/`onResume`, asks for confirmation before emitting
+ * {@link pauseChunk}/{@link resumeChunk} upward.
  */
 @Component({
   selector: 'local-machine-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, RouterLink],
+  imports: [KitButton, KitConfirmDialog, RouterLink],
   templateUrl: './machine-detail-header.html',
   styleUrl: './machine-detail-header.css',
 })
@@ -69,25 +69,49 @@ export class MachineDetailHeader {
   /** Emitted with the chunk id once the operator confirms Resume. */
   readonly resumeChunk = output<string>();
 
-  /** Confirm, then emit {@link pauseChunk} — mirrors the hub header's own `onPause`. */
+  protected readonly pendingConfirm = signal<{
+    readonly heading: string;
+    readonly message: string;
+    readonly confirmLabel: string;
+    readonly variant: 'primary' | 'danger';
+    readonly run: () => void;
+  } | null>(null);
+
+  /** Open a confirmation before emitting {@link pauseChunk} — mirrors the hub header's own `onPause`. */
   protected onPause(): void {
     if (this.pause() || !this.pausable()) return;
-    const confirmed = globalThis.confirm(
-      `Pause chunk ${this.chunkId()}? This kills its active worker but keeps the claim ` +
+    const chunkId = this.chunkId();
+    this.pendingConfirm.set({
+      heading: `Pause chunk ${chunkId}`,
+      message: `Pause chunk ${chunkId}? This kills its active worker but keeps the claim ` +
         `(this is not detach); resume it later to pick the work back up.`,
-    );
-    if (!confirmed) return;
-    this.pauseChunk.emit(this.chunkId());
+      confirmLabel: 'Pause',
+      variant: 'primary',
+      run: () => this.pauseChunk.emit(chunkId),
+    });
   }
 
-  /** Confirm, then emit {@link resumeChunk} — mirrors the hub header's own `onResume`. */
+  /** Open a confirmation before emitting {@link resumeChunk} — mirrors the hub header's own `onResume`. */
   protected onResume(): void {
     if (!this.pause()) return;
-    const confirmed = globalThis.confirm(
-      `Resume chunk ${this.chunkId()}? Its runner picks the work back up from where the ` +
+    const chunkId = this.chunkId();
+    this.pendingConfirm.set({
+      heading: `Resume chunk ${chunkId}`,
+      message: `Resume chunk ${chunkId}? Its runner picks the work back up from where the ` +
         `pause stopped it.`,
-    );
-    if (!confirmed) return;
-    this.resumeChunk.emit(this.chunkId());
+      confirmLabel: 'Resume',
+      variant: 'primary',
+      run: () => this.resumeChunk.emit(chunkId),
+    });
+  }
+
+  protected onConfirmed(): void {
+    const pending = this.pendingConfirm();
+    this.pendingConfirm.set(null);
+    pending?.run();
+  }
+
+  protected onCancelled(): void {
+    this.pendingConfirm.set(null);
   }
 }

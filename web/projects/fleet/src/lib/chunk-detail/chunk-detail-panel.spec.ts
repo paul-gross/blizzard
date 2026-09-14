@@ -1,7 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { vi } from 'vitest';
 
 import type { ChunkDetail } from '../api/hub';
 import { ChunkDetailPanel } from './chunk-detail-panel';
@@ -161,7 +160,6 @@ describe('ChunkDetailPanel', () => {
   });
 
   it('emits detach with the chunk id once the operator confirms, through the header', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -171,13 +169,13 @@ describe('ChunkDetailPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
     expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
-    confirmSpy.mockRestore();
   });
 
   it('emits complete with the chunk id once the operator confirms, through the header', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
@@ -187,13 +185,13 @@ describe('ChunkDetailPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
     expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
-    confirmSpy.mockRestore();
   });
 
   it('emits delete with the chunk id once the operator confirms, through the header', async () => {
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'not_ready', route: null });
     fixture.componentRef.setInput('canControl', true);
@@ -203,9 +201,10 @@ describe('ChunkDetailPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
     expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
-    confirmSpy.mockRestore();
   });
 
   it('emits editGraph from the facts column', async () => {
