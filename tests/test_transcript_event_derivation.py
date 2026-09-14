@@ -18,12 +18,14 @@ from sqlalchemy import delete, select
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.analytics.derivation import EventDerivationReconciler, EventDerivationService
+from blizzard.hub.domain.analytics.derivation import EventDerivationReconciler, EventDerivationService, GraphPins
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION, KIND_FILE_READ
 from blizzard.hub.domain.transcripts import SegmentRecord
 from blizzard.hub.domain.work import Chunk
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from tests.support import chunk_stores, count_queries, hub_store_connections
@@ -158,6 +160,85 @@ def test_the_derived_events_graph_id_resolves_from_the_matching_transition(fixtu
     assert row.graph_id == "gr_mint"  # the only transition recorded — no migration in this fixture
 
 
+def test_the_derived_events_graph_id_falls_back_to_the_mint_pin_with_no_matching_transition(
+    fixture: _Fixture,
+) -> None:
+    """A chunk with no transition matching the segment's ``(node_id, epoch)`` resolves
+    its graph via the mint-pin fallback (D4) — proven here through a chunk minted with
+    no transition recorded at all."""
+    fixture.chunks.record.mint(Chunk(chunk_id="ch_unmoved", graph_id="gr_unmoved", work_refs=[], minted_at=_NOW))
+    fixture.segments.insert_accepted(
+        _segment_record(segment_id="sg_unmoved", chunk_id="ch_unmoved"), byte_count=10, codec="zlib", at=_NOW
+    )
+
+    fixture.reconciler.sweep()
+
+    [row] = [r for r in fixture.stored_events() if r.chunk_id == "ch_unmoved"]
+    assert row.graph_id == "gr_unmoved"
+
+
+class _CountingFactsStore(ChunkFactsStore):
+    def __init__(self, store, clock) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(store, clock)
+        self.load_facts_calls = 0
+        self.load_facts_for_calls = 0
+
+    def load_facts(self, chunk_id: str):  # type: ignore[no-untyped-def]
+        self.load_facts_calls += 1
+        return super().load_facts(chunk_id)
+
+    def load_facts_for(self, chunk_ids):  # type: ignore[no-untyped-def]
+        self.load_facts_for_calls += 1
+        return super().load_facts_for(chunk_ids)
+
+
+class _CountingRecordStore(ChunkRecordStore):
+    def __init__(self, store, clock, *, facts) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(store, clock, facts=facts)
+        self.get_calls = 0
+        self.graph_id_of_many_calls = 0
+
+    def get(self, chunk_id: str):  # type: ignore[no-untyped-def]
+        self.get_calls += 1
+        return super().get(chunk_id)
+
+    def graph_id_of_many(self, chunk_ids):  # type: ignore[no-untyped-def]
+        self.graph_id_of_many_calls += 1
+        return super().graph_id_of_many(chunk_ids)
+
+
+def test_sweep_resolves_graph_pins_with_one_load_facts_for_and_one_graph_id_of_many_call(
+    fixture: _Fixture,
+) -> None:
+    """A pass over several segments spanning several chunks — including two segments on
+    the same chunk — resolves every graph pin through one bulk `load_facts_for` call and
+    one bulk `graph_id_of_many` call, never the per-chunk `load_facts`/`record.get`
+    (Phase 4)."""
+    for i in range(3):
+        fixture.mint_chunk(f"ch_multi_{i}")
+        fixture.segments.insert_accepted(
+            _segment_record(segment_id=f"sg_multi_{i}", chunk_id=f"ch_multi_{i}"), byte_count=10, codec="zlib", at=_NOW
+        )
+    fixture.segments.insert_accepted(
+        _segment_record(segment_id="sg_multi_0b", chunk_id="ch_multi_0"), byte_count=10, codec="zlib", at=_NOW
+    )
+
+    counting_facts = _CountingFactsStore(hub_store_connections(fixture.engine), fixture.clock)
+    counting_record = _CountingRecordStore(hub_store_connections(fixture.engine), fixture.clock, facts=counting_facts)
+    service = EventDerivationService(
+        events=fixture.events, facts=counting_facts, record=counting_record, clock=fixture.clock
+    )
+    reconciler = EventDerivationReconciler(service=service, events=fixture.events, clock=fixture.clock)
+
+    reconciler.sweep()
+
+    assert len(fixture.stored_events()) == 4
+    assert counting_facts.load_facts_for_calls == 1
+    assert counting_record.graph_id_of_many_calls == 1
+    assert counting_facts.load_facts_calls == 0
+    assert counting_record.get_calls == 0
+
+
 def test_candidate_segment_ids_narrows_to_the_given_chunk(fixture: _Fixture) -> None:
     """The re-derive route's chunk-scoped call (blizzard#254 D7)."""
     fixture.mint_chunk("ch_2")
@@ -230,13 +311,15 @@ def test_derive_segment_reports_true_for_a_segment_with_derivation_input(fixture
     a derivable segment reports it actually derived."""
     fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
 
-    assert fixture.service.derive_segment("sg_1") is True
+    pins = fixture.service.graph_pins_for(["sg_1"])
+    assert fixture.service.derive_segment("sg_1", pins) is True
 
 
 def test_derive_segment_reports_false_for_a_segment_with_no_derivation_input(fixture: _Fixture) -> None:
     """An unknown segment id — a typo, a stale id, one never ingested — is the no-op the
     route must not report as ``derived: 1`` (blizzard#321)."""
-    assert fixture.service.derive_segment("sg_does_not_exist") is False
+    pins = fixture.service.graph_pins_for(["sg_does_not_exist"])
+    assert fixture.service.derive_segment("sg_does_not_exist", pins) is False
     assert fixture.stored_events() == []
 
 
@@ -300,7 +383,8 @@ def test_forcing_a_segment_whose_chunk_does_not_resolve_is_a_no_op_rather_than_a
     fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
     fixture.drop_chunk_row("ch_1")
 
-    assert fixture.service.derive_segment("sg_1") is False
+    pins = fixture.service.graph_pins_for(["sg_1"])
+    assert fixture.service.derive_segment("sg_1", pins) is False
     assert fixture.stored_events() == []
 
 
@@ -311,10 +395,10 @@ class _PoisonedService(EventDerivationService):
         super().__init__(**kwargs)
         self._poison = poison
 
-    def derive_segment(self, segment_id: str) -> bool:
+    def derive_segment(self, segment_id: str, pins: GraphPins) -> bool:
         if segment_id == self._poison:
             raise RuntimeError("underivable")
-        return super().derive_segment(segment_id)
+        return super().derive_segment(segment_id, pins)
 
 
 def test_one_underivable_segment_does_not_cost_the_rest_of_the_tick(fixture: _Fixture) -> None:

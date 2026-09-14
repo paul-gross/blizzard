@@ -72,13 +72,15 @@ def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends
         )
     service = services.event_derivation_service
     if request.segment_id is not None:
-        derived = service.derive_segment(request.segment_id)
+        pins = service.graph_pins_for([request.segment_id])
+        derived = service.derive_segment(request.segment_id, pins)
         return ReDeriveResponse(derived=1 if derived else 0, remaining=0)
 
     candidates = service.candidate_segment_ids(chunk_id=request.chunk_id)
     to_derive = candidates[: request.limit]
+    pins = service.graph_pins_for(to_derive)
     for segment_id in to_derive:
-        service.derive_segment(segment_id)
+        service.derive_segment(segment_id, pins)
     return ReDeriveResponse(derived=len(to_derive), remaining=len(candidates) - len(to_derive))
 
 
