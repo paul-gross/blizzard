@@ -9,10 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 
-#: The per-statement id-batch cap every batched read seam shares. Read live, by name,
-#: inside :func:`id_batches`'s own body rather than captured as a default argument, so a
-#: test can `monkeypatch.setattr` this module's own attribute and lower it without
-#: needing to seed hundreds of rows to exercise a batch boundary.
+#: Read live, by name, rather than captured as a default argument, so a test can lower it
+#: via `monkeypatch.setattr` instead of seeding hundreds of rows to hit a batch boundary.
 BATCH_SIZE = 500
 
 

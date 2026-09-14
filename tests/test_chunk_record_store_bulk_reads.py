@@ -1,11 +1,9 @@
 """``ChunkRecordStore``'s batch reads — ``get_many``, ``graph_id_of_many``, and
 ``list_ready``/``list_not_ready``'s optional ``statuses`` (component tier).
 
-Proves each batch read matches its singular per-id sibling across a normal id, an
-ephemeral (grouped or deleted) id, and an id never minted at all; that each is correct
-across a lowered ``BATCH_SIZE`` boundary; and that supplying ``list_ready``/
-``list_not_ready`` a precomputed ``statuses`` map short-circuits the facts read
-``_listed_with_status`` otherwise makes, entirely."""
+Proves each batch read matches its singular sibling for a normal, ephemeral, and unminted
+id, stays correct across a lowered ``BATCH_SIZE`` boundary, and that a precomputed
+``statuses`` map short-circuits ``_listed_with_status``'s own facts read entirely."""
 
 from __future__ import annotations
 

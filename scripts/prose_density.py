@@ -1,9 +1,10 @@
 """Comment/docstring density: per-root growth ratchet + per-block caps (issue #270).
 
-measure [--write-baseline] ROOTS...  report (or record) per-root prose totals.
+measure [--write-baseline] ROOTS...  report (or record) per-root prose totals, including
+                                      each file's `bzh:prose-budget` over-cap block count.
 check ROOTS...                       exit 1 when a root's prose grows over the baseline.
-check --blocks ROOTS...              additionally exit 1 on any block over its
-`bzh:prose-budget` cap, each named as file:line.
+check --blocks ROOTS...              additionally exit 1 when a file's over-cap block
+count grows past its baseline, naming every current violation in that file as file:line.
 """
 
 from __future__ import annotations
@@ -115,7 +116,12 @@ def _measure_file(path: Path) -> dict[str, int]:
         docstrings = _docstring_lines(ast.parse(src))
     except SyntaxError:
         docstrings = 0
-    return {"total": total, "comments": len(comment_lines), "docstrings": docstrings}
+    return {
+        "total": total,
+        "comments": len(comment_lines),
+        "docstrings": docstrings,
+        "over_cap": len(_over_cap_blocks(path)),
+    }
 
 
 def _measure_root(root: Path) -> dict[str, dict[str, int]]:
@@ -157,15 +163,18 @@ def main() -> int:
             print(f"baseline written: {BASELINE}")
         return 0
 
+    baseline = json.loads(BASELINE.read_text())
+
     over_cap = False
     if args.blocks:
-        for root in args.roots:
-            for f in sorted(Path(root).rglob("*.py")):
-                for violation in _over_cap_blocks(f):
-                    print(violation)
+        for root, files in report.items():
+            base_files = baseline.get(root, {})
+            for name, m in files.items():
+                base_over = base_files.get(name, {}).get("over_cap", 0)
+                if m["over_cap"] > base_over:
                     over_cap = True
-
-    baseline = json.loads(BASELINE.read_text())
+                    for violation in _over_cap_blocks(Path(root) / name):
+                        print(violation)
     grew = False
     for root, files in report.items():
         base_files = baseline.get(root)

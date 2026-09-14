@@ -1,10 +1,9 @@
 """``ChunkWorkRefsStore.live_holders`` — ``find_live_holder``'s batched sibling
 (component tier).
 
-Proves the batch read agrees with calling ``find_live_holder`` once per pointer, across
-a live holder, a holder grouped away, a holder at a terminal status, and a pointer no
-chunk ever held at all — the last three each contributing no entry to the result, not a
-``None`` value — and that it stays correct across a lowered ``BATCH_SIZE`` boundary."""
+Proves the batch read agrees with ``find_live_holder`` per pointer — a grouped holder, a
+terminal-status holder, and an unheld pointer each contribute no entry, not ``None`` —
+and that it stays correct across a lowered ``BATCH_SIZE`` boundary."""
 
 from __future__ import annotations
 

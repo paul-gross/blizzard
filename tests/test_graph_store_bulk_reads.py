@@ -1,10 +1,9 @@
 """``GraphStore``'s narrow projections — ``load_graph_names``, ``load_node_names``,
 ``list_summaries``, and ``graph_id_of_enabled_name`` (component tier).
 
-Each agrees with its fully-reified sibling (``get``/``get_enabled_by_name``/
-``list_all``) across two minted graphs, one of them retired; ``load_graph_names`` and
-``load_node_names`` are also proven correct across a lowered ``BATCH_SIZE`` boundary,
-the ``tests/test_chunk_record_store_bulk_reads.py`` shape."""
+Each agrees with its fully-reified sibling (``get``/``get_enabled_by_name``/``list_all``)
+across two minted graphs, one retired; the two batch methods are also proven correct
+across a lowered ``BATCH_SIZE`` boundary."""
 
 from __future__ import annotations
 

@@ -350,9 +350,8 @@ def test_ephemeral_ids_evaluated_at_most_once_per_bulk_read(tmp_path: Path, monk
         calls["n"] += 1
         return original(conn)
 
-    # `load_all_facts`'s exclusion now runs through `chunk_rows.graph_id_of_batch`,
-    # lifted out of this module's own former private staticmethod — patched at its
-    # new home rather than this module's.
+    # `load_all_facts`'s exclusion runs through `chunk_rows.graph_id_of_batch` now,
+    # so this patches `chunk_rows`, not this module's own former staticmethod.
     monkeypatch.setattr(chunk_rows_module, "ephemeral_ids", counting)
 
     store.facts.load_all_facts()
@@ -459,12 +458,9 @@ def test_load_all_statuses_matches_load_all_facts_status_across_every_derived_st
 
 
 def test_status_is_insensitive_to_every_non_status_family(tmp_path: Path) -> None:
-    """The mechanical binding `_STATUS_FAMILIES`'s own comment otherwise only asserts in
-    prose: every family `_ALL_FAMILIES` carries beyond `_STATUS_FAMILIES` is populated
-    with a value that would change `.status()` were it (incorrectly) read, and `.status()`
-    must come back unchanged. A future `ChunkFacts.status` reading one of these families
-    without adding it to `_STATUS_FAMILIES` fails this test, not just `load_all_statuses`
-    silently under-reading in production."""
+    """Every family `_ALL_FAMILIES` carries beyond `_STATUS_FAMILIES` is populated with a
+    value that would change `.status()` if it were (incorrectly) read; `.status()` must come
+    back unchanged, mechanically pinning `_STATUS_FAMILIES` against `.status()`'s own reach."""
     non_status = _ALL_FAMILIES - _STATUS_FAMILIES
     assert non_status == {
         "delivery_landed",

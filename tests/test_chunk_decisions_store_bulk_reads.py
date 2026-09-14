@@ -1,12 +1,9 @@
 """``ChunkDecisionsStore.dockets_for_chunks`` — ``_pending_proposals``'s batched sibling
 (component tier).
 
-Proves the batch read returns, for every requested chunk, exactly what
-``decision_for_chunk`` would carry as its own docket — including a chunk with no
-proposals at all, mapped to an empty list rather than an absent key — that a judged
-proposal is excluded the same way, that it stays correct across a lowered
-``BATCH_SIZE`` boundary, and that the global judged-set read costs one statement total
-rather than one per batch."""
+Proves each chunk's docket matches ``decision_for_chunk`` exactly — including an empty
+list for a chunk with no proposals and exclusion of judged proposals — across a lowered
+``BATCH_SIZE`` boundary, with the global judged-set read costing one statement total."""
 
 from __future__ import annotations
 

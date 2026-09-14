@@ -73,12 +73,8 @@ _ALL_FAMILIES: frozenset[str] = frozenset(
     }
 )
 
-#: Exactly the families `ChunkFacts.status` reaches (`domain/work.py`): movement,
-#: promotion, stop/completion, the open-pr terminal fact, escalation supersession,
-#: routes, questions/decisions, pauses. Never `landed_repos`, `delivery_landed`,
-#: `pr_opened`, `usage`, `bounces`, `hub_node_polls` or `route_tokens_minted` — bound to
-#: `status`'s own behavior by `test_status_is_insensitive_to_every_non_status_family`,
-#: not just this comment.
+#: Exactly the families `ChunkFacts.status()` reaches — pinned against `.status()` itself
+#: by `test_status_is_insensitive_to_every_non_status_family`, not just this comment.
 _STATUS_FAMILIES: frozenset[str] = frozenset(
     {
         "promoted",
@@ -260,9 +256,8 @@ class ChunkFactsStore:
         decisions: dict[str, list[DecisionFact]] = defaultdict(list)
         if "decisions" in families:
             decision_rows = _rows(conn, s.decisions, batch)
-            # A decision's resolution can also come from an operator restart superseding it
-            # (#370) — `restart_rows` only carries that signal when `restarts` is itself
-            # among the requested families, which every current caller of this branch does.
+            # A decision can also resolve via an operator restart superseding it — only signaled
+            # when `restarts` is itself among the requested families, true of every current caller.
             if batch is None:
                 resolved_ids = {
                     r.decision_id for r in conn.execute(select(s.decision_resolutions.c.decision_id)).all()

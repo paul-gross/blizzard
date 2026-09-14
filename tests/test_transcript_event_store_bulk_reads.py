@@ -1,11 +1,9 @@
 """``TranscriptEventStore``'s batch reads — ``derivation_markers``,
 ``segment_derivation_inputs``, and ``segment_contexts`` (component tier).
 
-Proves each batch read agrees with its singular per-id sibling; that
-``segment_derivation_inputs``/``segment_contexts`` are correct across a lowered
-``BATCH_SIZE`` boundary; that a segment whose content fails to decode stays out of a
-``segment_derivation_inputs`` result without costing the rest of the batch; and that
-``segment_contexts`` never selects the ``content`` column."""
+Proves each agrees with its singular sibling across a lowered ``BATCH_SIZE`` boundary; a
+segment that fails to decode stays out of ``segment_derivation_inputs`` without costing
+the rest of the batch; and ``segment_contexts`` never selects ``content``."""
 
 from __future__ import annotations
 

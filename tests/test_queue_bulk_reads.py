@@ -104,9 +104,8 @@ def test_peek_reads_facts_in_bulk_and_never_per_chunk(tmp_path: Path, path: str,
 
     assert resp.status_code == 200, resp.text
     assert len(resp.json()["entries"]) == 2
-    # The candidate list resolves via `load_all_statuses`, no longer `load_all_facts`
-    # — the list route only needs each chunk's derived status — while the blocked
-    # marking (issue #457) still needs each chunk's full fact history.
+    # The candidate list resolves via `load_all_statuses` now, not `load_all_facts` — it
+    # only needs each chunk's derived status; blocked marking still needs the full history.
     assert counting.load_all_statuses_calls == 1
     assert counting.load_all_facts_calls == 1
     assert counting.load_facts_calls == 0
