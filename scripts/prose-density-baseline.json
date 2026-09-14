@@ -1374,8 +1374,8 @@
   },
   "blizzard/hub/domain/analytics/events.py": {
    "comments": 5,
-   "docstrings": 68,
-   "total": 203
+   "docstrings": 67,
+   "total": 202
   },
   "blizzard/hub/domain/analytics/extraction.py": {
    "comments": 7,
@@ -1469,8 +1469,8 @@
   },
   "blizzard/hub/domain/chunks/record.py": {
    "comments": 0,
-   "docstrings": 27,
-   "total": 66
+   "docstrings": 29,
+   "total": 68
   },
   "blizzard/hub/domain/chunks/route.py": {
    "comments": 0,
@@ -1834,8 +1834,8 @@
   },
   "blizzard/hub/store/internal/batching.py": {
    "comments": 4,
-   "docstrings": 8,
-   "total": 26
+   "docstrings": 7,
+   "total": 22
   },
   "blizzard/hub/store/internal/chunk_artifacts_store.py": {
    "comments": 2,
@@ -1844,8 +1844,8 @@
   },
   "blizzard/hub/store/internal/chunk_decisions_store.py": {
    "comments": 12,
-   "docstrings": 11,
-   "total": 257
+   "docstrings": 18,
+   "total": 250
   },
   "blizzard/hub/store/internal/chunk_delivery_store.py": {
    "comments": 2,
@@ -1868,9 +1868,9 @@
    "total": 630
   },
   "blizzard/hub/store/internal/chunk_facts_store.py": {
-   "comments": 21,
-   "docstrings": 26,
-   "total": 455
+   "comments": 22,
+   "docstrings": 28,
+   "total": 462
   },
   "blizzard/hub/store/internal/chunk_hub_exec_store.py": {
    "comments": 5,
@@ -1899,8 +1899,8 @@
   },
   "blizzard/hub/store/internal/chunk_record_store.py": {
    "comments": 2,
-   "docstrings": 31,
-   "total": 182
+   "docstrings": 30,
+   "total": 179
   },
   "blizzard/hub/store/internal/chunk_route_store.py": {
    "comments": 0,
@@ -1908,9 +1908,9 @@
    "total": 178
   },
   "blizzard/hub/store/internal/chunk_rows.py": {
-   "comments": 17,
-   "docstrings": 81,
-   "total": 441
+   "comments": 18,
+   "docstrings": 85,
+   "total": 442
   },
   "blizzard/hub/store/internal/chunk_store_factory.py": {
    "comments": 0,
@@ -1923,9 +1923,9 @@
    "total": 89
   },
   "blizzard/hub/store/internal/chunk_work_refs_store.py": {
-   "comments": 6,
+   "comments": 10,
    "docstrings": 15,
-   "total": 141
+   "total": 145
   },
   "blizzard/hub/store/internal/finding_store.py": {
    "comments": 7,
@@ -1964,8 +1964,8 @@
   },
   "blizzard/hub/store/internal/graph_store.py": {
    "comments": 9,
-   "docstrings": 42,
-   "total": 481
+   "docstrings": 41,
+   "total": 478
   },
   "blizzard/hub/store/internal/routine_scope_store.py": {
    "comments": 1,
@@ -1994,8 +1994,8 @@
   },
   "blizzard/hub/store/internal/transcript_event_store.py": {
    "comments": 8,
-   "docstrings": 29,
-   "total": 425
+   "docstrings": 34,
+   "total": 430
   },
   "blizzard/hub/store/internal/transcript_segment_store.py": {
    "comments": 15,
@@ -4510,9 +4510,9 @@
    "total": 231
   },
   "test_chunk_decisions_store_bulk_reads.py": {
-   "comments": 2,
+   "comments": 4,
    "docstrings": 9,
-   "total": 161
+   "total": 181
   },
   "test_chunk_delete_route.py": {
    "comments": 3,
@@ -5456,8 +5456,8 @@
   },
   "test_load_all_facts_store.py": {
    "comments": 32,
-   "docstrings": 16,
-   "total": 522
+   "docstrings": 22,
+   "total": 580
   },
   "test_load_all_routes_store.py": {
    "comments": 4,
@@ -6320,9 +6320,9 @@
    "total": 538
   },
   "test_transcript_event_store_bulk_reads.py": {
-   "comments": 5,
+   "comments": 7,
    "docstrings": 8,
-   "total": 233
+   "total": 238
   },
   "test_transcript_ingest_service.py": {
    "comments": 12,

@@ -334,11 +334,10 @@ class GraphStore:
 
     def load_node_names(self, graph_ids: Sequence[str]) -> dict[str, str]:
         """``{node_id: name}`` for every node belonging to any of ``graph_ids``. Keyed by
-        bare ``node_id``, not ``(graph_id, node_id)``: a node id is a freshly-minted
-        ULID at authoring time, globally unique across every graph in practice, and the
-        caller here already knows which graphs it asked about — unlike
-        ``chunk_facts_store.py``'s executor map, which keys by ``(graph_id, node_id)``
-        because it merges chunks pointing at *different* graphs into one dict."""
+        bare ``node_id``: unlike ``chunk_facts_store.py``'s executor map — which merges
+        chunks pointing at *different* graphs and so keys by ``(graph_id, node_id)`` — a
+        node id is a freshly-minted, globally-unique ULID, and the caller already knows
+        which graphs it asked about."""
         if not graph_ids:
             return {}
         result: dict[str, str] = {}

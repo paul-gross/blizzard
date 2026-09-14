@@ -1,10 +1,9 @@
 """Shared id-batching for every bulk read seam (package-private).
 
-Every batch read that filters a family query by a caller-supplied id selection batches
-through :func:`id_batches` so no single ``IN (...)`` clause's bind-parameter count grows
-with the caller — the same rationale `finding_store.py`'s own ``_FACTS_BATCH_SIZE``
-documents for its private ``_facts_for_many`` loop, generalized here so every seam's
-batch method shares one cap and one batching loop."""
+Every batch read filtering a family query by a caller-supplied id selection batches
+through :func:`id_batches` so no single ``IN (...)`` bind-parameter count grows with the
+caller — `finding_store.py`'s own ``_FACTS_BATCH_SIZE`` precedent, generalized so every
+seam's batch method shares one cap and one batching loop."""
 
 from __future__ import annotations
 

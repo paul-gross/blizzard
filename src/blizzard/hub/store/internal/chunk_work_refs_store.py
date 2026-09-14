@@ -34,14 +34,16 @@ class ChunkWorkRefsStore:
     def find_live_holder(self, pointer: WorkRef) -> str | None:
         with self._store.read("find_live_holder") as conn:
             ephemeral = ephemeral_ids(conn)
-            chunk_ids = [
+            # Sorted so a multi-holder tie-break (shouldn't happen) agrees with
+            # `live_holders`' own lowest-id pick.
+            chunk_ids = sorted(
                 p.chunk_id
                 for p in conn.execute(
                     select(s.chunk_work_refs.c.chunk_id).where(
                         (s.chunk_work_refs.c.source == pointer.source) & (s.chunk_work_refs.c.ref == pointer.ref)
                     )
                 ).all()
-            ]
+            )
         for chunk_id in chunk_ids:
             if chunk_id in ephemeral:
                 continue  # grouped away or deleted; the pointer moved on or is withdrawn
@@ -78,11 +80,11 @@ class ChunkWorkRefsStore:
         for pointer in pointers:
             refs_by_source[pointer.source].append(pointer.ref)
 
+        candidates: dict[WorkRef, list[str]] = defaultdict(list)
         with self._store.read("live_holders") as conn:
             # Unfiltered — the same whole-fleet scan `live_work_refs` already pays,
             # kept unbatched here too rather than re-derived per pointer.
             ephemeral = ephemeral_ids(conn)
-            candidates: dict[WorkRef, list[str]] = defaultdict(list)
             for source, refs in refs_by_source.items():
                 for batch in id_batches(refs):
                     rows = conn.execute(
@@ -95,8 +97,10 @@ class ChunkWorkRefsStore:
                             continue  # grouped away or deleted; the pointer moved on or is withdrawn
                         candidates[WorkRef(source=source, ref=row.ref)].append(row.chunk_id)
 
-            candidate_ids = sorted({chunk_id for chunk_ids in candidates.values() for chunk_id in chunk_ids})
-            facts_by_id = self._facts.load_facts_for(candidate_ids)
+        # Called after the read connection above has closed, not nested inside it —
+        # `_status`'s own pattern below.
+        candidate_ids = sorted({chunk_id for chunk_ids in candidates.values() for chunk_id in chunk_ids})
+        facts_by_id = self._facts.load_facts_for(candidate_ids)
 
         result: dict[WorkRef, str] = {}
         for pointer, chunk_ids in candidates.items():

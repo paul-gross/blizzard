@@ -339,6 +339,11 @@ class TranscriptEventStore:
         }
 
     def segment_derivation_inputs(self, segment_ids: Sequence[str]) -> dict[str, SegmentDerivationInput]:
+        """See :meth:`~blizzard.hub.domain.analytics.events.IReadTranscriptEvents.segment_derivation_inputs`.
+        Unlike :meth:`segment_derivation_input`, a decode failure here does not raise —
+        it drops that one id from the result. This adapter stays a pure read (no logger:
+        ``bzh:dependency-inversion``), so a caller that needs to observe a dropped id
+        diffs the requested ``segment_ids`` against this result's keys itself."""
         result: dict[str, SegmentDerivationInput] = {}
         if not segment_ids:
             return result
@@ -360,7 +365,7 @@ class TranscriptEventStore:
                             content_fingerprint=content_fingerprint(group_rows),
                         )
                     except Exception:
-                        continue  # a corrupt segment's decode failure stays out of the result, not the batch
+                        continue  # decode failure: this id is dropped, unlike the singular's raise
         return result
 
     def segment_contexts(self, segment_ids: Sequence[str]) -> dict[str, SegmentContext]:

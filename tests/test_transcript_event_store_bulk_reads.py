@@ -10,6 +10,7 @@ Proves each batch read agrees with its singular per-id sibling; that
 from __future__ import annotations
 
 import json
+import zlib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -175,6 +176,10 @@ def test_segment_derivation_inputs_drops_a_segment_whose_content_fails_to_decode
 
     assert set(result) == {"sg_good"}
     assert result["sg_good"] == store.segment_derivation_input("sg_good")
+    # The singular does not share the plural's fault isolation — it lets the same
+    # decode failure raise, which is exactly why the plural exists.
+    with pytest.raises(zlib.error):
+        store.segment_derivation_input("sg_corrupt")
 
 
 # --- segment_contexts ------------------------------------------------------------ #

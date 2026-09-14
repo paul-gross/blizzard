@@ -23,11 +23,22 @@ from blizzard.hub.api.chunks import FleetPulse
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import Chunk, ChunkFacts, DecisionChoice, FleetSummary, MigrationSource
+from blizzard.hub.domain.work import (
+    BounceFact,
+    Chunk,
+    ChunkFacts,
+    DecisionChoice,
+    FleetSummary,
+    HubNodePollFact,
+    MigrationSource,
+    PrOpenedFact,
+    RouteTokenMintedFact,
+    UsageFact,
+)
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal import chunk_rows as chunk_rows_module
-from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_facts_store import _ALL_FAMILIES, _STATUS_FAMILIES, ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from tests.support import build_hub, chunk_stores, count_queries, hub_store_connections, ingest, migrate_to, seed_graph
@@ -445,6 +456,53 @@ def test_load_all_statuses_matches_load_all_facts_status_across_every_derived_st
     assert set(statuses) == set(_LIVE_CHUNK_IDS)
     assert statuses == {chunk_id: facts.status() for chunk_id, facts in bulk.items()}
     assert set(statuses.values()) == set(ChunkStatus)  # the fixture spans every derived status
+
+
+def test_status_is_insensitive_to_every_non_status_family(tmp_path: Path) -> None:
+    """The mechanical binding `_STATUS_FAMILIES`'s own comment otherwise only asserts in
+    prose: every family `_ALL_FAMILIES` carries beyond `_STATUS_FAMILIES` is populated
+    with a value that would change `.status()` were it (incorrectly) read, and `.status()`
+    must come back unchanged. A future `ChunkFacts.status` reading one of these families
+    without adding it to `_STATUS_FAMILIES` fails this test, not just `load_all_statuses`
+    silently under-reading in production."""
+    non_status = _ALL_FAMILIES - _STATUS_FAMILIES
+    assert non_status == {
+        "delivery_landed",
+        "landed_repos",
+        "route_tokens_minted",
+        "pr_opened",
+        "usage",
+        "bounces",
+        "hub_node_polls",
+    }
+
+    baseline = ChunkFacts(minted=True, promoted=True)
+    loud = replace(
+        baseline,
+        delivery_landed=True,
+        landed_repos=frozenset({"acme/widget"}),
+        route_tokens_minted=[RouteTokenMintedFact(token_hash="h", minted_at=_T0, seq=1)],
+        pr_opened=[PrOpenedFact(repo="acme/widget", number=1, url="u", commit_hash="c", opened_at=_T0)],
+        usage=[
+            UsageFact(
+                node_id="nd_1",
+                epoch=1,
+                kind="build",
+                model="m",
+                input_tokens=1,
+                output_tokens=1,
+                cache_read_tokens=0,
+                cache_create_tokens=0,
+                cost_usd=None,
+                recorded_at=_T0,
+            )
+        ],
+        bounces=[BounceFact(epoch=1, cause="c", envelope="{}", recorded_at=_T0)],
+        hub_node_polls=[HubNodePollFact(node_id="nd_1", epoch=1, polled_at=_T0)],
+    )
+
+    assert baseline.status() is ChunkStatus.READY
+    assert loud.status() == baseline.status()
 
 
 def test_load_all_statuses_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:

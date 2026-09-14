@@ -73,11 +73,12 @@ _ALL_FAMILIES: frozenset[str] = frozenset(
     }
 )
 
-#: Exactly the families `ChunkFacts.status`'s call graph reaches (`domain/work.py`) —
-#: movement (transitions/migrations/restarts), promotion, stop/completion, the open-pr
-#: terminal fact, escalation supersession (leases/requeues), routes, questions/decisions
-#: and pauses. Never `landed_repos`, `delivery_landed`, `pr_opened`, `usage`, `bounces` or
-#: `hub_node_polls` — `status` never reads them, so `load_all_statuses` skips them.
+#: Exactly the families `ChunkFacts.status` reaches (`domain/work.py`): movement,
+#: promotion, stop/completion, the open-pr terminal fact, escalation supersession,
+#: routes, questions/decisions, pauses. Never `landed_repos`, `delivery_landed`,
+#: `pr_opened`, `usage`, `bounces`, `hub_node_polls` or `route_tokens_minted` — bound to
+#: `status`'s own behavior by `test_status_is_insensitive_to_every_non_status_family`,
+#: not just this comment.
 _STATUS_FAMILIES: frozenset[str] = frozenset(
     {
         "promoted",
@@ -436,23 +437,25 @@ class ChunkFactsStore:
     @staticmethod
     def _resolved_ids(conn, decision_ids: list[str]) -> set[str]:  # type: ignore[no-untyped-def]
         """The decisions among ``decision_ids`` that carry a resolution row, or that an
-        operator restart superseded (#370) — the two ways one stops deriving open."""
-        if not decision_ids:
-            return set()
-        resolved = {
-            r.decision_id
-            for r in conn.execute(
-                select(s.decision_resolutions.c.decision_id).where(
-                    s.decision_resolutions.c.decision_id.in_(decision_ids)
-                )
-            ).all()
-        }
-        return resolved | {
-            r.decision_id
-            for r in conn.execute(
-                select(s.chunk_restarts.c.decision_id).where(s.chunk_restarts.c.decision_id.in_(decision_ids))
-            ).all()
-        }
+        operator restart superseded (#370) — the two ways one stops deriving open.
+        ``decision_ids`` can outgrow one chunk-id batch's worth of decisions, so each
+        ``IN`` runs through :func:`id_batches` rather than a single unbounded clause."""
+        resolved: set[str] = set()
+        for batch in id_batches(decision_ids):
+            resolved |= {
+                r.decision_id
+                for r in conn.execute(
+                    select(s.decision_resolutions.c.decision_id).where(s.decision_resolutions.c.decision_id.in_(batch))
+                ).all()
+            }
+        for batch in id_batches(decision_ids):
+            resolved |= {
+                r.decision_id
+                for r in conn.execute(
+                    select(s.chunk_restarts.c.decision_id).where(s.chunk_restarts.c.decision_id.in_(batch))
+                ).all()
+            }
+        return resolved
 
 
 def _conforms_facts(x: ChunkFactsStore) -> IReadChunkFactsRepository:

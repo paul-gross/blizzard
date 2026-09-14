@@ -230,33 +230,38 @@ def is_ephemeral_id(conn, chunk_id: str) -> bool:  # type: ignore[no-untyped-def
     return row_exists(conn, s.chunk_grouped, chunk_id) or row_exists(conn, s.chunk_deleted, chunk_id)
 
 
+def ephemeral_ids_in(conn, batch: Sequence[str]) -> set[str]:  # type: ignore[no-untyped-def]
+    """Which of ``batch``'s ids are grouped-away or deleted — :func:`graph_id_of_batch`'s
+    own exclusion, factored out so a caller already holding ``batch``'s full ``chunks``
+    rows doesn't pay for a second, narrower read of the same ids just to get it. A
+    singleton batch excludes via :func:`is_ephemeral_id`'s two targeted checks; a larger
+    one via two id-batch-bounded ``IN`` queries."""
+    if len(batch) == 1:
+        (chunk_id,) = batch
+        return {chunk_id} if is_ephemeral_id(conn, chunk_id) else set()
+    return {
+        r.chunk_id
+        for r in conn.execute(select(s.chunk_grouped.c.chunk_id).where(s.chunk_grouped.c.chunk_id.in_(batch))).all()
+    } | {
+        r.chunk_id
+        for r in conn.execute(select(s.chunk_deleted.c.chunk_id).where(s.chunk_deleted.c.chunk_id.in_(batch))).all()
+    }
+
+
 def graph_id_of_batch(conn, batch: Sequence[str] | None) -> dict[str, str]:  # type: ignore[no-untyped-def]
     """A selection's chunk id -> graph id pins, ephemeral ids excluded — lifted out of
     ``ChunkFactsStore`` so ``ChunkRecordStore``'s own batch reads share this exclusion
-    rather than re-deriving it. A singleton batch excludes via
-    :func:`is_ephemeral_id`'s two targeted checks rather than a wider scan; a larger
-    batch excludes via two id-batch-bounded ``IN`` queries; ``None`` (the whole live
-    fleet) keeps :func:`ephemeral_ids`'s own single unfiltered scan."""
+    rather than re-deriving it. ``None`` (the whole live fleet) keeps
+    :func:`ephemeral_ids`'s own single unfiltered scan; a bounded batch delegates to
+    :func:`ephemeral_ids_in`."""
     if batch is None:
         ephemeral = ephemeral_ids(conn)
         rows = conn.execute(select(s.chunks.c.chunk_id, s.chunks.c.graph_id)).all()
-    elif len(batch) == 1:
-        (chunk_id,) = batch
-        rows = conn.execute(
-            select(s.chunks.c.chunk_id, s.chunks.c.graph_id).where(s.chunks.c.chunk_id == chunk_id)
-        ).all()
-        ephemeral = {chunk_id} if is_ephemeral_id(conn, chunk_id) else set()
     else:
         rows = conn.execute(
             select(s.chunks.c.chunk_id, s.chunks.c.graph_id).where(s.chunks.c.chunk_id.in_(batch))
         ).all()
-        ephemeral = {
-            r.chunk_id
-            for r in conn.execute(select(s.chunk_grouped.c.chunk_id).where(s.chunk_grouped.c.chunk_id.in_(batch))).all()
-        } | {
-            r.chunk_id
-            for r in conn.execute(select(s.chunk_deleted.c.chunk_id).where(s.chunk_deleted.c.chunk_id.in_(batch))).all()
-        }
+        ephemeral = ephemeral_ids_in(conn, batch)
     return {r.chunk_id: r.graph_id for r in rows if r.chunk_id not in ephemeral}
 
 

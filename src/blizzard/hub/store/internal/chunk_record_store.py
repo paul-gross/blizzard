@@ -25,6 +25,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     INTENDED_MIGRATION,
     chunk_row,
     ephemeral_ids,
+    ephemeral_ids_in,
     graph_id_of_batch,
     insert_chunk_rows,
     is_ephemeral_id,
@@ -47,32 +48,30 @@ class ChunkRecordStore:
             return chunk_row(conn, row)
 
     def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
-        """`get`'s batched sibling — every requested id's row
-        plus its work refs, in a bounded number of queries per id batch rather than one
-        query pair per id. An id that doesn't exist or is ephemeral is silently dropped,
-        the same as `get` returning None for it."""
+        """`get`'s batched sibling — every requested id's row plus its work refs, in a
+        bounded number of queries per id batch. An id that doesn't exist or is ephemeral
+        is silently dropped, the same as `get` returning None for it. Reads each batch's
+        full ``chunks`` rows once, via :func:`ephemeral_ids_in` rather than
+        :func:`graph_id_of_batch`'s narrower shape, which would pay for a second read."""
         if not chunk_ids:
             return {}
         result: dict[str, Chunk] = {}
         with self._store.read("get_many") as conn:
             for batch in id_batches(chunk_ids):
-                graph_id_of = graph_id_of_batch(conn, batch)
-                if not graph_id_of:
-                    continue
-                surviving = list(graph_id_of)
                 rows = {
-                    r.chunk_id: r
-                    for r in conn.execute(select(s.chunks).where(s.chunks.c.chunk_id.in_(surviving))).all()
+                    r.chunk_id: r for r in conn.execute(select(s.chunks).where(s.chunks.c.chunk_id.in_(batch))).all()
                 }
+                if not rows:
+                    continue
+                ephemeral = ephemeral_ids_in(conn, batch)
+                surviving = [chunk_id for chunk_id in rows if chunk_id not in ephemeral]
                 pointers: dict[str, list[WorkRef]] = defaultdict(list)
                 for p in conn.execute(
                     select(s.chunk_work_refs).where(s.chunk_work_refs.c.chunk_id.in_(surviving))
                 ).all():
                     pointers[p.chunk_id].append(WorkRef(source=p.source, ref=p.ref))
                 for chunk_id in surviving:
-                    r = rows.get(chunk_id)
-                    if r is None:
-                        continue
+                    r = rows[chunk_id]
                     result[chunk_id] = Chunk(
                         chunk_id=r.chunk_id,
                         graph_id=r.graph_id,
@@ -132,12 +131,10 @@ class ChunkRecordStore:
     def _listed_with_status(
         self, status: ChunkStatus, *, statuses: Mapping[str, ChunkStatus] | None = None
     ) -> list[Chunk]:
-        """:meth:`list_all` narrowed by derived status, over ``statuses`` when a caller
-        already derived the fleet's statuses elsewhere, else the facts seam's own
-        ``load_all_statuses`` bulk read rather than a per-chunk fan-out — the queue and
-        backlog peeks read the whole fleet, so their cost must not scale with it (issue
-        #421's shape). Reading the listing first means a chunk deleted between the two
-        reads is excluded, never mistaken for one whose facts are simply unwritten."""
+        """:meth:`list_all` narrowed by derived status, over ``statuses`` when given, else
+        ``load_all_statuses``'s own bulk read — the queue/backlog peeks read the whole
+        fleet, so cost must not scale with it (issue #421). Reading the listing first
+        excludes a chunk deleted between the two reads, never mistaking it for unwritten."""
         chunks = self.list_all()
         resolved = statuses if statuses is not None else self._facts.load_all_statuses()
         return [c for c in chunks if resolved.get(c.chunk_id) is status]

@@ -144,6 +144,23 @@ def test_dockets_for_chunks_matches_decision_for_chunk_across_a_batch_boundary(
         assert result[chunk_id] == expected.docket
 
 
+def test_dockets_for_chunks_does_not_duplicate_an_id_repeated_across_two_batches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    store, _ = _store(tmp_path)
+    _mint(store, "ch_a")
+    _mint(store, "ch_b")
+    _record_decision(store, "ch_a", "dec_a", [_proposal("ch_a", "wip_a")])
+
+    # BATCH_SIZE=2 over ["ch_a", "ch_b", "ch_a"] splits into ["ch_a","ch_b"] and ["ch_a"] —
+    # ch_a lands in two batches if the ids aren't deduplicated before batching.
+    result = store.decisions.dockets_for_chunks(["ch_a", "ch_b", "ch_a"])
+
+    assert set(result) == {"ch_a", "ch_b"}
+    assert [e.proposal.proposal_id for e in result["ch_a"]] == ["wip_a"]
+
+
 def test_dockets_for_chunks_reads_the_judged_set_once_total_not_once_per_batch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
