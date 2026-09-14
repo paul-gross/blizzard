@@ -20,6 +20,7 @@ from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, enqueue_close_intents, insert_proposals, proposal_row
 
 
@@ -64,6 +65,46 @@ class ChunkDecisionsStore:
             rows = conn.execute(select(s.decisions).order_by(s.decisions.c.submitted_at)).all()
             decisions = [self._decision_row(conn, row) for row in rows]
             return [d for d in decisions if not d.resolved]
+
+    def dockets_for_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[DocketEntry]]:
+        """Every requested chunk's docket, exactly what ``_pending_proposals`` would
+        return for that id — a chunk with no pending proposals gets an empty list, not
+        an absent key (this reads the proposal table, it isn't chunk-existence-gated)."""
+        if not chunk_ids:
+            return {}
+        result: dict[str, list[DocketEntry]] = {chunk_id: [] for chunk_id in chunk_ids}
+        with self._store.read("dockets_for_chunks") as conn:
+            # Already unfiltered/global — read once total across every batch, not once
+            # per batch, since it doesn't depend on which chunks a batch names.
+            judged = {r.proposal_id for r in conn.execute(select(s.work_item_materializations.c.proposal_id)).all()}
+            for batch in id_batches(chunk_ids):
+                strikes = {
+                    r.proposal_id: r
+                    for r in conn.execute(
+                        select(s.work_item_strikes).where(
+                            s.work_item_strikes.c.proposal_id.in_(
+                                select(s.work_item_proposals.c.proposal_id).where(
+                                    s.work_item_proposals.c.chunk_id.in_(batch)
+                                )
+                            )
+                        )
+                    ).all()
+                }
+                rows = conn.execute(
+                    select(s.work_item_proposals).where(s.work_item_proposals.c.chunk_id.in_(batch))
+                ).all()
+                for row in rows:
+                    if row.proposal_id in judged:
+                        continue
+                    result[row.chunk_id].append(
+                        DocketEntry(
+                            proposal=proposal_row(row),
+                            struck=row.proposal_id in strikes,
+                            struck_by=strikes[row.proposal_id].struck_by if row.proposal_id in strikes else None,
+                            struck_at=strikes[row.proposal_id].struck_at if row.proposal_id in strikes else None,
+                        )
+                    )
+        return result
 
     def record_decision(
         self,

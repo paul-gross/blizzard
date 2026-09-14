@@ -26,7 +26,7 @@ from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import Chunk, ChunkFacts, DecisionChoice, FleetSummary, MigrationSource
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import batching as batching_module
-from blizzard.hub.store.internal import chunk_facts_store as chunk_facts_store_module
+from blizzard.hub.store.internal import chunk_rows as chunk_rows_module
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
@@ -333,13 +333,16 @@ def test_ephemeral_ids_evaluated_at_most_once_per_bulk_read(tmp_path: Path, monk
     _seed_fixture(store, engine)
 
     calls = {"n": 0}
-    original = chunk_facts_store_module.ephemeral_ids
+    original = chunk_rows_module.ephemeral_ids
 
     def counting(conn: sa.Connection) -> set[str]:
         calls["n"] += 1
         return original(conn)
 
-    monkeypatch.setattr(chunk_facts_store_module, "ephemeral_ids", counting)
+    # `load_all_facts`'s exclusion now runs through `chunk_rows.graph_id_of_batch`
+    # (blizzard#bulk-read-seams), lifted out of this module's own former private
+    # staticmethod — patched at its new home rather than this module's.
+    monkeypatch.setattr(chunk_rows_module, "ephemeral_ids", counting)
 
     store.facts.load_all_facts()
 

@@ -3,8 +3,10 @@ mutable configuration columns."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.work import Chunk, IntendedMigration
 
 
@@ -12,9 +14,26 @@ class IReadChunkRecordRepository(Protocol):
     """Read-only chunk-record access."""
 
     def get(self, chunk_id: str) -> Chunk | None: ...
-    def list_ready(self) -> list[Chunk]: ...
-    def list_not_ready(self) -> list[Chunk]:
-        """The backlog's own candidate set (``bzh:ranking-is-per-list``)."""
+    def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
+        """`get`'s batched sibling — every requested id's chunk, keyed by chunk id. An id
+        that doesn't exist or is ephemeral is silently dropped, the same as `get`
+        returning None for it."""
+        ...
+
+    def graph_id_of_many(self, chunk_ids: Sequence[str]) -> dict[str, str]:
+        """Every requested id's graph pin, keyed by chunk id, ephemeral ids excluded —
+        `get_many`'s narrower sibling for a caller that only needs the graph pin."""
+        ...
+
+    def list_ready(self, *, statuses: Mapping[str, ChunkStatus] | None = None) -> list[Chunk]:
+        """The ready queue's own candidate set. ``statuses`` lets a caller that has
+        already derived the fleet's statuses hand them in, so this doesn't re-derive
+        them through its own facts read."""
+        ...
+
+    def list_not_ready(self, *, statuses: Mapping[str, ChunkStatus] | None = None) -> list[Chunk]:
+        """The backlog's own candidate set (``bzh:ranking-is-per-list``). See
+        `list_ready` for ``statuses``."""
         ...
 
     def list_all(self) -> list[Chunk]: ...
