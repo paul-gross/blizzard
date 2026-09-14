@@ -1259,6 +1259,7 @@ class QuestionRow:
     answered_at: datetime | None = None
     delivered: bool = False
     delivered_at: datetime | None = None
+    harness_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,7 @@ from sqlalchemy import and_, func, select
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import IWriteLeaseLivenessRepository
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.store.internal.base import NO_NORMALIZER_VERSION, RunnerStoreConnections, enqueue_transcript_final
 from blizzard.runner.store.schema import heartbeats, lease_context, lease_spawns, leases, transcript_segments
 
@@ -71,17 +72,36 @@ class LeaseLivenessStore:
         return result.rowcount
 
     def record_spawn(
-        self, lease_id: str, *, pid: int, process_start_time: str, session_id: str, spawned_at: datetime
+        self,
+        lease_id: str,
+        *,
+        pid: int,
+        process_start_time: str,
+        spawned_at: datetime,
+        session: SessionReference,
+        harness_version: str | None = None,
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
                 leases.update()
                 .where(leases.c.lease_id == lease_id)
-                .values(pid=pid, process_start_time=process_start_time, session_id=session_id)
+                .values(
+                    pid=pid,
+                    process_start_time=process_start_time,
+                    session_id=session.session_id,
+                    harness_id=session.harness_id,
+                )
             )
             # One transaction with the in-place pid rewrite: the spawn generation and the process
             # it describes are one fact, and a crash between them would leave the two disagreeing.
-            conn.execute(lease_spawns.insert().values(lease_id=lease_id, spawned_at=spawned_at))
+            conn.execute(
+                lease_spawns.insert().values(
+                    lease_id=lease_id,
+                    spawned_at=spawned_at,
+                    harness_id=session.harness_id,
+                    harness_version=harness_version,
+                )
+            )
             generation = int(
                 conn.execute(
                     select(func.count()).select_from(lease_spawns).where(lease_spawns.c.lease_id == lease_id)
@@ -99,7 +119,8 @@ class LeaseLivenessStore:
             prior_segment = conn.execute(
                 select(transcript_segments)
                 .where(transcript_segments.c.chunk_id == context_row.chunk_id)
-                .where(transcript_segments.c.session_id == session_id)
+                .where(transcript_segments.c.session_id == session.session_id)
+                .where(transcript_segments.c.harness_id == session.harness_id)
                 # `segment_id` tie-breaks `stamped_at` (`bzh:sql-portable`) — a same-instant
                 # pair would otherwise pick nondeterministically across backends.
                 .order_by(transcript_segments.c.stamped_at.desc(), transcript_segments.c.segment_id.desc())
@@ -123,7 +144,8 @@ class LeaseLivenessStore:
                     epoch=int(context_row.epoch),
                     generation=generation,
                     lease_id=lease_id,
-                    session_id=session_id,
+                    session_id=session.session_id,
+                    harness_id=session.harness_id,
                     cursor=carried_cursor,
                     shipped_bytes=0,
                     shipped_turns=0,
@@ -135,7 +157,13 @@ class LeaseLivenessStore:
                     stamped_at=spawned_at,
                 )
             )
-        _log.info("worker spawned", lease_id=lease_id, pid=pid, session_id=session_id)
+        _log.info(
+            "worker spawned",
+            lease_id=lease_id,
+            pid=pid,
+            session_id=session.session_id,
+            harness_id=session.harness_id,
+        )
 
 
 def _conforms_lease_liveness_store(x: LeaseLivenessStore) -> IWriteLeaseLivenessRepository:

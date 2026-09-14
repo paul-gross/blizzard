@@ -892,6 +892,7 @@ questions = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the parked chunk
     Column("node_id", String, nullable=True),  # the node the worker parked at
     Column("session_id", String, nullable=True),  # the dormant session to resume around the answer
+    Column("harness_id", String, nullable=True),  # owner of session_id; null from an older peer without it
     Column("runner_id", String, nullable=False),  # the runner holding the session
     Column("epoch", Integer, nullable=False),  # the parked lease's fencing epoch
     Column("question", Text, nullable=False),
@@ -1266,6 +1267,9 @@ transcript_segments = Table(
     Column("byte_count", Integer, nullable=False),
     Column("codec", String, nullable=True),  # e.g. "zlib" (D10); null iff rejected
     Column("content", LargeBinary, nullable=True),  # compressed turns JSON; null iff rejected
+    # The harness family that produced the source transcript. This is deliberately
+    # separate from its observed version and the normalizer version below.
+    Column("harness_id", String, nullable=True),
     Column("normalizer_version", String, nullable=False),
     Column("harness_version", String, nullable=True),
     # The runner's OWN cap declaration, distinct from `rejected` above; nullable, no backfill.

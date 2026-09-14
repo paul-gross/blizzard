@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.runner.harness.identity import SessionReference
+
 __all__ = [
     "BufferedTranscriptDelta",
     "IReadTranscriptLedgerRepository",
@@ -44,9 +46,14 @@ class TranscriptSegmentLedgerRow:
     supersedes: str | None
     finalized_at: datetime | None
     stamped_at: datetime
+    harness_id: str
     #: agent_id -> spawning `tool_use_id` (blizzard#338), accumulated across every window
     #: this segment has read; empty until one names a pair.
     agent_tool_use_ids: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def session(self) -> SessionReference:
+        return SessionReference(self.harness_id, self.session_id)
 
 
 @dataclass(frozen=True)
@@ -76,6 +83,11 @@ class TranscriptBackfillLease:
     epoch: int
     session_id: str
     has_segment: bool
+    harness_id: str
+
+    @property
+    def session(self) -> SessionReference:
+        return SessionReference(self.harness_id, self.session_id)
 
 
 class IReadTranscriptLedgerRepository(Protocol):
@@ -182,8 +194,8 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         epoch: int,
         generation: int,
         lease_id: str,
-        session_id: str,
         stamped_at: datetime,
+        session: SessionReference,
         supersedes: str | None = None,
     ) -> str:
         """Stamp a segment boundary outside a spawn and return its id (blizzard#250), cursor

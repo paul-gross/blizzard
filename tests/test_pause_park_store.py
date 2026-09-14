@@ -14,6 +14,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.steps import Reap, ResumeIntents
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store, make_stores
 
@@ -45,7 +46,11 @@ def _seed_spawned_lease(store):  # type: ignore[no-untyped-def]
         )
     )
     store.record_spawn(
-        "lease_1", pid=_HANDLE_PID, process_start_time=_HANDLE_START, session_id="sess-a", spawned_at=_NOW
+        "lease_1",
+        pid=_HANDLE_PID,
+        process_start_time=_HANDLE_START,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 

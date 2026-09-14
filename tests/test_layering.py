@@ -326,24 +326,36 @@ _COMPOSITION_ROOTS = frozenset(
 )
 
 _GATED_COMPOSITION_NAMES = ("build_stores", "build_stores_and_connections", "ClaudeCodeAdapter")
+_CLAUDE_CODE_FACTORY = _RUNNER_DIR / "harness" / "internal" / "claude_code_registry.py"
 
 
-def test_build_stores_and_claude_code_adapter_are_named_only_at_a_composition_root() -> None:
-    """L (plan: structural gates over runner wiring, D1, D2): only the seven declared
-    composition roots may import ``build_stores``/``build_stores_and_connections``/
-    ``ClaudeCodeAdapter`` — every other collaborator takes the bundle or Protocol."""
+def test_concrete_stores_and_claude_code_adapter_stay_in_their_wiring_modules() -> None:
+    """L: concrete stores stay in roots; the harness adapter also allows its factory."""
     violations: list[str] = []
     for path in sorted(_SRC_DIR.rglob("*.py")):
-        if path in _COMPOSITION_ROOTS:
-            continue
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom):
                 continue
             hit = set(_GATED_COMPOSITION_NAMES) & {alias.name for alias in node.names}
+            if path in _COMPOSITION_ROOTS:
+                hit -= {"build_stores", "build_stores_and_connections"}
+            if path == _CLAUDE_CODE_FACTORY:
+                hit -= {"ClaudeCodeAdapter"}
             if hit:
                 violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
-    assert not violations, f"L — only a declared composition root may import {_GATED_COMPOSITION_NAMES}: {violations}"
+    assert not violations, f"L — concrete dependencies escaped their approved wiring modules: {violations}"
+
+
+_TRANSCRIPT_SERVICE_FILE = _RUNNER_DIR / "transcripts" / "service.py"
+
+
+def test_transcript_service_imports_no_internal_module() -> None:
+    """``TranscriptService`` takes its per-owner repository resolver injected
+    (``bzh:dependency-inversion``) rather than constructing one itself, so it never needs
+    to import any package's ``internal/`` adapter — not even its own."""
+    violations = [m for m in sorted(_imported_modules(_TRANSCRIPT_SERVICE_FILE)) if ".internal." in m]
+    assert not violations, f"transcripts/service.py must not import an internal/ module: {violations}"
 
 
 _HUB_CLI_SESSION_STORE_FILE = _HUB_DIR / "cli" / "session_store.py"

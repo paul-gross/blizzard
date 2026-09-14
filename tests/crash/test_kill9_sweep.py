@@ -595,7 +595,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         question_id="q_park",
         question="parked so REAP leaves the seeded lease be",
         options=[],
-        session_id=None,
+        session=None,
         asked_at=_ATTACH_NOW,
     )
     store.record_park(lease_id="lease_attach", chunk_id="ch_attach", question_id="q_park", parked_at=_ATTACH_NOW)
@@ -719,7 +719,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         question_id="q_park",
         question="parked so REAP leaves the seeded lease be",
         options=[],
-        session_id=None,
+        session=None,
         asked_at=_DECLARE_COMMIT_NOW,
     )
     store.record_park(
@@ -1888,6 +1888,7 @@ def test_kill9_at_hub_command_node_crash_point(crash_env: CrashEnv, tmp_path: Pa
 # one, switching on a durable workdir sentinel that survives the crash-forced restart.
 _POLL_THEN_LAND_STEP = """python3 - <<'PYEOF'
 import json, os, pathlib, urllib.error, urllib.request
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 
 sentinel = pathlib.Path(os.environ["BZ_HUB_WORKDIR"]) / "pending-once.marker"
 if not sentinel.exists():

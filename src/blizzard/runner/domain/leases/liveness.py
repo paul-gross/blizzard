@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.runner.harness.identity import SessionReference
 
 if TYPE_CHECKING:
     from blizzard.runner.domain.leases import LeaseRecord
@@ -56,7 +57,14 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         ...
 
     def record_spawn(
-        self, lease_id: str, *, pid: int, process_start_time: str, session_id: str, spawned_at: datetime
+        self,
+        lease_id: str,
+        *,
+        pid: int,
+        process_start_time: str,
+        spawned_at: datetime,
+        session: SessionReference,
+        harness_version: str | None = None,
     ) -> None:
         """Fill a lease's spawn-return facts: pid, process start time, session id.
 

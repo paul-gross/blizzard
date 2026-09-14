@@ -17,6 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import LocalLeaseService, NewLease
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from tests.runner_fakes import FakeProbe, make_read_stores, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
@@ -68,7 +69,13 @@ def test_503_when_store_and_leases_unwired(tmp_path: Path) -> None:
 def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
     app, store = _app_with_leases(tmp_path, probe=FakeProbe(alive={(100, "start-100")}))
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     beat_at = _NOW + timedelta(minutes=1)
     store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
@@ -90,6 +97,7 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
         "node_name": "build",
         "epoch": 1,
         "session_id": "sess-a",
+        "harness_id": "claude_code",
         "pid": 100,
         "environment_id": "e1",
         "workdir": "/ws/e1",
@@ -107,7 +115,13 @@ def test_timestamps_serialize_with_an_explicit_utc_offset(tmp_path: Path) -> Non
     the literal serialized bytes, not just the round-tripped value."""
     app, store = _app_with_leases(tmp_path, probe=FakeProbe(alive={(100, "start-100")}))
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW + timedelta(minutes=1))
 
     with TestClient(app) as client:
@@ -150,7 +164,13 @@ def test_closed_lease_appears_after_active_with_state_and_reason(tmp_path: Path)
     ordered after them, carrying ``state: "closed"`` and the closure reason on the wire."""
     app, store = _app_with_leases(tmp_path, probe=FakeProbe(alive={(100, "start-100")}))
     _seed_lease(store, lease_id="lease_1", chunk_id="ch_1")
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     _seed_lease(store, lease_id="lease_2", chunk_id="ch_2")
     closed_at = _NOW + timedelta(minutes=5)
     store.record_closure(lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", reason="failed", closed_at=closed_at)
@@ -176,7 +196,13 @@ def test_parked_state_reaches_the_wire_via_real_park_facts(tmp_path: Path) -> No
     """Watch item #3: `parked` driven end to end by a real park fact, not a stubbed boolean."""
     app, store = _app_with_leases(tmp_path, probe=FakeProbe(alive={(100, "start-100")}))
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="q_1", parked_at=_NOW)
 
     with TestClient(app) as client:

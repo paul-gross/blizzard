@@ -16,6 +16,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -171,7 +172,13 @@ def _seed_exited_lease(store, *, lease_id: str, chunk_id: str, node_id: str, epo
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease_id, pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        lease_id,
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 

@@ -19,6 +19,7 @@ from blizzard.runner.domain.takeover import (
     SubmissionPending,
     TakeoverEndedElsewhere,
 )
+from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.wire.runner_status import OpenTakeoverListResponse
 from blizzard.wire.runner_status import OpenTakeoverView as OpenTakeoverViewWire
 from blizzard.wire.takeover import TakeoverEndResponse, TakeoverOpenResponse, TakeoverRequest
@@ -36,10 +37,20 @@ def open_takeover(chunk_id: str, request_body: TakeoverRequest, request: Request
     scope = resolved_takeover_open_scope(chunk_id, request)
     try:
         opened = service.open(scope, force=request_body.force)
-    except (ChunkNotTakeable, LiveWorkerConflict, SubmissionPending) as exc:
+    except (
+        ChunkNotTakeable,
+        LiveWorkerConflict,
+        SubmissionPending,
+        UnknownHarnessError,
+        UnavailableHarnessError,
+    ) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return TakeoverOpenResponse(
-        takeover_id=opened.takeover_id, command=opened.command, workdir=opened.workdir, env=opened.env
+        takeover_id=opened.takeover_id,
+        command=opened.command,
+        workdir=opened.workdir,
+        env=opened.env,
+        harness_id=opened.harness_id,
     )
 
 
@@ -64,7 +75,12 @@ def list_open_takeovers(request: Request) -> OpenTakeoverListResponse:
 def _open_takeover_list(service: RunnerStatusService) -> OpenTakeoverListResponse:
     return OpenTakeoverListResponse(
         items=[
-            OpenTakeoverViewWire(chunk_id=t.chunk_id, takeover_id=t.takeover_id, held_since=iso_utc(t.held_since))
+            OpenTakeoverViewWire(
+                chunk_id=t.chunk_id,
+                takeover_id=t.takeover_id,
+                held_since=iso_utc(t.held_since),
+                harness_id=t.harness_id,
+            )
             for t in service.open_takeovers()
         ]
     )

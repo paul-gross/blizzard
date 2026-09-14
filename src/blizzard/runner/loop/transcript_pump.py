@@ -17,6 +17,7 @@ from typing import Any, Literal
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import (
     LateToolOutput,
@@ -128,7 +129,7 @@ class TranscriptPump:
         read, which the harness source's own ``MAX_BATCH_BYTES`` window bounds instead, not
         wall-clock. ``TranscriptDrain.run`` passes only a FRACTION of its own budget,
         reserving the rest for the flush."""
-        if not self.ctx.config.transcripts_ship or self.ctx.transcripts is None:
+        if not self.ctx.config.transcripts_ship or not self.ctx.transcripts_wired:
             return
         # One store read for the whole run (blizzard#246) — each segment this run ships
         # advances `budget` locally, so a later segment sees the current total without
@@ -145,7 +146,7 @@ class TranscriptPump:
         ``_pump_one`` call only advances one read window, and no later tick is coming — so
         each is pumped until caught up or ``deadline``. A segment never even attempted
         before ``deadline`` is marked truncated too, same as a partially-drained one."""
-        if not self.ctx.config.transcripts_ship or self.ctx.transcripts is None:
+        if not self.ctx.config.transcripts_ship or not self.ctx.transcripts_wired:
             return
         segments = [s for s in self.ctx.stores.transcript_ledger.open_transcript_segments() if s.lease_id == lease_id]
         budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
@@ -227,10 +228,20 @@ class TranscriptPump:
 
         bindings = self.ctx.stores.environments.bindings_for_chunk(segment.chunk_id)
         spawn_cwd = SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
-        source = self.ctx.transcripts
-        if source is None:
-            # A conditional, not an `assert`: `run`/`pump_lease` guard this, but `drain_segment`
-            # is public, and `python -O` would strip the guard into an opaque `AttributeError`.
+        try:
+            source = self.ctx.transcript_source_for(segment.session)
+        except (UnknownHarnessError, UnavailableHarnessError) as exc:
+            # The segment's recorded owner, not this pump's own bug — a read-only side lane
+            # that skips this segment for this tick; the lease's own dispatch path escalates it.
+            _log.error(
+                "transcript pump: segment owner unresolvable — skipping this segment",
+                segment_id=segment.segment_id,
+                lease_id=segment.lease_id,
+                session_id=segment.session_id,
+                harness_id=segment.harness_id,
+                reason="unavailable" if isinstance(exc, UnavailableHarnessError) else "unknown",
+                detail=str(exc),
+            )
             return _NOT_ATTEMPTED
         since = TranscriptPosition(segment.cursor) if segment.cursor is not None else None
         batch = source.turns_since(segment.session_id, spawn_cwd=spawn_cwd, since=since)
@@ -478,6 +489,7 @@ def _record_envelope(
         "turn_range_start": turn_range_start,
         "turn_range_end": turn_range_end,
         "final": False,
+        "harness_id": segment.harness_id,
         "normalizer_version": batch.normalizer_version,
         "harness_version": batch.harness_version,
         "record_truncated": False,

@@ -24,6 +24,8 @@ from blizzard.runner.domain.takeover import TakeoverCloseScope, TakeoverOpenScop
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.dormant import DormantSession
@@ -85,7 +87,13 @@ def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -96,7 +104,7 @@ def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:  # type: ig
         open_takeover=store.open_takeover_for_chunk(chunk_id),
         bindings=store.bindings_for_chunk(chunk_id),
         active_lease=store.active_lease_for_chunk(chunk_id),
-        latest_lease=store.latest_lease_for_chunk(chunk_id),
+        latest_lease_with_session=store.latest_lease_with_session_for_chunk(chunk_id),
         latest_epoch=store.latest_epoch(chunk_id),
     )
 
@@ -299,7 +307,7 @@ def test_dormant_on_answer_publishes_ask_answered(tmp_path: Path) -> None:
         question_id="qn_1",
         question="Which API?",
         options=["rest", "graphql"],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -344,7 +352,7 @@ def test_attempt_abandon_retiring_an_open_park_does_not_publish_ask_answered(tmp
         question_id="qn_1",
         question="Which API?",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -388,7 +396,7 @@ def test_dormant_park_on_ask_publishes_lease_changed_dormant(tmp_path: Path) -> 
         question_id="qn_1",
         question="Which API?",
         options=["rest", "graphql"],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     ask = store.unforwarded_ask("lease_1")
@@ -466,7 +474,13 @@ def test_pull_reconcile_escalations_publishes_escalation_closed(tmp_path: Path) 
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkStatusView(
@@ -505,9 +519,11 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
     service = TakeoverService(
         make_stores(store),
         FixedClock(_NOW),
-        FakeHarness(handle=_HANDLE, verdict=None),
         FakeProbe(),
         local_api_url="http://x",
+        harnesses=HarnessRegistry(
+            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
+        ),
         events=events,
     )
 
@@ -538,9 +554,11 @@ def test_takeover_force_open_over_a_live_worker_publishes_the_fence_bump_as_fact
     service = TakeoverService(
         make_stores(store),
         FixedClock(_NOW),
-        FakeHarness(handle=_HANDLE, verdict=None),
         probe,
         local_api_url="http://x",
+        harnesses=HarnessRegistry(
+            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
+        ),
         events=events,
     )
 
@@ -559,7 +577,7 @@ def test_pull_reconcile_takeovers_publishes_takeover_closed(tmp_path: Path) -> N
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,

@@ -15,6 +15,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.steps import Advance, Pull, Reap
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import ANSWER_DELIVERED, QUESTION_ASKED
@@ -49,7 +50,11 @@ def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
         )
     )
     store.record_spawn(
-        "lease_1", pid=_HANDLE_PID, process_start_time=_HANDLE_START, session_id="sess-a", spawned_at=_NOW
+        "lease_1",
+        pid=_HANDLE_PID,
+        process_start_time=_HANDLE_START,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
@@ -95,7 +100,7 @@ def test_exited_worker_with_open_ask_parks_without_a_verdict(tmp_path):  # type:
         question_id="qn_1",
         question="Which API?",
         options=["rest", "graphql"],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -131,7 +136,7 @@ def test_ask_during_judgement_parks_instead_of_failing(tmp_path):  # type: ignor
             question_id="qn_1",
             question="Which API?",
             options=["rest", "graphql"],
-            session_id="sess-a",
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
             asked_at=_NOW,
         )
 
@@ -164,7 +169,7 @@ def test_park_is_not_repeated_and_never_elicits_a_verdict(tmp_path):  # type: ig
         question_id="qn_1",
         question="Which API?",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     hub = FakeHub()
@@ -189,7 +194,7 @@ def test_parked_lease_is_not_reaped_though_pid_reads_alive_and_stale(tmp_path): 
         question_id="qn_1",
         question="Q",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -219,7 +224,7 @@ def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path):  # type: ig
         question_id="qn_1",
         question="Which API?",
         options=["rest", "graphql"],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     # A pause-park on a *different* lease — proves the predicate is untouched by the
@@ -253,7 +258,7 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path):  # t
         question_id="qn_1",
         question="Q",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -288,7 +293,7 @@ def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(t
         question_id="qn_1",
         question="Q",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -341,7 +346,7 @@ def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(t
         question_id="qn_1",
         question="Which API?",
         options=["rest", "graphql"],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)

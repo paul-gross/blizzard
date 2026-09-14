@@ -247,8 +247,10 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
     # Why the TARGETED form matters (plan Q4): the chunk's most-recent session overall is
     # the reviewer's, not build's — `resume:build` avoids that wrong inheritance.
     store = SqlAlchemyRunnerStore(create_engine_from_url(db_url), runner_store_errors())
-    assert store.latest_session_id(chunk_id, "build") == build_session
-    chunk_most_recent = store.latest_session_id(chunk_id, None)
+    build_latest = store.latest_session(chunk_id, "build")
+    assert build_latest is not None and build_latest.session_id == build_session
+    latest = store.latest_session(chunk_id, None)
+    chunk_most_recent = latest.session_id if latest is not None else None
     assert chunk_most_recent in review_sessions, (
         f"the chunk's most-recent session should be a review one, got {chunk_most_recent!r}"
     )

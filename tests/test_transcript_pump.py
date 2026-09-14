@@ -17,6 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES as HUB_RECORD_MAX_BYTES
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.transcript import (
     LateToolOutput,
     NormalizedTurn,
@@ -101,6 +102,7 @@ def _ledger_row_stub() -> TranscriptSegmentLedgerRow:
         supersedes=None,
         finalized_at=None,
         stamped_at=_NOW,
+        harness_id=CLAUDE_CODE_HARNESS_ID,
     )
 
 
@@ -292,7 +294,13 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    ctx.stores.liveness.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
 
@@ -975,7 +983,13 @@ def test_pump_never_double_ships_after_a_same_session_resume() -> None:
     assert first_pending == 1
 
     # A resume under a NEW lease generation, same session — record_spawn closes gen 1 out.
-    ctx.stores.liveness.record_spawn("lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn(
+        "lease_1",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     open_segments = ctx.stores.transcript_ledger.open_transcript_segments()
     assert len(open_segments) == 1  # exactly one open segment ever reads "sess-a"
     assert open_segments[0].cursor == "pos-1"  # carried forward, not re-read from the start
@@ -1130,7 +1144,13 @@ def test_run_yields_to_its_own_deadline_across_many_open_segments() -> None:
             created_at=_NOW,
         )
     )
-    ctx.stores.liveness.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn(
+        "lease_2",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
 
     TranscriptPump(ctx).run(deadline=_NOW)  # already past by the time the loop checks it
 
@@ -1198,7 +1218,13 @@ def test_run_isolates_one_segments_pump_failure_from_the_rest() -> None:
             created_at=_NOW,
         )
     )
-    ctx.stores.liveness.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-bad", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-bad"),
+        spawned_at=_NOW,
+    )
     ctx.stores.environments.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
     ctx.stores.lease_record.record_lease(
         NewLease(
@@ -1213,7 +1239,13 @@ def test_run_isolates_one_segments_pump_failure_from_the_rest() -> None:
             created_at=_NOW,
         )
     )
-    ctx.stores.liveness.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-good", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn(
+        "lease_2",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-good"),
+        spawned_at=_NOW,
+    )
 
     TranscriptPump(ctx).run()  # must not raise despite "sess-bad"'s own failure
 
@@ -1637,7 +1669,11 @@ def test_pump_lease_marks_a_second_segment_truncated_when_never_even_attempted()
     # A same-lease resume under a DIFFERENT session id leaves segment sess-a open too —
     # only a same-session resume finalizes it — so the lease now has two open segments.
     ctx.stores.liveness.record_spawn(
-        "lease_1", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW + timedelta(seconds=1)
+        "lease_1",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW + timedelta(seconds=1),
     )
     lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
@@ -1812,7 +1848,11 @@ def test_run_reads_outstanding_buffered_bytes_once_and_still_enforces_the_cap_lo
     # A same-lease resume under a different session id (as in the F2 test above) leaves a
     # second open segment on the same lease, so one `run()` call pumps both.
     ctx.stores.liveness.record_spawn(
-        "lease_1", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW + timedelta(seconds=1)
+        "lease_1",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW + timedelta(seconds=1),
     )
     lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None

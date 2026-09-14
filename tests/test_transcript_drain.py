@@ -14,6 +14,8 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
 from blizzard.runner.loop import transcript_drain as transcript_drain_module
 from blizzard.runner.loop.context import LoopConfig
@@ -80,7 +82,13 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    ctx.stores.liveness.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    ctx.stores.liveness.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
 
@@ -656,7 +664,14 @@ def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
     assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
 
     # The condition ending (a healthy tick) recovers on the very next run — nothing wedged.
-    healthy_ctx = replace(ctx, transcripts=FakeTranscriptSource())
+    healthy_source = FakeTranscriptSource()
+    healthy_ctx = replace(
+        ctx,
+        transcripts_wired=True,
+        harnesses=HarnessRegistry(
+            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=healthy_source)}
+        ),
+    )
     TranscriptDrain(healthy_ctx).run()  # must not raise either
 
 

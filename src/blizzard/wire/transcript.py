@@ -14,7 +14,8 @@ from blizzard.wire.transcript_segment import TurnSegmentView
 
 
 class TranscriptResponse(BaseModel):
-    """A lease's parsed transcript — always 200 when the lease exists."""
+    """A lease's parsed transcript — 200 when the lease exists and its recorded harness
+    owner is known and available; 503 when that owner is unknown or unavailable."""
 
     lease_id: str
     session_id: str | None

@@ -58,6 +58,7 @@ def _ask_view(ask: AskRecord) -> AskView:
         question=ask.question,
         options=ask.options,
         session_id=ask.session_id,
+        harness_id=ask.harness_id,
         asked_at=iso_utc(ask.asked_at),
     )
 

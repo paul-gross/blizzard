@@ -13,9 +13,8 @@ from blizzard.runner.store.schema import escalation_closures, lease_closures, le
 
 _log = get_logger("blizzard.runner.store")
 
-# The caller-owned closure reason this store reads back to derive "open escalation"
-# (issue #51).
-_ESCALATED_REASON = "escalated"
+# The closure reasons "open escalation" derives from (issue #51): ordinary, and the owner-unresolvable mint's own.
+_ESCALATION_REASONS = ("escalated", "owner-unresolvable-mint")
 
 
 class EscalationStore:
@@ -59,6 +58,7 @@ class EscalationStore:
                 lease_closures.c.closed_at,
                 leases.c.epoch,
                 leases.c.session_id,
+                leases.c.harness_id,
                 # The escalated lease's session stamps (issue #144) — joined here rather
                 # than read back per row.
                 lease_context.c.session_name,
@@ -70,7 +70,7 @@ class EscalationStore:
                     lease_context, lease_context.c.lease_id == leases.c.lease_id
                 )
             )
-            .where(lease_closures.c.reason == _ESCALATED_REASON)
+            .where(lease_closures.c.reason.in_(_ESCALATION_REASONS))
         )
 
     @staticmethod
@@ -81,6 +81,7 @@ class EscalationStore:
             node_id=str(r.node_id),
             epoch=int(r.epoch),
             session_id=str(r.session_id) if r.session_id is not None else None,
+            harness_id=str(r.harness_id) if r.harness_id is not None else None,
             closed_at=r.closed_at,
             session_name=r.session_name,
             resolved_model=r.resolved_model,

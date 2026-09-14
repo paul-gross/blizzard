@@ -13,6 +13,7 @@ from fastapi.exceptions import HTTPException
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.transcript_rendering import turn_view
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.transcripts.ledger import TranscriptSegmentLedgerRow
 from blizzard.runner.transcripts.service import ResolvedSegmentContent
 from blizzard.wire.transcript_segment import (
@@ -37,6 +38,7 @@ def _index_entry(row: TranscriptSegmentLedgerRow) -> TranscriptSegmentIndexEntry
         final=row.finalized_at is not None,
         truncated=row.truncated_reason is not None,
         byte_count=row.shipped_bytes,
+        harness_id=row.harness_id,
         normalizer_version=row.normalizer_version,
         harness_version=row.harness_version,
         received_at=iso_utc(row.stamped_at),
@@ -63,12 +65,18 @@ def list_transcript_segments(chunk_id: str, request: Request) -> TranscriptSegme
     return TranscriptSegmentIndexView(chunk_id=chunk_id, segments=[_index_entry(row) for row in segments])
 
 
-@router.get("/chunks/{chunk_id}/transcripts/{segment_id}", response_model=TranscriptSegmentContentView)
+@router.get(
+    "/chunks/{chunk_id}/transcripts/{segment_id}",
+    response_model=TranscriptSegmentContentView,
+    responses={503: {"description": "The recorded harness owner is unavailable."}},
+)
 def get_transcript_segment(chunk_id: str, segment_id: str, request: Request) -> TranscriptSegmentContentView:
-    """One segment's turns, read from its session file, local-only (D1) — 404 iff no such
-    segment exists under this chunk on this runner's own store."""
+    """One segment's turns, local-only (D1) — 404 iff absent; 503 iff its owner is unavailable."""
     service = RunnerWiring.of(request).transcripts()
-    content = service.segment_content(chunk_id, segment_id)
+    try:
+        content = service.segment_content(chunk_id, segment_id)
+    except (UnknownHarnessError, UnavailableHarnessError) as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     if content is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown segment {segment_id}")
     return _content_view(segment_id, content)

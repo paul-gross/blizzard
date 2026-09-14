@@ -23,6 +23,8 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from tests.runner_fakes import FakeHarness, make_read_stores, make_store, make_stores, no_retry_delay
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -39,12 +41,12 @@ def _app_with_status(
     service = RunnerStatusService(
         make_read_stores(store),
         FixedClock(_NOW),
-        harness,
         runner_id=config.runner_id,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         hub_url=config.hub_url,
         env_pool=("e1",),
+        harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)}),
     )
     app = create_app(
         config,
@@ -82,7 +84,7 @@ def _seed_all_sections(store) -> None:  # type: ignore[no-untyped-def]
         question_id="qn_1",
         question="which branch?",
         options=["main", "dev"],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
@@ -90,13 +92,19 @@ def _seed_all_sections(store) -> None:  # type: ignore[no-untyped-def]
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,
     )
     _seed_lease(store, lease_id="lease_2", chunk_id="ch_2", epoch=1)
-    store.record_spawn("lease_2", pid=200, process_start_time="start-200", session_id="sess-b", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_2",
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_2", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_closure(
         lease_id="lease_2",

@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.store.schema import external_usage_samples, heartbeats, transcript_outbound_buffer
 from tests.runner_fakes import make_store
@@ -25,7 +26,7 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _mint(store, chunk="ch_1", node="nd_build", node_name="build", epoch=1, lease="lease_1"):  # type: ignore[no-untyped-def]
+def _mint(store, chunk="ch_1", node="nd_build", node_name="build", epoch=1, lease="lease_1", retries_max=2):  # type: ignore[no-untyped-def]
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -35,10 +36,15 @@ def _mint(store, chunk="ch_1", node="nd_build", node_name="build", epoch=1, leas
             node_name=node_name,
             epoch=epoch,
             runner_id="r1",
-            retries_max=2,
+            retries_max=retries_max,
             created_at=_NOW,
         )
     )
+
+
+def _session_id(store, chunk_id, node_name):  # type: ignore[no-untyped-def]
+    session = store.latest_session(chunk_id, node_name)
+    return session.session_id if session is not None else None
 
 
 @pytest.mark.unit
@@ -97,7 +103,7 @@ def test_lease_for_open_takeover_resolves_a_closed_reference_lease(tmp_path):  #
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,
@@ -127,7 +133,7 @@ def test_lease_for_open_takeover_is_none_once_the_takeover_ends(tmp_path):  # ty
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,
@@ -138,12 +144,18 @@ def test_lease_for_open_takeover_is_none_once_the_takeover_ends(tmp_path):  # ty
 
 
 @pytest.mark.component
-def test_latest_session_id_returns_most_recent_session_bearing_lease(tmp_path):  # type: ignore[no-untyped-def]
+def test_latest_session_returns_most_recent_session_bearing_lease(tmp_path):  # type: ignore[no-untyped-def]
     """Node-entry resume resolution (issue #115): ``node_name=None`` spans every
     node of the chunk, newest-first by mint order."""
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", node_name="build", lease="lease_1", epoch=1)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-build-1", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-build-1"),
+        spawned_at=_NOW,
+    )
 
     store.record_lease(
         NewLease(
@@ -159,33 +171,43 @@ def test_latest_session_id_returns_most_recent_session_bearing_lease(tmp_path): 
         )
     )
     store.record_spawn(
-        "lease_2", pid=2, process_start_time="2", session_id="sess-review-1", spawned_at=_NOW + timedelta(minutes=5)
+        "lease_2",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-review-1"),
+        spawned_at=_NOW + timedelta(minutes=5),
     )
 
-    assert store.latest_session_id("ch_1", None) == "sess-review-1"
-    assert store.latest_session_id("ch_1", "build") == "sess-build-1"
-    assert store.latest_session_id("ch_1", "review") == "sess-review-1"
+    assert _session_id(store, "ch_1", None) == "sess-review-1"
+    assert _session_id(store, "ch_1", "build") == "sess-build-1"
+    assert _session_id(store, "ch_1", "review") == "sess-review-1"
 
 
 @pytest.mark.component
-def test_latest_session_id_returns_none_when_no_session_or_no_match(tmp_path):  # type: ignore[no-untyped-def]
+def test_latest_session_returns_none_when_no_session_or_no_match(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    assert store.latest_session_id("ch_none", None) is None
+    assert store.latest_session("ch_none", None) is None
 
     _mint(store, chunk="ch_1", node="nd_build", node_name="build", lease="lease_1")
     # Lease minted but never spawned — no session_id yet.
-    assert store.latest_session_id("ch_1", None) is None
-    assert store.latest_session_id("ch_1", "build") is None
-    assert store.latest_session_id("ch_1", "review") is None
+    assert store.latest_session("ch_1", None) is None
+    assert store.latest_session("ch_1", "build") is None
+    assert store.latest_session("ch_1", "review") is None
 
 
 @pytest.mark.component
-def test_latest_session_id_breaks_created_at_ties_by_lease_id(tmp_path):  # type: ignore[no-untyped-def]
+def test_latest_session_breaks_created_at_ties_by_lease_id(tmp_path):  # type: ignore[no-untyped-def]
     """``created_at`` is not a total order — tied timestamps must still resolve
     deterministically, by the monotonic ``lease_id`` (bzh:sql-portable)."""
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", node_name="build", lease="lease_1")
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-1", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+        spawned_at=_NOW,
+    )
 
     store.record_lease(
         NewLease(
@@ -200,10 +222,16 @@ def test_latest_session_id_breaks_created_at_ties_by_lease_id(tmp_path):  # type
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-2", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_2",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-2"),
+        spawned_at=_NOW,
+    )
 
-    assert store.latest_session_id("ch_1", None) == "sess-2"
-    assert store.latest_session_id("ch_1", "build") == "sess-2"
+    assert _session_id(store, "ch_1", None) == "sess-2"
+    assert _session_id(store, "ch_1", "build") == "sess-2"
 
 
 @pytest.mark.component
@@ -251,7 +279,13 @@ def test_list_closed_leases_excludes_active_leases(tmp_path):  # type: ignore[no
 def test_spawn_facts_populate_pid_and_session(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _mint(store)
-    store.record_spawn("lease_1", pid=999, process_start_time="12345", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=999,
+        process_start_time="12345",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
     assert (lease.pid, lease.process_start_time, lease.session_id) == (999, "12345", "sess-a")
@@ -280,6 +314,57 @@ def test_attempt_count_and_latest_epoch_track_retries(tmp_path):  # type: ignore
     assert store.attempt_count("ch_1", "nd_other") == 0
     assert store.latest_epoch("ch_1") == 2
     assert store.latest_epoch("ch_absent") == 0
+
+
+@pytest.mark.unit
+def test_attempt_count_excludes_a_never_spawned_escalation_but_counts_a_spawned_one(tmp_path):  # type: ignore[no-untyped-def]
+    """An owner-unresolvable escalation's own never-spawned mint must not cost the node's
+    real attempts a retry — discriminated by its own closure reason from an ordinary,
+    already-spawned escalation, which still counts."""
+    store = _store(tmp_path)
+    _mint(store, lease="lease_1", epoch=1)  # a real, spawned attempt
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="t1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "s1"),
+        spawned_at=_NOW,
+    )
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
+
+    _mint(store, lease="lease_escalation", epoch=2, retries_max=0)  # the never-spawned escalation mint
+    store.record_closure(
+        lease_id="lease_escalation",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        reason="owner-unresolvable-mint",
+        closed_at=_NOW,
+    )
+    assert store.attempt_count("ch_1", "nd_build") == 1  # only the spawned attempt counts
+
+    _mint(store, lease="lease_2", epoch=3)  # a later real attempt, once the owner is restored
+    store.record_spawn(
+        "lease_2",
+        pid=2,
+        process_start_time="t2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "s2"),
+        spawned_at=_NOW,
+    )
+    store.record_closure(lease_id="lease_2", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    assert store.attempt_count("ch_1", "nd_build") == 2  # a spawned-then-escalated attempt still counts
+
+
+@pytest.mark.unit
+def test_attempt_count_still_counts_a_never_spawned_escalation_with_a_real_budget(tmp_path):  # type: ignore[no-untyped-def]
+    """`Reap` treats a never-spawned orphan as a failed attempt like any other, so its
+    escalation still closes plain `escalated`, never the mint's own distinct reason — and
+    must still cost the node a retry."""
+    store = _store(tmp_path)
+    _mint(store, lease="lease_orphan", epoch=1, retries_max=2)  # never spawned, then reaped and escalated
+    store.record_closure(
+        lease_id="lease_orphan", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW
+    )
+    assert store.attempt_count("ch_1", "nd_build") == 1  # the never-run attempt still spent its retry
 
 
 @pytest.mark.unit
@@ -363,9 +448,21 @@ def test_lease_generation_counts_spawn_facts(tmp_path):  # type: ignore[no-untyp
     store = _store(tmp_path)
     _mint(store)
     assert store.lease_generation("lease_1") == 0  # minted, not yet spawned
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="s1", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "s1"),
+        spawned_at=_NOW,
+    )
     assert store.lease_generation("lease_1") == 1
-    store.record_spawn("lease_1", pid=2, process_start_time="2", session_id="s1", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "s1"),
+        spawned_at=_NOW,
+    )
     assert store.lease_generation("lease_1") == 2
 
 
@@ -581,17 +678,22 @@ def test_attachments_for_lease_is_scoped_per_lease(tmp_path):  # type: ignore[no
 
 @pytest.mark.unit
 def test_session_preamble_fingerprint_is_none_for_an_unrecorded_session(tmp_path):  # type: ignore[no-untyped-def]
-    """The back-compat read (issue #149): a session nothing was ever recorded for reads
-    back ``None`` — every pre-existing session inherits this with no data migration."""
+    """A session nothing was ever recorded for reads back ``None`` (issue #149)."""
     store = _store(tmp_path)
-    assert store.session_preamble_fingerprint("sess_never_seen") is None
+    assert store.session_preamble_fingerprint(SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_never_seen")) is None
 
 
 @pytest.mark.unit
 def test_record_session_preamble_round_trips(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    store.record_session_preamble("sess_1", fingerprint=PreambleFingerprint(blizzard="aaa", workspace="bbb"), at=_NOW)
-    assert store.session_preamble_fingerprint("sess_1") == PreambleFingerprint(blizzard="aaa", workspace="bbb")
+    store.record_session_preamble(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1"),
+        fingerprint=PreambleFingerprint(blizzard="aaa", workspace="bbb"),
+        at=_NOW,
+    )
+    assert store.session_preamble_fingerprint(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1")
+    ) == PreambleFingerprint(blizzard="aaa", workspace="bbb")
 
 
 @pytest.mark.unit
@@ -599,11 +701,19 @@ def test_session_preamble_fingerprint_is_newest_row_wins(tmp_path):  # type: ign
     """Append-only, newest-row-is-the-answer (``bzh:facts-not-status``): the second spawn's
     prose is what the third spawn compares against, not the first's."""
     store = _store(tmp_path)
-    store.record_session_preamble("sess_1", fingerprint=PreambleFingerprint(blizzard="a1", workspace="w1"), at=_NOW)
     store.record_session_preamble(
-        "sess_1", fingerprint=PreambleFingerprint(blizzard="a1", workspace="w2"), at=_NOW + timedelta(minutes=5)
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1"),
+        fingerprint=PreambleFingerprint(blizzard="a1", workspace="w1"),
+        at=_NOW,
     )
-    assert store.session_preamble_fingerprint("sess_1") == PreambleFingerprint(blizzard="a1", workspace="w2")
+    store.record_session_preamble(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1"),
+        fingerprint=PreambleFingerprint(blizzard="a1", workspace="w2"),
+        at=_NOW + timedelta(minutes=5),
+    )
+    assert store.session_preamble_fingerprint(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1")
+    ) == PreambleFingerprint(blizzard="a1", workspace="w2")
 
 
 @pytest.mark.unit
@@ -612,18 +722,40 @@ def test_session_preamble_newest_row_wins_at_an_identical_stamp(tmp_path):  # ty
     one in production), so the newest-row read orders on the insert id, never on
     ``recorded_at`` — with an equal stamp, the later insert still wins."""
     store = _store(tmp_path)
-    store.record_session_preamble("sess_1", fingerprint=PreambleFingerprint(blizzard="a1", workspace="w1"), at=_NOW)
-    store.record_session_preamble("sess_1", fingerprint=PreambleFingerprint(blizzard="a2", workspace="w2"), at=_NOW)
-    assert store.session_preamble_fingerprint("sess_1") == PreambleFingerprint(blizzard="a2", workspace="w2")
+    store.record_session_preamble(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1"),
+        fingerprint=PreambleFingerprint(blizzard="a1", workspace="w1"),
+        at=_NOW,
+    )
+    store.record_session_preamble(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1"),
+        fingerprint=PreambleFingerprint(blizzard="a2", workspace="w2"),
+        at=_NOW,
+    )
+    assert store.session_preamble_fingerprint(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1")
+    ) == PreambleFingerprint(blizzard="a2", workspace="w2")
 
 
 @pytest.mark.unit
 def test_session_preamble_fingerprint_is_scoped_per_session(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    store.record_session_preamble("sess_1", fingerprint=PreambleFingerprint(blizzard="a1", workspace="w1"), at=_NOW)
-    store.record_session_preamble("sess_2", fingerprint=PreambleFingerprint(blizzard="a2", workspace="w2"), at=_NOW)
-    assert store.session_preamble_fingerprint("sess_1") == PreambleFingerprint(blizzard="a1", workspace="w1")
-    assert store.session_preamble_fingerprint("sess_2") == PreambleFingerprint(blizzard="a2", workspace="w2")
+    store.record_session_preamble(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1"),
+        fingerprint=PreambleFingerprint(blizzard="a1", workspace="w1"),
+        at=_NOW,
+    )
+    store.record_session_preamble(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_2"),
+        fingerprint=PreambleFingerprint(blizzard="a2", workspace="w2"),
+        at=_NOW,
+    )
+    assert store.session_preamble_fingerprint(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_1")
+    ) == PreambleFingerprint(blizzard="a1", workspace="w1")
+    assert store.session_preamble_fingerprint(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess_2")
+    ) == PreambleFingerprint(blizzard="a2", workspace="w2")
 
 
 # --- transcript segment ledger (issue #246, D1/D2) ---------------------------
@@ -636,7 +768,13 @@ def test_record_spawn_stamps_a_segment_keyed_by_chunk_node_epoch_generation(tmp_
     session_id leaves the prior generation open — see the resume test below for the other case."""
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
 
     open_segments = store.open_transcript_segments()
     assert len(open_segments) == 1
@@ -652,7 +790,11 @@ def test_record_spawn_stamps_a_segment_keyed_by_chunk_node_epoch_generation(tmp_
     # A rotation mints a genuinely different session_id — the prior segment stays open,
     # unmerged, until this lease's eventual closure finalizes it (D3).
     store.record_spawn(
-        "lease_1", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW + timedelta(minutes=1)
+        "lease_1",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW + timedelta(minutes=1),
     )
     segments_by_generation = sorted(store.open_transcript_segments(), key=lambda s: s.generation)
     assert [s.generation for s in segments_by_generation] == [1, 2]
@@ -668,11 +810,21 @@ def test_transcript_segments_for_chunk_returns_every_segment_open_or_finalized(t
     this store never held a lease for reads back ``[]`` (D3's ownership exclusion)."""
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     gen1 = store.open_transcript_segments()[0]
     # A same-session resume finalizes gen1 and opens gen2, so the chunk holds one of each.
     store.record_spawn(
-        "lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+        "lease_1",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW + timedelta(minutes=1),
     )
     gen2 = store.open_transcript_segments()[0]
 
@@ -694,7 +846,13 @@ def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on
     instead finalizes the outgoing segment and carries its cursor into the new one."""
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     gen1 = store.open_transcript_segments()[0]
     store.record_transcript_deltas(
         segment_id=gen1.segment_id,
@@ -709,7 +867,11 @@ def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on
     )
 
     store.record_spawn(
-        "lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+        "lease_1",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW + timedelta(minutes=1),
     )
 
     open_segments = store.open_transcript_segments()
@@ -744,7 +906,13 @@ def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_pat
     lease_2 mints, so carry-forward must find it ALREADY finalized."""
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     gen1 = store.open_transcript_segments()[0]
     store.record_transcript_deltas(
         segment_id=gen1.segment_id,
@@ -765,7 +933,11 @@ def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_pat
     # A different node-step, a different lease — but the SAME session, resumed via the pool.
     _mint(store, chunk="ch_1", node="nd_review", node_name="review", epoch=2, lease="lease_2")
     store.record_spawn(
-        "lease_2", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+        "lease_2",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW + timedelta(minutes=1),
     )
 
     open_segments = store.open_transcript_segments()
@@ -808,7 +980,13 @@ def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path, monkeypatc
     _pin_next_segment_id_suffixes(monkeypatch, suffixes)
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     seg1 = store.open_transcript_segments()[0]
     store.record_transcript_deltas(
         segment_id=seg1.segment_id,
@@ -825,7 +1003,13 @@ def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path, monkeypatc
 
     _mint(store, chunk="ch_1", node="nd_build", epoch=2, lease="lease_2")
     # SAME instant as lease_1's own spawn (not advanced) — manufactures the tie.
-    store.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_2",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     seg2 = store.open_transcript_segments()[0]
     store.record_transcript_deltas(
         segment_id=seg2.segment_id,
@@ -842,7 +1026,13 @@ def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path, monkeypatc
     assert seg1.stamped_at == seg2.stamped_at  # the tie the fix must break
 
     _mint(store, chunk="ch_1", node="nd_build", epoch=3, lease="lease_3")
-    store.record_spawn("lease_3", pid=3, process_start_time="3", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_3",
+        pid=3,
+        process_start_time="3",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
 
     gen3 = store.open_transcript_segments()[0]
     winner_cursor = "tok-1" if seg1.segment_id > seg2.segment_id else "tok-2"
@@ -856,8 +1046,20 @@ def test_record_spawn_stamps_one_segment_per_lease_at_its_own_epoch(tmp_path):  
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
     _mint(store, chunk="ch_1", node="nd_build", epoch=2, lease="lease_2")
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
-    store.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_spawn(
+        "lease_2",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW,
+    )
 
     by_lease = {s.lease_id: s for s in store.open_transcript_segments()}
     assert by_lease["lease_1"].epoch == 1
@@ -872,7 +1074,13 @@ def test_transcript_segment_delta_stop_shipping_and_record_truncated(tmp_path): 
     the production finalize path, ``record_closure``, regardless of either reason."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     segment_id = store.open_transcript_segments()[0].segment_id
 
     store.record_transcript_deltas(
@@ -944,7 +1152,13 @@ def test_marking_truncated_survives_a_row_whose_severity_column_was_never_backfi
     backfill, so a row carrying a reason and a NULL severity is reachable and must not raise."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     segment_id = store.open_transcript_segments()[0].segment_id
     store.mark_transcript_record_truncated(segment_id, reason="source_read_truncated", severity=0)
     with store._engine.begin() as conn:  # the pre-column shape: a reason, no severity
@@ -966,7 +1180,13 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
     (D3) — a fact-lane enqueue does not perturb the transcript lane's own numbering."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     segment_id = store.open_transcript_segments()[0].segment_id
     store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
 
@@ -1017,7 +1237,13 @@ def test_ack_transcript_outbound_never_reissues_a_pruned_rows_seq(tmp_path):  # 
     marked applied would read as a replay, silently dropping genuinely new content."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     segment_id = store.open_transcript_segments()[0].segment_id
     (t1,) = store.record_transcript_deltas(
         segment_id=segment_id,
@@ -1054,7 +1280,13 @@ def test_ack_transcript_outbound_keeps_a_final_marker_row_acked_not_deleted(tmp_
     receipt a finalized segment's marker landed exactly once."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
     marker = store.pending_transcript_outbound()
     assert len(marker) == 1
@@ -1081,9 +1313,19 @@ def test_record_closure_finalizes_every_open_segment_and_marks_it_atomically(tmp
     session_ids (a rotation, not a resume) so both genuinely stay open until closure."""
     store = _store(tmp_path)
     _mint(store, lease="lease_1")
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
     store.record_spawn(
-        "lease_1", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW + timedelta(minutes=1)
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_spawn(
+        "lease_1",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW + timedelta(minutes=1),
     )
     segment_ids = {s.segment_id for s in store.open_transcript_segments()}
     assert len(segment_ids) == 2  # two generations (two different sessions), both still open
@@ -1121,7 +1363,13 @@ def test_record_closure_ships_a_final_marker_even_when_no_pump_ever_ran(tmp_path
     on the ledger row, the one place ``_final_record`` reads it from."""
     store = _store(tmp_path)
     _mint(store, lease="lease_1")
-    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     segment_id = store.open_transcript_segments()[0].segment_id
 
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)

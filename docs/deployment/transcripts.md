@@ -25,7 +25,10 @@ fleet token can push to ingest but never read back through it. A runner's own lo
 its own chunk-scoped segments straight from that runner's local store, through the runner daemon's own
 `GET /api/chunks/{chunk_id}/transcripts[/{segment_id}]` pair (`src/blizzard/runner/api/transcript_segments.py`) — a
 runner-local read never routed through the hub or gated by `transcript:read`, since it never crosses the fleet token
-boundary the hub's API guards.
+boundary the hub's API guards. Both content reads — the segment-content read and the lease-keyed
+`GET /api/leases/{lease_id}/transcript` — are `503` when the recorded harness owner is unknown or bound but
+unavailable on this runner — the same unresolvable-owner shape that escalates a chunk in place elsewhere; the index
+read is unaffected, since it serves metadata off the local ledger alone, never the owner's own content.
 
 Tool results and subagent conversations routinely arrive in later records than the call that produced them (the runner
 reads a session in windows), shipping with that call's `tool_use_id`; the board folds them back on render, direct API

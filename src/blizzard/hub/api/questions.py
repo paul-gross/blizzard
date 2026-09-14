@@ -33,6 +33,7 @@ def question_view(row: QuestionRow) -> QuestionView:
         chunk_id=row.chunk_id,
         node_id=row.node_id,
         session_id=row.session_id,
+        harness_id=row.harness_id,
         runner_id=row.runner_id,
         epoch=row.epoch,
         question=row.question,

@@ -278,7 +278,9 @@ class InterruptedClaims:
         if envelope is None:
             return
         _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
-        Spawner(self.ctx).spawn(chunk_id, envelope, Environments(bindings).acquired, via="adopt")
+        Spawner(self.ctx).spawn(
+            chunk_id, envelope, Environments(bindings).acquired, via="adopt", harness_id=self._latest_owner(chunk_id)
+        )
 
     def _resume_requeued(self, chunk_id: str) -> None:
         """Spawn a fresh attempt at the chunk's current node — its local hold is cleared (#53).
@@ -294,7 +296,13 @@ class InterruptedClaims:
         if envelope is None:
             return
         _log.info("resuming requeued chunk — spawning current node", chunk_id=chunk_id)
-        Spawner(self.ctx).spawn(chunk_id, envelope, Environments(bindings).acquired, via="requeue-resume")
+        Spawner(self.ctx).spawn(
+            chunk_id,
+            envelope,
+            Environments(bindings).acquired,
+            via="requeue-resume",
+            harness_id=self._latest_owner(chunk_id),
+        )
 
     def _reclaim(self, chunk_id: str, bindings: list[EnvBindingRecord]) -> None:
         """Complete a claim whose hub POST never landed — claim now, reusing the held binding.
@@ -327,7 +335,17 @@ class InterruptedClaims:
         # A reclaim is a fresh claim, so its token overwrites whatever this chunk's row held
         # before — a fresh claim always wins (issue #84a).
         self.ctx.stores.tokens.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
-        Spawner(self.ctx).spawn(chunk_id, outcome.claimed.envelope, envs, via="reclaim")
+        Spawner(self.ctx).spawn(
+            chunk_id, outcome.claimed.envelope, envs, via="reclaim", harness_id=self._latest_owner(chunk_id)
+        )
+
+    def _latest_owner(self, chunk_id: str) -> str | None:
+        """The chunk's most recently minted lease's own owner, if it has one yet — carried
+        into a recovery spawn so it never falls back to the default harness under a chunk
+        this runner already minted under a different owner. ``None`` for a chunk with no
+        prior mint, the genuinely fresh case a caller's own default is free to decide."""
+        latest = self.ctx.stores.lease_record.latest_lease_for_chunk(chunk_id)
+        return latest.harness_id if latest is not None else None
 
     def _envelope(self, chunk_id: str, what: str) -> NodeEnvelope | None:
         try:

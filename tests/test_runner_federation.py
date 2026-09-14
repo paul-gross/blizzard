@@ -23,6 +23,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepository
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.status import RunnerStatusService
+from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.store.schema import metadata
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_read_stores, make_stores, runner_store_errors
@@ -90,12 +91,12 @@ def _build_app(
     runner_status = RunnerStatusService(
         stores=make_read_stores(store),
         clock=SystemClock(),
-        harness=None,  # type: ignore[arg-type]  # unused by the two routes this test drives
         runner_id=_RUNNER_ID,
         workspace_id="workspace-1",
         max_agents=1,
         hub_url=config.hub_url,
         env_pool=("e1",),
+        harnesses=HarnessRegistry({}),  # unused by the two routes this test drives
     )
     app = create_app(
         config,

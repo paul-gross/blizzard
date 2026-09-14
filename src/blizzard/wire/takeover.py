@@ -25,6 +25,7 @@ class TakeoverOpenResponse(BaseModel):
     command: str
     workdir: str
     env: dict[str, str] = {}
+    harness_id: str | None = None
 
 
 class TakeoverEndResponse(BaseModel):

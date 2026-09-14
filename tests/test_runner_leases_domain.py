@@ -22,6 +22,7 @@ from blizzard.runner.domain.leases import (
     LocalLeaseService,
     NewLease,
 )
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
 from tests.runner_fakes import FakeProbe, SqlAlchemyRunnerStore, make_read_stores, make_store, runner_store_errors
@@ -195,7 +196,13 @@ def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_p
     whole window back, not stale at birth and reaped seconds into its first turn."""
     store = _store(tmp_path)
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="s1", session_id="sess", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="s1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess"),
+        spawned_at=_NOW,
+    )
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
@@ -205,7 +212,13 @@ def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_p
     assert Liveness.of(store, lease).stale(resumed_at) is True
 
     # The answer-resume respawns the same lease — a second generation, same lease_id.
-    store.record_spawn("lease_1", pid=2, process_start_time="s2", session_id="sess", spawned_at=resumed_at)
+    store.record_spawn(
+        "lease_1",
+        pid=2,
+        process_start_time="s2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess"),
+        spawned_at=resumed_at,
+    )
 
     assert Liveness.of(store, lease).stale(resumed_at + timedelta(seconds=1)) is False
     assert Liveness.of(store, lease).stale(resumed_at + HEARTBEAT_STALENESS_THRESHOLD) is False
@@ -220,7 +233,13 @@ def test_a_heartbeat_newer_than_the_spawn_still_sets_the_baseline(tmp_path) -> N
     long after its spawn must not be measured from the spawn and reaped mid-work."""
     store = _store(tmp_path)
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="s1", session_id="sess", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="s1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess"),
+        spawned_at=_NOW,
+    )
     beat_at = _NOW + timedelta(minutes=50)
     store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
     lease = store.active_lease_for_chunk("ch_1")
@@ -276,7 +295,13 @@ def test_list_active_over_empty_store_returns_empty_list(tmp_path) -> None:  # t
 def test_list_active_joins_binding_and_heartbeat(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     beat_at = _NOW + timedelta(minutes=5)
     store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
@@ -303,10 +328,22 @@ def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path) ->
     spawn — reporting what the worker last did, not when staleness is measured from."""
     store = _store(tmp_path)
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
     resumed_at = _NOW + timedelta(hours=3)
-    store.record_spawn("lease_1", pid=101, process_start_time="start-101", session_id="sess-a", spawned_at=resumed_at)
+    store.record_spawn(
+        "lease_1",
+        pid=101,
+        process_start_time="start-101",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=resumed_at,
+    )
     probe = FakeProbe(alive={(101, "start-101")})
     service = LocalLeaseService(make_read_stores(store), FixedClock(resumed_at + timedelta(seconds=30)), probe)
 
@@ -320,9 +357,21 @@ def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path) ->
 def test_list_active_reads_parked_lease_ids_once_not_per_lease(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _counting_store(tmp_path)
     _seed_lease(store, chunk="ch_1", lease="lease_1")
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     _seed_lease(store, chunk="ch_2", lease="lease_2")
-    store.record_spawn("lease_2", pid=200, process_start_time="start-200", session_id="sess-b", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_2",
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW,
+    )
     probe = FakeProbe(alive={(100, "start-100"), (200, "start-200")})
     service = LocalLeaseService(make_read_stores(store), FixedClock(_NOW), probe)
 
@@ -339,9 +388,21 @@ def test_list_active_reads_parked_lease_ids_once_not_per_lease(tmp_path) -> None
 def test_list_recent_appends_closed_leases_after_active(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_lease(store, chunk="ch_1", lease="lease_1")
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     _seed_lease(store, chunk="ch_2", lease="lease_2")
-    store.record_spawn("lease_2", pid=200, process_start_time="start-200", session_id="sess-b", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_2",
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW,
+    )
     closed_at = _NOW + timedelta(minutes=5)
     store.record_closure(
         lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", reason="transitioned", closed_at=closed_at
@@ -370,7 +431,11 @@ def test_list_recent_active_lease_not_crowded_out_by_newer_closed_leases(tmp_pat
     old_active_at = _NOW - timedelta(hours=2)
     _seed_lease(store, chunk="ch_active", lease="lease_active", created_at=old_active_at)
     store.record_spawn(
-        "lease_active", pid=100, process_start_time="start-100", session_id="sess-active", spawned_at=old_active_at
+        "lease_active",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-active"),
+        spawned_at=old_active_at,
     )
     _seed_lease(store, chunk="ch_closed_1", lease="lease_closed_1", created_at=_NOW)
     store.record_closure(
@@ -419,7 +484,13 @@ def test_liveness_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path) -> N
     (a lease that genuinely never beat) distinct from "not supplied, go read it"."""
     store = _store(tmp_path)
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=1, process_start_time="s1", session_id="sess", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="s1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess"),
+        spawned_at=_NOW,
+    )
     beat_at = _NOW + timedelta(minutes=30)
     store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
     lease = store.active_lease_for_chunk("ch_1")

@@ -11,6 +11,7 @@ from sqlalchemy import and_, case, func, select
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.domain.usage import ContextSampleState, IWriteUsageRepository, UsageTotals
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.store.schema import context_samples, external_usage_samples, outbound_buffer, usage_facts
@@ -155,9 +156,9 @@ class UsageStore:
         *,
         lease_id: str,
         chunk_id: str,
-        session_id: str,
         context_tokens: int | None,
         sampled_at: datetime,
+        session: SessionReference,
         report_kind: str = "",
         report_payload: str = "",
     ) -> int | None:
@@ -168,7 +169,8 @@ class UsageStore:
             conn.execute(
                 context_samples.insert().values(
                     lease_id=lease_id,
-                    session_id=session_id,
+                    session_id=session.session_id,
+                    harness_id=session.harness_id,
                     context_tokens=context_tokens,
                     sampled_at=sampled_at,
                 )
@@ -189,7 +191,8 @@ class UsageStore:
             _log.warning(
                 "session context crossed the warn line",
                 lease_id=lease_id,
-                session_id=session_id,
+                session_id=session.session_id,
+                harness_id=session.harness_id,
                 context_tokens=context_tokens,
             )
         return seq

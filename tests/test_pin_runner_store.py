@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.store.errors import (
     RunnerStoreError,
     RunnerStoreErrorFactory,
@@ -197,7 +198,13 @@ def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_
                 created_at=_NOW,
             )
         )
-        store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+        store.record_spawn(
+            "lease_1",
+            pid=1,
+            process_start_time="1",
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+            spawned_at=_NOW,
+        )
         segment_id = store.open_transcript_segments()[0].segment_id
         first = _delta(store, segment_id, cursor="tok-1")
         store.ack_transcript_outbound(first, acked_at=_NOW)  # prunes the table's only, and highest, row

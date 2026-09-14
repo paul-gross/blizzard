@@ -17,6 +17,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.requeue import RequeueService
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from tests.runner_fakes import make_store, make_stores
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
@@ -44,7 +45,13 @@ def _seed_escalated_chunk(store) -> None:  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
 
@@ -77,7 +84,7 @@ def test_requeue_while_a_takeover_is_open_is_409(tmp_path: Path) -> None:
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,
@@ -122,7 +129,7 @@ def test_requeue_after_an_ended_takeover_returns_202(tmp_path: Path) -> None:
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,

@@ -13,6 +13,7 @@ import pytest
 
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.steps import Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from tests.runner_fakes import (
@@ -61,7 +62,13 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
             created_at=created,
         )
     )
-    store.record_spawn(lease, pid=pid, process_start_time=start, session_id=session, spawned_at=spawned or created)
+    store.record_spawn(
+        lease,
+        pid=pid,
+        process_start_time=start,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
+        spawned_at=spawned or created,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=created)
 
 
@@ -146,7 +153,13 @@ def test_marks_crash_after_an_earlier_session_ended(tmp_path):  # type: ignore[n
 
     # The answer resumes the same lease under a new pid; the worker gets back to work.
     answered_at = _NOW + timedelta(minutes=30)
-    store.record_spawn("lease_1", pid=200, process_start_time="start-200", session_id="sess-a", spawned_at=answered_at)
+    store.record_spawn(
+        "lease_1",
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=answered_at,
+    )
     store.record_heartbeat(lease_id="lease_1", beat_at=answered_at)
     _crashed_at(store, answered_at)  # then kill -9 lands mid-work
 
@@ -166,7 +179,13 @@ def test_marks_worker_respawned_just_before_the_crash_with_no_beat_of_its_own(tm
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # the pre-park generation's last beat
 
     respawned_at = _NOW + timedelta(hours=2)  # answered well past the threshold
-    store.record_spawn("lease_1", pid=200, process_start_time="start-200", session_id="sess-a", spawned_at=respawned_at)
+    store.record_spawn(
+        "lease_1",
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=respawned_at,
+    )
     crashed_at = respawned_at + timedelta(seconds=30)  # kill -9 lands 30s into the resumed turn
     _crashed_at(store, crashed_at)
 
@@ -185,7 +204,13 @@ def test_still_skips_a_worker_whose_newest_spawn_is_also_stale(tmp_path):  # typ
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
     respawned_at = _NOW + timedelta(minutes=1)
-    store.record_spawn("lease_1", pid=200, process_start_time="start-200", session_id="sess-a", spawned_at=respawned_at)
+    store.record_spawn(
+        "lease_1",
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=respawned_at,
+    )
     crashed_at = respawned_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(minutes=1)
     _crashed_at(store, crashed_at)
 
@@ -201,7 +226,13 @@ def test_skips_worker_that_declared_done_in_its_current_spawn(tmp_path):  # type
     store = _store(tmp_path)
     _seed_running_lease(store)
     respawned_at = _NOW + timedelta(minutes=30)
-    store.record_spawn("lease_1", pid=200, process_start_time="start-200", session_id="sess-a", spawned_at=respawned_at)
+    store.record_spawn(
+        "lease_1",
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=respawned_at,
+    )
     store.record_heartbeat(lease_id="lease_1", beat_at=respawned_at)
     store.record_session_end(
         lease_id="lease_1", ended_at=respawned_at + timedelta(minutes=1)
@@ -241,7 +272,7 @@ def test_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[no-untype
         question_id="qn_1",
         question="Q",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_park", chunk_id="ch_park", question_id="qn_1", parked_at=_NOW)

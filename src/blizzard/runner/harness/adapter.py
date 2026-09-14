@@ -74,6 +74,12 @@ class IHarnessWorkerLifecycle(Protocol):
         ``resume_from`` (#115) continues a session; the returned id is authoritative."""
         ...
 
+    def observe_version(self) -> str | None:
+        """The configured harness binding's version, observed right now, or ``None`` when
+        it could not be — bounded and non-raising (never a property: this may run a
+        subprocess). Uncached, so a self-updated binary is reflected on the next call."""
+        ...
+
     def resume_with_message(
         self,
         workdir: str,

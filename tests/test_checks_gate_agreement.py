@@ -14,6 +14,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.checks import CheckOutcome
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -126,7 +127,13 @@ def _runner_fails(tmp_path: Path, requires_checks: bool, results: list[tuple[str
             created_at=clock.now(),
         )
     )
-    store.record_spawn("lease_b", pid=100, process_start_time="s", session_id="sess-a", spawned_at=clock.now())
+    store.record_spawn(
+        "lease_b",
+        pid=100,
+        process_start_time="s",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=clock.now(),
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=clock.now())
 
     hub = FakeHub()

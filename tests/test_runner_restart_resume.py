@@ -7,6 +7,7 @@ directly against a real tmp store with fakes at the seams."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -14,6 +15,8 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.steps import Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView
@@ -52,7 +55,13 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=pid, process_start_time=start, session_id=session, spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=pid,
+        process_start_time=start,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -90,7 +99,7 @@ def test_marking_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[n
         question_id="qn_1",
         question="Q",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_park", chunk_id="ch_park", question_id="qn_1", parked_at=_NOW)
@@ -303,6 +312,39 @@ def test_resume_defers_when_hub_unreachable(tmp_path):  # type: ignore[no-untype
     assert store.resume_intent_lease_ids() == {"lease_1"}
     assert harness.resumed == []
     assert store.held_environment_ids() == ["e1"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("known_but_unavailable", [False, True], ids=["unknown", "unavailable"])
+def test_resume_owner_failure_escalates_in_place(tmp_path, known_but_unavailable):  # type: ignore[no-untyped-def]
+    """An unservable exact owner escalates the chunk in place — no other
+    runner can resume this exact session, so RESUME kills the stale survivor, closes the
+    lease escalated, and clears the resume intent rather than leaving either open forever."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    owner = "other" if known_but_unavailable else "missing"
+    with store._engine.begin() as conn:
+        conn.exec_driver_sql(f"UPDATE leases SET harness_id = '{owner}' WHERE lease_id = 'lease_1'")
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _running_chunk()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    bindings = {"claude_code": HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
+    if known_but_unavailable:
+        bindings[owner] = HarnessBinding(transcript_source=harness.transcript_source())
+    probe = FakeProbe(alive={(100, "start-100")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+    ctx = replace(ctx, harnesses=HarnessRegistry(bindings))
+
+    Resume(ctx).run()
+
+    assert harness.resumed == []
+    assert probe.killed == [100]  # best-effort hygiene; nothing is live behind the closed lease
+    assert store.resume_intent_lease_ids() == set()
+    assert store.active_lease("lease_1") is None
+    escalations = [e for e in store.open_escalations() if e.chunk_id == "ch_1"]
+    assert len(escalations) == 1
 
 
 @pytest.mark.unit

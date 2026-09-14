@@ -23,6 +23,7 @@ class LeaseView(BaseModel):
     node_name: str
     epoch: int
     session_id: str | None
+    harness_id: str | None = None
     pid: int | None
     environment_id: str | None
     workdir: str | None

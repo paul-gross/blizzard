@@ -11,10 +11,16 @@ from dataclasses import dataclass
 
 from blizzard.runner.domain.leases import IReadLeaseRecordRepository, LeaseRecord
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, TranscriptSegmentLedgerRow
-from blizzard.runner.transcripts.repository import IReadTranscriptRepository, Transcript, TranscriptProvenance, Turn
+from blizzard.runner.transcripts.repository import (
+    ITranscriptRepositoryResolver,
+    Transcript,
+    TranscriptProvenance,
+    Turn,
+)
 
 
 @dataclass(frozen=True)
@@ -50,7 +56,7 @@ class TranscriptService:
         leases: IReadLeaseRecordRepository,
         transcript_ledger: IReadTranscriptLedgerRepository,
         environments: IReadEnvironmentRepository,
-        transcripts: IReadTranscriptRepository,
+        transcripts: ITranscriptRepositoryResolver,
         archived: IReadArchivedTranscriptRepository,
         workspace_root: str,
     ) -> None:
@@ -73,6 +79,11 @@ class TranscriptService:
             # session yet, on either side. Ordinary, not an error.
             transcript = Transcript(session_id=None, available=False, reason="spawning", turns=[], truncated=False)
             return ResolvedTranscript(transcript=transcript, provenance="local", hub_unreachable=False)
+        # Resolve even when the archived copy may answer: the persisted owner governs this
+        # concrete session's transcript, and an archive must not conceal an absent owner.
+        session = lease.session
+        assert session is not None
+        self._transcripts.transcript_repository(session.harness_id)
 
         if self._leases.active_lease(lease_id) is not None or self._transcript_ledger.has_unshipped_transcript_content(
             lease.chunk_id
@@ -118,14 +129,14 @@ class TranscriptService:
             return None
         start_cursor = self._session_start(chunk_id, segment)
         spawn_cwd = self._spawn_cwd(chunk_id)
-        local = self._transcripts.read_turns(segment.session_id, spawn_cwd=spawn_cwd, since=start_cursor)
+        local = self._read_local_session(segment.session, spawn_cwd=spawn_cwd, since=start_cursor)
         final = segment.finalized_at is not None
         if not local.available:
             return ResolvedSegmentContent(final=final, available=False, truncated=True, turns=[])
         turns = local.turns
         truncated = local.truncated or segment.truncated_reason is not None
         if final and segment.cursor is not None:
-            tail = self._transcripts.read_turns(segment.session_id, spawn_cwd=spawn_cwd, since=segment.cursor)
+            tail = self._read_local_session(segment.session, spawn_cwd=spawn_cwd, since=segment.cursor)
             if tail.available:
                 turns = turns[: max(0, len(turns) - len(tail.turns))]
                 truncated = truncated or tail.truncated
@@ -137,16 +148,22 @@ class TranscriptService:
         the window starts where the chronologically preceding sibling left off; the first
         segment of its session has no start bound."""
         siblings = [
-            s
-            for s in self._transcript_ledger.transcript_segments_for_chunk(chunk_id)
-            if s.session_id == segment.session_id
+            s for s in self._transcript_ledger.transcript_segments_for_chunk(chunk_id) if s.session == segment.session
         ]
         index = next(i for i, s in enumerate(siblings) if s.segment_id == segment.segment_id)
         return siblings[index - 1].cursor if index > 0 else None
 
     def _read_local(self, lease: LeaseRecord) -> Transcript:
         assert lease.session_id is not None
-        return self._transcripts.read_turns(lease.session_id, spawn_cwd=self._spawn_cwd(lease.chunk_id))
+        session = lease.session
+        assert session is not None
+        return self._read_local_session(session, spawn_cwd=self._spawn_cwd(lease.chunk_id))
+
+    def _read_local_session(
+        self, session: SessionReference, *, spawn_cwd: str | None, since: str | None = None
+    ) -> Transcript:
+        repository = self._transcripts.transcript_repository(session.harness_id)
+        return repository.read_turns(session.session_id, spawn_cwd=spawn_cwd, since=since)
 
     def _spawn_cwd(self, chunk_id: str) -> str | None:
         bindings = self._environments.bindings_for_chunk(chunk_id)

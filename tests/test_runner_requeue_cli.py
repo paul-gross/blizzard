@@ -17,6 +17,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.test_runner_status_cli import _init_runner, _serve_local_api
 
@@ -41,7 +42,13 @@ def _seed_escalated_chunk(store: SqlAlchemyRunnerStore) -> None:
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
 
@@ -69,7 +76,7 @@ def test_requeue_refuses_while_a_takeover_is_open(tmp_path: Path) -> None:
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,

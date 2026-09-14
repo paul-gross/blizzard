@@ -16,10 +16,18 @@ from fastapi.testclient import TestClient
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
+from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
-from tests.runner_fakes import FakeArchivedTranscriptRepository, make_store, make_stores
+from tests.runner_fakes import (
+    FakeArchivedTranscriptRepository,
+    StaticTranscriptRepositoryResolver,
+    make_store,
+    make_stores,
+)
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -48,16 +56,20 @@ def _app_with_transcripts(
     repo: FakeTranscriptRepository | None = None,
     archived: FakeArchivedTranscriptRepository | None = None,
     workspace_root: str = "",
+    harnesses: HarnessRegistry | None = None,
 ):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     repo = repo or FakeTranscriptRepository()
     archived = archived or FakeArchivedTranscriptRepository()
+    transcripts = (
+        HarnessTranscriptRepositories(harnesses) if harnesses is not None else StaticTranscriptRepositoryResolver(repo)
+    )
     service = TranscriptService(
         leases=store,
         transcript_ledger=store,
         environments=store,
-        transcripts=repo,
+        transcripts=transcripts,
         archived=archived,
         workspace_root=workspace_root,
     )
@@ -96,7 +108,13 @@ def test_200_with_turns_for_an_active_lease(tmp_path: Path) -> None:
     repo = FakeTranscriptRepository({"sess-a": transcript})
     app, store, _repo = _app_with_transcripts(tmp_path, repo=repo)
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
 
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/transcript")
@@ -127,6 +145,37 @@ def test_200_with_turns_for_an_active_lease(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
+def test_unknown_recorded_owner_returns_503_without_reading_default_transcript_source(tmp_path: Path) -> None:
+    app, store, repo = _app_with_transcripts(tmp_path, harnesses=HarnessRegistry({}))
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    with store._engine.begin() as conn:
+        conn.exec_driver_sql("UPDATE leases SET harness_id = 'missing' WHERE lease_id = 'lease_1'")
+
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/transcript")
+
+    assert resp.status_code == 503
+    assert "unknown coding harness 'missing'" in resp.json()["detail"]
+    assert repo.calls == []
+
+
+@pytest.mark.unit
+def test_transcript_openapi_declares_the_owner_unavailable_response(tmp_path: Path) -> None:
+    app, _store, _repo = _app_with_transcripts(tmp_path)
+
+    responses = app.openapi()["paths"]["/api/leases/{lease_id}/transcript"]["get"]["responses"]
+
+    assert responses["503"]["description"] == "The recorded harness owner is unavailable."
+
+
+@pytest.mark.component
 def test_200_spawning_when_no_session_id_yet(tmp_path: Path) -> None:
     app, store, repo = _app_with_transcripts(tmp_path)
     _seed_lease(store)
@@ -148,7 +197,13 @@ def test_200_spawning_when_no_session_id_yet(tmp_path: Path) -> None:
 def test_200_not_found_when_the_file_is_missing(tmp_path: Path) -> None:
     app, store, _repo = _app_with_transcripts(tmp_path)  # empty repo -> not_found for any session
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
 
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/transcript")
@@ -169,7 +224,13 @@ def test_200_for_a_closed_lease_with_no_hub_segments_falls_back_to_local(tmp_pat
     archived = FakeArchivedTranscriptRepository()
     app, store, _repo = _app_with_transcripts(tmp_path, repo=repo, archived=archived)
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
     assert store.active_lease("lease_1") is None  # the cliff `active_lease()` would hit
 
@@ -207,7 +268,13 @@ def test_200_for_a_closed_lease_with_hub_segments_serves_them(tmp_path: Path) ->
     repo = FakeTranscriptRepository()
     app, store, _repo = _app_with_transcripts(tmp_path, repo=repo, archived=archived)
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
 
     with TestClient(app) as client:

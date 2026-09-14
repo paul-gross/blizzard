@@ -7,6 +7,7 @@ FILL against a pending mark spawns a fresh attempt — new lease, epoch, carried
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -21,6 +22,8 @@ from blizzard.runner.domain.requeue import (
     RequeueService,
 )
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.steps import Fill
 from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
@@ -50,7 +53,16 @@ def _scope(store, chunk_id: str = "ch_1") -> RequeueScope:  # type: ignore[no-un
     )
 
 
-def _seed_escalated_chunk(store, *, chunk="ch_1", lease="lease_1", node_id="nd_build", node_name="build", epoch=1):  # type: ignore[no-untyped-def]
+def _seed_escalated_chunk(  # type: ignore[no-untyped-def]
+    store,
+    *,
+    chunk="ch_1",
+    lease="lease_1",
+    node_id="nd_build",
+    node_name="build",
+    epoch=1,
+    harness_id=CLAUDE_CODE_HARNESS_ID,
+):
     """A build lease, spawned, bound, then closed escalated — retries exhausted."""
     store.record_lease(
         NewLease(
@@ -65,7 +77,13 @@ def _seed_escalated_chunk(store, *, chunk="ch_1", lease="lease_1", node_id="nd_b
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(harness_id, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id=node_id, reason="escalated", closed_at=_NOW)
 
@@ -92,7 +110,7 @@ def test_requeue_refuses_while_a_takeover_is_open(tmp_path) -> None:  # type: ig
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,
@@ -135,7 +153,7 @@ def test_requeue_works_after_an_ended_takeover_with_no_recorded_escalation_chang
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,
@@ -196,6 +214,49 @@ def test_fill_spawns_a_fresh_attempt_after_requeue_and_consumes_the_mark(tmp_pat
     assert store.pending_requeue_chunk_ids() == set()
     # No route re-claim — the chunk never re-entered the hub's queue.
     assert hub.claims == []
+
+
+def test_fill_requeue_resume_carries_the_failed_leases_own_harness_owner(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The requeue-resume path (``InterruptedClaims._resume_requeued``) mints its fresh
+    lease under the escalated lease's own recorded owner (``claim.py``'s ``_latest_owner``)
+    — never the default harness, even though a fresh mint carries no session yet."""
+    store = _store(tmp_path)
+    _seed_escalated_chunk(store, harness_id="other")
+    _service(store).requeue(_scope(store))
+
+    hub = FakeHub()
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok"), ("fail", "no")])
+    hub.envelopes["ch_1"] = envelope
+    hub.queue = []  # nothing new to fill — only the requeue-resume path should act
+    default = FakeHarness(handle=_HANDLE, verdict=None)
+    other = FakeHarness(handle=WorkerHandle(session_id="sess-c", pid=300, process_start_time="start-300"), verdict=None)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=default,
+        probe=FakeProbe(),
+        clock=FixedClock(_EVEN_LATER),  # strictly after the requeue mark — a real fresh mint
+    )
+    registry = HarnessRegistry(
+        {
+            CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+            "other": HarnessBinding(adapter=other, transcript_source=other.transcript_source()),
+        }
+    )
+    ctx = replace(
+        ctx,
+        harnesses=registry,
+        sessions=replace(ctx.sessions, harnesses=registry),
+        usage=replace(ctx.usage, harnesses=registry),
+    )
+
+    Fill(ctx).run()
+
+    assert default.spawns == []
+    assert len(other.spawns) == 1
+    fresh = store.active_lease_for_chunk("ch_1")
+    assert fresh is not None and fresh.session == SessionReference("other", "sess-c")
 
 
 def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_here(tmp_path) -> None:  # type: ignore[no-untyped-def]

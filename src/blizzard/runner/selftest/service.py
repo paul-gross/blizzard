@@ -8,12 +8,12 @@ is process-local and gone on daemon restart.
 from __future__ import annotations
 
 import threading
-from collections.abc import Mapping
 from dataclasses import replace
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import SELFTEST_PREFIX, Id
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
+from blizzard.runner.harness.registry import IHarnessRegistry, UnknownHarnessError
 from blizzard.runner.selftest.checks import IProcessProbe, SelfTest
 from blizzard.runner.selftest.model import SelfTestCheck, SelfTestRun, SelfTestStatus
 from blizzard.runner.selftest.scratch_git import IScratchGit
@@ -22,32 +22,25 @@ from blizzard.runner.selftest.scratch_git import IScratchGit
 # rather than wedge it silently.
 _DEFAULT_RUN_BUDGET_SECONDS = 300.0
 
-
-class UnknownHarnessError(Exception):
-    """``harness`` names no coding harness this runner is configured with."""
-
-    def __init__(self, harness: str, known: tuple[str, ...]) -> None:
-        super().__init__(f"unknown coding harness {harness!r}")
-        self.harness = harness
-        self.known = known
+__all__ = ["SelfTestService", "UnknownHarnessError"]
 
 
 class SelfTestService:
     """Mint selftest runs and execute them off the request thread.
 
-    A ``harness`` outside the configured ``adapters`` registry raises
+    A ``harness`` outside the injected ``harnesses`` registry raises
     :class:`UnknownHarnessError` — a client error, never a missing resource."""
 
     def __init__(
         self,
         *,
-        adapters: Mapping[str, IHarnessLifecycleAndVerdict],
+        harnesses: IHarnessRegistry,
         scratch_git: IScratchGit,
         process: IProcessProbe,
         clock: IClock,
         run_budget_seconds: float = _DEFAULT_RUN_BUDGET_SECONDS,
     ) -> None:
-        self._adapters = dict(adapters)
+        self._harnesses = harnesses
         self._scratch_git = scratch_git
         self._process = process
         self._clock = clock
@@ -57,13 +50,11 @@ class SelfTestService:
 
     @property
     def known_harnesses(self) -> tuple[str, ...]:
-        return tuple(self._adapters)
+        return self._harnesses.known_harnesses
 
     def start(self, harness: str) -> SelfTestRun:
         """Mint a run and begin it in a background thread; returns immediately."""
-        adapter = self._adapters.get(harness)
-        if adapter is None:
-            raise UnknownHarnessError(harness, self.known_harnesses)
+        adapter = self._harnesses.adapter(harness)
         run = SelfTestRun(id=Id.mint(SELFTEST_PREFIX, self._clock).value, harness=harness)
         with self._lock:
             self._runs[run.id] = run

@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.drain import OutboundDrain
@@ -118,13 +120,13 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
     assert store.latest_epoch(chunk_id) == 0, "the fresh runner store must carry no local history"
     provider = FakeProvider({"e9": "/ws/e9"})
     _hub_client = HttpHubClient(hub.client)
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
     ctx = LoopContext(
         stores=make_stores(store),
         clock=hub.clock,
         hub=_hub_client,
         chunk_views=ReadThroughChunkViews(_hub_client),
         provider=provider,
-        harness=FakeHarness(handle=_HANDLE, verdict=None),
         process=FakeProbe(alive={(200, "start-200")}),
         worktree_git=FakeWorktreeGit(),
         config=LoopConfig(runner_id="r2", workspace_id="w2", max_agents=1),
@@ -138,6 +140,9 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
             clock=hub.clock,
             provider=provider,
             worker_files=WorkerStdoutFiles("", store),
+        ),
+        harnesses=HarnessRegistry(
+            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
         ),
     )
     Fill(ctx).run()

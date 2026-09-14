@@ -35,6 +35,7 @@ from blizzard.runner.domain.leases.session import (
     IWriteLeaseSessionRepository,
 )
 from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.harness.identity import SessionReference
 
 if TYPE_CHECKING:
     # Deferred: ``runner/stores.py`` composes this module's own Protocol.
@@ -95,6 +96,11 @@ class PoolHead:
     lease_id: str
     resolved_model: str | None
     resolved_effort: str | None
+    harness_id: str
+
+    @property
+    def session(self) -> SessionReference:
+        return SessionReference(harness_id=self.harness_id, session_id=self.session_id)
 
 
 @dataclass(frozen=True)
@@ -121,14 +127,24 @@ class LeaseRecord:
     pid: int | None = None
     process_start_time: str | None = None
     session_id: str | None = None
+    harness_id: str | None = None
+
+    @property
+    def session(self) -> SessionReference | None:
+        """The typed concrete-session identity, absent until spawn-return."""
+        if self.session_id is None:
+            return None
+        if self.harness_id is None:
+            raise ValueError(f"lease {self.lease_id} has session_id {self.session_id!r} but no recorded harness_id")
+        return SessionReference(harness_id=self.harness_id, session_id=self.session_id)
 
 
 @dataclass(frozen=True)
 class ClosedLeaseRecord:
     """A lease joined with its closure fact — the panel's recent-history read (issue #29).
-
     ``reason`` is the closure vocabulary: ``transitioned`` | ``reaped`` | ``failed`` |
-    ``escalated`` | ``parked`` | ``released``."""
+    ``escalated`` | ``parked`` | ``released`` | ``owner-unresolvable-mint`` (zero-budget,
+    minted only to escalate an unresolvable resume owner)."""
 
     lease: LeaseRecord
     reason: str

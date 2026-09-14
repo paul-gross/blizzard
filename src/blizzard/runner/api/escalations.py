@@ -36,6 +36,7 @@ def _escalation_list(service: RunnerStatusService) -> EscalationListResponse:
                 session_name=e.session_name,
                 model=e.model,
                 effort=e.effort,
+                harness_id=e.harness_id,
             )
             for e in service.escalations()
         ]

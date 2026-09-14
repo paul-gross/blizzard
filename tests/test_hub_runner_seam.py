@@ -14,6 +14,8 @@ import pytest
 
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -105,7 +107,13 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
             created_at=seed_time,
         )
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=seed_time)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=seed_time,
+    )
     store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=seed_time)
 
     # The operator detaches at the REAL hub endpoint.
@@ -119,13 +127,13 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
     provider = FakeProvider({"e1": "/ws/e1"})
     probe = FakeProbe(alive={(100, "start-100")})
     _hub_client = HttpHubClient(hub.client)
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
     ctx = LoopContext(
         stores=make_stores(store),
         clock=hub.clock,
         hub=_hub_client,
         chunk_views=ReadThroughChunkViews(_hub_client),
         provider=provider,
-        harness=FakeHarness(handle=_HANDLE, verdict=None),
         process=probe,
         worktree_git=FakeWorktreeGit(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
@@ -139,6 +147,9 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
             clock=hub.clock,
             provider=provider,
             worker_files=WorkerStdoutFiles("", store),
+        ),
+        harnesses=HarnessRegistry(
+            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
         ),
     )
 
@@ -187,7 +198,13 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
             created_at=seed_time,
         )
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=seed_time)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=seed_time,
+    )
     store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=seed_time)
 
     # The operator stops at the REAL hub endpoint.
@@ -201,13 +218,13 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
     provider = FakeProvider({"e1": "/ws/e1"})
     probe = FakeProbe(alive={(100, "start-100")})
     _hub_client = HttpHubClient(hub.client)
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
     ctx = LoopContext(
         stores=make_stores(store),
         clock=hub.clock,
         hub=_hub_client,
         chunk_views=ReadThroughChunkViews(_hub_client),
         provider=provider,
-        harness=FakeHarness(handle=_HANDLE, verdict=None),
         process=probe,
         worktree_git=FakeWorktreeGit(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
@@ -221,6 +238,9 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
             clock=hub.clock,
             provider=provider,
             worker_files=WorkerStdoutFiles("", store),
+        ),
+        harnesses=HarnessRegistry(
+            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
         ),
     )
 

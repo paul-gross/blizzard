@@ -26,6 +26,7 @@ def _view(activity: LeaseActivity) -> LeaseView:
         node_name=lease.node_name,
         epoch=lease.epoch,
         session_id=lease.session_id,
+        harness_id=lease.harness_id,
         pid=lease.pid,
         environment_id=activity.environment_id,
         workdir=activity.workdir,

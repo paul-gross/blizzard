@@ -7,12 +7,14 @@ second slice drives REAP/ADVANCE against an open takeover."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.domain.takeover import (
@@ -24,11 +26,25 @@ from blizzard.runner.domain.takeover import (
     TakeoverOpenScope,
     TakeoverService,
 )
+from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.loop.session import SessionResolver
+from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Reap
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import LEASE_MINTED
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store, make_stores
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    make_context,
+    make_envelope,
+    make_store,
+    make_stores,
+)
 
 pytestmark = pytest.mark.component
 
@@ -44,9 +60,11 @@ def _service(store, *, clock=None, harness=None, probe=None):  # type: ignore[no
     return TakeoverService(
         make_stores(store),
         clock or FixedClock(_NOW),
-        harness or FakeHarness(handle=_HANDLE, verdict=None),
         probe or FakeProbe(),
         local_api_url="http://127.0.0.1:8431",
+        harnesses=HarnessRegistry(
+            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness or FakeHarness(handle=_HANDLE, verdict=None))}
+        ),
     )
 
 
@@ -84,7 +102,13 @@ def _seed_lease(
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=pid, process_start_time=f"start-{pid}", session_id=session, spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=pid,
+        process_start_time=f"start-{pid}",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -95,7 +119,7 @@ def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:  # type: ig
         open_takeover=store.open_takeover_for_chunk(chunk_id),
         bindings=store.bindings_for_chunk(chunk_id),
         active_lease=store.active_lease_for_chunk(chunk_id),
-        latest_lease=store.latest_lease_for_chunk(chunk_id),
+        latest_lease_with_session=store.latest_lease_with_session_for_chunk(chunk_id),
         latest_epoch=store.latest_epoch(chunk_id),
     )
 
@@ -138,8 +162,86 @@ def test_takeover_opens_over_a_needs_human_chunk(tmp_path) -> None:  # type: ign
     assert opened.command == "cd /ws/e1 && claude --resume sess-a"
     record = store.open_takeover_for_chunk("ch_1")
     assert record is not None
-    assert record.lease_id == "lease_1"  # the closed escalated lease, recovered via latest_lease_for_chunk
+    assert record.lease_id == "lease_1"  # the closed escalated lease, recovered via latest_lease_with_session
     assert record.fence_epoch is None
+
+
+def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A plain resume's owner unresolvable at node entry (`Spawner.enter_node`) mints a
+    session-less lease newer than the prior session it could not resume. Once the owner is
+    restored, a takeover must still resolve against that prior session, not the empty mint."""
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn(
+        "lease_1", pid=1, process_start_time="t1", session=SessionReference("foreign", "sess-old"), spawned_at=_NOW
+    )
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+    default = FakeHarness(handle=_HANDLE, verdict="pass")
+    unresolved = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=default, transcript_source=default.transcript_source())}
+    )
+    hub = FakeHub()
+    envelope = make_envelope(
+        "ch_1",
+        "verify",
+        node_id="nd_verify",
+        choices=[("pass", "meets criteria"), ("fail", "does not")],
+        session=SessionMode.RESUME,
+        session_source="build",  # a targeted, un-pooled resume — no `session_name`
+    )
+    hub.envelopes["ch_1"] = envelope
+    now2 = _NOW + timedelta(minutes=5)  # strictly after the prior session's own mint
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=default,
+        probe=FakeProbe(),
+        clock=FixedClock(now2),
+    )
+    ctx = replace(
+        ctx, harnesses=unresolved, sessions=SessionResolver(leases=store, harnesses=unresolved, transcripts_wired=True)
+    )
+
+    Spawner(ctx).enter_node(
+        "ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test"
+    )  # `foreign` unresolvable
+
+    assert store.active_lease_for_chunk("ch_1") is None
+    assert len([e for e in store.open_escalations() if e.chunk_id == "ch_1"]) == 1
+
+    # The owner is restored.
+    resolved = HarnessRegistry(
+        {
+            CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+            "foreign": HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+        }
+    )
+    service = TakeoverService(
+        make_stores(store), FixedClock(_NOW), FakeProbe(), local_api_url="http://127.0.0.1:8431", harnesses=resolved
+    )
+
+    opened = service.open(_open_scope(store), force=False)
+
+    assert opened.command == "cd /ws/e1 && claude --resume sess-old"
+    record = store.open_takeover_for_chunk("ch_1")
+    assert record is not None
+    assert record.lease_id == "lease_1"
+    assert record.session_id == "sess-old"
 
 
 def test_takeover_opens_over_a_gate_parked_chunk(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -317,7 +419,7 @@ def test_reap_skips_a_stalled_worker_under_an_open_takeover(tmp_path) -> None:  
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=2,
         opened_at=_NOW,
@@ -344,7 +446,7 @@ def test_advance_skips_judgement_and_the_held_chunk_poll_under_an_open_takeover(
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,
@@ -371,7 +473,7 @@ def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
         opened_at=_NOW,

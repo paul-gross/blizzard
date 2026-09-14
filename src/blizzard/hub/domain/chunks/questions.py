@@ -40,6 +40,7 @@ class IWriteChunkQuestionsRepository(IReadChunkQuestionsRepository, Protocol):
         question: str,
         options: list[str],
         asked_at: datetime,
+        harness_id: str | None = None,
     ) -> None:
         """Land a ``question.asked`` row — the chunk derives ``waiting_on_human``.
 

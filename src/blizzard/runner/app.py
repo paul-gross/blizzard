@@ -80,10 +80,8 @@ from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.adapter import IHarnessAdapter
-from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
-from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
+from blizzard.runner.harness.internal.claude_code_registry import build_production_harness_registry
+from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.loop.build import ResumeMarking
 from blizzard.runner.loop.process import LinuxProcessProbe
@@ -92,14 +90,11 @@ from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessS
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores, RunnerStores
+from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
 from blizzard.runner.transcripts.internal.http_archived_transcript_repository import (
     HttpArchivedTranscriptRepository,
 )
-from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
 from blizzard.runner.transcripts.service import TranscriptService
-
-# The one coding-harness name a selftest may target today (issue #54).
-CLAUDE_CODE_HARNESS_NAME = "claude_code"
 
 
 @dataclass(frozen=True)
@@ -171,7 +166,7 @@ def create_app(
     *,
     readiness: ReadinessService | None = None,
     workspace_provider: IWorkspaceProvider | None = None,
-    harness: IHarnessAdapter | None = None,
+    harnesses: IHarnessRegistry | None = None,
     runner_stores: RunnerStores | None = None,
     leases: LocalLeaseService | None = None,
     transcripts: TranscriptService | None = None,
@@ -198,13 +193,14 @@ def create_app(
     then answer 503 and ``/api/ready`` reports ``ready=false``. ``selftests`` is always
     wired (issue #54); ``events`` (D2) defaults absent, leaving the route silent."""
     log = get_logger("blizzard.runner")
+    resolved_harnesses: IHarnessRegistry = harnesses if harnesses is not None else HarnessRegistry({})
 
     app = FastAPI(title="blizzard-runner", version=__version__, lifespan=_lifespan)
     app.state.config = config
     app.state.readiness = readiness
     # The seams below are None on the store-free app.
     app.state.workspace_provider = workspace_provider
-    app.state.harness = harness
+    app.state.harnesses = resolved_harnesses
     # The controller-facing narrowing of `runner_stores` (D1, D2, blizzard#412) — every
     # route resolves this; the write bundle itself is never stashed on `app.state`, so no
     # route can reach it — only used here, to derive this and the five single-concept
@@ -243,7 +239,7 @@ def create_app(
     )
     # The adapter-drift canary (issue #54): store-free, so wired unconditionally.
     app.state.selftests = selftests or SelfTestService(
-        adapters={CLAUDE_CODE_HARNESS_NAME: harness} if harness is not None else {},
+        harnesses=resolved_harnesses,
         scratch_git=SubprocessScratchGit(),
         process=LinuxProcessProbe(),
         clock=SystemClock(),
@@ -334,26 +330,11 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         env_pool=config.workspace_envs,
         base_branch=config.base_branch,
     )
-    # Empty ``transcripts_root`` resolves here, once, never inside the adapter.
-    projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
-    harness_transcript_source = ClaudeCodeTranscriptSource(
-        projects_root, HarnessTranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
-    )
-    harness: IHarnessAdapter = ClaudeCodeAdapter(
-        binary=config.harness_binary,
-        settings_path=config.worker_settings_path,
-        permission_mode=config.harness_permission_mode,
-        model_aliases=config.model_aliases,
-        effort_aliases=config.effort_aliases,
-        transcript_source=harness_transcript_source,
-        process=LinuxProcessProbe(),
-    )
+    harnesses = build_production_harness_registry(config)
     # ``stale_after`` is left at its default so the two readers never desync (#28).
     leases = LocalLeaseService(
         stores=RunnerReadStores.of(runner_stores), clock=SystemClock(), process=LinuxProcessProbe()
     )
-    # Projected off the harness's own source, via the accessor — never built twice.
-    transcript_repository = ProjectedTranscriptRepository(harness.transcript_source())
     # The archived-transcript seam (blizzard#249, D4) needs its own authenticated client:
     # `hub_http_client` below carries no auth headers (JWKS/hub-auth-mode reads only).
     archived_transcript_client = httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
@@ -366,7 +347,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         leases=runner_stores.lease_record,
         transcript_ledger=runner_stores.transcript_ledger,
         environments=runner_stores.environments,
-        transcripts=transcript_repository,
+        transcripts=HarnessTranscriptRepositories(harnesses),
         archived=archived_transcripts,
         workspace_root=config.workspace_root,
     )
@@ -375,20 +356,20 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     runner_status = RunnerStatusService(
         stores=RunnerReadStores.of(runner_stores),
         clock=SystemClock(),
-        harness=harness,
         runner_id=config.runner_id,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         hub_url=config.hub_url,
         env_pool=config.workspace_envs,
+        harnesses=harnesses,
     )
     takeover = TakeoverService(
         runner_stores,
         SystemClock(),
-        harness,
         LinuxProcessProbe(),
         # The same derivation the spawn preamble uses, so the two agree.
         local_api_url=config.local_api_url,
+        harnesses=harnesses,
         events=events,
     )
     requeue = RequeueService(runner_stores.requeue, SystemClock())
@@ -409,7 +390,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         config,
         readiness=readiness,
         workspace_provider=workspace_provider,
-        harness=harness,
+        harnesses=harnesses,
         runner_stores=runner_stores,
         leases=leases,
         transcripts=transcripts,

@@ -34,6 +34,9 @@ _log = get_logger("blizzard.runner.store")
 # read back to keep that attempt out of the node's retry budget.
 _PREEMPTED_REASON = "preempted"
 
+# `Attempt.close`'s own closure reason for the never-spawned owner-unresolvable escalation mint.
+_ESCALATION_MINT_REASON = "owner-unresolvable-mint"
+
 # Pinned by tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held's
 # sibling lease cases.
 _OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
@@ -71,6 +74,16 @@ class LeaseRecordStore:
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
+    def latest_lease_with_session_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
+        stmt = (
+            lease_select()
+            .where(leases.c.chunk_id == chunk_id)
+            .where(leases.c.session_id.is_not(None))
+            .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
+        )
+        rows = self._store.all(stmt)
+        return row_to_lease(rows[0]) if rows else None
+
     def lease(self, lease_id: str) -> LeaseRecord | None:
         stmt = lease_select().where(leases.c.lease_id == lease_id)
         rows = self._store.all(stmt)
@@ -93,11 +106,15 @@ class LeaseRecordStore:
         # A preempted attempt was superseded, not spent (issue #370): counting it would carry
         # the node toward exhaustion and escalate the very chunk the operator is rescuing.
         preempted = select(lease_closures.c.lease_id).where(lease_closures.c.reason == _PREEMPTED_REASON)
+        # The mint's own closure reason names it directly — an ordinary exhausted-retries
+        # escalation, spawned or REAP-orphaned alike, closes plain `escalated` and still counts.
+        escalation_mints = select(lease_closures.c.lease_id).where(lease_closures.c.reason == _ESCALATION_MINT_REASON)
         stmt = (
             select(func.count())
             .select_from(lease_context)
             .where(and_(lease_context.c.chunk_id == chunk_id, lease_context.c.node_id == node_id))
             .where(lease_context.c.lease_id.not_in(preempted))
+            .where(lease_context.c.lease_id.not_in(escalation_mints))
         )
         with self._store.connect() as conn:
             return int(conn.execute(stmt).scalar_one())

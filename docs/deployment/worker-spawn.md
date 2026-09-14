@@ -1,5 +1,17 @@
 # Worker spawn
 
+## Harness identity
+
+Every session is recorded and read under a harness id; the only one a runner binds is `claude_code`, built once at
+startup from `[worker]`'s `harness_binary` (and its sibling knobs below) in `blizzard-runner.toml` — the same binary
+every spawn, judge, and resume child runs. A recorded session's owner resolves against this runner's own binding:
+**unknown** means the session was recorded under a harness id this runner build doesn't ship at all — the remedy is to
+run a runner version that binds that id, on the runner holding the chunk, never to substitute another harness.
+**unavailable** means the id is bound but this runner can't supply the specific capability being asked of it — resuming
+or judging versus reading its transcript — a gap the production harness registry doesn't leave open today, so it can't
+occur in practice. Either shows up as an `owner-unresolvable` event, which [observability.md](./observability.md) owns
+reading and resolving.
+
 ## The three prompt layers
 
 A worker's first spawn on a session carries three ordered layers ahead of the node's own envelope prompt: a baked-in

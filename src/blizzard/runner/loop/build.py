@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from pathlib import Path
 
 import httpx
 from sqlalchemy import Engine
@@ -20,9 +19,8 @@ from blizzard.runner.composition import build_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
-from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.internal.claude_code_registry import build_production_harness_registry
 from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -83,22 +81,10 @@ class LoopWiring:
         provider = WinterWorkspaceProvider(
             config.workspace_root, env_pool=config.workspace_envs, base_branch=config.base_branch
         )
-        # Resolved once here for both readers (issue #58, blizzard#245; see also
-        # `runner/app.py`, issue #29): `transcripts_root` empty means Claude Code's own default.
-        projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
-        harness_transcript_source = ClaudeCodeTranscriptSource(
-            projects_root, HarnessTranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
-        )
-        harness = ClaudeCodeAdapter(
-            binary=config.harness_binary,
-            settings_path=config.worker_settings_path,
-            permission_mode=config.harness_permission_mode,
-            env_passthrough=config.worker_env_passthrough,
-            model_aliases=config.model_aliases,
-            effort_aliases=config.effort_aliases,
-            transcript_source=harness_transcript_source,
-            process=LinuxProcessProbe(),
-        )
+        harnesses = build_production_harness_registry(config)
+        # A startup guard: this composition's transcripts lane requires the default
+        # harness's own binding to resolve one, not merely to be registered at all.
+        harnesses.transcript_source(CLAUDE_CODE_HARNESS_ID)
         # The subscription-sampling seam (blizzard#436) — each declaration paired with its
         # resolved binding; an unknown provider selects `None` (declared, unsampled).
         _clock = SystemClock()
@@ -156,7 +142,6 @@ class LoopWiring:
             # The non-memoizing default (D4) — only `tick()` itself upgrades this per call.
             chunk_views=ReadThroughChunkViews(hub),
             provider=provider,
-            harness=harness,
             subscriptions=resolved_subscriptions,
             process=LinuxProcessProbe(),
             worktree_git=SubprocessWorktreeGit(),
@@ -169,13 +154,17 @@ class LoopWiring:
                 leases=stores.liveness,
                 usage=stores.usage,
                 clock=_clock,
-                harness=harness,
                 worker_files=_worker_files,
                 workspace_root=config.workspace_root,
-                transcripts=harness_transcript_source,
+                harnesses=harnesses,
+                transcripts_wired=True,
                 events=self.events,
             ),
-            sessions=SessionResolver(leases=stores.session, harness=harness, transcripts=harness_transcript_source),
+            sessions=SessionResolver(
+                leases=stores.session,
+                harnesses=harnesses,
+                transcripts_wired=True,
+            ),
             env_release=EnvironmentRelease(
                 environments=stores.environments,
                 leases=stores.lease_record,
@@ -184,10 +173,11 @@ class LoopWiring:
                 worker_files=_worker_files,
                 events=self.events,
             ),
-            # The same source injected into `harness` above, declared here too so the loop's
-            # direct readers don't reach through `ctx.harness` for it.
-            transcripts=harness_transcript_source,
+            # `harness_transcript_source` above always resolves (or the registry build
+            # itself already raised) — this composition's transcripts lane is always wired.
+            transcripts_wired=True,
             events=self.events,
+            harnesses=harnesses,
         )
 
     def tick_once(self) -> None:

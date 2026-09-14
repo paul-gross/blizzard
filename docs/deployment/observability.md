@@ -14,6 +14,17 @@ routes and the chunk re-polls it forever; announced once per node visit, not per
 missing edge then requeuing, not retrying. The work-item closure events are also the hub's —
 [work-sources.md](./work-sources.md) owns them.
 
+`owner-unresolvable` (critical): a runner reached an existing session whose recorded harness owner it cannot resolve
+right now. This runner binds only `claude_code` ([worker-spawn.md](./worker-spawn.md) owns that binding). **Unknown**
+means the session was recorded under a harness id this runner build doesn't bind at all — the remedy is to run a
+runner version that binds that id, on the runner holding the chunk, never to substitute another harness. **Unavailable**
+means a bound harness is missing the specific capability being asked of it; the production registry always binds
+`claude_code` with every capability, so this can't happen today. The chunk escalates in place with no takeover command,
+since no other runner can dispatch to that exact session either — but once the recorded harness is resolvable again
+(that runner build), the operator can take the session over by hand
+([chunk-operations/takeover.md](./chunk-operations/takeover.md)) alongside that remedy; either way, clearing the
+escalation still takes one of the supersessions below.
+
 Escalations appear in the same feed as a needs-human event kind — one row, one surface; a row leaves when its escalation
 is superseded by any of a requeue, an operator `chunk restart`, the next attempt's lease, or the chunk ending `stopped`
 or `done`.

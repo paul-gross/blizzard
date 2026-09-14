@@ -3269,6 +3269,10 @@ export type QuestionAsked = {
      */
     epoch: number;
     /**
+     * Harness Id
+     */
+    harness_id?: string | null;
+    /**
      * Node Id
      */
     node_id?: string | null;
@@ -3339,6 +3343,10 @@ export type QuestionView = {
      * Epoch
      */
     epoch: number;
+    /**
+     * Harness Id
+     */
+    harness_id?: string | null;
     /**
      * Node Id
      */
@@ -4583,6 +4591,10 @@ export type TranscriptSegmentIndexEntry = {
      */
     final: boolean;
     /**
+     * Harness Id
+     */
+    harness_id?: string | null;
+    /**
      * Harness Version
      */
     harness_version: string | null;
@@ -4658,6 +4670,10 @@ export type TranscriptSegmentRecord = {
      * Final
      */
     final: boolean;
+    /**
+     * Harness Id
+     */
+    harness_id?: string | null;
     /**
      * Harness Version
      */

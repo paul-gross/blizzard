@@ -73,6 +73,7 @@ class AskView(BaseModel):
     question: str
     options: list[str] = []
     session_id: str | None
+    harness_id: str | None = None
     asked_at: str
 
 
@@ -96,6 +97,7 @@ class EscalationView(BaseModel):
     session_name: str | None = None
     model: str | None = None
     effort: str | None = None
+    harness_id: str | None = None
 
 
 class EscalationListResponse(BaseModel):
@@ -112,6 +114,7 @@ class OpenTakeoverView(BaseModel):
     chunk_id: str
     takeover_id: str
     held_since: str
+    harness_id: str | None = None
 
 
 class OpenTakeoverListResponse(BaseModel):

@@ -15,6 +15,8 @@ from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.outbound import OutboundFactRecord
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.stores import RunnerReadStores
 
 __all__ = [
@@ -107,6 +109,7 @@ class EscalationView:
     session_name: str | None = None
     model: str | None = None
     effort: str | None = None
+    harness_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -118,10 +121,11 @@ class OpenTakeoverView:
     chunk_id: str
     takeover_id: str
     held_since: datetime
+    harness_id: str | None = None
 
 
 class RunnerStatusService:
-    """Composition-root-wired: the store, clock, harness, and this runner's own
+    """Composition-root-wired: the store, clock, harness registry, and this runner's own
     identity/config — everything ``blizzard runner status`` renders (issue #51).
 
     Reads across seven concepts (pause, leases, outbound, environments, asks, takeover,
@@ -133,18 +137,18 @@ class RunnerStatusService:
         self,
         stores: RunnerReadStores,
         clock: IClock,
-        harness: IHarnessWorkerLifecycle,
         *,
         runner_id: str,
         workspace_id: str,
         max_agents: int,
         hub_url: str,
         env_pool: tuple[str, ...],
+        harnesses: IHarnessRegistry,
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
     ) -> None:
         self._stores = stores
         self._clock = clock
-        self._harness = harness
+        self._harnesses = harnesses
         self._runner_id = runner_id
         self._workspace_id = workspace_id
         self._max_agents = max_agents
@@ -221,7 +225,9 @@ class RunnerStatusService:
 
     def open_takeovers(self) -> list[OpenTakeoverView]:
         return [
-            OpenTakeoverView(chunk_id=t.chunk_id, takeover_id=t.takeover_id, held_since=t.opened_at)
+            OpenTakeoverView(
+                chunk_id=t.chunk_id, takeover_id=t.takeover_id, held_since=t.opened_at, harness_id=t.harness_id
+            )
             for t in self._stores.takeover.open_takeovers()
         ]
 
@@ -229,17 +235,23 @@ class RunnerStatusService:
         views = []
         for escalation in self._stores.escalations.open_escalations():
             resume_command = ""
-            if escalation.session_id is not None:
+            session = escalation.session
+            if session is not None:
                 bindings = self._stores.environments.bindings_for_chunk(escalation.chunk_id)
                 if bindings:
                     # Composed from the escalation's own stamps (issue #144), not a fresh
                     # resolution: the operator lands in the configuration it ran with.
-                    resume_command = self._harness.resume_command(
-                        bindings[0].workdir,
-                        escalation.session_id,
-                        model=escalation.resolved_model,
-                        effort=escalation.resolved_effort,
-                    )
+                    try:
+                        resume_command = self._resolved_harness(session).resume_command(
+                            bindings[0].workdir,
+                            session.session_id,
+                            model=escalation.resolved_model,
+                            effort=escalation.resolved_effort,
+                        )
+                    except (UnknownHarnessError, UnavailableHarnessError):
+                        # The escalation remains visible under its recorded owner, but cannot
+                        # offer a command this runner cannot compose.
+                        resume_command = ""
             views.append(
                 EscalationView(
                     chunk_id=escalation.chunk_id,
@@ -251,6 +263,10 @@ class RunnerStatusService:
                     session_name=escalation.session_name,
                     model=escalation.resolved_model,
                     effort=escalation.resolved_effort,
+                    harness_id=escalation.harness_id,
                 )
             )
         return views
+
+    def _resolved_harness(self, session: SessionReference) -> IHarnessWorkerLifecycle:
+        return self._harnesses.adapter(session.harness_id)

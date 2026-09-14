@@ -11,6 +11,7 @@ from sqlalchemy import Connection, func, select
 
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.store.internal.base import (
     NO_NORMALIZER_VERSION,
     RunnerStoreConnections,
@@ -108,6 +109,7 @@ class TranscriptLedgerStore:
         has_segment = (
             select(transcript_segments.c.segment_id)
             .where(transcript_segments.c.session_id == leases.c.session_id)
+            .where(transcript_segments.c.harness_id == leases.c.harness_id)
             .exists()
         )
         stmt = (
@@ -123,6 +125,7 @@ class TranscriptLedgerStore:
                 node_id=str(r.node_id),
                 epoch=int(r.epoch),
                 session_id=str(r.session_id),
+                harness_id=str(r.harness_id),
                 has_segment=bool(r.has_segment),
             )
             for r in self._store.all(stmt)
@@ -249,8 +252,8 @@ class TranscriptLedgerStore:
         epoch: int,
         generation: int,
         lease_id: str,
-        session_id: str,
         stamped_at: datetime,
+        session: SessionReference,
         supersedes: str | None = None,
     ) -> str:
         segment_id = Id.mint_at(SEGMENT_PREFIX, stamped_at).value
@@ -263,7 +266,8 @@ class TranscriptLedgerStore:
                     epoch=epoch,
                     generation=generation,
                     lease_id=lease_id,
-                    session_id=session_id,
+                    session_id=session.session_id,
+                    harness_id=session.harness_id,
                     cursor=None,
                     shipped_bytes=0,
                     shipped_turns=0,
@@ -276,7 +280,13 @@ class TranscriptLedgerStore:
                     stamped_at=stamped_at,
                 )
             )
-        _log.info("transcript segment opened", segment_id=segment_id, lease_id=lease_id, session_id=session_id)
+        _log.info(
+            "transcript segment opened",
+            segment_id=segment_id,
+            lease_id=lease_id,
+            session_id=session.session_id,
+            harness_id=session.harness_id,
+        )
         return segment_id
 
     def finalize_transcript_segment(self, segment_id: str, *, finalized_at: datetime) -> bool:
@@ -351,6 +361,7 @@ class TranscriptLedgerStore:
             generation=int(r.generation),
             lease_id=str(r.lease_id),
             session_id=str(r.session_id),
+            harness_id=str(r.harness_id),
             cursor=str(r.cursor) if r.cursor is not None else None,
             shipped_bytes=int(r.shipped_bytes),
             shipped_turns=int(r.shipped_turns),

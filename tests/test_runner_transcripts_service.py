@@ -14,10 +14,11 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
-from tests.runner_fakes import FakeArchivedTranscriptRepository, make_store
+from tests.runner_fakes import FakeArchivedTranscriptRepository, StaticTranscriptRepositoryResolver, make_store
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _KEY = ("ch_1", "nd_build", 1)
@@ -48,7 +49,7 @@ def _service(
         leases=store,
         transcript_ledger=store,
         environments=store,
-        transcripts=local or FakeTranscriptRepository(),
+        transcripts=StaticTranscriptRepositoryResolver(local or FakeTranscriptRepository()),
         archived=archived or FakeArchivedTranscriptRepository(),
         workspace_root="",
     )
@@ -122,7 +123,13 @@ def test_a_lease_with_no_session_yet_is_spawning_local_and_never_asks_the_hub(tm
 def test_an_open_lease_reads_local_and_is_never_asked_of_the_hub(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     local = FakeTranscriptRepository(
         {
             "sess-a": Transcript(
@@ -157,7 +164,13 @@ def _close(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
 
 def _closed_lease(store) -> None:  # type: ignore[no-untyped-def]
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     _close(store)
     assert store.active_lease("lease_1") is None
 
@@ -384,7 +397,13 @@ def test_a_closed_lease_the_hub_is_unreachable_and_local_cannot_answer_either_fl
 def test_segments_for_chunk_returns_the_chunks_own_ledger_rows(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
 
     segments = _service(store).segments_for_chunk("ch_1")
 
@@ -396,7 +415,13 @@ def test_segments_for_chunk_returns_the_chunks_own_ledger_rows(tmp_path: Path) -
 def test_segments_for_chunk_is_empty_for_a_chunk_this_store_never_held(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
 
     assert _service(store).segments_for_chunk("ch_other") == []
 
@@ -413,7 +438,13 @@ def test_segment_content_is_none_when_the_segment_belongs_to_a_different_chunk(t
     URL resolves as though it never existed, same as an unknown id."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     [segment] = store.transcript_segments_for_chunk("ch_1")
 
     assert _service(store).segment_content("ch_other", segment.segment_id) is None
@@ -423,7 +454,13 @@ def test_segment_content_is_none_when_the_segment_belongs_to_a_different_chunk(t
 def test_segment_content_reads_the_session_file_local_only_never_the_hub(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     [segment] = store.transcript_segments_for_chunk("ch_1")
     local = FakeTranscriptRepository(
         {
@@ -453,7 +490,13 @@ def test_segment_content_windows_a_same_session_resume_to_each_segments_own_turn
     never the whole file both would otherwise return byte-identical."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     [gen1] = store.transcript_segments_for_chunk("ch_1")
     store.record_transcript_deltas(
         segment_id=gen1.segment_id,
@@ -467,7 +510,11 @@ def test_segment_content_windows_a_same_session_resume_to_each_segments_own_turn
         created_at=_NOW,
     )
     store.record_spawn(
-        "lease_1", pid=101, process_start_time="start-101", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+        "lease_1",
+        pid=101,
+        process_start_time="start-101",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW + timedelta(minutes=1),
     )
     [gen2] = store.open_transcript_segments()
     assert gen2.cursor == "2"  # carried forward from gen1's own cursor
@@ -505,7 +552,13 @@ def test_segment_content_windows_a_same_session_resume_to_each_segments_own_turn
 def test_segment_content_reports_unavailability_rather_than_raising_when_the_file_is_gone(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     [segment] = store.transcript_segments_for_chunk("ch_1")
 
     content = _service(store).segment_content("ch_1", segment.segment_id)  # no fake entry -> not_found

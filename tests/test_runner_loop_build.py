@@ -17,6 +17,7 @@ from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.config import CONFIG_FILENAME, LEGACY_ANTHROPIC_SLUG, ConfigError, RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
@@ -42,7 +43,13 @@ def _seeded_running_lease_store(tmp_path: Path):  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     return store
 
@@ -57,9 +64,10 @@ def test_loop_wiring_threads_worker_env_passthrough_into_the_adapter(tmp_path: P
     )
 
     ctx = LoopWiring(config, "", "").context(FakeHub())
+    harness = ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID)
 
-    assert isinstance(ctx.harness, ClaudeCodeAdapter)
-    assert ctx.harness._env_passthrough == ("MY_HARNESS_QUIRK", "ANOTHER_VAR")
+    assert isinstance(harness, ClaudeCodeAdapter)
+    assert harness._env_passthrough == ("MY_HARNESS_QUIRK", "ANOTHER_VAR")
 
 
 @pytest.mark.unit
@@ -83,7 +91,7 @@ def test_loop_wiring_threads_external_usage_credentials_path_into_the_sampler(tm
 
     ctx = LoopWiring(config, "", "").context(FakeHub())
 
-    assert isinstance(ctx.harness, ClaudeCodeAdapter)
+    assert isinstance(ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID), ClaudeCodeAdapter)
     assert [s.slug for s in ctx.subscriptions] == [LEGACY_ANTHROPIC_SLUG]
     resolved = ctx.subscriptions[0]
     assert resolved.sample_interval_seconds == 123
@@ -106,10 +114,11 @@ def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_pa
     )
 
     ctx = LoopWiring(config, "", "").context(FakeHub())
+    harness = ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID)
 
-    assert isinstance(ctx.harness, ClaudeCodeAdapter)
-    assert ctx.harness._settings_path == settings
-    assert ctx.harness._permission_mode == "acceptEdits"
+    assert isinstance(harness, ClaudeCodeAdapter)
+    assert harness._settings_path == settings
+    assert harness._permission_mode == "acceptEdits"
 
 
 @pytest.mark.unit
@@ -126,7 +135,7 @@ def test_hosted_app_threads_the_worker_settings_path_and_permission_mode(tmp_pat
 
     app = build_hosted_app(RunnerConfig.load(tmp_path)).app
 
-    harness = app.state.harness
+    harness = app.state.harnesses.adapter(CLAUDE_CODE_HARNESS_ID)
     assert isinstance(harness, ClaudeCodeAdapter)
     assert harness._settings_path == settings
     assert " --permission-mode acceptEdits" in harness.resume_command("/w", "s-1", attended=True)

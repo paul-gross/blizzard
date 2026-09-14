@@ -19,6 +19,7 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import LeaseRecord, Liveness, as_utc
+from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import (
     REAPED,
@@ -575,7 +576,7 @@ class ContextSample(Step):
         the other leases their samples."""
         ctx = self.ctx
         warn_tokens = ctx.config.context_warn_tokens
-        if warn_tokens is None or ctx.transcripts is None:
+        if warn_tokens is None or not ctx.transcripts_wired:
             return
         try:
             leases = ctx.stores.lease_record.list_active_leases()
@@ -590,7 +591,8 @@ class ContextSample(Step):
 
     def _sample(self, lease: LeaseRecord, warn_tokens: int) -> None:
         ctx = self.ctx
-        if lease.session_id is None or ctx.transcripts is None:
+        session = lease.session
+        if session is None or not ctx.transcripts_wired:
             return  # a lease whose spawn has not yet minted a session has nothing to read
         state = ctx.stores.usage.context_sample_state(lease.lease_id)
         now = ctx.clock.now()
@@ -598,7 +600,21 @@ class ContextSample(Step):
             seconds=ctx.config.context_sample_interval_seconds
         ):
             return
-        tokens = ctx.transcripts.context_tokens(lease.session_id, spawn_cwd=self._spawn_cwd(lease))
+        try:
+            source = ctx.transcript_source_for(session)
+        except (UnknownHarnessError, UnavailableHarnessError) as exc:
+            # A read-only side lane: never escalates on its own, only skips this one lease's
+            # sample for this tick — its own dispatch path (a wake, a judgement) escalates it.
+            _log.warning(
+                "context sample skipped — owner unresolvable",
+                lease_id=lease.lease_id,
+                session_id=session.session_id,
+                harness_id=session.harness_id,
+                reason="unavailable" if isinstance(exc, UnavailableHarnessError) else "unknown",
+                detail=str(exc),
+            )
+            return
+        tokens = source.context_tokens(session.session_id, spawn_cwd=self._spawn_cwd(lease))
         # Only the FIRST crossing reports: the warning is a state change, not a level, and a
         # lease past the line samples on for the curve without re-reporting every minute.
         crossing = (
@@ -609,7 +625,7 @@ class ContextSample(Step):
         seq = ctx.stores.usage.record_context_sample(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,
-            session_id=lease.session_id,
+            session=session,
             # `None` is *unmeasured*, recorded as an attempt so the cadence anchor still advances
             # — else an unreadable transcript is re-read every tick instead of every interval.
             context_tokens=tokens,

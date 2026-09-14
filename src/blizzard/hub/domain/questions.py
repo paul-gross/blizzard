@@ -33,6 +33,7 @@ class QuestionService:
             chunk_id=fact.chunk_id,
             node_id=fact.node_id,
             session_id=fact.session_id,
+            harness_id=fact.harness_id,
             runner_id=fact.runner_id,
             epoch=fact.epoch,
             question=fact.question,

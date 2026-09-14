@@ -16,6 +16,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.outbound import COMPLETION_KIND
 from blizzard.runner.loop.steps import Pull
 from blizzard.wire.chunk import ChunkStatusView, PauseView
@@ -58,7 +59,13 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", epoch=1):  # ty
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        lease,
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -181,7 +188,7 @@ def test_pull_never_preempts_a_session_a_person_is_inside(tmp_path):  # type: ig
         takeover_id="tk_1",
         chunk_id="ch_1",
         lease_id="lease_1",
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=2,
         opened_at=_NOW,
@@ -297,7 +304,7 @@ def test_a_preempted_ask_park_is_retired_with_the_lease(tmp_path):  # type: igno
         question_id="qn_1",
         question="?",
         options=[],
-        session_id="sess-a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
