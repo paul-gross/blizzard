@@ -49,7 +49,7 @@ def test_the_driver_error_wrap_is_substitutable_by_injection(tmp_path: Path) -> 
     store = SqlAlchemyRunnerStore(engine, errors)
 
     with pytest.raises(RunnerStoreError):
-        store.pending_outbound(10_000)
+        store.pending_outbound()
 
     assert errors.wrapped == ["query"]
 
@@ -212,7 +212,7 @@ def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_
 def test_a_migrated_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path) -> None:
     """``outbound_buffer`` carries the same ``sqlite_autoincrement`` fix as its sibling
     ``transcript_outbound_buffer`` — now load-bearing for it too, since retention
-    (Decision 4, issue #520) prunes it as well. Production migrates
+    (issue #520) prunes it as well. Production migrates
     (`bzh:gating-tier-pins-production-paths`), so the revision's own copy is pinned here."""
     config = runner_runtime.init_environment(tmp_path)
     engine = create_engine_from_url(config.db_url)

@@ -293,7 +293,7 @@ def test_reap_never_reaps_a_pause_parked_lease_however_long_it_stands(tmp_path):
     assert store.active_lease("lease_1") is not None  # never reaped
     assert _closure_reasons(store) == []  # no `reaped` closure, no escalation, no failure
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
-    assert [f for f in store.pending_outbound(10_000) if f.kind == ESCALATION_RECORDED] == []
+    assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED] == []
     assert harness.judged == []  # the killed worker was never mistaken for a finished one
     assert store.held_environment_ids() == ["e1"]
     assert store.pause_parked_lease_ids() == {"lease_1"}  # still parked, still waiting
@@ -535,7 +535,7 @@ def test_advance_does_not_drive_a_pause_parked_chunk_as_a_held_chunk(tmp_path): 
     assert store.active_lease_for_chunk("ch_1") is not None
     # No verdict elicited from the killed worker, and nothing buffered on its behalf.
     assert harness.judged == []
-    assert [f for f in store.pending_outbound(10_000) if f.kind == "completion.submitted"] == []
+    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
     assert hub.completions == []
     assert store.attempt_count("ch_1", "nd_build") == 1
 

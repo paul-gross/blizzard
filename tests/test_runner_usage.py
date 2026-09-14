@@ -69,7 +69,7 @@ def _write_stdout(stdout_dir, lease_id, generation, content="<envelope>") -> Non
 
 
 def _usage_payloads(store):  # type: ignore[no-untyped-def]
-    return [json.loads(b.payload) for b in store.pending_outbound(10_000) if b.kind == USAGE_RECORDED]
+    return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED]
 
 
 @pytest.mark.unit
@@ -473,7 +473,7 @@ def test_verdict_less_failure_still_records_spawn_and_judge_usage(tmp_path):  # 
     Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     # It failed the attempt: no completion buffered, the attempt requeued.
-    completions = [f for f in store.pending_outbound(10_000) if f.kind == "completion.submitted"]
+    completions = [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
     assert completions == []
     # ...but both burned invocations are accounted for before the fail.
     payloads = _usage_payloads(store)

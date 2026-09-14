@@ -1,7 +1,8 @@
 """Runner-store read indexes (issue #520): the heartbeat staleness probe, the outbound
-buffer's pending-fact reads, per-lease attachments, `HELD_BINDING`, and the per-chunk
-transcript-segment reads — plus `outbound_buffer`'s own `sqlite_autoincrement` fix,
-mirroring `transcript_outbound_buffer`'s (blizzard-context:/standards/persistence.md).
+buffer's pending-fact reads, per-lease attachments, `HELD_BINDING`, external-usage-sample
+retention's per-slug lookup, and the per-chunk transcript-segment reads — plus
+`outbound_buffer`'s own `sqlite_autoincrement` fix, mirroring `transcript_outbound_buffer`'s
+(blizzard-context:/standards/persistence.md).
 
 Revision ID: 20260913_1100_runner_store_indexes
 Revises: 20260905_1000_runner_external_usage_samples_slug
@@ -30,6 +31,7 @@ _NEW_INDEXES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "binding_releases",
         ("chunk_id", "environment_id", "released_at"),
     ),
+    ("ix_external_usage_samples_slug_sampled_at", "external_usage_samples", ("slug", "sampled_at")),
 )
 
 _OLD_CHUNK_INDEX = "ix_transcript_segments_chunk_id"
@@ -45,10 +47,8 @@ def _has_index(bind: sa.Connection, table: str, name: str) -> bool:
 def upgrade() -> None:
     bind = op.get_bind()
 
-    # `outbound_buffer` never deletes a row (unlike `transcript_outbound_buffer`), so this
-    # is purely for a fresh store's `sqlite_sequence` seed to match a migrated one
-    # row-for-row — the batch recreate copies every row across with its explicit `seq`,
-    # which seeds the sequence at the current max automatically.
+    # `sqlite_sequence` is seeded at the current max automatically: the batch recreate
+    # copies every row across with its explicit `seq`, matching a fresh store row-for-row.
     with op.batch_alter_table("outbound_buffer", recreate="always", table_kwargs={"sqlite_autoincrement": True}):
         pass
 

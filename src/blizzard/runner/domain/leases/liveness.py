@@ -49,10 +49,10 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         ...
 
     def prune_heartbeats(self, *, now: datetime) -> int:
-        """Compact heartbeats older than the store's own retention window (Decision 4,
-        issue #520), keeping each lease's newest beat regardless of age — ``max(beat_at)``
-        per lease is unchanged, so :meth:`~IReadLeaseLivenessRepository.latest_heartbeat`
-        answers identically before and after. Returns the number of rows pruned."""
+        """Compact heartbeats older than the store's own retention window (issue #520),
+        keeping each lease's newest beat regardless of age — ``max(beat_at)`` per lease is
+        unchanged, so :meth:`~IReadLeaseLivenessRepository.latest_heartbeat` answers
+        identically before and after. Returns the number of rows pruned."""
         ...
 
     def record_spawn(

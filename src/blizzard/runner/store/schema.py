@@ -63,28 +63,20 @@ outbound_buffer = Table(
     Column("payload", Text, nullable=False),  # the JSON body posted to the matching hub route
     Column("created_at", UtcDateTime, nullable=False),
     Column("acked_at", UtcDateTime, nullable=True),  # NULL = pending; set when the hub acks the seq
-    # Retention (Decision 4, issue #520): an acked row older than `_OUTBOUND_RETENTION_WINDOW`
-    # (store/internal/outbound_store.py) is pruned, but only when its seq is below the lowest
-    # still-pending seq — an acked row interleaved above a pending one always survives, so the
-    # retained buffer stays gapless from the pending floor upward (`GaplessOutboundSeq`). That
-    # prune carries the same sqlite rowid-reuse hazard as its sibling `transcript_outbound_buffer`'s
-    # own pruning, hence the same pragma (`bzh:sql-portable` exemption in
-    # blizzard-context:/standards/persistence.md).
+    # Retention/pending-floor contract (issue #520): see
+    # `IWriteOutboundRepository.prune_outbound`'s own docstring.
     sqlite_autoincrement=True,
 )
 
 # `pending_outbound`/`pending_submission_lease_ids` (issue #520) both filter on
-# `acked_at IS NULL`, and the former orders by `seq` — a live buffer is mostly acked rows
-# behind a small pending tail, so this index turns both into a search of that tail instead
-# of a scan of the whole (ever-growing) table.
+# `acked_at IS NULL` — a live buffer is mostly acked rows behind a small pending tail, so
+# this turns both into a search of that tail instead of a scan of the whole table.
 Index("ix_outbound_buffer_acked_at_seq", outbound_buffer.c.acked_at, outbound_buffer.c.seq)
 
 # --- Heartbeats (progress detection, machine-local — never leaves the box) ----
 # Append-only: a lease's last heartbeat is ``max(beat_at)`` (``bzh:facts-not-status``).
-# Retention (Decision 4, issue #520): compacted to each lease's newest beat past
-# `_HEARTBEAT_RETENTION_WINDOW` (store/internal/lease_liveness_store.py) — `max(beat_at)` per
-# lease is unchanged by the prune, so `latest_heartbeat` and REAP's staleness probe answer
-# identically before and after.
+
+# Retention contract (issue #520): see IWriteLeaseLivenessRepository.prune_heartbeats.
 
 heartbeats = Table(
     "heartbeats",
@@ -157,8 +149,7 @@ binding_releases = Table(
 )
 
 # `HELD_BINDING` (issue #520) correlates on exactly this triple, once per `env_bindings`
-# row it is asked about — without it, every held-binding read builds sqlite's own ad hoc
-# covering index for the correlated lookup instead of using a declared one.
+# row asked about — without it, each read builds sqlite's own ad hoc covering index.
 Index(
     "ix_binding_releases_chunk_id_environment_id_released_at",
     binding_releases.c.chunk_id,
@@ -168,14 +159,9 @@ Index(
 
 # --- Asks (the worker's local open-ask fact) ---------------------------------
 # Recorded before the worker exits, so it is durable by the time the process ends.
-#
-# Deliberately unindexed (issue #520), along with `park_facts`, `park_resumes`,
-# `check_results`, `checks_ran`, and `in_flight_elicitations` below — the single prose home
-# for this fact; each of those tables' own comment points back here rather than repeat it.
-# All six hold at most one open row per in-flight lease, so at their observed row counts
-# (tiny, roughly 0-33 rows in a running fleet) a full scan already is the correct query
-# plan — an index would cost upkeep on every write for a scan an index could never
-# meaningfully shrink.
+
+# Deliberately unindexed (issue #520), with `park_facts`, `park_resumes`, `check_results`,
+# `checks_ran`, `in_flight_elicitations` below — each near-empty, so a scan beats an index's upkeep.
 
 asks = Table(
     "asks",
@@ -192,6 +178,7 @@ asks = Table(
 
 # --- Park / resume (the chunk's dormancy on a question) ----------------------
 # Parked while a park_fact references a lease with no later park_resume.
+
 # Deliberately unindexed — see `asks`'s own comment above for why (issue #520).
 
 park_facts = Table(
@@ -432,6 +419,7 @@ nudge_facts = Table(
 
 # --- Check results + the checks-ran guard (issue #114) -----------------------
 # ``checks_ran`` is written last: a marker implies its result rows exist.
+
 # Both tables deliberately unindexed — see `asks`'s own comment above for why (issue #520).
 
 check_results = Table(
@@ -461,6 +449,7 @@ checks_ran = Table(
 # One row per (lease_id, epoch) launch: durable BEFORE the process starts (D1), so an
 # orphaned Popen is never possible — only an un-armable record-with-no-process gap REAP's
 # generic staleness treatment absorbs. `pid`/`process_start_time` land once Popen returns.
+
 # Deliberately unindexed — see `asks`'s own comment above for why (issue #520).
 
 in_flight_elicitations = Table(
@@ -522,10 +511,8 @@ session_preamble_facts = Table(
 # One row per sampling *attempt*: a NULL payload still counts toward the cadence.
 # `slug` joins a row to its declared subscription (blizzard#436) — every pre-slug row is
 # backfilled to the legacy Anthropic slug by the reshape that added the column.
-# Retention (Decision 4, issue #520): compacted to each slug's newest attempt past
-# `_EXTERNAL_USAGE_SAMPLE_RETENTION_WINDOW` (store/internal/usage_store.py) —
-# `max(sampled_at)` per slug is unchanged by the prune, so `last_external_usage_attempt_at`
-# answers identically before and after.
+
+# Retention contract (issue #520): see IWriteUsageRepository.prune_external_usage_samples.
 
 external_usage_samples = Table(
     "external_usage_samples",
@@ -537,8 +524,7 @@ external_usage_samples = Table(
 )
 
 # `prune_external_usage_samples`'s per-slug newest-attempt lookup (issue #520) reads
-# `max(sampled_at) WHERE slug = ?` — trailing `sampled_at` lets that MAX come off the index
-# alone, mirroring `ix_heartbeats_lease_id_beat_at`.
+# `max(sampled_at) WHERE slug = ?`, mirroring `ix_heartbeats_lease_id_beat_at`.
 Index("ix_external_usage_samples_slug_sampled_at", external_usage_samples.c.slug, external_usage_samples.c.sampled_at)
 
 # --- Live session-context samples (the warn lane) ----------------------------
@@ -600,10 +586,8 @@ transcript_segments = Table(
     Column("stamped_at", UtcDateTime, nullable=False),
 )
 
-# Replaces the old bare `ix_transcript_segments_chunk_id` (issue #520): every per-chunk read
-# (`transcript_segments_for_chunk`) filters `chunk_id` and orders by exactly `stamped_at,
-# segment_id` — the same tail `record_spawn`'s prior-segment lookup walks in reverse — so
-# this composite serves both without a separate sort step.
+# Replaces the old bare `ix_transcript_segments_chunk_id` (issue #520) — every per-chunk read
+# filters `chunk_id`, orders by `stamped_at, segment_id`; this composite serves both, sort-free.
 Index(
     "ix_transcript_segments_chunk_id_stamped_at_segment_id",
     transcript_segments.c.chunk_id,

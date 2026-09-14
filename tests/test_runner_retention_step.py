@@ -1,4 +1,4 @@
-"""``Retention`` — the tick's append-only-lane pruner (Decision 4, issue #520).
+"""``Retention`` — the tick's append-only-lane pruner (issue #520).
 
 Each of outbound/heartbeat/external-usage-sample retention is its own store-level
 derivation, already proven against a real store in ``tests/test_runner_store.py``. This

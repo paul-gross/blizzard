@@ -138,7 +138,7 @@ def test_reap_skips_a_pause_parked_lease_though_pid_reads_alive_and_stale(tmp_pa
 
     assert store.active_lease("lease_1") is not None  # claim kept — not closed
     assert probe.killed == []  # worker not killed
-    assert [f for f in store.pending_outbound(10_000) if f.kind == "escalation.recorded"] == []
+    assert [f for f in store.pending_outbound() if f.kind == "escalation.recorded"] == []
 
 
 def test_mark_resume_intents_skips_a_pause_parked_lease(tmp_path):  # type: ignore[no-untyped-def]

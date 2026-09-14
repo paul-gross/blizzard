@@ -186,7 +186,7 @@ def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_
 
     assert store.last_external_usage_attempt_at(_SLUG) == _NOW
 
-    pending = [f for f in store.pending_outbound(10_000) if f.kind == _SAMPLED_KIND]
+    pending = [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND]
     assert len(pending) == 1
     fact = pending[0]
     # Runner-scoped: no chunk_id/lease_id, mirroring `record_local_pause`'s own report.
@@ -218,7 +218,7 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path)
     ExternalUsageSample(ctx).run()
 
     assert store.last_external_usage_attempt_at(_SLUG) == _NOW
-    assert [f for f in store.pending_outbound(10_000) if f.kind == _SAMPLED_KIND] == []
+    assert [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND] == []
 
     # The next tick, still within the interval, must not re-sample — the NULL-payload
     # attempt still counts as "tried" for cadence purposes.
@@ -378,7 +378,7 @@ def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_othe
     ExternalUsageSample(ctx).run()  # both sample cleanly the first time
     assert store.last_external_usage_attempt_at("good") == _NOW
     assert store.last_external_usage_attempt_at("bad") == _NOW
-    good_reports_after_first = [f for f in store.pending_outbound(10_000) if f.kind == _SAMPLED_KIND]
+    good_reports_after_first = [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND]
     assert len(good_reports_after_first) == 2
 
     clock.advance(timedelta(seconds=200))
@@ -391,7 +391,7 @@ def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_othe
     # ...but "good"'s own anchor and its last successful report are untouched by "bad"'s
     # failure — a fresh, successful report from "good" this same tick.
     assert store.last_external_usage_attempt_at("good") == later
-    reports_after_second = [f for f in store.pending_outbound(10_000) if f.kind == _SAMPLED_KIND]
+    reports_after_second = [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND]
     # Only "good" enqueued a NEW report this tick (2 total from the first tick, +1 now).
     assert len(reports_after_second) == 3
     newest = json.loads(reports_after_second[-1].payload)
@@ -442,7 +442,7 @@ def test_the_payload_is_still_parseable_by_a_reader_ignorant_of_slug(tmp_path) -
 
     ExternalUsageSample(ctx).run()
 
-    fact = next(f for f in store.pending_outbound(10_000) if f.kind == _SAMPLED_KIND)
+    fact = next(f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND)
     payload = json.loads(fact.payload)
 
     def _read_pre_slug_shape(raw: dict[str, object]) -> tuple[str, list[dict[str, object]]]:

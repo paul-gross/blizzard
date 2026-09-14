@@ -120,10 +120,9 @@ class UniqueEnvBinding(QueryCheck):
 
 class GaplessOutboundSeq(QueryCheck):
     """A hole in the outbound buffer's retained seqs would break FIFO idempotent replay —
-    scoped to the lowest still-pending seq upward, not every seq ever minted (Decision 4,
-    issue #520): retention prunes an acked row below that floor outright, and an interleaved
-    acked row above it is by construction never pruned, so the retained buffer stays gapless
-    from the floor up. Mirrors `GaplessTranscriptOutboundSeq`'s own scoping for its lane."""
+    scoped to the pending floor upward, not every seq ever minted, since retention (issue
+    #520, `IWriteOutboundRepository.prune_outbound`) prunes below it. Mirrors
+    `GaplessTranscriptOutboundSeq`'s own scoping for its lane."""
 
     def run(self) -> list[Violation]:
         floor = self.conn.execute(

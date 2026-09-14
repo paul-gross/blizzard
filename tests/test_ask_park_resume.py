@@ -108,7 +108,7 @@ def test_exited_worker_with_open_ask_parks_without_a_verdict(tmp_path):  # type:
     # Parked: the reap clock is stopped.
     assert store.parked_lease_ids() == {"lease_1"}
     # The question was forwarded up the outbound buffer (store-and-forward).
-    buffered = [f for f in store.pending_outbound(10_000) if f.kind == QUESTION_ASKED]
+    buffered = [f for f in store.pending_outbound() if f.kind == QUESTION_ASKED]
     assert len(buffered) == 1
     assert '"question_id": "qn_1"' in buffered[0].payload
     # No verdict elicited and no completion buffered — a park is not a judgement.
@@ -149,7 +149,7 @@ def test_ask_during_judgement_parks_instead_of_failing(tmp_path):  # type: ignor
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.lease_id == "lease_1"
     # The question was forwarded up the outbound buffer (store-and-forward).
-    buffered = [f for f in store.pending_outbound(10_000) if f.kind == QUESTION_ASKED]
+    buffered = [f for f in store.pending_outbound() if f.kind == QUESTION_ASKED]
     assert len(buffered) == 1
     assert '"question_id": "qn_1"' in buffered[0].payload
     assert store.pending_submission_lease_ids() == set()  # no completion buffered
@@ -176,7 +176,7 @@ def test_park_is_not_repeated_and_never_elicits_a_verdict(tmp_path):  # type: ig
     Advance(ctx).run()  # still parked, answer not yet in — a no-op poll
 
     assert store.parked_lease_ids() == {"lease_1"}
-    assert len([f for f in store.pending_outbound(10_000) if f.kind == QUESTION_ASKED]) == 1  # not re-forwarded
+    assert len([f for f in store.pending_outbound() if f.kind == QUESTION_ASKED]) == 1  # not re-forwarded
     assert harness.judged == []  # never elicited a verdict on the ask
 
 
@@ -204,7 +204,7 @@ def test_parked_lease_is_not_reaped_though_pid_reads_alive_and_stale(tmp_path): 
 
     assert store.active_lease("lease_1") is not None  # not closed
     assert probe.killed == []  # not killed
-    assert [f for f in store.pending_outbound(10_000) if f.kind == "escalation.recorded"] == []
+    assert [f for f in store.pending_outbound() if f.kind == "escalation.recorded"] == []
 
 
 def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path):  # type: ignore[no-untyped-def]
@@ -238,7 +238,7 @@ def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path):  # type: ig
     assert store.ask_parked_lease_ids() == {"lease_1"}
     assert store.pause_parked_lease_ids() == {"lease_other"}
     assert store.parked_lease_ids() == {"lease_1", "lease_other"}
-    buffered = [f for f in store.pending_outbound(10_000) if f.kind == QUESTION_ASKED]
+    buffered = [f for f in store.pending_outbound() if f.kind == QUESTION_ASKED]
     assert len(buffered) == 1
     assert '"question_id": "qn_1"' in buffered[0].payload
     assert harness.judged == []
@@ -273,7 +273,7 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path):  # t
     resumed_lease = store.active_lease("lease_1")
     assert resumed_lease is not None and resumed_lease.pid == 4321
     # answer.delivered was buffered up to the hub.
-    assert [f for f in store.pending_outbound(10_000) if f.kind == ANSWER_DELIVERED]
+    assert [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
 
 
 def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(tmp_path):  # type: ignore[no-untyped-def]
@@ -326,7 +326,7 @@ def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(t
 
     assert store.active_lease("lease_1") is not None  # not reaped
     assert resumed_probe.killed == []
-    assert [f for f in store.pending_outbound(10_000) if f.kind == "escalation.recorded"] == []
+    assert [f for f in store.pending_outbound() if f.kind == "escalation.recorded"] == []
 
 
 def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(tmp_path):  # type: ignore[no-untyped-def]

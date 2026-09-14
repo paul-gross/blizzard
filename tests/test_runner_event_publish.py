@@ -830,7 +830,7 @@ def test_attempt_retry_closure_publishes_fact_changed_for_its_own_event(tmp_path
         if f["kind"] == EVENT_RECORDED and f["chunk_id"] == "ch_1" and f["lease_id"] == "lease_1"
     ]
     assert len(fact_frames) == 1
-    written = [f for f in store.pending_outbound(10_000) if f.kind == EVENT_RECORDED and f.chunk_id == "ch_1"]
+    written = [f for f in store.pending_outbound() if f.kind == EVENT_RECORDED and f.chunk_id == "ch_1"]
     assert len(written) == 1
     assert fact_frames[0]["seq"] == written[0].seq > 1
 

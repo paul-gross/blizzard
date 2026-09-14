@@ -85,7 +85,7 @@ def test_run_sends_a_contiguous_run_of_generic_facts_in_one_push_facts_call() ->
 
     assert len(hub.push_facts_calls) == 1
     assert hub.push_facts_calls[0] == seqs
-    assert ctx.stores.outbound.pending_outbound(10_000) == []
+    assert ctx.stores.outbound.pending_outbound() == []
 
 
 def test_run_flushes_the_collected_run_before_a_completion_then_handles_it_on_its_own() -> None:
@@ -106,7 +106,7 @@ def test_run_flushes_the_collected_run_before_a_completion_then_handles_it_on_it
     # ...and the trailing run, collected after it, ships as its own separate call.
     assert hub.push_facts_calls[1] == trailing_seqs
     assert len(hub.push_facts_calls) == 2
-    assert ctx.stores.outbound.pending_outbound(10_000) == []
+    assert ctx.stores.outbound.pending_outbound() == []
 
 
 def test_run_bounds_its_own_per_run_slice_and_drains_a_larger_backlog_over_several_ticks() -> None:
@@ -117,10 +117,10 @@ def test_run_bounds_its_own_per_run_slice_and_drains_a_larger_backlog_over_sever
     seqs = [_enqueue_generic(ctx) for _ in range(total)]
 
     OutboundDrain(ctx).run()
-    assert len(ctx.stores.outbound.pending_outbound(10_000)) == 5  # the rest waits for the next tick
+    assert len(ctx.stores.outbound.pending_outbound()) == 5  # the rest waits for the next tick
 
     OutboundDrain(ctx).run()
-    assert ctx.stores.outbound.pending_outbound(10_000) == []
+    assert ctx.stores.outbound.pending_outbound() == []
 
     # Every seq landed at the hub exactly once, in order, across the two ticks' calls.
     delivered = [seq for call in hub.push_facts_calls for seq in call]
@@ -137,13 +137,13 @@ def test_run_stops_the_whole_run_on_a_transport_failure_and_retries_it_next_tick
     OutboundDrain(ctx).run()
 
     assert hub.push_facts_calls == []
-    assert [f.seq for f in ctx.stores.outbound.pending_outbound(10_000)] == seqs  # nothing acked
+    assert [f.seq for f in ctx.stores.outbound.pending_outbound()] == seqs  # nothing acked
 
     hub.down = False
     OutboundDrain(ctx).run()
 
     assert hub.push_facts_calls == [seqs]
-    assert ctx.stores.outbound.pending_outbound(10_000) == []
+    assert ctx.stores.outbound.pending_outbound() == []
 
 
 def test_run_acks_a_rejected_fact_within_its_run_rather_than_wedging_the_fifo() -> None:
@@ -163,4 +163,4 @@ def test_run_acks_a_rejected_fact_within_its_run_rather_than_wedging_the_fifo() 
 
     # A contract rejection is not idempotency — the whole run, rejected fact included, is
     # still acked in one transaction so the FIFO drain never wedges on it.
-    assert ctx.stores.outbound.pending_outbound(10_000) == []
+    assert ctx.stores.outbound.pending_outbound() == []

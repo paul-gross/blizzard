@@ -52,7 +52,7 @@ class OutboundDrain:
         run of generic-kind facts into one ``push_facts`` call; a completion or decision
         fact first flushes the run collected so far, then routes to its own arm unchanged."""
         run: list[BufferedFact] = []
-        for fact in self.ctx.stores.outbound.pending_outbound(_DRAIN_LIMIT):
+        for fact in self.ctx.stores.outbound.pending_outbound(limit=_DRAIN_LIMIT):
             if fact.kind not in (COMPLETION_KIND, DECISION_KIND):
                 run.append(fact)
                 continue

@@ -58,15 +58,11 @@ _INTERNAL_BOOKKEEPING = (
     "internal bookkeeping with no client-facing read surface; no kind in the vocabulary represents it."
 )
 
-#: The three retention prunes' shared reason (Decision 4, issue #520) — each compacts or
-#: trims an append-only lane no client-facing read surface renders row-for-row; the reads
-#: those lanes DO back (`latest_heartbeat`, `last_external_usage_attempt_at`,
-#: `recent_outbound`/`pending_outbound`) answer identically before and after a prune, so
-#: there is nothing for a kind to announce.
+#: The three retention prunes' shared reason (issue #520) — see
+#: `IWriteOutboundRepository.prune_outbound` and its siblings for the retention contract.
 _RETENTION_PRUNE = (
-    "Retention.run (runner/loop/steps.py), every tick (Decision 4, issue #520) — compacts or "
-    "trims an append-only lane with no client-facing read surface rendering it row-for-row; "
-    "the reads it backs answer identically before and after, so no kind announces it."
+    "Retention.run (runner/loop/steps.py) — a prune changes no client-facing read's answer "
+    "(issue #520), so there is nothing for a kind to announce."
 )
 
 #: The full census over ``IWriteRunnerStore``'s own-declared members (D5) — keyed by the
@@ -250,4 +246,5 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "finalize_transcript_segment": Silent(_TRANSCRIPT_LANE_POLLS),
     "advance_transcript_cursor": Silent(_TRANSCRIPT_LANE_POLLS),
     "ack_transcript_outbound": Silent(_TRANSCRIPT_LANE_POLLS),
+    "ack_transcript_outbound_batch": Silent(_TRANSCRIPT_LANE_POLLS),
 }

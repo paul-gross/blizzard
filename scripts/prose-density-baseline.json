@@ -3274,13 +3274,13 @@
   },
   "blizzard/runner/loop/steps.py": {
    "comments": 63,
-   "docstrings": 129,
-   "total": 721
+   "docstrings": 128,
+   "total": 718
   },
   "blizzard/runner/loop/tick.py": {
-   "comments": 16,
-   "docstrings": 6,
-   "total": 55
+   "comments": 14,
+   "docstrings": 7,
+   "total": 54
   },
   "blizzard/runner/loop/transcript_backfill.py": {
    "comments": 18,
@@ -3288,14 +3288,14 @@
    "total": 259
   },
   "blizzard/runner/loop/transcript_drain.py": {
-   "comments": 26,
+   "comments": 28,
    "docstrings": 20,
-   "total": 179
+   "total": 185
   },
   "blizzard/runner/loop/transcript_pump.py": {
    "comments": 70,
-   "docstrings": 76,
-   "total": 656
+   "docstrings": 77,
+   "total": 662
   },
   "blizzard/runner/loop/usage.py": {
    "comments": 8,
@@ -3413,9 +3413,9 @@
    "total": 66
   },
   "blizzard/runner/store/internal/lease_liveness_store.py": {
-   "comments": 15,
+   "comments": 13,
    "docstrings": 6,
-   "total": 144
+   "total": 142
   },
   "blizzard/runner/store/internal/lease_record_store.py": {
    "comments": 14,
@@ -3433,9 +3433,9 @@
    "total": 138
   },
   "blizzard/runner/store/internal/outbound_store.py": {
-   "comments": 5,
+   "comments": 3,
    "docstrings": 2,
-   "total": 111
+   "total": 106
   },
   "blizzard/runner/store/internal/pause_store.py": {
    "comments": 2,
@@ -3460,12 +3460,12 @@
   "blizzard/runner/store/internal/transcript_ledger_store.py": {
    "comments": 20,
    "docstrings": 7,
-   "total": 382
+   "total": 385
   },
   "blizzard/runner/store/internal/usage_store.py": {
-   "comments": 18,
+   "comments": 16,
    "docstrings": 3,
-   "total": 241
+   "total": 239
   },
   "blizzard/runner/store/internal/workspace_prompt_store.py": {
    "comments": 0,
@@ -3668,14 +3668,9 @@
    "total": 58
   },
   "blizzard/runner/store/migrations/versions/20260913_1100_runner_store_indexes.py": {
-   "comments": 8,
-   "docstrings": 8,
+   "comments": 6,
+   "docstrings": 9,
    "total": 80
-  },
-  "blizzard/runner/store/migrations/versions/20260913_1200_runner_store_retention_index.py": {
-   "comments": 0,
-   "docstrings": 7,
-   "total": 39
   },
   "blizzard/runner/store/migrations/versions/__init__.py": {
    "comments": 0,
@@ -3683,9 +3678,9 @@
    "total": 0
   },
   "blizzard/runner/store/schema.py": {
-   "comments": 198,
+   "comments": 176,
    "docstrings": 5,
-   "total": 649
+   "total": 633
   },
   "blizzard/runner/stores.py": {
    "comments": 0,
@@ -3759,8 +3754,8 @@
   },
   "blizzard/runner/transcripts/ledger.py": {
    "comments": 3,
-   "docstrings": 77,
-   "total": 225
+   "docstrings": 79,
+   "total": 230
   },
   "blizzard/runner/transcripts/repository.py": {
    "comments": 5,
@@ -3784,8 +3779,8 @@
   },
   "blizzard/tools/invariants.py": {
    "comments": 23,
-   "docstrings": 84,
-   "total": 902
+   "docstrings": 83,
+   "total": 901
   },
   "blizzard/tools/openapi.py": {
    "comments": 0,
@@ -4165,9 +4160,9 @@
    "total": 623
   },
   "runner_event_census.py": {
-   "comments": 23,
+   "comments": 20,
    "docstrings": 10,
-   "total": 253
+   "total": 250
   },
   "runner_fakes.py": {
    "comments": 75,
@@ -6260,9 +6255,9 @@
    "total": 591
   },
   "test_transcript_drain.py": {
-   "comments": 46,
-   "docstrings": 62,
-   "total": 677
+   "comments": 48,
+   "docstrings": 65,
+   "total": 697
   },
   "test_transcript_event_derivation.py": {
    "comments": 21,

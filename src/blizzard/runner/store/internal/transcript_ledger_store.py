@@ -321,17 +321,20 @@ class TranscriptLedgerStore:
             )
 
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
+        self.ack_transcript_outbound_batch([seq], acked_at=acked_at)
+
+    def ack_transcript_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:
         with self._store.begin() as conn:
             # Non-final rows are pruned outright, nothing reading an acked one; a final
             # marker stays, acked in place — its row is the exactly-once receipt.
             conn.execute(
                 transcript_outbound_buffer.delete()
-                .where(transcript_outbound_buffer.c.seq == seq)
+                .where(transcript_outbound_buffer.c.seq.in_(seqs))
                 .where(transcript_outbound_buffer.c.final.is_(False))
             )
             conn.execute(
                 transcript_outbound_buffer.update()
-                .where(transcript_outbound_buffer.c.seq == seq)
+                .where(transcript_outbound_buffer.c.seq.in_(seqs))
                 .where(transcript_outbound_buffer.c.final.is_(True))
                 .values(acked_at=acked_at)
             )

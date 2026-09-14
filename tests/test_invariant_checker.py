@@ -90,7 +90,7 @@ def test_gapped_outbound_seq_is_a_violation(tmp_path: Path) -> None:
 
 
 def test_a_pruned_acked_outbound_seq_below_the_pending_floor_is_not_a_violation(tmp_path: Path) -> None:
-    """Retention (Decision 4, issue #520) prunes an acked outbound row below the lowest
+    """Retention (issue #520) prunes an acked outbound row below the lowest
     still-pending seq — the ordinary case after a prune, not a lost record."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
@@ -109,7 +109,7 @@ def test_a_pruned_acked_outbound_seq_below_the_pending_floor_is_not_a_violation(
 
 
 def test_a_hole_at_or_above_the_pending_floor_in_outbound_seq_is_still_a_violation(tmp_path: Path) -> None:
-    """The rescoped check (Decision 4, issue #520) still catches a real hole at or above the
+    """The rescoped check (issue #520) still catches a real hole at or above the
     pending floor — a seq that never arrived there is the lost-record case the check exists
     for, whatever retention has already pruned further back."""
     engine = _runner_engine(tmp_path)

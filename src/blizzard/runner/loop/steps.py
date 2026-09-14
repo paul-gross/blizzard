@@ -8,7 +8,7 @@ mid-tick and a restart re-run the tick harmlessly; startup recovery is REAP runn
 from __future__ import annotations
 
 import json
-from collections.abc import Container, Iterator
+from collections.abc import Callable, Container, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -532,30 +532,27 @@ class Advance(Step):
 
 
 class Retention(Step):
-    """Prune the runner store's append-only observation/report lanes (Decision 4, issue
-    #520) — every tick, so none of them grows without bound. Each lane's own store module
-    holds its retention window as a constant beside the prune writer, not a config knob; no
-    reader needs it tuned. Every prune is one transaction, so a crash mid-tick leaves the
-    store exactly as it was before or after, never half pruned."""
+    """Prune the runner store's append-only observation/report lanes every tick, so none
+    grows without bound (issue #520) — each lane's own retention/pending-floor contract
+    lives at its own store method (`IWriteOutboundRepository.prune_outbound` and its
+    usage/liveness siblings), each prune its own single transaction."""
 
     def run(self) -> None:
-        """One prune per lane; a failure pruning one must not skip the others (mirrors
-        ContextSample/ExternalUsageSample's own per-item isolation), and this step gates
-        nothing else in the tick either way."""
+        """One prune per lane, each isolated (mirrors ExternalUsageSample's own per-item
+        loop): one lane's failure must not skip the others, and this step gates nothing
+        else in the tick either way."""
         ctx = self.ctx
         now = ctx.clock.now()
-        try:
-            ctx.stores.outbound.prune_outbound(now=now)
-        except Exception as exc:  # one lane's prune failure must not skip the others
-            _log.warning("outbound buffer retention failed", detail=str(exc))
-        try:
-            ctx.stores.liveness.prune_heartbeats(now=now)
-        except Exception as exc:
-            _log.warning("heartbeat retention failed", detail=str(exc))
-        try:
-            ctx.stores.usage.prune_external_usage_samples(now=now)
-        except Exception as exc:
-            _log.warning("external usage sample retention failed", detail=str(exc))
+        lanes: tuple[tuple[str, Callable[[], int]], ...] = (
+            ("outbound buffer", lambda: ctx.stores.outbound.prune_outbound(now=now)),
+            ("heartbeat", lambda: ctx.stores.liveness.prune_heartbeats(now=now)),
+            ("external usage sample", lambda: ctx.stores.usage.prune_external_usage_samples(now=now)),
+        )
+        for label, prune in lanes:
+            try:
+                prune()
+            except Exception as exc:  # one lane's prune failure must not skip the others
+                _log.warning("retention prune failed", lane=label, detail=str(exc))
 
 
 class ContextSample(Step):

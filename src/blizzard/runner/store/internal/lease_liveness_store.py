@@ -18,9 +18,7 @@ from blizzard.runner.store.schema import heartbeats, lease_context, lease_spawns
 
 _log = get_logger("blizzard.runner.store")
 
-# Retention (Decision 4, issue #520): a lease's newest beat survives regardless of age
-# (`latest_heartbeat`'s own answer never depends on it), so this bounds only how long a
-# SUPERSEDED beat sticks around.
+# See IWriteLeaseLivenessRepository.prune_heartbeats's own docstring for the retention contract.
 _HEARTBEAT_RETENTION_WINDOW = timedelta(days=1)
 
 

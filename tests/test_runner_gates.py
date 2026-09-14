@@ -90,7 +90,7 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
 
     assert wt.verified_calls == [("file:///origins/toy-api.git", "e1", "abc123")]
     assert harness.judged == []  # the human judges — no verdict elicitation
-    buffered = [b for b in store.pending_outbound(10_000) if b.kind == "decision.submitted"]
+    buffered = [b for b in store.pending_outbound() if b.kind == "decision.submitted"]
     assert len(buffered) == 1 and buffered[0].lease_id == "lease_1"
     assert hub.decisions_submitted == []  # not yet flushed
     assert store.active_lease_for_chunk("ch_1") is not None  # open until the flush parks it
@@ -136,7 +136,7 @@ def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path)
     Advance(ctx).run()
     Advance(ctx).run()  # decision already buffered -> the lease is skipped (pending_submission)
 
-    buffered = [b for b in store.pending_outbound(10_000) if b.kind == "decision.submitted"]
+    buffered = [b for b in store.pending_outbound() if b.kind == "decision.submitted"]
     assert len(buffered) == 1
     assert len(wt.verified_calls) == 1  # not re-verified
 

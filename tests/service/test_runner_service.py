@@ -94,7 +94,7 @@ def _pending_outbound(config: RunnerConfig) -> int:
     """The depth of the runner's store-and-forward buffer."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound(10_000))
+        return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound())
     finally:
         engine.dispose()
 

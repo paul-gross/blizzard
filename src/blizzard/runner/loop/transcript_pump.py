@@ -35,6 +35,14 @@ _log = get_logger("blizzard.runner.loop")
 
 _EVENT_TRANSCRIPT_SIDECHAIN_DROPPED: EventLogKind = "transcript-sidechain-dropped"
 
+
+def resolve_record_max_bytes(ctx: LoopContext) -> int:
+    """The configured per-record cap, or the module default (blizzard#338) — shared by
+    every producer and consumer of a rendered record's byte size."""
+    configured = ctx.config.transcript_record_max_bytes
+    return TRANSCRIPT_RECORD_MAX_BYTES if configured is None else configured
+
+
 #: Backpressure cap on total unacked bytes across the WHOLE outbound buffer, distinct
 #: from `CHUNK_TRANSCRIPT_MAX_BYTES`'s per-chunk shipped total — self-clears as the drain catches up.
 MAX_BUFFERED_BYTES = 256 * 1024 * 1024
@@ -93,9 +101,7 @@ class TranscriptPump:
 
     @property
     def _record_max_bytes(self) -> int:
-        """The configured per-record cap, or the module default (blizzard#338)."""
-        configured = self.ctx.config.transcript_record_max_bytes
-        return TRANSCRIPT_RECORD_MAX_BYTES if configured is None else configured
+        return resolve_record_max_bytes(self.ctx)
 
     @property
     def _chunk_max_bytes(self) -> int:

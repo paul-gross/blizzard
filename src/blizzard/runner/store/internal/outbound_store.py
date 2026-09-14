@@ -10,8 +10,7 @@ from blizzard.runner.domain.outbound import BufferedFact, IWriteOutboundReposito
 from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.store.schema import outbound_buffer
 
-# Retention (Decision 4, issue #520): an acked row survives at least this long, so a hub
-# outage this short never costs `recent_outbound`'s own week of local fact-log history.
+# See IWriteOutboundRepository.prune_outbound's own docstring for the retention contract.
 _OUTBOUND_RETENTION_WINDOW = timedelta(days=7)
 
 
@@ -31,13 +30,10 @@ class OutboundStore:
         )
         return {str(r.lease_id) for r in self._store.all(stmt)}
 
-    def pending_outbound(self, limit: int) -> list[BufferedFact]:
-        stmt = (
-            select(outbound_buffer)
-            .where(outbound_buffer.c.acked_at.is_(None))
-            .order_by(outbound_buffer.c.seq)
-            .limit(limit)
-        )
+    def pending_outbound(self, *, limit: int | None = None) -> list[BufferedFact]:
+        stmt = select(outbound_buffer).where(outbound_buffer.c.acked_at.is_(None)).order_by(outbound_buffer.c.seq)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return [
             BufferedFact(
                 seq=int(r.seq),
@@ -92,9 +88,8 @@ class OutboundStore:
     def prune_outbound(self, *, now: datetime) -> int:
         cutoff = now - _OUTBOUND_RETENTION_WINDOW
         with self._store.begin() as conn:
-            # The pending floor, read in the SAME transaction as the delete below — a fact
-            # enqueued between the two would otherwise risk being read as "no pending row"
-            # and pruning an acked row that ought to have stayed below it.
+            # Read in the SAME transaction as the delete below, so a fact enqueued between
+            # the two can never be missed as "no pending row" and pruned as if above none.
             floor = conn.execute(
                 select(func.min(outbound_buffer.c.seq)).where(outbound_buffer.c.acked_at.is_(None))
             ).scalar_one()

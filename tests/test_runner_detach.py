@@ -128,7 +128,7 @@ def test_pull_abandons_a_live_detached_chunk(tmp_path):  # type: ignore[no-untyp
     assert provider.released == ["e1"]  # environment released
     assert store.active_lease("lease_1") is None  # lease closed
     assert store.latest_epoch("ch_1") == 1  # no epoch bump
-    assert store.pending_outbound(10_000) == []  # no requeue fact buffered
+    assert store.pending_outbound() == []  # no requeue fact buffered
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
 
 
@@ -148,7 +148,7 @@ def test_pull_abandons_a_chunk_reassigned_to_another_runner(tmp_path):  # type: 
     assert provider.released == ["e1"]
     assert store.active_lease("lease_1") is None
     assert store.latest_epoch("ch_1") == 1
-    assert store.pending_outbound(10_000) == []
+    assert store.pending_outbound() == []
     assert store.attempt_count("ch_1", "nd_build") == 1
 
 
@@ -238,7 +238,7 @@ def test_pull_defers_when_hub_unreachable(tmp_path):  # type: ignore[no-untyped-
     assert lease is not None and lease.pid == 100
     # flush_outbound still ran (and, correctly, could not deliver): the buffered fact is
     # still pending, not lost, not acked.
-    pending = store.pending_outbound(10_000)
+    pending = store.pending_outbound()
     assert len(pending) == 1
     assert pending[0].kind == LEASE_MINTED
 
@@ -302,7 +302,7 @@ def test_reap_abandons_instead_of_escalating_a_detached_chunk(tmp_path):  # type
 
     # No escalation.recorded — the whole point. The abandon surfaces an *info*
     # ``attempt-abandoned`` operational event (issue #125), which is not an escalation.
-    pending = store.pending_outbound(10_000)
+    pending = store.pending_outbound()
     assert [f.kind for f in pending] == [EVENT_RECORDED]
     assert ESCALATION_RECORDED not in [f.kind for f in pending]
     assert json.loads(pending[0].payload)["kind"] == "attempt-abandoned"
@@ -328,7 +328,7 @@ def test_reap_still_escalates_an_exhausted_lease_that_is_still_ours(tmp_path):  
 
     # The genuine escalation still posts — alongside its critical ``worker-lost``
     # operational event, enqueued atomically with the same closure (issue #125).
-    pending = store.pending_outbound(10_000)
+    pending = store.pending_outbound()
     kinds = [f.kind for f in pending]
     assert ESCALATION_RECORDED in kinds
     assert EVENT_RECORDED in kinds
@@ -388,7 +388,7 @@ def test_pull_abandons_a_live_lease_whose_chunk_the_hub_reports_unknown(tmp_path
     assert provider.released == ["e1"]  # environment released
     assert store.active_lease("lease_1") is None  # lease closed
     assert store.latest_epoch("ch_1") == 1  # no epoch bump
-    assert store.pending_outbound(10_000) == []  # no requeue, no escalation
+    assert store.pending_outbound() == []  # no requeue, no escalation
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
 
 
@@ -464,7 +464,7 @@ def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path
     Reap(ctx).run()
 
     # No escalation — abandoned as an *info* ``attempt-abandoned`` event (issue #125).
-    pending = store.pending_outbound(10_000)
+    pending = store.pending_outbound()
     assert [f.kind for f in pending] == [EVENT_RECORDED]
     assert ESCALATION_RECORDED not in [f.kind for f in pending]
     assert json.loads(pending[0].payload)["kind"] == "attempt-abandoned"

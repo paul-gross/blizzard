@@ -422,7 +422,7 @@ def test_pump_truncates_a_single_record_that_alone_exceeds_the_cap() -> None:
     assert segment.shipping_stopped_reason is None  # never latches the pump's guard
     # Truncation is never silent (D4): a warning rides the FACT lane. review F12: assert
     # the actual payload, not just the generic envelope kind every fact-lane event shares.
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     assert len(fact_events) == 1
     assert fact_events[0].kind == "event.recorded"
     warning = json.loads(fact_events[0].payload)
@@ -464,7 +464,7 @@ def test_pump_warns_once_per_segment_when_every_tick_needs_truncation() -> None:
     TranscriptPump(ctx).run()
 
     assert len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 3  # every tick still shipped, shrunk
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     assert len(fact_events) == 1  # exactly one warning across all three truncated ticks
 
 
@@ -483,7 +483,7 @@ def test_pump_warns_once_per_reason_even_as_the_segments_displayed_reason_altern
     source._batches["sess-a"] = _batch([_turn(0, "bye")], next_token="pos-3", truncated=True)
     TranscriptPump(ctx).run()  # tick 3: source_read_truncated AGAIN — same reason, no re-warn
 
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert kinds.count("transcript-truncated") == 2  # exactly one per DISTINCT reason, not per tick
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
@@ -823,7 +823,7 @@ def test_pump_marks_and_warns_when_the_source_read_itself_came_back_truncated() 
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "source_read_truncated"
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert "transcript-truncated" in kinds
     pending = ctx.stores.transcript_ledger.pending_transcript_outbound()
@@ -845,7 +845,7 @@ def test_pump_marks_and_warns_when_the_sidechain_fanout_budget_ran_out() -> None
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "source_read_truncated"
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert "transcript-truncated" in kinds
 
@@ -863,7 +863,7 @@ def test_pump_marks_and_warns_on_a_truncated_source_read_with_no_turns() -> None
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "source_read_truncated"
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert "transcript-truncated" in kinds
 
@@ -922,12 +922,12 @@ def test_a_raise_before_the_warning_leaves_the_dropped_sidechain_unlatched() -> 
     ctx.stores.transcript_ledger.record_transcript_deltas = _raise_once  # type: ignore[method-assign]
     TranscriptPump(ctx).run()
 
-    kinds = [json.loads(e.payload).get("kind") for e in ctx.stores.outbound.pending_outbound(10_000)]
+    kinds = [json.loads(e.payload).get("kind") for e in ctx.stores.outbound.pending_outbound()]
     assert "transcript-sidechain-dropped" not in kinds  # nothing warned on the failing tick
 
     TranscriptPump(ctx).run()  # the next tick re-reads the same batch and succeeds
 
-    kinds = [json.loads(e.payload).get("kind") for e in ctx.stores.outbound.pending_outbound(10_000)]
+    kinds = [json.loads(e.payload).get("kind") for e in ctx.stores.outbound.pending_outbound()]
     assert kinds.count("transcript-sidechain-dropped") == 1
 
 
@@ -960,7 +960,7 @@ def test_pump_still_warns_a_dropped_sidechain_on_the_tick_that_tips_the_chunk_bu
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.shipping_stopped_reason == "chunk_budget_exceeded"  # this tick's record tipped it
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert "transcript-sidechain-dropped" in kinds  # never silently dropped alongside the stop
 
@@ -1238,7 +1238,7 @@ def test_pump_warns_on_an_unlinked_sidechain_dropped_alongside_a_normal_record()
     assert len(pending) == 1
     body = json.loads(pending[0].payload)
     assert len(body["turns"]) == 1  # the ordinary turn ships normally
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     assert len(fact_events) == 1
     warning = json.loads(fact_events[0].payload)
     assert warning["kind"] == "transcript-sidechain-dropped"
@@ -1261,7 +1261,7 @@ def test_pump_warns_on_an_unlinked_sidechain_dropped_with_no_turns() -> None:
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.cursor == "pos-1"  # still advances
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     assert len(fact_events) == 1
     warning = json.loads(fact_events[0].payload)
     assert warning["kind"] == "transcript-sidechain-dropped"
@@ -1296,7 +1296,7 @@ def test_pump_warns_only_once_per_segment_per_agent_across_ticks() -> None:
     assert (
         len(ctx.stores.transcript_ledger.pending_transcript_outbound()) == 3
     )  # every tick still shipped its own record
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     assert len(fact_events) == 2  # sub_1 once (tick 1), sub_2 once (tick 3) — never sub_1 again
     warnings = [json.loads(e.payload) for e in fact_events]
     assert [w["detail"]["agent_ids"] for w in warnings] == [["sub_1"], ["sub_2"]]
@@ -1558,7 +1558,7 @@ def test_pump_lease_marks_incomplete_when_its_deadline_expires_mid_drain() -> No
     assert segment is not None
     assert segment.truncated_reason == "lease_closure_incomplete"
     assert segment.cursor == "pos-2"  # the first two reads still landed
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert "transcript-truncated" in kinds
 
@@ -1659,7 +1659,7 @@ def test_pump_lease_marks_a_second_segment_truncated_when_never_even_attempted()
     assert segment_a.truncated_reason is None  # attempted and caught up
     assert segment_b is not None
     assert segment_b.truncated_reason == "lease_closure_incomplete"
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert kinds.count("transcript-truncated") == 1
 
@@ -1692,7 +1692,7 @@ def test_pump_warns_a_dropped_sidechain_even_when_the_cursor_guard_skips_the_seg
 
     _assert_skipped_not_raised(logs)
     assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []  # never enqueued — the guard still skips
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert "transcript-sidechain-dropped" in kinds  # the already-latched warning still fires
 
@@ -1823,7 +1823,7 @@ def test_pump_lease_marks_incomplete_when_backpressure_gates_the_close_time_read
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "lease_closure_incomplete"
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert "transcript-truncated" in kinds
 
@@ -1842,7 +1842,7 @@ def test_pump_lease_marks_incomplete_when_the_source_is_unavailable_at_closure()
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "lease_closure_incomplete"
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert "transcript-truncated" in kinds
 
@@ -1873,7 +1873,7 @@ def test_pump_lease_marks_incomplete_when_the_source_raises_at_closure() -> None
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "lease_closure_incomplete"
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert "transcript-truncated" in kinds
 
@@ -1911,7 +1911,7 @@ def test_pump_lease_marks_incomplete_when_the_cursor_is_stuck_at_closure() -> No
     assert segment is not None
     assert segment.shipped_turns == 0  # nothing ever shipped — this is real loss, not caught-up
     assert segment.truncated_reason == "lease_closure_incomplete"
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert "transcript-truncated" in kinds
 
@@ -2090,7 +2090,7 @@ def test_a_sidechain_with_no_pair_anywhere_is_still_dropped_and_warned() -> None
     TranscriptPump(ctx).run()
 
     assert [t for t in _shipped_turns(ctx) if t["kind"] == "sidechain"] == []
-    kinds = [json.loads(e.payload)["kind"] for e in ctx.stores.outbound.pending_outbound(10_000)]
+    kinds = [json.loads(e.payload)["kind"] for e in ctx.stores.outbound.pending_outbound()]
     assert "transcript-sidechain-dropped" in kinds
 
 
@@ -2112,7 +2112,7 @@ def test_a_linked_sidechain_no_longer_warns_as_dropped() -> None:
 
     TranscriptPump(ctx).run()
 
-    kinds = [json.loads(e.payload)["kind"] for e in ctx.stores.outbound.pending_outbound(10_000)]
+    kinds = [json.loads(e.payload)["kind"] for e in ctx.stores.outbound.pending_outbound()]
     assert "transcript-sidechain-dropped" not in kinds
 
 

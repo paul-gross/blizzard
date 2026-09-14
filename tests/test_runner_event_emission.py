@@ -64,7 +64,7 @@ def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch
 
 
 def _events(store):  # type: ignore[no-untyped-def]
-    return [json.loads(b.payload) for b in store.pending_outbound(10_000) if b.kind == EVENT_RECORDED]
+    return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == EVENT_RECORDED]
 
 
 def _dead_worker_ctx(store, **kwargs):  # type: ignore[no-untyped-def]
@@ -101,7 +101,7 @@ def test_retry_branch_emits_a_warning_attempt_failed(tmp_path):  # type: ignore[
     assert ev["node_name"] == "build"
     assert ev["detail"]["via"] == "advance"
     # The retry also mints a fresh lease — the event rode atomically alongside the closure.
-    assert LEASE_MINTED in {b.kind for b in store.pending_outbound(10_000)}
+    assert LEASE_MINTED in {b.kind for b in store.pending_outbound()}
 
 
 def test_escalate_branch_emits_a_critical_worker_lost(tmp_path):  # type: ignore[no-untyped-def]
@@ -115,7 +115,7 @@ def test_escalate_branch_emits_a_critical_worker_lost(tmp_path):  # type: ignore
     assert len(events) == 1
     assert (events[0]["severity"], events[0]["kind"]) == ("critical", "worker-lost")
     # ...alongside the escalation.recorded fact the escalate branch already buffered.
-    assert ESCALATION_RECORDED in {b.kind for b in store.pending_outbound(10_000)}
+    assert ESCALATION_RECORDED in {b.kind for b in store.pending_outbound()}
 
 
 def test_locally_paused_defer_emits_nothing(tmp_path):  # type: ignore[no-untyped-def]
@@ -128,7 +128,7 @@ def test_locally_paused_defer_emits_nothing(tmp_path):  # type: ignore[no-untype
 
     # ...but the locally-paused defer surfaces nothing (and no escalation either).
     assert _events(store) == []
-    assert ESCALATION_RECORDED not in {b.kind for b in store.pending_outbound(10_000)}
+    assert ESCALATION_RECORDED not in {b.kind for b in store.pending_outbound()}
 
 
 def test_reap_stalled_but_alive_worker_emits_via_reap(tmp_path):  # type: ignore[no-untyped-def]
@@ -190,7 +190,7 @@ def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  # t
     assert len(events) == 1
     assert (events[0]["severity"], events[0]["kind"]) == ("info", "attempt-abandoned")
     # No escalation — an abandon is not a needs-human hand-off.
-    assert ESCALATION_RECORDED not in {b.kind for b in store.pending_outbound(10_000)}
+    assert ESCALATION_RECORDED not in {b.kind for b in store.pending_outbound()}
 
 
 def test_at_most_once_a_second_tick_emits_no_duplicate(tmp_path):  # type: ignore[no-untyped-def]

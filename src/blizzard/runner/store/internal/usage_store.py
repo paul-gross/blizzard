@@ -18,9 +18,7 @@ from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.store")
 
-# Retention (Decision 4, issue #520): a slug's newest attempt survives regardless of age
-# (`last_external_usage_attempt_at`'s own answer never depends on it), so this bounds only
-# how long a SUPERSEDED attempt sticks around.
+# See IWriteUsageRepository.prune_external_usage_samples's own docstring for the retention contract.
 _EXTERNAL_USAGE_SAMPLE_RETENTION_WINDOW = timedelta(days=1)
 
 

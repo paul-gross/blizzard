@@ -50,12 +50,12 @@ class IReadOutboundRepository(Protocol):
         while the flush is pending."""
         ...
 
-    def pending_outbound(self, limit: int) -> list[BufferedFact]:
-        """The unacked outbound buffer, FIFO by seq.
+    def pending_outbound(self, *, limit: int | None = None) -> list[BufferedFact]:
+        """The unacked outbound buffer, FIFO by seq; unbounded when ``limit`` is ``None``.
 
-        ``limit`` bounds the query itself, not just what the caller iterates — a large
-        backlog's full payload set is otherwise materialized before any per-run bound the
-        caller applies is ever consulted."""
+        A given ``limit`` bounds the query itself, not just what the caller iterates — a
+        large backlog's full payload set is otherwise materialized before any per-run bound
+        the caller applies is ever consulted."""
         ...
 
     def pending_outbound_count(self) -> int:
@@ -88,8 +88,8 @@ class IWriteOutboundRepository(IReadOutboundRepository, Protocol):
         ...
 
     def prune_outbound(self, *, now: datetime) -> int:
-        """Delete acked rows older than the store's own retention window (Decision 4,
-        issue #520), but only below the lowest still-pending seq — an acked row interleaved
-        above a pending one always survives, so the retained buffer stays gapless from the
-        pending floor upward. Returns the number of rows pruned."""
+        """Delete acked rows older than the store's own retention window (issue #520), but
+        only below the lowest still-pending seq — an acked row interleaved above a pending
+        one always survives, so the retained buffer stays gapless from the pending floor
+        upward. Returns the number of rows pruned."""
         ...

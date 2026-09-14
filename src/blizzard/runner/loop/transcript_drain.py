@@ -7,6 +7,7 @@ stops only this lane, never the fact lane's."""
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -15,8 +16,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.transcript_pump import TRUNCATION_REASON_SEVERITY, TranscriptPump
-from blizzard.runner.transcripts.caps import TRANSCRIPT_RECORD_MAX_BYTES
+from blizzard.runner.loop.transcript_pump import TRUNCATION_REASON_SEVERITY, TranscriptPump, resolve_record_max_bytes
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
     TranscriptSegmentLedgerRow,
@@ -81,25 +81,52 @@ class TranscriptDrain:
         self.flush(limit=_MAX_RECORDS_PER_RUN, deadline=deadline)
 
     def flush(self, *, limit: int, deadline: datetime | None) -> int:
-        """Deliver buffered records FIFO, batched under ``TRANSCRIPT_RECORD_MAX_BYTES`` (one
-        oversized record ships alone), until ``limit``, ``deadline``, or the first batch that
-        will not deliver, returning how many landed. Zero reads the same either way — an
-        empty buffer or a hub that refused the head. The deadline is checked once per batch,
-        not once per record."""
+        """Deliver buffered records FIFO, batched under the configured per-record byte cap
+        (one oversized record ships alone), until ``limit``, ``deadline``, or the first
+        batch that will not deliver, returning how many landed. Checked once per batch,
+        not per record."""
         # `limit` bounds the query itself, and is this call's ONLY count bound — a second,
         # loop-level guard would be dead code below this line's cap.
         pending = self.ctx.stores.transcript_ledger.pending_transcript_outbound(limit=limit)
-        rendered = [(delta, self._render(delta)) for delta in pending]
         delivered = 0
-        for records in _batched_by_bytes(rendered):
+        for batch in self._batches(pending):
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 break  # this run's wall-clock bound reached — retry the rest next tick
-            if not self._deliver_batch(records):
+            if not self._deliver_batch(batch):
                 break  # transport failure — stop; retry the backlog next tick
-            delivered += len(records)
+            delivered += len(batch)
         return delivered
 
+    def _batches(
+        self, pending: list[BufferedTranscriptDelta]
+    ) -> Iterator[list[tuple[BufferedTranscriptDelta, TranscriptSegmentRecord]]]:
+        """Greedily group pending deltas into batches at or below the per-record byte cap
+        (one oversized record still ships alone). Each record renders lazily, right as its
+        batch is built — never the whole backlog up front — so a raise building one record
+        never blocks batches already produced ahead of it."""
+        cap = self._record_max_bytes
+        batch: list[tuple[BufferedTranscriptDelta, TranscriptSegmentRecord]] = []
+        batch_bytes = 0
+        for delta in pending:
+            record = self._render(delta)
+            record_bytes = len(record.model_dump_json().encode("utf-8"))
+            if batch and batch_bytes + record_bytes > cap:
+                yield batch
+                batch = []
+                batch_bytes = 0
+            batch.append((delta, record))
+            batch_bytes += record_bytes
+        if batch:
+            yield batch
+
+    @property
+    def _record_max_bytes(self) -> int:
+        return resolve_record_max_bytes(self.ctx)
+
     def _deliver_batch(self, records: list[tuple[BufferedTranscriptDelta, TranscriptSegmentRecord]]) -> bool:
+        # A final marker is re-rendered fresh here, not the grouping-time one `_batches` used
+        # only to size the batch — so it reflects an earlier batch's just-applied hub-cap ack.
+        records = [(delta, self._render(delta) if delta.final else record) for delta, record in records]
         batch = TranscriptSegmentBatch(runner_id=self.ctx.config.runner_id, records=[record for _, record in records])
         _CP_BEFORE_SUBMIT.reached()
         try:
@@ -120,7 +147,8 @@ class TranscriptDrain:
                     OutboundFacts(self.ctx).transcript_truncated(
                         chunk_id=delta.chunk_id, segment_id=delta.segment_id, reason=HUB_CAPPED, at=self.ctx.clock.now()
                     )
-            self.ctx.stores.transcript_ledger.ack_transcript_outbound(delta.seq, acked_at=self.ctx.clock.now())
+        seqs = [delta.seq for delta, _record in records]
+        self.ctx.stores.transcript_ledger.ack_transcript_outbound_batch(seqs, acked_at=self.ctx.clock.now())
         return True
 
     def _render(self, delta: BufferedTranscriptDelta) -> TranscriptSegmentRecord:
@@ -135,28 +163,6 @@ class TranscriptDrain:
             # an `assert`, which `python -O` strips into an opaque `AttributeError` below.
             raise RuntimeError(f"final transcript marker {delta.seq} has no segment row {delta.segment_id}")
         return _final_record(delta.seq, segment)
-
-
-def _batched_by_bytes(
-    rendered: list[tuple[BufferedTranscriptDelta, TranscriptSegmentRecord]],
-) -> list[list[tuple[BufferedTranscriptDelta, TranscriptSegmentRecord]]]:
-    """Greedily pack rendered records FIFO into batches whose accumulated payload stays at
-    or below ``TRANSCRIPT_RECORD_MAX_BYTES`` — except a single record already over the cap
-    on its own, which still ships alone rather than blocking the drain (issue #522)."""
-    batches: list[list[tuple[BufferedTranscriptDelta, TranscriptSegmentRecord]]] = []
-    current: list[tuple[BufferedTranscriptDelta, TranscriptSegmentRecord]] = []
-    current_bytes = 0
-    for delta, record in rendered:
-        record_bytes = len(record.model_dump_json().encode("utf-8"))
-        if current and current_bytes + record_bytes > TRANSCRIPT_RECORD_MAX_BYTES:
-            batches.append(current)
-            current = []
-            current_bytes = 0
-        current.append((delta, record))
-        current_bytes += record_bytes
-    if current:
-        batches.append(current)
-    return batches
 
 
 def _final_record(seq: int, segment: TranscriptSegmentLedgerRow) -> TranscriptSegmentRecord:

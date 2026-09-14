@@ -49,7 +49,7 @@ class _SteppingClock(FixedClock):
         return self.instant if self.calls == 1 else self.instant + self.step
 
 
-def _ctx(hub: FakeHub, *, clock: FixedClock | None = None):  # type: ignore[no-untyped-def]
+def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int | None = None):  # type: ignore[no-untyped-def]
     store = make_store("sqlite://")
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"), verdict=None)
     return make_context(
@@ -58,7 +58,9 @@ def _ctx(hub: FakeHub, *, clock: FixedClock | None = None):  # type: ignore[no-u
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=False),
+        config=LoopConfig(
+            runner_id="r1", workspace_id="ws1", transcripts_ship=False, transcript_record_max_bytes=record_max_bytes
+        ),
         clock=clock,
     )
 
@@ -346,7 +348,7 @@ def test_drain_surfaces_a_hub_cap_rejection_never_silently() -> None:
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "hub_capped"
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     assert len(fact_events) == 1
     payload = json.loads(fact_events[0].payload)
     assert payload["kind"] == "transcript-truncated"
@@ -378,7 +380,7 @@ def test_drain_marks_a_hub_cap_rejection_on_replay_after_a_lost_ack() -> None:
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "hub_capped"
-    fact_events = ctx.stores.outbound.pending_outbound(10_000)
+    fact_events = ctx.stores.outbound.pending_outbound()
     assert len(fact_events) == 1
     assert json.loads(fact_events[0].payload)["kind"] == "transcript-truncated"
 
@@ -430,12 +432,11 @@ def test_drain_ships_a_full_ticks_worth_of_records_in_one_request() -> None:
     assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
 
 
-def test_drain_splits_a_batch_when_accumulated_payload_exceeds_the_byte_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_drain_splits_a_batch_when_accumulated_payload_exceeds_the_byte_cap() -> None:
     """Records are packed FIFO into as few requests as fit under the byte cap — split only
     when the next record would push the accumulated batch over it, never mid-batch."""
-    monkeypatch.setattr(transcript_drain_module, "TRANSCRIPT_RECORD_MAX_BYTES", 900)
     hub = FakeHub()
-    ctx = _ctx(hub)
+    ctx = _ctx(hub, record_max_bytes=900)
     segment_id = _spawn_one_segment(ctx)
     seqs = [_enqueue_delta(ctx, segment_id, cursor=f"pos-{i}") for i in range(5)]
 
@@ -448,12 +449,11 @@ def test_drain_splits_a_batch_when_accumulated_payload_exceeds_the_byte_cap(monk
         assert len(call) >= 1  # never an empty batch
 
 
-def test_drain_ships_a_single_oversized_record_alone_rather_than_blocking(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_drain_ships_a_single_oversized_record_alone_rather_than_blocking() -> None:
     """A record that alone exceeds the byte cap still ships, alone, rather than wedging
     the drain forever waiting for a batch that could never fit."""
-    monkeypatch.setattr(transcript_drain_module, "TRANSCRIPT_RECORD_MAX_BYTES", 1)
     hub = FakeHub()
-    ctx = _ctx(hub)
+    ctx = _ctx(hub, record_max_bytes=1)
     segment_id = _spawn_one_segment(ctx)
     seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
 
@@ -461,6 +461,26 @@ def test_drain_ships_a_single_oversized_record_alone_rather_than_blocking(monkey
 
     assert hub.push_transcripts_calls == [[seq]]
     assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+
+
+def test_drain_reflects_an_earlier_batchs_cap_on_a_later_batchs_final_marker() -> None:
+    """A delta capped in one batch must still read `record_truncated: true` on a same-run
+    final marker rendered afterward, in a later batch — each batch renders only once the
+    one ahead of it already delivered, never the whole slice up front."""
+    hub = FakeHub()
+    ctx = _ctx(hub, record_max_bytes=1)  # forces every record into its own batch
+    segment_id = _spawn_one_segment(ctx)
+    capped_seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    hub.reject_transcript_seqs = {capped_seq}
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+
+    TranscriptDrain(ctx).run()
+
+    assert len(hub.push_transcripts_calls) == 2  # the delta and the final, each its own batch
+    final = next(r for r in hub.transcripts_pushed if r.final)
+    assert final.record_truncated is True
 
 
 def test_drain_acks_a_batch_mixing_applied_and_capped_records() -> None:
