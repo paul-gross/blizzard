@@ -16,7 +16,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import Chunk, ChunkFacts, PauseFact, UsageTotal, holds_claim
+from blizzard.hub.domain.work import Chunk, ChunkFacts, PauseFact, UsageTotal, WorkRef, holds_claim
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
     ArtifactView,
@@ -71,6 +71,18 @@ def usage_total_view(usage: UsageTotal) -> ChunkUsageTotalView:
     )
 
 
+class _LiveHoldersNotInjected(Enum):
+    """The type of :data:`_LIVE_HOLDERS_NOT_INJECTED` — the ``_RouteNotInjected`` pattern,
+    reused so a ``dict[WorkRef, str] | None`` union stays narrowable for pyright."""
+
+    TOKEN = 0
+
+
+#: :meth:`ChunkView.of`'s default: no live-holder map was given, so :meth:`ChunkView.pointer_views`
+#: resolves one lazily with a single bulk call over the chunk's own pointers.
+_LIVE_HOLDERS_NOT_INJECTED: Final = _LiveHoldersNotInjected.TOKEN
+
+
 def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedView | None:
     """A derived marking's wire wrapping (issue #457) — the one home every caller of
     :func:`~blizzard.hub.domain.dependencies.derive_blocked_prerequisites` reaches through,
@@ -97,6 +109,10 @@ class ChunkView:
     facts: ChunkFacts
     names: GraphNames
     route: Route | None | _RouteNotInjected = _ROUTE_NOT_INJECTED
+    #: Every pointer's live holder (issue #421/bulk-read adoption) — the caller's own
+    #: already-resolved map; :meth:`of` leaves it uninjected and :meth:`pointer_views`
+    #: resolves one lazily, the same shape :attr:`route` takes.
+    live_holders: dict[WorkRef, str] | _LiveHoldersNotInjected = _LIVE_HOLDERS_NOT_INJECTED
     #: The chunk's blocked marking (issue #457) — the caller's own already-derived value;
     #: neither constructor derives it itself, so a caller that has no use for it (every verb
     #: response but the list and detail reads) pays nothing for it.
@@ -137,12 +153,22 @@ class ChunkView:
         facts: ChunkFacts,
         route: Route | None,
         names: GraphNames,
+        live_holders: dict[WorkRef, str],
         blocked: BlockedView | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of` (issue #421): a fan-out list read injects
-        already-fetched facts and route instead of calling ``load_facts``/``route_of`` per
-        chunk. ``route=None`` means "no live route"; :meth:`of` leaves it uninjected."""
-        return cls(services=services, chunk=chunk, facts=facts, names=names, route=route, blocked=blocked)
+        already-fetched facts, route and pointer live-holders instead of calling
+        ``load_facts``/``route_of``/``live_holders`` per chunk. ``route=None`` means "no live
+        route"; :meth:`of` leaves both uninjected."""
+        return cls(
+            services=services,
+            chunk=chunk,
+            facts=facts,
+            names=names,
+            route=route,
+            live_holders=live_holders,
+            blocked=blocked,
+        )
 
     def _resolved_route(self) -> Route | None:
         """The chunk's route: the injected value if one was given, otherwise fetched lazily
@@ -150,6 +176,14 @@ class ChunkView:
         if self.route is not _ROUTE_NOT_INJECTED:
             return self.route
         return self.services.chunks.route.route_of(self.chunk.chunk_id)
+
+    def _resolved_live_holders(self) -> dict[WorkRef, str]:
+        """Every pointer's live holder: the injected map if one was given, otherwise
+        resolved lazily with one bulk ``IReadChunkWorkRefsRepository.live_holders`` call
+        over this chunk's own pointers — the ``_resolved_route`` pattern."""
+        if self.live_holders is not _LIVE_HOLDERS_NOT_INJECTED:
+            return self.live_holders
+        return self.services.chunks.work_refs.live_holders(self.chunk.work_refs)
 
     def summary(self) -> ChunkSummary:
         """The derived fleet-list row (issue #104) — rendered both by the list read and by
@@ -194,7 +228,9 @@ class ChunkView:
         configured source names ``pointer.source``.
 
         Each pointer resolves to its own binding by name, so a chunk's pointers need not
-        all share one source."""
+        all share one source. Liveness for every pointer resolves through one bulk call
+        (:meth:`_resolved_live_holders`) rather than once per pointer."""
+        holders = self._resolved_live_holders()
         views: list[WorkRefView] = []
         for p in self.chunk.work_refs:
             source = self.services.work_sources.get(p.source)
@@ -203,7 +239,7 @@ class ChunkView:
                     source=p.source,
                     ref=p.ref,
                     label=source.label(p) if source is not None else None,
-                    web_url=source.web_url(p) if source is not None else None,
+                    web_url=source.web_url(p, live_holder=holders.get(p)) if source is not None else None,
                 )
             )
         return views

@@ -8,16 +8,50 @@ and its ``{source}/items``/``{source}/items/{ref}`` children."""
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from blizzard.auth_core import Role
+from blizzard.foundation.clock import IClock
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
+from blizzard.hub.domain.work import ChunkFacts, WorkRef
 from blizzard.hub.events.broker import CHUNK_CHANGED, QUEUE_CHANGED
-from tests.support import FakeWorkSource, build_hub, emitted_events, seed_session, seed_user
+from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from tests.support import FakeWorkSource, build_hub, emitted_events, hub_store_connections, seed_session, seed_user
 
 pytestmark = pytest.mark.component
+
+
+class _CountingFactsStore(ChunkFactsStore):
+    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+        super().__init__(store, clock)
+        self.load_facts_calls = 0
+
+    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+        self.load_facts_calls += 1
+        return super().load_facts(chunk_id)
+
+
+class _CountingWorkRefsStore(ChunkWorkRefsStore):
+    """Counts calls to the pointer-liveness reads (mirrors
+    ``test_list_chunks_bulk_reads.py``'s own counting store)."""
+
+    def __init__(self, store: HubStoreConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
+        super().__init__(store, clock, facts=facts)
+        self.find_live_holder_calls = 0
+        self.live_holders_calls = 0
+
+    def find_live_holder(self, pointer: WorkRef) -> str | None:
+        self.find_live_holder_calls += 1
+        return super().find_live_holder(pointer)
+
+    def live_holders(self, pointers):  # type: ignore[no-untyped-def]
+        self.live_holders_calls += 1
+        return super().live_holders(pointers)
 
 
 def test_a_hub_owned_pointer_ingests_and_renders_its_title_and_body(tmp_path: Path) -> None:
@@ -98,6 +132,28 @@ def test_create_get_list_patch_and_withdraw_round_trip(tmp_path: Path) -> None:
     assert withdrawn.json()["closed_at"] is not None
     assert withdrawn.json()["web_url"] is None  # its holding chunk is gone
     assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 404
+
+
+def test_list_work_items_resolves_liveness_with_one_bulk_call_regardless_of_item_count(tmp_path: Path) -> None:
+    """``GET /api/work-sources/hub/items`` renders every item's ``web_url`` through one
+    bulk ``live_holders`` call rather than once per item (issue #421/bulk-read adoption)."""
+    hub = build_hub(tmp_path)
+    created = [
+        hub.client.post("/api/work-sources/hub/items", json={"title": f"t{i}", "body": "b"}).json() for i in range(3)
+    ]
+
+    counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
+    counting_work_refs = _CountingWorkRefsStore(hub_store_connections(hub.engine), hub.clock, facts=counting_facts)
+    assert hub.app is not None
+    hub.app.state.services = replace(
+        hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, work_refs=counting_work_refs)
+    )
+
+    listed = hub.client.get("/api/work-sources/hub/items").json()["items"]
+
+    assert {item["web_url"] for item in listed} == {f"/board/chunk/{c['chunk_id']}" for c in created}
+    assert counting_work_refs.live_holders_calls == 1
+    assert counting_work_refs.find_live_holder_calls == 0
 
 
 # --------------------------------------------------------------------------- #

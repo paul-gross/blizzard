@@ -41,7 +41,7 @@ from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
-from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph, seed_work_item
+from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -67,7 +67,7 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, 
         findings=FindingStore(store),
         exits=FindingExitService(repo=FindingStore(store), clock=clock),
     )
-    return HubWorkSource(items, chunks.work_refs, edits, users, resolution), items, chunks, users, engine, clock
+    return HubWorkSource(items, edits, users, resolution), items, chunks, users, engine, clock
 
 
 def _user(users: UserRepository, *, username: str) -> User:
@@ -235,21 +235,18 @@ def test_fetch_a_delivered_ref_still_resolves(tmp_path: Path) -> None:
     assert item.body == "b"
 
 
-def test_web_url_resolves_to_the_live_holder_s_board_chunk_link(tmp_path: Path) -> None:
-    """``web_url`` reads only ``find_live_holder`` — no item row is needed to prove it."""
-    source, _, chunks, _, engine, _ = _source(tmp_path)
-    pointer = WorkRef(source="hub", ref="1")
-    with engine.begin() as conn:
-        seed_graph(conn, "gr_1", at=_T0)
-        seed_chunk(conn, "ch_1", graph_id="gr_1", at=_T0)
-    chunks.work_refs.add_work_refs("ch_1", [pointer], at=_T0)
-
-    assert source.web_url(pointer) == "/board/chunk/ch_1"
-
-
-def test_web_url_is_none_when_no_live_chunk_holds_the_pointer(tmp_path: Path) -> None:
+def test_web_url_formats_the_caller_supplied_live_holder_as_a_board_chunk_link(tmp_path: Path) -> None:
+    """``web_url`` no longer resolves liveness itself — the caller supplies
+    ``live_holder`` via one bulk ``live_holders`` call, so this only proves formatting."""
     source, _, _, _, _, _ = _source(tmp_path)
-    assert source.web_url(WorkRef(source="hub", ref="1")) is None
+    pointer = WorkRef(source="hub", ref="1")
+
+    assert source.web_url(pointer, live_holder="ch_1") == "/board/chunk/ch_1"
+
+
+def test_web_url_is_none_when_no_live_holder_is_supplied(tmp_path: Path) -> None:
+    source, _, _, _, _, _ = _source(tmp_path)
+    assert source.web_url(WorkRef(source="hub", ref="1"), live_holder=None) is None
 
 
 # --------------------------------------------------------------------------- #

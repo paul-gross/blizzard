@@ -9,7 +9,6 @@ from __future__ import annotations
 from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph import Graph
@@ -41,13 +40,11 @@ class HubWorkSource:
     def __init__(
         self,
         items: IReadWorkItemRepository,
-        work_refs: IReadChunkWorkRefsRepository,
         edits: WorkItemEditService,
         users: IReadUserRepository,
         resolution: GardenProposalDeliveryResolution,
     ) -> None:
         self._items = items
-        self._work_refs = work_refs
         self._edits = edits
         self._users = users
         self._resolution = resolution
@@ -77,14 +74,14 @@ class HubWorkSource:
     def label(self, pointer: WorkRef) -> str | None:
         return f"{RESERVED_HUB_SOURCE_NAME}:{pointer.ref}"
 
-    def web_url(self, pointer: WorkRef) -> str | None:
+    def web_url(self, pointer: WorkRef, *, live_holder: str | None) -> str | None:
         """The board's own chunk deep link — relative, since the hub declares no public
-        origin. Non-``None`` exactly while a live (non-terminal) chunk holds the pointer
-        — from the moment create mints the item's resting chunk (blizzard#359) until
-        that chunk reaches a terminal status (``stopped`` or ``done``); ``None`` before
-        and after."""
-        chunk_id = self._work_refs.find_live_holder(pointer)
-        return f"/board/chunk/{chunk_id}" if chunk_id is not None else None
+        origin. Non-``None`` exactly while ``live_holder`` is set: the caller resolves
+        liveness itself (once, in bulk) rather than this formatting call reading it —
+        from the moment create mints the item's resting chunk (blizzard#359) until that
+        chunk reaches a terminal status (``stopped`` or ``done``), the caller's
+        ``live_holder`` is that chunk id; ``None`` before and after."""
+        return f"/board/chunk/{live_holder}" if live_holder is not None else None
 
     def branch_url(self, repo: str, branch_name: str) -> str | None:
         """The built-in source names no forge to link a branch through."""
@@ -162,7 +159,7 @@ def seat_hub_work_source(
     edits = WorkItemEditService(
         items=items, work_refs=work_refs, record=record, facts=facts, clock=clock, delete=delete
     )
-    hub_source = HubWorkSource(items, work_refs, edits, users, resolution)
+    hub_source = HubWorkSource(items, edits, users, resolution)
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source

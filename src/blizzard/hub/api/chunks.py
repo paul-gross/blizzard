@@ -7,6 +7,7 @@ stored column. The work-item read is a pass-through whose contents are never sto
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -25,6 +26,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.chunks.work_refs import resolve_live_holder
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable
 from blizzard.hub.domain.dependencies import ChunkNeighbor, derive_blocked_prerequisites, derive_chunk_neighborhood
@@ -153,6 +155,20 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
     # inside a store (``bzh:dependency-inversion``, issue #457, D2).
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
     markings = derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
+    chunks = services.chunks.record.list_all()
+    # The live-holder map derives from the chunks and statuses already loaded above — no
+    # further fact load, unlike calling `live_holders` itself (issue #421/bulk-read
+    # adoption); `list_all` already excludes ephemeral chunks, so every candidate here is
+    # non-ephemeral by construction.
+    candidates: dict[WorkRef, list[str]] = defaultdict(list)
+    for chunk in chunks:
+        for p in chunk.work_refs:
+            candidates[p].append(chunk.chunk_id)
+    live_holders = {
+        pointer: holder
+        for pointer, chunk_ids in candidates.items()
+        if (holder := resolve_live_holder(chunk_ids, statuses)) is not None
+    }
     return [
         ChunkView.injected(
             services,
@@ -160,9 +176,10 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
             facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
             routes.get(chunk.chunk_id),
             names,
+            live_holders,
             blocked=blocked_view(markings.get(chunk.chunk_id)),
         ).summary()
-        for chunk in services.chunks.record.list_all()
+        for chunk in chunks
     ]
 
 
@@ -648,6 +665,7 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     fetched_at = iso_utc(services.clock.now())
+    holders = services.chunks.work_refs.live_holders(chunk.work_refs)
     entries: list[WorkItemEntry] = []
     for pointer in chunk.work_refs:
         source = services.work_sources.get(pointer.source)
@@ -664,7 +682,7 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
             )
             continue
         label = source.label(pointer)
-        web_url = source.web_url(pointer)
+        web_url = source.web_url(pointer, live_holder=holders.get(pointer))
         try:
             item = source.fetch(pointer)
             stated_priority = WorkItemPriority(item.stated_priority) if item.stated_priority is not None else None

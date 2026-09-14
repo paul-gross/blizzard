@@ -12,10 +12,11 @@ import pytest
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import ChunkFacts
+from blizzard.hub.domain.work import ChunkFacts, WorkRef
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
+from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from tests.support import build_hub, count_queries, hub_store_connections, ingest
 
 pytestmark = pytest.mark.component
@@ -105,3 +106,49 @@ def test_list_chunks_calls_bulk_reads_and_never_load_facts_or_route_of(tmp_path:
     assert counting_route.load_all_routes_calls == 1
     assert counting_facts.load_facts_calls == 0
     assert counting_route.route_of_calls == 0
+
+
+class _CountingWorkRefsStore(ChunkWorkRefsStore):
+    """Counts calls to the pointer-liveness reads, so a test can pin that a fan-out
+    read never reaches the per-pointer `find_live_holder` (issue #421/bulk-read
+    adoption's own `_CountingFactsStore`/`_CountingRouteStore` pattern)."""
+
+    def __init__(self, store: HubStoreConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
+        super().__init__(store, clock, facts=facts)
+        self.find_live_holder_calls = 0
+        self.live_holders_calls = 0
+
+    def find_live_holder(self, pointer: WorkRef) -> str | None:
+        self.find_live_holder_calls += 1
+        return super().find_live_holder(pointer)
+
+    def live_holders(self, pointers):  # type: ignore[no-untyped-def]
+        self.live_holders_calls += 1
+        return super().live_holders(pointers)
+
+
+def test_list_chunks_renders_work_refs_with_no_fact_load_or_live_holders_call(tmp_path: Path) -> None:
+    """``list_chunks`` derives its live-holder map from the chunks and statuses it
+    already loaded (Decisions: "renders work refs with zero fact loads") — it must
+    never call `find_live_holder`/`live_holders` (each its own bulk read) or reach
+    `load_facts`/`load_facts_for` a second time to resolve a pointer's URL."""
+    hub = build_hub(tmp_path)
+    ingest(hub, [{"source": "default", "ref": "1"}])
+    created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+
+    counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
+    counting_work_refs = _CountingWorkRefsStore(hub_store_connections(hub.engine), hub.clock, facts=counting_facts)
+    assert hub.app is not None
+    hub.app.state.services = replace(
+        hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, work_refs=counting_work_refs)
+    )
+
+    resp = hub.client.get("/api/chunks")
+
+    assert resp.status_code == 200, resp.text
+    by_source_ref = {(row["work_refs"][0]["source"], row["work_refs"][0]["ref"]): row for row in resp.json()}
+    assert by_source_ref[("default", "1")]["work_refs"][0]["web_url"] == "http://forge.local/acme/widget/issues/1"
+    assert by_source_ref[("hub", created["ref"])]["work_refs"][0]["web_url"] == f"/board/chunk/{created['chunk_id']}"
+    assert counting_work_refs.find_live_holder_calls == 0
+    assert counting_work_refs.live_holders_calls == 0
+    assert counting_facts.load_facts_calls == 0

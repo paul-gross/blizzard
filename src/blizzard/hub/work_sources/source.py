@@ -86,8 +86,13 @@ class IWorkSource(Protocol):
         (e.g. a URL that isn't shaped like this source's items)."""
         ...
 
-    def web_url(self, pointer: WorkRef) -> str | None:
-        """The pointer's browser-openable address, or ``None`` when it can't be derived."""
+    def web_url(self, pointer: WorkRef, *, live_holder: str | None) -> str | None:
+        """The pointer's browser-openable address, or ``None`` when it can't be derived.
+        ``live_holder`` is the pointer's live (non-terminal) chunk holder, resolved by the
+        caller through one bulk ``live_holders`` call rather than this method resolving it
+        itself per call — a required keyword so no caller silently falls back to a
+        per-pointer read. A source whose address doesn't depend on liveness (every binding
+        but the built-in ``hub`` source) ignores it."""
         ...
 
     def branch_url(self, repo: str, branch_name: str) -> str | None:

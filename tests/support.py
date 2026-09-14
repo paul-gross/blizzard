@@ -218,7 +218,7 @@ class FakeWorkSource:
     def label(self, pointer: WorkRef) -> str | None:
         return f"{self.name}#{pointer.ref}"
 
-    def web_url(self, pointer: WorkRef) -> str | None:
+    def web_url(self, pointer: WorkRef, *, live_holder: str | None) -> str | None:
         return f"http://forge.local/{self.repo}/issues/{pointer.ref}"
 
     def branch_url(self, repo: str, branch_name: str) -> str | None:
