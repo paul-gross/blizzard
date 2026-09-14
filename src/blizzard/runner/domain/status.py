@@ -167,7 +167,7 @@ class RunnerStatusService:
                 endpoint=self._hub_url,
                 reachable=reachable,
                 last_contact_at=contact_at,
-                buffer_depth=len(self._stores.outbound.pending_outbound()),
+                buffer_depth=self._stores.outbound.pending_outbound_count(),
             ),
             last_tick_at=self._stores.pause.last_daemon_liveness(),
         )

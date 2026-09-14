@@ -168,6 +168,24 @@ def test_buffer_depth_counts_the_unacked_outbound_buffer(tmp_path: Path) -> None
 
 
 @pytest.mark.component
+def test_buffer_depth_reports_the_true_depth_above_the_drains_own_per_run_limit(tmp_path: Path) -> None:
+    """`buffer_depth` reads a dedicated count, never the drain's own bounded
+    `pending_outbound(limit)` — a backlog bigger than any one run's slice must still report
+    its true size, not the slice size."""
+    app, store = _app_with_status(tmp_path)
+    total = 150  # bigger than the outbound drain's own per-run slice bound
+    for i in range(total):
+        store.enqueue_outbound(
+            kind="lease.minted", chunk_id=f"ch_{i}", lease_id=f"lease_{i}", payload="{}", created_at=_NOW
+        )
+
+    with TestClient(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.json()["hub"]["buffer_depth"] == total
+
+
+@pytest.mark.component
 def test_last_tick_reflects_daemon_liveness(tmp_path: Path) -> None:
     app, store = _app_with_status(tmp_path)
     store.record_daemon_liveness(runner_id="runner-local", alive_at=_NOW)

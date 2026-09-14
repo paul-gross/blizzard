@@ -223,3 +223,8 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         :class:`~blizzard.tools.invariants.TranscriptSegmentFinalizedExactlyOnce`
         checks for."""
         ...
+
+    def ack_transcript_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:
+        """Ack every seq in ``seqs`` in one transaction — one delivered ``push_transcripts``
+        batch's ack (issue #522), same delta/final split as :meth:`ack_transcript_outbound`."""
+        ...

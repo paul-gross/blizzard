@@ -111,3 +111,11 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         the buffered seq or ``None``. ``slug`` (blizzard#436) is the join key a later read
         filters on, so one subscription's attempt never advances another's cadence."""
         ...
+
+    def prune_external_usage_samples(self, *, now: datetime) -> int:
+        """Compact external-usage-sample attempts older than the store's own retention
+        window (issue #520), keeping each slug's newest attempt regardless of age —
+        ``max(sampled_at)`` per slug is unchanged, so
+        :meth:`~IReadUsageRepository.last_external_usage_attempt_at` answers identically
+        before and after. Returns the number of rows pruned."""
+        ...

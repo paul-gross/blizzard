@@ -4,7 +4,7 @@ blizzard#410)."""
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import and_, case, func, select
 
@@ -17,6 +17,9 @@ from blizzard.runner.store.schema import context_samples, external_usage_samples
 from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.store")
+
+# See IWriteUsageRepository.prune_external_usage_samples's own docstring for the retention contract.
+_EXTERNAL_USAGE_SAMPLE_RETENTION_WINDOW = timedelta(days=1)
 
 
 class UsageStore:
@@ -209,6 +212,27 @@ class UsageStore:
                 seq = int(key[0]) if key is not None else 0
         _log.info("external subscription usage attempt recorded", slug=slug, sampled=payload is not None)
         return seq
+
+    def prune_external_usage_samples(self, *, now: datetime) -> int:
+        cutoff = now - _EXTERNAL_USAGE_SAMPLE_RETENTION_WINDOW
+        newest_sample = external_usage_samples.alias("newest_sample")
+        latest_sample = (
+            select(func.max(newest_sample.c.sampled_at))
+            .where(newest_sample.c.slug == external_usage_samples.c.slug)
+            .scalar_subquery()
+        )
+        with self._store.begin() as conn:
+            # `< latest_sample` (never `<=`) keeps EVERY row tied for newest — a same-instant
+            # pair is not a superseded attempt, so neither is pruned out from under the other.
+            result = conn.execute(
+                external_usage_samples.delete().where(
+                    and_(
+                        external_usage_samples.c.sampled_at < cutoff,
+                        external_usage_samples.c.sampled_at < latest_sample,
+                    )
+                )
+            )
+        return result.rowcount
 
 
 def _conforms_usage_store(x: UsageStore) -> IWriteUsageRepository:

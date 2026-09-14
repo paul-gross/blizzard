@@ -58,6 +58,13 @@ _INTERNAL_BOOKKEEPING = (
     "internal bookkeeping with no client-facing read surface; no kind in the vocabulary represents it."
 )
 
+#: The three retention prunes' shared reason (issue #520) — see
+#: `IWriteOutboundRepository.prune_outbound` and its siblings for the retention contract.
+_RETENTION_PRUNE = (
+    "Retention.run (runner/loop/steps.py) — a prune changes no client-facing read's answer "
+    "(issue #520), so there is nothing for a kind to announce."
+)
+
 #: The full census over ``IWriteRunnerStore``'s own-declared members (D5) — keyed by the
 #: method names ``tests/test_runner_write_protocol_census.py`` introspects at runtime.
 WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
@@ -181,9 +188,17 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "flush marker reads `acked_at` off the row this re-read fetches, so leaving this "
         "silent stales that marker until the next backstop poll.",
     ),
+    "ack_outbound_batch": Published(
+        FACT_CHANGED,
+        "OutboundDrain._ack_run (runner/loop/drain.py) — every seq in one delivered generic-"
+        "kind run, re-announced the same as `ack_outbound`'s own single-seq case (issue #522).",
+    ),
     # --- liveness/usage/context — the elapsed-time-derived samplers (D7) ------------
     "record_daemon_liveness": Silent(_ELAPSED_TIME_DERIVED + " (the daemon's own tick beat)"),
     "record_heartbeat": Silent(_ELAPSED_TIME_DERIVED + " (a worker's tool-call beat, named explicitly in D7)"),
+    "prune_outbound": Silent(_RETENTION_PRUNE),
+    "prune_heartbeats": Silent(_RETENTION_PRUNE),
+    "prune_external_usage_samples": Silent(_RETENTION_PRUNE),
     "record_usage": Published(
         FACT_CHANGED,
         "UsageRecorder.record_sample (runner/loop/usage.py) — kind='usage.recorded'. D7 names the "
@@ -231,4 +246,5 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "finalize_transcript_segment": Silent(_TRANSCRIPT_LANE_POLLS),
     "advance_transcript_cursor": Silent(_TRANSCRIPT_LANE_POLLS),
     "ack_transcript_outbound": Silent(_TRANSCRIPT_LANE_POLLS),
+    "ack_transcript_outbound_batch": Silent(_TRANSCRIPT_LANE_POLLS),
 }

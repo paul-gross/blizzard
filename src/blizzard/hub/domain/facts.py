@@ -182,9 +182,10 @@ class FactIngestService:
             applied.append(fact.seq)
             if row_id is not None:
                 row_id_by_seq[fact.seq] = row_id
-
-        if applied:
+            # Persisted per applied fact, not once after the loop — bounds a crash mid-batch
+            # to the one in-flight fact's double-apply (blizzard-context crash-correctness/hub.md).
             self._route.set_runner_high_water(batch.runner_id, seq=mark, at=self._clock.now())
+
         _log.info(
             "runner facts ingested",
             runner_id=batch.runner_id,

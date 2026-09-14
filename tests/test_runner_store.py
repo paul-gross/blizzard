@@ -15,7 +15,7 @@ from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageKind, UsageSample
-from blizzard.runner.store.schema import transcript_outbound_buffer
+from blizzard.runner.store.schema import external_usage_samples, heartbeats, transcript_outbound_buffer
 from tests.runner_fakes import make_store
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -1133,3 +1133,154 @@ def test_record_closure_ships_a_final_marker_even_when_no_pump_ever_ran(tmp_path
     assert segment is not None
     assert segment.finalized_at == _NOW
     assert segment.normalizer_version == ""  # the sentinel, never learned from a real read
+
+
+# --- retention pruning (issue #520) ------------------------------
+
+
+def _outbound_row_seqs(tmp_path) -> set[int]:  # type: ignore[no-untyped-def]
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
+    with engine.connect() as conn:
+        from blizzard.runner.store.schema import outbound_buffer
+
+        return set(conn.execute(sa.select(outbound_buffer.c.seq)).scalars().all())
+
+
+@pytest.mark.component
+def test_prune_outbound_deletes_old_acked_rows_below_the_pending_floor(tmp_path):  # type: ignore[no-untyped-def]
+    """Retention (issue #520): an acked row past the window is pruned only
+    when its seq sits below the lowest still-pending seq — one interleaved above it
+    survives regardless of age, keeping the retained buffer gapless from the floor up."""
+    store = _store(tmp_path)
+    old = _NOW - timedelta(days=8)  # past the 7-day window
+    below_floor = store.enqueue_outbound(
+        kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=old
+    )
+    pending = store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=old)
+    above_floor = store.enqueue_outbound(
+        kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=old
+    )
+    store.ack_outbound(below_floor, acked_at=old)
+    store.ack_outbound(above_floor, acked_at=old)  # acked, old, but ABOVE the pending floor
+
+    pruned = store.prune_outbound(now=_NOW)
+
+    assert pruned == 1
+    assert _outbound_row_seqs(tmp_path) == {pending, above_floor}
+    assert [f.seq for f in store.pending_outbound()] == [pending]
+
+
+@pytest.mark.component
+def test_prune_outbound_keeps_acked_rows_still_inside_the_retention_window(tmp_path):  # type: ignore[no-untyped-def]
+    """An acked row younger than the retention window survives even below the pending
+    floor — retention is about age, not merely about being superseded by a pending row."""
+    store = _store(tmp_path)
+    recent = _NOW - timedelta(days=1)
+    acked = store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=recent)
+    pending = store.enqueue_outbound(
+        kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=recent
+    )
+    store.ack_outbound(acked, acked_at=recent)
+
+    pruned = store.prune_outbound(now=_NOW)
+
+    assert pruned == 0
+    assert _outbound_row_seqs(tmp_path) == {acked, pending}
+
+
+@pytest.mark.component
+def test_prune_heartbeats_removes_a_superseded_beat_but_never_the_newest(tmp_path):  # type: ignore[no-untyped-def]
+    """A lease's newest beat survives regardless of age — ``latest_heartbeat`` answers
+    identically before and after — while a superseded beat past the window is pruned."""
+    store = _store(tmp_path)
+    superseded = _NOW - timedelta(days=2)  # past the 1-day window
+    newest = superseded + timedelta(minutes=1)  # also past the window, but the newest
+    store.record_heartbeat(lease_id="lease_1", beat_at=superseded)
+    store.record_heartbeat(lease_id="lease_1", beat_at=newest)
+    before = store.latest_heartbeat("lease_1")
+
+    pruned = store.prune_heartbeats(now=_NOW)
+
+    assert pruned == 1
+    assert store.latest_heartbeat("lease_1") == before == newest
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
+    with engine.connect() as conn:
+        remaining = (
+            conn.execute(sa.select(heartbeats.c.beat_at).where(heartbeats.c.lease_id == "lease_1")).scalars().all()
+        )
+    assert list(remaining) == [newest]
+
+
+@pytest.mark.component
+def test_prune_heartbeats_never_prunes_a_same_instant_tied_newest_pair(tmp_path):  # type: ignore[no-untyped-def]
+    """``< latest_beat``, never ``<=``: two beats tied for newest are both spared, even
+    when that tied instant is itself past the retention window."""
+    store = _store(tmp_path)
+    tied = _NOW - timedelta(days=2)  # past the window
+    store.record_heartbeat(lease_id="lease_1", beat_at=tied)
+    store.record_heartbeat(lease_id="lease_1", beat_at=tied)
+
+    pruned = store.prune_heartbeats(now=_NOW)
+
+    assert pruned == 0
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
+    with engine.connect() as conn:
+        remaining = conn.execute(
+            sa.select(sa.func.count()).select_from(heartbeats).where(heartbeats.c.lease_id == "lease_1")
+        ).scalar_one()
+    assert remaining == 2
+
+
+def _record_external_usage_attempt(store, *, slug: str, sampled_at):  # type: ignore[no-untyped-def]
+    store.record_external_usage_attempt(
+        slug=slug, sampled_at=sampled_at, payload=None, report_kind="", report_payload=""
+    )
+
+
+@pytest.mark.component
+def test_prune_external_usage_samples_removes_a_superseded_attempt_but_never_the_newest(tmp_path):  # type: ignore[no-untyped-def]
+    """A slug's newest attempt survives regardless of age — ``last_external_usage_attempt_at``
+    answers identically before and after — while a superseded attempt past the window is pruned."""
+    store = _store(tmp_path)
+    superseded = _NOW - timedelta(days=2)  # past the 1-day window
+    newest = superseded + timedelta(minutes=1)  # also past the window, but the newest
+    _record_external_usage_attempt(store, slug="anthropic", sampled_at=superseded)
+    _record_external_usage_attempt(store, slug="anthropic", sampled_at=newest)
+    before = store.last_external_usage_attempt_at("anthropic")
+
+    pruned = store.prune_external_usage_samples(now=_NOW)
+
+    assert pruned == 1
+    assert store.last_external_usage_attempt_at("anthropic") == before == newest
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
+    with engine.connect() as conn:
+        remaining = (
+            conn.execute(
+                sa.select(external_usage_samples.c.sampled_at).where(external_usage_samples.c.slug == "anthropic")
+            )
+            .scalars()
+            .all()
+        )
+    assert list(remaining) == [newest]
+
+
+@pytest.mark.component
+def test_prune_external_usage_samples_never_prunes_a_same_instant_tied_newest_pair(tmp_path):  # type: ignore[no-untyped-def]
+    """``< latest_sample``, never ``<=``: two attempts tied for newest are both spared,
+    even when that tied instant is itself past the retention window."""
+    store = _store(tmp_path)
+    tied = _NOW - timedelta(days=2)  # past the window
+    _record_external_usage_attempt(store, slug="anthropic", sampled_at=tied)
+    _record_external_usage_attempt(store, slug="anthropic", sampled_at=tied)
+
+    pruned = store.prune_external_usage_samples(now=_NOW)
+
+    assert pruned == 0
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
+    with engine.connect() as conn:
+        remaining = conn.execute(
+            sa.select(sa.func.count())
+            .select_from(external_usage_samples)
+            .where(external_usage_samples.c.slug == "anthropic")
+        ).scalar_one()
+    assert remaining == 2

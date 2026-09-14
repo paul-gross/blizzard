@@ -208,6 +208,36 @@ def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_
     assert second != first
 
 
+@pytest.mark.component
+def test_a_migrated_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path) -> None:
+    """``outbound_buffer`` carries the same ``sqlite_autoincrement`` fix as its sibling
+    ``transcript_outbound_buffer`` — now load-bearing for it too, since retention
+    (issue #520) prunes it as well. Production migrates
+    (`bzh:gating-tier-pins-production-paths`), so the revision's own copy is pinned here."""
+    config = runner_runtime.init_environment(tmp_path)
+    engine = create_engine_from_url(config.db_url)
+    try:
+        store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+        old = _NOW - timedelta(days=8)  # past the 7-day retention window
+        seqs = [
+            store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=old)
+            for _ in range(3)
+        ]
+        for seq in seqs:
+            store.ack_outbound(seq, acked_at=old)  # every issued seq acked — none pending, no floor to respect
+
+        pruned = store.prune_outbound(now=_NOW)
+        assert pruned == len(seqs)  # every acked row, including the table's own highest seq, is gone
+
+        fresh = store.enqueue_outbound(
+            kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
+        )
+    finally:
+        engine.dispose()
+
+    assert fresh > max(seqs)
+
+
 def _delta(store: SqlAlchemyRunnerStore, segment_id: str, *, cursor: str) -> int:
     (seq,) = store.record_transcript_deltas(
         segment_id=segment_id,

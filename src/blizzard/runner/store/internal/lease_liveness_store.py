@@ -6,9 +6,9 @@ cross-concept write D1 keeps inside this one ``store/internal/`` package."""
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
@@ -17,6 +17,9 @@ from blizzard.runner.store.internal.base import NO_NORMALIZER_VERSION, RunnerSto
 from blizzard.runner.store.schema import heartbeats, lease_context, lease_spawns, leases, transcript_segments
 
 _log = get_logger("blizzard.runner.store")
+
+# See IWriteLeaseLivenessRepository.prune_heartbeats's own docstring for the retention contract.
+_HEARTBEAT_RETENTION_WINDOW = timedelta(days=1)
 
 
 class LeaseLivenessStore:
@@ -50,6 +53,22 @@ class LeaseLivenessStore:
         with self._store.begin() as conn:
             conn.execute(heartbeats.insert().values(lease_id=lease_id, beat_at=beat_at))
         _log.debug("heartbeat recorded", lease_id=lease_id)
+
+    def prune_heartbeats(self, *, now: datetime) -> int:
+        cutoff = now - _HEARTBEAT_RETENTION_WINDOW
+        newest_beat = heartbeats.alias("newest_beat")
+        latest_beat = (
+            select(func.max(newest_beat.c.beat_at))
+            .where(newest_beat.c.lease_id == heartbeats.c.lease_id)
+            .scalar_subquery()
+        )
+        with self._store.begin() as conn:
+            # `< latest_beat` (never `<=`) keeps EVERY row tied for newest — a same-instant
+            # pair is not a superseded beat, so neither is pruned out from under the other.
+            result = conn.execute(
+                heartbeats.delete().where(and_(heartbeats.c.beat_at < cutoff, heartbeats.c.beat_at < latest_beat))
+            )
+        return result.rowcount
 
     def record_spawn(
         self, lease_id: str, *, pid: int, process_start_time: str, session_id: str, spawned_at: datetime

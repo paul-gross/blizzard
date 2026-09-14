@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 
 from blizzard.runner.domain.outbound import BufferedFact, IWriteOutboundRepository, OutboundFactRecord
 from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.store.schema import outbound_buffer
+
+# See IWriteOutboundRepository.prune_outbound's own docstring for the retention contract.
+_OUTBOUND_RETENTION_WINDOW = timedelta(days=7)
 
 
 class OutboundStore:
@@ -27,8 +30,10 @@ class OutboundStore:
         )
         return {str(r.lease_id) for r in self._store.all(stmt)}
 
-    def pending_outbound(self) -> list[BufferedFact]:
+    def pending_outbound(self, *, limit: int | None = None) -> list[BufferedFact]:
         stmt = select(outbound_buffer).where(outbound_buffer.c.acked_at.is_(None)).order_by(outbound_buffer.c.seq)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return [
             BufferedFact(
                 seq=int(r.seq),
@@ -40,6 +45,11 @@ class OutboundStore:
             )
             for r in self._store.all(stmt)
         ]
+
+    def pending_outbound_count(self) -> int:
+        stmt = select(func.count()).select_from(outbound_buffer).where(outbound_buffer.c.acked_at.is_(None))
+        rows = self._store.all(stmt)
+        return int(rows[0][0]) if rows else 0
 
     def recent_outbound(self, limit: int) -> list[OutboundFactRecord]:
         stmt = select(outbound_buffer).order_by(outbound_buffer.c.seq.desc()).limit(limit)
@@ -70,6 +80,26 @@ class OutboundStore:
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
         with self._store.begin() as conn:
             conn.execute(outbound_buffer.update().where(outbound_buffer.c.seq == seq).values(acked_at=acked_at))
+
+    def ack_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:
+        with self._store.begin() as conn:
+            conn.execute(outbound_buffer.update().where(outbound_buffer.c.seq.in_(seqs)).values(acked_at=acked_at))
+
+    def prune_outbound(self, *, now: datetime) -> int:
+        cutoff = now - _OUTBOUND_RETENTION_WINDOW
+        with self._store.begin() as conn:
+            # Read in the SAME transaction as the delete below, so a fact enqueued between
+            # the two can never be missed as "no pending row" and pruned as if above none.
+            floor = conn.execute(
+                select(func.min(outbound_buffer.c.seq)).where(outbound_buffer.c.acked_at.is_(None))
+            ).scalar_one()
+            stmt = outbound_buffer.delete().where(
+                and_(outbound_buffer.c.acked_at.is_not(None), outbound_buffer.c.acked_at < cutoff)
+            )
+            if floor is not None:
+                stmt = stmt.where(outbound_buffer.c.seq < floor)
+            result = conn.execute(stmt)
+        return result.rowcount
 
 
 def _conforms_outbound_store(x: OutboundStore) -> IWriteOutboundRepository:
