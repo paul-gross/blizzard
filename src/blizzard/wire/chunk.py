@@ -506,9 +506,8 @@ class ChunkDecisionStatusView(BaseModel):
 
 class ChunkStatusView(BaseModel):
     """One chunk's tick-relevant status (blizzard#521) — the slim batch projection
-    ``GET /api/fleet/chunk-statuses`` returns, carrying only what the runner loop's nine
-    per-chunk reads use. Not ``ChunkSummary``: this is the runner's own read, not the
-    board's fleet list."""
+    ``GET /api/fleet/chunk-statuses`` returns. Not ``ChunkSummary``: a narrower, runner-facing
+    status read rather than a fleet-wide listing projection."""
 
     chunk_id: str
     status: ChunkStatus

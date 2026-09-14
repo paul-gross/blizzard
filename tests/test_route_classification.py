@@ -196,6 +196,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
 #: ``require_runner_principal``-at-router-level confinement); no per-route permission.
 _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/queue/peek"),
+    ("GET", "/api/fleet/chunk-statuses"),
     ("GET", "/api/fleet/chunks/{chunk_id}"),
     ("GET", "/api/fleet/chunks/{chunk_id}/work-items"),
     ("GET", "/api/fleet/chunks/{chunk_id}/pm-items"),  # the issue-#55 deprecated alias

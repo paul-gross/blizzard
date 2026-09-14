@@ -1737,7 +1737,7 @@
         "type": "string"
       },
       "ChunkStatusView": {
-        "description": "One chunk's tick-relevant status (blizzard#521) \u2014 the slim batch projection\n``GET /api/fleet/chunk-statuses`` returns, carrying only what the runner loop's nine\nper-chunk reads use. Not ``ChunkSummary``: this is the runner's own read, not the\nboard's fleet list.",
+        "description": "One chunk's tick-relevant status (blizzard#521) \u2014 the slim batch projection\n``GET /api/fleet/chunk-statuses`` returns. Not ``ChunkSummary``: a narrower, runner-facing\nstatus read rather than a fleet-wide listing projection.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
