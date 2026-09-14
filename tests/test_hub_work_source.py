@@ -236,8 +236,7 @@ def test_fetch_a_delivered_ref_still_resolves(tmp_path: Path) -> None:
 
 
 def test_web_url_formats_the_caller_supplied_live_holder_as_a_board_chunk_link(tmp_path: Path) -> None:
-    """``web_url`` no longer resolves liveness itself — the caller supplies
-    ``live_holder`` via one bulk ``live_holders`` call, so this only proves formatting."""
+    """The caller supplies ``live_holder``; this proves only formatting."""
     source, _, _, _, _, _ = _source(tmp_path)
     pointer = WorkRef(source="hub", ref="1")
 

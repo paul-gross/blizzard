@@ -35,10 +35,9 @@ class ChunkWorkRefsStore:
         return self.live_holders([pointer]).get(pointer)
 
     def live_work_refs(self) -> dict[WorkRef, ChunkStatus]:
-        """Two reads, not one shared transaction: the fleet's statuses first, then the
-        pointer rows — a row whose chunk carries no status (minted in the gap between
-        the two reads, or ephemeral) is excluded, replacing what used to be up to one
-        status transaction per row."""
+        """Reads the fleet's statuses, then the pointer rows; a row whose chunk carries
+        no status — minted in the gap between the two reads, or ephemeral — is
+        excluded."""
         statuses = self._facts.load_all_statuses()
         with self._store.read("live_work_refs") as conn:
             ephemeral = ephemeral_ids(conn)

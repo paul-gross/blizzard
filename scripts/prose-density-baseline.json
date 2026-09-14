@@ -1092,7 +1092,7 @@
    "comments": 30,
    "docstrings": 80,
    "over_cap": 2,
-   "total": 747
+   "total": 745
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -2308,9 +2308,9 @@
   },
   "blizzard/hub/store/internal/chunk_work_refs_store.py": {
    "comments": 4,
-   "docstrings": 16,
+   "docstrings": 15,
    "over_cap": 0,
-   "total": 114
+   "total": 113
   },
   "blizzard/hub/store/internal/finding_store.py": {
    "comments": 7,
@@ -6438,9 +6438,9 @@
   },
   "test_hub_work_source.py": {
    "comments": 14,
-   "docstrings": 27,
+   "docstrings": 26,
    "over_cap": 0,
-   "total": 670
+   "total": 669
   },
   "test_hub_work_source_api.py": {
    "comments": 30,
@@ -7572,9 +7572,9 @@
   },
   "test_transcript_event_derivation.py": {
    "comments": 27,
-   "docstrings": 45,
+   "docstrings": 48,
    "over_cap": 1,
-   "total": 607
+   "total": 631
   },
   "test_transcript_event_extraction.py": {
    "comments": 3,

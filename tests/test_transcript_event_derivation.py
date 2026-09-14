@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import zlib
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -419,6 +420,29 @@ def test_one_underivable_segment_does_not_cost_the_rest_of_the_tick(fixture: _Fi
     EventDerivationReconciler(service=poisoned, events=fixture.events, clock=fixture.clock).sweep()
 
     assert [row.segment_id for row in fixture.stored_events()] == ["sg_2"]
+
+
+class _PoisonedGraphPinsService(EventDerivationService):
+    """Raises out of ``graph_pins_for``, standing in for any pin-resolution fault."""
+
+    def graph_pins_for(self, segment_ids: Sequence[str]) -> GraphPins:
+        raise RuntimeError("pin resolution unavailable")
+
+
+def test_a_pin_resolution_fault_skips_the_whole_pass_without_raising(fixture: _Fixture) -> None:
+    """``graph_pins_for`` raising costs the entire tick, not one segment: no candidate
+    derives, and the sweep itself does not raise."""
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    poisoned = _PoisonedGraphPinsService(
+        events=fixture.events,
+        facts=fixture.chunks.facts,
+        record=fixture.chunks.record,
+        clock=fixture.clock,
+    )
+
+    EventDerivationReconciler(service=poisoned, events=fixture.events, clock=fixture.clock).sweep()
+
+    assert fixture.stored_events() == []
 
 
 # --- bulk candidacy, zero decode, batched drop (blizzard#513) -----------------
