@@ -27,8 +27,7 @@ class IChunkViews(Protocol):
         failed prime just means every ``get()`` below re-tries its own read)."""
         ...
 
-    def invalidate(self, chunk_id: str) -> None:
-        ...
+    def invalidate(self, chunk_id: str) -> None: ...
 
 
 @dataclass(frozen=True)

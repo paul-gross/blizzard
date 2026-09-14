@@ -158,8 +158,12 @@ class _WriteReactingHub(FakeHub):
                 status=ChunkStatus.RUNNING,
                 route_runner_id="r1",
                 cost=ChunkUsageTotalView(
-                    input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_create_tokens=0,
-                    cost_usd=7.0, cost_partial=False,
+                    input_tokens=0,
+                    output_tokens=0,
+                    cache_read_tokens=0,
+                    cache_create_tokens=0,
+                    cost_usd=7.0,
+                    cost_partial=False,
                 ),
             )
         return response
@@ -197,7 +201,12 @@ def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type
         status=ChunkStatus.RUNNING,
         route_runner_id="r1",
         cost=ChunkUsageTotalView(
-            input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_create_tokens=0, cost_usd=1.0, cost_partial=False
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_create_tokens=0,
+            cost_usd=1.0,
+            cost_partial=False,
         ),
     )
     hub.envelopes["ch_a"] = make_envelope("ch_a", "build", node_id="nd_build", choices=[("pass", "ok")])
