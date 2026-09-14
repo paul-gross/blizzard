@@ -67,6 +67,20 @@ class ScopeStore:
         ).first()
         return bool(row.retired) if row is not None else False
 
+    def retired_slugs(self) -> set[str]:
+        """Every slug whose newest lifecycle fact reads retired — mirrors
+        ``GraphStore.retired_graph_ids``."""
+        with self._store.read("retired_slugs") as conn:
+            rows = conn.execute(
+                select(scope_lifecycle_facts.c.slug, scope_lifecycle_facts.c.retired).order_by(
+                    scope_lifecycle_facts.c.id
+                )
+            ).all()
+        newest: dict[str, bool] = {}
+        for row in rows:
+            newest[row.slug] = row.retired  # newest-fact-wins: ascending id order overwrites
+        return {slug for slug, retired in newest.items() if retired}
+
     def record_lifecycle(self, slug: str, *, retired: bool, at: datetime, by: str) -> None:
         """Append a ``scope.retired``/``scope.enabled`` fact — newest-fact-wins (D3)."""
         with self._store.write("record_lifecycle") as conn:
