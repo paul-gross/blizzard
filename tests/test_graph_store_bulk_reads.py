@@ -17,7 +17,7 @@ from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal.graph_store import GraphStore
-from tests.support import hub_store_connections, migrate_to
+from tests.support import count_queries, hub_store_connections, migrate_to
 
 pytestmark = pytest.mark.component
 
@@ -165,6 +165,27 @@ def test_list_summaries_agrees_with_list_all_newest_first(tmp_path: Path) -> Non
         assert summary.name == graph.name
         assert summary.entry_node_id == graph.entry_node_id
         assert summary.created_at == graph.created_at
+
+
+# --- _reify choice batching ------------------------------------------------------ #
+
+
+def test_reify_returns_equal_choices_and_its_query_count_does_not_grow_with_node_count(tmp_path: Path) -> None:
+    """``get``'s reification batches its ``graph_choices`` read across every node id
+    (Phase 3) rather than issuing one per node — proves both that ``get`` still returns
+    the same choices and that its query count stays flat as node count grows."""
+    store, engine = _store(tmp_path)
+    few = _mint(store, "gr_few", "few", node_names=["a", "b"], created_at=_T0)
+    many = _mint(store, "gr_many", "many", node_names=[f"n{i}" for i in range(8)], created_at=_T0)
+
+    few_count = count_queries(engine, lambda: store.get(few.graph_id))
+    many_count = count_queries(engine, lambda: store.get(many.graph_id))
+    assert few_count == many_count
+
+    reloaded = store.get(many.graph_id)
+    assert reloaded is not None
+    assert [n.node_id for n in reloaded.nodes] == [n.node_id for n in many.nodes]
+    assert all(reloaded.node_by_id(n.node_id).choices == n.choices for n in many.nodes)  # type: ignore[union-attr]
 
 
 # --- graph_id_of_enabled_name ---------------------------------------------------- #

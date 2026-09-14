@@ -612,13 +612,21 @@ class GraphSummary:
 
 @dataclass(frozen=True)
 class Mint:
-    """One minted graph, ordered by when it was minted."""
+    """One minted graph, ordered by when it was minted. Holds only a
+    :class:`GraphSummary` — the ``graph_id``/``name``/``created_at`` fields this reads
+    — never a fully reified :class:`Graph` (issue #421/bulk-read adoption)."""
 
-    graph: Graph
+    graph: GraphSummary
 
     @classmethod
-    def of(cls, graph: Graph) -> Mint:
-        return cls(graph)
+    def of(cls, graph: Graph | GraphSummary) -> Mint:
+        if isinstance(graph, GraphSummary):
+            return cls(graph)
+        return cls(
+            GraphSummary(
+                graph_id=graph.graph_id, name=graph.name, entry_node_id=graph.entry_node_id, created_at=graph.created_at
+            )
+        )
 
     @property
     def order(self) -> tuple[datetime, str]:
@@ -639,7 +647,7 @@ class Mints:
     retired_ids: Collection[str]
 
     @classmethod
-    def of(cls, graphs: list[Graph], *, retired_ids: Collection[str]) -> Mints:
+    def of(cls, graphs: Sequence[Graph | GraphSummary], *, retired_ids: Collection[str]) -> Mints:
         return cls([Mint.of(g) for g in graphs], retired_ids)
 
     @property

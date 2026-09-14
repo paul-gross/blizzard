@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub
+from tests.support import build_hub, count_queries
 
 pytestmark = pytest.mark.component
 
@@ -116,6 +116,52 @@ def test_list_graphs_marks_newest_per_name_effective(tmp_path: Path) -> None:
     # Newest-first ordering — the route's own contract.
     created_ats = [row["created_at"] for row in body]
     assert created_ats == sorted(created_ats, reverse=True)
+
+
+def test_list_graphs_over_retired_and_superseded_mints_renders_todays_shape(tmp_path: Path) -> None:
+    """``GET /api/graphs`` reads the listing-shape projection now (issue #421/bulk-read
+    adoption, Phase 3) — proves its response is unchanged over a fixture mixing a
+    retired mint, a superseded-but-live mint, and the newest effective one."""
+    hub = build_hub(tmp_path)
+    old_id = _mint(hub, _GRAPH_A)
+    hub.clock.advance(timedelta(hours=1))
+    superseded_id = _mint(hub, _GRAPH_A)
+    hub.clock.advance(timedelta(hours=1))
+    newest_id = _mint(hub, _GRAPH_A)
+    retired = hub.client.post(f"/api/graphs/{old_id}/retire", json={"by": "op"})
+    assert retired.status_code == 202, retired.text
+
+    resp = hub.client.get("/api/graphs")
+    assert resp.status_code == 200, resp.text
+    by_id = {row["graph_id"]: row for row in resp.json()}
+
+    assert by_id[old_id]["retired"] is True
+    assert by_id[old_id]["effective"] is False
+    assert by_id[superseded_id]["retired"] is False
+    assert by_id[superseded_id]["effective"] is False
+    assert by_id[newest_id]["retired"] is False
+    assert by_id[newest_id]["effective"] is True
+
+
+def test_list_graphs_query_count_is_independent_of_graph_count(tmp_path: Path) -> None:
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few = build_hub(tmp_path / "few")
+    many = build_hub(tmp_path / "many")
+    for _ in range(2):
+        _mint(few, _GRAPH_A)
+    for _ in range(6):  # 3x the small fleet
+        _mint(many, _GRAPH_A)
+
+    def call(hub) -> int:  # type: ignore[no-untyped-def]
+        resp = hub.client.get("/api/graphs")
+        assert resp.status_code == 200, resp.text
+        return len(resp.json())
+
+    few_count = count_queries(few.engine, lambda: call(few))
+    many_count = count_queries(many.engine, lambda: call(many))
+
+    assert few_count == many_count
 
 
 def test_get_graph_returns_full_view(tmp_path: Path) -> None:
