@@ -114,20 +114,23 @@ def test_mock_hub_openapi_serves_every_ihubclient_endpoint() -> None:
 _EXPECTED_DRIVE_VERBS: dict[str, str] = {
     "register": "IHubClient.register_runner — POST /api/fleet/runners",
     "peek": "IHubClient.peek_queue — GET /api/fleet/queue/peek",
-    "claim": "IHubClient.claim_route — POST /api/fleet/routes (+ report_lease's /events push)",
+    "claim": "IHubClient.claim_route — POST /api/fleet/routes (+ the lease-minted fact's /events push)",
     "claim-next": (
         "IHubClient.peek_queue + IHubClient.claim_route (blizzard#459) — peek, select, and "
         "claim in one call, taking strictness per call so one driver exercises both policies"
     ),
     "complete": "IHubClient.submit_completion — POST /api/fleet/chunks/{id}/completions",
-    "get-chunk": "IHubClient.get_chunk — GET /api/fleet/chunks/{id}",
-    "chunk-statuses": (
-        "no IHubClient operation yet (blizzard#521, mock-side only so far) — drives "
-        "GET /api/fleet/chunk-statuses (repeatable chunk_id) directly, ahead of the "
-        "runner tick's own read hoist onto it"
+    "get-chunk": (
+        "no live IHubClient caller (blizzard#521 retired get_chunk in favor of chunk_statuses) "
+        "— drives the hub's still-served single-chunk route directly, GET /api/fleet/chunks/{id}"
     ),
+    "chunk-statuses": "IHubClient.chunk_statuses — GET /api/fleet/chunk-statuses (repeatable chunk_id)",
     "reset": "test-only control — clears held state + levers, no IHubClient operation",
-    "escalate": "IHubClient.report_escalation — POST /api/fleet/chunks/{id}/escalations",
+    "escalate": (
+        "no live IHubClient caller (blizzard#521 retired report_escalation, unused before this "
+        "too) — drives the hub's still-served escalation route directly, "
+        "POST /api/fleet/chunks/{id}/escalations"
+    ),
     "decide": "IHubClient.submit_decision — POST /api/fleet/chunks/{id}/decisions",
     "ask": "IHubClient.push_facts (question.asked) — POST /api/fleet/events",
     "poll-answer": "IHubClient.get_question — GET /api/fleet/questions/{id}",
