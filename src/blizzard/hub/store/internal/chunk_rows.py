@@ -231,9 +231,9 @@ def is_ephemeral_id(conn, chunk_id: str) -> bool:  # type: ignore[no-untyped-def
 
 
 def graph_id_of_batch(conn, batch: Sequence[str] | None) -> dict[str, str]:  # type: ignore[no-untyped-def]
-    """A selection's chunk id -> graph id pins, ephemeral ids excluded (blizzard#bulk-read-seams;
-    lifted out of ``ChunkFactsStore`` so ``ChunkRecordStore``'s own batch reads share this
-    exclusion rather than re-deriving it). A singleton batch excludes via
+    """A selection's chunk id -> graph id pins, ephemeral ids excluded — lifted out of
+    ``ChunkFactsStore`` so ``ChunkRecordStore``'s own batch reads share this exclusion
+    rather than re-deriving it. A singleton batch excludes via
     :func:`is_ephemeral_id`'s two targeted checks rather than a wider scan; a larger
     batch excludes via two id-batch-bounded ``IN`` queries; ``None`` (the whole live
     fleet) keeps :func:`ephemeral_ids`'s own single unfiltered scan."""

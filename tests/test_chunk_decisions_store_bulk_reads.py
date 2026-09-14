@@ -1,5 +1,5 @@
 """``ChunkDecisionsStore.dockets_for_chunks`` — ``_pending_proposals``'s batched sibling
-(component tier, blizzard#bulk-read-seams).
+(component tier).
 
 Proves the batch read returns, for every requested chunk, exactly what
 ``decision_for_chunk`` would carry as its own docket — including a chunk with no

@@ -339,9 +339,9 @@ def test_ephemeral_ids_evaluated_at_most_once_per_bulk_read(tmp_path: Path, monk
         calls["n"] += 1
         return original(conn)
 
-    # `load_all_facts`'s exclusion now runs through `chunk_rows.graph_id_of_batch`
-    # (blizzard#bulk-read-seams), lifted out of this module's own former private
-    # staticmethod — patched at its new home rather than this module's.
+    # `load_all_facts`'s exclusion now runs through `chunk_rows.graph_id_of_batch`,
+    # lifted out of this module's own former private staticmethod — patched at its
+    # new home rather than this module's.
     monkeypatch.setattr(chunk_rows_module, "ephemeral_ids", counting)
 
     store.facts.load_all_facts()

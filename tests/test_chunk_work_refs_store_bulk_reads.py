@@ -1,5 +1,5 @@
 """``ChunkWorkRefsStore.live_holders`` — ``find_live_holder``'s batched sibling
-(component tier, blizzard#bulk-read-seams).
+(component tier).
 
 Proves the batch read agrees with calling ``find_live_holder`` once per pointer, across
 a live holder, a holder grouped away, a holder at a terminal status, and a pointer no

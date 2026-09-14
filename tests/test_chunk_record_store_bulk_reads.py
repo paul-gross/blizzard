@@ -1,6 +1,5 @@
 """``ChunkRecordStore``'s batch reads — ``get_many``, ``graph_id_of_many``, and
-``list_ready``/``list_not_ready``'s optional ``statuses`` (component tier,
-blizzard#bulk-read-seams).
+``list_ready``/``list_not_ready``'s optional ``statuses`` (component tier).
 
 Proves each batch read matches its singular per-id sibling across a normal id, an
 ephemeral (grouped or deleted) id, and an id never minted at all; that each is correct
