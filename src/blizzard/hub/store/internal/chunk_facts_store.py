@@ -149,7 +149,11 @@ class ChunkFactsStore:
         return {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
 
     def _load(
-        self, conn, chunk_ids: Sequence[str] | None, *, families: frozenset[str] | None = None  # type: ignore[no-untyped-def]
+        self,
+        conn,  # type: ignore[no-untyped-def]
+        chunk_ids: Sequence[str] | None,
+        *,
+        families: frozenset[str] | None = None,
     ) -> dict[str, ChunkFacts]:
         selected = families if families is not None else _ALL_FAMILIES
         if chunk_ids is None:

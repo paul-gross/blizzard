@@ -328,9 +328,7 @@ class GraphStore:
         result: dict[str, str] = {}
         with self._store.read("load_graph_names") as conn:
             for batch in id_batches(graph_ids):
-                rows = conn.execute(
-                    select(graphs.c.graph_id, graphs.c.name).where(graphs.c.graph_id.in_(batch))
-                ).all()
+                rows = conn.execute(select(graphs.c.graph_id, graphs.c.name).where(graphs.c.graph_id.in_(batch))).all()
                 result.update({row.graph_id: row.name for row in rows})
         return result
 

@@ -18,7 +18,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.work import Chunk, WorkRef
 from blizzard.hub.store.internal import batching as batching_module
-from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
+from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from tests.support import chunk_stores, migrate_to, seed_graph
 
 pytestmark = pytest.mark.component
@@ -84,7 +84,7 @@ def test_live_holders_matches_find_live_holder_across_a_batch_boundary(
 
     result = store.work_refs.live_holders(pointers)
 
-    assert {p: c for p, c in result.items()} == {pointer: f"ch_{i}" for i, pointer in enumerate(pointers)}
+    assert result == {pointer: f"ch_{i}" for i, pointer in enumerate(pointers)}
     for pointer in pointers:
         assert result[pointer] == store.work_refs.find_live_holder(pointer)
 

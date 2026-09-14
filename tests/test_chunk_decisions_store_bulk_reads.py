@@ -76,7 +76,10 @@ def test_dockets_for_chunks_matches_decision_for_chunk_and_includes_a_zero_propo
         store,
         "ch_with_proposals",
         "dec_1",
-        [_proposal("ch_with_proposals", "wip_keep", ordinal=0), _proposal("ch_with_proposals", "wip_strike", ordinal=1)],
+        [
+            _proposal("ch_with_proposals", "wip_keep", ordinal=0),
+            _proposal("ch_with_proposals", "wip_strike", ordinal=1),
+        ],
     )
     store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_T0, struck=["wip_strike"])
 

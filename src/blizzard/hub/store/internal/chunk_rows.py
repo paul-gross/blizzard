@@ -252,14 +252,10 @@ def graph_id_of_batch(conn, batch: Sequence[str] | None) -> dict[str, str]:  # t
         ).all()
         ephemeral = {
             r.chunk_id
-            for r in conn.execute(
-                select(s.chunk_grouped.c.chunk_id).where(s.chunk_grouped.c.chunk_id.in_(batch))
-            ).all()
+            for r in conn.execute(select(s.chunk_grouped.c.chunk_id).where(s.chunk_grouped.c.chunk_id.in_(batch))).all()
         } | {
             r.chunk_id
-            for r in conn.execute(
-                select(s.chunk_deleted.c.chunk_id).where(s.chunk_deleted.c.chunk_id.in_(batch))
-            ).all()
+            for r in conn.execute(select(s.chunk_deleted.c.chunk_id).where(s.chunk_deleted.c.chunk_id.in_(batch))).all()
         }
     return {r.chunk_id: r.graph_id for r in rows if r.chunk_id not in ephemeral}
 

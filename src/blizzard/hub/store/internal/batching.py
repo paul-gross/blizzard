@@ -9,7 +9,6 @@ batch method shares one cap and one batching loop."""
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from typing import TypeVar
 
 #: The per-statement id-batch cap every batched read seam shares. Read live, by name,
 #: inside :func:`id_batches`'s own body rather than captured as a default argument, so a
@@ -17,10 +16,8 @@ from typing import TypeVar
 #: needing to seed hundreds of rows to exercise a batch boundary.
 BATCH_SIZE = 500
 
-_T = TypeVar("_T")
 
-
-def id_batches(ids: Sequence[_T]) -> Iterator[Sequence[_T]]:
+def id_batches[T](ids: Sequence[T]) -> Iterator[Sequence[T]]:
     """Yield ``ids`` in slices no larger than the current :data:`BATCH_SIZE`."""
     for start in range(0, len(ids), BATCH_SIZE):
         yield ids[start : start + BATCH_SIZE]

@@ -95,7 +95,7 @@ def test_graph_id_of_many_matches_across_a_batch_boundary(tmp_path: Path, monkey
 
     result = store.record.graph_id_of_many(ids)
 
-    assert result == {chunk_id: "gr_1" for chunk_id in ids}
+    assert result == dict.fromkeys(ids, "gr_1")
 
 
 def test_list_ready_and_list_not_ready_with_explicit_statuses_match_the_derived_default(tmp_path: Path) -> None:
