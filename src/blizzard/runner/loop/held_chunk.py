@@ -50,31 +50,31 @@ class HeldChunk:
         Four shapes share this poll, all holding environments: a hub node polled toward its
         terminal outcome, a resolved gate, a chunk moved to a higher epoch, and an unknown one."""
         try:
-            detail = self.ctx.chunk_views.get(self.chunk_id)
+            view = self.ctx.chunk_views.get(self.chunk_id)
         except ChunkNotFoundError:
             _log.warning("hub reports held chunk unknown — releasing envs", chunk_id=self.chunk_id)
             self.ctx.env_release.release_chunk(self.chunk_id)
             return
         except HubClientError:
             return
-        if detail.status == ChunkStatus.DONE:
+        if view.status == ChunkStatus.DONE:
             _log.info("delivery landed — releasing envs", chunk_id=self.chunk_id)
             self.ctx.env_release.release_chunk(self.chunk_id)
             return
-        decision = detail.decision
+        decision = view.decision
         if decision is not None and decision.resolved_choice is not None and not decision.transitioned:
             self._resolve_gate(decision)
             return
-        hub_epoch = detail.latest_epoch
+        hub_epoch = view.latest_epoch
         if (
-            detail.status == ChunkStatus.RUNNING
+            view.status == ChunkStatus.RUNNING
             and hub_epoch is not None
             and hub_epoch > self.ctx.stores.lease_record.latest_epoch(self.chunk_id)
         ):
             # The strictly-higher epoch is load-bearing: a just-escalated chunk still derives
             # `running` at the SAME epoch until its fact flushes, and would re-spawn forever (#63).
             self._spawn_advanced_node()
-        elif detail.status == ChunkStatus.DELIVERING:
+        elif view.status == ChunkStatus.DELIVERING:
             # A chunk parked at a hub node — drive it one step; a no-op leaves this binding
             # held and polled again next tick (#65/#66).
             self._poll_hub_node()

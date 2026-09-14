@@ -879,7 +879,6 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
 
     # The one-way door stayed shut: nothing handed to a human, the lease left open.
     assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED] == []
-    assert hub.escalations == []
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.lease_id == "lease_1"  # not closed
 

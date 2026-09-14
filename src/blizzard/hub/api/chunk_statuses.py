@@ -4,9 +4,9 @@ round-trips the tick loop used to make."""
 
 from __future__ import annotations
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api.chunk_views import pause_view, usage_total_view
 from blizzard.hub.composition import HubServices
-from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView, ChunkUsageTotalView, PauseView
+from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
 
 
 def chunk_statuses(chunk_ids: list[str], services: HubServices) -> list[ChunkStatusView]:
@@ -26,25 +26,18 @@ def chunk_statuses(chunk_ids: list[str], services: HubServices) -> list[ChunkSta
         if facts is None:
             continue
         route = routes_by_id.get(chunk_id)
-        usage = facts.usage_total()
-        pause = facts.open_pause()
         decision = decisions_by_id.get(chunk_id)
         views.append(
             ChunkStatusView(
                 chunk_id=chunk_id,
                 status=facts.status(),
                 route_runner_id=route.runner_id if route is not None else None,
-                pause=PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None,
+                pause=pause_view(facts.open_pause()),
                 latest_epoch=facts.latest_epoch(),
-                restart_epochs=[r.epoch for r in facts.restarts],
-                cost=ChunkUsageTotalView(
-                    input_tokens=usage.input_tokens,
-                    output_tokens=usage.output_tokens,
-                    cache_read_tokens=usage.cache_read_tokens,
-                    cache_create_tokens=usage.cache_create_tokens,
-                    cost_usd=usage.cost_usd,
-                    cost_partial=usage.cost_partial,
-                ),
+                # Oldest first (issue #370) — mirrors `ChunkHistoryView.restarts`'s own
+                # `(recorded_at, epoch)` order, the documented contract on the wire field.
+                restart_epochs=[r.epoch for r in sorted(facts.restarts, key=lambda r: (r.recorded_at, r.epoch))],
+                cost=usage_total_view(facts.usage_total()),
                 decision=ChunkDecisionStatusView(
                     decision_id=decision.decision_id,
                     node_id=decision.node_id,

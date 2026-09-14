@@ -41,19 +41,19 @@ class ReadyQueue:
     environments all-or-nothing, bind them locally, then race for the route.
 
     ``_entries`` is this one ``Fill.run()`` call's own local peeked snapshot (blizzard#459):
-    peeked ONCE via :meth:`peek`, then selected from and dropped in place by each
+    peeked ONCE via :meth:`peeked`, then selected from and dropped in place by each
     ``claim_one()`` this run makes, rather than re-peeking the hub per attempt."""
 
     ctx: LoopContext
     _entries: list[QueuePeekEntry] = field(default_factory=list)
 
     @classmethod
-    def peek(cls, ctx: LoopContext) -> ReadyQueue:
+    def peeked(cls, ctx: LoopContext) -> ReadyQueue:
         try:
             peeked = ctx.hub.peek_queue()
         except HubClientError:
-            return cls(ctx, [])
-        return cls(ctx, list(peeked.entries))
+            return cls(ctx, _entries=[])
+        return cls(ctx, _entries=list(peeked.entries))
 
     def claim_one(self) -> bool:
         """Claim and start one chunk. ``False`` when nothing more can be filled this tick;
@@ -209,14 +209,14 @@ class InterruptedClaims:
 
     def _reconcile_one(self, chunk_id: str, *, requeued: bool) -> None:
         try:
-            detail = self.ctx.chunk_views.get(chunk_id)
+            view = self.ctx.chunk_views.get(chunk_id)
         except ChunkNotFoundError:
             _log.warning("hub reports interrupted-claim chunk unknown — releasing envs", chunk_id=chunk_id)
             self.ctx.env_release.release_chunk(chunk_id)
             return
         except HubClientError:
             return  # hub unreachable — the binding is durable; retry next tick
-        ours = detail.route_runner_id == self.ctx.config.runner_id
+        ours = view.route_runner_id == self.ctx.config.runner_id
         if requeued:
             # An explicit human decision (issue #53) outranks every other branch below —
             # nothing here should second-guess it.
@@ -225,26 +225,26 @@ class InterruptedClaims:
             else:
                 self._release(chunk_id, "releasing binding — chunk requeued locally but no longer routed here")
             return
-        if detail.decision is not None:
+        if view.decision is not None:
             # A resolved gate keeps its route live, so it looks exactly like an interrupted
             # claim; without this guard the adopt branch would bump the epoch under the human.
             return
         bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)
         if not bindings:
             return
-        if detail.status == ChunkStatus.RUNNING and ours:
+        if view.status == ChunkStatus.RUNNING and ours:
             self._adopt(chunk_id)  # route ours — just spawn the current node
-        elif detail.status == ChunkStatus.READY:
+        elif view.status == ChunkStatus.READY:
             self._reclaim(chunk_id, bindings)  # claim never landed — claim now, reuse the binding
-        elif detail.route_runner_id is not None and not ours:
+        elif view.route_runner_id is not None and not ours:
             self._release(chunk_id, "releasing binding — another runner won the chunk")
-        elif detail.route_runner_id is None:
+        elif view.route_runner_id is None:
             # No live route, and neither claimable nor ours to adopt (blizzard#202). Release
             # explicitly instead of matching no branch and leaking the binding forever.
             self._release(
                 chunk_id,
                 "releasing binding — hub reports no live route in a non-ready, non-running state",
-                hub_status=str(detail.status),
+                hub_status=str(view.status),
             )
 
     def _adopt(self, chunk_id: str) -> None:

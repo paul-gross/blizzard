@@ -40,9 +40,9 @@ class ChunkNotFoundError(HubClientError):
     """The hub reports a chunk unknown (404) — terminal, not transient (blizzard#9).
 
     Raised by :meth:`IHubClient.get_envelope` and, at the chunk-view cache layer
-    (:mod:`blizzard.runner.loop.chunk_views`, not ``IHubClient`` itself —
+    (:mod:`blizzard.runner.loop.chunk_status_cache`, not ``IHubClient`` itself —
     ``IHubClient.chunk_statuses`` never raises it for an unknown id), by
-    :meth:`~blizzard.runner.loop.chunk_views.IChunkViews.get`. Still a
+    :meth:`~blizzard.runner.loop.chunk_status_cache.IChunkViews.get`. Still a
     :class:`HubClientError`, so an unaware caller degrades to the retry behavior."""
 
 
@@ -146,4 +146,18 @@ class IHubClient(Protocol):
         """``POST /api/fleet/chunks/{id}/route-token`` — rotate the chunk's route
         capability token (issue #84b). Why it exists: `src/blizzard/hub/domain/claim.py`'s
         ``ClaimService.rekey``."""
+        ...
+
+
+class IChunkStatusReader(Protocol):
+    """The narrow seam :mod:`blizzard.runner.loop.chunk_status_cache`'s two ``IChunkViews``
+    bindings actually call — one method of :class:`IHubClient`'s thirteen (the seam-size
+    ceiling: a new consumer re-types to the capability it calls, not the whole wide client).
+    ``HttpHubClient``/``FakeHub`` satisfy this structurally, with no changes of their own."""
+
+    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
+        """``GET /api/fleet/chunk-statuses`` (repeatable ``chunk_id``) — every requested id
+        present in the store, keyed by ``chunk_id``; an id the hub doesn't know is simply
+        absent, never an error. A transport/5xx failure raises ``HubClientError`` for the
+        whole call."""
         ...

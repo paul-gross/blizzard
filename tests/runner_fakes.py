@@ -30,7 +30,7 @@ from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, Worke
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
-from blizzard.runner.loop.chunk_views import IChunkViews, ReadThroughChunkViews
+from blizzard.runner.loop.chunk_status_cache import IChunkViews, ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
@@ -282,10 +282,6 @@ class FakeHub:
         self.completions: list[tuple[str, CompletionSubmission]] = []
         self.decisions_submitted: list[tuple[str, DecisionSubmission]] = []
         self.decision_responses: list[ApplyResponse] = []
-        self.leases: list[tuple[str, int, str]] = []  # (chunk_id, epoch, runner_id)
-        self.escalations: list[tuple[str, int, str, str]] = []
-        # (chunk_id, epoch, runner_id, takeover) — `wrapped_takeover_command` stays
-        # untracked here; nothing in `src/` calls this route (push_facts carries it instead).
         self.pushed: list[RunnerFact] = []
         self.high_water: dict[str, int] = {}
         # One entry per `push_facts` call, naming the seqs it carried — lets a test assert
@@ -308,7 +304,9 @@ class FakeHub:
         self.registered_redirect_uris: list[tuple[str, ...]] = []  # redirect_uris per register call (issue #95)
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
-        self.not_found: set[str] = set()  # chunk ids `get_chunk`/`get_envelope` 404 for (blizzard#9)
+        # chunk ids `get_envelope` 404s for (blizzard#9); `chunk_statuses` never raises for
+        # one of these — it simply omits it from the returned mapping (blizzard#521).
+        self.not_found: set[str] = set()
         self.get_envelope_calls: list[str] = []  # chunk ids `get_envelope` was called for (Phase 3 hoist)
         self.hub_advance_calls: list[str] = []  # chunk ids `hub_advance` was called for (#66)
         self.hub_advance_responses: dict[str, HubAdvanceResponse] = {}

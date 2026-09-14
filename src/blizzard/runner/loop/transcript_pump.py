@@ -100,9 +100,6 @@ class _OutstandingBudget:
 
     bytes: int
 
-    def exceeded(self, cap: int) -> bool:
-        return self.bytes >= cap
-
     def accept(self, n: int) -> None:
         self.bytes += n
 
@@ -151,26 +148,34 @@ class TranscriptPump:
         if not self.ctx.config.transcripts_ship or self.ctx.transcripts is None:
             return
         segments = [s for s in self.ctx.stores.transcript_ledger.open_transcript_segments() if s.lease_id == lease_id]
+        budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
         for i, segment in enumerate(segments):
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 # Every remaining segment loses just as silently as a partially-drained one.
                 for remaining in segments[i:]:
                     self._mark_record_truncated(remaining, _LEASE_CLOSURE_INCOMPLETE)
                 return
-            self.drain_segment(segment.segment_id, deadline=deadline)
+            self.drain_segment(segment.segment_id, deadline=deadline, budget=budget)
 
     def drain_segment(
-        self, segment_id: str, *, deadline: datetime | None, incomplete_reason: str = _LEASE_CLOSURE_INCOMPLETE
+        self,
+        segment_id: str,
+        *,
+        deadline: datetime | None,
+        incomplete_reason: str = _LEASE_CLOSURE_INCOMPLETE,
+        budget: _OutstandingBudget | None = None,
     ) -> bool:
         """Read one segment forward until it is caught up, ``deadline`` passes, or reading
         again would gain nothing — marking ``incomplete_reason`` in the latter two cases.
         ``True`` iff the source was read to its end: a caller that closes the segment out
         must not do so on ``False``, or content it never read is sealed away."""
+        if budget is None:
+            budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
         for _ in range(_PUMP_LEASE_MAX_ITERATIONS):
             segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
             if segment is None:
                 return False  # the segment vanished from under us — nothing left to drain
-            outcome = self._pump_one_safe(segment)
+            outcome = self._pump_one_safe(segment, budget=budget)
             if outcome == _CAUGHT_UP:
                 return True  # caught up — nothing more to gain from reading again right now
             if outcome in (_NOT_ATTEMPTED, _STUCK):
@@ -187,9 +192,7 @@ class TranscriptPump:
             self._mark_record_truncated(segment, incomplete_reason)
         return False
 
-    def _pump_one_safe(
-        self, segment: TranscriptSegmentLedgerRow, *, budget: _OutstandingBudget | None = None
-    ) -> _PumpOutcome:
+    def _pump_one_safe(self, segment: TranscriptSegmentLedgerRow, *, budget: _OutstandingBudget) -> _PumpOutcome:
         """One segment's own failure must not abort the loop. Returns
         ``_NOT_ATTEMPTED`` on a caught exception — a raising segment must
         not spin ``pump_lease``'s drain loop, but at lease closure it must not read as
@@ -204,9 +207,7 @@ class TranscriptPump:
             )
             return _NOT_ATTEMPTED
 
-    def _pump_one(
-        self, segment: TranscriptSegmentLedgerRow, *, budget: _OutstandingBudget | None = None
-    ) -> _PumpOutcome:
+    def _pump_one(self, segment: TranscriptSegmentLedgerRow, *, budget: _OutstandingBudget) -> _PumpOutcome:
         """Advance ``segment`` one read window forward. ``_NOT_ATTEMPTED``:
         nothing was read at all — ``pump_lease`` treats this as incomplete, not caught-up,
         since a finalizing segment gets no later tick to make up a read it never took.
@@ -219,10 +220,7 @@ class TranscriptPump:
         if budget_before >= chunk_max_bytes:
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
             return _CAUGHT_UP
-        if budget is not None:
-            outstanding = budget.bytes
-        else:
-            outstanding = self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes()
+        outstanding = budget.bytes
         if outstanding >= MAX_BUFFERED_BYTES:
             # Transient backpressure, not a latch — self-clears once the drain catches up.
             return _NOT_ATTEMPTED
@@ -311,8 +309,7 @@ class TranscriptPump:
             created_at=self.ctx.clock.now(),
             agent_tool_use_ids=batch.agent_tool_use_ids,
         )
-        if budget is not None:
-            budget.accept(total_bytes)
+        budget.accept(total_bytes)
         # Order here does not matter: the store keeps the worse of the two
         # by the explicit severity each call carries, not by which call happened last.
         if any_shrunk:

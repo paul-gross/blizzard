@@ -1,5 +1,5 @@
 """The per-tick chunk-status cache (blizzard#521) — ``tick()``'s own read hoist onto
-``IHubClient.chunk_statuses``, proven at the seam :mod:`blizzard.runner.loop.chunk_views`
+``IHubClient.chunk_statuses``, proven at the seam :mod:`blizzard.runner.loop.chunk_status_cache`
 adds: one hub round-trip per distinct chunk id per tick, a write this same tick invalidates
 (D5), and an unknown id raising ``ChunkNotFoundError`` at every reader without a repeat read.
 """

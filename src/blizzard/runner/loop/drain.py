@@ -164,11 +164,11 @@ class OutboundDrain:
         if cap is None:
             return False
         try:
-            detail = self.ctx.chunk_views.get(lease.chunk_id)
+            view = self.ctx.chunk_views.get(lease.chunk_id)
         except HubClientError:
             # Covers ChunkNotFoundError too — re-checked at the next step boundary either way.
             return False
-        cost = detail.cost
+        cost = view.cost
         if cost.cost_usd < cap:
             return False
         partial_note = " (PARTIAL — true spend may be higher)" if cost.cost_partial else ""

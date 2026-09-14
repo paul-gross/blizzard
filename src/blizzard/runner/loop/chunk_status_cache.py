@@ -5,12 +5,11 @@ round-trip per distinct chunk id instead of one per read site.
 
 from __future__ import annotations
 
-import contextlib
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient
+from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IChunkStatusReader
 from blizzard.wire.chunk import ChunkStatusView
 
 
@@ -38,7 +37,7 @@ class ReadThroughChunkViews:
     Wraps any ``LoopContext`` not built by ``tick()`` itself, so a step driven directly
     (e.g. by a test) reads the hub on every ``get()`` unchanged."""
 
-    hub: IHubClient
+    hub: IChunkStatusReader
 
     def get(self, chunk_id: str) -> ChunkStatusView:
         found = self.hub.chunk_statuses([chunk_id])
@@ -48,12 +47,7 @@ class ReadThroughChunkViews:
         return view
 
     def prime(self, chunk_ids: Iterable[str]) -> None:
-        ids = list(chunk_ids)
-        if not ids:
-            return
-        # best-effort — every get() below re-tries its own read
-        with contextlib.suppress(HubClientError):
-            self.hub.chunk_statuses(ids)
+        pass  # nothing to prime into — this binding memoizes nothing
 
     def invalidate(self, chunk_id: str) -> None:
         pass  # nothing memoized to drop
@@ -68,7 +62,7 @@ class MemoizingChunkViewCache:
     "not yet read" (absent key), so a repeated ``get()`` on a genuinely-unknown id does not
     re-read the hub only to raise the same ``ChunkNotFoundError`` again."""
 
-    hub: IHubClient
+    hub: IChunkStatusReader
     _cache: dict[str, ChunkStatusView | None] = field(default_factory=dict)
 
     def get(self, chunk_id: str) -> ChunkStatusView:

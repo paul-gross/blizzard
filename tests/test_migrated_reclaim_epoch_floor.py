@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.chunk_views import ReadThroughChunkViews
+from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.elicitation_files import ElicitationFiles

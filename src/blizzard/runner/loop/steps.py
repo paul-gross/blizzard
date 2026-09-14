@@ -298,14 +298,14 @@ class Fenced:
 
     taken_over: Container[str]
 
-    def out(self, detail: ChunkStatusView, ref: _FenceRef) -> bool:
+    def out(self, view: ChunkStatusView, ref: _FenceRef) -> bool:
         if ref.chunk_id in self.taken_over:
             return False
-        if detail.latest_epoch is not None and detail.latest_epoch > ref.epoch:
+        if view.latest_epoch is not None and view.latest_epoch > ref.epoch:
             return True
         # A restart mints one above the newest epoch THE HUB knows, which excludes a reference whose
         # own mint is still buffered here — so it can land LEVEL with what it displaces.
-        return any(epoch >= ref.epoch for epoch in detail.restart_epochs)
+        return any(epoch >= ref.epoch for epoch in view.restart_epochs)
 
 
 class Pull(Step):
@@ -354,7 +354,7 @@ class Pull(Step):
         fenced = Fenced(ctx.stores.takeover.open_takeover_chunk_ids())
         for lease in ctx.stores.lease_record.list_active_leases():
             try:
-                detail = ctx.chunk_views.get(lease.chunk_id)
+                view = ctx.chunk_views.get(lease.chunk_id)
             except ChunkNotFoundError:
                 # Terminal, not retryable (blizzard#9). Ordered before the HubClientError arm
                 # because it subclasses it, or the 404 would be swallowed as "hub unreachable".
@@ -362,18 +362,18 @@ class Pull(Step):
                 continue
             except HubClientError:
                 continue  # hub unreachable — last-known directive holds; keep working
-            if detail.status == ChunkStatus.STOPPED:
+            if view.status == ChunkStatus.STOPPED:
                 # Honor the terminal fact directly (issue #118), rather than waiting on the
                 # route check below to observe the release.
                 Attempt(ctx, lease).abandon(via="pull")
-            elif detail.route_runner_id != ctx.config.runner_id:
+            elif view.route_runner_id != ctx.config.runner_id:
                 Attempt(ctx, lease).abandon(via="pull")
-            elif detail.pause is not None:
+            elif view.pause is not None:
                 # A pause outranks a move: the paused chunk keeps its lease, route and epoch, and
                 # the re-entry happens on the tick after the pause lifts.
                 if lease.lease_id not in pause_parked:
                     Attempt(ctx, lease).park_paused(via="pull")
-            elif fenced.out(detail, lease):
+            elif fenced.out(view, lease):
                 Attempt(ctx, lease).preempt(via="pull")
 
     def _reconcile_escalations(self) -> None:
@@ -390,21 +390,21 @@ class Pull(Step):
         fenced = Fenced(ctx.stores.takeover.open_takeover_chunk_ids())
         for escalation in ctx.stores.escalations.open_escalations():
             try:
-                detail = ctx.chunk_views.get(escalation.chunk_id)
+                view = ctx.chunk_views.get(escalation.chunk_id)
             except HubClientError as exc:
                 # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
                 _log.debug("escalation left open — hub unreadable", chunk_id=escalation.chunk_id, error=str(exc))
                 continue
             superseded = (
-                detail.status in TERMINAL_STATUSES
-                or detail.route_runner_id != ctx.config.runner_id
-                or fenced.out(detail, escalation)
+                view.status in TERMINAL_STATUSES
+                or view.route_runner_id != ctx.config.runner_id
+                or fenced.out(view, escalation)
             )
             if not superseded:
-                _log.debug("escalation left open", chunk_id=escalation.chunk_id, hub_status=detail.status.value)
+                _log.debug("escalation left open", chunk_id=escalation.chunk_id, hub_status=view.status.value)
                 continue
             ctx.stores.escalations.record_escalation_closure(
-                chunk_id=escalation.chunk_id, reason=detail.status.value, at=ctx.clock.now()
+                chunk_id=escalation.chunk_id, reason=view.status.value, at=ctx.clock.now()
             )
             if ctx.events is not None:
                 ctx.events.publish_escalation_changed(
@@ -422,13 +422,13 @@ class Pull(Step):
         ctx = self.ctx
         for takeover in ctx.stores.takeover.open_takeovers():
             try:
-                detail = ctx.chunk_views.get(takeover.chunk_id)
+                view = ctx.chunk_views.get(takeover.chunk_id)
             except HubClientError as exc:
                 # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
                 _log.debug("takeover left open — hub unreadable", chunk_id=takeover.chunk_id, error=str(exc))
                 continue
-            if detail.status not in TERMINAL_STATUSES:
-                _log.debug("takeover left open", chunk_id=takeover.chunk_id, hub_status=detail.status.value)
+            if view.status not in TERMINAL_STATUSES:
+                _log.debug("takeover left open", chunk_id=takeover.chunk_id, hub_status=view.status.value)
                 continue
             ctx.stores.takeover.record_takeover_end(takeover_id=takeover.takeover_id, ended_at=ctx.clock.now())
             if ctx.events is not None:
@@ -455,7 +455,7 @@ class Fill(Step):
             )
             return
         slots = ctx.config.max_agents - len(ctx.stores.lease_record.list_active_leases())
-        queue = ReadyQueue.peek(ctx)  # one hub peek for the whole fill (blizzard#459)
+        queue = ReadyQueue.peeked(ctx)  # one hub peek for the whole fill (blizzard#459)
         for _ in range(max(slots, 0)):
             if not queue.claim_one():
                 break
@@ -513,7 +513,7 @@ class Advance(Step):
             return  # not spawned — REAP's residue (guarded by the caller too)
         elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
         if elicitation is not None:
-            if elicitation_still_pending(self.ctx, lease, elicitation):
+            if elicitation_still_pending(self.ctx, elicitation):
                 # Live and under the staleness bound — the steady-state case. `collect`
                 # would early-return here anyway; skip the envelope/binding fetch it never uses.
                 return

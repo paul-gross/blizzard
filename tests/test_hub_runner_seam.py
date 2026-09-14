@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.chunk_views import ReadThroughChunkViews
+from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease

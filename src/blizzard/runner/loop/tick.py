@@ -10,7 +10,7 @@ from __future__ import annotations
 import dataclasses
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.loop.chunk_views import MemoizingChunkViewCache
+from blizzard.runner.loop.chunk_status_cache import MemoizingChunkViewCache
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import (
     Advance,
