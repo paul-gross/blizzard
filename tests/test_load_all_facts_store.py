@@ -398,8 +398,8 @@ def test_fleet_pulse_view_calls_load_all_facts_and_never_load_facts_or_list_all(
             return super().load_facts(chunk_id)
 
     class _CountingRecordStore(ChunkRecordStore):
-        def __init__(self, store, clock, *, facts) -> None:  # type: ignore[no-untyped-def]
-            super().__init__(store, clock, facts=facts)
+        def __init__(self, store, clock) -> None:  # type: ignore[no-untyped-def]
+            super().__init__(store, clock)
             self.list_all_calls = 0
 
         def list_all(self):  # type: ignore[no-untyped-def]
@@ -407,7 +407,7 @@ def test_fleet_pulse_view_calls_load_all_facts_and_never_load_facts_or_list_all(
             return super().list_all()
 
     counting_facts = _CountingFactsStore(hub_store_connections(hub.engine), hub.clock)
-    counting_record = _CountingRecordStore(hub_store_connections(hub.engine), hub.clock, facts=counting_facts)
+    counting_record = _CountingRecordStore(hub_store_connections(hub.engine), hub.clock)
     services = replace(hub.services, chunks=replace(hub.services.chunks, facts=counting_facts, record=counting_record))
 
     view = FleetPulse(services).view()

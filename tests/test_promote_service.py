@@ -13,6 +13,7 @@ from typing import Any, cast
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
@@ -45,7 +46,13 @@ class _FakeChunkRepo:
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts
 
-    def list_ready(self) -> list[Chunk]:
+    def load_all_statuses(self) -> dict[str, ChunkStatus]:
+        # PromoteService derives this once and hands it to `tail_position`; the fake's
+        # own `list_ready` ignores it (`self.ready` is already the resolved set), so an
+        # empty map is enough to satisfy the now-required keyword.
+        return {}
+
+    def list_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
         return self.ready
 
     def queue_positions(self) -> dict[str, float]:

@@ -6,6 +6,7 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import select
@@ -59,16 +60,37 @@ class ChunkQueueStore:
                 return None
             return insert_promote_rows(conn, chunk_id, position=position, at=at)
 
-    def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
-        """Append the moved chunk's new ready-queue position; order derives."""
-        with self._store.write("record_queue_position") as conn:
-            conn.execute(s.queue_positions.insert().values(chunk_id=chunk_id, position=position, set_at=at))
+    def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
+        """Append every ``(chunk_id, position)`` pair in one multi-row insert — a
+        whole-order replace of N chunks costs one write transaction, not N."""
+        if not positions:
+            return
+        with self._store.write("record_queue_positions") as conn:
+            conn.execute(
+                s.queue_positions.insert(),
+                [{"chunk_id": chunk_id, "position": position, "set_at": at} for chunk_id, position in positions],
+            )
 
-    def record_backlog_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
-        with self._store.write("record_backlog_position") as conn:
-            if row_exists(conn, s.chunk_promoted, chunk_id):
-                return  # promoted since the caller resolved backlog candidates — not this write's chunk anymore
-            conn.execute(s.queue_positions.insert().values(chunk_id=chunk_id, position=position, set_at=at))
+    def record_backlog_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
+        if not positions:
+            return
+        with self._store.write("record_backlog_positions") as conn:
+            chunk_ids = [chunk_id for chunk_id, _ in positions]
+            # One `.in_()` read for the whole batch, not one `row_exists` per pair.
+            promoted = {
+                r.chunk_id
+                for r in conn.execute(
+                    select(s.chunk_promoted.c.chunk_id).where(s.chunk_promoted.c.chunk_id.in_(chunk_ids))
+                ).all()
+            }
+            rows = [
+                {"chunk_id": chunk_id, "position": position, "set_at": at}
+                for chunk_id, position in positions
+                # promoted since the caller resolved backlog candidates — not this write's chunk anymore
+                if chunk_id not in promoted
+            ]
+            if rows:
+                conn.execute(s.queue_positions.insert(), rows)
 
 
 def _conforms_queue(x: ChunkQueueStore) -> IWriteChunkQueueRepository:

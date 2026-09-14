@@ -573,6 +573,7 @@ def build_services(
             work_refs=chunk_work_refs,
             record=chunk_record,
             queue=chunk_queue,
+            facts=chunk_facts,
             clock=clock,
         ),
         routine_baselines=RoutineBaselineService(finding_sets=finding_set_store, delivery=chunk_delivery),

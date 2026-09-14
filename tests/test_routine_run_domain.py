@@ -11,7 +11,9 @@ from typing import Any, cast
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.queue import IReadChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
@@ -106,7 +108,7 @@ class _FakeChunks:
     promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict)
     live_holder: str | None = None
 
-    def list_ready(self) -> list[Chunk]:
+    def list_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
         return self.ready
 
     def queue_positions(self) -> dict[str, float]:
@@ -114,6 +116,11 @@ class _FakeChunks:
 
     def promoted_ats(self) -> dict[str, datetime]:
         return self.promoted_ats_by_chunk
+
+    def load_all_statuses(self) -> dict[str, ChunkStatus]:
+        # RunService derives this once and hands it to `tail_position`; `list_ready`
+        # above ignores it (`self.ready` is already the resolved set).
+        return {}
 
     def find_live_holder(self, pointer: WorkRef) -> str | None:
         return self.live_holder
@@ -179,6 +186,7 @@ def _service(
         work_refs=cast(IReadChunkWorkRefsRepository, chunks),
         record=cast(IReadChunkRecordRepository, chunks),
         queue=cast(IReadChunkQueueRepository, chunks),
+        facts=cast(IReadChunkFactsRepository, chunks),
         clock=clock,
     )
     return service, items, scopes, chunks

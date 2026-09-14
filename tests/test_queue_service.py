@@ -14,11 +14,16 @@ from typing import Any, cast
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.queue import QueueList, QueueService
 from blizzard.hub.domain.work import Chunk
+
+_NO_STATUSES: dict[str, ChunkStatus] = {}
+"""The fake repo below pre-filters `ready`/`not_ready` itself, so `QueueService` never
+actually reads this map — it exists only to satisfy the now-required keyword."""
 
 pytestmark = pytest.mark.unit
 
@@ -81,13 +86,13 @@ class _FakeChunkRepo:
     promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict)
     stamped: list[tuple[str, float, datetime]] = field(default_factory=list)
     #: Chunks promoted since candidates were resolved — makes
-    #: :meth:`record_backlog_position` a no-op for them, mirroring the real store.
+    #: :meth:`record_backlog_positions` a no-op for them, mirroring the real store.
     promoted_chunk_ids: set[str] = field(default_factory=set)
 
-    def list_ready(self) -> list[Chunk]:
+    def list_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
         return self.ready
 
-    def list_not_ready(self) -> list[Chunk]:
+    def list_not_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
         return self.not_ready
 
     def queue_positions(self) -> dict[str, float]:
@@ -96,15 +101,17 @@ class _FakeChunkRepo:
     def promoted_ats(self) -> dict[str, datetime]:
         return dict(self.promoted_ats_by_chunk)
 
-    def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
-        self.stamped.append((chunk_id, position, at))
-        self.positions[chunk_id] = position
+    def record_queue_positions(self, positions: list[tuple[str, float]], *, at: datetime) -> None:
+        for chunk_id, position in positions:
+            self.stamped.append((chunk_id, position, at))
+            self.positions[chunk_id] = position
 
-    def record_backlog_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
-        if chunk_id in self.promoted_chunk_ids:
-            return
-        self.stamped.append((chunk_id, position, at))
-        self.positions[chunk_id] = position
+    def record_backlog_positions(self, positions: list[tuple[str, float]], *, at: datetime) -> None:
+        for chunk_id, position in positions:
+            if chunk_id in self.promoted_chunk_ids:
+                continue
+            self.stamped.append((chunk_id, position, at))
+            self.positions[chunk_id] = position
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"QueueService.reposition should not touch {name!r}")
@@ -128,10 +135,10 @@ def test_ordered_not_ready_sorts_by_newest_explicit_position_else_mint_instant()
     repo = _FakeChunkRepo(not_ready=[a, b, c], positions={"chk_c": -1.0})  # c explicitly pinned to the top
     service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
-    ordered = service.ordered_not_ready()
+    ordered = service.ordered_not_ready(statuses=_NO_STATUSES)
 
     assert [chunk.chunk_id for chunk in ordered] == ["chk_c", "chk_b", "chk_a"]
-    assert service.ordered(QueueList.NOT_READY) == ordered
+    assert service.ordered(QueueList.NOT_READY, statuses=_NO_STATUSES) == ordered
 
 
 def test_ordered_not_ready_never_reads_the_ready_candidate_set() -> None:
@@ -139,8 +146,8 @@ def test_ordered_not_ready_never_reads_the_ready_candidate_set() -> None:
     repo = _FakeChunkRepo(ready=[ready_only], not_ready=[])
     service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
-    assert service.ordered_not_ready() == []
-    assert service.ordered_ready() == [ready_only]
+    assert service.ordered_not_ready(statuses=_NO_STATUSES) == []
+    assert service.ordered_ready(statuses=_NO_STATUSES) == [ready_only]
 
 
 def test_reposition_between_two_neighbours_lands_on_their_midpoint() -> None:
@@ -148,7 +155,7 @@ def test_reposition_between_two_neighbours_lands_on_their_midpoint() -> None:
     repo = _FakeChunkRepo(ready=[a, b, c, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_c": 2.0, "chk_m": 5.0})
     service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(QueueList.READY, m, after=a)
+    service.reposition(QueueList.READY, m, after=a, statuses=_NO_STATUSES)
 
     assert repo.stamped[-1] == ("chk_m", 0.5, _T0)
 
@@ -158,7 +165,7 @@ def test_reposition_to_the_top_lands_below_the_current_lowest() -> None:
     repo = _FakeChunkRepo(ready=[a, b, m], positions={"chk_a": 1.0, "chk_b": 2.0, "chk_m": 5.0})
     service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(QueueList.READY, m, after=None)
+    service.reposition(QueueList.READY, m, after=None, statuses=_NO_STATUSES)
 
     assert repo.stamped[-1] == ("chk_m", 0.0, _T0)
 
@@ -168,7 +175,7 @@ def test_reposition_to_the_top_of_an_otherwise_empty_ready_set_is_zero() -> None
     repo = _FakeChunkRepo(ready=[m], positions={"chk_m": 5.0})
     service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(QueueList.READY, m, after=None)
+    service.reposition(QueueList.READY, m, after=None, statuses=_NO_STATUSES)
 
     assert repo.stamped[-1] == ("chk_m", 0.0, _T0)
 
@@ -178,7 +185,7 @@ def test_reposition_after_the_last_chunk_lands_one_past_it() -> None:
     repo = _FakeChunkRepo(ready=[a, b, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_m": 5.0})
     service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(QueueList.READY, m, after=b)
+    service.reposition(QueueList.READY, m, after=b, statuses=_NO_STATUSES)
 
     assert repo.stamped[-1] == ("chk_m", 2.0, _T0)
 
@@ -194,7 +201,7 @@ def test_reposition_between_adjacent_doubles_renormalizes_then_succeeds() -> Non
     repo = _FakeChunkRepo(ready=[a, b], positions={"chk_a": a_pos, "chk_b": b_pos})
     service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(QueueList.READY, m, after=a)
+    service.reposition(QueueList.READY, m, after=a, statuses=_NO_STATUSES)
 
     # Renormalize restamped a/b (and m, inserted between them) with dense ascending
     # floats; the final write lands strictly between the freshly-spread neighbours.
@@ -209,7 +216,7 @@ def test_reposition_between_two_backlog_neighbours_lands_on_their_midpoint() -> 
     repo = _FakeChunkRepo(not_ready=[a, b, c, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_c": 2.0, "chk_m": 5.0})
     service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(QueueList.NOT_READY, m, after=a)
+    service.reposition(QueueList.NOT_READY, m, after=a, statuses=_NO_STATUSES)
 
     assert repo.stamped[-1] == ("chk_m", 0.5, _T0)
 
@@ -223,7 +230,7 @@ def test_reposition_between_adjacent_backlog_doubles_renormalizes_then_succeeds(
     repo = _FakeChunkRepo(not_ready=[a, b], positions={"chk_a": a_pos, "chk_b": b_pos})
     service = QueueService(queue=_as_queue(repo), record=_as_record(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(QueueList.NOT_READY, m, after=a)
+    service.reposition(QueueList.NOT_READY, m, after=a, statuses=_NO_STATUSES)
 
     assert repo.positions["chk_a"] < repo.positions["chk_m"] < repo.positions["chk_b"]
 
@@ -233,7 +240,7 @@ def test_record_backlog_position_is_a_no_op_for_a_chunk_promoted_since_candidate
     # fresh tail stamp it already landed for this chunk.
     repo = _FakeChunkRepo(promoted_chunk_ids={"chk_m"})
 
-    repo.record_backlog_position("chk_m", position=0.0, at=_T0)
+    repo.record_backlog_positions([("chk_m", 0.0)], at=_T0)
 
     assert repo.stamped == []
     assert "chk_m" not in repo.positions

@@ -49,7 +49,7 @@ def test_upgrade_creates_chunk_deleted_and_leaves_preexisting_chunks_claimable(t
     assert store.record.get("ch_legacy") is not None
     facts = store.facts.load_facts("ch_legacy")
     assert facts is not None and facts.status() is ChunkStatus.READY  # unaffected — still claimable
-    assert [c.chunk_id for c in store.record.list_ready()] == ["ch_legacy"]
+    assert [c.chunk_id for c in store.record.list_ready(statuses=store.facts.load_all_statuses())] == ["ch_legacy"]
 
     # The fresh table is honored immediately: a row in it makes the chunk ephemeral.
     with engine.begin() as conn:

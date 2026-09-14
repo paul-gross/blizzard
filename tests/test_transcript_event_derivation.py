@@ -194,8 +194,8 @@ class _CountingFactsStore(ChunkFactsStore):
 
 
 class _CountingRecordStore(ChunkRecordStore):
-    def __init__(self, store, clock, *, facts) -> None:  # type: ignore[no-untyped-def]
-        super().__init__(store, clock, facts=facts)
+    def __init__(self, store, clock) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(store, clock)
         self.get_calls = 0
         self.graph_id_of_many_calls = 0
 
@@ -224,7 +224,7 @@ def test_sweep_resolves_graph_pins_with_one_load_facts_for_and_one_graph_id_of_m
     )
 
     counting_facts = _CountingFactsStore(hub_store_connections(fixture.engine), fixture.clock)
-    counting_record = _CountingRecordStore(hub_store_connections(fixture.engine), fixture.clock, facts=counting_facts)
+    counting_record = _CountingRecordStore(hub_store_connections(fixture.engine), fixture.clock)
     service = EventDerivationService(
         events=fixture.events, facts=counting_facts, record=counting_record, clock=fixture.clock
     )
