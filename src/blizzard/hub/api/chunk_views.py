@@ -16,7 +16,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import Chunk, ChunkFacts, PauseFact, UsageTotal, holds_claim
+from blizzard.hub.domain.work import Chunk, ChunkFacts, PauseFact, UsageTotal, WorkRef, holds_claim
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
     ArtifactView,
@@ -71,6 +71,17 @@ def usage_total_view(usage: UsageTotal) -> ChunkUsageTotalView:
     )
 
 
+class _LiveHoldersNotInjected(Enum):
+    """The type of :data:`_LIVE_HOLDERS_NOT_INJECTED` — the ``_RouteNotInjected`` pattern,
+    reused so a ``dict[WorkRef, str] | None`` union stays narrowable for pyright."""
+
+    TOKEN = 0
+
+
+#: :meth:`ChunkView.of`'s default: no live-holder map was given, so it resolves lazily.
+_LIVE_HOLDERS_NOT_INJECTED: Final = _LiveHoldersNotInjected.TOKEN
+
+
 def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedView | None:
     """A derived marking's wire wrapping (issue #457) — the one home every caller of
     :func:`~blizzard.hub.domain.dependencies.derive_blocked_prerequisites` reaches through,
@@ -97,6 +108,8 @@ class ChunkView:
     facts: ChunkFacts
     names: GraphNames
     route: Route | None | _RouteNotInjected = _ROUTE_NOT_INJECTED
+    #: Every pointer's live holder — the caller's own already-resolved map (issue #421).
+    live_holders: dict[WorkRef, str] | _LiveHoldersNotInjected = _LIVE_HOLDERS_NOT_INJECTED
     #: The chunk's blocked marking (issue #457) — the caller's own already-derived value;
     #: neither constructor derives it itself, so a caller that has no use for it (every verb
     #: response but the list and detail reads) pays nothing for it.
@@ -124,7 +137,7 @@ class ChunkView:
             facts=facts
             if facts is not None
             else (services.chunks.facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)),
-            names=names or GraphNames(services.graphs.get),
+            names=names or GraphNames(services.graphs),
             blocked=blocked,
             neighborhood=neighborhood,
         )
@@ -137,12 +150,22 @@ class ChunkView:
         facts: ChunkFacts,
         route: Route | None,
         names: GraphNames,
+        live_holders: dict[WorkRef, str],
         blocked: BlockedView | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of` (issue #421): a fan-out list read injects
-        already-fetched facts and route instead of calling ``load_facts``/``route_of`` per
-        chunk. ``route=None`` means "no live route"; :meth:`of` leaves it uninjected."""
-        return cls(services=services, chunk=chunk, facts=facts, names=names, route=route, blocked=blocked)
+        already-fetched facts, route and pointer live-holders, skipping a per-chunk
+        ``load_facts``/``route_of``/``live_holders`` call. ``route=None`` means "no live
+        route"; :meth:`of` leaves both uninjected."""
+        return cls(
+            services=services,
+            chunk=chunk,
+            facts=facts,
+            names=names,
+            route=route,
+            live_holders=live_holders,
+            blocked=blocked,
+        )
 
     def _resolved_route(self) -> Route | None:
         """The chunk's route: the injected value if one was given, otherwise fetched lazily
@@ -150,6 +173,14 @@ class ChunkView:
         if self.route is not _ROUTE_NOT_INJECTED:
             return self.route
         return self.services.chunks.route.route_of(self.chunk.chunk_id)
+
+    def _resolved_live_holders(self) -> dict[WorkRef, str]:
+        """Every pointer's live holder: the injected map if one was given, otherwise
+        resolved lazily with one bulk ``IReadChunkWorkRefsRepository.live_holders`` call
+        over this chunk's own pointers — the ``_resolved_route`` pattern."""
+        if self.live_holders is not _LIVE_HOLDERS_NOT_INJECTED:
+            return self.live_holders
+        return self.services.chunks.work_refs.live_holders(self.chunk.work_refs)
 
     def summary(self) -> ChunkSummary:
         """The derived fleet-list row (issue #104) — rendered both by the list read and by
@@ -185,16 +216,15 @@ class ChunkView:
         """The chunk's current node as ``(id, name)`` — the newest transition's target, or the
         pinned graph's entry node before the first transition (a nicer board value than ``None``).
         The name rides along so the board is legible without reassembly."""
-        graph = self.names.graph(self.chunk.graph_id)
-        node_id = self.facts.current_node_id() or (graph.entry_node_id if graph is not None else None)
+        node_id = self.facts.current_node_id() or self.names.entry_node_id(self.chunk.graph_id)
         return node_id, self.names.node_name(self.chunk.graph_id, node_id)
 
     def pointer_views(self) -> list[WorkRefView]:
-        """Each pointer with its board-legible label and browser URL — both null when no
-        configured source names ``pointer.source``.
-
-        Each pointer resolves to its own binding by name, so a chunk's pointers need not
-        all share one source."""
+        """Each pointer with its board-legible label and browser URL, both null when no
+        configured source names ``pointer.source``; each resolves to its own binding by
+        name, so a chunk's pointers need not all share one source. Liveness resolves via
+        :meth:`_resolved_live_holders`'s one bulk call."""
+        holders = self._resolved_live_holders()
         views: list[WorkRefView] = []
         for p in self.chunk.work_refs:
             source = self.services.work_sources.get(p.source)
@@ -203,7 +233,7 @@ class ChunkView:
                     source=p.source,
                     ref=p.ref,
                     label=source.label(p) if source is not None else None,
-                    web_url=source.web_url(p) if source is not None else None,
+                    web_url=source.web_url(p, live_holder=holders.get(p)) if source is not None else None,
                 )
             )
         return views
@@ -213,14 +243,14 @@ class ChunkView:
 
     def detail(self) -> ChunkDetail:
         node_id, node_name = self.current_node()
-        graph = self.names.graph(self.chunk.graph_id)
+        graph_created_at = self.names.created_at(self.chunk.graph_id)
         artifacts = self.services.chunks.artifacts.load_artifacts(self.chunk.chunk_id)
         history = ChunkHistoryView(self.facts, self.names)
         return ChunkDetail(
             chunk_id=self.chunk.chunk_id,
             graph_id=self.chunk.graph_id,
             graph_name=self.names.graph_name(self.chunk.graph_id),
-            graph_created_at=iso_utc(graph.created_at) if graph is not None else None,
+            graph_created_at=iso_utc(graph_created_at) if graph_created_at is not None else None,
             status=self.facts.status(),
             current_node_id=node_id,
             current_node_name=node_name,
@@ -277,10 +307,15 @@ class ChunkView:
         return to_decision_view(decision) if decision is not None else None
 
     def _pending(self) -> PendingView | None:
+        """The only place a whole-fleet or whole-history read still reifies a full
+        :class:`Graph` (issue #421) — the poll policy it needs lives only on a
+        :class:`Node`, not the :class:`GraphSummary`/name projection :attr:`names`
+        otherwise resolves through, and it's reached only when a hub-node poll is
+        actually pending."""
         pending = self.facts.hub_node_pending()
         if pending is None:
             return None
-        graph = self.names.graph(self.chunk.graph_id)
+        graph = self.services.graphs.get(self.chunk.graph_id)
         node = graph.node_by_id(pending.node_id) if graph is not None else None
         if node is None:
             return None

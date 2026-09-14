@@ -17,7 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.api.chunk_views import ChunkHistoryView
 from blizzard.hub.api.graph_names import GraphNames
-from blizzard.hub.domain.graph import Graph, GraphDoc
+from blizzard.hub.domain.graph import Graph, GraphDoc, GraphSummary
 from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.domain.work import ChunkFacts, TransitionFact
 from blizzard.hub.store import schema as s
@@ -53,6 +53,30 @@ def _two_node_graph(entry: str, other: str, *, other_executor: str) -> Graph:
         }
     )
     return Reification.of(doc, FixedClock(_T0)).graph
+
+
+class _GraphLookup:
+    """A minimal ``IReadGraphRepository`` stand-in over an in-memory ``{graph_id: Graph}``
+    map — only the two narrow projections ``GraphNames`` itself reaches."""
+
+    def __init__(self, by_id: dict[str, Graph]) -> None:
+        self._by_id = by_id
+
+    def load_graph_summaries(self, graph_ids):  # type: ignore[no-untyped-def]
+        return {
+            graph_id: GraphSummary(
+                graph_id=graph.graph_id, name=graph.name, entry_node_id=graph.entry_node_id, created_at=graph.created_at
+            )
+            for graph_id in graph_ids
+            if (graph := self._by_id.get(graph_id)) is not None
+        }
+
+    def load_node_names(self, graph_ids):  # type: ignore[no-untyped-def]
+        return {
+            graph_id: {node.node_id: node.name for node in graph.nodes}
+            for graph_id in graph_ids
+            if (graph := self._by_id.get(graph_id)) is not None
+        }
 
 
 # Unit — per-graph name resolution in the history view
@@ -92,7 +116,7 @@ def test_history_view_resolves_each_step_name_against_its_own_graph() -> None:
     )
 
     by_id = {graph_a.graph_id: graph_a, graph_b.graph_id: graph_b}
-    views = ChunkHistoryView(facts, GraphNames(by_id.get)).transitions()
+    views = ChunkHistoryView(facts, GraphNames(_GraphLookup(by_id))).transitions()  # type: ignore[arg-type]
 
     assert [(v.from_node_name, v.to_node_name) for v in views] == [("build", "review"), ("triage", "fix")]
     # No raw-id degradation: every name resolved against its own graph.

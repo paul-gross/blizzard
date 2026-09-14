@@ -71,14 +71,16 @@ def _stripped(value: str, field_name: str) -> str:
     return text
 
 
-def _view(item: WorkItemRecord, source_obj: IWorkSource, users: IReadUserRepository) -> WorkItemView:
+def _view(
+    item: WorkItemRecord, source_obj: IWorkSource, users: IReadUserRepository, *, live_holder: str | None
+) -> WorkItemView:
     pointer = WorkRef(source=item.source, ref=item.ref)
     author = resolve_author_view(item.author, users)
     return WorkItemView(
         source=item.source,
         ref=item.ref,
         label=source_obj.label(pointer),
-        web_url=source_obj.web_url(pointer),
+        web_url=source_obj.web_url(pointer, live_holder=live_holder),
         title=item.title,
         body=item.body,
         author=WorkItemAuthorView(
@@ -123,7 +125,14 @@ def list_work_items(
 ) -> WorkItemsListView:
     """Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 per D4."""
     source_obj, editor = _require_editor(source, services)
-    return WorkItemsListView(items=[_view(item, source_obj, services.users) for item in editor.list(limit=limit)])
+    items = editor.list(limit=limit)
+    holders = services.chunks.work_refs.live_holders(WorkRef(source=item.source, ref=item.ref) for item in items)
+    return WorkItemsListView(
+        items=[
+            _view(item, source_obj, services.users, live_holder=holders.get(WorkRef(source=item.source, ref=item.ref)))
+            for item in items
+        ]
+    )
 
 
 @router.post(
@@ -171,8 +180,10 @@ def create_work_item(
         cause="minted", key=f"chunks:{created.chunk_id}"
     )
     services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
+    # The freshly minted resting chunk is always its own live holder — no read needed.
     return WorkItemCreateResponse(
-        **_view(created.item, source_obj, services.users).model_dump(), chunk_id=created.chunk_id
+        **_view(created.item, source_obj, services.users, live_holder=created.chunk_id).model_dump(),
+        chunk_id=created.chunk_id,
     )
 
 
@@ -185,11 +196,12 @@ def get_work_item(source: str, ref: str, services: Annotated[HubServices, Depend
     """One item at SOURCE by REF, open or closed. 404 for an unknown source, an
     unallocated ref (D9), or a known source with no editor answered as 409 (D4)."""
     source_obj, editor = _require_editor(source, services)
+    pointer = WorkRef(source=source, ref=ref)
     try:
-        item = editor.get(WorkRef(source=source, ref=ref))
+        item = editor.get(pointer)
     except WorkItemRefUnknownError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return _view(item, source_obj, services.users)
+    return _view(item, source_obj, services.users, live_holder=services.chunks.work_refs.find_live_holder(pointer))
 
 
 @router.patch(
@@ -221,7 +233,7 @@ def patch_work_item(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except WorkItemNotEditable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return _view(updated, source_obj, services.users)
+    return _view(updated, source_obj, services.users, live_holder=services.chunks.work_refs.find_live_holder(pointer))
 
 
 @router.delete(
@@ -259,4 +271,5 @@ def withdraw_work_item(
             status=withdrawn.deleted_chunk_status,
         )
         services.events.publish_queue_changed()  # a deleted chunk is never offered for claim again
-    return _view(withdrawn.item, source_obj, services.users)
+    holder = services.chunks.work_refs.find_live_holder(pointer)
+    return _view(withdrawn.item, source_obj, services.users, live_holder=holder)

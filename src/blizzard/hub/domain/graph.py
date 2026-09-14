@@ -612,13 +612,21 @@ class GraphSummary:
 
 @dataclass(frozen=True)
 class Mint:
-    """One minted graph, ordered by when it was minted."""
+    """One minted graph, ordered by when it was minted. Holds only a
+    :class:`GraphSummary` — the ``graph_id``/``name``/``created_at`` fields this reads
+    — never a fully reified :class:`Graph` (issue #421)."""
 
-    graph: Graph
+    graph: GraphSummary
 
     @classmethod
-    def of(cls, graph: Graph) -> Mint:
-        return cls(graph)
+    def of(cls, graph: Graph | GraphSummary) -> Mint:
+        if isinstance(graph, GraphSummary):
+            return cls(graph)
+        return cls(
+            GraphSummary(
+                graph_id=graph.graph_id, name=graph.name, entry_node_id=graph.entry_node_id, created_at=graph.created_at
+            )
+        )
 
     @property
     def order(self) -> tuple[datetime, str]:
@@ -639,7 +647,7 @@ class Mints:
     retired_ids: Collection[str]
 
     @classmethod
-    def of(cls, graphs: list[Graph], *, retired_ids: Collection[str]) -> Mints:
+    def of(cls, graphs: Sequence[Graph | GraphSummary], *, retired_ids: Collection[str]) -> Mints:
         return cls([Mint.of(g) for g in graphs], retired_ids)
 
     @property
@@ -732,15 +740,17 @@ class IReadGraphRepository(Protocol):
         """
         ...
 
-    def load_graph_names(self, graph_ids: Sequence[str]) -> dict[str, str]:
-        """``{graph_id: name}`` for every requested id that exists — a narrow projection
-        that never reifies a whole :class:`Graph`, for a sibling call site batching a
-        name lookup over several ids at once."""
+    def load_graph_summaries(self, graph_ids: Sequence[str]) -> dict[str, GraphSummary]:
+        """``{graph_id: GraphSummary}`` for every requested id that exists — a narrow
+        projection that never reifies a whole :class:`Graph`, for :class:`GraphNames`'s
+        own batched priming over several ids at once. The entry node rides along on
+        :class:`GraphSummary` itself, so a caller needing it never reifies for that alone."""
         ...
 
-    def load_node_names(self, graph_ids: Sequence[str]) -> dict[str, str]:
-        """``{node_id: name}`` for every node belonging to any of the requested graphs —
-        the node-level sibling of :meth:`load_graph_names`."""
+    def load_node_names(self, graph_ids: Sequence[str]) -> dict[str, dict[str, str]]:
+        """``{graph_id: {node_id: name}}`` for every node belonging to any of the
+        requested graphs — the node-level sibling of :meth:`load_graph_summaries`, keyed
+        per graph so a node id is never looked up against the wrong one."""
         ...
 
     def list_summaries(self) -> list[GraphSummary]:

@@ -110,8 +110,10 @@ _ADAPTER_CASES = [
     _AdapterCase(
         "ChunkWorkRefsStore",
         lambda store: ChunkWorkRefsStore(store, FixedClock(_NOW), facts=ChunkFactsStore(store, FixedClock(_NOW))),
+        # `find_live_holder` delegates to `live_holders([pointer])` (issue #421), so the
+        # driver fault it raises wraps `live_holders`' own operation name.
         lambda a: a.find_live_holder(WorkRef(source="s", ref="1")),
-        "find_live_holder",
+        "live_holders",
     ),
     _AdapterCase(
         "ChunkQueueStore",

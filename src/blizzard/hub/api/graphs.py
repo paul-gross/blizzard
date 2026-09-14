@@ -154,8 +154,11 @@ def sync_graphs(services: Annotated[HubServices, Depends(get_services)]) -> Grap
 
 @router.get("/graphs", response_model=list[GraphSummaryView], dependencies=[Depends(require(FLEET_VIEW))])
 def list_graphs(services: Annotated[HubServices, Depends(get_services)]) -> list[GraphSummaryView]:
-    """Every minted graph, newest first, newest non-retired per name marked ``effective``."""
-    graphs = services.graphs.list_all()
+    """Every minted graph, newest first, newest non-retired per name marked ``effective``.
+
+    Reads the listing-shape projection (issue #421) — nothing here touches nodes,
+    edges, sessions or artifacts."""
+    graphs = services.graphs.list_summaries()
     retired_ids = services.graphs.retired_graph_ids()
     effective_by_id = Mints.of(graphs, retired_ids=retired_ids).effective
     return [

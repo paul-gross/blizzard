@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
@@ -26,8 +27,34 @@ from blizzard.hub.domain.analytics.extraction import (
 )
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
+from blizzard.hub.domain.work import TransitionFact
 
 _log = get_logger("blizzard.hub.transcript_events")
+
+
+@dataclass(frozen=True)
+class GraphPins:
+    """Per chunk, its transitions and mint pin (D4), pre-resolved once for a whole
+    pass. Owns the "newest matching transition, else mint pin" rule
+    :meth:`EventDerivationService.derive_segment` applies per node-step."""
+
+    transitions_by_chunk: dict[str, list[TransitionFact]] = field(default_factory=dict)
+    mint_pin_by_chunk: dict[str, str] = field(default_factory=dict)
+
+    def graph_id_for(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
+        """The node-step's graph (D4): the newest transition among this chunk's
+        pre-resolved ones matching ``node_id``/``epoch``, else the chunk's mint pin, else
+        ``None`` when neither resolves (an unresolvable chunk)."""
+        matches = [
+            t
+            for t in self.transitions_by_chunk.get(chunk_id, [])
+            if t.to_node_id == node_id and t.epoch == epoch and t.graph_id is not None
+        ]
+        if matches:
+            newest = max(matches, key=lambda t: t.recorded_at)
+            assert newest.graph_id is not None  # narrowed by the filter above
+            return newest.graph_id
+        return self.mint_pin_by_chunk.get(chunk_id)
 
 
 class EventDerivationService:
@@ -66,16 +93,32 @@ class EventDerivationService:
         own entry point onto :meth:`candidacy`."""
         return self.candidacy(chunk_id=chunk_id).candidate_segment_ids
 
-    def derive_segment(self, segment_id: str) -> bool:
-        """One transaction: recognize every event this segment's turns hold today,
-        stamp the node-step context, and replace this ``(segment_id, extractor_version)``
-        pair's rows and marker (D6). Returns whether it derived: a segment that no longer
-        exists, or whose ``chunk_id`` resolves to no chunk, is the no-op a caller must not
-        count — the reconciler's drop path (D1) is what reclaims such a segment's rows."""
+    def graph_pins_for(self, segment_ids: Sequence[str]) -> GraphPins:
+        """:meth:`derive_segment`'s graph-pin resolution, built once for a whole pass (D4):
+        one ``segment_contexts`` call resolves ``segment_ids``' chunk ids, then one
+        ``load_facts_for`` plus one ``graph_id_of_many`` call resolves the distinct
+        chunk set's transitions and mint pins. Empty input issues neither read."""
+        if not segment_ids:
+            return GraphPins()
+        chunk_ids = sorted({context.chunk_id for context in self._events.segment_contexts(segment_ids).values()})
+        if not chunk_ids:
+            return GraphPins()
+        facts_by_id = self._facts.load_facts_for(chunk_ids)
+        return GraphPins(
+            transitions_by_chunk={chunk_id: facts.transitions for chunk_id, facts in facts_by_id.items()},
+            mint_pin_by_chunk=self._record.graph_id_of_many(chunk_ids),
+        )
+
+    def derive_segment(self, segment_id: str, pins: GraphPins) -> bool:
+        """One transaction: recognize every event this segment's turns hold today, stamp
+        the node-step context, and replace this ``(segment_id, extractor_version)`` pair's
+        rows and marker (D6). Returns ``False``, deriving nothing, for a segment gone by
+        now or one whose chunk has no resolvable graph pin. ``pins`` is the caller's own
+        already-resolved :class:`GraphPins`, built once per pass by :meth:`graph_pins_for`."""
         current = self._events.segment_derivation_input(segment_id)
         if current is None:
             return False
-        graph_id = self._resolve_graph_id(current.chunk_id, current.node_id, current.epoch)
+        graph_id = pins.graph_id_for(current.chunk_id, current.node_id, current.epoch)
         if graph_id is None:
             return False
         extracted = extract_events(
@@ -110,26 +153,8 @@ class EventDerivationService:
         )
         return True
 
-    def _resolve_graph_id(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
-        """The node-step's graph (D4), or ``None`` when no chunk resolves — a segment
-        whose ``chunk_id`` names none breaches the foreign key its table declares, so
-        derivation declines it and ``hub:segment-chunk-resolves`` is what reports it."""
-        facts = self._facts.load_facts(chunk_id)
-        matches = [
-            t
-            for t in (facts.transitions if facts is not None else [])
-            if t.to_node_id == node_id and t.epoch == epoch and t.graph_id is not None
-        ]
-        if matches:
-            newest = max(matches, key=lambda t: t.recorded_at)
-            assert newest.graph_id is not None  # narrowed by the filter above
-            return newest.graph_id
-        chunk = self._record.get(chunk_id)
-        return chunk.graph_id if chunk is not None else None
 
-
-#: The change probe's forced floor (blizzard#524 D5): an optimization only, so a full
-#: pass still runs at least this often, bounding how stale a missed signature can leave reality.
+#: The change probe's forced floor (blizzard#524 D5) — bounds how stale a missed signature can leave reality.
 _FORCED_FULL_PASS_FLOOR = timedelta(minutes=10)
 
 
@@ -148,10 +173,10 @@ class EventDerivationReconciler:
 
     def sweep(self) -> None:
         """One convergence pass, or a skip when the probe reports nothing changed and the
-        floor isn't due. A segment that raises during derivation is stepped over rather
-        than ending the tick, so one bad segment doesn't cost every later candidate its
-        derivation and the drop pass behind it. ``candidacy()`` is this pass's one
-        visibility evaluation; the drop pass below reuses its ``visible_segment_ids`` instead of re-evaluating it."""
+        floor isn't due. Graph-pin resolution failing skips the whole pass, logged and
+        retried next tick; a single segment raising during derivation only costs that
+        segment. ``candidacy()``'s ``visible_segment_ids`` is reused by the drop pass
+        below, not re-evaluated."""
         signature = self._events.derivation_signature()
         now = self._clock.now()
         floor_due = self._last_full_pass_at is None or now - self._last_full_pass_at >= _FORCED_FULL_PASS_FLOOR
@@ -160,11 +185,16 @@ class EventDerivationReconciler:
             return
 
         read = self._service.candidacy()
+        try:
+            pins = self._service.graph_pins_for(read.candidate_segment_ids)
+        except Exception as exc:
+            _log.warning("graph pin resolution failed, sweep skipped", fault=repr(exc))
+            return
         derived = 0
         failed = 0
         for segment_id in read.candidate_segment_ids:
             try:
-                if self._service.derive_segment(segment_id):
+                if self._service.derive_segment(segment_id, pins):
                     derived += 1
             except Exception as exc:
                 failed += 1

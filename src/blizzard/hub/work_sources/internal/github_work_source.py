@@ -100,7 +100,9 @@ class GitHubWorkSource:
         """``{name}#{ref}`` — always renders; ``ref`` is opaque here."""
         return f"{self._name}#{pointer.ref}"
 
-    def web_url(self, pointer: WorkRef) -> str | None:
+    def web_url(self, pointer: WorkRef, *, live_holder: str | None) -> str | None:
+        """This source's address never depends on which chunk holds the pointer, so
+        ``live_holder`` is ignored."""
         return f"{self._web_base}/{self._repo}/issues/{pointer.ref}"
 
     def branch_url(self, repo: str, branch_name: str) -> str | None:

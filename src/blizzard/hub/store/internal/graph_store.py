@@ -8,6 +8,7 @@ newest-fact-wins per ``graph_id`` (issue #101)."""
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -319,34 +320,50 @@ class GraphStore:
                     return row.graph_id
             return None
 
-    def load_graph_names(self, graph_ids: Sequence[str]) -> dict[str, str]:
-        """``{graph_id: name}`` for every requested id that exists. Graphs are
+    def load_graph_summaries(self, graph_ids: Sequence[str]) -> dict[str, GraphSummary]:
+        """``{graph_id: GraphSummary}`` for every requested id that exists. Graphs are
         immutable/insert-only — no ephemeral concept to exclude, just "exists or
         doesn't"."""
         if not graph_ids:
             return {}
-        result: dict[str, str] = {}
-        with self._store.read("load_graph_names") as conn:
+        result: dict[str, GraphSummary] = {}
+        with self._store.read("load_graph_summaries") as conn:
             for batch in id_batches(graph_ids):
-                rows = conn.execute(select(graphs.c.graph_id, graphs.c.name).where(graphs.c.graph_id.in_(batch))).all()
-                result.update({row.graph_id: row.name for row in rows})
+                rows = conn.execute(
+                    select(graphs.c.graph_id, graphs.c.name, graphs.c.entry_node_id, graphs.c.created_at).where(
+                        graphs.c.graph_id.in_(batch)
+                    )
+                ).all()
+                result.update(
+                    {
+                        row.graph_id: GraphSummary(
+                            graph_id=row.graph_id,
+                            name=row.name,
+                            entry_node_id=row.entry_node_id,
+                            created_at=row.created_at,
+                        )
+                        for row in rows
+                    }
+                )
         return result
 
-    def load_node_names(self, graph_ids: Sequence[str]) -> dict[str, str]:
-        """``{node_id: name}`` for every node belonging to any of ``graph_ids``. Keyed by
-        bare ``node_id``: unlike ``chunk_facts_store.py``'s executor map — which merges
-        chunks pointing at *different* graphs and so keys by ``(graph_id, node_id)`` — a
-        node id is a freshly-minted, globally-unique ULID, and the caller already knows
-        which graphs it asked about."""
+    def load_node_names(self, graph_ids: Sequence[str]) -> dict[str, dict[str, str]]:
+        """``{graph_id: {node_id: name}}`` for every node belonging to any of
+        ``graph_ids`` — keyed per graph so a node id is never resolved against the wrong
+        one (a node id is a freshly-minted, globally-unique ULID, but the caller may hold
+        several graphs whose node sets it must not cross)."""
         if not graph_ids:
             return {}
-        result: dict[str, str] = {}
+        result: dict[str, dict[str, str]] = {}
         with self._store.read("load_node_names") as conn:
             for batch in id_batches(graph_ids):
                 rows = conn.execute(
-                    select(graph_nodes.c.node_id, graph_nodes.c.name).where(graph_nodes.c.graph_id.in_(batch))
+                    select(graph_nodes.c.graph_id, graph_nodes.c.node_id, graph_nodes.c.name).where(
+                        graph_nodes.c.graph_id.in_(batch)
+                    )
                 ).all()
-                result.update({row.node_id: row.name for row in rows})
+                for row in rows:
+                    result.setdefault(row.graph_id, {})[row.node_id] = row.name
         return result
 
     def newest_definition_yaml(self, name: str) -> str | None:
@@ -445,11 +462,14 @@ class GraphStore:
 
     def _reify(self, conn, graph_row) -> Graph:  # type: ignore[no-untyped-def]
         node_rows = conn.execute(select(graph_nodes).where(graph_nodes.c.graph_id == graph_row.graph_id)).all()
-        nodes: list[Node] = []
-        for nr in node_rows:
-            choice_rows = conn.execute(select(graph_choices).where(graph_choices.c.node_id == nr.node_id)).all()
-            nodes.append(NODES.of(nr, choices=[CHOICES.of(c) for c in choice_rows]))
-        node_ids = {n.node_id for n in nodes}
+        node_ids = {nr.node_id for nr in node_rows}
+        # One `graph_choices` select over every node id, grouped in Python — matching
+        # the `graph_edges` read just below's own shape.
+        choice_rows = conn.execute(select(graph_choices).where(graph_choices.c.node_id.in_(node_ids))).all()
+        choices_by_node: dict[str, list[Choice]] = defaultdict(list)
+        for cr in choice_rows:
+            choices_by_node[cr.node_id].append(CHOICES.of(cr))
+        nodes = [NODES.of(nr, choices=choices_by_node[nr.node_id]) for nr in node_rows]
         edge_rows = conn.execute(select(graph_edges).where(graph_edges.c.from_node_id.in_(node_ids))).all()
         edges = [EDGES.of(er) for er in edge_rows]
         session_rows = conn.execute(

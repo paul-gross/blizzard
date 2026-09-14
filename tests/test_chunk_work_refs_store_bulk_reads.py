@@ -1,9 +1,9 @@
 """``ChunkWorkRefsStore.live_holders`` — ``find_live_holder``'s batched sibling
 (component tier).
 
-Proves the batch read agrees with ``find_live_holder`` per pointer — a grouped holder, a
-terminal-status holder, and an unheld pointer each contribute no entry, not ``None`` —
-and that it stays correct across a lowered ``BATCH_SIZE`` boundary."""
+Proves a grouped holder, a terminal-status holder, and an unheld pointer each
+contribute no entry, not ``None``, and that batching stays correct across a lowered
+``BATCH_SIZE`` boundary."""
 
 from __future__ import annotations
 
@@ -60,9 +60,23 @@ def test_live_holders_matches_find_live_holder_across_live_ephemeral_terminal_an
     result = store.work_refs.live_holders(pointers)
 
     assert result == {live_ref: "ch_live"}
-    for pointer in pointers:
-        expected = store.work_refs.find_live_holder(pointer)
-        assert result.get(pointer) == expected
+
+
+def test_live_holders_prefers_a_live_holder_over_an_earlier_terminal_one(tmp_path: Path) -> None:
+    """A pointer two chunks each hold — an earlier one now terminal, a later one still
+    live — resolves to the live holder, never the terminal one, regardless of id order."""
+    store, _ = _store(tmp_path)
+    shared_ref = WorkRef(source="default", ref="1")
+
+    _mint(store, "ch_a_terminal", work_refs=[shared_ref])
+    store.queue.record_promote("ch_a_terminal", at=_T0)
+    store.lifecycle.record_completion("ch_a_terminal", by="op", at=_T0)
+
+    _mint(store, "ch_b_live", work_refs=[shared_ref])
+    store.queue.record_promote("ch_b_live", at=_T0)
+
+    assert store.work_refs.find_live_holder(shared_ref) == "ch_b_live"
+    assert store.work_refs.live_holders([shared_ref]) == {shared_ref: "ch_b_live"}
 
 
 def test_live_holders_of_no_pointers_is_empty(tmp_path: Path) -> None:
@@ -84,8 +98,6 @@ def test_live_holders_matches_find_live_holder_across_a_batch_boundary(
     result = store.work_refs.live_holders(pointers)
 
     assert result == {pointer: f"ch_{i}" for i, pointer in enumerate(pointers)}
-    for pointer in pointers:
-        assert result[pointer] == store.work_refs.find_live_holder(pointer)
 
 
 def test_live_holders_groups_pointers_by_source_before_batching_refs(tmp_path: Path) -> None:

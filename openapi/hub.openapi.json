@@ -10612,7 +10612,7 @@
     },
     "/api/chunks": {
       "get": {
-        "description": "The fleet chunk list \u2014 derived status per chunk.\n\nReads the fleet's facts and routes with one bulk query each rather than fanning\n`load_facts`/`route_of` out per chunk (issue #421) \u2014 the `FleetPulse.view()` shape\n(issue #374), extended to routes and to the rendered row.",
+        "description": "The fleet chunk list \u2014 derived status per chunk.\n\nReads the fleet's facts and routes with one bulk query each: the `FleetPulse.view()`\nshape (issue #374), extended to routes and to the rendered row (issue #421).",
         "operationId": "list_chunks_api_chunks_get",
         "responses": {
           "200": {
@@ -13732,7 +13732,7 @@
     },
     "/api/graphs": {
       "get": {
-        "description": "Every minted graph, newest first, newest non-retired per name marked ``effective``.",
+        "description": "Every minted graph, newest first, newest non-retired per name marked ``effective``.\n\nReads the listing-shape projection (issue #421) \u2014 nothing here touches nodes,\nedges, sessions or artifacts.",
         "operationId": "list_graphs_api_graphs_get",
         "responses": {
           "200": {

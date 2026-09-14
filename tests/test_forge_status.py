@@ -16,7 +16,7 @@ from blizzard.hub.domain.forge_status import AnnotationReconciler
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
-from tests.support import FakeAnnotator, FakeWorkSource, build_hub, ingest
+from tests.support import FakeAnnotator, FakeWorkSource, build_hub, count_queries, ingest
 
 # --- WorkStatusMarker.of — pure, exhaustive over ChunkStatus ---
 
@@ -92,6 +92,20 @@ def test_live_work_refs_excludes_a_grouped_chunk_but_carries_its_ref_via_the_sur
 
     assert refs[WorkRef(source="default", ref="1")] is ChunkStatus.NOT_READY
     assert refs[WorkRef(source="default", ref="2")] is ChunkStatus.NOT_READY  # via the survivor now
+
+
+@pytest.mark.component
+def test_live_work_refs_statement_count_does_not_grow_with_work_ref_count(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
+    for ref in ("1", "2", "3"):
+        ingest(hub, [{"source": "default", "ref": ref}], promote=True)
+    few_count = count_queries(hub.engine, lambda: hub.services.chunks.work_refs.live_work_refs())
+
+    for ref in ("4", "5", "6", "7", "8", "9", "10", "11", "12"):
+        ingest(hub, [{"source": "default", "ref": ref}], promote=True)
+    many_count = count_queries(hub.engine, lambda: hub.services.chunks.work_refs.live_work_refs())
+
+    assert few_count == many_count
 
 
 # --- AnnotationReconciler.sweep() — real store, FakeAnnotator standing in for the forge ---

@@ -116,7 +116,7 @@ def test_fetch_maps_a_missing_or_null_title_to_empty_string() -> None:
 def test_web_url_renders_the_browser_issue_address() -> None:
     source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
     pointer = WorkRef(source="widget", ref="12")
-    assert source.web_url(pointer) == "https://github.com/acme/widget/issues/12"
+    assert source.web_url(pointer, live_holder=None) == "https://github.com/acme/widget/issues/12"
 
 
 def test_branch_url_qualifies_a_bare_repo_with_this_source_s_owner() -> None:
@@ -205,7 +205,7 @@ def test_factory_derives_web_base_by_stripping_the_api_host_prefix(
     source = registry.get("blizzard")
     assert source is not None
     pointer = WorkRef(source="blizzard", ref="9")
-    assert source.web_url(pointer) == "https://github.com/paul-gross/blizzard/issues/9"
+    assert source.web_url(pointer, live_holder=None) == "https://github.com/paul-gross/blizzard/issues/9"
 
 
 def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(
@@ -235,7 +235,7 @@ def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(
     source = registry.get("internal")
     assert source is not None
     pointer = WorkRef(source="internal", ref="2")
-    assert source.web_url(pointer) == "https://git.corp.internal/acme/internal-tool/issues/2"
+    assert source.web_url(pointer, live_holder=None) == "https://git.corp.internal/acme/internal-tool/issues/2"
 
 
 def test_factory_gives_each_source_its_own_credentialed_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

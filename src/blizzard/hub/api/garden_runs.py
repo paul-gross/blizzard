@@ -163,7 +163,8 @@ def list_runs(
     422 on a malformed instant or an inverted span."""
     window = _RunWindow.of(since=since, until=until, now=services.clock.now())
     rows = services.garden_run.list_runs(since=window.since, until=window.until)
-    names = GraphNames(services.graphs.get)
+    names = GraphNames(services.graphs)
+    names.prime(row.escalation.graph_id for row in rows if row.escalation is not None)
     return [_run_row_view(row, names) for row in rows]
 
 
@@ -176,5 +177,7 @@ def run_delta(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     delta = services.garden_run.run_delta(chunk) if chunk is not None else None
     if delta is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown run {chunk_id}")
-    names = GraphNames(services.graphs.get)
+    names = GraphNames(services.graphs)
+    if delta.escalation is not None:
+        names.prime([delta.escalation.graph_id])
     return _run_delta_view(delta, names)

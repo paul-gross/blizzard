@@ -264,9 +264,8 @@ export const repositionBacklogApiBacklogPositionPost = <ThrowOnError extends boo
  *
  * The fleet chunk list — derived status per chunk.
  *
- * Reads the fleet's facts and routes with one bulk query each rather than fanning
- * `load_facts`/`route_of` out per chunk (issue #421) — the `FleetPulse.view()` shape
- * (issue #374), extended to routes and to the rendered row.
+ * Reads the fleet's facts and routes with one bulk query each: the `FleetPulse.view()`
+ * shape (issue #374), extended to routes and to the rendered row (issue #421).
  */
 export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(options?: Options<ListChunksApiChunksGetData, ThrowOnError>): RequestResult<ListChunksApiChunksGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListChunksApiChunksGetResponses, unknown, ThrowOnError>({ url: '/api/chunks', ...options });
 
@@ -1061,6 +1060,9 @@ export const passGardenProposalApiGardenProposalsProposalIdPassPost = <ThrowOnEr
  * List Graphs
  *
  * Every minted graph, newest first, newest non-retired per name marked ``effective``.
+ *
+ * Reads the listing-shape projection (issue #421) — nothing here touches nodes,
+ * edges, sessions or artifacts.
  */
 export const listGraphsApiGraphsGet = <ThrowOnError extends boolean = false>(options?: Options<ListGraphsApiGraphsGetData, ThrowOnError>): RequestResult<ListGraphsApiGraphsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListGraphsApiGraphsGetResponses, unknown, ThrowOnError>({ url: '/api/graphs', ...options });
 
