@@ -38,7 +38,7 @@ const ALL_ROUTINES = 'all';
 
 /**
  * The `/gardening/proposals` sub-tab
- * (`blizzard-product:/plans/garden/user-interface.md` §The docket) — the proposal
+ * (`blizzard-product:/delivered/garden/user-interface.md` §The docket) — the proposal
  * docket, filtered client-side by waiting state, by class, and by routine (Decision
  * 1: `GET /api/garden-proposals` declares no query parameters), beside a
  * `<router-outlet>` holding whichever proposal the URL names

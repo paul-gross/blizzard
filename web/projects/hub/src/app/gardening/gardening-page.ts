@@ -4,7 +4,7 @@ import { injectHubGardenProposalsQuery, isGardenProposalWaiting, KitCountBadge, 
 
 /**
  * The `/gardening` route (blizzard#397) — a top-level tab beside the board, not a
- * panel inside it (`blizzard-product:/plans/garden/user-interface.md` §Where it
+ * panel inside it (`blizzard-product:/delivered/garden/user-interface.md` §Where it
  * lives). The app shell above this page is untouched; this page owns only its own
  * second strip, divided along the garden machinery's own nouns, in this fixed order
  * — scopes, routines, runs, findings, proposals — each a real child route

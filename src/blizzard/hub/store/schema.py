@@ -334,7 +334,7 @@ Index("ix_artifacts_chunk_id_node_id_epoch", artifacts.c.chunk_id, artifacts.c.n
 
 # --- Findings and finding sets (blizzard#390) -----------------------------------
 # A finding is a durable observation a routine's run recorded — first class the way an
-# artifact is (blizzard-product:/plans/garden/machinery.md §Findings are artifacts). This
+# artifact is (blizzard-product:/delivered/garden/machinery.md §Findings are artifacts). This
 # table carries no live/last_seen_at/observed_count column (D2, D4): finding_facts is
 # append-only, and every reader derives them fresh, newest-fact-wins, the
 # scope_lifecycle_facts shape.

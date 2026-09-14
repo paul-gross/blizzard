@@ -1,6 +1,6 @@
 """Delivery materialization (blizzard#393) — turning a :class:`ValidatedDelivery`
 into the rows a passing delivery mints, written in one transaction
-(blizzard-product:/plans/garden/machinery.md §Delivery). Sibling to ``garden_delivery.py``
+(blizzard-product:/delivered/garden/machinery.md §Delivery). Sibling to ``garden_delivery.py``
 rather than folded into it so that module stays pure validation with no I/O; this one
 mints ids, resolves a proposal's submission-local ref citations against them, and hands
 a ready-to-insert plan to the store, trusting that validation rather than repeating it."""
@@ -24,7 +24,7 @@ from blizzard.wire.finding import AddFindingOp, GoneFindingOp, ObservedFindingOp
 
 class DeliveryOutcome(Enum):
     """What :meth:`GardenDelivery.deliver` reports. Both members mean the delivery is
-    durably recorded (blizzard-product:/plans/garden/machinery.md §Delivery: "a replay
+    durably recorded (blizzard-product:/delivered/garden/machinery.md §Delivery: "a replay
     finds it and returns `recorded` having minted nothing") — the distinction is kept only
     because it is useful to assert on in tests, never because a caller need branch on it."""
 

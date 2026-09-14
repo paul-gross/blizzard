@@ -2,7 +2,7 @@
 # what was seen against the routine's live findings, propose responses, deliver.
 #
 # Packaged from the prebaked plan artifact at
-# blizzard-product:/plans/garden/artifacts/garden-routine/ (the plan is frozen; the
+# blizzard-product:/delivered/garden/artifacts/garden-routine/ (the plan is frozen; the
 # corrections this copy carries over it are recorded in ./README.md). Conforms to the
 # canonical authoring schema (`blizzard-context:/domain/graphs.md`): fused choice/edge
 # entries, prompts as file references inlined at mint, retries escaping to escalation, a

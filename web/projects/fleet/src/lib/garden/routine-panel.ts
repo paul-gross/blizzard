@@ -79,7 +79,7 @@ export interface RoutinePanelVm {
 
 /**
  * The gardening routine panel's single-routine detail, as three stacked
- * `fleet-kit-panel`s (blizzard-product:/plans/garden/user-interface.md §Declaring
+ * `fleet-kit-panel`s (blizzard-product:/delivered/garden/user-interface.md §Declaring
  * and running a routine): **Routine** — what the routine *is*, its record plus the
  * Run action; **Activity** — what it *has done*, the inflow/outflow trend,
  * measurements, and last-swept table, all runtime observations rather than routine

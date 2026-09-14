@@ -1,7 +1,7 @@
 """Finding wire shapes (blizzard#390) — the candidate, the delta ops, and the read view.
 
 Both this and ``blizzard.wire.garden_proposal`` are the platform's own shapes
-(blizzard-product:/plans/garden/machinery.md §Where the formats live): a garden graph
+(blizzard-product:/delivered/garden/machinery.md §Where the formats live): a garden graph
 never carries its own copy. Nothing in production writes these yet — delivery is a
 sibling issue; this is the format it will validate against."""
 

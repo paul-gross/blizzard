@@ -1,6 +1,6 @@
 # The packaged garden-routine graph
 
-The packaged copy of the prebaked plan artifact at `blizzard-product:/plans/garden/artifacts/garden-routine/`. The plan
+The packaged copy of the prebaked plan artifact at `blizzard-product:/delivered/garden/artifacts/garden-routine/`. The plan
 froze when this shipped; a correction the graph needs to mint or to run lands here and is recorded below, never in the
 plan.
 

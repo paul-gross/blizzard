@@ -14,7 +14,7 @@ import { hubFindingKey, hubFindingsBucketKey, hubFindingsKey } from '../query-ke
  * at a time": a garden proposal carries finding *ids* only
  * (`GardenProposalView.findings`), so the docket detail's evidence table reads each
  * one live rather than trusting a copy the proposal itself might carry
- * (`blizzard-product:/plans/garden/user-interface.md` §The docket). One `injectQuery`
+ * (`blizzard-product:/delivered/garden/user-interface.md` §The docket). One `injectQuery`
  * whose `queryFn` fans the id list out and joins it — the id list itself is reactive
  * (re-derived per selected proposal), and Angular's injection context cannot vary a
  * fixed number of `injectQuery` calls at runtime the way a per-id call would need.

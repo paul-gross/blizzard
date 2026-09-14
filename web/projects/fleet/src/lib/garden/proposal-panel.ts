@@ -92,7 +92,7 @@ export interface ProposalPanelVm {
 
 /**
  * The garden proposal docket's detail panel — the case as prose, the closure record
- * once one exists, and the evidence table (`blizzard-product:/plans/garden/user-
+ * once one exists, and the evidence table (`blizzard-product:/delivered/garden/user-
  * interface.md` §The docket). Presentational only: renders exactly the view model
  * and evidence rows it is handed and injects no query of its own — the container
  * resolves the live finding reads and the accepted work item read

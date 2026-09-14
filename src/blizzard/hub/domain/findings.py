@@ -164,7 +164,7 @@ class IReadFindingRepository(Protocol):
 
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """A routine's findings under one scope
-        (blizzard-product:/plans/garden/machinery.md §Managing findings and proposals) —
+        (blizzard-product:/delivered/garden/machinery.md §Managing findings and proposals) —
         live only, unless `include_gone` (D3), which also surfaces every exited finding,
         not just a merely `gone` one."""
         ...
@@ -189,7 +189,7 @@ class IReadFindingRepository(Protocol):
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name`
-        (blizzard-product:/plans/garden/machinery.md §What the store buys) — a count,
+        (blizzard-product:/delivered/garden/machinery.md §What the store buys) — a count,
         never the rows themselves."""
         ...
 
