@@ -48,11 +48,17 @@ def _normalize(path: str) -> str:
 
 
 def _protocol_method_names(proto: type) -> set[str]:
-    """Every non-dunder method declared directly on a ``typing.Protocol`` class body.
+    """Every non-dunder method declared on ``proto`` itself or an inherited ``Protocol`` base.
 
-    Reads ``vars(proto)`` directly (no ``get_protocol_members`` before 3.13); ``IHubClient``
-    extends nothing else, so every non-dunder name in its own ``__dict__`` is an endpoint."""
-    return {name for name in vars(proto) if not name.startswith("_") and callable(getattr(proto, name))}
+    Reads ``vars()`` across the MRO (no ``get_protocol_members`` before 3.13) — ``IHubClient``
+    composes ``IChunkStatusReader`` rather than re-declaring its method (blizzard#521's
+    seam-size narrowing), so an inherited name must count the same as one declared directly."""
+    return {
+        name
+        for klass in proto.__mro__
+        for name in vars(klass)
+        if not name.startswith("_") and callable(getattr(klass, name))
+    }
 
 
 def _assert_ihubclient_endpoint_table_matches_protocol() -> None:

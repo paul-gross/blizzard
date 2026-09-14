@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from blizzard.runner.loop.hub import HubClientError
+from blizzard.runner.loop.internal import http_hub as http_hub_module
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.route import RouteClaim
@@ -243,6 +244,24 @@ def test_chunk_statuses_parses_the_batch_response() -> None:
     found = _client(handler).chunk_statuses(["ch_1", "ch_2"])
     assert set(found) == {"ch_1"}
     assert found["ch_1"].status == "done"
+
+
+@pytest.mark.unit
+def test_chunk_statuses_batches_across_the_query_param_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A primed id set larger than the per-request cap becomes more than one GET, each
+    within the cap — never one URL whose query string grows with the caller's own id
+    count (`drain.py`'s ``_DRAIN_LIMIT`` precedent, applied to the outbound HTTP edge)."""
+    monkeypatch.setattr(http_hub_module, "_CHUNK_STATUSES_BATCH_LIMIT", 2)
+    seen_batches: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        batch = request.url.params.get_list("chunk_id")
+        seen_batches.append(batch)
+        return httpx.Response(200, json=[{"chunk_id": cid, "status": "done", "latest_epoch": 1} for cid in batch])
+
+    found = _client(handler).chunk_statuses(["ch_1", "ch_2", "ch_3"])
+    assert seen_batches == [["ch_1", "ch_2"], ["ch_3"]]
+    assert set(found) == {"ch_1", "ch_2", "ch_3"}
 
 
 @pytest.mark.unit

@@ -16,7 +16,7 @@ def chunk_statuses(chunk_ids: list[str], services: HubServices) -> list[ChunkSta
     ids = list(dict.fromkeys(chunk_ids))
     if not ids:
         return []
-    facts_by_id = services.chunks.facts.load_facts_for(ids)
+    facts_by_id = services.chunks.facts.status_facts_for(ids)
     routes_by_id = services.chunks.route.routes_for(ids)
     decisions_by_id = services.chunks.decisions.live_decisions_for(ids)
 

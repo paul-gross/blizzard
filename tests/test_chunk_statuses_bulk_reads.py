@@ -18,6 +18,7 @@ from blizzard.hub.domain.chunks.decisions import LiveDecisionStatus
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import ChunkFacts, DecisionRow
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
@@ -146,12 +147,12 @@ class _CountingFactsStore(ChunkFactsStore):
 
     def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
         super().__init__(store, clock)
-        self.load_facts_for_calls = 0
+        self.status_facts_for_calls = 0
         self.load_facts_calls = 0
 
-    def load_facts_for(self, chunk_ids) -> dict[str, ChunkFacts]:  # type: ignore[no-untyped-def]
-        self.load_facts_for_calls += 1
-        return super().load_facts_for(chunk_ids)
+    def status_facts_for(self, chunk_ids) -> dict[str, ChunkFacts]:  # type: ignore[no-untyped-def]
+        self.status_facts_for_calls += 1
+        return super().status_facts_for(chunk_ids)
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         self.load_facts_calls += 1
@@ -209,12 +210,42 @@ def test_chunk_statuses_calls_bulk_reads_and_never_the_per_chunk_ones(tmp_path: 
 
     assert resp.status_code == 200, resp.text
     assert len(resp.json()) == len(chunk_ids)
-    assert counting_facts.load_facts_for_calls == 1
+    assert counting_facts.status_facts_for_calls == 1
     assert counting_route.routes_for_calls == 1
     assert counting_decisions.live_decisions_for_calls == 1
     assert counting_facts.load_facts_calls == 0
     assert counting_route.route_of_calls == 0
     assert counting_decisions.decision_for_chunk_calls == 0
+
+
+def test_chunk_statuses_correct_across_a_lowered_batch_size_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every sibling ``*_bulk_reads.py`` test pins a lowered ``batching.BATCH_SIZE`` to
+    prove its bulk read actually batches rather than splicing every id into one
+    unbounded ``IN (...)`` — this is that test for the route's own three bulk-by-id-set
+    reads (facts, routes, live decisions), each exercised through every role
+    ``_seed_batch`` cycles a chunk through."""
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    hub = build_hub(tmp_path)
+    chunk_ids = _seed_batch(hub, 7)  # 3 batches of size 3, 3, 1 under the lowered cap
+
+    resp = hub.client.get("/api/fleet/chunk-statuses", params={"chunk_id": chunk_ids})
+
+    assert resp.status_code == 200, resp.text
+    views_by_id = {v["chunk_id"]: v for v in resp.json()}
+    assert set(views_by_id) == set(chunk_ids)
+    for i, chunk_id in enumerate(chunk_ids):
+        role = i % 4
+        view = views_by_id[chunk_id]
+        if role == 0:
+            assert view["pause"] is not None
+        elif role == 1:
+            assert len(view["restart_epochs"]) == 1
+        elif role == 2:
+            assert view["decision"] is not None
+        else:
+            assert view["cost"]["cost_usd"] == pytest.approx(0.25)
 
 
 def test_an_unknown_chunk_id_is_silently_omitted(tmp_path: Path) -> None:

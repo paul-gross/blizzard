@@ -346,8 +346,9 @@ class Pull(Step):
     def _reconcile_leases(self) -> None:
         """Reconcile every active lease against the hub's view of its chunk — abandon it if the hub
         no longer routes it here, park it if the operator paused it (issue #46), preempt it if a
-        restart moved the chunk out from under it (#370). All three share **one** ``get_chunk``
-        per lease, and a transport failure reads as none of them. The pause branch keys on the
+        restart moved the chunk out from under it (#370). All three share **one** ``ctx.chunk_views.get``
+        per lease — a per-tick cache primed at tick start (blizzard#521), not a fresh hub round trip
+        each time — and a transport failure reads as none of them. The pause branch keys on the
         pause *fact*, which an ask-park masks."""
         ctx = self.ctx
         pause_parked = ctx.stores.pause.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
@@ -378,7 +379,8 @@ class Pull(Step):
 
     def _reconcile_escalations(self) -> None:
         """Close a local escalation on every arm that supersedes one (domain:
-        escalation.md#Supersession) — one ``get_chunk`` each. An escalated lease is already
+        escalation.md#Supersession) — one ``ctx.chunk_views.get`` each, the same per-tick cache
+        read ``_reconcile_leases`` above makes (blizzard#521). An escalated lease is already
         closed, so ``_reconcile_leases`` above never sees it; the fourth arm, this runner's own
         next lease mint, never reaches this read either, filtered out of ``open_escalations()`` by
         ``LIVE_ESCALATION`` before it gets here. The remaining three collapse into one condition —
@@ -414,11 +416,12 @@ class Pull(Step):
                 )
 
     def _reconcile_takeovers(self) -> None:
-        """Close an open takeover whose chunk the hub has ended (issue #291) — one ``get_chunk``
-        each. The takeover fact now authorizes the resumed session's worker verbs (D1), so a
-        chunk the hub ends mid-takeover must not leave that authorization standing forever; this
-        is the second, no-person-drives closer alongside the CLI's own end-PATCH. The mark is
-        what keeps the read hub-free (``bzh:facts-not-status``)."""
+        """Close an open takeover whose chunk the hub has ended (issue #291) — one
+        ``ctx.chunk_views.get`` each, the same per-tick cache read the other two reconcile
+        sweeps make (blizzard#521). The takeover fact now authorizes the resumed session's
+        worker verbs (D1), so a chunk the hub ends mid-takeover must not leave that
+        authorization standing forever; this is the second, no-person-drives closer alongside
+        the CLI's own end-PATCH. The mark is what keeps the read hub-free (``bzh:facts-not-status``)."""
         ctx = self.ctx
         for takeover in ctx.stores.takeover.open_takeovers():
             try:

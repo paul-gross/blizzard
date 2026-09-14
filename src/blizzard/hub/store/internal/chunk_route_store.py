@@ -7,7 +7,7 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy import select
@@ -19,6 +19,7 @@ from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import RouteCreatedFact, RouteHistory, RouteReleasedFact
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import next_route_seq, route_of_conn
 
 _ROUTE_PREFIX = "route"
@@ -57,9 +58,20 @@ class ChunkRouteStore:
             return self._routes(conn, ids)
 
     def _routes(self, conn, chunk_ids: list[str] | None) -> dict[str, Route]:  # type: ignore[no-untyped-def]
-        """Row construction and grouping shared by :meth:`load_all_routes` and
-        :meth:`routes_for` — ``chunk_ids=None`` reads fleet-wide; otherwise every per-table
-        select is scoped by a ``chunk_id.in_(chunk_ids)`` filter."""
+        """:meth:`load_all_routes`/:meth:`routes_for`'s shared entry — ``chunk_ids=None``
+        reads fleet-wide in one pass; otherwise batches through :func:`id_batches` so no
+        single ``IN (...)`` grows with the caller's own id count (``batching.py``'s
+        mandatory cap, the same discipline :meth:`~ChunkFactsStore._load` follows)."""
+        if chunk_ids is None:
+            return self._routes_batch(conn, None)
+        result: dict[str, Route] = {}
+        for batch in id_batches(chunk_ids):
+            result.update(self._routes_batch(conn, batch))
+        return result
+
+    def _routes_batch(self, conn, chunk_ids: Sequence[str] | None) -> dict[str, Route]:  # type: ignore[no-untyped-def]
+        """Row construction and grouping for one batch (or the whole fleet, when
+        ``chunk_ids`` is ``None``) — shared by both of :meth:`_routes`'s branches."""
 
         def scoped(query, column):  # type: ignore[no-untyped-def]
             return query if chunk_ids is None else query.where(column.in_(chunk_ids))

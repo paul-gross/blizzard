@@ -74,6 +74,13 @@ class ReadyQueue:
             return False
         if outcome.won:
             self.ctx.chunk_views.invalidate(chunk_id)  # D5 — a later get() this tick sees the win
+        # A dependency block discovered only here, at claim time, is invisible to the peeked
+        # snapshot's own `blocked` field — strict mode must hold at it exactly as it holds at
+        # a statically-known block (F3), so `entry` stays in `_entries` rather than being
+        # dropped before the outcome that would have vetoed the drop was known.
+        strict_dependency_hold = self.ctx.config.queue_strict and outcome.denied_dependency is not None
+        if not strict_dependency_hold:
+            self._entries.remove(entry)
         if outcome.denied_paused is not None:
             # Refused outright, not beaten in the race (issue #44) — stop filling this tick
             # rather than burn the remaining slots on claims that will be refused the same way.
@@ -92,14 +99,16 @@ class ReadyQueue:
             return True
         if outcome.denied_dependency is not None:
             # Stands on an unmet prerequisite (blizzard#458) — not a race loss either.
-            # Undo the binding and move on; it may become claimable again later.
+            # Undo the binding; reach-ahead moves on since it may become claimable again
+            # later, but strict mode stops the whole run here instead of falling through
+            # past a head that is (dynamically) still blocked.
             _log.info(
                 "route claim denied — unmet prerequisite",
                 chunk_id=chunk_id,
                 prerequisite_chunk_id=outcome.denied_dependency.prerequisite_chunk_id,
             )
             self.ctx.env_release.release_binding(chunk_id, acquired)
-            return True
+            return not strict_dependency_hold
         if outcome.conflict is not None or outcome.claimed is None:
             _log.info("route claim lost the race", chunk_id=chunk_id)
             self.ctx.env_release.release_binding(chunk_id, acquired)  # someone else won — undo our binding
@@ -113,21 +122,19 @@ class ReadyQueue:
 
     def _next(self) -> QueuePeekEntry | None:
         """Pick this runner's entry out of this fill's one peeked snapshot (blizzard#459),
-        dropping it from the local list so a later claim_one() this same Fill.run() moves on
-        rather than re-attempting it. Strict holds at a marked head and yields nothing rather
-        than falling through, exactly as before — an idle tick reads the same as an empty
-        queue at this seam. Reach-ahead (the default) scans for the first unmarked entry."""
+        left in place until ``claim_one()`` knows the outcome and drops it itself (F3) —
+        a later ``claim_one()`` this same ``Fill.run()`` must not silently move past an
+        entry whose outcome is still undetermined. Strict holds at a marked head and
+        yields nothing rather than falling through, exactly as before — an idle tick reads
+        the same as an empty queue at this seam. Reach-ahead (the default) scans for the
+        first unmarked entry."""
         if not self._entries:
             return None
         if self.ctx.config.queue_strict:
             head = self._entries[0]
-            if head.blocked is not None:
-                return None  # not attempted — left in place, matches today's no-fall-through
-            del self._entries[0]
-            return head
-        for i, entry in enumerate(self._entries):
+            return None if head.blocked is not None else head  # not attempted — left in place
+        for entry in self._entries:
             if entry.blocked is None:
-                del self._entries[i]
                 return entry
         return None
 

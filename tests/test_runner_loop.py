@@ -418,6 +418,43 @@ def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path):  # type: i
 
 
 @pytest.mark.unit
+def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(tmp_path):  # type: ignore[no-untyped-def]
+    """review F3: a dependency block discovered only at claim time — not reflected in the
+    peeked snapshot's own ``blocked`` field, unlike ``test_fill_strict_holds_at_a_marked_head``'s
+    statically-known one — must still hold strict mode at that head. With two open slots and
+    a second, unmarked entry behind it, the whole run must stop at the first claim rather
+    than falling through to attempt the second."""
+    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.wire.route import RouteClaimDependencyDenial
+
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [
+        QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0),
+        QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=1),
+    ]
+    hub.claim_outcome = RouteClaimOutcome(
+        denied_dependency=RouteClaimDependencyDenial(chunk_id="ch_1", prerequisite_chunk_id="ch_0")
+    )
+    provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=2, queue_strict=True),
+    )
+
+    Fill(ctx).run()
+
+    assert [c.chunk_id for c in hub.claims] == ["ch_1"]  # ch_2 never attempted — held behind ch_1
+    assert store.list_active_leases() == []
+    assert harness.spawns == []
+
+
+@pytest.mark.unit
 def test_fill_reaches_past_a_marked_head_by_default(tmp_path):  # type: ignore[no-untyped-def]
     """Reach-ahead (blizzard#459), the default: a marked head is skipped for the first
     unmarked entry, at whatever depth in the peeked list."""

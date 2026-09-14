@@ -64,7 +64,23 @@ class RouteClaimOutcome:
         return self.claimed is not None
 
 
-class IHubClient(Protocol):
+class IChunkStatusReader(Protocol):
+    """The narrow seam :mod:`blizzard.runner.loop.chunk_status_cache`'s two ``IChunkViews``
+    bindings actually call — one method of :class:`IHubClient`'s thirteen (the seam-size
+    ceiling: a new consumer re-types to the capability it calls, not the whole wide client).
+    ``IHubClient`` composes this rather than re-declaring the method (one contract, not two
+    copies free to drift); ``HttpHubClient``/``FakeHub`` satisfy it structurally, with no
+    changes of their own."""
+
+    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
+        """``GET /api/fleet/chunk-statuses`` (repeatable ``chunk_id``) — every requested id
+        present in the store, keyed by ``chunk_id``; an id the hub doesn't know is simply
+        absent, never an error. A transport/5xx failure raises ``HubClientError`` for the
+        whole call."""
+        ...
+
+
+class IHubClient(IChunkStatusReader, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
     def peek_queue(self) -> QueuePeekResponse:
@@ -99,13 +115,6 @@ class IHubClient(Protocol):
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
         """``GET /api/fleet/chunks/{id}/envelope`` — the idempotent envelope re-read."""
-        ...
-
-    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
-        """``GET /api/fleet/chunk-statuses`` (repeatable ``chunk_id``) — every requested id
-        present in the store, keyed by ``chunk_id``; an id the hub doesn't know is simply
-        absent, never an error. A transport/5xx failure raises ``HubClientError`` for the
-        whole call."""
         ...
 
     def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
@@ -146,18 +155,4 @@ class IHubClient(Protocol):
         """``POST /api/fleet/chunks/{id}/route-token`` — rotate the chunk's route
         capability token (issue #84b). Why it exists: `src/blizzard/hub/domain/claim.py`'s
         ``ClaimService.rekey``."""
-        ...
-
-
-class IChunkStatusReader(Protocol):
-    """The narrow seam :mod:`blizzard.runner.loop.chunk_status_cache`'s two ``IChunkViews``
-    bindings actually call — one method of :class:`IHubClient`'s thirteen (the seam-size
-    ceiling: a new consumer re-types to the capability it calls, not the whole wide client).
-    ``HttpHubClient``/``FakeHub`` satisfy this structurally, with no changes of their own."""
-
-    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
-        """``GET /api/fleet/chunk-statuses`` (repeatable ``chunk_id``) — every requested id
-        present in the store, keyed by ``chunk_id``; an id the hub doesn't know is simply
-        absent, never an error. A transport/5xx failure raises ``HubClientError`` for the
-        whole call."""
         ...

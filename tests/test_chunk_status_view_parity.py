@@ -152,6 +152,32 @@ def test_decision_resolved_not_transitioned_chunk_field_parity(tmp_path: Path) -
     _assert_parity(hub, chunk_id)
 
 
+def test_decision_closed_by_restart_chunk_field_parity(tmp_path: Path) -> None:
+    """The decision-closure check has four arms (transitions, migrations, escalations,
+    restarts — issue #370); every other decision test here closes one via a transition.
+    This one closes it via a restart instead, so the shared closure rule
+    (`ChunkDecisionsStore._decision_closure_ids`) is proven on a second arm, not just the
+    one every sibling test happens to exercise."""
+    hub = build_hub(tmp_path)
+    build_node_id = _build_node_id(hub)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "7"}])
+    _claim(hub, chunk_id)
+    parked = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": build_node_id, "artifacts": []},
+    )
+    assert parked.status_code == 200, parked.text
+    assert parked.json()["outcome"] == "parked_at_gate"
+
+    restarted = hub.client.post(f"/api/chunks/{chunk_id}/restart", json={"node": "build"})
+    assert restarted.status_code == 202, restarted.text
+
+    detail = _detail_for(hub, chunk_id)
+    assert detail["decision"] is None  # closed by the restart, not a transition
+    assert detail["restarts"][0]["decision_id"] is not None
+    _assert_parity(hub, chunk_id)
+
+
 def test_usage_cost_chunk_field_parity(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     build_node_id = _build_node_id(hub)

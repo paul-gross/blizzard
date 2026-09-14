@@ -41,6 +41,11 @@ _FLEET_API = "/api/fleet"
 #: Overrides the shared client's own default timeout for this one call (issue #246).
 _TRANSCRIPT_PUSH_TIMEOUT_SECONDS = 5.0
 
+#: Caps a single ``chunk-statuses`` GET's ``chunk_id`` query-param count — a tick's primed id
+#: set (``tick.py``'s ``_primed_chunk_ids``) carries no fleet-wide bound, so one oversized
+#: batch must not become one oversized URL (`drain.py`'s ``_DRAIN_LIMIT`` precedent).
+_CHUNK_STATUSES_BATCH_LIMIT = 500
+
 
 class HttpHubClient:
     """The runner's hub API client over an injected ``httpx.Client``."""
@@ -95,9 +100,14 @@ class HttpHubClient:
         return NodeEnvelope.model_validate(resp.json())
 
     def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
-        resp = self._get(f"{_FLEET_API}/chunk-statuses", params={"chunk_id": list(chunk_ids)})
-        views = TypeAdapter(list[ChunkStatusView]).validate_python(resp.json())
-        return {v.chunk_id: v for v in views}
+        ids = list(dict.fromkeys(chunk_ids))
+        result: dict[str, ChunkStatusView] = {}
+        for start in range(0, len(ids), _CHUNK_STATUSES_BATCH_LIMIT):
+            batch = ids[start : start + _CHUNK_STATUSES_BATCH_LIMIT]
+            resp = self._get(f"{_FLEET_API}/chunk-statuses", params={"chunk_id": batch})
+            for view in TypeAdapter(list[ChunkStatusView]).validate_python(resp.json()):
+                result[view.chunk_id] = view
+        return result
 
     def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
         path = f"{_FLEET_API}/chunks/{chunk_id}/hub-advance"
