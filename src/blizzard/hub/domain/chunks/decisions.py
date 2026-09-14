@@ -3,13 +3,25 @@ decision and its first-write-wins resolution."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
+
+
+@dataclass(frozen=True)
+class LiveDecisionStatus:
+    """The decision fields the runner tick reads (blizzard#521) — no choices, no docket."""
+
+    decision_id: str
+    node_id: str
+    epoch: int
+    resolved_choice: str | None
+    transitioned: bool
 
 
 class IReadChunkDecisionsRepository(Protocol):
@@ -36,6 +48,13 @@ class IReadChunkDecisionsRepository(Protocol):
         """Every requested chunk's docket, keyed by chunk id, as ``decision_for_chunk``
         would carry it — a chunk with no pending proposals maps to an empty list, never
         an absent key."""
+        ...
+
+    def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
+        """Each given chunk's newest not-yet-transitioned decision, lean (blizzard#521) —
+        the by-id-set bulk counterpart to :meth:`decision_for_chunk`, set-based
+        throughout rather than :meth:`get_decision`'s per-decision docket/choices work.
+        A chunk with no live decision is absent from the dict."""
         ...
 
 

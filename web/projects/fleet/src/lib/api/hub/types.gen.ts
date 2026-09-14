@@ -694,6 +694,35 @@ export type ChunkCompleteRequest = {
 };
 
 /**
+ * ChunkDecisionStatusView
+ *
+ * The slice of a live gate decision the runner tick reads (blizzard#521) — no
+ * ``choices``, no ``docket``: those drive a person's own read, not the loop's.
+ */
+export type ChunkDecisionStatusView = {
+    /**
+     * Decision Id
+     */
+    decision_id: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Resolved Choice
+     */
+    resolved_choice?: string | null;
+    /**
+     * Transitioned
+     */
+    transitioned?: boolean;
+};
+
+/**
  * ChunkDeleteRequest
  *
  * Delete a chunk — records who deleted it (issue #364).
@@ -1101,6 +1130,37 @@ export type ChunkRestartRequest = {
  * The derived chunk statuses. Never stored — always a query result.
  */
 export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'waiting_on_human' | 'needs_human' | 'paused' | 'stopped' | 'done';
+
+/**
+ * ChunkStatusView
+ *
+ * One chunk's tick-relevant status (blizzard#521) — the slim batch projection
+ * ``GET /api/fleet/chunk-statuses`` returns, carrying only what the runner loop's nine
+ * per-chunk reads use. Not ``ChunkSummary``: this is the runner's own read, not the
+ * board's fleet list.
+ */
+export type ChunkStatusView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    cost?: ChunkUsageTotalView;
+    decision?: ChunkDecisionStatusView | null;
+    /**
+     * Latest Epoch
+     */
+    latest_epoch?: number | null;
+    pause?: PauseView | null;
+    /**
+     * Restart Epochs
+     */
+    restart_epochs?: Array<number>;
+    /**
+     * Route Runner Id
+     */
+    route_runner_id?: string | null;
+    status: ChunkStatus;
+};
 
 /**
  * ChunkStopRequest
@@ -7285,6 +7345,38 @@ export type GetFindingApiFindingsFindingIdGetResponses = {
 };
 
 export type GetFindingApiFindingsFindingIdGetResponse = GetFindingApiFindingsFindingIdGetResponses[keyof GetFindingApiFindingsFindingIdGetResponses];
+
+export type GetChunkStatusesApiFleetChunkStatusesGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: Array<string>;
+    };
+    url: '/api/fleet/chunk-statuses';
+};
+
+export type GetChunkStatusesApiFleetChunkStatusesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkStatusesApiFleetChunkStatusesGetError = GetChunkStatusesApiFleetChunkStatusesGetErrors[keyof GetChunkStatusesApiFleetChunkStatusesGetErrors];
+
+export type GetChunkStatusesApiFleetChunkStatusesGetResponses = {
+    /**
+     * Response Get Chunk Statuses Api Fleet Chunk Statuses Get
+     *
+     * Successful Response
+     */
+    200: Array<ChunkStatusView>;
+};
+
+export type GetChunkStatusesApiFleetChunkStatusesGetResponse = GetChunkStatusesApiFleetChunkStatusesGetResponses[keyof GetChunkStatusesApiFleetChunkStatusesGetResponses];
 
 export type GetChunkApiFleetChunksChunkIdGetData = {
     body?: never;

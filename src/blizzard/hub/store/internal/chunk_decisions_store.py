@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy import Connection, select
@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.artifacts import ArtifactRow
-from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 from blizzard.hub.store import schema as s
@@ -60,6 +60,52 @@ class ChunkDecisionsStore:
                 if not decision.transitioned:
                     return decision
             return None
+
+    def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
+        """See :meth:`~blizzard.hub.domain.chunks.decisions.IReadChunkDecisionsRepository.live_decisions_for`
+        (blizzard#521) — set-based throughout, unlike :meth:`_decision_row`'s per-decision
+        docket/choices reads: one bulk decisions select, one bulk resolutions select, and
+        the "transitioned" closure check as four bulk ``.in_()`` selects (mirroring
+        :meth:`_decision_row`'s four arms) unioned into one set. Newest-first per chunk,
+        same "newest not-yet-transitioned" semantics as :meth:`decision_for_chunk`."""
+        ids = list(chunk_ids)
+        if not ids:
+            return {}
+        with self._store.read("live_decisions_for") as conn:
+            rows = conn.execute(
+                select(s.decisions).where(s.decisions.c.chunk_id.in_(ids)).order_by(s.decisions.c.submitted_at.desc())
+            ).all()
+            if not rows:
+                return {}
+            decision_ids = [row.decision_id for row in rows]
+            resolved_choice_of = {
+                r.decision_id: r.choice
+                for r in conn.execute(
+                    select(s.decision_resolutions.c.decision_id, s.decision_resolutions.c.choice).where(
+                        s.decision_resolutions.c.decision_id.in_(decision_ids)
+                    )
+                ).all()
+            }
+            transitioned_ids: set[str] = set()
+            for table in (s.transitions, s.chunk_migrations, s.escalations, s.chunk_restarts):
+                transitioned_ids |= {
+                    r.decision_id
+                    for r in conn.execute(
+                        select(table.c.decision_id).where(table.c.decision_id.in_(decision_ids))
+                    ).all()
+                }
+            result: dict[str, LiveDecisionStatus] = {}
+            for row in rows:  # newest-first; the newest not-yet-transitioned decision is live
+                if row.chunk_id in result or row.decision_id in transitioned_ids:
+                    continue
+                result[row.chunk_id] = LiveDecisionStatus(
+                    decision_id=row.decision_id,
+                    node_id=row.node_id,
+                    epoch=row.epoch,
+                    resolved_choice=resolved_choice_of.get(row.decision_id),
+                    transitioned=False,
+                )
+            return result
 
     def list_open_decisions(self) -> list[DecisionRow]:
         with self._store.read("list_open_decisions") as conn:

@@ -7,6 +7,7 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from datetime import datetime
 
 from sqlalchemy import select
@@ -57,6 +58,67 @@ class ChunkRouteStore:
             newest_released: dict[str, RouteReleasedFact] = {}
             for r in conn.execute(
                 select(s.route_released.c.chunk_id, s.route_released.c.released_at, s.route_released.c.seq)
+            ).all():
+                existing = newest_released.get(r.chunk_id)
+                if existing is None or (r.released_at, r.seq) > (existing.released_at, existing.seq):
+                    newest_released[r.chunk_id] = RouteReleasedFact(released_at=r.released_at, seq=r.seq)
+
+            live_chunk_ids = {
+                chunk_id
+                for chunk_id, created in newest_created.items()
+                if RouteHistory([created], [newest_released[chunk_id]] if chunk_id in newest_released else []).newest
+                is not None
+            }
+            if not live_chunk_ids:
+                return {}
+
+            route_ids = {route_id_of[chunk_id] for chunk_id in live_chunk_ids}
+            env_ids: dict[str, list[str]] = defaultdict(list)
+            for e in conn.execute(
+                select(s.route_environments.c.route_id, s.route_environments.c.environment_id).where(
+                    s.route_environments.c.route_id.in_(route_ids)
+                )
+            ).all():
+                env_ids[e.route_id].append(e.environment_id)
+
+            return {
+                chunk_id: Route(
+                    chunk_id=chunk_id,
+                    runner_id=runner_of[chunk_id],
+                    workspace_id=workspace_of[chunk_id],
+                    environment_ids=env_ids[route_id_of[chunk_id]],
+                    created_at=newest_created[chunk_id].created_at,
+                    route_id=route_id_of[chunk_id],
+                )
+                for chunk_id in live_chunk_ids
+            }
+
+    def routes_for(self, chunk_ids: Iterable[str]) -> dict[str, Route]:
+        """See :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.routes_for`
+        (blizzard#521) — :meth:`load_all_routes`'s own shape, scoped to ``ids`` by a
+        ``chunk_id.in_(ids)`` filter added to every per-table select rather than a
+        fleet-wide one."""
+        ids = list(chunk_ids)
+        if not ids:
+            return {}
+        with self._store.read("routes_for") as conn:
+            newest_created: dict[str, RouteCreatedFact] = {}
+            route_id_of: dict[str, str] = {}
+            runner_of: dict[str, str] = {}
+            workspace_of: dict[str, str] = {}
+            for r in conn.execute(select(s.route_created).where(s.route_created.c.chunk_id.in_(ids))).all():
+                existing = newest_created.get(r.chunk_id)
+                if existing is None or (r.created_at, r.seq) > (existing.created_at, existing.seq):
+                    newest_created[r.chunk_id] = RouteCreatedFact(created_at=r.created_at, seq=r.seq)
+                    route_id_of[r.chunk_id] = r.route_id
+                    runner_of[r.chunk_id] = r.runner_id
+                    workspace_of[r.chunk_id] = r.workspace_id
+
+            newest_released: dict[str, RouteReleasedFact] = {}
+            for r in conn.execute(
+                select(s.route_released.c.chunk_id, s.route_released.c.released_at, s.route_released.c.seq).where(
+                    s.route_released.c.chunk_id.in_(ids)
+                )
             ).all():
                 existing = newest_released.get(r.chunk_id)
                 if existing is None or (r.released_at, r.seq) > (existing.released_at, existing.seq):

@@ -32,6 +32,7 @@ _NEW_PATHS = [
     # The runner-authenticated fleet router (issue #87) — mounted once with
     # `require_runner_principal` at router level.
     "/api/fleet/queue/peek",
+    "/api/fleet/chunk-statuses",
     "/api/fleet/chunks/{chunk_id}",
     "/api/fleet/chunks/{chunk_id}/work-items",
     "/api/fleet/chunks/{chunk_id}/pause",
