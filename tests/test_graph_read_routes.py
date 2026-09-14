@@ -119,9 +119,9 @@ def test_list_graphs_marks_newest_per_name_effective(tmp_path: Path) -> None:
 
 
 def test_list_graphs_over_retired_and_superseded_mints_renders_todays_shape(tmp_path: Path) -> None:
-    """``GET /api/graphs`` reads the listing-shape projection now (issue #421/bulk-read
-    adoption, Phase 3) — proves its response is unchanged over a fixture mixing a
-    retired mint, a superseded-but-live mint, and the newest effective one."""
+    """``GET /api/graphs`` reads the listing-shape projection (issue #421) — proves its
+    response is unchanged over a fixture mixing a retired mint, a superseded-but-live
+    mint, and the newest effective one."""
     hub = build_hub(tmp_path)
     old_id = _mint(hub, _GRAPH_A)
     hub.clock.advance(timedelta(hours=1))

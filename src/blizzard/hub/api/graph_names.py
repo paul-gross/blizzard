@@ -25,14 +25,9 @@ def graph_by_ref(graphs: IReadGraphRepository, ref: str) -> Graph:
 @dataclass
 class GraphNames:
     """The graph summaries and node names one read resolves, primed in bulk and
-    memoised by id — including the misses. Backed by :class:`IReadGraphRepository`'s
-    narrow projections, never :meth:`IReadGraphRepository.get`: a full :class:`Graph`
-    is never held here (issue #421/bulk-read adoption).
-
-    A whole-fleet or whole-history read calls :meth:`prime` once with every graph id
-    it will need, so a fleet's or a chunk's distinct graphs are read once each rather
-    than once per chunk or history step; an id nothing primed still resolves lazily,
-    one graph at a time, the first time it's asked for."""
+    memoised by id (issue #421) — backed by :class:`IReadGraphRepository`'s narrow
+    projections, never a full :class:`Graph`. An id nothing primed still resolves
+    lazily, one graph at a time, the first time it's asked for."""
 
     graphs: IReadGraphRepository
     _summaries: dict[str, GraphSummary | None] = field(default_factory=dict)
@@ -40,8 +35,9 @@ class GraphNames:
 
     def prime(self, graph_ids: Iterable[str | None]) -> None:
         """Resolve every id in ``graph_ids`` not already resolved, through one
-        ``load_graph_summaries`` call and one ``load_node_names`` call. ``None``
-        entries (an unset pin) are dropped rather than looked up."""
+        ``load_graph_summaries`` call and one ``load_node_names`` call, so a fleet's or a
+        chunk's distinct graphs are read once each regardless of caller count. ``None``
+        entries (an unset pin) are dropped, not looked up."""
         unresolved = sorted({graph_id for graph_id in graph_ids if graph_id is not None} - self._summaries.keys())
         if not unresolved:
             return

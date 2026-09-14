@@ -3,6 +3,7 @@ holds, and merge-group survivorship over them."""
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Protocol
@@ -16,10 +17,26 @@ def resolve_live_holder(chunk_ids: Iterable[str], statuses: Mapping[str, ChunkSt
     the lowest id among ``chunk_ids`` whose status is not terminal — more than one live
     holder shouldn't happen, so the lowest id picks deterministically. ``chunk_ids`` is
     assumed already stripped of ephemeral holders; a chunk id absent from ``statuses``
-    reads as :class:`ChunkStatus.READY` (unrecorded facts), the same fallback a per-chunk
-    status read used before this rule had its own function."""
+    reads as :class:`ChunkStatus.READY` (unrecorded facts)."""
     live = sorted(c for c in chunk_ids if statuses.get(c, ChunkStatus.READY) not in TERMINAL_STATUSES)
     return live[0] if live else None
+
+
+def resolve_live_holders(
+    pointer_chunk_ids: Iterable[tuple[WorkRef, str]], statuses: Mapping[str, ChunkStatus]
+) -> dict[WorkRef, str]:
+    """`resolve_live_holder`'s batched sibling: groups ``pointer_chunk_ids`` by pointer,
+    then resolves each group's holder; a pointer with no live holder has no entry at all,
+    never mapped to None."""
+    candidates: dict[WorkRef, list[str]] = defaultdict(list)
+    for pointer, chunk_id in pointer_chunk_ids:
+        candidates[pointer].append(chunk_id)
+    result: dict[WorkRef, str] = {}
+    for pointer, chunk_ids in candidates.items():
+        holder = resolve_live_holder(chunk_ids, statuses)
+        if holder is not None:
+            result[pointer] = holder
+    return result
 
 
 class IReadChunkWorkRefsRepository(Protocol):

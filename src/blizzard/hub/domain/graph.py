@@ -614,7 +614,7 @@ class GraphSummary:
 class Mint:
     """One minted graph, ordered by when it was minted. Holds only a
     :class:`GraphSummary` — the ``graph_id``/``name``/``created_at`` fields this reads
-    — never a fully reified :class:`Graph` (issue #421/bulk-read adoption)."""
+    — never a fully reified :class:`Graph` (issue #421)."""
 
     graph: GraphSummary
 

@@ -78,8 +78,7 @@ class _LiveHoldersNotInjected(Enum):
     TOKEN = 0
 
 
-#: :meth:`ChunkView.of`'s default: no live-holder map was given, so :meth:`ChunkView.pointer_views`
-#: resolves one lazily with a single bulk call over the chunk's own pointers.
+#: :meth:`ChunkView.of`'s default: no live-holder map was given, so it resolves lazily.
 _LIVE_HOLDERS_NOT_INJECTED: Final = _LiveHoldersNotInjected.TOKEN
 
 
@@ -109,9 +108,7 @@ class ChunkView:
     facts: ChunkFacts
     names: GraphNames
     route: Route | None | _RouteNotInjected = _ROUTE_NOT_INJECTED
-    #: Every pointer's live holder (issue #421/bulk-read adoption) — the caller's own
-    #: already-resolved map; :meth:`of` leaves it uninjected and :meth:`pointer_views`
-    #: resolves one lazily, the same shape :attr:`route` takes.
+    #: Every pointer's live holder — the caller's own already-resolved map (issue #421).
     live_holders: dict[WorkRef, str] | _LiveHoldersNotInjected = _LIVE_HOLDERS_NOT_INJECTED
     #: The chunk's blocked marking (issue #457) — the caller's own already-derived value;
     #: neither constructor derives it itself, so a caller that has no use for it (every verb
@@ -157,8 +154,8 @@ class ChunkView:
         blocked: BlockedView | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of` (issue #421): a fan-out list read injects
-        already-fetched facts, route and pointer live-holders instead of calling
-        ``load_facts``/``route_of``/``live_holders`` per chunk. ``route=None`` means "no live
+        already-fetched facts, route and pointer live-holders, skipping a per-chunk
+        ``load_facts``/``route_of``/``live_holders`` call. ``route=None`` means "no live
         route"; :meth:`of` leaves both uninjected."""
         return cls(
             services=services,
@@ -223,12 +220,10 @@ class ChunkView:
         return node_id, self.names.node_name(self.chunk.graph_id, node_id)
 
     def pointer_views(self) -> list[WorkRefView]:
-        """Each pointer with its board-legible label and browser URL — both null when no
-        configured source names ``pointer.source``.
-
-        Each pointer resolves to its own binding by name, so a chunk's pointers need not
-        all share one source. Liveness for every pointer resolves through one bulk call
-        (:meth:`_resolved_live_holders`) rather than once per pointer."""
+        """Each pointer with its board-legible label and browser URL, both null when no
+        configured source names ``pointer.source``; each resolves to its own binding by
+        name, so a chunk's pointers need not all share one source. Liveness resolves via
+        :meth:`_resolved_live_holders`'s one bulk call."""
         holders = self._resolved_live_holders()
         views: list[WorkRefView] = []
         for p in self.chunk.work_refs:
@@ -313,10 +308,10 @@ class ChunkView:
 
     def _pending(self) -> PendingView | None:
         """The only place a whole-fleet or whole-history read still reifies a full
-        :class:`Graph` (issue #421/bulk-read adoption) — the poll policy it needs lives
-        only on a :class:`Node`, not the :class:`GraphSummary`/name projection
-        :attr:`names` otherwise resolves through, and it's reached only when a hub-node
-        poll is actually pending."""
+        :class:`Graph` (issue #421) — the poll policy it needs lives only on a
+        :class:`Node`, not the :class:`GraphSummary`/name projection :attr:`names`
+        otherwise resolves through, and it's reached only when a hub-node poll is
+        actually pending."""
         pending = self.facts.hub_node_pending()
         if pending is None:
             return None

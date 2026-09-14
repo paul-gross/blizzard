@@ -463,8 +463,8 @@ class GraphStore:
     def _reify(self, conn, graph_row) -> Graph:  # type: ignore[no-untyped-def]
         node_rows = conn.execute(select(graph_nodes).where(graph_nodes.c.graph_id == graph_row.graph_id)).all()
         node_ids = {nr.node_id for nr in node_rows}
-        # One `graph_choices` select over every node id, grouped in Python — the
-        # `graph_edges` read just below's own shape, rather than one query per node.
+        # One `graph_choices` select over every node id, grouped in Python — matching
+        # the `graph_edges` read just below's own shape.
         choice_rows = conn.execute(select(graph_choices).where(graph_choices.c.node_id.in_(node_ids))).all()
         choices_by_node: dict[str, list[Choice]] = defaultdict(list)
         for cr in choice_rows:

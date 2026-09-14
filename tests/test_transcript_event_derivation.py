@@ -210,10 +210,9 @@ class _CountingRecordStore(ChunkRecordStore):
 def test_sweep_resolves_graph_pins_with_one_load_facts_for_and_one_graph_id_of_many_call(
     fixture: _Fixture,
 ) -> None:
-    """A pass over several segments spanning several chunks — including two segments on
-    the same chunk — resolves every graph pin through one bulk `load_facts_for` call and
-    one bulk `graph_id_of_many` call, never the per-chunk `load_facts`/`record.get`
-    (Phase 4)."""
+    """A pass over several segments spanning several chunks — including two on the same
+    chunk — resolves every graph pin through one bulk `load_facts_for` call and one bulk
+    `graph_id_of_many` call, never the per-chunk `load_facts`/`record.get`."""
     for i in range(3):
         fixture.mint_chunk(f"ch_multi_{i}")
         fixture.segments.insert_accepted(

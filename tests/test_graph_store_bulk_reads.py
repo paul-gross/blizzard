@@ -72,8 +72,7 @@ def test_load_graph_summaries_matches_get_across_two_graphs_including_a_retired_
 
     result = store.load_graph_summaries([alpha.graph_id, beta.graph_id, "gr_never_minted"])
 
-    # Graphs are immutable/insert-only — retirement does not exclude a graph here,
-    # unlike the ephemeral-chunk exclusion `chunk_rows.graph_id_of_batch` performs.
+    # Graphs are immutable/insert-only — retirement does not exclude a graph here.
     assert {gid: s.name for gid, s in result.items()} == {alpha.graph_id: alpha.name, beta.graph_id: beta.name}
     for graph_id, summary in result.items():
         loaded = store.get(graph_id)
@@ -122,15 +121,15 @@ def test_load_node_names_matches_node_by_id_across_two_graphs(tmp_path: Path) ->
 
 def test_load_node_names_keys_a_shared_node_id_per_graph_so_the_wrong_graph_misses(tmp_path: Path) -> None:
     """A node id looked up against a graph that doesn't hold it must not fall back to
-    another graph's node of the same id — the reshape's whole point (issue #421/
-    bulk-read adoption)."""
+    another graph's node of the same id (issue #421)."""
     store, _ = _store(tmp_path)
     alpha = _mint(store, "gr_1", "alpha", node_names=["build"], created_at=_T0)
-    other_graph_id = "gr_2"
-    result = store.load_node_names([alpha.graph_id])
+    beta = _mint(store, "gr_2", "beta", node_names=["deploy"], created_at=_T0)
+
+    result = store.load_node_names([alpha.graph_id, beta.graph_id])
 
     assert result[alpha.graph_id][alpha.nodes[0].node_id] == "build"
-    assert result.get(other_graph_id, {}).get(alpha.nodes[0].node_id) is None
+    assert result[beta.graph_id].get(alpha.nodes[0].node_id) is None
 
 
 def test_load_node_names_of_no_ids_is_empty(tmp_path: Path) -> None:
@@ -171,9 +170,9 @@ def test_list_summaries_agrees_with_list_all_newest_first(tmp_path: Path) -> Non
 
 
 def test_reify_returns_equal_choices_and_its_query_count_does_not_grow_with_node_count(tmp_path: Path) -> None:
-    """``get``'s reification batches its ``graph_choices`` read across every node id
-    (Phase 3) rather than issuing one per node — proves both that ``get`` still returns
-    the same choices and that its query count stays flat as node count grows."""
+    """``get``'s reification batches its ``graph_choices`` read across every node id —
+    proves both that ``get`` still returns the same choices and that its query count
+    stays flat as node count grows."""
     store, engine = _store(tmp_path)
     few = _mint(store, "gr_few", "few", node_names=["a", "b"], created_at=_T0)
     many = _mint(store, "gr_many", "many", node_names=[f"n{i}" for i in range(8)], created_at=_T0)

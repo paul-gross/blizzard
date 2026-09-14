@@ -15,7 +15,7 @@ from sqlalchemy import select
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository, resolve_live_holder
+from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository, resolve_live_holders
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
@@ -68,10 +68,9 @@ class ChunkWorkRefsStore:
         for pointer in pointers:
             refs_by_source[pointer.source].append(pointer.ref)
 
-        candidates: dict[WorkRef, list[str]] = defaultdict(list)
+        pairs: list[tuple[WorkRef, str]] = []
         with self._store.read("live_holders") as conn:
-            # Unfiltered — the same whole-fleet scan `live_work_refs` already pays,
-            # kept unbatched here too rather than re-derived per pointer.
+            # Unfiltered — the same whole-fleet scan `live_work_refs` already pays.
             ephemeral = ephemeral_ids(conn)
             for source, refs in refs_by_source.items():
                 for batch in id_batches(refs):
@@ -83,19 +82,13 @@ class ChunkWorkRefsStore:
                     for row in rows:
                         if row.chunk_id in ephemeral:
                             continue  # grouped away or deleted; the pointer moved on or is withdrawn
-                        candidates[WorkRef(source=source, ref=row.ref)].append(row.chunk_id)
+                        pairs.append((WorkRef(source=source, ref=row.ref), row.chunk_id))
 
         # Called after the read connection above has closed, not nested inside it.
-        candidate_ids = sorted({chunk_id for chunk_ids in candidates.values() for chunk_id in chunk_ids})
+        candidate_ids = sorted({chunk_id for _, chunk_id in pairs})
         facts_by_id = self._facts.load_facts_for(candidate_ids)
         statuses = {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
-
-        result: dict[WorkRef, str] = {}
-        for pointer, chunk_ids in candidates.items():
-            holder = resolve_live_holder(chunk_ids, statuses)
-            if holder is not None:
-                result[pointer] = holder
-        return result
+        return resolve_live_holders(pairs, statuses)
 
     def add_work_refs(self, chunk_id: str, pointers: list[WorkRef], *, at: datetime) -> None:
         """Fold pointers into the survivor of a group, de-duped by (source, ref)."""

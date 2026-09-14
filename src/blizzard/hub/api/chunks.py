@@ -7,7 +7,6 @@ stored column. The work-item read is a pass-through whose contents are never sto
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -26,7 +25,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.chunks.work_refs import resolve_live_holder
+from blizzard.hub.domain.chunks.work_refs import resolve_live_holders
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable
 from blizzard.hub.domain.dependencies import ChunkNeighbor, derive_blocked_prerequisites, derive_chunk_neighborhood
@@ -146,33 +145,21 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
 def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list[ChunkSummary]:
     """The fleet chunk list — derived status per chunk.
 
-    Reads the fleet's facts and routes with one bulk query each rather than fanning
-    `load_facts`/`route_of` out per chunk (issue #421) — the `FleetPulse.view()` shape
-    (issue #374), extended to routes and to the rendered row."""
+    Reads the fleet's facts and routes with one bulk query each: the `FleetPulse.view()`
+    shape (issue #374), extended to routes and to the rendered row (issue #421)."""
     names = GraphNames(services.graphs)
     facts = services.chunks.facts.load_all_facts()
     routes = services.chunks.route.load_all_routes()
-    # The dependency edges join the same bulk facts pass at this call site rather than
+    # The dependency edges join the same bulk facts pass at this call site, not
     # inside a store (``bzh:dependency-inversion``, issue #457, D2).
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
     markings = derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
     chunks = services.chunks.record.list_all()
     # One priming call resolves every chunk's pinned graph's name/entry-node/node-names
-    # up front, rather than once per chunk (issue #421/bulk-read adoption).
+    # up front (issue #421).
     names.prime(chunk.graph_id for chunk in chunks)
-    # The live-holder map derives from the chunks and statuses already loaded above — no
-    # further fact load, unlike calling `live_holders` itself (issue #421/bulk-read
-    # adoption); `list_all` already excludes ephemeral chunks, so every candidate here is
-    # non-ephemeral by construction.
-    candidates: dict[WorkRef, list[str]] = defaultdict(list)
-    for chunk in chunks:
-        for p in chunk.work_refs:
-            candidates[p].append(chunk.chunk_id)
-    live_holders = {
-        pointer: holder
-        for pointer, chunk_ids in candidates.items()
-        if (holder := resolve_live_holder(chunk_ids, statuses)) is not None
-    }
+    # Derives from the chunks and statuses already loaded above, no further fact load.
+    live_holders = resolve_live_holders(((p, chunk.chunk_id) for chunk in chunks for p in chunk.work_refs), statuses)
     return [
         ChunkView.injected(
             services,
@@ -248,9 +235,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
     chunk_status = facts.status()
     blocked, neighborhood = _dependency_views_for_chunk(services, chunk_id, status=chunk_status)
-    # Primed once with every graph id this chunk's history, restarts, migrations and
-    # intended migration ever name — its statement count does not grow with history
-    # length (issue #421/bulk-read adoption).
+    # Primed with every graph id this chunk's history ever names (issue #421).
     names = GraphNames(services.graphs)
     names.prime(_detail_graph_ids(chunk, facts))
     return ChunkView.of(services, chunk, names=names, blocked=blocked, facts=facts, neighborhood=neighborhood).detail()

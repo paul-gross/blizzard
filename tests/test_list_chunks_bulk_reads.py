@@ -115,8 +115,7 @@ def test_list_chunks_calls_bulk_reads_and_never_load_facts_or_route_of(tmp_path:
 
 class _CountingWorkRefsStore(ChunkWorkRefsStore):
     """Counts calls to the pointer-liveness reads, so a test can pin that a fan-out
-    read never reaches the per-pointer `find_live_holder` (issue #421/bulk-read
-    adoption's own `_CountingFactsStore`/`_CountingRouteStore` pattern)."""
+    read never reaches the per-pointer `find_live_holder` (issue #421)."""
 
     def __init__(self, store: HubStoreConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
         super().__init__(store, clock, facts=facts)
@@ -133,10 +132,8 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
 
 
 def test_list_chunks_renders_work_refs_with_no_fact_load_or_live_holders_call(tmp_path: Path) -> None:
-    """``list_chunks`` derives its live-holder map from the chunks and statuses it
-    already loaded (Decisions: "renders work refs with zero fact loads") — it must
-    never call `find_live_holder`/`live_holders` (each its own bulk read) or reach
-    `load_facts`/`load_facts_for` a second time to resolve a pointer's URL."""
+    """`list_chunks` derives its live-holder map from the chunks and statuses it
+    already loaded, with no second read to resolve a pointer's URL."""
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}])
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
@@ -161,7 +158,7 @@ def test_list_chunks_renders_work_refs_with_no_fact_load_or_live_holders_call(tm
 
 class _CountingGraphStore(GraphStore):
     """Counts calls to the fully-reifying `get`, so a test can pin that `list_chunks`
-    never reaches it (issue #421/bulk-read adoption, Phase 2)."""
+    never reaches it (issue #421)."""
 
     def __init__(self, store: HubStoreConnections) -> None:
         super().__init__(store)
@@ -199,7 +196,7 @@ def _seed_chunks_across_graphs(hub, n_chunks: int, n_graphs: int) -> None:  # ty
 
 def test_list_chunks_query_count_is_independent_of_distinct_graph_pin_count(tmp_path: Path) -> None:
     """Extends the fleet-size test to a second axis: the number of *distinct* graphs a
-    fleet's chunks pin to must not grow the statement count either (Phase 2)."""
+    fleet's chunks pin to must not grow the statement count either."""
     (tmp_path / "few_graphs").mkdir()
     (tmp_path / "many_graphs").mkdir()
     few = build_hub(tmp_path / "few_graphs")

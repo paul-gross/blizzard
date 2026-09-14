@@ -136,7 +136,7 @@ def test_create_get_list_patch_and_withdraw_round_trip(tmp_path: Path) -> None:
 
 def test_list_work_items_resolves_liveness_with_one_bulk_call_regardless_of_item_count(tmp_path: Path) -> None:
     """``GET /api/work-sources/hub/items`` renders every item's ``web_url`` through one
-    bulk ``live_holders`` call rather than once per item (issue #421/bulk-read adoption)."""
+    bulk ``live_holders`` call, not once per item (issue #421)."""
     hub = build_hub(tmp_path)
     created = [
         hub.client.post("/api/work-sources/hub/items", json={"title": f"t{i}", "body": "b"}).json() for i in range(3)
