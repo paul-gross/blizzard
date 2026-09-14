@@ -212,14 +212,40 @@ class StubbedBufferBytesStore:
     """A real store reading a scripted ``outstanding_transcript_buffer_bytes`` — the pump's
     backpressure cap, crossed without materializing hundreds of MB of real payload. Values
     are consumed one per call and the last repeats, so a test can let one read pass the cap
-    and a later one trip it."""
+    and a later one trip it. ``calls`` counts every read, for asserting ``run()``'s own
+    once-per-run hoist queries this exactly once regardless of segment count."""
 
     def __init__(self, inner: object, *outstanding_bytes: int) -> None:
         self._inner = inner
         self._values = list(outstanding_bytes)
+        self.calls = 0
 
     def outstanding_transcript_buffer_bytes(self) -> int:
+        self.calls += 1
         return self._values.pop(0) if len(self._values) > 1 else self._values[0]
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+class CountingAttachmentStore:
+    """A real store, wrapped to count ``attachments_for_lease`` (full content) and
+    ``attachment_names_for_lease`` (names only, Phase 3 hoist) calls separately — lets a
+    test assert the produces-coverage check reads only names while `_judged`'s asset
+    harvest still reads full content, on the very same lease."""
+
+    def __init__(self, inner: object) -> None:
+        self._inner = inner
+        self.attachments_for_lease_calls: list[str] = []
+        self.attachment_names_for_lease_calls: list[str] = []
+
+    def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
+        self.attachments_for_lease_calls.append(lease_id)
+        return self._inner.attachments_for_lease(lease_id)  # type: ignore[attr-defined,no-any-return]
+
+    def attachment_names_for_lease(self, lease_id: str) -> set[str]:
+        self.attachment_names_for_lease_calls.append(lease_id)
+        return self._inner.attachment_names_for_lease(lease_id)  # type: ignore[attr-defined,no-any-return]
 
     def __getattr__(self, name: str) -> object:
         return getattr(self._inner, name)
@@ -244,6 +270,7 @@ class FakeHub:
         # the chunk; `make_context` keeps this in sync with `LoopConfig.runner_id` (blizzard#38).
         self.default_runner_id = default_runner_id
         self.queue: list[QueuePeekEntry] = []
+        self.peek_queue_calls = 0  # counts `peek_queue` calls (blizzard#459) — one per Fill.run()
         self.claim_outcome: RouteClaimOutcome | None = None
         self.apply_responses: list[ApplyResponse] = []
         self.envelopes: dict[str, NodeEnvelope] = {}
@@ -282,12 +309,14 @@ class FakeHub:
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
         self.not_found: set[str] = set()  # chunk ids `get_chunk`/`get_envelope` 404 for (blizzard#9)
+        self.get_envelope_calls: list[str] = []  # chunk ids `get_envelope` was called for (Phase 3 hoist)
         self.hub_advance_calls: list[str] = []  # chunk ids `hub_advance` was called for (#66)
         self.hub_advance_responses: dict[str, HubAdvanceResponse] = {}
         self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for (issue #84b)
         self.rekey_responses: dict[str, str] = {}  # chunk_id -> the plaintext to hand back
 
     def peek_queue(self) -> QueuePeekResponse:
+        self.peek_queue_calls += 1
         return QueuePeekResponse(entries=list(self.queue))
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
@@ -355,6 +384,7 @@ class FakeHub:
         )
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
+        self.get_envelope_calls.append(chunk_id)
         if chunk_id in self.not_found:
             raise ChunkNotFoundError(f"chunk {chunk_id} unknown")
         return self.envelopes[chunk_id]

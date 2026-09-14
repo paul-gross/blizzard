@@ -30,7 +30,7 @@ from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.held_chunk import HeldChunk
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
-from blizzard.runner.loop.judgement import Judgement
+from blizzard.runner.loop.judgement import Judgement, elicitation_still_pending
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot
@@ -455,7 +455,7 @@ class Fill(Step):
             )
             return
         slots = ctx.config.max_agents - len(ctx.stores.lease_record.list_active_leases())
-        queue = ReadyQueue(ctx)
+        queue = ReadyQueue.peek(ctx)  # one hub peek for the whole fill (blizzard#459)
         for _ in range(max(slots, 0)):
             if not queue.claim_one():
                 break
@@ -513,6 +513,10 @@ class Advance(Step):
             return  # not spawned — REAP's residue (guarded by the caller too)
         elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
         if elicitation is not None:
+            if elicitation_still_pending(self.ctx, lease, elicitation):
+                # Live and under the staleness bound — the steady-state case. `collect`
+                # would early-return here anyway; skip the envelope/binding fetch it never uses.
+                return
             judgement = Judgement.of(self.ctx, lease)
             if judgement is not None:
                 judgement.collect(elicitation)

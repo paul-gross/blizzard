@@ -92,6 +92,21 @@ _NOT_ATTEMPTED: _PumpOutcome = "not_attempted"
 _STUCK: _PumpOutcome = "stuck"
 
 
+@dataclass
+class _OutstandingBudget:
+    """run()'s own local mirror of the buffer's outstanding-bytes total — read from the
+    store once, then advanced locally by each segment this run ships, so later segments in
+    the same run see the current total without re-reading it."""
+
+    bytes: int
+
+    def exceeded(self, cap: int) -> bool:
+        return self.bytes >= cap
+
+    def accept(self, n: int) -> None:
+        self.bytes += n
+
+
 @dataclass(frozen=True)
 class TranscriptPump:
     """Advances every live segment one tick's worth forward — the lane's only producer
@@ -118,10 +133,14 @@ class TranscriptPump:
         reserving the rest for the flush."""
         if not self.ctx.config.transcripts_ship or self.ctx.transcripts is None:
             return
+        # One store read for the whole run (blizzard#246) — each segment this run ships
+        # advances `budget` locally, so a later segment sees the current total without
+        # re-querying a store this same run's own writes would otherwise make stale.
+        budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
         for segment in self.ctx.stores.transcript_ledger.open_transcript_segments():
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 break  # this run's bound reached — the rest catch up on a later tick
-            self._pump_one_safe(segment)
+            self._pump_one_safe(segment, budget=budget)
 
     def pump_lease(self, lease_id: str, *, deadline: datetime | None = None) -> None:
         """Drain a closing lease's own still-open segment(s) before finalization excludes
@@ -168,13 +187,15 @@ class TranscriptPump:
             self._mark_record_truncated(segment, incomplete_reason)
         return False
 
-    def _pump_one_safe(self, segment: TranscriptSegmentLedgerRow) -> _PumpOutcome:
+    def _pump_one_safe(
+        self, segment: TranscriptSegmentLedgerRow, *, budget: _OutstandingBudget | None = None
+    ) -> _PumpOutcome:
         """One segment's own failure must not abort the loop. Returns
         ``_NOT_ATTEMPTED`` on a caught exception — a raising segment must
         not spin ``pump_lease``'s drain loop, but at lease closure it must not read as
         caught-up either, or whatever the source held finalizes with no truncation trace."""
         try:
-            return self._pump_one(segment)
+            return self._pump_one(segment, budget=budget)
         except Exception:
             _log.exception(
                 "transcript pump: failed to pump segment — continuing with the rest",
@@ -183,7 +204,9 @@ class TranscriptPump:
             )
             return _NOT_ATTEMPTED
 
-    def _pump_one(self, segment: TranscriptSegmentLedgerRow) -> _PumpOutcome:
+    def _pump_one(
+        self, segment: TranscriptSegmentLedgerRow, *, budget: _OutstandingBudget | None = None
+    ) -> _PumpOutcome:
         """Advance ``segment`` one read window forward. ``_NOT_ATTEMPTED``:
         nothing was read at all — ``pump_lease`` treats this as incomplete, not caught-up,
         since a finalizing segment gets no later tick to make up a read it never took.
@@ -196,7 +219,11 @@ class TranscriptPump:
         if budget_before >= chunk_max_bytes:
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
             return _CAUGHT_UP
-        if self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes() >= MAX_BUFFERED_BYTES:
+        if budget is not None:
+            outstanding = budget.bytes
+        else:
+            outstanding = self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes()
+        if outstanding >= MAX_BUFFERED_BYTES:
             # Transient backpressure, not a latch — self-clears once the drain catches up.
             return _NOT_ATTEMPTED
 
@@ -284,6 +311,8 @@ class TranscriptPump:
             created_at=self.ctx.clock.now(),
             agent_tool_use_ids=batch.agent_tool_use_ids,
         )
+        if budget is not None:
+            budget.accept(total_bytes)
         # Order here does not matter: the store keeps the worse of the two
         # by the explicit severity each call carries, not by which call happened last.
         if any_shrunk:

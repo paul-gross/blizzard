@@ -590,6 +590,43 @@ def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path
     assert store.live_tenure_chunk_ids() == []
 
 
+@pytest.mark.unit
+def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills(tmp_path):  # type: ignore[no-untyped-def]
+    """Phase 3 hoist (blizzard#459): one ``Fill.run()`` call peeks the hub ONCE, filling every
+    open slot it can off that one snapshot — not one fresh peek per ``claim_one()`` attempt."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    env = _build_envelope()
+    hub.queue = [
+        QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0),
+        QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=1),
+    ]
+    # `claim_route`'s scripted outcome is the same object for every call, but `claim_one`
+    # only ever reads `entry.chunk_id` (the peeked entry) and `outcome.claimed.envelope`/
+    # `.route_token` off it — never `outcome.claimed.chunk_id` — so one scripted outcome
+    # correctly claims each distinct peeked chunk.
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=2),
+    )
+
+    Fill(ctx).run()
+
+    assert hub.peek_queue_calls == 1  # one hub peek for the whole fill, not one per claim
+    assert len(hub.claims) == 2  # both slots still filled off the one peeked snapshot
+    assert len(harness.spawns) == 2
+    assert store.active_lease_for_chunk("ch_1") is not None
+    assert store.active_lease_for_chunk("ch_2") is not None
+    assert set(store.held_environment_ids()) == {"e1", "e2"}
+
+
 # ADVANCE — exited worker (buffer) + PULL flush (deliver)
 
 

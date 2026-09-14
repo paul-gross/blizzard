@@ -70,6 +70,20 @@ _CP_AFTER_BUFFER = crashpoint("advance.after-buffer.before-flush", "completion b
 ELICITATION_STALENESS_THRESHOLD = timedelta(minutes=15)
 
 
+def elicitation_still_pending(ctx: LoopContext, lease: LeaseRecord, elicitation: ElicitationRecord) -> bool:
+    """Read-only mirror of `Judgement.collect`'s own staleness-then-liveness order (a caller
+    must replicate, not diverge from, that order/thresholds), for a caller that wants to
+    know whether `collect` would trivially early-return WITHOUT paying for a `Judgement` —
+    the hub envelope fetch and binding read `Judgement.of` unconditionally performs. ``True``
+    only in the live-and-under-the-bound steady state; stale or exited both return ``False``,
+    the two cases that genuinely need a full `Judgement` to proceed."""
+    now = ctx.clock.now()
+    if now - as_utc(elicitation.first_launched_at) > ELICITATION_STALENESS_THRESHOLD:
+        return False
+    pid, start_time = elicitation.pid, elicitation.process_start_time or ""
+    return pid is not None and ctx.process.is_alive(pid, start_time)
+
+
 @dataclass(frozen=True)
 class Judgement:
     """One exited worker's node-step, judged — its declared commits confirmed, its ``checks:``
@@ -115,8 +129,10 @@ class Judgement:
             return
 
         produces = ProducesReconciler(self.envelope)
-        attachments = self.ctx.stores.attachments.attachments_for_lease(lease.lease_id)
-        missing = produces.missing(artifacts, attachments)
+        # Names only — this check never reads content (Phase 3 hoist); `_judged` below
+        # still fetches the full `attachments_for_lease` where content is genuinely needed.
+        attached_names = self.ctx.stores.attachments.attachment_names_for_lease(lease.lease_id)
+        missing = produces.missing(artifacts, attached_names)
         if missing and not self.ctx.stores.checks.nudge_fired(lease.lease_id, lease.epoch):
             # Resume-once (issues #113, #422): an exit with `produces:` unmet is resumed, not
             # judged — no verdict elicited, no attempt failed, and no `checks:` run.

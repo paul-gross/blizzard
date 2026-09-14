@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
@@ -35,17 +35,30 @@ _CP_AFTER_BIND = crashpoint("fill.after-bind.before-claim", "binding recorded; r
 _CP_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds the route; lease not minted")
 
 
-@dataclass(frozen=True)
+@dataclass
 class ReadyQueue:
     """The hub's ready queue, as the source FILL takes work from — peek the head, acquire its
-    environments all-or-nothing, bind them locally, then race for the route."""
+    environments all-or-nothing, bind them locally, then race for the route.
+
+    ``_entries`` is this one ``Fill.run()`` call's own local peeked snapshot (blizzard#459):
+    peeked ONCE via :meth:`peek`, then selected from and dropped in place by each
+    ``claim_one()`` this run makes, rather than re-peeking the hub per attempt."""
 
     ctx: LoopContext
+    _entries: list[QueuePeekEntry] = field(default_factory=list)
+
+    @classmethod
+    def peek(cls, ctx: LoopContext) -> ReadyQueue:
+        try:
+            peeked = ctx.hub.peek_queue()
+        except HubClientError:
+            return cls(ctx, [])
+        return cls(ctx, list(peeked.entries))
 
     def claim_one(self) -> bool:
         """Claim and start one chunk. ``False`` when nothing more can be filled this tick;
         ``True`` when the caller should peek fresh, whether or not this one started."""
-        entry = self._peek()
+        entry = self._next()
         if entry is None:
             return False
         acquired = self._acquire(entry)
@@ -98,26 +111,23 @@ class ReadyQueue:
         Spawner(self.ctx).enter_node(chunk_id, outcome.claimed.envelope, acquired, via="fill")
         return True
 
-    def _peek(self) -> QueuePeekEntry | None:
-        try:
-            peek = self.ctx.hub.peek_queue()
-        except HubClientError:
-            return None  # hub unreachable — try next tick
-        return self._select(peek.entries)
-
-    def _select(self, entries: list[QueuePeekEntry]) -> QueuePeekEntry | None:
-        """Pick this runner's entry out of the whole peeked list (blizzard#459).
-
-        Strict holds at a marked head and yields nothing rather than falling through — an
-        idle tick reads the same as an empty queue at this seam. Reach-ahead (the default)
-        scans the whole list for the first unmarked entry, at any depth."""
-        if not entries:
+    def _next(self) -> QueuePeekEntry | None:
+        """Pick this runner's entry out of this fill's one peeked snapshot (blizzard#459),
+        dropping it from the local list so a later claim_one() this same Fill.run() moves on
+        rather than re-attempting it. Strict holds at a marked head and yields nothing rather
+        than falling through, exactly as before — an idle tick reads the same as an empty
+        queue at this seam. Reach-ahead (the default) scans for the first unmarked entry."""
+        if not self._entries:
             return None
         if self.ctx.config.queue_strict:
-            head = entries[0]
-            return None if head.blocked is not None else head
-        for entry in entries:
+            head = self._entries[0]
+            if head.blocked is not None:
+                return None  # not attempted — left in place, matches today's no-fall-through
+            del self._entries[0]
+            return head
+        for i, entry in enumerate(self._entries):
             if entry.blocked is None:
+                del self._entries[i]
                 return entry
         return None
 

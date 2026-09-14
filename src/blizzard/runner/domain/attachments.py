@@ -27,6 +27,12 @@ class IReadAttachmentRepository(Protocol):
         the same name reads back as the replacement, never a duplicate."""
         ...
 
+    def attachment_names_for_lease(self, lease_id: str) -> set[str]:
+        """Just the names attached for ``lease_id`` — the produces-coverage check's own lean
+        read (Phase 3 hoist): it only ever needs to know WHICH names are attached, never their
+        content, so this skips fetching and materializing ``attachments_for_lease``'s values."""
+        ...
+
 
 class IWriteAttachmentRepository(IReadAttachmentRepository, Protocol):
     """Read-write attachment store — held only by the domain."""

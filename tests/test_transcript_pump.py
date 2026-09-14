@@ -1797,6 +1797,49 @@ def test_pump_gates_on_outstanding_buffered_bytes_before_reading_a_new_batch() -
     assert segment.cursor == "pos-1"
 
 
+def test_run_reads_outstanding_buffered_bytes_once_and_still_enforces_the_cap_locally() -> None:
+    """Phase 3 hoist: `run()` reads the buffer's outstanding total once for the whole call,
+    then tracks it locally — a segment this same run ships adds to the local total, so a
+    LATER segment in the same run correctly sees the cap crossed without a second store read."""
+    ctx, source = _ctx(
+        ship=True,
+        batches={
+            "sess-a": _batch([_turn(0, "hi")], next_token="pos-1"),
+            "sess-b": _batch([_turn(0, "hi")], next_token="pos-1"),
+        },
+    )
+    segment_a_id = _spawn_one_segment(ctx)
+    # A same-lease resume under a different session id (as in the F2 test above) leaves a
+    # second open segment on the same lease, so one `run()` call pumps both.
+    ctx.stores.liveness.record_spawn(
+        "lease_1", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW + timedelta(seconds=1)
+    )
+    lease = ctx.stores.lease_record.active_lease("lease_1")
+    assert lease is not None
+    open_segments = {
+        s.session_id: s.segment_id
+        for s in ctx.stores.transcript_ledger.open_transcript_segments()
+        if s.lease_id == lease.lease_id
+    }
+    assert set(open_segments) == {"sess-a", "sess-b"}
+    segment_b_id = open_segments["sess-b"]
+    stub = StubbedBufferBytesStore(ctx.stores.transcript_ledger, MAX_BUFFERED_BYTES - 1)
+    budgeted_ctx = replace(ctx, stores=replace(ctx.stores, transcript_ledger=stub))  # type: ignore[arg-type]
+
+    TranscriptPump(budgeted_ctx).run()
+
+    assert stub.calls == 1  # one store read for the WHOLE run, not one per segment
+    # sess-a's own shipped bytes push the local counter over the cap, so sess-b is gated
+    # by the local total — never even reads the source, let alone re-queries the store.
+    assert [c[0] for c in source.turns_since_calls] == ["sess-a"]
+    segment_a = ctx.stores.transcript_ledger.transcript_segment(segment_a_id)
+    segment_b = ctx.stores.transcript_ledger.transcript_segment(segment_b_id)
+    assert segment_a is not None
+    assert segment_a.cursor == "pos-1"  # shipped: the initial read was still under the cap
+    assert segment_b is not None
+    assert segment_b.cursor is None  # never attempted: the local counter tripped the cap, not a stale re-read
+
+
 # --- Every path that returns without ever reading the source: a lease-closure pump this
 # happens to has not "caught up", and its segment finalizes losing what the source held.
 

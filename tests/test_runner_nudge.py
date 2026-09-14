@@ -6,6 +6,7 @@ per (lease, epoch)" holds."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.graph import ProducesEntry
 from tests.runner_fakes import (
+    CountingAttachmentStore,
     FakeCheckRunner,
     FakeHarness,
     FakeHub,
@@ -470,14 +472,21 @@ def test_fully_attached_node_does_not_resume(tmp_path: Path) -> None:
         worktree_git=FakeWorktreeGit(),
         clock=clock,
     )
+    attachments_store = CountingAttachmentStore(ctx.stores.attachments)
+    ctx = replace(ctx, stores=replace(ctx.stores, attachments=attachments_store))  # type: ignore[arg-type]
 
-    Advance(ctx).run()  # launches the detached elicitation
-    Advance(ctx).run()  # collects it — the fake pid reads dead by default
+    Advance(ctx).run()  # launches the detached elicitation — the produces-coverage check runs here
+    assert attachments_store.attachment_names_for_lease_calls == ["lease_r"]  # Phase 3 hoist: names only
+    assert attachments_store.attachments_for_lease_calls == []  # no content read for this check
+
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default; `_judged` harvests assets
     Pull(ctx).run()
 
     assert harness.resumed == [], "a fully-attached node must not be resumed"
     assert len(harness.judged) == 1
     assert store.nudge_fired("lease_r", 1) is False
+    # `_judged`'s asset harvest genuinely needs content — it still calls the full read.
+    assert attachments_store.attachments_for_lease_calls == ["lease_r"]
 
     _, submission = hub.completions[0]
     by_name = {a.name: a for a in submission.artifacts}

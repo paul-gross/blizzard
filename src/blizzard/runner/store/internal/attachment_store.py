@@ -30,6 +30,12 @@ class AttachmentStore:
         stmt = select(attachments.c.name, attachments.c.content).join(newest, attachments.c.id == newest.c.id)
         return {str(r.name): str(r.content) for r in self._store.all(stmt)}
 
+    def attachment_names_for_lease(self, lease_id: str) -> set[str]:
+        # The names-only equivalent of `attachments_for_lease` above — no `max(id)`/join
+        # needed, since which names are attached does not depend on which content is newest.
+        stmt = select(attachments.c.name).distinct().where(attachments.c.lease_id == lease_id)
+        return {str(r.name) for r in self._store.all(stmt)}
+
     def record_attachment(
         self,
         *,
