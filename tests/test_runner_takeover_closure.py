@@ -16,7 +16,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Pull
-from blizzard.wire.chunk import ChunkDetail, RouteView
+from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -64,13 +64,11 @@ def _seed_taken_over(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW):
 
 
 def _chunk(chunk="ch_1", *, status: ChunkStatus):  # type: ignore[no-untyped-def]
-    return ChunkDetail(
+    return ChunkStatusView(
         chunk_id=chunk,
-        graph_id="gr_1",
         status=status,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
     )
 
 

@@ -30,13 +30,11 @@ _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
     "push_facts": ("POST", "/api/fleet/events"),
     "push_transcripts": ("POST", "/api/fleet/transcripts"),
     "get_envelope": ("GET", "/api/fleet/chunks/{chunk_id}/envelope"),
-    "get_chunk": ("GET", "/api/fleet/chunks/{chunk_id}"),
+    "chunk_statuses": ("GET", "/api/fleet/chunk-statuses"),
     "hub_advance": ("POST", "/api/fleet/chunks/{chunk_id}/hub-advance"),
     "get_question": ("GET", "/api/fleet/questions/{question_id}"),
     "register_runner": ("POST", "/api/fleet/runners"),
     "fetch_runner_paused": ("GET", "/api/fleet/runners/{runner_id}"),
-    "report_lease": ("POST", "/api/fleet/chunks/{chunk_id}/leases"),
-    "report_escalation": ("POST", "/api/fleet/chunks/{chunk_id}/escalations"),
     "rekey_route_token": ("POST", "/api/fleet/chunks/{chunk_id}/route-token"),
 }
 
@@ -123,6 +121,11 @@ _EXPECTED_DRIVE_VERBS: dict[str, str] = {
     ),
     "complete": "IHubClient.submit_completion — POST /api/fleet/chunks/{id}/completions",
     "get-chunk": "IHubClient.get_chunk — GET /api/fleet/chunks/{id}",
+    "chunk-statuses": (
+        "no IHubClient operation yet (blizzard#521, mock-side only so far) — drives "
+        "GET /api/fleet/chunk-statuses (repeatable chunk_id) directly, ahead of the "
+        "runner tick's own read hoist onto it"
+    ),
     "reset": "test-only control — clears held state + levers, no IHubClient operation",
     "escalate": "IHubClient.report_escalation — POST /api/fleet/chunks/{id}/escalations",
     "decide": "IHubClient.submit_decision — POST /api/fleet/chunks/{id}/decisions",

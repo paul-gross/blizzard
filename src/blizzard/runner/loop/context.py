@@ -15,6 +15,7 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.loop.checks import ICheckRunner
+from blizzard.runner.loop.chunk_views import IChunkViews
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import IHubClient
@@ -115,6 +116,9 @@ class LoopContext:
     stores: RunnerStores
     clock: IClock
     hub: IHubClient
+    #: This tick's (or, standalone, this step's own) chunk-status read seam (blizzard#521) —
+    #: see :mod:`blizzard.runner.loop.chunk_views`.
+    chunk_views: IChunkViews
     provider: IWorkspaceProvider
     harness: IHarnessLifecycleAndVerdict
     process: IProcessProbe

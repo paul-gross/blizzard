@@ -7,15 +7,18 @@ confined here; a transport failure or unexpected status is wrapped once into
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 import httpx
+from pydantic import TypeAdapter
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
-from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse
+from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
-from blizzard.wire.facts import EscalationReport, LeaseMintReport, RunnerFactAck, RunnerFactBatch
+from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekResponse
 from blizzard.wire.route import (
@@ -91,9 +94,10 @@ class HttpHubClient:
         resp = self._get(f"{_FLEET_API}/chunks/{chunk_id}/envelope", not_found_as=ChunkNotFoundError)
         return NodeEnvelope.model_validate(resp.json())
 
-    def get_chunk(self, chunk_id: str) -> ChunkDetail:
-        resp = self._get(f"{_FLEET_API}/chunks/{chunk_id}", not_found_as=ChunkNotFoundError)
-        return ChunkDetail.model_validate(resp.json())
+    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
+        resp = self._get(f"{_FLEET_API}/chunk-statuses", params={"chunk_id": list(chunk_ids)})
+        views = TypeAdapter(list[ChunkStatusView]).validate_python(resp.json())
+        return {v.chunk_id: v for v in views}
 
     def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
         path = f"{_FLEET_API}/chunks/{chunk_id}/hub-advance"
@@ -132,34 +136,21 @@ class HttpHubClient:
         resp = self._get(f"{_FLEET_API}/runners/{runner_id}")
         return bool(RunnerView.model_validate(resp.json()).hub_paused)
 
-    def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
-        self._post(
-            f"{_FLEET_API}/chunks/{chunk_id}/leases",
-            LeaseMintReport(epoch=epoch, runner_id=runner_id).model_dump(mode="json"),
-        )
-
-    def report_escalation(
-        self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str, wrapped_takeover_command: str = ""
-    ) -> None:
-        self._post(
-            f"{_FLEET_API}/chunks/{chunk_id}/escalations",
-            EscalationReport(
-                epoch=epoch,
-                runner_id=runner_id,
-                takeover_command=takeover_command,
-                wrapped_takeover_command=wrapped_takeover_command,
-            ).model_dump(mode="json"),
-        )
-
     def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
         resp = self._post(f"{_FLEET_API}/chunks/{chunk_id}/route-token", None)
         return RouteTokenRekeyResponse.model_validate(resp.json())
 
     # --- plumbing -----------------------------------------------------------
 
-    def _get(self, path: str, *, not_found_as: type[HubClientError] | None = None) -> httpx.Response:
+    def _get(
+        self,
+        path: str,
+        *,
+        params: dict[str, list[str]] | None = None,
+        not_found_as: type[HubClientError] | None = None,
+    ) -> httpx.Response:
         try:
-            resp = self._client.get(path)
+            resp = self._client.get(path, params=params)
         except httpx.HTTPError as exc:
             raise self._wrap(exc, f"GET {path}") from exc
         self._raise_for_status(resp, f"GET {path}", not_found_as=not_found_as)

@@ -18,7 +18,7 @@ from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.outbound import COMPLETION_KIND
 from blizzard.runner.loop.steps import Pull
-from blizzard.wire.chunk import ChunkDetail, PauseView, RestartView, RouteView
+from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
@@ -36,7 +36,6 @@ pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
-_ISO_NOW = "2026-07-13T12:00:00Z"
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
@@ -65,13 +64,12 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", epoch=1):  # ty
 
 def _moved_chunk(*, node_id="nd_build", epoch=2, chunk="ch_1"):  # type: ignore[no-untyped-def]
     """The hub's view after a restart: still routed here, at a strictly higher epoch."""
-    return ChunkDetail(
+    del node_id  # no runner-loop-visible field carries the node id on ChunkStatusView
+    return ChunkStatusView(
         chunk_id=chunk,
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id=node_id,
         latest_epoch=epoch,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
     )
 
 
@@ -352,13 +350,7 @@ def test_a_restart_level_with_the_lease_still_fences_it(tmp_path):  # type: igno
     store = _store(tmp_path)
     _seed_running_lease(store)  # epoch 1, its mint not yet drained to the hub
     hub = _restarted_hub()
-    hub.chunks["ch_1"] = _moved_chunk(epoch=1).model_copy(
-        update={
-            "restarts": [
-                RestartView(to_node_id="nd_build", graph_id="gr_1", epoch=1, restarted_by="op", recorded_at=_ISO_NOW)
-            ]
-        }
-    )
+    hub.chunks["ch_1"] = _moved_chunk(epoch=1).model_copy(update={"restart_epochs": [1]})
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, probe=probe)
 
@@ -377,13 +369,7 @@ def test_an_older_restart_never_re_fences_the_lease_it_already_produced(tmp_path
     store = _store(tmp_path)
     _seed_running_lease(store, epoch=2)  # the lease a restart at epoch 1 already produced
     hub = _restarted_hub()
-    hub.chunks["ch_1"] = _moved_chunk(epoch=2).model_copy(
-        update={
-            "restarts": [
-                RestartView(to_node_id="nd_build", graph_id="gr_1", epoch=1, restarted_by="op", recorded_at=_ISO_NOW)
-            ]
-        }
-    )
+    hub.chunks["ch_1"] = _moved_chunk(epoch=2).model_copy(update={"restart_epochs": [1]})
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, probe=probe)
 

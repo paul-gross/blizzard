@@ -17,7 +17,7 @@ from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap
 from blizzard.runner.loop.tick import tick
-from blizzard.wire.chunk import ChunkDetail, RouteView
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
 from tests.runner_fakes import (
     FakeHarness,
@@ -78,24 +78,20 @@ def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=0): 
 
 
 def _detached_chunk(chunk="ch_1", *, status=ChunkStatus.READY):  # type: ignore[no-untyped-def]
-    return ChunkDetail(
+    return ChunkStatusView(
         chunk_id=chunk,
-        graph_id="gr_1",
         status=status,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=None,
+        route_runner_id=None,
     )
 
 
 def _routed_chunk(chunk="ch_1", *, status: ChunkStatus, runner_id="r1"):  # type: ignore[no-untyped-def]
-    return ChunkDetail(
+    return ChunkStatusView(
         chunk_id=chunk,
-        graph_id="gr_1",
         status=status,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id=runner_id, workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id=runner_id,
     )
 
 
@@ -224,7 +220,7 @@ def test_pull_defers_when_hub_unreachable(tmp_path):  # type: ignore[no-untyped-
     _seed_running_lease(store)
     store.enqueue_outbound(kind=LEASE_MINTED, chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
     hub = FakeHub()
-    hub.down = True  # get_chunk (and everything else) unreachable
+    hub.down = True  # chunk_statuses (and everything else) unreachable
     provider = FakeProvider({"e1": "/ws/e1"})
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, provider=provider, probe=probe)
@@ -247,15 +243,16 @@ def test_pull_defers_when_hub_unreachable(tmp_path):  # type: ignore[no-untyped-
 
 
 class _OrderTrackingHub(FakeHub):
-    """A :class:`FakeHub` that records the order ``get_chunk`` / ``push_facts`` are called in."""
+    """A :class:`FakeHub` that records the order ``chunk_statuses`` / ``push_facts`` are
+    called in."""
 
     def __init__(self) -> None:
         super().__init__()
         self.calls: list[str] = []
 
-    def get_chunk(self, chunk_id: str) -> ChunkDetail:
-        self.calls.append("get_chunk")
-        return super().get_chunk(chunk_id)
+    def chunk_statuses(self, chunk_ids):  # type: ignore[no-untyped-def]
+        self.calls.append("chunk_statuses")
+        return super().chunk_statuses(chunk_ids)
 
     def push_facts(self, batch):  # type: ignore[no-untyped-def]
         self.calls.append("push_facts")
@@ -275,7 +272,7 @@ def test_pull_abandons_before_it_flushes(tmp_path):  # type: ignore[no-untyped-d
 
     Pull(ctx).run()
 
-    assert hub.calls == ["get_chunk", "push_facts"]  # the ownership check precedes the flush
+    assert hub.calls == ["chunk_statuses", "push_facts"]  # the ownership check precedes the flush
     # And the abandon's effects (kill + release + close) are already in place.
     assert probe.killed == [100]
     assert provider.released == ["e1"]

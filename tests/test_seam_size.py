@@ -20,8 +20,10 @@ _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
 _SEAM_SIZE_LIMIT = 12
 
 _ACCEPTED_VIOLATIONS: set[str] = {
-    # LoopContext's downstream steps exercise 13 of IHubClient's 15 methods — genuinely wide
-    # by design, not a seam left to narrow (blizzard-context:/architecture/system-shape/seam-size.md).
+    # LoopContext's downstream steps exercise all 13 of IHubClient's methods (blizzard#521
+    # narrowed 15 to 13 by retiring get_chunk/report_lease/report_escalation for the batch
+    # chunk_statuses read) — genuinely wide by design, not a seam left to narrow
+    # (blizzard-context:/architecture/system-shape/seam-size.md).
     "IHubClient",
 }
 

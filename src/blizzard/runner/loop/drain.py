@@ -77,6 +77,9 @@ class OutboundDrain:
             ack = self.ctx.hub.push_facts(batch)
         except HubClientError:
             return False  # hub unreachable — the whole run stays buffered, retried next tick
+        # D5 — every chunk this run named a fact for, so a later get() this tick sees the push.
+        for chunk_id in {fact.chunk_id for fact in run if fact.chunk_id}:
+            self.ctx.chunk_views.invalidate(chunk_id)
         for fact in run:
             if fact.seq in ack.rejected:
                 # A contract rejection is not idempotency — surface it, but do not wedge the
@@ -98,6 +101,8 @@ class OutboundDrain:
         except HubClientError:
             return False  # stays durable in the buffer; the mid-node worker is unaffected
         _CP_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay
+        if fact.chunk_id:
+            self.ctx.chunk_views.invalidate(fact.chunk_id)  # D5 — a later get() this tick sees the apply
         self._ack(fact)
         _CP_AFTER_ACK.reached()
         lease = self.ctx.stores.lease_record.active_lease(fact.lease_id or "")
@@ -117,6 +122,8 @@ class OutboundDrain:
             response = self.ctx.hub.submit_decision(fact.chunk_id or "", submission)
         except HubClientError:
             return False  # decision stays durable in the buffer; retried next tick
+        if fact.chunk_id:
+            self.ctx.chunk_views.invalidate(fact.chunk_id)  # D5 — a later get() this tick sees the apply
         self._ack(fact)
         lease = self.ctx.stores.lease_record.active_lease(fact.lease_id or "")
         if lease is None:
@@ -157,9 +164,10 @@ class OutboundDrain:
         if cap is None:
             return False
         try:
-            detail = self.ctx.hub.get_chunk(lease.chunk_id)
+            detail = self.ctx.chunk_views.get(lease.chunk_id)
         except HubClientError:
-            return False  # hub unreachable — re-checked at the next step boundary
+            # Covers ChunkNotFoundError too — re-checked at the next step boundary either way.
+            return False
         cost = detail.cost
         if cost.cost_usd < cap:
             return False

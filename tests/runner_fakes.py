@@ -8,7 +8,7 @@ fakes standing in for the hub, provider, harness, probe, and worktree git.
 from __future__ import annotations
 
 import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime
 
 import structlog
@@ -30,6 +30,7 @@ from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, Worke
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
+from blizzard.runner.loop.chunk_views import IChunkViews, ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
@@ -72,7 +73,7 @@ from blizzard.runner.stores import (
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot, ISubscriptionSampler
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.tools.invariants import RunnerInvariants, Violation
-from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
+from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import (
@@ -234,18 +235,22 @@ def runner_invariant_violations(store: object) -> list[Violation]:
 class FakeHub:
     """A scriptable :class:`IHubClient`: canned queue/claim/apply/envelope/chunk.
 
-    ``down`` raises :class:`HubClientError`; ``not_found`` (blizzard#9) 404s `get_chunk`/`get_envelope`.
+    ``down`` raises :class:`HubClientError`; ``not_found`` (blizzard#9) 404s `get_envelope`
+    and omits the id from a `chunk_statuses` response.
     """
 
     def __init__(self, *, default_runner_id: str = "r1") -> None:
-        # The runner id the unscripted `get_chunk` fallback's route reports as holding the
-        # chunk; `make_context` keeps this in sync with `LoopConfig.runner_id` (blizzard#38).
+        # The runner id the unscripted `chunk_statuses` fallback's route reports as holding
+        # the chunk; `make_context` keeps this in sync with `LoopConfig.runner_id` (blizzard#38).
         self.default_runner_id = default_runner_id
         self.queue: list[QueuePeekEntry] = []
         self.claim_outcome: RouteClaimOutcome | None = None
         self.apply_responses: list[ApplyResponse] = []
         self.envelopes: dict[str, NodeEnvelope] = {}
-        self.chunks: dict[str, ChunkDetail] = {}
+        self.chunks: dict[str, ChunkStatusView] = {}
+        # One entry per `chunk_statuses` call, naming the ids it requested (blizzard#521) —
+        # lets a test assert on the per-tick batching the cache is built for.
+        self.chunk_statuses_calls: list[list[str]] = []
         self.claims: list[RouteClaim] = []
         self.completions: list[tuple[str, CompletionSubmission]] = []
         self.decisions_submitted: list[tuple[str, DecisionSubmission]] = []
@@ -354,23 +359,27 @@ class FakeHub:
             raise ChunkNotFoundError(f"chunk {chunk_id} unknown")
         return self.envelopes[chunk_id]
 
-    def get_chunk(self, chunk_id: str) -> ChunkDetail:
-        if chunk_id in self.not_found:
-            raise ChunkNotFoundError(f"chunk {chunk_id} unknown")
+    def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
         if self.down:
             raise HubClientError("fake hub is down")
-        # Default a hub-node-held chunk to `delivering` with its route still ours — the
-        # common case — unless a test scripts something else (e.g. a released route).
-        if chunk_id in self.chunks:
-            return self.chunks[chunk_id]
-        return ChunkDetail(
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            status=ChunkStatus.DELIVERING,
-            current_node_id="deliver",
-            latest_epoch=1,
-            route=RouteView(runner_id=self.default_runner_id, workspace_id="ws1", environment_ids=[]),
-        )
+        ids = list(chunk_ids)
+        self.chunk_statuses_calls.append(ids)
+        found: dict[str, ChunkStatusView] = {}
+        for chunk_id in ids:
+            if chunk_id in self.not_found:
+                continue  # omitted, never a 404 — mirrors the real hub's batch-read semantics
+            if chunk_id in self.chunks:
+                found[chunk_id] = self.chunks[chunk_id]
+                continue
+            # Default a hub-node-held chunk to `delivering` with its route still ours — the
+            # common case — unless a test scripts something else (e.g. a released route).
+            found[chunk_id] = ChunkStatusView(
+                chunk_id=chunk_id,
+                status=ChunkStatus.DELIVERING,
+                route_runner_id=self.default_runner_id,
+                latest_epoch=1,
+            )
+        return found
 
     def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
         if self.down:
@@ -405,14 +414,6 @@ class FakeHub:
         if self.down:
             raise HubClientError("fake hub is down")
         return self.paused
-
-    def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
-        self.leases.append((chunk_id, epoch, runner_id))
-
-    def report_escalation(
-        self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str, wrapped_takeover_command: str = ""
-    ) -> None:
-        self.escalations.append((chunk_id, epoch, runner_id, takeover_command))
 
     def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
         if chunk_id in self.not_found:
@@ -853,13 +854,19 @@ def make_context(
     config: LoopConfig | None = None,
     events: EventBroker | None = None,
     subscriptions: tuple[ResolvedSubscription, ...] = (),
+    chunk_views: IChunkViews | None = None,
 ) -> LoopContext:
-    """Assemble a :class:`LoopContext` from a real store and injected fakes."""
+    """Assemble a :class:`LoopContext` from a real store and injected fakes.
+
+    ``chunk_views`` defaults to a fresh :class:`ReadThroughChunkViews` over ``hub`` — a step
+    driven directly (not through ``tick()``) reads the hub on every ``get()``, exactly as
+    ``get_chunk`` did before the per-tick cache (blizzard#521)."""
     resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
-    # Derived, not duplicated (blizzard#38): keeps the fake's unscripted `get_chunk` route
-    # matching this context's actual runner_id.
+    # Derived, not duplicated (blizzard#38): keeps the fake's unscripted `chunk_statuses`
+    # route matching this context's actual runner_id.
     hub.default_runner_id = resolved_config.runner_id
     _hub: IHubClient = hub
+    _chunk_views: IChunkViews = chunk_views if chunk_views is not None else ReadThroughChunkViews(hub=_hub)
     _provider: IWorkspaceProvider = provider
     _harness: IHarnessAdapter = harness
     _probe: IProcessProbe = probe
@@ -877,6 +884,7 @@ def make_context(
         stores=_stores,
         clock=_clock,
         hub=_hub,
+        chunk_views=_chunk_views,
         provider=_provider,
         harness=_harness,
         process=_probe,

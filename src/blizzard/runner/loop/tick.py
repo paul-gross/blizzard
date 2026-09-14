@@ -7,7 +7,10 @@ comment below states why its position matters."""
 
 from __future__ import annotations
 
+import dataclasses
+
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.loop.chunk_views import MemoizingChunkViewCache
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import (
     Advance,
@@ -31,6 +34,12 @@ def tick(ctx: LoopContext) -> None:
     # Stamp liveness first (issue #13), so a pass that dies mid-step still leaves the beat
     # proving the daemon reached it — the reference the next startup's scan ages against.
     ctx.stores.pause.record_daemon_liveness(runner_id=ctx.config.runner_id, alive_at=ctx.clock.now())
+    # This tick's own memoized chunk-status cache (blizzard#521) — every step below shares
+    # it via the rebound `ctx`, so a chunk read at more than one site this tick costs the
+    # hub at most one round-trip. Primed with the ids every reconcile sweep below is about
+    # to read anyway, so the common case pays for its reads once, up front.
+    ctx = dataclasses.replace(ctx, chunk_views=MemoizingChunkViewCache(ctx.hub))
+    ctx.chunk_views.prime(_primed_chunk_ids(ctx))
     # The spend-ceiling kill-switch (issue #61b) — first, so it brakes the same tick it fires in.
     SpendCeiling(ctx).run()
     Reap(ctx).run()  # startup recovery IS reap running early
@@ -52,3 +61,14 @@ def tick(ctx: LoopContext) -> None:
     # before or after TranscriptDrain, since either's fact-lane enqueue waits for PULL anyway.
     ExternalUsageSample(ctx).run()
     _log.debug("tick end", runner_id=ctx.config.runner_id)
+
+
+def _primed_chunk_ids(ctx: LoopContext) -> set[str]:
+    """The chunk ids this tick's reconcile sweeps and held-chunk poll are about to read
+    anyway — primed in one batch call so their own first ``get()`` each is a cache hit."""
+    return (
+        {lease.chunk_id for lease in ctx.stores.lease_record.list_active_leases()}
+        | {escalation.chunk_id for escalation in ctx.stores.escalations.open_escalations()}
+        | ctx.stores.takeover.open_takeover_chunk_ids()
+        | set(ctx.stores.environments.live_tenure_chunk_ids())
+    )

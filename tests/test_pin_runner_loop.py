@@ -23,7 +23,7 @@ from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.loop.tick import tick
-from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
+from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
@@ -79,13 +79,11 @@ def test_resume_parks_a_paused_chunk_whose_derived_status_hides_the_pause(tmp_pa
     _seed_running_lease(store)
     store.record_resume_intent(lease_id="lease_1", marked_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.WAITING_ON_HUMAN,  # the lossy read — paused AND asked
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
         pause=PauseView(by="operator", set_at="2026-08-04T12:00:00Z"),
     )
     provider = FakeProvider({"e1": "/ws/e1"})

@@ -26,7 +26,7 @@ from blizzard.runner.domain.takeover import (
 )
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import Advance, Reap
-from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import LEASE_MINTED
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store, make_stores
 
@@ -379,11 +379,9 @@ def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(
     hub = FakeHub()
     # Scripted DONE: if the guard failed to skip, `_advance_held_chunk` would poll this
     # and release the binding — an observable side effect the assertion below catches.
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.DONE,
-        current_node_id="deliver",
         latest_epoch=1,
     )
     provider = FakeProvider({"e1": "/ws/e1"})

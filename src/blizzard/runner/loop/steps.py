@@ -34,7 +34,7 @@ from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot
-from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import (
     EVENT_RECORDED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
@@ -298,14 +298,14 @@ class Fenced:
 
     taken_over: Container[str]
 
-    def out(self, detail: ChunkDetail, ref: _FenceRef) -> bool:
+    def out(self, detail: ChunkStatusView, ref: _FenceRef) -> bool:
         if ref.chunk_id in self.taken_over:
             return False
         if detail.latest_epoch is not None and detail.latest_epoch > ref.epoch:
             return True
         # A restart mints one above the newest epoch THE HUB knows, which excludes a reference whose
         # own mint is still buffered here — so it can land LEVEL with what it displaces.
-        return any(restart.epoch >= ref.epoch for restart in detail.restarts)
+        return any(epoch >= ref.epoch for epoch in detail.restart_epochs)
 
 
 class Pull(Step):
@@ -354,7 +354,7 @@ class Pull(Step):
         fenced = Fenced(ctx.stores.takeover.open_takeover_chunk_ids())
         for lease in ctx.stores.lease_record.list_active_leases():
             try:
-                detail = ctx.hub.get_chunk(lease.chunk_id)
+                detail = ctx.chunk_views.get(lease.chunk_id)
             except ChunkNotFoundError:
                 # Terminal, not retryable (blizzard#9). Ordered before the HubClientError arm
                 # because it subclasses it, or the 404 would be swallowed as "hub unreachable".
@@ -366,7 +366,7 @@ class Pull(Step):
                 # Honor the terminal fact directly (issue #118), rather than waiting on the
                 # route check below to observe the release.
                 Attempt(ctx, lease).abandon(via="pull")
-            elif detail.route is None or detail.route.runner_id != ctx.config.runner_id:
+            elif detail.route_runner_id != ctx.config.runner_id:
                 Attempt(ctx, lease).abandon(via="pull")
             elif detail.pause is not None:
                 # A pause outranks a move: the paused chunk keeps its lease, route and epoch, and
@@ -390,15 +390,14 @@ class Pull(Step):
         fenced = Fenced(ctx.stores.takeover.open_takeover_chunk_ids())
         for escalation in ctx.stores.escalations.open_escalations():
             try:
-                detail = ctx.hub.get_chunk(escalation.chunk_id)
+                detail = ctx.chunk_views.get(escalation.chunk_id)
             except HubClientError as exc:
                 # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
                 _log.debug("escalation left open — hub unreadable", chunk_id=escalation.chunk_id, error=str(exc))
                 continue
             superseded = (
                 detail.status in TERMINAL_STATUSES
-                or detail.route is None
-                or detail.route.runner_id != ctx.config.runner_id
+                or detail.route_runner_id != ctx.config.runner_id
                 or fenced.out(detail, escalation)
             )
             if not superseded:
@@ -423,7 +422,7 @@ class Pull(Step):
         ctx = self.ctx
         for takeover in ctx.stores.takeover.open_takeovers():
             try:
-                detail = ctx.hub.get_chunk(takeover.chunk_id)
+                detail = ctx.chunk_views.get(takeover.chunk_id)
             except HubClientError as exc:
                 # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
                 _log.debug("takeover left open — hub unreadable", chunk_id=takeover.chunk_id, error=str(exc))

@@ -59,6 +59,8 @@ class ReadyQueue:
             # Ambiguous — the claim may or may not have committed. Releasing the binding here
             # could strand the chunk, so leave it; the next tick resolves it authoritatively.
             return False
+        if outcome.won:
+            self.ctx.chunk_views.invalidate(chunk_id)  # D5 — a later get() this tick sees the win
         if outcome.denied_paused is not None:
             # Refused outright, not beaten in the race (issue #44) — stop filling this tick
             # rather than burn the remaining slots on claims that will be refused the same way.
@@ -197,14 +199,14 @@ class InterruptedClaims:
 
     def _reconcile_one(self, chunk_id: str, *, requeued: bool) -> None:
         try:
-            detail = self.ctx.hub.get_chunk(chunk_id)
+            detail = self.ctx.chunk_views.get(chunk_id)
         except ChunkNotFoundError:
             _log.warning("hub reports interrupted-claim chunk unknown — releasing envs", chunk_id=chunk_id)
             self.ctx.env_release.release_chunk(chunk_id)
             return
         except HubClientError:
             return  # hub unreachable — the binding is durable; retry next tick
-        ours = detail.route is not None and detail.route.runner_id == self.ctx.config.runner_id
+        ours = detail.route_runner_id == self.ctx.config.runner_id
         if requeued:
             # An explicit human decision (issue #53) outranks every other branch below —
             # nothing here should second-guess it.
@@ -224,9 +226,9 @@ class InterruptedClaims:
             self._adopt(chunk_id)  # route ours — just spawn the current node
         elif detail.status == ChunkStatus.READY:
             self._reclaim(chunk_id, bindings)  # claim never landed — claim now, reuse the binding
-        elif detail.route is not None and not ours:
+        elif detail.route_runner_id is not None and not ours:
             self._release(chunk_id, "releasing binding — another runner won the chunk")
-        elif detail.route is None:
+        elif detail.route_runner_id is None:
             # No live route, and neither claimable nor ours to adopt (blizzard#202). Release
             # explicitly instead of matching no branch and leaking the binding forever.
             self._release(
@@ -253,6 +255,7 @@ class InterruptedClaims:
                 return
             except HubClientError:
                 return  # hub unreachable — the binding is durable; retry next tick
+            self.ctx.chunk_views.invalidate(chunk_id)  # D5 — named alongside the other writes
             self.ctx.stores.tokens.set_route_token(chunk_id, token=rekeyed.route_token, at=self.ctx.clock.now())
         envelope = self._envelope(chunk_id, "adopted")
         if envelope is None:
@@ -293,6 +296,8 @@ class InterruptedClaims:
             outcome = self.ctx.hub.claim_route(claim)
         except HubClientError:
             return  # hub unreachable — the binding is durable; retry next tick
+        if outcome.won:
+            self.ctx.chunk_views.invalidate(chunk_id)  # D5 — a later get() this tick sees the win
         if outcome.denied_paused is not None:
             # Refused outright because this runner is paused upstream, not lost to another
             # runner (issue #44).

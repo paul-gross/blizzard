@@ -42,7 +42,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
-from blizzard.wire.chunk import ChunkDetail, ChunkUsageTotalView, RouteView
+from blizzard.wire.chunk import ChunkStatusView, ChunkUsageTotalView
 from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import ESCALATION_RECORDED, LEASE_MINTED
@@ -105,14 +105,12 @@ def _chunk_with_cost(  # type: ignore[no-untyped-def]
     route_runner_id="r1",
     epoch=1,
 ):
-    """A hub-derived ``ChunkDetail`` carrying a scripted usage/cost total (issue #61a)."""
-    return ChunkDetail(
+    """A hub-derived ``ChunkStatusView`` carrying a scripted usage/cost total (issue #61a)."""
+    return ChunkStatusView(
         chunk_id=chunk_id,
-        graph_id="gr_1",
         status=status,
-        current_node_id="nd_build",
         latest_epoch=epoch,
-        route=RouteView(runner_id=route_runner_id, workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id=route_runner_id,
         cost=ChunkUsageTotalView(
             input_tokens=0,
             output_tokens=0,
@@ -571,13 +569,11 @@ def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path
     # (e.g. `transitioned`), the observed-in-production shape.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.DONE,
-        current_node_id=None,
         latest_epoch=1,
-        route=None,  # no live route — terminal, hub-side
+        route_runner_id=None,  # no live route — terminal, hub-side
     )
     hub.queue = []  # nothing new to fill — the reconciler is the only path that could act
     ctx = make_context(
@@ -1158,13 +1154,11 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
 
     # --- The graceful-restart re-attach, interleaved: mark, then RESUME in place.
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW + timedelta(seconds=30))
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_build",
         latest_epoch=1,
-        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        route_runner_id="r1",
     )
     resume_harness = FakeHarness(handle=_HANDLE, verdict="pass")
     Resume(
@@ -1522,11 +1516,9 @@ def test_poll_hub_node_releases_on_done(tmp_path):  # type: ignore[no-untyped-de
     # A chunk held at a hub node: a binding but no active lease.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.DONE,
-        current_node_id="deliver",
         latest_epoch=1,
     )
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -1545,11 +1537,9 @@ def test_poll_hub_node_waits_while_delivering(tmp_path):  # type: ignore[no-unty
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.DELIVERING,
-        current_node_id="deliver",
         latest_epoch=1,
     )
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -1592,12 +1582,9 @@ def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  # type: igno
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_verify",
-        current_node_name="verify",
         latest_epoch=2,  # the coordinator's hub_epoch — ahead of the runner's minted epoch 1
     )
     hub.envelopes["ch_1"] = make_envelope("ch_1", "verify", node_id="nd_verify", choices=_CHOICES)
@@ -1642,12 +1629,9 @@ def test_advance_held_chunk_does_not_respawn_a_buffered_escalation(tmp_path):  #
     hub = FakeHub()
     # The hub has NOT advanced: it still reads running at the SAME epoch the runner minted (2),
     # because the escalation.recorded fact has not flushed yet.
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.RUNNING,
-        current_node_id="nd_build",
-        current_node_name="build",
         latest_epoch=2,
     )
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -2315,11 +2299,9 @@ def test_full_happy_path_across_ticks(tmp_path):  # type: ignore[no-untyped-def]
     assert store.held_environment_ids() == ["e1"]
 
     # The hub's merge queue lands the delivery; nothing left to peek.
-    hub.chunks["ch_1"] = ChunkDetail(
+    hub.chunks["ch_1"] = ChunkStatusView(
         chunk_id="ch_1",
-        graph_id="gr_1",
         status=ChunkStatus.DONE,
-        current_node_id="deliver",
         latest_epoch=1,
     )
     hub.queue = []

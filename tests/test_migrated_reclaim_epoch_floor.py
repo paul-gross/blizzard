@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.loop.chunk_views import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -116,10 +117,12 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     assert store.latest_epoch(chunk_id) == 0, "the fresh runner store must carry no local history"
     provider = FakeProvider({"e9": "/ws/e9"})
+    _hub_client = HttpHubClient(hub.client)
     ctx = LoopContext(
         stores=make_stores(store),
         clock=hub.clock,
-        hub=HttpHubClient(hub.client),
+        hub=_hub_client,
+        chunk_views=ReadThroughChunkViews(_hub_client),
         provider=provider,
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         process=FakeProbe(alive={(200, "start-200")}),
