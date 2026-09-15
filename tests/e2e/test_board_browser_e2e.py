@@ -295,17 +295,17 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                     """One chunk's card in the READY lane, by its full id."""
                     return col("ready").locator(f'[data-chunk="{chunk_id}"]')
 
-                def ready_block(chunk_id: str):
-                    """That card *with* its queue controls — the queue controls are the
-                    card's siblings, and the block, not the card, is what a drag grabs."""
-                    return col("ready").locator(f'.q-card:has([data-chunk="{chunk_id}"])')
-
                 # All three chunks rest NOT READY in the BACKLOG column; no runner has
                 # registered yet.
                 expect(page.get_by_test_id("chunk-card")).to_have_count(3)
                 expect(col_cards("notready")).to_have_count(3)
                 expect(page.get_by_test_id("runners-empty")).to_be_visible()
                 expect(col_cards("ready")).to_have_count(0)
+                backlog_grips = col("notready").get_by_test_id("board-reorder-grip")
+                expect(backlog_grips).to_have_count(3)
+                expect(backlog_grips.first).to_have_attribute("aria-hidden", "true")
+                for retired_control in ("queue-select", "group-selected", "queue-move-top", "backlog-move-top"):
+                    expect(page.get_by_test_id(retired_control)).to_have_count(0)
 
                 # Promote each chunk by data-chunk, not `.first`: promote order is queue
                 # order, and the queue this scenario reshapes has to start known.
@@ -314,11 +314,14 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                     expect(col_cards("notready")).to_have_count(remaining)
                     expect(col_cards("ready")).to_have_count(promoted)
                 expect(page.get_by_test_id("chunk-card")).to_have_count(3)
+                ready_grips = col("ready").get_by_test_id("board-reorder-grip")
+                expect(ready_grips).to_have_count(3)
+                expect(ready_grips.first).to_have_attribute("aria-hidden", "true")
 
-                # --- Group B + C from their cards (survivor = top-most selected = B) ---
-                ready_block(chunk_b).get_by_test_id("queue-select").check()
-                ready_block(chunk_c).get_by_test_id("queue-select").check()
-                page.get_by_test_id("group-selected").click()
+                # --- Group B + C through the retained hub API (B is the survivor) ------
+                grouped_response = hub.post(f"/api/chunks/{chunk_b}/group", json={"merge_chunk_ids": [chunk_c]})
+                assert grouped_response.status_code == 200, grouped_response.text
+                assert grouped_response.json()["merged_chunk_ids"] == [chunk_c]
 
                 # C vanishes from the board live and B survives carrying the union of work
                 # refs, one chip per pointer label.
@@ -337,7 +340,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # Promote stamped B at the tail, so A leads; B is dragged over it
                 # (`_drag_ready_card_to_top`). Before-shot asserted so after can't pass vacuously.
                 expect(col_cards("ready").first).to_have_attribute("data-chunk", chunk_a)
-                _drag_ready_card_to_top(page, ready_block(chunk_b), ready_block(chunk_a))
+                _drag_ready_card_to_top(page, ready_card(chunk_b), ready_card(chunk_a))
                 expect(col_cards("ready").first).to_have_attribute("data-chunk", chunk_b)
 
                 # Fleet truth corroborates both shaping actions before the runner claims.

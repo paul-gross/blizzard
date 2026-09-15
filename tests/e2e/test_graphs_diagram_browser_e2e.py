@@ -400,6 +400,7 @@ def test_diagram_geometry_matches_the_rendered_text(tmp_path: Path, chromium_ava
             try:
                 wrapped_somewhere = False
                 name_bound_nodes = 0
+                targeted_resume_somewhere = False
                 for seed_name, graph_id in graph_ids.items():
                     page.goto(f"http://127.0.0.1:{hub_port}/graphs/{graph_id}", wait_until="load")
                     diagram = page.get_by_test_id("graph-diagram")
@@ -440,9 +441,11 @@ def test_diagram_geometry_matches_the_rendered_text(tmp_path: Path, chromium_ava
                             f"background but its rendered text needs {expected}px"
                         )
 
-                    # Targeted resumes reach the meta line in their authored form (#158) —
-                    # every *shipped* graph authors at least one `session: resume:<node>`.
-                    if seed_name != "name-row-bound":
+                    # Targeted resumes reach the meta line in their authored form (#158).
+                    # Only assert that contract for shipped graphs that actually author one;
+                    # the default triage graph deliberately uses a fresh session.
+                    if "session: resume:" in graphs[seed_name]:
+                        targeted_resume_somewhere = True
                         metas = [m["text"] for node in geometry["nodes"] for m in node["metas"]]
                         assert any(text.startswith("resume:") for text in metas), (
                             f"{seed_name}: no meta line rendered a targeted resume's `resume:<node>` form"
@@ -451,6 +454,7 @@ def test_diagram_geometry_matches_the_rendered_text(tmp_path: Path, chromium_ava
                 # Both sensitivities are load-bearing: some node wrapped (`meta`), and
                 # some was sized by its name row (`name`/`badge`), not merely available.
                 assert wrapped_somewhere, "no graph exercised the meta-line wrap"
+                assert targeted_resume_somewhere, "no shipped graph exercised targeted-resume metadata"
                 assert name_bound_nodes >= 2, (
                     f"only {name_bound_nodes} node(s) were sized by their name row — the reconstruction "
                     "is not binding the `name`/`badge` kinds"

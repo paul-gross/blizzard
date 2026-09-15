@@ -10,6 +10,9 @@
   width: 100%;
   min-width: 0;
 }
+:host(.reorder-armed) .card {
+  padding-left: 22px;
+}
 /* Hover reads as the background step plus a dim-cyan edge on three sides
    (never the left, which stays status-colored) — the background step alone
    measured too subtle against this card's own borders/text/chrome to read

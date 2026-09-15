@@ -1,4 +1,4 @@
-import { CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
+import { CdkDrag, CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
@@ -372,12 +372,7 @@ describe('BoardShell', () => {
     expect(el.querySelector('[data-testid="card-cost"]')).toBeNull();
   });
 
-  /*
-   * The READY lane (issue #137) — the ready queue as a board column: ordered by
-   * the hub's dispatch order, and the only lane carrying the queue-shaping
-   * affordances the retired left rail used to own (same testids, moved not
-   * renamed).
-   */
+  /** The READY lane (issue #137), ordered by the hub's dispatch order. */
   describe('the READY lane', () => {
     const A = READY('aaaaaaaaaaaaaaaaaaaa');
     const B = READY('bbbbbbbbbbbbbbbbbbbb');
@@ -425,39 +420,7 @@ describe('BoardShell', () => {
       expect(selected).toBe(A.chunk_id);
     });
 
-    it('emits moveToTop tagged \'ready\' from a card\'s Top button, disabled for the one already there', async () => {
-      const fixture = await render([A, B], [A.chunk_id, B.chunk_id]);
-      let emitted: { chunkId: string; list: string } | undefined;
-      fixture.componentInstance.moveToTop.subscribe((move) => (emitted = move));
-      const el = fixture.nativeElement as HTMLElement;
-
-      const tops = el.querySelectorAll<HTMLButtonElement>('[data-testid="queue-move-top"]');
-      expect(tops).toHaveLength(2);
-      expect(tops[0].disabled).toBe(true);
-      tops[1].click();
-      expect(emitted).toEqual({ chunkId: B.chunk_id, list: 'ready' });
-    });
-
-    it('emits group with the checked ids in lane order, and only from two up', async () => {
-      const fixture = await render([A, B, C], [A.chunk_id, B.chunk_id, C.chunk_id]);
-      let emitted: readonly string[] | undefined;
-      fixture.componentInstance.group.subscribe((ids) => (emitted = ids));
-      const el = fixture.nativeElement as HTMLElement;
-
-      const groupButton = el.querySelector<HTMLButtonElement>('[data-testid="group-selected"]');
-      expect(groupButton?.disabled).toBe(true);
-
-      const checks = el.querySelectorAll<HTMLInputElement>('[data-testid="queue-select"]');
-      checks[2].click();
-      checks[1].click();
-      fixture.detectChanges();
-
-      // Lane order, not click order — the top-most selected is the survivor.
-      el.querySelector<HTMLButtonElement>('[data-testid="group-selected"]')?.click();
-      expect(emitted).toEqual([B.chunk_id, C.chunk_id]);
-    });
-
-    it('carries the queue-shaping controls in READY alone', async () => {
+    it('renders a decorative grip on each reorder-armed card', async () => {
       const el = (
         await render([
           A,
@@ -465,20 +428,30 @@ describe('BoardShell', () => {
         ])
       ).nativeElement as HTMLElement;
 
-      expect(el.querySelectorAll('[data-testid="queue-select"]')).toHaveLength(1);
-      expect(el.querySelectorAll('[data-testid="group-selected"]')).toHaveLength(1);
-      expect(el.querySelector('[data-col="ready"] [data-testid="queue-select"]')).toBeTruthy();
-      expect(el.querySelector('[data-col="running"] [data-testid="queue-move-top"]')).toBeNull();
+      const grips = el.querySelectorAll('[data-col="ready"] [data-testid="board-reorder-grip"]');
+      expect(grips).toHaveLength(1);
+      expect(grips[0].getAttribute('aria-hidden')).toBe('true');
+      expect(el.querySelector('[data-col="running"] [data-testid="board-reorder-grip"]')).toBeNull();
     });
 
-    it('does not arm the drag list, and withholds Group/Top/checkbox, without queue:reorder', async () => {
+    it('hosts the READY lane drag on the whole card, not its decorative grip', async () => {
+      const fixture = await render([A], [A.chunk_id]);
+      const el = fixture.nativeElement as HTMLElement;
+      const card = el.querySelector('[data-col="ready"] .q-card');
+      const grip = el.querySelector('[data-col="ready"] [data-testid="board-reorder-grip"]');
+      const drag = fixture.debugElement.query(By.directive(CdkDrag));
+
+      expect(drag).toBeTruthy();
+      expect(drag!.nativeElement).toBe(card);
+      expect(drag!.nativeElement).not.toBe(grip);
+    });
+
+    it('does not arm the drag list or render a grip without queue:reorder', async () => {
       const fixture = await render([A, B], [A.chunk_id, B.chunk_id], 'ready', { canReorder: false });
       const el = fixture.nativeElement as HTMLElement;
 
       expect(fixture.debugElement.queryAll(By.directive(CdkDropList))).toHaveLength(0);
-      expect(el.querySelector('[data-testid="group-selected"]')).toBeNull();
-      expect(el.querySelector('[data-testid="queue-select"]')).toBeNull();
-      expect(el.querySelector('[data-testid="queue-move-top"]')).toBeNull();
+      expect(el.querySelector('[data-testid="board-reorder-grip"]')).toBeNull();
       // The cards themselves still render — a read-only board still shows the queue.
       expect(laneIds(el, 'ready')).toEqual([A.chunk_id, B.chunk_id]);
     });
@@ -513,14 +486,7 @@ describe('BoardShell', () => {
     });
   });
 
-  /*
-   * The BACKLOG lane's own reorder affordances (the backlog ranking work that
-   * followed issue #137) — drag-and-drop and a Top button, exactly like READY's,
-   * but tagged 'notready' so a container routes the write to the backlog's own
-   * mutation rather than the ready queue's. Grouping stays READY-only
-   * (out of scope to extend): BACKLOG never renders the checkbox or Group
-   * button, permission or not.
-   */
+  /** BACKLOG has its own independent ranked order and drag target. */
   describe('the BACKLOG lane', () => {
     const P = BACKLOG('pppppppppppppppppppp');
     const Q = BACKLOG('qqqqqqqqqqqqqqqqqqqq');
@@ -545,7 +511,7 @@ describe('BoardShell', () => {
       expect(laneIds(fixture.nativeElement as HTMLElement, 'notready')).toEqual([Q.chunk_id, P.chunk_id]);
     });
 
-    it('arms the drag list and renders a Top button with its own testid, with queue:reorder', async () => {
+    it('arms the drag list and renders a decorative grip with queue:reorder', async () => {
       const fixture = await render([P, Q], [], 'ready', { canReorder: true }, [P.chunk_id, Q.chunk_id]);
       const el = fixture.nativeElement as HTMLElement;
 
@@ -553,14 +519,10 @@ describe('BoardShell', () => {
       expect(lists.some((l) => l.nativeElement.closest('[data-col]').getAttribute('data-col') === 'notready')).toBe(
         true,
       );
-      const tops = el.querySelectorAll<HTMLButtonElement>('[data-col="notready"] [data-testid="backlog-move-top"]');
-      expect(tops).toHaveLength(2);
-      expect(tops[0].disabled).toBe(true);
-      // READY's own testid never leaks onto the BACKLOG lane.
-      expect(el.querySelector('[data-col="notready"] [data-testid="queue-move-top"]')).toBeNull();
+      expect(el.querySelectorAll('[data-col="notready"] [data-testid="board-reorder-grip"]')).toHaveLength(2);
     });
 
-    it('withholds the drag list and the Top button without queue:reorder — cards still render', async () => {
+    it('withholds the drag list and grip without queue:reorder — cards still render', async () => {
       const fixture = await render([P, Q], [], 'ready', { canReorder: false }, [P.chunk_id, Q.chunk_id]);
       const el = fixture.nativeElement as HTMLElement;
 
@@ -568,30 +530,8 @@ describe('BoardShell', () => {
       expect(lists.some((l) => l.nativeElement.closest('[data-col]').getAttribute('data-col') === 'notready')).toBe(
         false,
       );
-      expect(el.querySelector('[data-col="notready"] [data-testid="backlog-move-top"]')).toBeNull();
+      expect(el.querySelector('[data-col="notready"] [data-testid="board-reorder-grip"]')).toBeNull();
       expect(laneIds(el, 'notready')).toEqual([P.chunk_id, Q.chunk_id]);
-    });
-
-    it('renders no grouping affordance — no checkbox, no Group button — with or without queue:reorder', async () => {
-      for (const canReorder of [true, false]) {
-        const fixture = await render([P, Q], [], 'ready', { canReorder }, [P.chunk_id, Q.chunk_id]);
-        const el = fixture.nativeElement as HTMLElement;
-
-        expect(el.querySelector('[data-col="notready"] [data-testid="queue-select"]')).toBeNull();
-        expect(el.querySelector('[data-col="notready"] [data-testid="group-selected"]')).toBeNull();
-      }
-    });
-
-    it("emits moveToTop tagged 'notready' from a card's Top button", async () => {
-      const fixture = await render([P, Q], [], 'ready', {}, [P.chunk_id, Q.chunk_id]);
-      let emitted: { chunkId: string; list: string } | undefined;
-      fixture.componentInstance.moveToTop.subscribe((move) => (emitted = move));
-      const el = fixture.nativeElement as HTMLElement;
-
-      const tops = el.querySelectorAll<HTMLButtonElement>('[data-col="notready"] [data-testid="backlog-move-top"]');
-      tops[1].click();
-
-      expect(emitted).toEqual({ chunkId: Q.chunk_id, list: 'notready' });
     });
 
     it("resolves a drop to the anchor it landed after, tagged 'notready'", async () => {

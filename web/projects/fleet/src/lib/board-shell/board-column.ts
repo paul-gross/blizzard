@@ -1,10 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { CdkDrag, type CdkDragDrop, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 
 import { BoardCardComponent, type BoardCard } from '../board-card/board-card';
 import type { Lane } from '../chunk-lanes';
 import { KitBeacon } from '../kit/kit-beacon';
-import { KitButton } from '../kit/kit-button';
 
 /**
  * Which hub-ranked list a reorder targets — the READY queue or the BACKLOG
@@ -29,40 +28,24 @@ export interface BoardReposition {
   readonly list: BoardReorderList;
 }
 
-/** A card's Top button, activated — the same `list` tagging as {@link BoardReposition}. */
-export interface BoardTopMove {
-  readonly chunkId: string;
-  readonly list: BoardReorderList;
-}
-
 /**
  * One board column — a lane's engraved head (label, occupancy beacon, count)
  * over its card list. Split out of {@link BoardShell} (issue #137) alongside
  * {@link BoardCardComponent} so that file stays under the
- * `web:lint` line cap once the READY lane grew its queue-shaping
- * affordances.
+ * `web:lint` line cap once the ranked lanes gained reordering.
  *
- * Two independent conditionals arm this component's affordances: {@link reorderControls}
- * arms the drag-and-drop drop list and the per-card move-to-top control, and
- * {@link groupingControls} arms the per-card multi-select checkbox and the head's Group
- * button. READY sets both; BACKLOG sets {@link reorderControls} alone — it reorders
- * like READY does, but grouping stays READY-only. Every other lane renders a plain,
- * undraggable list, so `cdkDropList`/`cdkDrag` never reach markup that has no reorder
- * to express. The queue-shaping testids (`queue-select`, `group-selected`) are the
- * ones the retired left rail used: the controls moved onto the board, they were not
- * renamed. The Top button's testid is lane-scoped instead ({@link moveTopTestId}):
- * READY keeps `queue-move-top`, BACKLOG gets its own `backlog-move-top`, so each
- * resolves to exactly one lane's control.
+ * {@link reorderControls} arms READY and BACKLOG's drag-and-drop branches. Every
+ * other lane renders a plain, undraggable list, so `cdkDropList`/`cdkDrag` never
+ * reach markup that has no reorder to express. Armed cards carry a decorative grip;
+ * the wrapper remains the whole-card drag target.
  *
- * Presentational: the checkbox selection is plain UI state and lives here (the
- * same reason `QueuePanelView` held it before this replaced it,
- * `bzh:frontend-container-presentational`); everything else is a plain input,
- * and every action leaves as an output for a container to write.
+ * Presentational: every value is a plain input and every action leaves as an
+ * output for a container to write.
  */
 @Component({
   selector: 'fleet-board-column',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardCardComponent, CdkDrag, CdkDropList, KitBeacon, KitButton],
+  imports: [BoardCardComponent, CdkDrag, CdkDropList, KitBeacon],
   host: { '[attr.data-col]': 'column().key' },
   templateUrl: './board-column.html',
   styleUrl: './board-column.css',
@@ -77,25 +60,18 @@ export class BoardColumn {
   /** The chunk whose detail fills the dock, or null — its card carries the highlight. */
   readonly selectedChunkId = input<string | null>(null);
 
-  /** Whether this lane carries the grouping affordances — the multi-select
-   * checkbox and the Group button — set only for READY (grouping stays
-   * READY-only, out of scope to extend). */
-  readonly groupingControls = input(false);
-
-  /** Whether this lane carries the reorder affordances — drag-and-drop and the
-   * Top button — set for READY and BACKLOG alike, independently of {@link groupingControls}:
+  /** Whether this lane carries reordering — set for READY and BACKLOG alike:
    * both lists rank independently (`bzh:ranking-is-per-list`) and both are
-   * operator-reshapeable, but only READY groups. */
+   * operator-reshapeable. */
   readonly reorderControls = input(false);
 
   /** Whether the current identity may promote a backlog chunk (`chunk:control` —
    * issue #210), forwarded to each {@link BoardCardComponent}. */
   readonly canControl = input(false);
 
-  /** Whether the current identity may reorder or group the ready queue and
-   * backlog (`queue:reorder` — issue #210) — gates the Group button and,
-   * combined with {@link reorderControls}, whether this lane's drag-and-drop is
-   * armed at all. */
+  /** Whether the current identity may reorder the ready queue and backlog
+   * (`queue:reorder` — issue #210), combined with {@link reorderControls} to
+   * arm this lane's drag-and-drop. */
   readonly canReorder = input(false);
 
   /** Emitted with a chunk id when its card is activated — fills the detail dock. */
@@ -108,25 +84,6 @@ export class BoardColumn {
    * tagged with which list ({@link BoardReorderList}) the move belongs to. */
   readonly reposition = output<BoardReposition>();
 
-  /** Emitted when a card's Top button is clicked, tagged with which list the
-   * move belongs to. */
-  readonly moveToTop = output<BoardTopMove>();
-
-  /** Emitted with the checked ids in current lane order (the top-most is the
-   * group survivor) when the operator activates Group. */
-  readonly group = output<readonly string[]>();
-
-  /** Chunk ids checked for grouping. */
-  private readonly selection = signal<ReadonlySet<string>>(new Set());
-
-  /** Checked ids in current lane order (the top-most is the group survivor). */
-  protected readonly selectedIds = computed<readonly string[]>(() => {
-    const selected = this.selection();
-    return this.cards()
-      .map((card) => card.chunkId)
-      .filter((chunkId) => selected.has(chunkId));
-  });
-
   /** The beacon color for an occupied lane's header, or null for the quiet lanes:
    * amber for work in flight or parked on a human, red for an escalation. */
   protected readonly blink = computed<'amber' | 'red' | null>(() => {
@@ -136,39 +93,13 @@ export class BoardColumn {
     return null;
   });
 
-  /** This lane's own reorder list tag, derived from {@link Lane.key} — the value
-   * every {@link reposition}/{@link moveToTop} emission carries. Only meaningful
+  /** This lane's own reorder list tag, derived from {@link Lane.key}. Only meaningful
    * when {@link reorderControls} is armed (READY or BACKLOG); asserted rather
    * than defaulted, since a lane with no reorder never reads this. */
   private get list(): BoardReorderList {
     const key = this.column().key;
     if (key === 'ready' || key === 'notready') return key;
     throw new Error(`board column ${key} has no reorder list`);
-  }
-
-  /** The Top button's testid, lane-scoped so it resolves to exactly one
-   * component: READY keeps `queue-move-top` (the retired left rail's own),
-   * BACKLOG gets its own `backlog-move-top`. */
-  protected readonly moveTopTestId = computed(() => (this.list === 'notready' ? 'backlog-move-top' : 'queue-move-top'));
-
-  protected isSelected(chunkId: string): boolean {
-    return this.selection().has(chunkId);
-  }
-
-  protected toggle(chunkId: string): void {
-    this.selection.update((prev) => {
-      const next = new Set(prev);
-      if (next.has(chunkId)) next.delete(chunkId);
-      else next.add(chunkId);
-      return next;
-    });
-  }
-
-  protected groupSelected(): void {
-    const ids = this.selectedIds();
-    if (ids.length < 2) return;
-    this.group.emit(ids);
-    this.selection.set(new Set());
   }
 
   /**
@@ -191,8 +122,4 @@ export class BoardColumn {
     });
   }
 
-  /** A card's Top button, clicked — tagged with this lane's {@link list}. */
-  protected topClicked(chunkId: string): void {
-    this.moveToTop.emit({ chunkId, list: this.list });
-  }
 }

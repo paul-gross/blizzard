@@ -330,9 +330,7 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
 
 
 def _rail_messages(page: Page) -> list[str]:
-    """The rail's rendered messages, less the live-only queue signal: no durable fact backs
-    it, so `GET /api/activity` backfill cannot reproduce it after a restart."""
-    return [m for m in page.get_by_test_id("activity-message").all_text_contents() if m != "ready queue changed"]
+    return page.get_by_test_id("activity-message").all_text_contents()
 
 
 def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: Path, chromium_available: bool) -> None:
@@ -382,9 +380,9 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                 page.goto(f"http://127.0.0.1:{hub_port}/", wait_until="load")
                 expect(page.get_by_test_id("board-shell")).to_be_visible()
                 expect(page.get_by_test_id("activity-panel")).to_be_visible()
-                # Facts already landed before this subscribes, so the replay tail alone
-                # carries them — this is the baseline row set, not yet the restart assertion.
-                expect(page.get_by_test_id("activity-row")).to_have_count(5)  # 3 durable + a queue signal per mint
+                # Facts already landed before this subscribes; the initial activity read
+                # supplies the durable baseline, before the restart assertion below.
+                expect(page.get_by_test_id("activity-row")).to_have_count(3)
                 first_load_messages = _rail_messages(page)
                 assert len(first_load_messages) == 3, first_load_messages
 

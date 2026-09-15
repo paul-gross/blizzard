@@ -6,7 +6,7 @@ import { By } from '@angular/platform-browser';
 import { Router, provideRouter, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { compactRef, hubClient } from 'fleet';
+import { BoardShell, compactRef, hubClient } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { BoardPage } from './board-page';
@@ -219,14 +219,11 @@ describe('BoardPage', () => {
     expect(card(el, READY).closest('[data-col]')?.getAttribute('data-col')).toBe('ready');
   });
 
-  it('repositions a ready chunk with no anchor when its Top control is used', async () => {
-    const { el, harness } = await open();
+  it('routes a ready reposition with a null top anchor to the queue endpoint', async () => {
+    const { harness } = await open();
 
-    // The lane renders in the queue read's order, so the second card is the one
-    // with somewhere to go; the first one's Top is disabled.
-    const tops = el.querySelectorAll<HTMLButtonElement>('[data-testid="queue-move-top"]');
-    expect(tops[0].disabled).toBe(true);
-    tops[1].click();
+    const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+    shell.reposition.emit({ chunkId: READY_NEXT, afterChunkId: null, list: 'ready' });
     await settle(harness.fixture);
 
     const calls = stub.forRoute('/api/queue/position', 'POST');
@@ -235,8 +232,7 @@ describe('BoardPage', () => {
   });
 
   /*
-   * The BACKLOG lane's reorder affordances — the same drag-and-drop/Top wiring
-   * as READY's, but reading `GET /api/backlog` and writing
+   * The BACKLOG lane's reorder wiring, reading `GET /api/backlog` and writing
    * `POST /api/backlog/position` instead of the queue's own routes
    * (`bzh:ranking-is-per-list`), and gated on `queue:reorder` even to read.
    */
@@ -252,29 +248,21 @@ describe('BoardPage', () => {
       expect(ids).toEqual([compactRef(BACKLOG), compactRef(BACKLOG_NEXT)]);
     });
 
-    it("repositions a backlog chunk with no anchor when its Top control is used — the backlog's own route, not the queue's", async () => {
-      const { el, harness } = await open();
+    it("routes a backlog reposition to its own endpoint, not the queue's", async () => {
+      const { harness } = await open();
 
-      const tops = el.querySelectorAll<HTMLButtonElement>('[data-testid="backlog-move-top"]');
-      expect(tops[0].disabled).toBe(true);
-      tops[1].click();
+      const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+      shell.reposition.emit({ chunkId: BACKLOG_NEXT, afterChunkId: BACKLOG, list: 'notready' });
       await settle(harness.fixture);
 
       const backlogCalls = stub.forRoute('/api/backlog/position', 'POST');
       expect(backlogCalls).toHaveLength(1);
-      expect(backlogCalls[0].body).toEqual({ chunk_id: BACKLOG_NEXT, after_chunk_id: null });
+      expect(backlogCalls[0].body).toEqual({ chunk_id: BACKLOG_NEXT, after_chunk_id: BACKLOG });
       // Never the ready queue's route.
       expect(stub.forRoute('/api/queue/position', 'POST')).toHaveLength(0);
     });
 
-    it('renders no grouping affordance on the backlog lane', async () => {
-      const { el } = await open();
-
-      expect(el.querySelector('[data-col="notready"] [data-testid="queue-select"]')).toBeNull();
-      expect(el.querySelector('[data-col="notready"] [data-testid="group-selected"]')).toBeNull();
-    });
-
-    it('never reads the backlog, and withholds its drag list and Top button, without queue:reorder', async () => {
+    it('never reads the backlog, and withholds its drag list and grip, without queue:reorder', async () => {
       // A narrower identity than OPERATOR_ME_RESPONSE: everything queue:reorder
       // gates is missing, everything else stays so the rest of the board still
       // renders normally.
@@ -289,7 +277,7 @@ describe('BoardPage', () => {
 
       // The read itself never fires — not a fired-then-discarded 403.
       expect(stub.forRoute('/api/backlog', 'GET')).toHaveLength(0);
-      expect(el.querySelector('[data-testid="backlog-move-top"]')).toBeNull();
+      expect(el.querySelector('[data-testid="board-reorder-grip"]')).toBeNull();
       // The backlog chunk still renders as a card — a withheld read only
       // withholds the order and the reorder controls, not the chunk itself.
       expect(el.querySelectorAll(`[data-chunk="${BACKLOG}"]`)).toHaveLength(1);

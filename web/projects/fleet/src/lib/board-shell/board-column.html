@@ -1,15 +1,5 @@
 <div class="b-col-head">
   <span class="col-lbl">{{ column().label }}</span>
-  @if (groupingControls() && canReorder()) {
-    <fleet-kit-button
-      variant="primary"
-      testid="group-selected"
-      [disabled]="selectedIds().length < 2"
-      (click)="groupSelected()"
-    >
-      Group ({{ selectedIds().length }})
-    </fleet-kit-button>
-  }
   <span class="n">
     <!-- A live lane with occupants announces itself: a flashing square
          ahead of the count — amber for work in flight or parked on a
@@ -26,29 +16,13 @@
      falls to the plain, undraggable branch below, same as every non-reorderable lane. -->
 @if (reorderControls() && canReorder()) {
   <div class="b-col-body" cdkDropList (cdkDropListDropped)="dropped($event)">
-    @for (card of cards(); track card.chunkId; let i = $index) {
+    @for (card of cards(); track card.chunkId) {
       <div class="q-card" cdkDrag>
-        <div class="q-ctl">
-          @if (groupingControls()) {
-            <input
-              type="checkbox"
-              class="sel"
-              data-testid="queue-select"
-              [attr.aria-label]="'Select ' + card.chunkId + ' for grouping'"
-              [checked]="isSelected(card.chunkId)"
-              (change)="toggle(card.chunkId)"
-            />
-          }
-          <fleet-kit-button
-            [testid]="moveTopTestId()"
-            [ariaLabel]="'Move ' + card.chunkId + ' to top'"
-            [disabled]="i === 0"
-            (click)="topClicked(card.chunkId)"
-          >
-            Top
-          </fleet-kit-button>
-        </div>
+        <span class="reorder-grip" data-testid="board-reorder-grip" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </span>
         <fleet-board-card
+          class="reorder-armed"
           [card]="card"
           [selected]="card.chunkId === selectedChunkId()"
           [canControl]="canControl()"

@@ -70,24 +70,29 @@
   flex-direction: column;
   gap: 4px;
 }
-/* A READY card and its queue controls travel together as one draggable
-   block — the controls sit above the card rather than inside it, so
-   BoardCardComponent stays the same presentational card in every lane. */
+/* An armed card remains the whole drag target; this is only its visual cue. */
 .q-card {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  position: relative;
   cursor: grab;
 }
-.q-ctl {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+.reorder-grip {
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  transform: translateY(-50%);
+  display: grid;
+  grid-template-columns: repeat(2, 3px);
+  grid-auto-rows: 3px;
+  gap: 2px;
+  width: max-content;
+  padding: 2px;
 }
-.sel {
-  margin: 0;
-  accent-color: var(--cyan);
+.reorder-grip > span {
+  border-radius: 50%;
+  background: var(--cyan);
 }
 /* The gap holding a dragged card's destination. cdk's *preview* is appended
    to the body, outside this component's encapsulation, so it is left to the

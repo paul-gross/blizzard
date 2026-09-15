@@ -2,14 +2,14 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import type { ChunkSummary } from '../api/hub';
 import type { BoardCard } from '../board-card/board-card';
-import { BoardColumn, type BoardReposition, type BoardTopMove } from './board-column';
+import { BoardColumn, type BoardReposition } from './board-column';
 import { compactRef } from '../compact-ref';
 import { LANES, STATUS_LANE } from '../chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel, KitPanelHeader } from '../kit/kit-panel';
 import { KitSkeleton } from '../kit/kit-skeleton';
 
-export type { BoardCard, BoardReposition, BoardTopMove };
+export type { BoardCard, BoardReposition };
 
 /**
  * The mission-control chunk board — the six status columns and their
@@ -19,13 +19,9 @@ export type { BoardCard, BoardReposition, BoardTopMove };
  * READY and BACKLOG are two of those columns (issue #137, and the backlog
  * ranking work that followed it), not a rail beside them: both are hub-ranked
  * lists (`bzh:ranking-is-per-list`), so each renders top-to-bottom in its own
- * hub order ({@link readyOrder}/{@link backlogOrder}) and is reshaped in place —
- * drag a card, or use its Top button, and {@link reposition}/{@link moveToTop}
- * leave for whoever owns the write, lane-tagged so a container with both armed
- * can route to the matching mutation. {@link group} carries READY's own
- * multi-select — grouping stays READY-only. {@link BoardColumn} arms reorder and
- * grouping off two independent flags, so BACKLOG gets the former without the
- * latter.
+ * hub order ({@link readyOrder}/{@link backlogOrder}) and is reshaped in place:
+ * card drags leave as {@link reposition}, lane-tagged so a container with both
+ * armed can route to the matching mutation.
  *
  * This is the shared fleet view the hub app renders; it lives once here so the
  * runner app can compose it too. Presentational only: it holds no data client.
@@ -82,22 +78,13 @@ export class BoardShell {
    * list it belongs to (forwarded as-is from {@link BoardColumn}). */
   readonly reposition = output<BoardReposition>();
 
-  /** Emitted when a READY or BACKLOG card's Top button is clicked, tagged with
-   * which list it belongs to (forwarded as-is from {@link BoardColumn}). */
-  readonly moveToTop = output<BoardTopMove>();
-
-  /** Emitted with the READY lane's multi-selection, in lane order (the top-most
-   * is the group survivor), when the operator activates Group. */
-  readonly group = output<readonly string[]>();
-
   /** Whether the current identity may promote a backlog chunk (`chunk:control` —
    * issue #210), forwarded to every {@link BoardColumn}. `null`/pending resolves to
    * `false` (hidden until confirmed). */
   readonly canControl = input(false);
 
-  /** Whether the current identity may reorder the ready queue or backlog, or
-   * group the ready queue (`queue:reorder` — issue #210), forwarded to the
-   * READY and BACKLOG {@link BoardColumn}s. */
+  /** Whether the current identity may reorder the ready queue or backlog
+   * (`queue:reorder` — issue #210), forwarded to the ranked {@link BoardColumn}s. */
   readonly canReorder = input(false);
 
   protected readonly columns = LANES;

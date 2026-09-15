@@ -5,7 +5,7 @@
 # so an agent or human can reproduce the gate before pushing:
 #   ruff format --check · ruff check · pyright · structural gate (ast-grep scan +
 #   test) · pytest (unit + component) · OpenAPI spec drift · eslint · vitest ·
-#   structural gate (real-timer) · generated-client drift
+#   web structural gate · generated-client drift
 #
 # Invoke as `mise run gate` or `./scripts/ci-gate.sh`. Frontend steps run live
 # against the Angular workspace at $WEB_DIR, guarded only so a checkout without
@@ -55,8 +55,8 @@ echo "OK: committed OpenAPI specs match the exporter."
 # --- Frontend: eslint + vitest + structural gate + generated-client drift ---
 # $WEB_DIR is the Angular workspace with `npm run lint` (eslint, including the
 # `max-lines` ceiling), `npm run test` (vitest), `npm run structural-gate`
-# (the real-timer sweep), and `npm run generate:client` (openapi-ts codegen of
-# the committed client).
+# (the real-timer, kit-floor, and retired-board-control sweeps), and
+# `npm run generate:client` (openapi-ts codegen of the committed client).
 # Guarded so a checkout without $WEB_DIR is still a green no-op.
 if [ -f "$WEB_DIR/package.json" ]; then
   # `npm ci` wipes node_modules and reinstalls even when nothing changed —
@@ -82,7 +82,7 @@ if [ -f "$WEB_DIR/package.json" ]; then
   step "vitest ($WEB_DIR)"
   ( cd "$WEB_DIR" && npm run test )
 
-  step "structural gate ($WEB_DIR): real-timer (web:structural-gate)"
+  step "structural gate ($WEB_DIR) (web:structural-gate)"
   ( cd "$WEB_DIR" && npm run structural-gate )
 
   step "generated-client drift ($WEB_DIR): openapi-ts codegen + git diff"

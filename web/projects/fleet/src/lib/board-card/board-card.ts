@@ -51,13 +51,11 @@ export interface BoardCard {
  * `BoardShell`'s `@for` before, plus one addition — `[attr.data-chunk]`
  * carries the card's full chunk id, a unique locator the e2e suite needs
  * since same-instant chunk ids share a 12-char prefix. Nothing else in the
- * board repeats that attribute, including the READY lane's own per-card
- * queue controls, so it stays one node per chunk.
+ * board repeats that attribute, so it stays one node per chunk.
  *
- * The same card renders in every lane, READY included: the queue-shaping
- * affordances that lane adds are {@link BoardColumn}'s, rendered beside the
- * card rather than inside it, so this stays the one card the whole board is
- * built from.
+ * The same card renders in every lane, READY included: {@link BoardColumn}'s
+ * decorative reorder cue stays beside it, so this remains the one card the
+ * whole board is built from.
  *
  * Presentational only: {@link card} and {@link selected} are plain inputs; every
  * output forwards the chunk id to whatever container composes this — no query or

@@ -18,6 +18,9 @@
  * `.html` outside the kit hand-rolling `KitFactList`'s own `<dl class="kv">` grid.
  * A site that should not convert is named in `KIT_FLOOR_EXEMPT_SITES` with its reason.
  *
+ * Finally, a repository-wide census keeps retired board Top/group controls out of
+ * `projects/`, while leaving the generated grouping API available to other clients.
+ *
  * Run from `web/`: `npm run structural-gate` (`node scripts/structural-gate.js`).
  */
 
@@ -220,6 +223,46 @@ function assertKitFloorDetectorWorks() {
   }
 }
 
+// The board's retired Top/group contracts and the test handles that exposed them.
+// The generated hub client intentionally retains its grouping endpoint; this census
+// names only the former board facade, not that supported API surface.
+const RETIRED_BOARD_CONTROL_SYMBOLS = [
+  'BoardTopMove',
+  'groupingControls',
+  'moveToTop',
+  'moveTopTestId',
+  'topClicked',
+  'groupSelected',
+  'GroupVars',
+  'injectGroupChunksMutation',
+  'queue-select',
+  'group-selected',
+  'queue-move-top',
+  'backlog-move-top',
+];
+const RETIRED_BOARD_CONTROL = new RegExp(`\\b(${RETIRED_BOARD_CONTROL_SYMBOLS.join('|')})\\b`, 'g');
+
+/** The retired board-control symbols `source` still carries. */
+function retiredBoardControls(source) {
+  RETIRED_BOARD_CONTROL.lastIndex = 0;
+  return [...source.matchAll(RETIRED_BOARD_CONTROL)].map((match) => match[1]);
+}
+
+/** Prove the board-control census catches every retired shape before using it on
+ * `projects/` (`bzh:case-pins-its-own-name`). */
+function assertBoardControlDetectorWorks() {
+  for (const symbol of RETIRED_BOARD_CONTROL_SYMBOLS) {
+    if (!retiredBoardControls(`const value = '${symbol}';`).includes(symbol)) {
+      throw new Error(`board-control census missed \`${symbol}\``);
+    }
+  }
+  for (const source of ['groupChunksApiChunksChunkIdGroupPost', 'reposition', 'board-reorder-grip']) {
+    if (retiredBoardControls(source).length > 0) {
+      throw new Error(`board-control census false-positived on \`${source}\``);
+    }
+  }
+}
+
 /** Whether `relPath` (relative to `PROJECTS_DIR`) sits inside `fleet/lib/kit/` — the
  * kit's own sources are exempt from its own floor. */
 function isInsideKit(relPath) {
@@ -229,6 +272,7 @@ function isInsideKit(relPath) {
 function main() {
   assertRealTimerDetectorWorks();
   assertKitFloorDetectorWorks();
+  assertBoardControlDetectorWorks();
 
   const specFiles = walk(PROJECTS_DIR, ['.ts']);
 
@@ -250,6 +294,8 @@ function main() {
 
   /** @type {{ file: string, class: string }[]} */
   const kitFloorViolations = [];
+  /** @type {{ file: string, symbol: string }[]} */
+  const boardControlViolations = [];
 
   for (const file of walk(PROJECTS_DIR, ['.css'])) {
     const rel = path.relative(PROJECTS_DIR, file);
@@ -270,7 +316,14 @@ function main() {
     if (KV_FACT_GRID.test(source)) kitFloorViolations.push({ file: rel, class: '<dl class="kv">' });
   }
 
-  if (realTimerViolations.length > 0 || kitFloorViolations.length > 0) {
+  for (const file of walk(PROJECTS_DIR, ['.ts', '.html', '.css'])) {
+    const rel = path.relative(PROJECTS_DIR, file);
+    for (const symbol of retiredBoardControls(fs.readFileSync(file, 'utf8'))) {
+      boardControlViolations.push({ file: rel, symbol });
+    }
+  }
+
+  if (realTimerViolations.length > 0 || kitFloorViolations.length > 0 || boardControlViolations.length > 0) {
     if (realTimerViolations.length > 0) {
       console.error('structural-gate: real timers in merge-gating specs:\n');
       for (const v of realTimerViolations) console.error(`  ${v.file}: ${v.timer}(…, ${v.delay})`);
@@ -288,12 +341,20 @@ function main() {
           'copy; a site that genuinely should not convert goes in KIT_FLOOR_EXEMPT_SITES with a one-line reason.',
       );
     }
+    if (boardControlViolations.length > 0) {
+      console.error('structural-gate: retired board controls under projects:\n');
+      for (const v of boardControlViolations) console.error(`  ${v.file}: ${v.symbol}`);
+      console.error(
+        '\nKeep grouping at its supported API and CLI surfaces; board cards reorder through their whole-card drag only.',
+      );
+    }
     process.exitCode = 1;
     return;
   }
 
   console.log('structural-gate: real-timer sweep clean.');
   console.log('structural-gate: kit floor clean.');
+  console.log('structural-gate: retired board-control census clean.');
 }
 
 main();
