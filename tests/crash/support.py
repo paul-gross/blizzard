@@ -10,7 +10,6 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import os
-import socket
 import subprocess
 import sys
 import time
@@ -467,12 +466,6 @@ def intended_migrate_source_yaml() -> str:
 
 
 # Process helpers
-
-
-def free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
 
 
 def git_bare(bare: Path, *args: str) -> str:

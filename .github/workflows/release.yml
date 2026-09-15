@@ -78,7 +78,7 @@ jobs:
         env:
           BLIZZARD_SERVICE: "1"
           BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
-        run: cd blizzard && uv run pytest tests/service/ -v
+        run: cd blizzard && uv run pytest -n auto tests/service/ -v
 
   crash-sweep:
     name: FULL kill-9 crash sweep (blizzard:crash-sweep)
@@ -129,7 +129,7 @@ jobs:
         env:
           BLIZZARD_CRASH_SWEEP: "1"
           BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
-        run: cd blizzard && uv run pytest -m crash_sweep tests/crash/ -v
+        run: cd blizzard && uv run pytest -n auto -m crash_sweep tests/crash/ -v
 
   e2e:
     name: e2e acceptance loop (blizzard:e2e)

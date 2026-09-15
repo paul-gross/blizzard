@@ -16,10 +16,10 @@ from tests.crash.support import (
     FIXTURE_ENV,
     CrashEnv,
     forge_daemon,
-    free_port,
     mock_bin_dir,
     winter_source,
 )
+from tests.support import free_port
 
 pytestmark = pytest.mark.crash_sweep
 

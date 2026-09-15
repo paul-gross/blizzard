@@ -7,6 +7,7 @@ identity vars — see ``_strip_worker_identity_env``.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -60,6 +61,19 @@ def _strip_worker_identity_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unset the worker identity vars so the suite is green inside a blizzard worker."""
     for name in _WORKER_IDENTITY_ENV:
         monkeypatch.delenv(name, raising=False)
+
+
+def pytest_configure() -> None:
+    """Unsign every git commit the suite spawns: parallel workers overload a host's gpg-agent."""
+    os.environ.update(
+        {
+            "GIT_CONFIG_COUNT": "2",
+            "GIT_CONFIG_KEY_0": "commit.gpgsign",
+            "GIT_CONFIG_VALUE_0": "false",
+            "GIT_CONFIG_KEY_1": "tag.gpgsign",
+            "GIT_CONFIG_VALUE_1": "false",
+        }
+    )
 
 
 @pytest.fixture(autouse=True)

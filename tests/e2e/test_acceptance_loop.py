@@ -10,7 +10,6 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import os
-import socket
 import subprocess
 import sys
 import threading
@@ -28,7 +27,7 @@ from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
-from tests.support import daemon_log_sink, read_daemon_log, write_work_sources
+from tests.support import daemon_log_sink, free_port, read_daemon_log, write_work_sources
 
 pytestmark = [
     pytest.mark.e2e,
@@ -218,10 +217,7 @@ def _winter_source() -> Path | None:
 # Process helpers
 
 
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+_free_port = free_port
 
 
 def _git_bare(bare: Path, *args: str) -> str:

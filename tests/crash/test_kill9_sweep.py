@@ -38,7 +38,6 @@ from tests.crash.support import (
     await_http,
     build_script,
     checks_graph_yaml,
-    free_port,
     git_bare,
     graph_yaml,
     intended_migrate_source_yaml,
@@ -57,6 +56,7 @@ from tests.crash.support import (
 )
 from tests.crash_points import discover_crash_points
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.support import free_port
 
 pytestmark = pytest.mark.crash_sweep
 

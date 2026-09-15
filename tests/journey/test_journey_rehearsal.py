@@ -25,7 +25,6 @@ from tests.crash.support import (
     WORK_SOURCE_TOKEN_ENV,
     await_http,
     forge_daemon,
-    free_port,
     git_bare,
     mock_bin_dir,
     start_hub,
@@ -35,6 +34,7 @@ from tests.crash.support import (
     winter_source,
     write_runner_config,
 )
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.journey,
