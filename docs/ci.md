@@ -34,9 +34,9 @@ service tier (`blizzard:service-test`) and the kill-9 crash sweep's bounded CI p
 multi-repo checkout of `blizzard` + `blizzard-mock` + `blizzard-workspace`; `pr.yml` and `push.yml` both call it.
 
 Locally the upper tiers need the sibling `blizzard-mock` worktree provisioned (`winter provision <env>`); their exact
-local equivalents are `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest tests/service/`) and
+local equivalents are `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`) and
 `mise run crash-sweep-ci`
-(`BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -m crash_sweep tests/crash/`).
+(`BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -n auto -m crash_sweep tests/crash/`).
 
 The e2e tier runs only locally and in the tag `release` workflow — it is never a `pr`/`push` gate job.
 

@@ -102,11 +102,11 @@ jobs:
       - name: provision blizzard-mock (mock hub/runner/forge + fixture + mock-claude-code)
         run: cd blizzard-mock && uv sync
       - name: service tier — a running daemon's HTTP API vs. its mocked counterpart
-        # `mise run service-test` == `BLIZZARD_SERVICE=1 uv run pytest tests/service/`.
+        # `mise run service-test` == `BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`.
         env:
           BLIZZARD_SERVICE: "1"
           BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
-        run: cd blizzard && uv run pytest tests/service/ -v
+        run: cd blizzard && uv run pytest -n auto tests/service/ -v
 
   crash-sweep:
     name: kill-9 crash sweep — CI profile (blizzard:crash-sweep)
@@ -172,7 +172,7 @@ jobs:
         run: cd blizzard-mock && uv sync
       - name: kill-9 sweep (CI profile) — arm each subset crash point, SIGKILL, assert recovery
         # `mise run crash-sweep-ci` == the FULL sweep gated to the representative CI subset:
-        # `BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -m crash_sweep`.
+        # `BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -n auto -m crash_sweep`.
         # The FULL sweep is `mise run crash-sweep` (local + tag release).
         #
         # The ceiling tracks `crash_sweep_ci`: the bounded CI profile the pr/push callers
@@ -184,4 +184,4 @@ jobs:
           BLIZZARD_CRASH_SWEEP: "1"
           BLIZZARD_CRASH_SWEEP_CI: ${{ inputs.crash_sweep_ci }}
           BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
-        run: cd blizzard && uv run pytest -m crash_sweep tests/crash/ -v
+        run: cd blizzard && uv run pytest -n auto -m crash_sweep tests/crash/ -v
