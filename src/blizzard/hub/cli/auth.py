@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import contextlib
-
 import click
 
 from blizzard.hub.cli import login as cli_login
-from blizzard.hub.cli.command import AuthCommand, SessionWriteCommand
+from blizzard.hub.cli.command import AuthCommand, SessionServiceCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.sessions import IWriteSessionStore
+from blizzard.hub.cli.sessions.service import SessionService
 
 
 @click.command("rotate-signing-key", cls=AuthCommand)
@@ -26,7 +24,7 @@ def rotate_signing_key(cli: CliContext) -> None:
     click.echo("signing key rotated")
 
 
-@click.command(cls=SessionWriteCommand)
+@click.command(cls=SessionServiceCommand)
 @click.option(
     "--paste",
     "paste",
@@ -37,7 +35,7 @@ def rotate_signing_key(cli: CliContext) -> None:
 @click.option(
     "--no-browser", "no_browser", is_flag=True, default=False, help="Print the login URL instead of opening it."
 )
-def login(cli: CliContext, session_store: IWriteSessionStore, paste: bool, no_browser: bool) -> None:
+def login(cli: CliContext, session_service: SessionService, paste: bool, no_browser: bool) -> None:
     """Log into the hub (issue #96) — opens the browser to the hub's own authorize
     endpoint (PKCE, an ephemeral ``127.0.0.1`` loopback redirect) and stores the
     resulting session token locally. The CLI never contacts a provider directly.
@@ -52,17 +50,15 @@ def login(cli: CliContext, session_store: IWriteSessionStore, paste: bool, no_br
         token = flow.token()
     except cli_login.LoginError as exc:
         raise click.ClickException(f"login failed: {exc}") from exc
-    session_store.save(cli.hub_url, token)
+    session_service.login(cli.hub_url, token)
     click.echo(f"logged in to {cli.hub_url}")
 
 
-@click.command(cls=SessionWriteCommand)
-def logout(cli: CliContext, session_store: IWriteSessionStore) -> None:
+@click.command(cls=SessionServiceCommand)
+def logout(cli: CliContext, session_service: SessionService) -> None:
     """Log out of the hub (issue #96) — deletes the locally stored session token and
     revokes it at the hub, so it stops resolving even if it leaked. A no-op (locally)
     if never logged in; the revoke call is best-effort (a hub already unreachable, or
     an already-expired session, does not block the local cleanup)."""
-    with contextlib.suppress(click.ClickException):
-        cli.send("post", "/api/auth/logout")
-    session_store.delete(cli.hub_url)
+    session_service.logout(cli.hub_url, revoke=lambda: cli.send("post", "/api/auth/logout"))
     click.echo(f"logged out of {cli.hub_url}")

@@ -387,6 +387,33 @@ def test_session_file_is_named_only_at_its_composition_root() -> None:
     assert not violations, f"N — SessionFile must be named only at its composition root: {violations}"
 
 
+def _write_session_store_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:
+    violations: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        if path in exempt:
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            names_write_store = (isinstance(node, ast.Name) and node.id == "IWriteSessionStore") or (
+                isinstance(node, ast.Attribute) and node.attr == "IWriteSessionStore"
+            )
+            if names_write_store:
+                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} names IWriteSessionStore")  # type: ignore[union-attr]
+    return violations
+
+
+def test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root() -> None:
+    """D4/hub:98: only `hub/cli/sessions/` (the Protocol's own package) may name
+    `IWriteSessionStore` — every other hub CLI module, including `auth.py`'s
+    login/logout, takes the `SessionService` application service instead, never the raw
+    write seam (``bzh:controller-read-only``)."""
+    hub_cli_dir = _HUB_DIR / "cli"
+    sessions_dir = hub_cli_dir / "sessions"
+    exempt = _COMPOSITION_ROOTS | set(sessions_dir.rglob("*.py"))
+    violations = _write_session_store_accesses(hub_cli_dir, exempt=exempt)
+    assert not violations, f"D4 — IWriteSessionStore must be named only inside sessions/: {violations}"
+
+
 _RUNNER_API_DIR = _RUNNER_DIR / "api"
 
 

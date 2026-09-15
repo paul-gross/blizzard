@@ -23,6 +23,7 @@ from blizzard.hub.cli.runner import runner_group
 from blizzard.hub.cli.runtime import host, init, migrate_cmd
 from blizzard.hub.cli.scope import scope_group
 from blizzard.hub.cli.sessions.internal.session_file import SessionFile
+from blizzard.hub.cli.sessions.service import SessionService
 from blizzard.hub.cli.status import status as _status_command
 
 
@@ -32,7 +33,7 @@ def hub(ctx: click.Context) -> None:
     """Talk to — or become — the blizzard hub."""
     # The composition root (issue #104): built once, inherited as `ctx.obj` by every
     # subcommand's own context. No other module under `src/` names `SessionFile`.
-    ctx.obj = SessionFile.of()
+    ctx.obj = SessionService(SessionFile.of())
     if ctx.invoked_subcommand is None:
         ctx.invoke(host)
 
