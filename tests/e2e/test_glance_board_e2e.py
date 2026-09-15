@@ -139,7 +139,7 @@ def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populat
                 # Hold the chunks read open by capturing the route rather than racing a
                 # fixed delay or blocking with time.sleep() (would wedge Playwright's dispatcher).
                 held: list[Route] = []
-                page.route("**/api/chunks", lambda route: held.append(route))
+                page.route("**/api/chunks?**", lambda route: held.append(route))
 
                 # `commit`, not `load`: `load` waits on every in-flight request, including
                 # the one this test holds open.
