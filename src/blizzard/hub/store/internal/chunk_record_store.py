@@ -166,7 +166,9 @@ class ChunkRecordStore:
         with self._store.read("list_page") as conn:
             while True:
                 rows = conn.execute(_chunk_page_stmt(after, fetch)).all()
-                ephemeral = ephemeral_ids_in(conn, [r.chunk_id for r in rows]) if rows else set()
+                ephemeral: set[str] = set()
+                for batch in id_batches([r.chunk_id for r in rows]):
+                    ephemeral |= ephemeral_ids_in(conn, batch)
                 surviving = [r for r in rows if r.chunk_id not in ephemeral]
                 if len(surviving) > limit or len(rows) < fetch:
                     break
