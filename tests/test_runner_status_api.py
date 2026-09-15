@@ -22,7 +22,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from tests.runner_fakes import FakeHarness, make_read_stores, make_store, make_stores
+from tests.runner_fakes import FakeHarness, FakeProbe, make_read_stores, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -457,7 +457,7 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
         harnesses=HarnessRegistry(
             {
                 CLAUDE_CODE_HARNESS_ID: HarnessBinding(
-                    adapter=ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions")
+                    adapter=ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions", process=FakeProbe())
                 )
             }
         ),

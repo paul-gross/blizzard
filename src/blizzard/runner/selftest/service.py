@@ -14,7 +14,8 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import SELFTEST_PREFIX, Id
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.registry import IHarnessRegistry, UnknownHarnessError
-from blizzard.runner.selftest.checks import IProcessProbe, SelfTest
+from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.model import SelfTestCheck, SelfTestRun, SelfTestStatus
 from blizzard.runner.selftest.scratch_git import IScratchGit
 

@@ -26,7 +26,7 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
-from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
+from blizzard.runner.loop.process import IProcessProbe
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
@@ -137,7 +137,7 @@ class ClaudeCodeAdapter:
         model_aliases: Sequence[tuple[str, str]] = (),
         effort_aliases: Sequence[tuple[str, str]] = (),
         transcript_source: IHarnessTranscriptSource | None = None,
-        process: IProcessProbe | None = None,
+        process: IProcessProbe,
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
@@ -159,8 +159,8 @@ class ClaudeCodeAdapter:
         # serves the construction sites that need no real one.
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
         # The pid-liveness seam (`bzh:pluggable-seams`); the Linux `/proc` reference binding
-        # serves the construction sites that need no substitute.
-        self._process: IProcessProbe = process or LinuxProcessProbe()
+        # is the only production substitute, always injected (`bzh:dependency-injection`).
+        self._process: IProcessProbe = process
 
     def observe_version(self) -> str | None:
         """The configured executable's version, observed right now — bounded and
