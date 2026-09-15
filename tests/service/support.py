@@ -36,7 +36,7 @@ def mint_fixture(bin_dir: Path, winter_source: Path, scratch: Path) -> tuple[Pat
 
     Returns ``(workspace, origins, origin_bare)``. Idempotent via ``reset`` — repeatable per run.
     """
-    subprocess.run(
+    minted = subprocess.run(
         [
             str(bin_dir / "blizzard-mock-fixture"),
             "reset",
@@ -47,10 +47,11 @@ def mint_fixture(bin_dir: Path, winter_source: Path, scratch: Path) -> tuple[Pat
             "--winter-source",
             str(winter_source),
         ],
-        check=True,
         capture_output=True,
         text=True,
     )
+    if minted.returncode != 0:
+        pytest.fail(f"fixture reset exited {minted.returncode}:\n{minted.stdout}\n{minted.stderr}")
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"

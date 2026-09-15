@@ -8,10 +8,14 @@ Builds the store-backed ``host`` composition with the work-item read seam replac
 from __future__ import annotations
 
 import functools
+import hashlib
+import os
 import re
 import shutil
+import socket
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -728,6 +732,45 @@ def shared_daemon_log_dir() -> Path:
     one through their ~40 call sites buys nothing a single well-named directory does not.
     Created once per pytest process and reused."""
     return Path(tempfile.mkdtemp(prefix="blizzard-daemon-logs-"))
+
+
+_PORT_FLOOR = 20000
+_PORT_CEILING = 32768  # the kernel's ephemeral range starts here
+_PORT_BAND = 256
+_port_lock = threading.Lock()
+_port_cursor: list[int] = []
+
+
+def _worker_port_band() -> int:
+    """This worker's first port: bands are disjoint within a run and shifted per run."""
+    run_id = os.environ.get("PYTEST_XDIST_TESTRUNUID") or f"{os.getpid()}-{time.time_ns()}"
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    bands = (_PORT_CEILING - _PORT_FLOOR) // _PORT_BAND
+    run_offset = int.from_bytes(hashlib.sha256(run_id.encode()).digest()[:4], "big")
+    return _PORT_FLOOR + ((run_offset + int(worker.removeprefix("gw"))) % bands) * _PORT_BAND
+
+
+def _port_is_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+        return True
+
+
+def free_port() -> int:
+    """A localhost port no other xdist worker of this run can be handed before its daemon binds."""
+    with _port_lock:
+        if not _port_cursor:
+            _port_cursor.append(_worker_port_band())
+        band = _port_cursor[0] - (_port_cursor[0] - _PORT_FLOOR) % _PORT_BAND
+        for _ in range(_PORT_BAND):
+            port = _port_cursor[0]
+            _port_cursor[0] = band + (port - band + 1) % _PORT_BAND
+            if _port_is_free(port):
+                return port
+    raise RuntimeError(f"no free port in the band starting at {band}")
 
 
 def parse_sse_frames(text: str) -> list[dict[str, str]]:
