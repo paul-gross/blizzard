@@ -1443,7 +1443,8 @@ export const runDeltaApiRunsChunkIdGet = <ThrowOnError extends boolean = false>(
 /**
  * List Scopes
  *
- * Every scope, newest first, each marked retired or not.
+ * Every scope, newest first, each marked retired or not — one bulk
+ * `retired_slugs` read rather than one `is_retired` call per scope.
  */
 export const listScopesApiScopesGet = <ThrowOnError extends boolean = false>(options?: Options<ListScopesApiScopesGetData, ThrowOnError>): RequestResult<ListScopesApiScopesGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListScopesApiScopesGetResponses, unknown, ThrowOnError>({ url: '/api/scopes', ...options });
 

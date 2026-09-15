@@ -6,6 +6,8 @@ sees only :class:`~blizzard.hub.auth.models.Identity`.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
@@ -40,6 +42,20 @@ class IdentityRepository:
                 select(s.identities).where(s.identities.c.user_id == user_id).order_by(s.identities.c.created_at)
             ).all()
             return [self._identity(row) for row in rows]
+
+    def list_for_users(self, user_ids: Sequence[str]) -> dict[str, list[Identity]]:
+        """`list_for_user`'s batched sibling — one query for every id in `user_ids`
+        rather than one per user, grouped by `user_id` in `list_for_user`'s own order."""
+        if not user_ids:
+            return {}
+        with self._store.read("list_for_users") as conn:
+            rows = conn.execute(
+                select(s.identities).where(s.identities.c.user_id.in_(user_ids)).order_by(s.identities.c.created_at)
+            ).all()
+        grouped: dict[str, list[Identity]] = {}
+        for row in rows:
+            grouped.setdefault(row.user_id, []).append(self._identity(row))
+        return grouped
 
     def distinct_provider_names(self) -> set[str]:
         with self._store.read("distinct_provider_names") as conn:

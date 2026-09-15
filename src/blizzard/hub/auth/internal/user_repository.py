@@ -6,6 +6,8 @@ sees only :class:`~blizzard.hub.auth.models.User`.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
@@ -45,6 +47,15 @@ class UserRepository:
         with self._store.read("username_exists") as conn:
             row = conn.execute(select(s.users.c.id).where(s.users.c.username == username)).one_or_none()
             return row is not None
+
+    def get_many(self, user_ids: Sequence[str]) -> dict[str, User]:
+        """`get`'s batched sibling — one query for every id in `user_ids` rather than
+        one per row, a missing id simply absent from the result."""
+        if not user_ids:
+            return {}
+        with self._store.read("get_many") as conn:
+            rows = conn.execute(select(s.users).where(s.users.c.id.in_(user_ids))).all()
+            return {row.id: self._user(row) for row in rows}
 
     def list_all(self) -> list[User]:
         with self._store.read("list_all") as conn:

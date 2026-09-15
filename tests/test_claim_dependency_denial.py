@@ -15,7 +15,7 @@ from typing import cast
 import pytest
 
 from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
-from tests.support import HubHarness, build_hub, chunk_facts_of, ingest
+from tests.support import HubHarness, build_hub, chunk_facts_of, count_queries, ingest
 
 pytestmark = pytest.mark.component
 
@@ -157,3 +157,36 @@ def test_claim_denial_names_the_earliest_declared_unmet_prerequisite(tmp_path: P
 
     assert resp.status_code == 409, resp.text
     assert resp.json()["prerequisite_chunk_id"] == first_prereq_id
+
+
+def _seed_unmet_dependent(hub: HubHarness, *, prerequisite_count: int) -> str:
+    """Every prerequisite but the last-declared one is already done — the earliest-unmet
+    scan must walk the whole standing set before landing on the one denial, rather than
+    short-circuiting on the first edge."""
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
+    dependent = _resolve(hub, dependent_id)
+    for i in range(prerequisite_count):
+        prereq_id = ingest(hub, [{"source": "default", "ref": f"prereq-{i}"}], promote=False)
+        prereq = _resolve(hub, prereq_id)
+        if i < prerequisite_count - 1:
+            hub.services.complete.complete(prereq, facts=chunk_facts_of(hub, prereq_id), by="user:alice")
+        hub.services.dependencies.declare(dependent, prereq, by="user:alice")
+    return dependent_id
+
+
+def test_claim_denial_query_count_is_independent_of_prerequisite_count(tmp_path: Path) -> None:
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few = build_hub(tmp_path / "few")
+    few_dependent_id = _seed_unmet_dependent(few, prerequisite_count=3)
+    many = build_hub(tmp_path / "many")
+    many_dependent_id = _seed_unmet_dependent(many, prerequisite_count=9)  # 3x the few fixture
+
+    def call(hub: HubHarness, dependent_id: str) -> None:
+        resp = hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id))
+        assert resp.status_code == 409, resp.text
+
+    few_count = count_queries(few.engine, lambda: call(few, few_dependent_id))
+    many_count = count_queries(many.engine, lambda: call(many, many_dependent_id))
+
+    assert few_count == many_count

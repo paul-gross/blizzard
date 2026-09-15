@@ -7,6 +7,7 @@ rather than minting a second user.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
 from blizzard.hub.auth.models import Identity
@@ -17,6 +18,11 @@ class IReadIdentityRepository(Protocol):
 
     def get(self, provider_name: str, subject: str) -> Identity | None: ...
     def list_for_user(self, user_id: str) -> list[Identity]: ...
+
+    def list_for_users(self, user_ids: Sequence[str]) -> dict[str, list[Identity]]:
+        """`list_for_user`'s batched sibling — every id in `user_ids` present that has
+        at least one linked identity, an id with none simply absent from the result."""
+        ...
 
     def distinct_provider_names(self) -> set[str]:
         """Every ``provider_name`` any stored identity references — the boot-time

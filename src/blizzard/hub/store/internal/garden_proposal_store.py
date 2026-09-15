@@ -5,12 +5,14 @@ a JSON column."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import func, insert, select
 
 from blizzard.hub.domain.garden_proposals import GardenProposal, IWriteGardenProposalRepository
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.schema import garden_proposal_findings, garden_proposals
 
 
@@ -74,7 +76,8 @@ class GardenProposalStore:
                     garden_proposals.c.created_at.desc(), garden_proposals.c.proposal_id.desc()
                 )
             ).all()
-            return [self._of(row, self._findings(conn, row.proposal_id)) for row in rows]
+            findings = self._findings_for(conn, [row.proposal_id for row in rows])
+            return [self._of(row, findings[row.proposal_id]) for row in rows]
 
     def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
         """`list_all`'s routine-narrowed sibling — newest first, the same
@@ -85,7 +88,8 @@ class GardenProposalStore:
                 .where(garden_proposals.c.routine_name == routine_name)
                 .order_by(garden_proposals.c.created_at.desc(), garden_proposals.c.proposal_id.desc())
             ).all()
-            return [self._of(row, self._findings(conn, row.proposal_id)) for row in rows]
+            findings = self._findings_for(conn, [row.proposal_id for row in rows])
+            return [self._of(row, findings[row.proposal_id]) for row in rows]
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
         with self._store.read("count_by_class") as conn:
@@ -102,6 +106,22 @@ class GardenProposalStore:
             .order_by(garden_proposal_findings.c.finding_id)
         ).all()
         return [r.finding_id for r in rows]
+
+    @staticmethod
+    def _findings_for(conn, proposal_ids: Sequence[str]) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
+        """`list_all`/`list_for_routine`'s bulk sibling to `_findings` — every listed
+        proposal's findings in one batched read apiece, instead of one query per
+        proposal. A proposal with no findings maps to an empty list, not an absent key."""
+        result: dict[str, list[str]] = {proposal_id: [] for proposal_id in proposal_ids}
+        for batch in id_batches(proposal_ids):
+            rows = conn.execute(
+                select(garden_proposal_findings.c.proposal_id, garden_proposal_findings.c.finding_id)
+                .where(garden_proposal_findings.c.proposal_id.in_(batch))
+                .order_by(garden_proposal_findings.c.finding_id)
+            ).all()
+            for row in rows:
+                result[row.proposal_id].append(row.finding_id)
+        return result
 
     @staticmethod
     def _of(row, findings: list[str]) -> GardenProposal:  # type: ignore[no-untyped-def]

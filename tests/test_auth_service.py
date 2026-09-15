@@ -7,6 +7,7 @@ SQLAlchemy adapters are exercised at component tier (``tests/test_auth_repositor
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -48,6 +49,9 @@ class _FakeUserRepository:
     def username_exists(self, username: str) -> bool:
         return self.get_by_username(username) is not None
 
+    def get_many(self, user_ids: Sequence[str]) -> dict[str, User]:
+        return {uid: self.by_id[uid] for uid in user_ids if uid in self.by_id}
+
     def list_all(self) -> list[User]:
         return sorted(self.by_id.values(), key=lambda u: u.created_at)
 
@@ -75,6 +79,13 @@ class _FakeIdentityRepository:
 
     def list_for_user(self, user_id: str) -> list[Identity]:
         return [i for i in self.rows if i.user_id == user_id]
+
+    def list_for_users(self, user_ids: Sequence[str]) -> dict[str, list[Identity]]:
+        grouped: dict[str, list[Identity]] = {}
+        for row in self.rows:
+            if row.user_id in user_ids:
+                grouped.setdefault(row.user_id, []).append(row)
+        return grouped
 
     def distinct_provider_names(self) -> set[str]:
         return {i.provider_name for i in self.rows}

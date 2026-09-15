@@ -11,7 +11,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection, and_, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
@@ -56,17 +56,29 @@ class ChunkDecisionsStore:
             return self._decision_row(conn, row) if row is not None else None
 
     def decision_for_chunk(self, chunk_id: str) -> DecisionRow | None:
+        """The newest not-yet-transitioned decision is live — filtered in SQL via
+        :meth:`_not_closed_clause` rather than loaded-then-filtered in Python, so only
+        the one surviving row (if any) ever gets hydrated."""
         with self._store.read("decision_for_chunk") as conn:
-            rows = conn.execute(
+            row = conn.execute(
                 select(s.decisions)
-                .where(s.decisions.c.chunk_id == chunk_id)
+                .where(s.decisions.c.chunk_id == chunk_id, self._not_closed_clause())
                 .order_by(s.decisions.c.submitted_at.desc())
-            ).all()
-            for row in rows:  # newest-first; the newest not-yet-transitioned decision is live
-                decision = self._decision_row(conn, row)
-                if not decision.transitioned:
-                    return decision
-            return None
+                .limit(1)
+            ).one_or_none()
+            return self._decision_row(conn, row) if row is not None else None
+
+    @staticmethod
+    def _not_closed_clause():  # type: ignore[no-untyped-def]
+        """True for a decision row with no matching id in any
+        :data:`_DECISION_CLOSURE_TABLES` — a ``NOT EXISTS`` per table, correlated to the
+        enclosing ``decisions`` row, ANDed together."""
+        return and_(
+            *(
+                ~select(table.c.decision_id).where(table.c.decision_id == s.decisions.c.decision_id).exists()
+                for table in _DECISION_CLOSURE_TABLES
+            )
+        )
 
     def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
         """See :meth:`~blizzard.hub.domain.chunks.decisions.IReadChunkDecisionsRepository.live_decisions_for`
@@ -135,10 +147,18 @@ class ChunkDecisionsStore:
         return closed
 
     def list_open_decisions(self) -> list[DecisionRow]:
+        """Unresolved (``resolved_choice is None``) filtered in SQL via a ``NOT EXISTS``
+        against ``decision_resolutions``, then hydrated in one batched pass through
+        :meth:`_hydrate` — instead of loading every decision and hydrating each in
+        Python only to drop the resolved ones."""
+        not_resolved = ~(
+            select(s.decision_resolutions.c.decision_id)
+            .where(s.decision_resolutions.c.decision_id == s.decisions.c.decision_id)
+            .exists()
+        )
         with self._store.read("list_open_decisions") as conn:
-            rows = conn.execute(select(s.decisions).order_by(s.decisions.c.submitted_at)).all()
-            decisions = [self._decision_row(conn, row) for row in rows]
-            return [d for d in decisions if not d.resolved]
+            rows = conn.execute(select(s.decisions).where(not_resolved).order_by(s.decisions.c.submitted_at)).all()
+            return self._hydrate(conn, rows)
 
     def dockets_for_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[DocketEntry]]:
         """Every requested chunk's docket, exactly what ``_pending_proposals`` would
@@ -151,32 +171,35 @@ class ChunkDecisionsStore:
         unique_ids = list(dict.fromkeys(chunk_ids))
         result: dict[str, list[DocketEntry]] = {chunk_id: [] for chunk_id in unique_ids}
         with self._store.read("dockets_for_chunks") as conn:
-            # Already unfiltered/global — read once total across every batch, not once
-            # per batch, since it doesn't depend on which chunks a batch names.
-            judged = {r.proposal_id for r in conn.execute(select(s.work_item_materializations.c.proposal_id)).all()}
             for batch in id_batches(unique_ids):
-                result.update(self._docket_entries(conn, judged, batch))
+                result.update(self._docket_entries(conn, batch))
         return result
 
     @staticmethod
-    def _docket_entries(conn: Connection, judged: set[str], chunk_ids: Sequence[str]) -> dict[str, list[DocketEntry]]:
-        """``chunk_ids``' own docket rows, given a precomputed ``judged`` set — the one
-        construction rule :meth:`_pending_proposals` (one chunk) and
-        :meth:`dockets_for_chunks` (id-batched) both build on, rather than each keeping
-        its own copy of the judged-exclusion/strike-join/``DocketEntry`` shape."""
-        strikes = {
-            r.proposal_id: r
-            for r in conn.execute(
-                select(s.work_item_strikes).where(
-                    s.work_item_strikes.c.proposal_id.in_(
-                        select(s.work_item_proposals.c.proposal_id).where(
-                            s.work_item_proposals.c.chunk_id.in_(chunk_ids)
-                        )
-                    )
-                )
-            ).all()
-        }
+    def _docket_entries(conn: Connection, chunk_ids: Sequence[str]) -> dict[str, list[DocketEntry]]:
+        """``chunk_ids``' own docket rows — the one construction rule
+        :meth:`_pending_proposals` (one chunk) and :meth:`dockets_for_chunks`
+        (id-batched) both build on. The judged/strike reads filter on this batch's own
+        proposal ids with one ``.in_()`` each, not the whole table."""
         rows = conn.execute(select(s.work_item_proposals).where(s.work_item_proposals.c.chunk_id.in_(chunk_ids))).all()
+        proposal_ids = [row.proposal_id for row in rows]
+        judged: set[str] = set()
+        strikes = {}
+        if proposal_ids:
+            judged = {
+                r.proposal_id
+                for r in conn.execute(
+                    select(s.work_item_materializations.c.proposal_id).where(
+                        s.work_item_materializations.c.proposal_id.in_(proposal_ids)
+                    )
+                ).all()
+            }
+            strikes = {
+                r.proposal_id: r
+                for r in conn.execute(
+                    select(s.work_item_strikes).where(s.work_item_strikes.c.proposal_id.in_(proposal_ids))
+                ).all()
+            }
         result: dict[str, list[DocketEntry]] = defaultdict(list)
         for row in rows:
             if row.proposal_id in judged:
@@ -273,6 +296,46 @@ class ChunkDecisionsStore:
             select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
         ).one_or_none()
         transitioned = row.decision_id in self._decision_closure_ids(conn, [row.decision_id])
+        return self._build_row(row, resolution, transitioned, self._pending_proposals(conn, row.chunk_id))
+
+    def _hydrate(self, conn: Connection, rows: Sequence) -> list[DecisionRow]:  # type: ignore[no-untyped-def]
+        """``rows``' resolution/closure/docket state, each read batched once across the
+        whole list rather than once per row — :meth:`list_open_decisions`'s own
+        hydration, sharing :meth:`_build_row`'s assembly with the single-row
+        :meth:`_decision_row`."""
+        if not rows:
+            return []
+        decision_ids = [row.decision_id for row in rows]
+        resolutions = {}
+        for batch in id_batches(decision_ids):
+            resolutions.update(
+                {
+                    r.decision_id: r
+                    for r in conn.execute(
+                        select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id.in_(batch))
+                    ).all()
+                }
+            )
+        transitioned_ids = self._decision_closure_ids(conn, decision_ids)
+        chunk_ids = list(dict.fromkeys(row.chunk_id for row in rows))
+        dockets: dict[str, list[DocketEntry]] = {}
+        for batch in id_batches(chunk_ids):
+            dockets.update(self._docket_entries(conn, batch))
+        return [
+            self._build_row(
+                row,
+                resolutions.get(row.decision_id),
+                row.decision_id in transitioned_ids,
+                dockets.get(row.chunk_id, []),
+            )
+            for row in rows
+        ]
+
+    @staticmethod
+    def _build_row(row, resolution, transitioned: bool, docket: list[DocketEntry]) -> DecisionRow:  # type: ignore[no-untyped-def]
+        """The one ``decisions`` row + resolution + transitioned flag + docket ->
+        :class:`DecisionRow` assembly, shared by :meth:`_decision_row` (one row) and
+        :meth:`_hydrate` (batched) so neither keeps its own copy of the shape."""
         choices = [DecisionChoice(name=c["name"], description=c["description"]) for c in json.loads(row.choices)]
         return DecisionRow(
             decision_id=row.decision_id,
@@ -286,7 +349,7 @@ class ChunkDecisionsStore:
             resolved_by=resolution.resolved_by if resolution is not None else None,
             resolved_at=resolution.resolved_at if resolution is not None else None,
             transitioned=transitioned,
-            docket=self._pending_proposals(conn, row.chunk_id),
+            docket=docket,
         )
 
     @staticmethod
@@ -294,8 +357,7 @@ class ChunkDecisionsStore:
         """The docket read, on a caller-supplied ``conn`` so :meth:`_decision_row` can
         fold it into its own already-open read — :meth:`_docket_entries` narrowed to one
         chunk."""
-        judged = {r.proposal_id for r in conn.execute(select(s.work_item_materializations.c.proposal_id)).all()}
-        return ChunkDecisionsStore._docket_entries(conn, judged, [chunk_id]).get(chunk_id, [])
+        return ChunkDecisionsStore._docket_entries(conn, [chunk_id]).get(chunk_id, [])
 
 
 def _conforms_decisions(x: ChunkDecisionsStore) -> IWriteChunkDecisionsRepository:

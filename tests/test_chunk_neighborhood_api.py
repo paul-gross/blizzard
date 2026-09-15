@@ -177,3 +177,31 @@ def test_the_neighborhoods_facts_reads_are_bounded_by_its_own_edges_not_fleet_si
     large_count = count_queries(large.engine, lambda: call(large, large_subject_id))
 
     assert small_count == large_count
+
+
+def test_query_count_is_independent_of_the_subjects_own_neighbor_count(tmp_path: Path) -> None:
+    """The subject's own edge count — not just fleet size — must not move the query
+    count: a bulk `load_facts_for` resolves every neighbor's status in one read
+    regardless of how many neighbors there are."""
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few = build_hub(tmp_path / "few")
+    few_subject_id = ingest(few, [{"source": "default", "ref": "subject"}])
+    for i in range(3):
+        prereq_id = ingest(few, [{"source": "default", "ref": f"prereq-{i}"}])
+        _declare(few, few_subject_id, prereq_id)
+
+    many = build_hub(tmp_path / "many")
+    many_subject_id = ingest(many, [{"source": "default", "ref": "subject"}])
+    for i in range(9):  # 3x the few-neighbor subject's own edge count
+        prereq_id = ingest(many, [{"source": "default", "ref": f"prereq-{i}"}])
+        _declare(many, many_subject_id, prereq_id)
+
+    def call(hub: HubHarness, chunk_id: str) -> None:
+        resp = hub.client.get(f"/api/chunks/{chunk_id}")
+        assert resp.status_code == 200, resp.text
+
+    few_count = count_queries(few.engine, lambda: call(few, few_subject_id))
+    many_count = count_queries(many.engine, lambda: call(many, many_subject_id))
+
+    assert few_count == many_count

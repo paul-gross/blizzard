@@ -10,15 +10,34 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import structlog
 
 from blizzard.auth_core import Role
-from tests.support import build_hub, seed_session, seed_user
+from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.internal.identity_repository import IdentityRepository
+from blizzard.hub.auth.models import Identity
+from tests.support import HubHarness, build_hub, count_queries, hub_store_connections, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
 
 def _cookie(token: str) -> dict[str, str]:
     return {"Cookie": f"bz_session={token}"}
+
+
+def _seed_users_with_identities(hub: HubHarness, n: int) -> None:
+    identities = IdentityRepository(hub_store_connections(hub.engine), RepoErrorFactory(structlog.get_logger("test")))
+    for i in range(n):
+        user = seed_user(hub, username=f"user{i}", role=Role.GUEST)
+        identities.link(
+            Identity(
+                provider_name="github",
+                subject=str(i),
+                user_id=user.user_id,
+                handle=f"user{i}",
+                created_at=hub.clock.now(),
+            )
+        )
 
 
 # --- gating -----------------------------------------------------------------
@@ -67,6 +86,29 @@ def test_list_users_renders_every_row(tmp_path: Path) -> None:
     assert ada["role"] == "admin"
     assert ada["identities"] == []
     assert ada["created_at"]
+
+
+def test_list_users_query_count_is_independent_of_user_count(tmp_path: Path) -> None:
+    """One batched identities read for the whole listing (``list_for_users``), not one
+    per row — the statement count must not grow with the account count."""
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small = build_hub(tmp_path / "small", auth_mode="oauth")
+    admin_small = seed_user(small, username="admin", role=Role.ADMIN)
+    small_token = seed_session(small, admin_small)
+    _seed_users_with_identities(small, 2)
+    large = build_hub(tmp_path / "large", auth_mode="oauth")
+    admin_large = seed_user(large, username="admin", role=Role.ADMIN)
+    large_token = seed_session(large, admin_large)
+    _seed_users_with_identities(large, 6)  # 3x the small fixture
+
+    def call(hub, token: str) -> None:  # type: ignore[no-untyped-def]
+        resp = hub.client.get("/api/users", headers=_cookie(token))
+        assert resp.status_code == 200, resp.text
+
+    small_count = count_queries(small.engine, lambda: call(small, small_token))
+    large_count = count_queries(large.engine, lambda: call(large, large_token))
+    assert small_count == large_count
 
 
 # --- role assignment -----------------------------------------------------------

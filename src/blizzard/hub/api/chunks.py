@@ -193,10 +193,8 @@ def _dependency_views_for_chunk(
     neighbor_ids = {
         edge.prerequisite_chunk_id if edge.dependent_chunk_id == chunk_id else edge.dependent_chunk_id for edge in edges
     }
-    for neighbor_id in neighbor_ids:
-        neighbor_facts = services.chunks.facts.load_facts(neighbor_id)
-        if neighbor_facts is not None:
-            statuses[neighbor_id] = neighbor_facts.status()
+    neighbor_facts_by_id = services.chunks.facts.load_facts_for(list(neighbor_ids))
+    statuses.update((neighbor_id, facts.status()) for neighbor_id, facts in neighbor_facts_by_id.items())
     dependent_edges = [e for e in edges if e.dependent_chunk_id == chunk_id]
     blocked = blocked_view(derive_blocked_prerequisites(dependent_edges, statuses).get(chunk_id))
     neighborhood = derive_chunk_neighborhood(chunk_id, edges, statuses)

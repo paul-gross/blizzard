@@ -15,7 +15,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import hub_store_connections
+from tests.support import count_queries, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -59,6 +59,34 @@ def _store_and_engine(tmp_path: Path) -> tuple[GardenProposalStore, Engine]:
 def _store(tmp_path: Path) -> GardenProposalStore:
     store, _ = _store_and_engine(tmp_path)
     return store
+
+
+def _sized_store(tmp_path: Path, n: int) -> tuple[GardenProposalStore, Engine]:
+    """``n`` proposals, each with its own finding — the fixture a query-count-parity
+    test seeds at two different sizes."""
+    store, engine = _store_and_engine(tmp_path)
+    findings = FindingStore(hub_store_connections(engine))
+    for i in range(n):
+        findings.add(
+            f"fin_extra_{i}",
+            routine_name="nightly",
+            scope_slug="blizzard",
+            class_="stale-docstring",
+            locus=f"x{i}.py:1",
+            summary=f"s{i}",
+            introduced=None,
+            at=_NOW,
+        )
+        store.create(
+            f"gprop_extra_{i}",
+            routine_name="nightly",
+            class_="c",
+            title=f"t{i}",
+            body="b",
+            findings=[f"fin_extra_{i}"],
+            at=_NOW,
+        )
+    return store, engine
 
 
 def test_create_then_get_round_trips(tmp_path: Path) -> None:
@@ -156,3 +184,20 @@ def test_two_proposals_with_overlapping_findings_stay_distinguished(tmp_path: Pa
 
     assert set(store.get("gprop_1").findings) == {"fin_1", "fin_2"}  # type: ignore[union-attr]
     assert set(store.get("gprop_2").findings) == {"fin_1"}  # type: ignore[union-attr]
+
+
+def test_list_all_and_list_for_routine_query_count_is_independent_of_proposal_count(tmp_path: Path) -> None:
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small, small_engine = _sized_store(tmp_path / "small", 3)
+    large, large_engine = _sized_store(tmp_path / "large", 9)  # 3x the small fixture
+
+    small_all_count = count_queries(small_engine, small.list_all)
+    large_all_count = count_queries(large_engine, large.list_all)
+    small_routine_count = count_queries(small_engine, lambda: small.list_for_routine("nightly"))
+    large_routine_count = count_queries(large_engine, lambda: large.list_for_routine("nightly"))
+
+    assert len(small.list_all()) == 3
+    assert len(large.list_all()) == 9
+    assert small_all_count == large_all_count
+    assert small_routine_count == large_routine_count

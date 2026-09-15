@@ -200,6 +200,7 @@ class _CountingFactsStore(ChunkFactsStore):
         super().__init__(store, clock)
         self.load_all_facts_calls = 0
         self.load_facts_calls = 0
+        self.load_facts_for_calls = 0
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         self.load_all_facts_calls += 1
@@ -209,12 +210,17 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_facts_calls += 1
         return super().load_facts(chunk_id)
 
+    def load_facts_for(self, chunk_ids):  # type: ignore[no-untyped-def]
+        self.load_facts_for_calls += 1
+        return super().load_facts_for(chunk_ids)
+
 
 def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path: Path) -> None:
     """Review round 1 F5, round 2 F1: ``GET /api/chunks/{id}``'s blocked-marking and
     neighborhood (issue #462) share one standing-edges read and one resulting statuses map,
-    so a prerequisite named by both costs one `load_facts` call, not two — only bounded
-    per-chunk reads, never the bulk `load_all_facts` seam."""
+    so its one prerequisite's facts are read through the same bulk `load_facts_for` call
+    the neighborhood derivation makes — never a second per-chunk `load_facts`, and never
+    the bulk `load_all_facts` seam."""
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [_DEPENDENT], promote=False)
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)
@@ -229,8 +235,10 @@ def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path:
     assert resp.status_code == 200, resp.text
     assert resp.json()["blocked"] == {"prerequisite_chunk_id": prerequisite_id, "unmet_count": 1}
     assert counting.load_all_facts_calls == 0
-    # the dependent's own facts, and the one shared read of its one prerequisite's facts.
-    assert counting.load_facts_calls == 2
+    # the dependent's own facts (`load_facts`) plus one bulk `load_facts_for` covering
+    # every neighbor, including the shared prerequisite.
+    assert counting.load_facts_calls == 1
+    assert counting.load_facts_for_calls == 1
 
 
 def test_detail_routes_facts_reads_are_bounded_by_its_own_edges_not_fleet_size(tmp_path: Path) -> None:

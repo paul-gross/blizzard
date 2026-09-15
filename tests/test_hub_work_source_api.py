@@ -21,7 +21,15 @@ from blizzard.hub.events.broker import CHUNK_CHANGED, QUEUE_CHANGED
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
-from tests.support import FakeWorkSource, build_hub, emitted_events, hub_store_connections, seed_session, seed_user
+from tests.support import (
+    FakeWorkSource,
+    build_hub,
+    count_queries,
+    emitted_events,
+    hub_store_connections,
+    seed_session,
+    seed_user,
+)
 
 pytestmark = pytest.mark.component
 
@@ -154,6 +162,59 @@ def test_list_work_items_resolves_liveness_with_one_bulk_call_regardless_of_item
     assert {item["web_url"] for item in listed} == {f"/board/chunk/{c['chunk_id']}" for c in created}
     assert counting_work_refs.live_holders_calls == 1
     assert counting_work_refs.find_live_holder_calls == 0
+
+
+def _seed_authored_items(hub, n: int) -> str:  # type: ignore[no-untyped-def]
+    """``n`` hub items, each authored by its own user — the token of the last one."""
+    token = ""
+    for i in range(n):
+        user = seed_user(hub, username=f"user{i}", role=Role.CONTRIBUTOR)
+        token = seed_session(hub, user)
+        hub.client.post(
+            "/api/work-sources/hub/items",
+            json={"title": f"t{i}", "body": "b"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    return token
+
+
+def test_list_work_items_resolves_authors_with_one_bulk_call_regardless_of_item_count(tmp_path: Path) -> None:
+    """``GET /api/work-sources/hub/items`` renders every item's author login through one
+    batched user fetch, not once per item."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    users = [seed_user(hub, username=f"user{i}", role=Role.CONTRIBUTOR) for i in range(3)]
+    tokens = [seed_session(hub, u) for u in users]
+    for i, token in enumerate(tokens):
+        hub.client.post(
+            "/api/work-sources/hub/items",
+            json={"title": f"t{i}", "body": "b"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    listed = hub.client.get("/api/work-sources/hub/items", headers={"Authorization": f"Bearer {tokens[0]}"}).json()[
+        "items"
+    ]
+
+    assert {item["author"]["login"] for item in listed} == {u.username for u in users}
+
+
+def test_list_work_items_author_query_count_is_independent_of_item_count(tmp_path: Path) -> None:
+    """One batched user read for the whole listing (``get_many``), not one per item — the
+    statement count must not grow with the item count."""
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small = build_hub(tmp_path / "small", auth_mode="oauth")
+    small_token = _seed_authored_items(small, 2)
+    large = build_hub(tmp_path / "large", auth_mode="oauth")
+    large_token = _seed_authored_items(large, 6)  # 3x the small fixture
+
+    def call(hub, token: str) -> None:  # type: ignore[no-untyped-def]
+        resp = hub.client.get("/api/work-sources/hub/items", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 200, resp.text
+
+    small_count = count_queries(small.engine, lambda: call(small, small_token))
+    large_count = count_queries(large.engine, lambda: call(large, large_token))
+    assert small_count == large_count
 
 
 # --------------------------------------------------------------------------- #
