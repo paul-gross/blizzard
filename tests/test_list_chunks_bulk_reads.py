@@ -217,15 +217,12 @@ def test_list_chunks_query_count_is_independent_of_distinct_graph_pin_count(tmp_
     assert few_count == many_count
 
 
-# Keyset pagination (blizzard#526 D3/D4/D6) — sort-key ties, ephemeral windows, the
-# whole-fleet-derived live-holder/blocked markings surviving a page boundary, and the
-# route's own limit/cursor validation.
+# Keyset pagination (blizzard#526 D3/D4/D6).
 
 
 def _delete_chunk(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
-    """``DELETE /api/chunks/{id}`` — ``httpx``'s own ``delete()`` refuses a ``json``
-    keyword, so this goes through ``request`` instead (mirrors
-    ``tests/test_chunk_delete_route.py``'s ``_delete_chunk``)."""
+    """``DELETE /api/chunks/{id}`` — ``httpx``'s own ``delete()`` refuses ``json``, so
+    this goes through ``request`` instead (mirrors ``test_chunk_delete_route.py``'s own)."""
     resp = hub.client.request("DELETE", f"/api/chunks/{chunk_id}", json={})
     assert resp.status_code == 202, resp.text
 
@@ -251,9 +248,8 @@ def _all_pages(hub, *, limit: int) -> list[dict]:  # type: ignore[no-untyped-def
 
 
 def test_sort_key_ties_paged_concatenation_matches_the_full_unpaginated_order(tmp_path: Path) -> None:
-    """`chunk_id desc` is what makes the sort a total order when `minted_at` ties
-    (blizzard#526 D4) — paging at `limit=1` through a fleet carrying two same-instant
-    ties must reproduce a single large-limit read's order exactly, no dupes, no gaps."""
+    """`chunk_id desc` makes the sort total when `minted_at` ties (blizzard#526 D4);
+    paging at `limit=1` must reproduce a single large-limit read's order exactly."""
     hub = build_hub(tmp_path)
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_ties", at=_T0)
@@ -275,10 +271,9 @@ def test_sort_key_ties_paged_concatenation_matches_the_full_unpaginated_order(tm
 
 
 def test_ephemeral_only_window_still_pages_every_visible_chunk_exactly_once(tmp_path: Path) -> None:
-    """`list_page`'s SQL window filters ephemeral chunks out in Python after the read, so
-    a window landing entirely on grouped-away/deleted rows must retry with a doubled
-    window rather than short-paging (blizzard#526 D6): three deleted chunks sit at the
-    very top of the order, ahead of the three live ones a `limit=2` page must still see."""
+    """A window landing entirely on grouped-away/deleted rows must retry with a doubled
+    window rather than short-paging (blizzard#526 D6): three deleted chunks sit ahead of
+    three live ones that a `limit=2` page must still surface."""
     hub = build_hub(tmp_path)
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_window", at=_T0)
@@ -305,19 +300,14 @@ def test_ephemeral_only_window_still_pages_every_visible_chunk_exactly_once(tmp_
 
 
 def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path) -> None:
-    """D6: live-holder and blocked-prerequisite derivation read the whole fleet even
-    though only the page's own chunks render — so a chunk's marking must be identical
-    whether the chunk that causes it (a competing pointer-holder, a prerequisite) shares
-    its page or not. Forces every chunk onto its own page (`limit=1`) and compares
-    against a single large-limit read."""
+    """D6: live-holder/blocked derivation reads the whole fleet though only the page's
+    own chunks render, so a marking must be identical whether its cause shares the page
+    or not — forced here by putting every chunk on its own page (`limit=1`)."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_REVIEW_DELIVER_YAML}).status_code == 201
 
-    # (a) one pointer, two holders: an old, terminal chunk and a freshly re-ingested live
-    # one — the exact `test_terminal_pointer_reingest_mints_a_fresh_chunk` shape, over the
-    # `hub` work source so the rendered `web_url` actually varies with the live holder
-    # (`HubWorkSource.web_url` is `None`-vs-link on it; the fake `default` source ignores
-    # `live_holder` entirely).
+    # (a) old + fresh holders of one pointer, over the `hub` source since its `web_url`
+    # varies with the live holder — `default`'s ignores `live_holder` entirely.
     old_holder_id = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]}).json()["chunk_id"]
     build_id = hub.client.post(
         "/api/fleet/routes",
@@ -354,10 +344,8 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
         (ref,) = [w for w in entry["work_refs"] if w["source"] == "hub"]
         return ref["web_url"]
 
-    # Both the old, terminal holder and the fresh, live one render the *same* live-holder
-    # link for the pointer they share — the live one's own id — proving the terminal
-    # chunk's row saw the live chunk even though minting it is what makes the terminal
-    # chunk's holding non-live in the first place.
+    # Both holders render the *same* live-holder link (the live one's own id) — proving
+    # the terminal row still saw the live chunk that is what makes it non-live at all.
     assert hub_pointer_url(full_by_id[old_holder_id]) == f"/board/chunk/{live_holder_id}"
     assert hub_pointer_url(full_by_id[live_holder_id]) == f"/board/chunk/{live_holder_id}"
     assert full_by_id[dependent_id]["blocked"] == {"prerequisite_chunk_id": prerequisite_id, "unmet_count": 1}

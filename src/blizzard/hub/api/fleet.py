@@ -199,9 +199,8 @@ class MigrationTargets:
 
 @router.get("/queue/peek", response_model=QueuePeekResponse)
 def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
-    """The runner's FILL read — the whole ready-queue order, out of scope for
-    blizzard#526's pagination (unlike the operator-facing, now-paginated
-    ``GET /api/queue``): a filling runner needs every ready chunk in one read."""
+    """The runner's FILL read — the whole ready-queue order, unlike the now-paginated
+    ``GET /api/queue``: a filling runner needs every ready chunk in one read."""
     statuses = services.chunks.facts.load_all_statuses()
     return queue_api.ReadyQueue.of(services, statuses).view
 

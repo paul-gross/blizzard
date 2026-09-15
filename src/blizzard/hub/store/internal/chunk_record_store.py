@@ -34,8 +34,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     is_ephemeral_id,
 )
 
-#: The whole cursor format `list_page` mints: the last returned row's own sort key
-#: (blizzard#526 D4) — ``(minted_at, chunk_id)``, the tiebreak `minted_at desc` alone lacks.
+#: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks (blizzard#526 D4).
 _CURSOR_ARITY = 2
 
 
@@ -62,7 +61,6 @@ def _chunk_page_stmt(after: tuple[datetime, str] | None, limit: int) -> Select[A
         # The portable spelling of `(minted_at, chunk_id) < (minted_at, chunk_id)` —
         # row-value comparison support varies by backend (`bzh:sql-portable`).
         stmt = stmt.where(or_(c.minted_at < minted_at, and_(c.minted_at == minted_at, c.chunk_id < chunk_id)))
-    # `chunk_id` breaks a same-instant tie (D4) — `minted_at desc` alone is not total.
     return stmt.order_by(s.chunks.c.minted_at.desc(), s.chunks.c.chunk_id.desc()).limit(limit)
 
 
@@ -156,12 +154,11 @@ class ChunkRecordStore:
             ]
 
     def list_page(self, *, cursor: str | None = None, limit: int) -> ChunkPage:
-        """`list_all`'s bounded sibling (blizzard#526 D4) — same total order, a SQL
-        keyset window. Ephemeral chunks are excluded in Python after the SQL read, same
-        as `list_all`, so a window landing wholly on ephemeral rows would come back
-        short of `limit` live chunks: each retry doubles the window instead of stopping
-        there, so a caller following `next_cursor` still sees every visible chunk
-        exactly once."""
+        """`list_all`'s bounded sibling (blizzard#526 D4): a SQL keyset window with
+        ephemeral chunks excluded in Python after the read, so a window landing wholly
+        on ephemeral rows can come back short of `limit` live chunks. Each retry doubles
+        the window rather than stopping there, so a `next_cursor` walk still sees every
+        visible chunk exactly once."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         after = _decode_chunk_cursor(cursor) if cursor is not None else None

@@ -27,12 +27,10 @@ from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encod
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 
-#: `_facts_for_many`'s own per-statement id-batch size (review:F6) — see that method's
-#: docstring for why an unbounded `IN (...)` cannot be allowed to grow with the caller.
+#: `_facts_for_many`'s per-statement id-batch size — see that method's docstring (review:F6).
 _FACTS_BATCH_SIZE = 500
 
-#: `list_page`'s whole cursor format: a plain finding id — `finding_id` alone is
-#: already total (blizzard#526 D4), unlike chunks' `minted_at`.
+#: `list_page`'s cursor: a plain `finding_id`, already total (blizzard#526 D4) unlike chunks' `minted_at`.
 _CURSOR_ARITY = 1
 
 
@@ -224,10 +222,9 @@ class FindingStore:
     ) -> FindingPage:
         """`list_for`/`list_for_routine`/`list_across_routines` unified into one bounded,
         keyset-paginated read (blizzard#526 D1/D5). Liveness is derived in Python after
-        each SQL window (D3), so a window can come back short of `limit` matching
-        findings — this tops up window after window, each narrowed by `finding_id`, until
-        `limit` matches accumulate or the table is exhausted, rather than returning a
-        short page while more findings still stand."""
+        each SQL window (D3), so a short window tops up — narrowed by `finding_id` each
+        retry — until `limit` matches accumulate or the table is exhausted, rather than
+        returning a short page while more findings still stand."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         window_after = _decode_finding_cursor(cursor) if cursor is not None else None

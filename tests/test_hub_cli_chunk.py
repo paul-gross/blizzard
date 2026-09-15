@@ -687,8 +687,6 @@ def test_chunk_list_marks_a_blocked_chunk(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.unit
 def test_chunk_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The hub paginates ``GET /api/chunks`` — ``chunk list`` must keep following
-    ``next_cursor`` until it goes null rather than stopping after the first page."""
     page_1 = {
         "chunks": [
             {"chunk_id": "ch_1", "status": "ready", "current_node_id": "nd_1", "cost": {}},

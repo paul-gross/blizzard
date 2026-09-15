@@ -60,10 +60,8 @@ def queue_set(cli: CliContext, chunk_ids: tuple[str, ...]) -> None:
 def queue_move(cli: CliContext, chunk_id: str, position: int) -> None:
     """Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).
 
-    A client of the single-chunk fractional ``POST /api/queue/position`` (issue #137):
-    reads the current order (drained to its whole order, blizzard#526 D7), drops
-    CHUNK_ID out of it, clamps POSITION into what's left, and sends one anchor. 409 when
-    CHUNK_ID is not in the ready list, not the backlog."""
+    Client of the fractional ``POST /api/queue/position`` (issue #137); 409 when CHUNK_ID
+    is not in the ready list, not the backlog."""
     entries = cli.get_all("/api/queue", "GET /queue", key="entries")
     rest = [entry["chunk_id"] for entry in entries if entry["chunk_id"] != chunk_id]
     index = min(max(position, 0), len(rest))

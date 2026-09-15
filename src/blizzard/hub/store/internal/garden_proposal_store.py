@@ -18,8 +18,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.schema import garden_proposal_findings, garden_proposals
 
-#: `list_page`'s whole cursor format: the last returned row's own sort key
-#: (blizzard#526 D4) — `(created_at, proposal_id)`, already total.
+#: `list_page`'s cursor, already total: `(created_at, proposal_id)` (blizzard#526 D4).
 _CURSOR_ARITY = 2
 
 

@@ -72,9 +72,8 @@ def _queue_page_response(chunk_ids: list[str], *, next_cursor: str | None) -> _F
 def _stub_two_pages(
     monkeypatch: pytest.MonkeyPatch, first_page: list[str], second_page: list[str], *, cursor: str = "cur_2"
 ) -> list[tuple[str, object]]:
-    """``GET /api/queue`` split across two pages — ``fake_get`` inspects the drain's own
-    ``cursor`` param to decide which page to serve, so this proves the CLI's paging loop
-    itself rather than a canned whole-order response."""
+    """``GET /api/queue`` split across two pages, ``fake_get`` branching on the drain's
+    own ``cursor`` param — proves the CLI's paging loop, not a canned whole-order response."""
     calls: list[tuple[str, object]] = []
 
     def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:

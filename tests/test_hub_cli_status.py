@@ -172,8 +172,6 @@ def test_status_names_both_brakes_with_the_local_reason_inline(monkeypatch: pyte
 
 
 def test_status_drains_every_page_of_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The hub paginates ``GET /api/chunks`` — ``hub status`` must keep following
-    ``next_cursor`` until it goes null rather than stopping after the first page."""
     cost = _cost(0.0, partial=False)
     page_1 = {
         "chunks": [

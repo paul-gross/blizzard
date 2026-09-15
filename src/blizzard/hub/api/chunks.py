@@ -149,14 +149,11 @@ def list_chunks(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> ChunksPageView:
-    """The fleet chunk list — derived status per chunk, bounded and keyset-paginated
-    (blizzard#526 D3/D4/D6).
+    """The fleet chunk list — derived status per chunk, bounded and keyset-paginated.
 
-    Reads the fleet's facts and routes with one bulk query each: the `FleetPulse.view()`
-    shape (issue #374), extended to routes and to the rendered row (issue #421). Only the
-    page's own rows are rendered, but live-holder and blocked-marking derivation still see
-    the whole fleet (D6) — a pointer this page renders can be held live by a chunk outside
-    it, and a dependent's blocked marking can name a prerequisite outside it too."""
+    Only the page's own rows render, but live-holder and blocked-marking derivation still
+    see the whole fleet (D6 below) — a pointer this page renders can be held live by a
+    chunk outside it, same for a dependent's prerequisite."""
     names = GraphNames(services.graphs)
     facts = services.chunks.facts.load_all_facts()
     routes = services.chunks.route.load_all_routes()
@@ -365,13 +362,8 @@ def record_garden_delivery(
             proposal_artifacts[name] = artifact.data
             proposal_artifact_id_by_name[name] = artifact.artifact_id
 
-    # A crash-retry of an already-fully-materialized delivery must stay a no-op replay
-    # (machinery.md §Delivery: "a replay finds it and returns `recorded`") even when a
-    # finding this same delivery named has been exited by a person since the original,
-    # successful attempt (blizzard#394 D3) — re-validating today's live state against
-    # yesterday's already-recorded content would turn that replay into a spurious
-    # failure. Checked before validation, not after, so no such retry re-derives
-    # `live_findings` from current state at all.
+    # Checked before validation: a replay must stay a no-op even if a finding this delivery
+    # named was since exited by a person (blizzard#394 D3) — never re-validated against live state.
     if services.garden_delivery.already_delivered(chunk_id=chunk_id, node_id=node_id, epoch=epoch):
         return GardenDeliveryResponse(outcome="recorded", detail="")
 
@@ -687,12 +679,9 @@ def _author_view(author: AuthorView) -> WorkItemAuthorView:
 
 @router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView, dependencies=[Depends(require(FLEET_VIEW))])
 def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemsView:
-    """Pass-through work items read — one entry per pointer, contents never stored.
-
-    A per-pointer resolution or forge failure degrades to an ``error`` on that entry
-    rather than failing the whole read. A chunk with no pointers is an empty list, not
-    a 404; the built-in ``hub`` source is always seated, so a bare hub carries no
-    configuration under which this ever 503s."""
+    """Pass-through work items read, one entry per pointer, contents never stored. A
+    per-pointer resolution or forge failure becomes that entry's own ``error`` instead of
+    failing the whole read; a chunk with no pointers reads as an empty list, not a 404."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")

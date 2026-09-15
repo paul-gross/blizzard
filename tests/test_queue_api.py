@@ -44,9 +44,8 @@ def _ids(entries: list[dict]) -> list[str]:
 
 
 def _ingest_tied(hub: HubHarness, n: int) -> list[str]:
-    """Ingest and promote ``n`` chunks with no clock advance between them, so every one
-    lands on the exact same promoted-at fallback position — proving the ``chunk_id``
-    tiebreak, not clock order, is what makes the ready queue's order total."""
+    """Ingest and promote ``n`` chunks with no clock advance, so the ``chunk_id``
+    tiebreak, not clock order, decides the ready queue's order."""
     ids = []
     for i in range(n):
         pointer = {"source": "default", "ref": f"tied-{i}"}
@@ -59,8 +58,7 @@ def _ingest_tied(hub: HubHarness, n: int) -> list[str]:
 
 
 def _ingest_backlog_tied(hub: HubHarness, n: int) -> list[str]:
-    """Ingest ``n`` chunks with no clock advance between them, left ``not_ready`` —
-    every one lands on the exact same mint-time fallback position, so only the
+    """Ingest ``n`` chunks with no clock advance, left ``not_ready``, so only the
     ``chunk_id`` tiebreak makes their order total."""
     ids = []
     for i in range(n):
@@ -321,7 +319,7 @@ def test_post_backlog_position_self_anchor_is_422(tmp_path: Path) -> None:
 
 def test_get_queue_pages_with_mint_time_ties_match_the_full_order(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    tied = _ingest_tied(hub, 2)  # same promoted-at fallback — the chunk_id tiebreak decides order
+    tied = _ingest_tied(hub, 2)
     hub.clock.advance(timedelta(seconds=1))
     rest = [_ingest(hub, i) for i in range(3, 6)]
 
@@ -334,14 +332,12 @@ def test_get_queue_pages_with_mint_time_ties_match_the_full_order(tmp_path: Path
     paged = _drain(hub, "/api/queue", limit=1)
     full_pairs = [(e["chunk_id"], e["position"]) for e in full_body["entries"]]
     paged_pairs = [(e["chunk_id"], e["position"]) for e in paged]
-    # (a) the paged concatenation is exactly the full order, no dupes/gaps; (b) each
-    # entry's `position` is its absolute index in the whole list, unaffected by paging.
     assert paged_pairs == full_pairs
 
 
 def test_get_backlog_pages_with_mint_time_ties_match_the_full_order(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    tied = _ingest_backlog_tied(hub, 2)  # same mint-time fallback — the chunk_id tiebreak decides order
+    tied = _ingest_backlog_tied(hub, 2)
     hub.clock.advance(timedelta(seconds=1))
     rest = [_ingest_backlog(hub, i) for i in range(3, 6)]
 

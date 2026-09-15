@@ -92,9 +92,8 @@ def test_get_unknown_id_is_404(tmp_path: Path) -> None:
 
 
 def test_paged_concatenation_matches_the_full_order_through_a_created_at_tie(tmp_path: Path) -> None:
-    """`gprop_a`/`gprop_b` share the exact same `created_at` — only the `proposal_id`
-    tiebreak (`desc`, so the lexicographically larger id sorts first) makes the order
-    total. Reading one row at a time via `next_cursor` must retrace exactly the same
+    """`gprop_a`/`gprop_b` share the same `created_at`; only the `proposal_id` tiebreak
+    (`desc`) makes the order total. Paging one row at a time must retrace the same
     order a single unpaginated read renders."""
     hub = build_hub(tmp_path)
     _seed(hub)

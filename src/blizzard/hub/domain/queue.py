@@ -29,8 +29,7 @@ from blizzard.hub.domain.work import Chunk
 
 _log = get_logger("blizzard.hub.queue")
 
-# The fold's own fixed dependency-edge actor (D5, issue #460) — grouping stays
-# actor-less on the wire; every edge a fold carries is stamped with this constant.
+# Grouping stays actor-less on the wire; every fold edge is stamped with this fixed actor (D5, issue #460).
 FOLD_ACTOR = "fold"
 
 
@@ -87,8 +86,7 @@ def _decode_queue_cursor(cursor: str) -> tuple[float, str]:
 @dataclass(frozen=True)
 class QueueEntry:
     """One paged queue/backlog row (blizzard#526 D4) — the chunk plus its absolute
-    0-based position in the *whole* ordered list, never a page-local one, so a drained
-    sequence of pages reads ``0…n-1`` exactly as an unpaginated peek does."""
+    0-based whole-list position, so drained pages read ``0…n-1`` like an unpaginated peek."""
 
     chunk: Chunk
     position: int
@@ -97,8 +95,7 @@ class QueueEntry:
 @dataclass(frozen=True)
 class QueuePage:
     """A bounded, keyset-paginated page of :meth:`QueueService.page` (blizzard#526 D4) —
-    ``next_cursor`` is ``None`` exactly when this page is the last one, the same
-    convention every other paginated hub read uses."""
+    ``next_cursor`` is ``None`` exactly when this page is the last one."""
 
     entries: list[QueueEntry]
     next_cursor: str | None
@@ -115,8 +112,7 @@ class QueueService:
 
     def ordered(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """``list_``'s chunks in order — ascending by effective position, ``chunk_id``
-        breaking a same-instant tie (blizzard#526 D4: effective position alone is not
-        total, a mint-time fallback can tie). ``statuses`` is the caller's own
+        breaking a same-instant tie (blizzard#526 D4). ``statuses`` is the caller's own
         already-derived fleet statuses (``load_all_statuses()``), never re-derived here."""
         positions = self._queue.queue_positions()
         promoted_ats = self._queue.promoted_ats()
@@ -131,15 +127,11 @@ class QueueService:
         cursor: str | None = None,
         limit: int,
     ) -> QueuePage:
-        """``list_``'s chunks bounded and keyset-paginated (blizzard#526 D4/D7) — the
-        same total order :meth:`ordered` returns. The candidate set is already
-        materialized for :meth:`ordered` itself (a status filter plus derived ordering),
-        so the keyset applies over the domain-ordered list rather than a second SQL
-        read. Each entry's own ``position`` is its absolute index in the whole ordered
-        list (never a page-local one), so a claimed or repositioned cursor chunk still
-        resumes by key rather than by an index a write since shifted. ``cursor`` is a
-        prior :attr:`QueuePage.next_cursor`: any other value raises
-        :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
+        """``list_``'s chunks bounded and keyset-paginated (blizzard#526 D4/D7); the
+        keyset applies over :meth:`ordered`'s already-materialized order, not a second
+        SQL read. ``position`` is each entry's absolute index in the whole list, so a
+        since-repositioned cursor chunk still resumes by key. ``cursor`` is a prior
+        :attr:`QueuePage.next_cursor`, else raising :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         positions = self._queue.queue_positions()
@@ -260,8 +252,7 @@ class GroupResult:
 
     survivor: Chunk
     status: ChunkStatus
-    # The last ``chunk_grouped.id`` this call wrote (issue #213) — ``None`` when
-    # ``merge_ids`` resolved to zero targets.
+    # The last ``chunk_grouped.id`` this call wrote; ``None`` when ``merge_ids`` resolved to zero targets (issue #213).
     grouped_id: int | None = None
 
 

@@ -108,8 +108,7 @@ class FindingView(BaseModel):
 
 class FindingsPageView(BaseModel):
     """``GET /api/findings``'s own bounded page (blizzard#526 D3/D5) — ``next_cursor`` is
-    ``None`` exactly when this page is the last one, the same convention every other
-    paginated hub read uses."""
+    ``None`` exactly when this page is the last one."""
 
     findings: list[FindingView] = []
     next_cursor: str | None = None

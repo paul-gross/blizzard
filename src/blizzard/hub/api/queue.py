@@ -178,9 +178,8 @@ def get_queue(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> QueuePageView:
-    """The hub-ordered ready queue, read-only, bounded and keyset-paginated
-    (blizzard#526 D3/D4/D7) — honours reorder/replace + grouping. ``position`` on each
-    entry is still its absolute index in the whole order, not a page-local one."""
+    """The hub-ordered ready queue, read-only and keyset-paginated (blizzard#526 D3/D4/D7)
+    — honours reorder/replace + grouping."""
     statuses = services.chunks.facts.load_all_statuses()
     try:
         page = services.queue.page(QueueList.READY, statuses=statuses, cursor=cursor, limit=limit)
@@ -273,9 +272,8 @@ def get_backlog(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> BacklogPageView:
-    """The hub-ordered ``not_ready`` list, read-only, bounded and keyset-paginated
-    (blizzard#526 D3/D4/D7) — an operator triage surface, so it requires
-    ``QUEUE_REORDER`` rather than the ready queue's ``FLEET_VIEW``."""
+    """The hub-ordered ``not_ready`` list, read-only and keyset-paginated (blizzard#526
+    D3/D4/D7) — an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``."""
     statuses = services.chunks.facts.load_all_statuses()
     try:
         page = services.queue.page(QueueList.NOT_READY, statuses=statuses, cursor=cursor, limit=limit)

@@ -291,9 +291,8 @@ def test_list_read_carries_no_facts_key(tmp_path: Path) -> None:
 
 
 def _seed_paging_fixture(hub) -> None:  # type: ignore[no-untyped-def]
-    """`fin_1`..`fin_8` under one routine/scope, `fin_2`/`fin_5`/`fin_6` marked gone —
-    interleaved among the live ones rather than clustered at either end, so a small
-    SQL window can land entirely on gone rows and exercise `list_page`'s top-up."""
+    """`fin_1`..`fin_8` under one routine/scope, `fin_2`/`fin_5`/`fin_6` interleaved-gone
+    so a small SQL window can land entirely on gone rows, exercising `list_page`'s top-up."""
     _seed_scope(hub, "blizzard")
     store = FindingStore(hub_store_connections(hub.engine))
     gone_ids = {"fin_2", "fin_5", "fin_6"}
@@ -314,9 +313,8 @@ def _seed_paging_fixture(hub) -> None:  # type: ignore[no-untyped-def]
 
 
 def _page_through(hub, *, params: dict[str, object], pages: int) -> list[str]:  # type: ignore[no-untyped-def]
-    """Follows `next_cursor` from `params` (carrying no `cursor` of its own) to
-    exhaustion, concatenating every page's `finding_id`s in order. `pages` bounds the
-    loop generously so a broken `next_cursor` fails the test rather than hanging it."""
+    """Follows `next_cursor` from `params` to exhaustion, concatenating each page's
+    `finding_id`s; `pages` bounds the loop so a broken cursor fails, not hangs."""
     finding_ids: list[str] = []
     cursor: str | None = None
     for _ in range(pages):

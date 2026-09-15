@@ -57,9 +57,6 @@ def test_garden_proposal_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -
 
 @pytest.mark.unit
 def test_garden_proposal_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The hub paginates ``GET /api/garden-proposals`` — ``garden-proposal list`` must
-    keep following ``next_cursor`` until it goes null rather than stopping after the
-    first page."""
     page_1 = {
         "proposals": [
             {

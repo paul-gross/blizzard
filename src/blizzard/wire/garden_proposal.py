@@ -55,8 +55,7 @@ class GardenProposalView(BaseModel):
 
 class GardenProposalsPageView(BaseModel):
     """``GET /api/garden-proposals``'s own bounded page (blizzard#526 D3/D4) —
-    ``next_cursor`` is ``None`` exactly when this page is the last one, the same
-    convention every other paginated hub read uses."""
+    ``next_cursor`` is ``None`` exactly when this page is the last one."""
 
     proposals: list[GardenProposalView] = []
     next_cursor: str | None = None
