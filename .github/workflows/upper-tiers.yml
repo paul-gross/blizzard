@@ -79,6 +79,12 @@ jobs:
           enable-cache: true
           python-version: "3.12"
           working-directory: blizzard
+          # Relative to working-directory, so the default `**/uv.lock` alone only
+          # sees blizzard's own lockfile — name blizzard-mock's sibling lockfile
+          # too, so its `uv sync` below shares this same cache.
+          cache-dependency-glob: |
+            uv.lock
+            ../blizzard-mock/uv.lock
       - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
         uses: jdx/mise-action@v2
         with:
@@ -142,6 +148,12 @@ jobs:
           enable-cache: true
           python-version: "3.12"
           working-directory: blizzard
+          # Relative to working-directory, so the default `**/uv.lock` alone only
+          # sees blizzard's own lockfile — name blizzard-mock's sibling lockfile
+          # too, so its `uv sync` below shares this same cache.
+          cache-dependency-glob: |
+            uv.lock
+            ../blizzard-mock/uv.lock
       - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
         uses: jdx/mise-action@v2
         with:
