@@ -15,7 +15,6 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.promote import PromoteService
@@ -33,8 +32,8 @@ def _chunk(chunk_id: str, minted_at: datetime = _T0) -> Chunk:
 @dataclass
 class _FakeChunkRepo:
     """Only the members :meth:`PromoteService.promote` touches are live; anything else
-    is a bug. ``facts`` is no longer loaded here — the service takes it as a parameter
-    now — but each test still stashes its own value here for the call site to pass."""
+    is a bug. ``facts``/``statuses`` are no longer loaded here — the service takes both
+    as parameters now — ``facts`` is still stashed here for the call site to pass."""
 
     facts: ChunkFacts
     ready: list[Chunk] = field(default_factory=list)
@@ -43,10 +42,6 @@ class _FakeChunkRepo:
     promoted: list[tuple[str, datetime]] = field(default_factory=list)
     stamped: list[tuple[str, float, datetime]] = field(default_factory=list)
     promoted_return: int | None = 1
-
-    def load_all_statuses(self) -> dict[str, ChunkStatus]:
-        # `list_ready` below ignores `statuses`, so an empty map satisfies the keyword.
-        return {}
 
     def list_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
         return self.ready
@@ -66,11 +61,6 @@ class _FakeChunkRepo:
         raise NotImplementedError(f"PromoteService should not touch {name!r}")
 
 
-def _as_facts(repo: _FakeChunkRepo) -> IReadChunkFactsRepository:
-    """Assert the fake satisfies the Protocol PromoteService depends on (see module docstring)."""
-    return cast(IReadChunkFactsRepository, repo)
-
-
 def _as_record(repo: _FakeChunkRepo) -> IReadChunkRecordRepository:
     return cast(IReadChunkRecordRepository, repo)
 
@@ -82,9 +72,9 @@ def _as_queue(repo: _FakeChunkRepo) -> IWriteChunkQueueRepository:
 def test_promote_stamps_zero_when_no_chunk_is_currently_ready() -> None:
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=ChunkFacts(minted=True), ready=[])
-    service = PromoteService(facts=_as_facts(repo), record=_as_record(repo), queue=_as_queue(repo), clock=clock)
+    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), clock=clock)
 
-    service.promote(_chunk("chk_1"), facts=repo.facts)
+    service.promote(_chunk("chk_1"), facts=repo.facts, statuses={})
 
     assert repo.promoted == [("chk_1", _T0)]
     assert repo.stamped == [("chk_1", 0.0, _T0)]
@@ -98,9 +88,9 @@ def test_promote_stamps_one_past_the_max_effective_position_of_ready_chunks() ->
         ready=ready,
         positions={"chk_a": 4.0, "chk_b": 1.0},
     )
-    service = PromoteService(facts=_as_facts(repo), record=_as_record(repo), queue=_as_queue(repo), clock=clock)
+    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), clock=clock)
 
-    service.promote(_chunk("chk_new"), facts=repo.facts)
+    service.promote(_chunk("chk_new"), facts=repo.facts, statuses={})
 
     assert repo.stamped == [("chk_new", 5.0, _T0)]
 
@@ -116,9 +106,9 @@ def test_promote_uses_the_effective_position_fallback_for_ready_chunks_with_no_e
         positions={},
         promoted_ats_by_chunk={"chk_a": datetime(2025, 6, 1, tzinfo=UTC)},
     )
-    service = PromoteService(facts=_as_facts(repo), record=_as_record(repo), queue=_as_queue(repo), clock=clock)
+    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), clock=clock)
 
-    service.promote(_chunk("chk_new"), facts=repo.facts)
+    service.promote(_chunk("chk_new"), facts=repo.facts, statuses={})
 
     expected = datetime(2025, 6, 1, tzinfo=UTC).timestamp() + 1.0
     assert repo.stamped == [("chk_new", expected, _T0)]
@@ -129,9 +119,9 @@ def test_promote_is_a_complete_no_op_on_an_already_promoted_chunk() -> None:
     # must not shove an already-ready chunk to the back of the queue.
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=ChunkFacts(minted=True, promoted=True))
-    service = PromoteService(facts=_as_facts(repo), record=_as_record(repo), queue=_as_queue(repo), clock=clock)
+    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), clock=clock)
 
-    service.promote(_chunk("chk_1"), facts=repo.facts)
+    service.promote(_chunk("chk_1"), facts=repo.facts, statuses={})
 
     assert repo.promoted == []
     assert repo.stamped == []
@@ -141,9 +131,9 @@ def test_promote_uses_the_injected_clock_not_the_wall_clock() -> None:
     later = datetime(2026, 6, 1, tzinfo=UTC)
     clock = FixedClock(instant=later)
     repo = _FakeChunkRepo(facts=ChunkFacts(minted=True), ready=[])
-    service = PromoteService(facts=_as_facts(repo), record=_as_record(repo), queue=_as_queue(repo), clock=clock)
+    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), clock=clock)
 
-    service.promote(_chunk("chk_1"), facts=repo.facts)
+    service.promote(_chunk("chk_1"), facts=repo.facts, statuses={})
 
     assert repo.promoted == [("chk_1", later)]
     assert repo.stamped == [("chk_1", 0.0, later)]

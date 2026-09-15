@@ -1098,7 +1098,7 @@
    "comments": 30,
    "docstrings": 80,
    "over_cap": 2,
-   "total": 743
+   "total": 744
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -1206,7 +1206,7 @@
    "comments": 4,
    "docstrings": 50,
    "over_cap": 1,
-   "total": 486
+   "total": 487
   },
   "blizzard/hub/api/runners.py": {
    "comments": 5,
@@ -1246,9 +1246,9 @@
   },
   "blizzard/hub/api/work_sources.py": {
    "comments": 8,
-   "docstrings": 32,
+   "docstrings": 29,
    "over_cap": 0,
-   "total": 315
+   "total": 301
   },
   "blizzard/hub/app.py": {
    "comments": 31,
@@ -1320,7 +1320,7 @@
    "comments": 4,
    "docstrings": 8,
    "over_cap": 0,
-   "total": 108
+   "total": 110
   },
   "blizzard/hub/auth/internal/session_repository.py": {
    "comments": 4,
@@ -1338,7 +1338,7 @@
    "comments": 4,
    "docstrings": 8,
    "over_cap": 0,
-   "total": 104
+   "total": 108
   },
   "blizzard/hub/auth/models.py": {
    "comments": 1,
@@ -1395,10 +1395,10 @@
    "total": 40
   },
   "blizzard/hub/auth/service.py": {
-   "comments": 19,
+   "comments": 21,
    "docstrings": 62,
    "over_cap": 6,
-   "total": 383
+   "total": 385
   },
   "blizzard/hub/auth/sessions.py": {
    "comments": 0,
@@ -1572,7 +1572,7 @@
    "comments": 91,
    "docstrings": 13,
    "over_cap": 25,
-   "total": 603
+   "total": 602
   },
   "blizzard/hub/config.py": {
    "comments": 45,
@@ -1980,7 +1980,7 @@
    "comments": 0,
    "docstrings": 17,
    "over_cap": 0,
-   "total": 63
+   "total": 59
   },
   "blizzard/hub/domain/proposal_auth.py": {
    "comments": 0,
@@ -2034,7 +2034,7 @@
    "comments": 0,
    "docstrings": 22,
    "over_cap": 1,
-   "total": 188
+   "total": 187
   },
   "blizzard/hub/domain/routines.py": {
    "comments": 5,
@@ -2068,9 +2068,9 @@
   },
   "blizzard/hub/domain/work.py": {
    "comments": 56,
-   "docstrings": 369,
+   "docstrings": 371,
    "over_cap": 15,
-   "total": 1416
+   "total": 1422
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 9,
@@ -2218,9 +2218,9 @@
   },
   "blizzard/hub/store/internal/chunk_decisions_store.py": {
    "comments": 16,
-   "docstrings": 45,
+   "docstrings": 46,
    "over_cap": 3,
-   "total": 364
+   "total": 370
   },
   "blizzard/hub/store/internal/chunk_delivery_store.py": {
    "comments": 2,
@@ -2280,7 +2280,7 @@
    "comments": 7,
    "docstrings": 10,
    "over_cap": 0,
-   "total": 97
+   "total": 100
   },
   "blizzard/hub/store/internal/chunk_record_store.py": {
    "comments": 2,
@@ -3048,7 +3048,7 @@
    "comments": 0,
    "docstrings": 56,
    "over_cap": 1,
-   "total": 144
+   "total": 146
   },
   "blizzard/runner/__init__.py": {
    "comments": 0,
@@ -5363,10 +5363,10 @@
    "total": 373
   },
   "test_auth_service.py": {
-   "comments": 17,
-   "docstrings": 24,
+   "comments": 19,
+   "docstrings": 27,
    "over_cap": 0,
-   "total": 793
+   "total": 821
   },
   "test_auth_session.py": {
    "comments": 13,
@@ -6158,13 +6158,13 @@
    "comments": 4,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 279
+   "total": 286
   },
   "test_garden_run_component.py": {
    "comments": 7,
    "docstrings": 26,
    "over_cap": 1,
-   "total": 442
+   "total": 449
   },
   "test_garden_run_domain.py": {
    "comments": 4,
@@ -6350,7 +6350,7 @@
    "comments": 8,
    "docstrings": 4,
    "over_cap": 0,
-   "total": 307
+   "total": 312
   },
   "test_hub_cli_graph.py": {
    "comments": 1,
@@ -6779,10 +6779,10 @@
    "total": 190
   },
   "test_promote_service.py": {
-   "comments": 5,
-   "docstrings": 10,
+   "comments": 4,
+   "docstrings": 9,
    "over_cap": 0,
-   "total": 149
+   "total": 139
   },
   "test_prompt_byte_bars.py": {
    "comments": 0,
@@ -6953,16 +6953,16 @@
    "total": 238
   },
   "test_routine_run_domain.py": {
-   "comments": 4,
+   "comments": 2,
    "docstrings": 9,
    "over_cap": 0,
-   "total": 400
+   "total": 393
   },
   "test_routine_run_service.py": {
    "comments": 0,
    "docstrings": 11,
    "over_cap": 0,
-   "total": 239
+   "total": 298
   },
   "test_routine_store.py": {
    "comments": 4,

@@ -15,6 +15,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import insert_promote_rows, row_exists
 
 
@@ -76,13 +77,15 @@ class ChunkQueueStore:
             return
         with self._store.write("record_backlog_positions") as conn:
             chunk_ids = [chunk_id for chunk_id, _ in positions]
-            # One `.in_()` read for the whole batch, not one `row_exists` per pair.
-            promoted = {
-                r.chunk_id
-                for r in conn.execute(
-                    select(s.chunk_promoted.c.chunk_id).where(s.chunk_promoted.c.chunk_id.in_(chunk_ids))
-                ).all()
-            }
+            # `.in_()` reads over id_batches, not one `row_exists` per pair.
+            promoted: set[str] = set()
+            for batch in id_batches(chunk_ids):
+                promoted |= {
+                    r.chunk_id
+                    for r in conn.execute(
+                        select(s.chunk_promoted.c.chunk_id).where(s.chunk_promoted.c.chunk_id.in_(batch))
+                    ).all()
+                }
             rows = [
                 {"chunk_id": chunk_id, "position": position, "set_at": at}
                 for chunk_id, position in positions

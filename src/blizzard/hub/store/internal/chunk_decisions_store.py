@@ -63,7 +63,7 @@ class ChunkDecisionsStore:
             row = conn.execute(
                 select(s.decisions)
                 .where(s.decisions.c.chunk_id == chunk_id, self._not_closed_clause())
-                .order_by(s.decisions.c.submitted_at.desc())
+                .order_by(s.decisions.c.submitted_at.desc(), s.decisions.c.decision_id.desc())
                 .limit(1)
             ).one_or_none()
             return self._decision_row(conn, row) if row is not None else None
@@ -133,17 +133,19 @@ class ChunkDecisionsStore:
     @staticmethod
     def _decision_closure_ids(conn: Connection, decision_ids: Sequence[str]) -> set[str]:
         """The ids among ``decision_ids`` closed by a fact in :data:`_DECISION_CLOSURE_TABLES`
-        — the one closure rule both :meth:`_decision_row` and :meth:`live_decisions_for` read.
-        Batches both the input and each table's own ``.in_()`` through :func:`id_batches`."""
+        — :meth:`_not_closed_clause`'s own predicate, inverted, so the two closure reads
+        share one rule rather than each encoding it separately. Batches through
+        :func:`id_batches`, one query per batch."""
         if not decision_ids:
             return set()
         closed: set[str] = set()
         for batch in id_batches(decision_ids):
-            for table in _DECISION_CLOSURE_TABLES:
-                closed |= {
-                    r.decision_id
-                    for r in conn.execute(select(table.c.decision_id).where(table.c.decision_id.in_(batch))).all()
-                }
+            rows = conn.execute(
+                select(s.decisions.c.decision_id).where(
+                    s.decisions.c.decision_id.in_(batch), ~ChunkDecisionsStore._not_closed_clause()
+                )
+            ).all()
+            closed |= {r.decision_id for r in rows}
         return closed
 
     def list_open_decisions(self) -> list[DecisionRow]:
@@ -157,7 +159,9 @@ class ChunkDecisionsStore:
             .exists()
         )
         with self._store.read("list_open_decisions") as conn:
-            rows = conn.execute(select(s.decisions).where(not_resolved).order_by(s.decisions.c.submitted_at)).all()
+            rows = conn.execute(
+                select(s.decisions).where(not_resolved).order_by(s.decisions.c.submitted_at, s.decisions.c.decision_id)
+            ).all()
             return self._hydrate(conn, rows)
 
     def dockets_for_chunks(self, chunk_ids: Sequence[str]) -> dict[str, list[DocketEntry]]:
@@ -185,21 +189,23 @@ class ChunkDecisionsStore:
         proposal_ids = [row.proposal_id for row in rows]
         judged: set[str] = set()
         strikes = {}
-        if proposal_ids:
-            judged = {
+        for batch in id_batches(proposal_ids):
+            judged |= {
                 r.proposal_id
                 for r in conn.execute(
                     select(s.work_item_materializations.c.proposal_id).where(
-                        s.work_item_materializations.c.proposal_id.in_(proposal_ids)
+                        s.work_item_materializations.c.proposal_id.in_(batch)
                     )
                 ).all()
             }
-            strikes = {
-                r.proposal_id: r
-                for r in conn.execute(
-                    select(s.work_item_strikes).where(s.work_item_strikes.c.proposal_id.in_(proposal_ids))
-                ).all()
-            }
+            strikes.update(
+                {
+                    r.proposal_id: r
+                    for r in conn.execute(
+                        select(s.work_item_strikes).where(s.work_item_strikes.c.proposal_id.in_(batch))
+                    ).all()
+                }
+            )
         result: dict[str, list[DocketEntry]] = defaultdict(list)
         for row in rows:
             if row.proposal_id in judged:

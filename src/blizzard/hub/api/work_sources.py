@@ -18,7 +18,7 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
-from blizzard.hub.auth.models import ResolvedIdentity, User
+from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.edit import UNSET
 from blizzard.hub.domain.errors import ChunkNotFound
@@ -68,20 +68,6 @@ def _stripped(value: str, field_name: str) -> str:
     if not text:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} must not be blank")
     return text
-
-
-def _author_view(author: WorkItemAuthor, users_by_id: dict[str, User]) -> AuthorView:
-    """`resolve_author_view`'s per-item mapping, replayed over one batched fetch — every
-    `WorkItemAuthorKind.USER` id resolved from `users_by_id` rather than a query per
-    item."""
-    if author.kind is WorkItemAuthorKind.USER:
-        user = users_by_id.get(author.user_id) if author.user_id is not None else None
-        return AuthorView(
-            kind=author.kind.value, user_id=author.user_id, login=user.username if user is not None else None
-        )
-    return AuthorView(
-        kind=author.kind.value, runner_id=author.runner_id, chunk_id=author.chunk_id, node_name=author.node_name
-    )
 
 
 def _view(
@@ -150,7 +136,7 @@ def list_work_items(
             _view(
                 item,
                 source_obj,
-                _author_view(item.author, users_by_id),
+                resolve_author_view(item.author, users_by_id),
                 live_holder=holders.get(WorkRef(source=item.source, ref=item.ref)),
             )
             for item in items

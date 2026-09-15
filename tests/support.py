@@ -762,7 +762,7 @@ def chunk_facts_of(hub: HubHarness, chunk_id: str) -> ChunkFacts:
     """A chunk's current facts, or the unminted default — the same fallback every route
     applies, for a test calling a write-verb domain service directly rather than through
     its route (which would otherwise supply this from its own ``ChunkChanged.before``)."""
-    return hub.services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
+    return ChunkFacts.or_default(hub.services.chunks.facts.load_facts(chunk_id))
 
 
 def write_chunk_pause_facts(tmp_path: Path, chunk_id: str, *facts: tuple[bool, datetime]) -> None:

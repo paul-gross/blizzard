@@ -10,11 +10,12 @@ unresolvable graph refuses rather than defaults (D5)."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.queue import IReadChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
@@ -106,7 +107,6 @@ class RunService:
         work_refs: IReadChunkWorkRefsRepository,
         record: IReadChunkRecordRepository,
         queue: IReadChunkQueueRepository,
-        facts: IReadChunkFactsRepository,
         clock: IClock,
     ) -> None:
         self._scopes = scopes
@@ -117,7 +117,6 @@ class RunService:
         self._work_refs = work_refs
         self._record = record
         self._queue = queue
-        self._facts = facts
         self._clock = clock
 
     def run(
@@ -128,6 +127,7 @@ class RunService:
         mode: RunMode,
         note: str | None,
         author: WorkItemAuthor,
+        statuses: Mapping[str, ChunkStatus],
     ) -> RunResult:
         graph = self._graphs.get_enabled_by_name(routine.graph_name)
         if graph is None:
@@ -164,7 +164,6 @@ class RunService:
             default_model=routine.default_model,
             default_effort=routine.default_effort,
         )
-        statuses = self._facts.load_all_statuses()
         position = tail_position(self._record, self._queue, statuses=statuses)
         item, promoted_id = self._items.create_with_chunk_and_promote(
             pointer=pointer,

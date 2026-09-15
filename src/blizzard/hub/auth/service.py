@@ -128,8 +128,8 @@ class AuthService:
         """Slide ``session``'s expiry and resolve its owning user's identity.
 
         ``None`` when idle-expired, past its absolute maximum age, or its user no
-        longer exists (takes the already-loaded ``Session``). Skips the write below
-        ``touch_granularity`` — both checks above still gate on the unwritten value."""
+        longer exists (takes the already-loaded ``Session``). Skips the write when
+        the elapsed time since ``last_seen_at`` is under ``touch_granularity``."""
         now = self._clock.now()
         if session.expires_at <= now:
             return None
@@ -138,8 +138,10 @@ class AuthService:
         user = self._users.get(session.user_id)
         if user is None:
             return None
-        new_expires_at = min(session.created_at + self._absolute_max_age, now + self._idle_ttl)
-        if new_expires_at - session.expires_at >= self._touch_granularity:
+        # Elapsed time, not the expiry slide: the slide saturates at `absolute_max_age`
+        # while the session is still live, which would freeze that delta at zero.
+        if now - session.last_seen_at >= self._touch_granularity:
+            new_expires_at = min(session.created_at + self._absolute_max_age, now + self._idle_ttl)
             self._sessions.touch(session.id_hash, last_seen_at=now, expires_at=new_expires_at)
         return ResolvedIdentity(
             user_id=user.user_id,

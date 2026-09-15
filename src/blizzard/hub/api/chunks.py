@@ -395,7 +395,7 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        requeue_id = services.requeue.requeue(chunk, facts=change.facts or ChunkFacts(minted=True))
+        requeue_id = services.requeue.requeue(chunk, facts=ChunkFacts.or_default(change.facts))
     except NotEscalated as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = change.publish(cause="requeued", key=f"requeues:{requeue_id}")
@@ -477,7 +477,7 @@ def pause_chunk(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        pause_fact_id = services.pause.pause(chunk, facts=change.facts or ChunkFacts(minted=True), by=request.by)
+        pause_fact_id = services.pause.pause(chunk, facts=ChunkFacts.or_default(change.facts), by=request.by)
     except ChunkNotPausable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = change.publish(cause="paused", key=f"chunk_pause_facts:{pause_fact_id}")
@@ -524,7 +524,7 @@ def stop_chunk(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        stopped_id = services.stop.stop(chunk, facts=change.facts or ChunkFacts(minted=True), by=request.by)
+        stopped_id = services.stop.stop(chunk, facts=ChunkFacts.or_default(change.facts), by=request.by)
     except ChunkNotStoppable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = change.publish(cause="stopped", key=f"chunk_stopped:{stopped_id}")
@@ -550,7 +550,7 @@ def complete_chunk(
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
-    completed_id = services.complete.complete(chunk, facts=change.facts or ChunkFacts(minted=True), by=request.by)
+    completed_id = services.complete.complete(chunk, facts=ChunkFacts.or_default(change.facts), by=request.by)
     key = f"chunk_completed:{completed_id}" if completed_id is not None else None
     facts = change.publish(cause="completed", key=key)
     services.events.publish_queue_changed()  # a completed chunk is never offered for claim again
@@ -572,7 +572,8 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
-    promoted_id = services.promote.promote(chunk, facts=change.facts or ChunkFacts(minted=True))
+    statuses = services.chunks.facts.load_all_statuses()
+    promoted_id = services.promote.promote(chunk, facts=ChunkFacts.or_default(change.facts), statuses=statuses)
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
     facts = change.publish(cause="promoted", key=key)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue

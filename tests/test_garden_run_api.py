@@ -45,7 +45,14 @@ def _routine(hub: HubHarness, *, name: str = "gardening", scope: str = "blizzard
 def _run(hub: HubHarness, routine: Routine) -> str:
     scope = hub.services.scopes.get(routine.default_scope_slug)
     assert scope is not None
-    result = hub.services.routine_run.run(routine, scope=scope, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(
+        routine,
+        scope=scope,
+        mode=RunMode.FULL,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
+    )
     return result.chunk_id
 
 

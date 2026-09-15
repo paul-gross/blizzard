@@ -49,7 +49,7 @@ class ChunkChanged:
         instead of reloading. ``key`` names the durable fact just written, or ``None``. ``by``
         (delete-route-only) still degrades a gone chunk to a bare ``{chunk_id, status}`` frame
         rather than raising."""
-        facts = self.services.chunks.facts.load_facts(self.chunk_id) or ChunkFacts(minted=True)
+        facts = ChunkFacts.or_default(self.services.chunks.facts.load_facts(self.chunk_id))
         resolved_status = status if status is not None else facts.status().value
         chunk = self.services.chunks.record.get(self.chunk_id)
         graph = self.services.graphs.get(chunk.graph_id) if chunk is not None else None

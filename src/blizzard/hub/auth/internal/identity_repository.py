@@ -16,6 +16,7 @@ from blizzard.hub.auth.identities import IWriteIdentityRepository
 from blizzard.hub.auth.models import Identity
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 
 
 class IdentityRepository:
@@ -48,13 +49,14 @@ class IdentityRepository:
         rather than one per user, grouped by `user_id` in `list_for_user`'s own order."""
         if not user_ids:
             return {}
-        with self._store.read("list_for_users") as conn:
-            rows = conn.execute(
-                select(s.identities).where(s.identities.c.user_id.in_(user_ids)).order_by(s.identities.c.created_at)
-            ).all()
         grouped: dict[str, list[Identity]] = {}
-        for row in rows:
-            grouped.setdefault(row.user_id, []).append(self._identity(row))
+        with self._store.read("list_for_users") as conn:
+            for batch in id_batches(user_ids):
+                rows = conn.execute(
+                    select(s.identities).where(s.identities.c.user_id.in_(batch)).order_by(s.identities.c.created_at)
+                ).all()
+                for row in rows:
+                    grouped.setdefault(row.user_id, []).append(self._identity(row))
         return grouped
 
     def distinct_provider_names(self) -> set[str]:

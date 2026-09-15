@@ -349,6 +349,34 @@ def test_touch_session_returns_none_past_absolute_max_age_even_if_recently_touch
     assert service.touch_session(session) is None
 
 
+def test_touch_session_keeps_advancing_last_seen_once_the_expiry_slide_saturates() -> None:
+    """Once the idle slide's target outruns the absolute cap, ``expires_at`` stops
+    moving — the touch-granularity gate must not key off that frozen delta, or
+    ``last_seen_at`` would freeze with it while the session is still very much live."""
+    clock = FixedClock(_T0)
+    service, users, sessions, _ident, _, _ = _service(
+        clock, idle_ttl=timedelta(hours=2), absolute_max_age=timedelta(hours=3)
+    )
+    user = _user()
+    users.create(user)
+    _, session = service.mint_session(user)
+
+    clock.advance(timedelta(hours=1, minutes=30))  # past the 1h saturation threshold
+    assert service.touch_session(session) is not None
+    session = sessions.get_by_hash(session.id_hash)
+    assert session is not None
+    saturated_expiry = session.expires_at
+    assert saturated_expiry == _T0 + timedelta(hours=3)
+
+    clock.advance(timedelta(minutes=10))  # well past touch_granularity, expiry target unchanged
+    assert service.touch_session(session) is not None
+    resolved = sessions.get_by_hash(session.id_hash)
+
+    assert resolved is not None
+    assert resolved.expires_at == saturated_expiry
+    assert resolved.last_seen_at == clock.now()
+
+
 def test_touch_session_returns_none_when_the_user_no_longer_exists() -> None:
     """A session outliving its user (deleted between mint and resolve) resolves to
     nothing rather than raising."""
