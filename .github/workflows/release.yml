@@ -164,13 +164,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: cache the Angular build cache
-        uses: actions/cache@v4
-        with:
-          path: blizzard/web/.angular/cache
-          key: ${{ runner.os }}-angular-cache-${{ hashFiles('blizzard/web/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-angular-cache-
       - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
         uses: jdx/mise-action@v2
         with:
@@ -231,13 +224,6 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: cache the Angular build cache
-        uses: actions/cache@v4
-        with:
-          path: web/.angular/cache
-          key: ${{ runner.os }}-angular-cache-${{ hashFiles('web/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-angular-cache-
       - name: check pyproject.toml's version agrees with the tag (fail before building anything)
         run: ./scripts/check-version-tag.sh "${GITHUB_REF_NAME}"
       - name: derive version from tag
