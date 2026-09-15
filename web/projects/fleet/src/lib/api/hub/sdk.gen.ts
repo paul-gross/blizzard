@@ -218,9 +218,8 @@ export const callbackApiAuthNameCallbackGet = <ThrowOnError extends boolean = fa
 /**
  * Get Backlog
  *
- * The hub-ordered ``not_ready`` list, read-only, bounded and keyset-paginated
- * (blizzard#526 D3/D4/D7) — an operator triage surface, so it requires
- * ``QUEUE_REORDER`` rather than the ready queue's ``FLEET_VIEW``.
+ * The hub-ordered ``not_ready`` list, read-only and keyset-paginated (blizzard#526
+ * D3/D4/D7) — an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``.
  */
 export const getBacklogApiBacklogGet = <ThrowOnError extends boolean = false>(options?: Options<GetBacklogApiBacklogGetData, ThrowOnError>): RequestResult<GetBacklogApiBacklogGetResponses, GetBacklogApiBacklogGetErrors, ThrowOnError> => (options?.client ?? client).get<GetBacklogApiBacklogGetResponses, GetBacklogApiBacklogGetErrors, ThrowOnError>({ url: '/api/backlog', ...options });
 
@@ -263,14 +262,11 @@ export const repositionBacklogApiBacklogPositionPost = <ThrowOnError extends boo
 /**
  * List Chunks
  *
- * The fleet chunk list — derived status per chunk, bounded and keyset-paginated
- * (blizzard#526 D3/D4/D6).
+ * The fleet chunk list — derived status per chunk, bounded and keyset-paginated.
  *
- * Reads the fleet's facts and routes with one bulk query each: the `FleetPulse.view()`
- * shape (issue #374), extended to routes and to the rendered row (issue #421). Only the
- * page's own rows are rendered, but live-holder and blocked-marking derivation still see
- * the whole fleet (D6) — a pointer this page renders can be held live by a chunk outside
- * it, and a dependent's blocked marking can name a prerequisite outside it too.
+ * Only the page's own rows render, but live-holder and blocked-marking derivation still
+ * see the whole fleet (D6 below) — a pointer this page renders can be held live by a
+ * chunk outside it, same for a dependent's prerequisite.
  */
 export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(options?: Options<ListChunksApiChunksGetData, ThrowOnError>): RequestResult<ListChunksApiChunksGetResponses, ListChunksApiChunksGetErrors, ThrowOnError> => (options?.client ?? client).get<ListChunksApiChunksGetResponses, ListChunksApiChunksGetErrors, ThrowOnError>({ url: '/api/chunks', ...options });
 
@@ -552,12 +548,9 @@ export const getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet = <Thro
 /**
  * Get Work Items
  *
- * Pass-through work items read — one entry per pointer, contents never stored.
- *
- * A per-pointer resolution or forge failure degrades to an ``error`` on that entry
- * rather than failing the whole read. A chunk with no pointers is an empty list, not
- * a 404; the built-in ``hub`` source is always seated, so a bare hub carries no
- * configuration under which this ever 503s.
+ * Pass-through work items read, one entry per pointer, contents never stored. A
+ * per-pointer resolution or forge failure becomes that entry's own ``error`` instead of
+ * failing the whole read; a chunk with no pointers reads as an empty list, not a 404.
  */
 export const getWorkItemsApiChunksChunkIdWorkItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetWorkItemsApiChunksChunkIdWorkItemsGetData, ThrowOnError>): RequestResult<GetWorkItemsApiChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiChunksChunkIdWorkItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetWorkItemsApiChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiChunksChunkIdWorkItemsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/work-items', ...options });
 
@@ -922,9 +915,8 @@ export const getQuestionApiFleetQuestionsQuestionIdGet = <ThrowOnError extends b
 /**
  * Peek Queue
  *
- * The runner's FILL read — the whole ready-queue order, out of scope for
- * blizzard#526's pagination (unlike the operator-facing, now-paginated
- * ``GET /api/queue``): a filling runner needs every ready chunk in one read.
+ * The runner's FILL read — the whole ready-queue order, unlike the now-paginated
+ * ``GET /api/queue``: a filling runner needs every ready chunk in one read.
  */
 export const peekQueueApiFleetQueuePeekGet = <ThrowOnError extends boolean = false>(options?: Options<PeekQueueApiFleetQueuePeekGetData, ThrowOnError>): RequestResult<PeekQueueApiFleetQueuePeekGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<PeekQueueApiFleetQueuePeekGetResponses, unknown, ThrowOnError>({ url: '/api/fleet/queue/peek', ...options });
 
@@ -1207,9 +1199,8 @@ export const answerQuestionApiQuestionsQuestionIdAnswersPost = <ThrowOnError ext
 /**
  * Get Queue
  *
- * The hub-ordered ready queue, read-only, bounded and keyset-paginated
- * (blizzard#526 D3/D4/D7) — honours reorder/replace + grouping. ``position`` on each
- * entry is still its absolute index in the whole order, not a page-local one.
+ * The hub-ordered ready queue, read-only and keyset-paginated (blizzard#526 D3/D4/D7)
+ * — honours reorder/replace + grouping.
  */
 export const getQueueApiQueueGet = <ThrowOnError extends boolean = false>(options?: Options<GetQueueApiQueueGetData, ThrowOnError>): RequestResult<GetQueueApiQueueGetResponses, GetQueueApiQueueGetErrors, ThrowOnError> => (options?.client ?? client).get<GetQueueApiQueueGetResponses, GetQueueApiQueueGetErrors, ThrowOnError>({ url: '/api/queue', ...options });
 

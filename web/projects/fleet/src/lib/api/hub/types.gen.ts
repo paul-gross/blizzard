@@ -551,10 +551,8 @@ export type ArtifactView = {
 /**
  * BacklogPageView
  *
- * ``GET /api/backlog``'s own bounded page (blizzard#526 D3/D4) — ``next_cursor``
- * is ``None`` exactly when this page is the last one, the same convention every other
- * paginated hub read uses. ``position`` on each entry is still its absolute index in
- * the whole order, not a page-local one.
+ * ``GET /api/backlog``'s own bounded page (blizzard#526 D3/D4): ``next_cursor``
+ * is ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local.
  */
 export type BacklogPageView = {
     /**
@@ -595,10 +593,8 @@ export type BacklogPeekEntry = {
 /**
  * BacklogPeekResponse
  *
- * The ``not_ready`` list, in the hub's explicit order — the whole order,
- * unpaginated. ``PUT /api/backlog``/``POST /api/backlog/position`` all still answer
- * with this (blizzard#526 D3): a write verb's caller needs the whole resulting order
- * to confirm against, not one page of it.
+ * The ``not_ready`` list's whole order, unpaginated — a write verb's caller needs
+ * it in full to confirm against, not one page (blizzard#526 D3).
  */
 export type BacklogPeekResponse = {
     /**
@@ -1332,8 +1328,7 @@ export type ChunkUsageView = {
  * ChunksPageView
  *
  * ``GET /api/chunks``'s own bounded page (blizzard#526 D3/D4) — ``next_cursor`` is
- * ``None`` exactly when this page is the last one, the same convention every other
- * paginated hub read uses.
+ * ``None`` exactly when this page is the last one.
  */
 export type ChunksPageView = {
     /**
@@ -2125,8 +2120,7 @@ export type FindingView = {
  * FindingsPageView
  *
  * ``GET /api/findings``'s own bounded page (blizzard#526 D3/D5) — ``next_cursor`` is
- * ``None`` exactly when this page is the last one, the same convention every other
- * paginated hub read uses.
+ * ``None`` exactly when this page is the last one.
  */
 export type FindingsPageView = {
     /**
@@ -2410,8 +2404,7 @@ export type GardenProposalView = {
  * GardenProposalsPageView
  *
  * ``GET /api/garden-proposals``'s own bounded page (blizzard#526 D3/D4) —
- * ``next_cursor`` is ``None`` exactly when this page is the last one, the same
- * convention every other paginated hub read uses.
+ * ``next_cursor`` is ``None`` exactly when this page is the last one.
  */
 export type GardenProposalsPageView = {
     /**
@@ -3452,10 +3445,8 @@ export type QuestionView = {
 /**
  * QueuePageView
  *
- * ``GET /api/queue``'s own bounded page (blizzard#526 D3/D4) — ``next_cursor`` is
- * ``None`` exactly when this page is the last one, the same convention every other
- * paginated hub read uses. ``position`` on each entry is still its absolute index in
- * the whole order, not a page-local one.
+ * ``GET /api/queue``'s own bounded page (blizzard#526 D3/D4): ``next_cursor`` is
+ * ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local.
  */
 export type QueuePageView = {
     /**
@@ -3496,11 +3487,8 @@ export type QueuePeekEntry = {
 /**
  * QueuePeekResponse
  *
- * The ready queue, in the hub's explicit order — the whole order, unpaginated.
- * ``PUT /api/queue``/``POST /api/queue/position`` and the runner's own
- * ``GET /api/fleet/queue/peek`` all still answer with this (blizzard#526 D3): a write
- * verb's caller needs the whole resulting order to confirm against, not one page of
- * it.
+ * The ready queue's whole order, unpaginated — a write verb's caller needs it in
+ * full to confirm against, not one page (blizzard#526 D3).
  */
 export type QueuePeekResponse = {
     /**

@@ -827,7 +827,7 @@
         "type": "object"
       },
       "BacklogPageView": {
-        "description": "``GET /api/backlog``'s own bounded page (blizzard#526 D3/D4) \u2014 ``next_cursor``\nis ``None`` exactly when this page is the last one, the same convention every other\npaginated hub read uses. ``position`` on each entry is still its absolute index in\nthe whole order, not a page-local one.",
+        "description": "``GET /api/backlog``'s own bounded page (blizzard#526 D3/D4): ``next_cursor``\nis ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local.",
         "properties": {
           "entries": {
             "default": [],
@@ -895,7 +895,7 @@
         "type": "object"
       },
       "BacklogPeekResponse": {
-        "description": "The ``not_ready`` list, in the hub's explicit order \u2014 the whole order,\nunpaginated. ``PUT /api/backlog``/``POST /api/backlog/position`` all still answer\nwith this (blizzard#526 D3): a write verb's caller needs the whole resulting order\nto confirm against, not one page of it.",
+        "description": "The ``not_ready`` list's whole order, unpaginated \u2014 a write verb's caller needs\nit in full to confirm against, not one page (blizzard#526 D3).",
         "properties": {
           "entries": {
             "default": [],
@@ -2059,7 +2059,7 @@
         "type": "object"
       },
       "ChunksPageView": {
-        "description": "``GET /api/chunks``'s own bounded page (blizzard#526 D3/D4) \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one, the same convention every other\npaginated hub read uses.",
+        "description": "``GET /api/chunks``'s own bounded page (blizzard#526 D3/D4) \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one.",
         "properties": {
           "chunks": {
             "default": [],
@@ -3284,7 +3284,7 @@
         "type": "object"
       },
       "FindingsPageView": {
-        "description": "``GET /api/findings``'s own bounded page (blizzard#526 D3/D5) \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one, the same convention every other\npaginated hub read uses.",
+        "description": "``GET /api/findings``'s own bounded page (blizzard#526 D3/D5) \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one.",
         "properties": {
           "findings": {
             "default": [],
@@ -3704,7 +3704,7 @@
         "type": "object"
       },
       "GardenProposalsPageView": {
-        "description": "``GET /api/garden-proposals``'s own bounded page (blizzard#526 D3/D4) \u2014\n``next_cursor`` is ``None`` exactly when this page is the last one, the same\nconvention every other paginated hub read uses.",
+        "description": "``GET /api/garden-proposals``'s own bounded page (blizzard#526 D3/D4) \u2014\n``next_cursor`` is ``None`` exactly when this page is the last one.",
         "properties": {
           "next_cursor": {
             "anyOf": [
@@ -5349,7 +5349,7 @@
         "type": "object"
       },
       "QueuePageView": {
-        "description": "``GET /api/queue``'s own bounded page (blizzard#526 D3/D4) \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one, the same convention every other\npaginated hub read uses. ``position`` on each entry is still its absolute index in\nthe whole order, not a page-local one.",
+        "description": "``GET /api/queue``'s own bounded page (blizzard#526 D3/D4): ``next_cursor`` is\n``None`` on the last page; ``position`` is each entry's whole-order index, not page-local.",
         "properties": {
           "entries": {
             "default": [],
@@ -5417,7 +5417,7 @@
         "type": "object"
       },
       "QueuePeekResponse": {
-        "description": "The ready queue, in the hub's explicit order \u2014 the whole order, unpaginated.\n``PUT /api/queue``/``POST /api/queue/position`` and the runner's own\n``GET /api/fleet/queue/peek`` all still answer with this (blizzard#526 D3): a write\nverb's caller needs the whole resulting order to confirm against, not one page of\nit.",
+        "description": "The ready queue's whole order, unpaginated \u2014 a write verb's caller needs it in\nfull to confirm against, not one page (blizzard#526 D3).",
         "properties": {
           "entries": {
             "default": [],
@@ -10682,7 +10682,7 @@
     },
     "/api/backlog": {
       "get": {
-        "description": "The hub-ordered ``not_ready`` list, read-only, bounded and keyset-paginated\n(blizzard#526 D3/D4/D7) \u2014 an operator triage surface, so it requires\n``QUEUE_REORDER`` rather than the ready queue's ``FLEET_VIEW``.",
+        "description": "The hub-ordered ``not_ready`` list, read-only and keyset-paginated (blizzard#526\nD3/D4/D7) \u2014 an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``.",
         "operationId": "get_backlog_api_backlog_get",
         "parameters": [
           {
@@ -10826,7 +10826,7 @@
     },
     "/api/chunks": {
       "get": {
-        "description": "The fleet chunk list \u2014 derived status per chunk, bounded and keyset-paginated\n(blizzard#526 D3/D4/D6).\n\nReads the fleet's facts and routes with one bulk query each: the `FleetPulse.view()`\nshape (issue #374), extended to routes and to the rendered row (issue #421). Only the\npage's own rows are rendered, but live-holder and blocked-marking derivation still see\nthe whole fleet (D6) \u2014 a pointer this page renders can be held live by a chunk outside\nit, and a dependent's blocked marking can name a prerequisite outside it too.",
+        "description": "The fleet chunk list \u2014 derived status per chunk, bounded and keyset-paginated.\n\nOnly the page's own rows render, but live-holder and blocked-marking derivation still\nsee the whole fleet (D6 below) \u2014 a pointer this page renders can be held live by a\nchunk outside it, same for a dependent's prerequisite.",
         "operationId": "list_chunks_api_chunks_get",
         "parameters": [
           {
@@ -11907,7 +11907,7 @@
     },
     "/api/chunks/{chunk_id}/work-items": {
       "get": {
-        "description": "Pass-through work items read \u2014 one entry per pointer, contents never stored.\n\nA per-pointer resolution or forge failure degrades to an ``error`` on that entry\nrather than failing the whole read. A chunk with no pointers is an empty list, not\na 404; the built-in ``hub`` source is always seated, so a bare hub carries no\nconfiguration under which this ever 503s.",
+        "description": "Pass-through work items read, one entry per pointer, contents never stored. A\nper-pointer resolution or forge failure becomes that entry's own ``error`` instead of\nfailing the whole read; a chunk with no pointers reads as an empty list, not a 404.",
         "operationId": "get_work_items_api_chunks__chunk_id__work_items_get",
         "parameters": [
           {
@@ -13513,7 +13513,7 @@
     },
     "/api/fleet/queue/peek": {
       "get": {
-        "description": "The runner's FILL read \u2014 the whole ready-queue order, out of scope for\nblizzard#526's pagination (unlike the operator-facing, now-paginated\n``GET /api/queue``): a filling runner needs every ready chunk in one read.",
+        "description": "The runner's FILL read \u2014 the whole ready-queue order, unlike the now-paginated\n``GET /api/queue``: a filling runner needs every ready chunk in one read.",
         "operationId": "peek_queue_api_fleet_queue_peek_get",
         "responses": {
           "200": {
@@ -14502,7 +14502,7 @@
     },
     "/api/queue": {
       "get": {
-        "description": "The hub-ordered ready queue, read-only, bounded and keyset-paginated\n(blizzard#526 D3/D4/D7) \u2014 honours reorder/replace + grouping. ``position`` on each\nentry is still its absolute index in the whole order, not a page-local one.",
+        "description": "The hub-ordered ready queue, read-only and keyset-paginated (blizzard#526 D3/D4/D7)\n\u2014 honours reorder/replace + grouping.",
         "operationId": "get_queue_api_queue_get",
         "parameters": [
           {
