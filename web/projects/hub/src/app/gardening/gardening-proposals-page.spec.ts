@@ -129,7 +129,7 @@ describe('GardeningProposalsPage', () => {
     mobile = false,
   ) {
     stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') return proposals;
+      if (method === 'GET' && path === '/api/garden-proposals') return { proposals, next_cursor: null };
       if (method === 'GET' && path === '/api/me') return me;
       if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
       return {};

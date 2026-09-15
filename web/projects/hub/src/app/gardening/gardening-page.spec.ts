@@ -14,7 +14,7 @@ describe('GardeningPage (blizzard#397)', () => {
 
   async function render(proposals: readonly unknown[]) {
     stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') return proposals;
+      if (method === 'GET' && path === '/api/garden-proposals') return { proposals, next_cursor: null };
       return {};
     });
     await TestBed.configureTestingModule({

@@ -31,12 +31,12 @@ describe('the /gardening route subtree', () => {
 
   beforeEach(async () => {
     stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') return [];
+      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
       if (method === 'GET' && path === '/api/runs') return [];
       if (method === 'GET' && path === '/api/scopes') return [];
-      if (method === 'GET' && path === '/api/findings') return [];
+      if (method === 'GET' && path === '/api/findings') return { findings: [], next_cursor: null };
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       return {};
     });
@@ -94,7 +94,7 @@ describe('the /gardening route subtree', () => {
   it('resolves /gardening/scopes/:scopeSlug to the scope detail', async () => {
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') return [];
+      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
       if (method === 'GET' && path === '/api/runs') return [];
@@ -130,7 +130,7 @@ describe('the /gardening route subtree', () => {
   it('resolves /gardening/routines/:routineName to the routine detail', async () => {
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') return [];
+      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') {
         return [
           {
@@ -182,7 +182,7 @@ describe('the /gardening route subtree', () => {
   it('resolves /gardening/runs/:chunkId to the run detail', async () => {
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') return [];
+      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
       if (method === 'GET' && path === '/api/runs') return [];
@@ -226,7 +226,7 @@ describe('the /gardening route subtree', () => {
   it('resolves /gardening/findings/:findingId to the finding detail', async () => {
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') return [];
+      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
       if (method === 'GET' && path === '/api/runs') return [];
@@ -235,20 +235,23 @@ describe('the /gardening route subtree', () => {
       // bucket's own rows don't include gets navigated away from
       // (`gardening-findings-page.ts`'s own selection-agreement effect).
       if (method === 'GET' && path === '/api/findings') {
-        return [
-          {
-            finding_id: 'fnd_1',
-            routine_name: 'nightly',
-            scope_slug: 'blizzard',
-            class: 'stale-docstring',
-            locus: 'a.py:1',
-            summary: 'summary a',
-            state: 'live',
-            live: true,
-            observed_count: 1,
-            last_seen_at: '2026-01-05T00:00:00Z',
-          },
-        ];
+        return {
+          findings: [
+            {
+              finding_id: 'fnd_1',
+              routine_name: 'nightly',
+              scope_slug: 'blizzard',
+              class: 'stale-docstring',
+              locus: 'a.py:1',
+              summary: 'summary a',
+              state: 'live',
+              live: true,
+              observed_count: 1,
+              last_seen_at: '2026-01-05T00:00:00Z',
+            },
+          ],
+          next_cursor: null,
+        };
       }
       if (method === 'GET' && path === '/api/findings/fnd_1') {
         return {
@@ -297,28 +300,31 @@ describe('the /gardening route subtree', () => {
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/garden-proposals') {
-        return [
-          {
-            proposal_id: 'gprop_1',
-            routine_name: 'comments',
-            class: 'fix-the-source',
-            title: 'Author a docstring standard',
-            body: 'Seventeen modules narrate their own change history.',
-            created_at: '2026-01-01T00:00:00Z',
-            findings: [],
-            closure: null,
-          },
-          {
-            proposal_id: 'gprop_2',
-            routine_name: 'comments',
-            class: 'remediate',
-            title: 'Delete the dead helper',
-            body: 'Nothing calls it.',
-            created_at: '2026-01-02T00:00:00Z',
-            findings: [],
-            closure: null,
-          },
-        ];
+        return {
+          proposals: [
+            {
+              proposal_id: 'gprop_1',
+              routine_name: 'comments',
+              class: 'fix-the-source',
+              title: 'Author a docstring standard',
+              body: 'Seventeen modules narrate their own change history.',
+              created_at: '2026-01-01T00:00:00Z',
+              findings: [],
+              closure: null,
+            },
+            {
+              proposal_id: 'gprop_2',
+              routine_name: 'comments',
+              class: 'remediate',
+              title: 'Delete the dead helper',
+              body: 'Nothing calls it.',
+              created_at: '2026-01-02T00:00:00Z',
+              findings: [],
+              closure: null,
+            },
+          ],
+          next_cursor: null,
+        };
       }
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];

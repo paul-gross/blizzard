@@ -52,7 +52,8 @@ describe('the board route (route-table mobile/desktop fork)', () => {
       if (path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (path === '/api/auth/providers') return [];
       // See `app.spec.ts`'s `stubAuth` for why these need their real empty shape.
-      if (path === '/api/chunks' || path === '/api/questions' || path === '/api/graphs') return [];
+      if (path === '/api/chunks') return { chunks: [], next_cursor: null };
+      if (path === '/api/questions' || path === '/api/graphs') return [];
       if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
       return {};
     });
@@ -138,7 +139,8 @@ describe('the fleet route (mobile-only, redirects to /board on desktop)', () => 
     authStub = stubRequestClient(hubClient, (method, path) => {
       if (path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (path === '/api/auth/providers') return [];
-      if (path === '/api/chunks' || path === '/api/questions' || path === '/api/graphs') return [];
+      if (path === '/api/chunks') return { chunks: [], next_cursor: null };
+      if (path === '/api/questions' || path === '/api/graphs') return [];
       if (path === '/api/runners') return { runners: [] };
       if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
       return {};

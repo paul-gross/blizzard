@@ -6,6 +6,7 @@ import {
   type FindingDetailView,
   type FindingView,
 } from '../api/hub';
+import { DRAIN_LIMIT, drainPages } from '../paginated-read';
 import { hubFindingKey, hubFindingsBucketKey, hubFindingsKey } from '../query-keys';
 
 /**
@@ -98,7 +99,9 @@ export function injectHubFindingQuery(findingId: () => string | null) {
  * `"null"`); a named half rides as-is. Always reads with `include_gone: true` — a gone
  * finding still belongs on the triage surface until a person confirms it (that's what
  * `confirm-gone` records), so the bucket can't afford to have the server drop it
- * before a person has weighed in.
+ * before a person has weighed in. The read is keyset-paginated on the hub
+ * (blizzard#526); {@link drainPages} follows `next_cursor` to exhaustion so the
+ * bucket still resolves whole.
  */
 export function injectHubFindingsBucketQuery(routine: () => string | null, scope: () => string | null) {
   return injectQuery(() => {
@@ -106,14 +109,21 @@ export function injectHubFindingsBucketQuery(routine: () => string | null, scope
     const s = scope();
     return {
       queryKey: hubFindingsBucketKey(r, s),
-      queryFn: async (): Promise<FindingView[]> => {
-        const { data, error } = await listFindingsApiFindingsGet({
-          query: { ...(r !== null ? { routine: r } : {}), ...(s !== null ? { scope: s } : {}), include_gone: true },
-          throwOnError: false,
-        });
-        if (error) throw error;
-        return data ?? [];
-      },
+      queryFn: (): Promise<FindingView[]> =>
+        drainPages(
+          (cursor) =>
+            listFindingsApiFindingsGet({
+              query: {
+                ...(r !== null ? { routine: r } : {}),
+                ...(s !== null ? { scope: s } : {}),
+                include_gone: true,
+                cursor,
+                limit: DRAIN_LIMIT,
+              },
+              throwOnError: false,
+            }),
+          (page) => page.findings,
+        ),
     };
   });
 }

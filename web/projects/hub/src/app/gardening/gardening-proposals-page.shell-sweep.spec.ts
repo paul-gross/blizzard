@@ -111,7 +111,7 @@ const realDetailRoutes: Routes = [
 async function render() {
   const stub = stubRequestClient(hubClient, (method, path) => {
     if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-    if (method === 'GET' && path === '/api/garden-proposals') return [PROPOSAL];
+    if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [PROPOSAL], next_cursor: null };
     if (method === 'GET' && path === '/api/findings/fin_1') return FINDING;
     return {};
   });
@@ -214,7 +214,10 @@ describe('gardening proposals page independent-scroll shell sweep (web:shell-swe
     const stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/garden-proposals') {
-        return [{ ...MANY_PROPOSALS[0], body: LONG_BODY }, ...MANY_PROPOSALS.slice(1)];
+        return {
+          proposals: [{ ...MANY_PROPOSALS[0], body: LONG_BODY }, ...MANY_PROPOSALS.slice(1)],
+          next_cursor: null,
+        };
       }
       if (method === 'GET' && path === '/api/findings/fin_1') return FINDING;
       return {};

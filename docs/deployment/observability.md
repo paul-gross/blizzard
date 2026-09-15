@@ -38,9 +38,20 @@ row linking to its chunk.
 
 `GET /api/activity` is a second read the board's Activity feed rail backfills from on page load, merging three durable
 sources — chunk status changes, the event log, and runner pause/resume — newest-first, bounded by `since` (default 24
-hours back) and `limit` (default and max 200), gated like `GET /api/events`. Activity orders by pure recency, the event
-log being the triage view; after backfill the rail continues live over the same stream, deduped by each frame's
-fact-identity key rather than by timestamp.
+hours back) and `limit` (default 200, refused past 1000), gated like `GET /api/events`. Activity orders by pure
+recency, the event log being the triage view; after backfill the rail continues live over the same stream, deduped by
+each frame's fact-identity key rather than by timestamp.
+
+## List pagination
+
+Every bulk list the hub serves — `GET /api/chunks`, `/api/queue`, `/api/backlog`, `/api/findings`, and
+`/api/garden-proposals` — shares one keyset-pagination contract, the same shape `GET /api/analytics/events` already
+used: an optional `cursor` and a `limit` (`ge=1, le=1000`, default 200 — an over-ceiling or zero `limit` is refused with
+a `422`, never silently clamped). The response is an envelope carrying the page's rows alongside `next_cursor`, which is
+`null` exactly on the last page; a caller wanting every row follows it to exhaustion. An undecodable `cursor` is a `422`
+naming `"malformed cursor"`. `GET /api/events` and `GET /api/activity` share this same `limit` ceiling (`le=1000`,
+default 200) but predate the cursor/`next_cursor` half of the contract — each is its own bounded, severity- or
+recency-ranked window, not a walk over the full backing set.
 
 ## Demo mode
 

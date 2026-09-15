@@ -119,7 +119,7 @@ describe('RunnerPanel', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return RUNNERS;
-      if (method === 'GET' && path === '/api/chunks') return CHUNKS;
+      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
       if (path === '/api/runners/rn_online/pause') return RUNNERS.runners[0];
       if (path === '/api/runners/rn_paused/resume') return RUNNERS.runners[1];
       if (path === '/api/runners/rn_local/pause') return RUNNERS.runners[2];
@@ -261,7 +261,7 @@ describe('RunnerPanel', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return CONTRIBUTOR_ME;
       if (method === 'GET' && path === '/api/runners') return RUNNERS;
-      if (method === 'GET' && path === '/api/chunks') return CHUNKS;
+      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
       return {};
     });
     const fixture = TestBed.createComponent(RunnerPanel);
@@ -290,7 +290,7 @@ describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return runners;
-      if (method === 'GET' && path === '/api/chunks') return [];
+      if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
       return {};
     });
     return TestBed.configureTestingModule({
@@ -367,7 +367,7 @@ describe('RunnerPanel external-subscription pace bars (issue #218)', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return RUNNERS_WITH_USAGE;
-      if (method === 'GET' && path === '/api/chunks') return [];
+      if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
       return {};
     });
     await TestBed.configureTestingModule({
@@ -438,7 +438,7 @@ describe('RunnerPanel per-subscription data model (blizzard#436)', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return RUNNERS_WITH_SUBSCRIPTIONS;
-      if (method === 'GET' && path === '/api/chunks') return [];
+      if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
       return {};
     });
     await TestBed.configureTestingModule({

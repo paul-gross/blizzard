@@ -48,7 +48,8 @@ function stubAuth(me: MeResponse | null = OPERATOR_ME_RESPONSE, providers: reado
     // The board/rail/graphs reads unwrap their response as a raw array
     // (`data ?? []`) — `{}` would resolve truthy-but-not-iterable and crash the
     // header/board/explorer's own `for…of`, so these need their real empty shape.
-    if (path === '/api/chunks' || path === '/api/questions' || path === '/api/graphs') return [];
+    if (path === '/api/chunks') return { chunks: [], next_cursor: null };
+      if (path === '/api/questions' || path === '/api/graphs') return [];
     // `BoardHeader` renders its spend cell whenever the read resolves truthy at all
     // (`{}` included) and calls `.toFixed` on `cost_usd` unconditionally.
     if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
@@ -69,8 +70,8 @@ function stubAuthCapturingSpendUrls(): RequestClientStub & { spendUrls: string[]
     const url = new URL(input.url);
     let body: unknown = {};
     if (url.pathname === '/api/me') body = OPERATOR_ME_RESPONSE;
-    else if (url.pathname === '/api/chunks' || url.pathname === '/api/questions' || url.pathname === '/api/graphs')
-      body = [];
+    else if (url.pathname === '/api/chunks') body = { chunks: [], next_cursor: null };
+    else if (url.pathname === '/api/questions' || url.pathname === '/api/graphs') body = [];
     else if (url.pathname === '/api/spend') {
       spendUrls.push(input.url);
       body = { cost_usd: 0, cost_partial: false };
@@ -324,7 +325,8 @@ describe('hub App', () => {
         // Once logged out, `authState` briefly still shows whatever route was last
         // active while the redirect to /login lands — same empty-shape need as
         // `stubAuth` above, so that transient render does not crash.
-        if (path === '/api/chunks' || path === '/api/questions' || path === '/api/graphs') return [];
+        if (path === '/api/chunks') return { chunks: [], next_cursor: null };
+      if (path === '/api/questions' || path === '/api/graphs') return [];
         return {};
       });
 
