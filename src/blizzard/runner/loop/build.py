@@ -88,7 +88,9 @@ class LoopWiring:
         return cls(config, config.resolved_workspace_prompt(), config.resolved_runner_prompt(), broker)
 
     def context(self, hub: IHubClient, *, engine: Engine | None = None) -> LoopContext:
-        """Wire a :class:`LoopContext`; the caller owns the ``httpx.Client`` behind ``hub``.
+        """Wire a :class:`LoopContext`; the caller owns the ``httpx.Client`` behind ``hub``,
+        and the returned context's own ``usage_http_client`` (blizzard#436, hub:95) —
+        closed the same way, once the caller is done with the context.
 
         Builds its own engine (kept separate from ``host``'s own, D4) unless ``engine`` is
         given — :class:`PeriodicDriver` passes its own so it can dispose it on thread exit
