@@ -107,6 +107,7 @@ class _FakeResponse:
         return None
 
 
+@pytest.mark.unit
 def test_heartbeat_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """The verb reads the spawn-injected identity and posts it — no arguments."""
     calls: list[tuple[str, dict]] = []
@@ -126,6 +127,7 @@ def test_heartbeat_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPatch
     assert calls == [("http://127.0.0.1:8431/api/heartbeat", {"lease_id": "lease_9"})]
 
 
+@pytest.mark.unit
 def test_heartbeat_verb_soft_fails_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """A hook must never break the worker's tool call — no identity means a clean skip."""
     posted = False
@@ -143,6 +145,7 @@ def test_heartbeat_verb_soft_fails_without_identity(monkeypatch: pytest.MonkeyPa
     assert posted is False  # never even attempted the post
 
 
+@pytest.mark.unit
 def test_heartbeat_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unreachable runner is reported and swallowed — exit 0, tool call unbroken."""
 

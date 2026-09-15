@@ -27,6 +27,7 @@ class _FakeResponse:
         return {"recorded": True, "lease_id": "lease_9", "name": "n", "bytes": 1}
 
 
+@pytest.mark.unit
 def test_attach_verb_posts_inherited_identity_stdin_content_and_token_header(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -49,6 +50,7 @@ def test_attach_verb_posts_inherited_identity_stdin_content_and_token_header(
     ]
 
 
+@pytest.mark.unit
 def test_attach_verb_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
@@ -64,6 +66,7 @@ def test_attach_verb_omits_the_token_header_when_absent(monkeypatch: pytest.Monk
     assert calls == [{}]
 
 
+@pytest.mark.unit
 def test_attach_verb_raises_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     posted = False
 
@@ -80,6 +83,7 @@ def test_attach_verb_raises_without_identity(monkeypatch: pytest.MonkeyPatch) ->
     assert posted is False
 
 
+@pytest.mark.unit
 def test_attach_verb_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     """A 403 (wrong/missing token) must reach the worker, not be swallowed."""
 

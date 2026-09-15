@@ -47,6 +47,7 @@ class _RejectingResponse:
         return self._detail
 
 
+@pytest.mark.unit
 def test_proposals_gets_the_lease_scoped_route_with_inherited_identity_and_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -66,6 +67,7 @@ def test_proposals_gets_the_lease_scoped_route_with_inherited_identity_and_token
     assert result.output.strip() == _PROPOSALS_TEXT
 
 
+@pytest.mark.unit
 def test_proposals_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
@@ -81,6 +83,7 @@ def test_proposals_omits_the_token_header_when_absent(monkeypatch: pytest.Monkey
     assert calls == [{}]
 
 
+@pytest.mark.unit
 def test_proposals_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     attempted = False
 
@@ -99,6 +102,7 @@ def test_proposals_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> N
     assert attempted is False
 
 
+@pytest.mark.unit
 def test_proposals_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"})
@@ -109,6 +113,7 @@ def test_proposals_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypa
     assert "presented token does not authorize lease" in result.output
 
 
+@pytest.mark.unit
 def test_proposals_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 carries no run context"})
@@ -119,6 +124,7 @@ def test_proposals_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPa
     assert "chunk ch_1 carries no run context" in result.output
 
 
+@pytest.mark.unit
 def test_garden_proposals_help_names_no_routine_or_scope_or_chunk_flag() -> None:
     """The verb takes no flag naming a routine, a scope, or a chunk — the hub derives
     the routine from the chunk's own run context, so there is nothing here for a worker

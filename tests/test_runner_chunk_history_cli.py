@@ -50,6 +50,7 @@ class _RejectingResponse:
         return self._detail
 
 
+@pytest.mark.unit
 def test_history_gets_the_lease_scoped_route_with_inherited_identity_and_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -69,6 +70,7 @@ def test_history_gets_the_lease_scoped_route_with_inherited_identity_and_token(
     assert result.output.strip() == _HISTORY_TEXT
 
 
+@pytest.mark.unit
 def test_history_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
@@ -84,6 +86,7 @@ def test_history_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPa
     assert calls == [{}]
 
 
+@pytest.mark.unit
 def test_history_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     attempted = False
 
@@ -102,6 +105,7 @@ def test_history_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> Non
     assert attempted is False
 
 
+@pytest.mark.unit
 def test_history_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"})
@@ -112,6 +116,7 @@ def test_history_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypatc
     assert "presented token does not authorize lease" in result.output
 
 
+@pytest.mark.unit
 def test_history_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "no active lease or open takeover for lease_9"})
@@ -122,6 +127,7 @@ def test_history_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatc
     assert "no active lease or open takeover for lease_9" in result.output
 
 
+@pytest.mark.unit
 def test_chunk_history_help_names_no_chunk_naming_flag() -> None:
     result = CliRunner().invoke(runner_group, ["chunk", "history", "--help"])
 
@@ -130,6 +136,7 @@ def test_chunk_history_help_names_no_chunk_naming_flag() -> None:
     assert "--lease" not in result.output
 
 
+@pytest.mark.unit
 def test_chunk_group_is_listed_in_top_level_help() -> None:
     """A bare substring check would pass even with the group unregistered — matches
     click's actual `Commands:` listing shape instead."""

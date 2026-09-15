@@ -20,6 +20,26 @@ from blizzard.hub.cli import session_store
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 
+#: The six verification tiers declared in ``pyproject.toml``'s ``markers`` list.
+_TIER_MARKERS = frozenset({"unit", "component", "service", "e2e", "crash_sweep", "journey"})
+
+#: Every collected item's nodeid missing all six tier markers, populated by
+#: ``pytest_collection_modifyitems`` below. A normal test can't see its siblings'
+#: markers on its own, so ``test_default_suite_markers.py`` reads this back instead.
+UNMARKED_TEST_NODEIDS: list[str] = []
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Record every collected test that carries none of the six tier markers.
+
+    An unmarked test still runs in the default suite but is invisible to both ``-m
+    unit`` and ``-m component`` -- a gap neither tier's total would catch.
+    """
+    UNMARKED_TEST_NODEIDS[:] = [
+        item.nodeid for item in items if not (_TIER_MARKERS & {mark.name for mark in item.iter_markers()})
+    ]
+
+
 # Identity vars a runner injects into worker spawn (``ClaudeCodeAdapter._spawn_env``);
 # kept in sync by ``test_runner_harness_adapter.py``.
 _WORKER_IDENTITY_ENV = (

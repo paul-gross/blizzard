@@ -1175,6 +1175,7 @@ def test_marking_truncated_survives_a_row_whose_severity_column_was_never_backfi
     assert marked.truncated_reason == "record_unshippable"
 
 
+@pytest.mark.unit
 def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_path):  # type: ignore[no-untyped-def]
     """The transcript lane's sequence is independent of the fact lane's ``outbound_buffer``
     (D3) — a fact-lane enqueue does not perturb the transcript lane's own numbering."""

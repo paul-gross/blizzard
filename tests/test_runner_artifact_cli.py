@@ -61,6 +61,7 @@ _ARTIFACTS_PAYLOAD = [
 ]
 
 
+@pytest.mark.unit
 def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -79,6 +80,7 @@ def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token(
     ]
 
 
+@pytest.mark.unit
 def test_list_elides_content_by_default_and_reports_byte_length(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse(payload=_ARTIFACTS_PAYLOAD))
     result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
@@ -95,6 +97,7 @@ def test_list_elides_content_by_default_and_reports_byte_length(monkeypatch: pyt
     assert git_commit["commit_hash"] == "abc123"
 
 
+@pytest.mark.unit
 def test_list_content_flag_restores_the_full_raw_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse(text=json.dumps(_ARTIFACTS_PAYLOAD)))
     result = CliRunner().invoke(runner_group, ["artifact", "list", "--content"], env=_ENV)
@@ -103,6 +106,7 @@ def test_list_content_flag_restores_the_full_raw_payload(monkeypatch: pytest.Mon
     assert json.loads(result.output) == _ARTIFACTS_PAYLOAD
 
 
+@pytest.mark.unit
 def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
@@ -165,6 +169,7 @@ def test_list_omits_the_scope_param_when_unset(monkeypatch: pytest.MonkeyPatch) 
     assert calls == [None]
 
 
+@pytest.mark.unit
 def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     attempted = False
 
@@ -186,6 +191,7 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
 # get
 
 
+@pytest.mark.unit
 def test_get_gets_the_named_route_and_prints_json(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict | None]] = []
 
@@ -201,6 +207,7 @@ def test_get_gets_the_named_route_and_prints_json(monkeypatch: pytest.MonkeyPatc
     assert '"name": "plan"' in result.output
 
 
+@pytest.mark.unit
 def test_get_percent_encodes_a_slash_containing_name(monkeypatch: pytest.MonkeyPatch) -> None:
     """A ``merged/<repo>`` delivery marker (issue #233) must reach the runner with the
     slash preserved in the URL rather than treated as a second path segment."""
@@ -217,6 +224,7 @@ def test_get_percent_encodes_a_slash_containing_name(monkeypatch: pytest.MonkeyP
     assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/artifacts/merged/blizzard"]
 
 
+@pytest.mark.unit
 def test_get_percent_encodes_other_reserved_characters(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
@@ -231,6 +239,7 @@ def test_get_percent_encodes_other_reserved_characters(monkeypatch: pytest.Monke
     assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/artifacts/a%20b%25c%3Fd"]
 
 
+@pytest.mark.unit
 def test_get_node_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict | None] = []
 
@@ -298,6 +307,7 @@ def test_get_node_and_scope_flags_both_land_in_params(monkeypatch: pytest.Monkey
     assert calls == [{"node": "review", "scope": "node"}]
 
 
+@pytest.mark.unit
 def test_get_content_prints_raw_asset_text_without_added_newline(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
         return _FakeResponse(payload={"name": "plan", "kind": "asset", "content": "the plan text"})
@@ -309,6 +319,7 @@ def test_get_content_prints_raw_asset_text_without_added_newline(monkeypatch: py
     assert result.output == "the plan text"
 
 
+@pytest.mark.unit
 def test_get_content_errors_on_a_git_commit_artifact(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
         return _FakeResponse(
@@ -322,6 +333,7 @@ def test_get_content_errors_on_a_git_commit_artifact(monkeypatch: pytest.MonkeyP
     assert "git-commit artifact" in result.output
 
 
+@pytest.mark.unit
 def test_get_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "get", lambda *a, **k: _RejectingResponse())
     result = CliRunner().invoke(runner_group, ["artifact", "get", "ghost"], env=_ENV)
@@ -330,6 +342,7 @@ def test_get_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -
     assert "could not read" in result.output
 
 
+@pytest.mark.unit
 def test_get_surfaces_an_ambiguous_name_rejection_naming_the_candidate_nodes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -363,6 +376,7 @@ def test_get_surfaces_a_cross_scope_ambiguity_naming_both_scopes(monkeypatch: py
 # create — write parity with attach
 
 
+@pytest.mark.unit
 def test_create_posts_inherited_identity_stdin_content_and_token_header(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict, dict]] = []
 
@@ -385,6 +399,7 @@ def test_create_posts_inherited_identity_stdin_content_and_token_header(monkeypa
     ]
 
 
+@pytest.mark.unit
 def test_create_prints_a_confirmation_with_name_and_byte_count(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx,
@@ -399,6 +414,7 @@ def test_create_prints_a_confirmation_with_name_and_byte_count(monkeypatch: pyte
     assert "11 bytes" in result.output
 
 
+@pytest.mark.unit
 def test_create_rejects_empty_stdin_without_posting(monkeypatch: pytest.MonkeyPatch) -> None:
     posted = False
 
@@ -415,6 +431,7 @@ def test_create_rejects_empty_stdin_without_posting(monkeypatch: pytest.MonkeyPa
     assert posted is False
 
 
+@pytest.mark.unit
 def test_create_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "post", lambda *a, **k: _RejectingResponse())
     result = CliRunner().invoke(runner_group, ["artifact", "create", "--name", "n"], env=_ENV, input="c")
@@ -484,6 +501,7 @@ def test_create_accepts_explicit_node_scope(monkeypatch: pytest.MonkeyPatch) -> 
 # staged — a worker's read-back of its own not-yet-published submissions
 
 
+@pytest.mark.unit
 def test_staged_gets_the_lease_scoped_attachments_route(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict]] = []
 
@@ -502,6 +520,7 @@ def test_staged_gets_the_lease_scoped_attachments_route(monkeypatch: pytest.Monk
     assert body == [{"name": "review-findings", "bytes": len(b"looks good")}]
 
 
+@pytest.mark.unit
 def test_staged_content_flag_restores_the_full_raw_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = [{"name": "review-findings", "content": "looks good"}]
     monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse(text=json.dumps(payload)))
@@ -511,6 +530,7 @@ def test_staged_content_flag_restores_the_full_raw_payload(monkeypatch: pytest.M
     assert json.loads(result.output) == payload
 
 
+@pytest.mark.unit
 def test_staged_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "get", lambda *a, **k: _RejectingResponse())
     result = CliRunner().invoke(runner_group, ["artifact", "staged"], env=_ENV)
@@ -560,6 +580,7 @@ def test_staged_refuses_system_scope_without_fetching(monkeypatch: pytest.Monkey
 # the deprecated `attach` alias — warns on stderr, delegates to `artifact create`
 
 
+@pytest.mark.unit
 def test_attach_alias_warns_on_stderr_and_delegates_to_artifact_create(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict, dict]] = []
 
@@ -584,6 +605,7 @@ def test_attach_alias_warns_on_stderr_and_delegates_to_artifact_create(monkeypat
     assert "runner artifact create" in result.stderr
 
 
+@pytest.mark.unit
 def test_attach_alias_is_hidden_but_the_artifact_group_is_listed() -> None:
     help_text = CliRunner().invoke(runner_group, ["--help"]).output
     assert "artifact" in help_text

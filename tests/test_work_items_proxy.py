@@ -194,6 +194,7 @@ class _FakeLocalResponse:
         return None
 
 
+@pytest.mark.unit
 def test_verb_gets_the_local_proxy_with_inherited_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """The verb reads ``BLIZZARD_RUNNER_URL`` and GETs the local proxy — chunk id from the arg."""
     calls: list[tuple[str, float]] = []
@@ -214,6 +215,7 @@ def test_verb_gets_the_local_proxy_with_inherited_identity(monkeypatch: pytest.M
     assert '"body": "please fix the flake"' in result.output
 
 
+@pytest.mark.unit
 def test_verb_errors_without_a_runner_url(monkeypatch: pytest.MonkeyPatch) -> None:
     """No runner URL in the environment is a hard error — the worker must not read nothing."""
     attempted = False

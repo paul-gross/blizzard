@@ -1012,6 +1012,7 @@ def _two_window_session(tmp_path: Path) -> tuple[ClaudeCodeTranscriptSource, Pat
     return ClaudeCodeTranscriptSource(str(tmp_path), _error_factory()), main
 
 
+@pytest.mark.unit
 def test_a_result_arriving_after_its_call_scrolled_away_is_surfaced_not_dropped(tmp_path: Path) -> None:
     source, main = _two_window_session(tmp_path)
     first = source.turns_since("sess-1", spawn_cwd=None, since=None)
@@ -1026,6 +1027,7 @@ def test_a_result_arriving_after_its_call_scrolled_away_is_surfaced_not_dropped(
     assert second.agent_tool_use_ids == {"agent-1": "toolu_T"}
 
 
+@pytest.mark.unit
 def test_a_pair_is_recorded_even_when_the_call_is_in_the_same_window(tmp_path: Path) -> None:
     """The sidecar keeps growing for ticks after this one, and only the result record ever
     names the pair — so an in-window match must record it too, not just consume it."""
@@ -1044,6 +1046,7 @@ def test_a_pair_is_recorded_even_when_the_call_is_in_the_same_window(tmp_path: P
     assert batch.late_tool_outputs == []  # matched in-window, so it rode its own turn
 
 
+@pytest.mark.unit
 def test_a_sidecar_read_after_its_spawning_turn_still_reports_the_pair(tmp_path: Path) -> None:
     """The full defect: by the window the sidecar is readable, the spawning turn is gone —
     the conversation surfaces unlinked, but the pair naming its parent rides alongside."""
@@ -1061,6 +1064,7 @@ def test_a_sidecar_read_after_its_spawning_turn_still_reports_the_pair(tmp_path:
     assert second.agent_tool_use_ids["agent-1"] == "toolu_T"
 
 
+@pytest.mark.unit
 def test_one_cold_read_of_the_same_file_still_links_in_place(tmp_path: Path) -> None:
     """The control: read whole rather than in windows, nothing is late and nothing is
     unlinked — the property that made the runner's own panel correct all along."""

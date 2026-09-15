@@ -50,6 +50,7 @@ class _RejectingResponse:
         return self._detail
 
 
+@pytest.mark.unit
 def test_findings_gets_the_lease_scoped_route_with_inherited_identity_and_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -69,6 +70,7 @@ def test_findings_gets_the_lease_scoped_route_with_inherited_identity_and_token(
     assert result.output.strip() == _FINDINGS_TEXT
 
 
+@pytest.mark.unit
 def test_findings_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
@@ -84,6 +86,7 @@ def test_findings_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyP
     assert calls == [{}]
 
 
+@pytest.mark.unit
 def test_findings_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     attempted = False
 
@@ -102,6 +105,7 @@ def test_findings_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> No
     assert attempted is False
 
 
+@pytest.mark.unit
 def test_findings_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"})
@@ -112,6 +116,7 @@ def test_findings_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypat
     assert "presented token does not authorize lease" in result.output
 
 
+@pytest.mark.unit
 def test_findings_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 carries no run context"})
@@ -122,6 +127,7 @@ def test_findings_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPat
     assert "chunk ch_1 carries no run context" in result.output
 
 
+@pytest.mark.unit
 def test_garden_findings_help_names_no_routine_or_scope_flag() -> None:
     """D5: the verb takes no flag naming a routine or a scope — the hub derives both
     from the chunk's own run context, so there is nothing here for a worker to point at
@@ -134,6 +140,7 @@ def test_garden_findings_help_names_no_routine_or_scope_flag() -> None:
     assert "--chunk" not in result.output
 
 
+@pytest.mark.unit
 def test_garden_group_is_listed_in_top_level_help() -> None:
     """A bare substring check would pass even with the group unregistered — matches
     click's actual `Commands:` listing shape instead."""
@@ -143,6 +150,7 @@ def test_garden_group_is_listed_in_top_level_help() -> None:
     assert re.search(r"^  garden\s", result.output, re.MULTILINE)
 
 
+@pytest.mark.unit
 def test_garden_group_names_findings_alongside_proposals() -> None:
     """Two verbs now: `findings` and `proposals`, both listed under the same group —
     the counterpart assertion lives with the ``proposals`` verb's own tests

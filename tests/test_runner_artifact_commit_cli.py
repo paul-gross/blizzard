@@ -24,6 +24,7 @@ class _FakeResponse:
         return None
 
 
+@pytest.mark.unit
 def test_commit_verb_posts_inherited_identity_and_declaration_body(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict, dict]] = []
 
@@ -48,6 +49,7 @@ def test_commit_verb_posts_inherited_identity_and_declaration_body(monkeypatch: 
     ]
 
 
+@pytest.mark.unit
 def test_commit_verb_omits_the_environment_key_when_not_named(monkeypatch: pytest.MonkeyPatch) -> None:
     """No ``--env`` sends no ``environment_id`` key at all, rather than an explicit null."""
     calls: list[dict] = []
@@ -66,6 +68,7 @@ def test_commit_verb_omits_the_environment_key_when_not_named(monkeypatch: pytes
     assert "environment_id" not in calls[0]
 
 
+@pytest.mark.unit
 def test_commit_verb_forwards_the_named_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
@@ -84,6 +87,7 @@ def test_commit_verb_forwards_the_named_environment(monkeypatch: pytest.MonkeyPa
     assert calls[0]["environment_id"] == "r2"
 
 
+@pytest.mark.unit
 def test_commit_verb_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
@@ -103,6 +107,7 @@ def test_commit_verb_omits_the_token_header_when_absent(monkeypatch: pytest.Monk
     assert calls == [{}]
 
 
+@pytest.mark.unit
 def test_commit_verb_raises_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     posted = False
 
@@ -123,6 +128,7 @@ def test_commit_verb_raises_without_identity(monkeypatch: pytest.MonkeyPatch) ->
     assert posted is False
 
 
+@pytest.mark.unit
 def test_commit_verb_surfaces_a_transport_failure_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unreachable runner must reach the worker, not be swallowed."""
 
@@ -140,6 +146,7 @@ def test_commit_verb_surfaces_a_transport_failure_as_a_nonzero_exit(monkeypatch:
     assert "could not record" in result.output
 
 
+@pytest.mark.unit
 def test_commit_verb_surfaces_the_rejection_detail_so_the_worker_can_correct_itself(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -167,6 +174,7 @@ def test_commit_verb_surfaces_the_rejection_detail_so_the_worker_can_correct_its
     assert "blizzard-mock" in result.output
 
 
+@pytest.mark.unit
 def test_commit_verb_requires_repo_branch_and_commit() -> None:
     result = CliRunner().invoke(runner_group, ["artifact", "commit", "--repo", "r"], env=_ENV)
 
@@ -174,6 +182,7 @@ def test_commit_verb_requires_repo_branch_and_commit() -> None:
     assert "Missing option" in result.output
 
 
+@pytest.mark.unit
 def test_commit_verb_has_no_forge_flag() -> None:
     """Structural pin: the flag is gone, not merely unused. Re-adding a worker-supplied
     forge re-opens the mismatch class the manifest lookup closed."""

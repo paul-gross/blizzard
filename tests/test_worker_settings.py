@@ -6,7 +6,11 @@ whose effect only a live harness shows (``blizzard:manual-worker-deny-list``).
 
 from __future__ import annotations
 
+import pytest
+
 from blizzard.runner.harness.worker_settings import WorkerSettings
+
+pytestmark = pytest.mark.unit
 
 
 def test_worker_settings_denies_exactly_the_turn_deferring_tools() -> None:

@@ -54,6 +54,7 @@ class _RejectingResponse:
         return self._detail
 
 
+@pytest.mark.unit
 def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict]] = []
 
@@ -71,6 +72,7 @@ def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token(monk
     assert result.output.strip() == _LIST_TEXT
 
 
+@pytest.mark.unit
 def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
@@ -86,6 +88,7 @@ def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch
     assert calls == [{}]
 
 
+@pytest.mark.unit
 def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     attempted = False
 
@@ -104,6 +107,7 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     assert attempted is False
 
 
+@pytest.mark.unit
 def test_list_surfaces_a_404_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 answers no accepted proposal"})
@@ -114,6 +118,7 @@ def test_list_surfaces_a_404_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: 
     assert "chunk ch_1 answers no accepted proposal" in result.output
 
 
+@pytest.mark.unit
 def test_get_gets_the_lease_scoped_route_naming_the_finding_id(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
@@ -129,6 +134,7 @@ def test_get_gets_the_lease_scoped_route_naming_the_finding_id(monkeypatch: pyte
     assert result.output.strip() == _GET_TEXT
 
 
+@pytest.mark.unit
 def test_get_surfaces_a_404_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "finding fin_other is not among the findings"})
@@ -139,6 +145,7 @@ def test_get_surfaces_a_404_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: p
     assert "not among the findings" in result.output
 
 
+@pytest.mark.unit
 def test_finding_verbs_help_names_no_chunk_routine_or_scope_flag() -> None:
     list_help = CliRunner().invoke(runner_group, ["finding", "list", "--help"])
     get_help = CliRunner().invoke(runner_group, ["finding", "get", "--help"])
@@ -151,6 +158,7 @@ def test_finding_verbs_help_names_no_chunk_routine_or_scope_flag() -> None:
         assert "--chunk" not in output
 
 
+@pytest.mark.unit
 def test_finding_group_is_listed_in_top_level_help() -> None:
     result = CliRunner().invoke(runner_group, ["--help"])
 
@@ -158,6 +166,7 @@ def test_finding_group_is_listed_in_top_level_help() -> None:
     assert re.search(r"^  finding\s", result.output, re.MULTILINE)
 
 
+@pytest.mark.unit
 def test_finding_group_names_only_list_and_get() -> None:
     result = CliRunner().invoke(runner_group, ["finding", "--help"])
 

@@ -110,6 +110,7 @@ class _FakeResponse:
         return None
 
 
+@pytest.mark.unit
 def test_session_end_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """The verb reads the spawn-injected identity and posts to the lease-scoped route — no args."""
     calls: list[str] = []
@@ -129,6 +130,7 @@ def test_session_end_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPat
     assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/session-end"]
 
 
+@pytest.mark.unit
 def test_session_end_verb_skips_on_elicitation_marker(monkeypatch: pytest.MonkeyPatch) -> None:
     """A judge/nudge resume's ``SessionEnd`` fire must record no done-signal for the lease."""
     calls: list[str] = []
@@ -152,6 +154,7 @@ def test_session_end_verb_skips_on_elicitation_marker(monkeypatch: pytest.Monkey
     assert calls == []
 
 
+@pytest.mark.unit
 def test_session_end_verb_soft_fails_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """A hook must never break the worker's exit — no identity means a clean skip."""
     posted = False
@@ -169,6 +172,7 @@ def test_session_end_verb_soft_fails_without_identity(monkeypatch: pytest.Monkey
     assert posted is False  # never even attempted the post
 
 
+@pytest.mark.unit
 def test_session_end_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unreachable runner is reported and swallowed — exit 0, the worker's exit unbroken."""
 
@@ -190,6 +194,7 @@ def test_session_end_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest
 # The worker settings document wires the hook
 
 
+@pytest.mark.unit
 def test_worker_settings_wires_the_session_end_hook() -> None:
     """The settings file the adapter passes to ``claude -p`` fires the session-end verb on exit."""
     hooks = WorkerSettings.of().document["hooks"]

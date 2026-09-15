@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -93,6 +94,7 @@ def _stub_hub(app: FastAPI, status_code: int, payload: object, seen: list[str] |
     app.state.hub_router.handler = handler
 
 
+@pytest.mark.component
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
     with TestClient(create_app(config)) as client:
@@ -100,6 +102,7 @@ def test_503_when_store_unwired(tmp_path: Path) -> None:
     assert resp.status_code == 503
 
 
+@pytest.mark.component
 def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
     app, _store = _app_with_store(tmp_path)
     with TestClient(app) as client:
@@ -107,6 +110,7 @@ def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
     assert resp.status_code == 404
 
 
+@pytest.mark.component
 def test_403_for_a_missing_token(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
@@ -115,6 +119,7 @@ def test_403_for_a_missing_token(tmp_path: Path) -> None:
     assert resp.status_code == 403
 
 
+@pytest.mark.component
 def test_403_for_a_wrong_token(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
@@ -123,6 +128,7 @@ def test_403_for_a_wrong_token(tmp_path: Path) -> None:
     assert resp.status_code == 403
 
 
+@pytest.mark.component
 def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
@@ -134,6 +140,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
     assert resp.status_code == 404
 
 
+@pytest.mark.component
 def test_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path) -> None:
     """Authorization is resolved before the hub is consulted, so an unauthorized caller
     never learns the hub-wiring state — mirrors the artifacts and history proxies."""
@@ -146,6 +153,7 @@ def test_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path) -> No
     assert unauthed.status_code == 403
 
 
+@pytest.mark.component
 def test_forwards_to_the_hub_chunks_garden_proposals_route_and_returns_the_docket(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
@@ -158,6 +166,7 @@ def test_forwards_to_the_hub_chunks_garden_proposals_route_and_returns_the_docke
     assert resp.json() == _DOCKET
 
 
+@pytest.mark.component
 def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -> None:
     """The forward rides the runner principal's bearer — the worker's own lease token
     never leaves the runner, and no `BZ_HUB_URL` is ever named by the worker's own call."""
@@ -179,6 +188,7 @@ def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -
     assert seen_headers[0]["Authorization"] == "Bearer hub-tok"
 
 
+@pytest.mark.component
 def test_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
@@ -192,6 +202,7 @@ def test_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
     assert resp.status_code == 502
 
 
+@pytest.mark.component
 def test_hub_refusal_of_a_non_routine_chunk_passes_through_verbatim(tmp_path: Path) -> None:
     """A lease on a chunk that is not a routine run gets a legible refusal, not an empty
     list — the hub's own 404 forwarded as-is."""
