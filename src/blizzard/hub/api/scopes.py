@@ -74,7 +74,7 @@ def list_scope_routines(slug: str, services: Annotated[HubServices, Depends(get_
     scope = services.scopes.get(slug)
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")
-    return services.routine_scope_membership.list_routines(scope)
+    return services.routine_scopes.list_routines(scope.slug)
 
 
 @router.patch("/scopes/{slug}", response_model=ScopeView, dependencies=[Depends(require(GRAPH_EDIT))])

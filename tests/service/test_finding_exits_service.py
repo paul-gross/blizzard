@@ -432,13 +432,13 @@ def test_the_trend_is_served_over_http_and_through_the_real_cli(tmp_path: Path) 
 
 
 def test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_series(tmp_path: Path) -> None:
-    """Every non-retired scope, including one never swept; a retired scope this routine
-    has swept stays listed; the measurement series is cut to the window while
-    last-swept is not."""
+    """The routine's declared set, including one linked scope never swept, but not a
+    scope that exists and was never linked; a retired scope this routine has swept
+    stays listed; the measurement series is cut to the window while last-swept is not."""
     with garden_stack(tmp_path) as g:
         t0, t0_local = datetime.now(UTC), datetime.now()
-        never_swept, retired_swept = "garden-svc-never", "garden-svc-retired"
-        for slug in (never_swept, retired_swept):
+        not_linked, retired_swept = "garden-svc-not-linked", "garden-svc-retired"
+        for slug in (not_linked, retired_swept):
             created = g.hub.post("/api/scopes", json={"slug": slug, "description": ""})
             assert created.status_code == 201, created.text
         linked = g.hub.put(f"/api/routines/{g.routine_id}/scopes/{retired_swept}")
@@ -461,8 +461,7 @@ def test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_se
         assert body["routine_name"] == _ROUTINE
 
         by_scope = {row["scope_slug"]: row for row in body["last_swept"]}
-        assert by_scope[never_swept]["finding_set_id"] is None
-        assert by_scope[never_swept]["produced_at"] is None
+        assert not_linked not in by_scope
         assert by_scope[_SCOPE]["finding_set_id"] is not None
         assert by_scope[retired_swept]["finding_set_id"] is not None
 
@@ -483,7 +482,7 @@ def test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_se
             "--json",
         ).stdout
         from_cli = json.loads(cli_out)
-        assert {row["scope_slug"] for row in from_cli["last_swept"]} == {_SCOPE, never_swept, retired_swept}
+        assert {row["scope_slug"] for row in from_cli["last_swept"]} == {_SCOPE, retired_swept}
 
 
 def test_sweeps_404s_on_an_unknown_routine_id(tmp_path: Path) -> None:
@@ -494,6 +493,50 @@ def test_sweeps_404s_on_an_unknown_routine_id(tmp_path: Path) -> None:
             params={"since": (t0 - timedelta(days=1)).isoformat(), "until": (t0 + timedelta(days=1)).isoformat()},
         )
         assert resp.status_code == 404, resp.text
+
+
+# --- Retiring a scope is a reversible brake, not an unlink ------------------ #
+
+
+def test_retiring_a_linked_scope_leaves_the_routine_scope_membership_intact(tmp_path: Path) -> None:
+    """D3: retire is a brake over new runs, not an unlink — a retired scope stays in
+    both directions of the routine_scopes membership it was already part of."""
+    with garden_stack(tmp_path) as g:
+        slug = "garden-svc-retired-linked"
+        created = g.hub.post("/api/scopes", json={"slug": slug, "description": ""})
+        assert created.status_code == 201, created.text
+        linked = g.hub.put(f"/api/routines/{g.routine_id}/scopes/{slug}")
+        assert linked.status_code == 204, linked.text
+
+        retired = g.hub.post(f"/api/scopes/{slug}/retire", json={"by": "operator"})
+        assert retired.status_code == 202, retired.text
+
+        routine_scopes = g.hub.get(f"/api/routines/{g.routine_id}/scopes")
+        assert routine_scopes.status_code == 200, routine_scopes.text
+        assert slug in routine_scopes.json()
+
+        scope_routines = g.hub.get(f"/api/scopes/{slug}/routines")
+        assert scope_routines.status_code == 200, scope_routines.text
+        assert g.routine_id in scope_routines.json()
+
+
+def test_retiring_a_scope_does_not_hide_its_already_delivered_findings(tmp_path: Path) -> None:
+    """D3: retire brakes new runs into a scope, not the findings list read — a finding
+    delivered before retirement still lists under it, unchanged."""
+    with garden_stack(tmp_path) as g:
+        recorded = deliver(g, [add_op("src/app.py:1")])
+        assert recorded.status_code == 200 and recorded.json()["outcome"] == "recorded", recorded.text
+        before = live(g)
+        assert len(before) == 1
+
+        retired = g.hub.post(f"/api/scopes/{_SCOPE}/retire", json={"by": "operator"})
+        assert retired.status_code == 202, retired.text
+
+        after = g.hub.get("/api/findings", params={"scope": _SCOPE})
+        assert after.status_code == 200, after.text
+        after_findings = after.json()["findings"]
+        assert [f["finding_id"] for f in after_findings] == [f["finding_id"] for f in before]
+        assert after_findings[0]["state"] == before[0]["state"]
 
 
 # --- Phase 3 — an accepted proposal's delivered item resolves its findings ---- #

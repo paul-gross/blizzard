@@ -62,7 +62,7 @@ def finding_view(finding: Finding) -> FindingView:
     """The one ``Finding`` -> ``FindingView`` projection — reused as-is by the runner-facing
     fleet route (``blizzard.hub.api.fleet``) rather than restated there."""
     # `class_`'s alias is the Python keyword `class` — constructed by alias via
-    # `model_validate`, the `_proposal_view` shape.
+    # `model_validate`, the `garden_proposal_view` shape.
     return FindingView.model_validate(_finding_view_fields(finding))
 
 

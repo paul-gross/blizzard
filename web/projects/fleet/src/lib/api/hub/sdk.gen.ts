@@ -1360,10 +1360,10 @@ export const linkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPut = <ThrowOnEr
 /**
  * Routine Sweeps
  *
- * ``routine_id``'s per-scope last-swept table (D2, D3, D4) — every non-retired
- * scope, plus any retired scope this routine has swept — and its measurement series
- * (D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a malformed instant
- * or a non-positive span.
+ * ``routine_id``'s per-scope last-swept table (D2, D3, D4) — the routine's declared
+ * set, retired scopes filtered out unless already swept while linked — and its
+ * measurement series (D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a
+ * malformed instant or a non-positive span.
  */
 export const routineSweepsApiRoutinesRoutineIdSweepsGet = <ThrowOnError extends boolean = false>(options: Options<RoutineSweepsApiRoutinesRoutineIdSweepsGetData, ThrowOnError>): RequestResult<RoutineSweepsApiRoutinesRoutineIdSweepsGetResponses, RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors, ThrowOnError> => (options.client ?? client).get<RoutineSweepsApiRoutinesRoutineIdSweepsGetResponses, RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors, ThrowOnError>({ url: '/api/routines/{routine_id}/sweeps', ...options });
 

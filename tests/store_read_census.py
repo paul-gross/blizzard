@@ -1717,7 +1717,6 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkWorkRefsRepository, "live_work_refs"): lambda w: w.read.work_refs.live_work_refs(),
     (IReadFindingRepository, "get"): lambda w: w.hub.services.findings.get(w.finding_1),
     (IReadFindingRepository, "get_many"): lambda w: w.hub.services.findings.get_many([w.finding_1, w.finding_2]),
-    (IReadFindingRepository, "get_facts"): lambda w: w.hub.services.findings.get_facts(w.finding_1),
     (IReadFindingRepository, "get_with_facts"): lambda w: w.hub.services.findings.get_with_facts(w.finding_1),
     (IReadFindingRepository, "list_for"): lambda w: w.hub.services.findings.list_for("gardening", "blizzard"),
     (IReadFindingRepository, "list_for_routine"): lambda w: w.hub.services.findings.list_for_routine("gardening"),

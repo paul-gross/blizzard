@@ -299,15 +299,3 @@ class TestRoutineScopeMembership:
             membership.unlink(routine, self._scope("blizzard"))
 
         assert repo.list_scopes(routine.routine_id) == ["blizzard"]
-
-    def test_list_scopes_delegates_to_the_repository(self) -> None:
-        repo = _FakeRoutineScopeRepo(linked={("rtn_1", "a"), ("rtn_1", "b"), ("rtn_2", "c")})
-        membership = RoutineScopeMembership(routine_scopes=_as_write_routine_scopes(repo))
-
-        assert membership.list_scopes(self._routine()) == ["a", "b"]
-
-    def test_list_routines_delegates_to_the_repository(self) -> None:
-        repo = _FakeRoutineScopeRepo(linked={("rtn_1", "a"), ("rtn_2", "a"), ("rtn_3", "b")})
-        membership = RoutineScopeMembership(routine_scopes=_as_write_routine_scopes(repo))
-
-        assert membership.list_routines(self._scope("a")) == ["rtn_1", "rtn_2"]

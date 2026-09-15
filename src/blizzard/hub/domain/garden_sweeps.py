@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.routines import IReadRoutineScopeRepository, Routine
 from blizzard.hub.domain.scopes import IReadScopeRepository
 
 
@@ -72,9 +73,10 @@ def compute_sweeps(
     until: datetime,
 ) -> GardenSweeps:
     """Fold `facts` (already unwindowed) into the last-swept table over `scope_slugs` —
-    every non-retired scope (D3) — and the windowed measurement series (D2, D5). One
-    pass over `facts`: newest-per-scope by `produced_at`, ties broken by
-    `finding_set_id` (ULID-monotonic, `garden_trend.py`'s own tie convention)."""
+    the routine's declared set, retired scopes already filtered out by the caller (D3)
+    — and the windowed measurement series (D2, D5). One pass over `facts`:
+    newest-per-scope by `produced_at`, ties broken by `finding_set_id`
+    (ULID-monotonic, `garden_trend.py`'s own tie convention)."""
     newest: dict[str, SweepFact] = {}
     for fact in facts:
         current = newest.get(fact.scope_slug)
@@ -110,15 +112,25 @@ def compute_sweeps(
 
 class GardenSweepsService:
     """Reads a routine's last-swept table and measurement series, delegating the fold
-    to `compute_sweeps`. `routine_name` is a query filter, like
-    `GardenTrendService.trend`'s own — existence is resolved at the edge, before this
-    is ever invoked."""
+    to `compute_sweeps`. Takes the resolved `Routine` (`bzh:domain-takes-objects`) —
+    existence is resolved at the edge, before this is ever invoked."""
 
-    def __init__(self, *, repo: IReadGardenSweepsRepository, scopes: IReadScopeRepository) -> None:
+    def __init__(
+        self,
+        *,
+        repo: IReadGardenSweepsRepository,
+        scopes: IReadScopeRepository,
+        routine_scopes: IReadRoutineScopeRepository,
+    ) -> None:
         self._repo = repo
         self._scopes = scopes
+        self._routine_scopes = routine_scopes
 
-    def sweeps(self, routine_name: str, *, since: datetime, until: datetime) -> GardenSweeps:
-        facts = self._repo.sweeps_for_routine(routine_name)
-        live_slugs = [scope.slug for scope in self._scopes.list_all() if not self._scopes.is_retired(scope.slug)]
-        return compute_sweeps(facts, routine_name=routine_name, scope_slugs=live_slugs, since=since, until=until)
+    def sweeps(self, routine: Routine, *, since: datetime, until: datetime) -> GardenSweeps:
+        declared = set(self._routine_scopes.list_scopes(routine.routine_id))
+        retired = self._scopes.retired_slugs()
+        live_declared = [slug for slug in declared if slug not in retired]
+        # A scope unlinked since being swept must not resurface via its own fact — the
+        # union below is only for a scope still in `declared` that's since been retired.
+        facts = [fact for fact in self._repo.sweeps_for_routine(routine.name) if fact.scope_slug in declared]
+        return compute_sweeps(facts, routine_name=routine.name, scope_slugs=live_declared, since=since, until=until)

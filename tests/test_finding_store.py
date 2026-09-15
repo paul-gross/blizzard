@@ -97,31 +97,9 @@ def test_get_many_of_no_ids_is_empty(tmp_path: Path) -> None:
     assert store.get_many([]) == {}
 
 
-def test_get_facts_returns_the_whole_chain_oldest_first(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    _add(store)
-
-    store.record_fact("fin_1", kind="observed", at=_LATER)
-    store.record_fact("fin_1", kind="resolved", at=_LATER.replace(hour=14), note="shipped it", actor="pgross")
-
-    facts = store.get_facts("fin_1")
-
-    assert [f.kind for f in facts] == ["add", "observed", "resolved"]
-    assert facts[0].note is None
-    assert facts[1].actor is None
-    assert facts[2].note == "shipped it"
-    assert facts[2].actor == "pgross"
-
-
-def test_get_facts_of_an_unknown_id_is_empty(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-
-    assert store.get_facts("fin_ghost") == []
-
-
 def test_get_with_facts_returns_the_row_and_its_whole_chain_together(tmp_path: Path) -> None:
-    """review:F5 — one read transaction for both, so `get_finding` never disagrees with
-    itself the way a `get` + `get_facts` pair could under a concurrent write."""
+    """One read transaction for both, so `get_finding` never disagrees with itself the
+    way two independent reads could under a concurrent write."""
     store = _store(tmp_path)
     _add(store)
     store.record_fact("fin_1", kind="observed", at=_LATER)

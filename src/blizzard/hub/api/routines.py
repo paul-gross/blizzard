@@ -250,7 +250,7 @@ def list_routine_scopes(routine_id: str, services: Annotated[HubServices, Depend
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
-    return services.routine_scope_membership.list_scopes(routine)
+    return services.routine_scopes.list_scopes(routine.routine_id)
 
 
 def _resolve_scope_for_membership(scope_slug: str, services: HubServices) -> Scope:
@@ -386,15 +386,15 @@ def routine_sweeps(
     since: Annotated[str, Query()],
     until: Annotated[str, Query()],
 ) -> GardenSweepsView:
-    """``routine_id``'s per-scope last-swept table (D2, D3, D4) — every non-retired
-    scope, plus any retired scope this routine has swept — and its measurement series
-    (D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a malformed instant
-    or a non-positive span."""
+    """``routine_id``'s per-scope last-swept table (D2, D3, D4) — the routine's declared
+    set, retired scopes filtered out unless already swept while linked — and its
+    measurement series (D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a
+    malformed instant or a non-positive span."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
     window = _SweepWindow.of(since=since, until=until)
-    sweeps = services.garden_sweeps.sweeps(routine.name, since=window.since, until=window.until)
+    sweeps = services.garden_sweeps.sweeps(routine, since=window.since, until=window.until)
     return _sweeps_view(sweeps)
 
 
