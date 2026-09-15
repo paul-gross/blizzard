@@ -8,8 +8,10 @@ fakes standing in for the hub, provider, harness, probe, and worktree git.
 from __future__ import annotations
 
 import tempfile
+import threading
 from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 
 import structlog
 from sqlalchemy import Engine, MetaData
@@ -18,6 +20,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -42,6 +45,7 @@ from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
+from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
@@ -159,6 +163,44 @@ def make_store(tmp_path_url: str) -> SqlAlchemyRunnerStore:
     engine = create_engine_from_url(tmp_path_url)
     _create_all(runner_metadata, engine)
     return SqlAlchemyRunnerStore(engine, runner_store_errors())
+
+
+_runner_prototype_lock = threading.Lock()
+_runner_prototype_tmp: tempfile.TemporaryDirectory[str] | None = None
+_runner_prototype_db: Path | None = None
+
+
+def runner_migration_prototype() -> Path:
+    """A runner store migrated to head exactly once per process — a test that needs a
+    real, Alembic-migrated file (rather than :func:`make_store`'s create-all shortcut)
+    copies this file instead of re-running the runner's ~39 revisions.
+
+    Safe to share regardless of the ``RunnerConfig`` a caller would otherwise build: the
+    migration tree branches on nothing but its own code, never on a config field. Lives
+    under its own per-process temp dir, cleaned up by :class:`tempfile.TemporaryDirectory`'s
+    own finalizer."""
+    global _runner_prototype_tmp, _runner_prototype_db
+    with _runner_prototype_lock:
+        if _runner_prototype_db is None:
+            _runner_prototype_tmp = tempfile.TemporaryDirectory(prefix="blizzard-runner-migration-proto-")
+            root = Path(_runner_prototype_tmp.name)
+            db_url = f"sqlite:///{root / 'runner.db'}"
+            migration_runner(RunnerConfig(root=root, db_url=db_url)).upgrade("head")
+            _checkpoint_sqlite(db_url)
+            _runner_prototype_db = root / "runner.db"
+        return _runner_prototype_db
+
+
+def _checkpoint_sqlite(db_url: str) -> None:
+    """Flush a sqlite file's WAL back into itself and drop the connection — a bare copy
+    of the ``.db`` file is only a complete store once no ``-wal``/``-shm`` sidecar is
+    load-bearing."""
+    engine = create_engine_from_url(db_url)
+    try:
+        with engine.connect() as conn:
+            conn.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        engine.dispose()
 
 
 def make_stores(store: IWriteRunnerStore) -> RunnerStores:

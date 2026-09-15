@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import pkgutil
+import shutil
 from collections.abc import Iterator
 from dataclasses import dataclass
 from types import ModuleType
@@ -23,9 +24,9 @@ import blizzard.runner as runner_pkg
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.store import schema as hub_schema
-from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.store import schema as runner_schema
 from tests import support
+from tests.runner_fakes import runner_migration_prototype
 from tests.store_read_census import (
     HUB_CENSUS,
     HUB_EXEMPTIONS,
@@ -106,8 +107,9 @@ def runner_world(tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunnerWor
     """One migrated-to-head runner store, seeded once through its own write Protocols
     and shared read-only by every test below."""
     root = tmp_path_factory.mktemp("runner-store-gate")
-    config = runner_runtime.init_environment(root)
-    engine = create_engine_from_url(config.db_url)
+    db_path = root / "runner.db"
+    shutil.copyfile(runner_migration_prototype(), db_path)
+    engine = create_engine_from_url(f"sqlite:///{db_path}")
     try:
         yield build_runner_world(engine)
     finally:

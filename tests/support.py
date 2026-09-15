@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import re
+import shutil
 import tempfile
 import threading
 from collections.abc import Callable, Iterable, Iterator, Sequence
@@ -519,6 +520,43 @@ class HubHarness:
     app: FastAPI | None = None
 
 
+_hub_prototype_lock = threading.Lock()
+_hub_prototype_tmp: tempfile.TemporaryDirectory[str] | None = None
+_hub_prototype_db: Path | None = None
+
+
+def hub_migration_prototype() -> Path:
+    """A hub store migrated to head exactly once per process; ``build_hub`` copies this
+    file rather than re-running all ~89 hub revisions on every call.
+
+    Safe to share across every ``build_hub`` call regardless of the ``HubConfig`` a test
+    passes: the migration tree branches on nothing but its own code, never on a config
+    field. Lives under its own per-process temp dir, cleaned up by
+    :class:`tempfile.TemporaryDirectory`'s own finalizer."""
+    global _hub_prototype_tmp, _hub_prototype_db
+    with _hub_prototype_lock:
+        if _hub_prototype_db is None:
+            _hub_prototype_tmp = tempfile.TemporaryDirectory(prefix="blizzard-hub-migration-proto-")
+            root = Path(_hub_prototype_tmp.name)
+            db_url = f"sqlite:///{root / 'hub.db'}"
+            migration_runner(HubConfig(root=root, db_url=db_url)).upgrade("head")
+            _checkpoint_sqlite(db_url)
+            _hub_prototype_db = root / "hub.db"
+        return _hub_prototype_db
+
+
+def _checkpoint_sqlite(db_url: str) -> None:
+    """Flush a sqlite file's WAL back into itself and drop the connection — a bare copy
+    of the ``.db`` file is only a complete store once no ``-wal``/``-shm`` sidecar is
+    load-bearing."""
+    engine = create_engine_from_url(db_url)
+    try:
+        with engine.connect() as conn:
+            conn.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        engine.dispose()
+
+
 def build_hub(
     tmp_path: Path,
     *,
@@ -554,7 +592,7 @@ def build_hub(
         auth=AuthConfig(mode=auth_mode, superuser=superuser),
         trusted_proxies=tuple(trusted_proxies),
     )
-    migration_runner(config).upgrade("head")
+    shutil.copyfile(hub_migration_prototype(), tmp_path / "hub.db")
     engine = create_engine_from_url(db_url)
 
     built_sources: dict[str, IWorkSource] = dict(
