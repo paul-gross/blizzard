@@ -15,9 +15,15 @@ import json
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Select, case, select
+from sqlalchemy import Connection, Select, case, or_, select
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.event_log import (
+    EVENT_LOG_SEVERITY,
+    EventLogSeverity,
+    narrow_event_log_kind,
+    narrow_event_log_severity,
+)
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
 from blizzard.hub.domain.work import DEFAULT_EVENT_LIST_LIMIT, SEVERITY_RANK, ActivityRow, EventRow
 from blizzard.hub.store import schema as s
@@ -38,6 +44,19 @@ def _bounded_stmt(stmt: Select[Any], *, ts_col: Any, pk_col: Any, since: datetim
     #213, AC4: never a full-table scan) — a pure builder, split from `_bounded` so a
     test can compile the exact statement a source executes."""
     return stmt.where(ts_col >= since).order_by(ts_col.desc(), pk_col.desc()).limit(limit)
+
+
+def _narrow_persisted_severity(*, kind: str, severity: str) -> EventLogSeverity:
+    """A row's ``severity`` as it was written, or the value its ``kind`` declares when it
+    was not (issue #106) — no migration: ingest has rejected an outside-the-vocabulary
+    pair since the fix, so this only ever narrows a row a since-fixed hub bug persisted
+    before it (``hub-node-unroutable-outcome`` once wrote ``severity="error"``). A kind
+    this table no longer recognizes narrows to ``critical``, the conservative read."""
+    narrowed = narrow_event_log_severity(severity)
+    if narrowed is not None:
+        return narrowed
+    narrowed_kind = narrow_event_log_kind(kind)
+    return EVENT_LOG_SEVERITY[narrowed_kind] if narrowed_kind is not None else "critical"
 
 
 def _deleted_chunk_ids_stmt() -> Select[Any]:
@@ -237,7 +256,7 @@ class ChunkEventsStore:
     def list_events(
         self,
         *,
-        severity: str | None = None,
+        severity: EventLogSeverity | None = None,
         runner_id: str | None = None,
         chunk_id: str | None = None,
         since: datetime | None = None,
@@ -253,9 +272,11 @@ class ChunkEventsStore:
                 stmt = stmt.where(s.event_log.c.chunk_id == chunk_id)
             if since is not None:
                 stmt = stmt.where(s.event_log.c.recorded_at >= since)
-            # Ranked from the domain's own vocabulary (`SEVERITY_RANK`), not restated
-            # here, so a severity outside it sinks below every declared one — the cap
-            # keeps the most severe rows, not merely the newest.
+            # Ranked from the domain's own vocabulary (`SEVERITY_RANK`), not restated here.
+            # Ingest has rejected a severity outside it since issue #106, so `else_` is
+            # reached only by a since-fixed legacy row — `_narrow_persisted_severity`
+            # narrows the value the row is served with; its raw column value still ranks
+            # last here, a pre-existing row's SQL sort position, not its served severity.
             severity_rank = case(
                 *[(s.event_log.c.severity == severity, rank) for severity, rank in SEVERITY_RANK.items()],
                 else_=len(SEVERITY_RANK),
@@ -267,7 +288,37 @@ class ChunkEventsStore:
                 EventRow(
                     id=row.id,
                     recorded_at=row.recorded_at,
-                    severity=row.severity,
+                    severity=_narrow_persisted_severity(kind=row.kind, severity=row.severity),
+                    kind=row.kind,
+                    runner_id=row.runner_id,
+                    chunk_id=row.chunk_id,
+                    lease_id=row.lease_id,
+                    node_name=row.node_name,
+                    message=row.message,
+                    detail=json.loads(row.detail) if row.detail is not None else None,
+                )
+                for row in conn.execute(stmt).all()
+            ]
+
+    def activity_events_since(self, since: datetime, *, limit: int) -> list[EventRow]:
+        """See
+        :meth:`~blizzard.hub.domain.chunks.events.IReadChunkEventsRepository.activity_events_since` —
+        the feed's own event source: recency-ordered, deleted-chunk-excluding, distinct
+        from ``list_events``'s severity-ranked contract."""
+        with self._store.read("activity_events_since") as conn:
+            deleted = _deleted_chunk_ids_stmt()
+            stmt = (
+                select(s.event_log)
+                .where(s.event_log.c.recorded_at >= since)
+                .where(or_(s.event_log.c.chunk_id.is_(None), s.event_log.c.chunk_id.not_in(deleted)))
+                .order_by(s.event_log.c.recorded_at.desc(), s.event_log.c.id.desc())
+                .limit(limit)
+            )
+            return [
+                EventRow(
+                    id=row.id,
+                    recorded_at=row.recorded_at,
+                    severity=_narrow_persisted_severity(kind=row.kind, severity=row.severity),
                     kind=row.kind,
                     runner_id=row.runner_id,
                     chunk_id=row.chunk_id,
@@ -596,7 +647,7 @@ class ChunkEventsStore:
     def record_event(
         self,
         *,
-        severity: str,
+        severity: EventLogSeverity,
         kind: str,
         runner_id: str | None,
         chunk_id: str | None,

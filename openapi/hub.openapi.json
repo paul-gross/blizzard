@@ -140,6 +140,11 @@
           "severity": {
             "anyOf": [
               {
+                "enum": [
+                  "critical",
+                  "warning",
+                  "info"
+                ],
                 "type": "string"
               },
               {
@@ -2850,6 +2855,11 @@
             "title": "Runner Id"
           },
           "severity": {
+            "enum": [
+              "critical",
+              "warning",
+              "info"
+            ],
             "title": "Severity",
             "type": "string"
           }
@@ -12035,6 +12045,11 @@
             "schema": {
               "anyOf": [
                 {
+                  "enum": [
+                    "critical",
+                    "warning",
+                    "info"
+                  ],
                   "type": "string"
                 },
                 {

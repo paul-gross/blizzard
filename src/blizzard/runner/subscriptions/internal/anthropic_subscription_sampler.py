@@ -20,7 +20,6 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageWindow,
     ISubscriptionSampler,
 )
-from blizzard.wire.facts import PROVIDER_ANTHROPIC as PROVIDER_ANTHROPIC
 
 _log = get_logger("blizzard.runner.harness")
 

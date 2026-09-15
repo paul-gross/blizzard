@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub.domain.work import DEFAULT_EVENT_LIST_LIMIT, ActivityRow, EventRow
 
 
@@ -15,7 +16,7 @@ class IReadChunkEventsRepository(Protocol):
     def list_events(
         self,
         *,
-        severity: str | None = None,
+        severity: EventLogSeverity | None = None,
         runner_id: str | None = None,
         chunk_id: str | None = None,
         since: datetime | None = None,
@@ -38,6 +39,16 @@ class IReadChunkEventsRepository(Protocol):
         returns rows unsorted across sources."""
         ...
 
+    def activity_events_since(self, since: datetime, *, limit: int) -> list[EventRow]:
+        """``event_log`` rows for the activity feed's ``event-logged`` half — newest
+        first (``recorded_at`` desc, ``id`` desc tiebreak), a deleted chunk's rows
+        excluded, bounded by ``limit`` after that ordering. A runner-scoped row
+        (``chunk_id IS NULL``) is never excluded by the deleted-chunk filter.
+
+        Distinct from :meth:`list_events`: that read is severity-ranked for
+        ``GET /api/events`` and can drop a recent row a pure-recency cap would keep."""
+        ...
+
 
 class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
     """Read-write chunk-events access."""
@@ -45,7 +56,7 @@ class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
     def record_event(
         self,
         *,
-        severity: str,
+        severity: EventLogSeverity,
         kind: str,
         runner_id: str | None,
         chunk_id: str | None,
@@ -69,7 +80,13 @@ class IEventLogPublisher(Protocol):
     :class:`~blizzard.hub.events.broker.EventBroker` satisfies this structurally."""
 
     def publish_event_logged(
-        self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str | None, key: str | None = None
+        self,
+        *,
+        severity: EventLogSeverity,
+        kind: str,
+        chunk_id: str | None,
+        runner_id: str | None,
+        key: str | None = None,
     ) -> int:
         """Fan out one ``event-logged`` SSE frame."""
         ...

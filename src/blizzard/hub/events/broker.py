@@ -6,6 +6,7 @@ event-type names, their payload shapes, and each mutation seam's ``publish_*`` h
 
 from __future__ import annotations
 
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.broker import EventBroker as _EventBroker
 from blizzard.wire.sse import (
     ChunkChangeCause,
@@ -128,7 +129,13 @@ class EventBroker(_EventBroker):
         return self.publish(RUNNER_CHANGED, payload)
 
     def publish_event_logged(
-        self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str | None, key: str | None = None
+        self,
+        *,
+        severity: EventLogSeverity,
+        kind: str,
+        chunk_id: str | None,
+        runner_id: str | None,
+        key: str | None = None,
     ) -> int:
         """An operational event landed in the event log (issue #125). The frame carries
         only identifying fields; the row itself is read back off ``GET /api/events``.

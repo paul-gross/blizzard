@@ -163,36 +163,6 @@ def test_list_events_cap_keeps_the_most_severe_rows(tmp_path: Path) -> None:
     assert [e.message for e in store.events.list_events(limit=3)] == ["old-critical", "warning-5", "warning-4"]
 
 
-def test_list_events_unknown_severity_sinks_below_declared_ones_through_the_store_query(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    store.events.record_event(
-        severity="mystery",
-        kind="unrecognized",
-        runner_id="r1",
-        chunk_id="ch_a",
-        lease_id=None,
-        node_name=None,
-        message="unknown",
-        detail=None,
-        at=_at(5),
-    )
-    store.events.record_event(
-        severity="info",
-        kind="attempt-abandoned",
-        runner_id="r1",
-        chunk_id="ch_a",
-        lease_id=None,
-        node_name=None,
-        message="info",
-        detail=None,
-        at=_at(1),
-    )
-
-    # "unknown" is newest by recorded_at but outside the declared vocabulary, so it must
-    # sink below "info" in the SQL ordering itself, not only in the in-memory feed sort.
-    assert [e.message for e in store.events.list_events()] == ["info", "unknown"]
-
-
 def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
     with engine.begin() as conn:  # seed the requeue and stop cases' chunks
@@ -292,29 +262,6 @@ def test_event_feed_sorts_severity_then_recency() -> None:
     assert projected.chunk_id == "ch_z"
     # …and names no runner as `None`, never `""` (issue #155).
     assert projected.runner_id is None
-
-
-def test_a_severity_outside_the_vocabulary_sinks_below_info() -> None:
-    """Why `info | warning | critical` is closed (`blizzard-context:/domain/operations.md`):
-    the rank falls back to *last* for anything else, so an emitter inventing a severity
-    buries its own event under every info row — and no severity filter reaches it."""
-    rows = [
-        EventRow(
-            id=index,
-            recorded_at=_at(index),
-            severity=severity,
-            kind="k",
-            runner_id="r",
-            chunk_id=None,
-            lease_id=None,
-            node_name=None,
-            message=severity,
-            detail=None,
-        )
-        for index, severity in enumerate(("info", "error"), start=1)
-    ]
-
-    assert [e.severity for e in EventFeed.of(rows, []).rows] == ["info", "error"]
 
 
 def test_event_feed_escalation_message_does_not_overclaim_resume() -> None:

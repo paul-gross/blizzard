@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
 from blizzard.auth_core import FLEET_VIEW
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.stream import Cursor, Stream
 from blizzard.foundation.store.utc import as_utc, iso_utc
@@ -79,7 +80,7 @@ class Events:
 )
 def list_events(
     services: Annotated[HubServices, Depends(get_services)],
-    severity: Annotated[str | None, Query()] = None,
+    severity: Annotated[EventLogSeverity | None, Query()] = None,
     runner_id: Annotated[str | None, Query()] = None,
     chunk_id: Annotated[str | None, Query()] = None,
     since: Annotated[datetime | None, Query()] = None,
@@ -152,6 +153,6 @@ def list_activity(
     UTC so it never raises against the store's aware timestamps."""
     since_utc = as_utc(since) if since is not None else services.clock.now() - timedelta(hours=24)
     chunk_changed = services.chunks.events.activity_facts_since(since_utc, limit=limit)
-    events = services.chunks.events.list_events(since=since_utc, limit=limit)
+    events = services.chunks.events.activity_events_since(since_utc, limit=limit)
     runner_changed = services.registry.list_pause_facts_since(since_utc, limit=limit)
     return Activity(ActivityFeed.of(chunk_changed, events, runner_changed, limit=limit).rows).response()

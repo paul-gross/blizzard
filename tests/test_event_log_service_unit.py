@@ -1,7 +1,5 @@
-""":class:`EventLogService`'s two authoring seams: the closed-vocabulary ``record`` every
-in-process site now uses, and ``record_wire`` — the one escape hatch
-``hub/domain/facts.py``'s ``EVENT_RECORDED`` branch calls, since a kind an older runner
-minted may not be in this hub's vocabulary. That event must still land as written."""
+""":class:`EventLogService`'s one authoring seam, ``record`` — severity is always derived
+from the closed ``EventLogKind`` vocabulary, never paired independently."""
 
 from __future__ import annotations
 
@@ -79,28 +77,3 @@ def test_record_derives_severity_from_the_closed_vocabulary() -> None:
     )
 
     assert events.rows == [_RecordedRow(severity="critical", kind="worker-lost")]
-
-
-def test_record_wire_records_a_kind_unrecognized_by_this_hubs_vocabulary_as_written() -> None:
-    """The version-skew guarantee: an older runner may mint a kind this hub's own
-    vocabulary has never declared, and it must land exactly as sent, not be dropped or
-    have its severity silently rewritten."""
-    events = _FakeEvents()
-    publisher = _FakePublisher()
-    service = _service(events, publisher)
-
-    row_id = service.record_wire(
-        kind="a-kind-this-hub-has-never-heard-of",
-        severity="warning",
-        runner_id="r1",
-        chunk_id="ch_1",
-        lease_id=None,
-        node_name=None,
-        message="from an older runner",
-        detail=None,
-        at=_AT,
-    )
-
-    assert row_id == 1
-    assert events.rows == [_RecordedRow(severity="warning", kind="a-kind-this-hub-has-never-heard-of")]
-    assert publisher.published == [("warning", "a-kind-this-hub-has-never-heard-of")]

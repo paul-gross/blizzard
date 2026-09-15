@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, output, signal } from '@a
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import { asyncState } from '../query-state';
 import { EventsView } from './events-view';
-import { injectHubEventsQuery } from './events.query';
+import { type EventSeverity, injectHubEventsQuery, narrowEventSeverity } from './events.query';
 
 /**
  * The Events tab's **container** (blizzard#125 Phase 4) — the board's operational
@@ -40,7 +40,7 @@ export class EventsPanel {
   readonly selectChunk = output<string>();
 
   /** The active severity filter, or `null` for "every severity". */
-  protected readonly severity = signal<string | null>(null);
+  protected readonly severity = signal<EventSeverity | null>(null);
   /** The active runner filter, or `null` for "every runner". */
   protected readonly runnerId = signal<string | null>(null);
   /** The active chunk filter, or `null` for "every chunk". */
@@ -97,7 +97,7 @@ export class EventsPanel {
   }
 
   protected onFilterChange(severity: string): void {
-    this.severity.set(severity === '' ? null : severity);
+    this.severity.set(severity === '' ? null : narrowEventSeverity(severity));
   }
 
   protected onRunnerFilterChange(runnerId: string): void {

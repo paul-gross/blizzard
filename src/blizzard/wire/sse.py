@@ -11,6 +11,8 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from blizzard.foundation.event_log import EventLogSeverity
+
 #: What fact family drove a ``chunk-changed`` frame (issue #212) — each emit site names
 #: its own cause statically.
 ChunkChangeCause = Literal[
@@ -115,7 +117,7 @@ class RunnerChangedPayload(SseFramePayload):
 
 
 class EventLoggedPayload(SseFramePayload):
-    severity: str
+    severity: EventLogSeverity
     kind: str
     chunk_id: str | None
     runner_id: str | None

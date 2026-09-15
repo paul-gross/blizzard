@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, narrow_event_log_kind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.config import ROUTE_TOKEN_WARN
@@ -269,11 +270,13 @@ class FactIngestService:
         if kind == EVENT_RECORDED:
             # Neither epoch-fenced nor route-token-gated (issue #125): an event from a fenced-out or
             # dying worker is exactly the signal this log exists to surface. `chunk_id` is optional.
-            # `record_wire`, not `record`: a kind minted by an older runner may not be in this
-            # hub's vocabulary, so severity is read off the wire rather than derived from it.
-            event_id = self._events.record_wire(
-                kind=fact.require_text("kind"),
-                severity=fact.require_text("severity"),
+            wire_kind = narrow_event_log_kind(fact.require_text("kind"))
+            wire_severity = fact.require_text("severity")
+            if wire_kind is None or wire_severity != EVENT_LOG_SEVERITY[wire_kind]:
+                _log.warning("event fact outside the closed vocabulary", kind=fact.require_text("kind"))
+                return False, None
+            event_id = self._events.record(
+                kind=wire_kind,
                 runner_id=runner_id,
                 chunk_id=fact.text("chunk_id"),
                 lease_id=fact.text("lease_id"),
