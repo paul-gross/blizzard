@@ -1,14 +1,9 @@
 """The store-read-index gate (blizzard#525) — runner (Phase 2) and hub (Phase 3) halves.
 
-Drives every read method of every runner/hub ``IRead*`` Protocol against a real,
-migrated-to-head sqlite store and fails if any of them plans a scan or an automatic
-(covering/partial) index over a table not on ``tests/store_scan_allowlist.py``'s
-``RUNNER_ALLOWED_SCANS``/``HUB_ALLOWED_SCANS``. Coverage of the read-method surface
-itself is enforced by reflection equality against ``tests/store_read_census.py``'s
-``RUNNER_CENSUS``/``RUNNER_EXEMPTIONS`` and ``HUB_CENSUS``/``HUB_EXEMPTIONS`` (Decision
-1), not by the recipe mechanism. ``tests/test_runner_store_indexes.py`` and
-``tests/test_chunk_fact_table_indexes.py`` keep their own narrower purpose — named-index
-pins, plus the runner's write-path loop sweep — untouched (Decision 7)."""
+Drives every read method of every runner/hub ``IRead*`` Protocol against a real, migrated-to-head sqlite store and
+fails if any plans a scan or automatic covering index over a table not on ``tests/store_scan_allowlist.py``'s
+allow-lists, coverage enforced by reflection equality against ``tests/store_read_census.py``'s census/exemptions
+(Decision 1). ``test_runner_store_indexes.py``/``test_chunk_fact_table_indexes.py`` keep their own narrower purpose."""
 
 from __future__ import annotations
 
@@ -51,13 +46,10 @@ pytestmark = pytest.mark.component
 
 
 def _reflect_read_protocol_methods(package: ModuleType) -> set[tuple[type, str]]:
-    """Walk ``package`` for every ``IRead*`` ``Protocol`` class (Decision 1), keyed
-    ``(ProtocolClass, method_name)`` for each method declared **directly** in that
-    class's own body (``vars(cls)``) — never one only inherited from a composed base, so
-    an umbrella such as the runner's ``IReadRunnerStore`` contributes none of its own,
-    and a module a package walk reaches with no umbrella at all (the hub) is still
-    covered. Called once for ``blizzard.runner`` and once for ``blizzard.hub``, rather
-    than duplicated per store."""
+    """Walk ``package`` for every ``IRead*`` ``Protocol`` class (Decision 1), keyed ``(ProtocolClass, method_name)``
+    for each method declared **directly** in that class's own body (``vars(cls)``) — never one only inherited from a
+    composed base, so an umbrella such as ``IReadRunnerStore`` contributes none of its own. Called once for
+    ``blizzard.runner`` and once for ``blizzard.hub``, rather than duplicated per store."""
     keys: set[tuple[type, str]] = set()
     for modinfo in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
         try:
@@ -79,12 +71,10 @@ def _reflect_read_protocol_methods(package: ModuleType) -> set[tuple[type, str]]
 def _offending_scans_by_method(
     engine: sa.Engine, world: object, census: dict[tuple[type, str], Any], tables: set[str]
 ) -> list[tuple[type, str, str, sa.Row[Any]]]:
-    """Every ``(Protocol, method, table, plan row)`` offense, driving each census recipe
-    under its own capture so an offense is attributable to the read that caused it — what
-    the allow-list's method-scoped entries (Decision 6) and the hygiene check below both
-    need. ``tables`` is the store's own ``schema.metadata`` table-name vocabulary
-    (Decision 3) — the caller's, so this stays a plain reflection over the recipe rather
-    than importing either store's own ``schema`` module."""
+    """Every ``(Protocol, method, table, plan row)`` offense, driving each census recipe under its own capture so an
+    offense is attributable to the read that caused it — what the allow-list's method-scoped entries (Decision 6) and
+    the hygiene check below both need. ``tables`` is the caller's own ``schema.metadata`` table-name vocabulary
+    (Decision 3), so this stays a plain reflection over the recipe rather than importing either store's ``schema``."""
     offenders: list[tuple[type, str, str, sa.Row[Any]]] = []
     for (protocol, method), recipe in census.items():
         with support.capture_statements(engine) as statements:
@@ -260,14 +250,9 @@ def test_hub_allow_list_hygiene(hub_world: HubWorld) -> None:
 def test_hub_mutation_dropping_an_index_the_census_exercises_is_caught_by_the_classifier(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> None:
-    """Decision 8's mutation self-test — permanent, not manual (AC3.2). Builds its own
-    dedicated migrated hub database (never ``hub_world``'s shared one), drops
-    ``ix_artifacts_chunk_id_node_id_epoch`` — the index serving
-    ``IReadChunkArtifactsRepository.load_artifacts``, a read :data:`HUB_CENSUS` drives —
-    and asserts the classifier (``support.offending_index_scans``) reports the
-    ``artifacts`` table for that read once the index is gone. Proves criterion 5's
-    bare-``SCAN``/``AUTOMATIC``-index match is load-bearing: if a later change weakens
-    ``support._offending_table``'s own matching, this assertion is the one that fails."""
+    """Decision 8's mutation self-test (AC3.2): drops ``ix_artifacts_chunk_id_node_id_epoch`` on a dedicated migrated
+    hub database and asserts ``support.offending_index_scans`` reports ``artifacts`` for the read it serves —
+    load-bearing proof that weakening ``support._offending_table``'s bare-``SCAN``/``AUTOMATIC`` match fails here."""
     root = tmp_path_factory.mktemp("hub-store-gate-mutation")
     world = build_hub_world(root)
     index_name = "ix_artifacts_chunk_id_node_id_epoch"

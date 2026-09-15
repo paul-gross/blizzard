@@ -1,21 +1,9 @@
-"""Store-read-index gate allow-list (blizzard#525, Phase 2).
+"""Store-read-index gate allow-list (blizzard#525).
 
-``ROW_THRESHOLD`` bounds what a "deliberately unindexed" table's declared row bound may
-claim — an allow-list entry above it fails the gate's own hygiene check
-(``tests/test_store_read_index_gate.py``), not a measured runtime fact (sqlite's query
-plan is row-count-independent without ``ANALYZE``, and this repo's
-``create_engine_from_url`` never runs it).
-
-The runner's own local sqlite store is per-feature-environment (``winter ws init``
-provisions a fresh one; the workspace's own ``AGENTS.md`` owns that lifecycle) — its
-tables hold one environment's own development history, not the whole fleet's, which is
-why most of them stay small enough to allow table-wide below. Contrast the hub's own
-store (Phase 3), which is shared fleet-wide and cannot lean on the same argument.
-
-Split by store at the module level (``RUNNER_ALLOWED_SCANS``/``HUB_ALLOWED_SCANS``)
-rather than one generic structure, so each store's own allow-list reads and edits
-independently of the other's.
-"""
+``ROW_THRESHOLD`` bounds what a "deliberately unindexed" table's declared row bound may claim — an entry above it
+fails the gate's own hygiene check, not a measured runtime fact (sqlite's plan is row-count-independent without
+``ANALYZE``). ``RUNNER_ALLOWED_SCANS`` leans on the runner's own store being per-environment (small by lifetime);
+``HUB_ALLOWED_SCANS`` cannot — the hub's store is shared fleet-wide, so each entry names its own bounded reason."""
 
 from __future__ import annotations
 
@@ -25,8 +13,7 @@ from blizzard.hub.domain.findings import IReadFindingRepository
 from blizzard.runner.domain.outbound import IReadOutboundRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 
-#: An allow-list entry's declared row bound must never exceed this — the ceiling on what
-#: "small enough that a scan beats an index's upkeep" may claim.
+#: The ceiling an allow-list entry's declared row bound must never exceed.
 ROW_THRESHOLD = 200
 
 
@@ -54,27 +41,20 @@ class MethodScopedAllowance:
     reason: str
 
 
-# `schema.py`'s own "Deliberately unindexed (issue #520)" comment (near `asks`) is the one
-# home for why these six stay near-empty by design — pointed at here, not restated
-# (`bzh:one-prose-home`).
+# Points at schema.py's own "Deliberately unindexed (issue #520)" comment near `asks` (`bzh:one-prose-home`).
 _SCHEMA_520_REASON = (
     "schema.py's own 'Deliberately unindexed (issue #520)' comment beside `asks`: "
     "near-empty by design, so a scan beats an index's upkeep."
 )
 
-# Every table below is append-only across ONE runner's own local store, never the whole
-# fleet's: `winter ws init` provisions a fresh environment (and so a fresh runner store)
-# per feature, so even a table's full history — not just its currently-live rows — stays
-# small for the environment's development lifetime.
+# Every table below is one runner's own local, per-environment store — small for that environment's own lifetime.
 _ENV_SCOPED_HISTORY_REASON = (
     "one feature environment's own local runner store (a fresh one per `winter ws init`, "
     "never shared fleet-wide) — even this table's full history across that one "
     "environment's development lifetime stays well under the threshold."
 )
 
-# Every table below records a rare, human- or operator-triggered event (a pause, a
-# takeover, a requeue, a hub-resolved escalation, a restart) — sparse by the nature of
-# the event itself, independent of how long the environment has been running.
+# Every table below records a rare, human/operator-triggered event — sparse by the event's own nature.
 _RARE_OPERATOR_EVENT_REASON = (
     "a rare human/operator-triggered event (pause, takeover, requeue, restart, or a "
     "hub-resolved escalation) — sparse by the event's own nature, not by retention."
@@ -141,20 +121,10 @@ RUNNER_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     ),
 ]
 
-# The hub's store is shared fleet-wide (unlike the runner's own per-environment store,
-# see the module docstring above) — a table's smallness cannot lean on "one environment's
-# own development lifetime" the way the runner's own history tables do. Populated
-# empirically (Decision per blizzard#525 Phase 3): built starting from an empty list, run
-# against the real offending `(Protocol, method, table)` scans the gate reported, and each
-# entry below names the specific, bounded reason that scan is genuinely small or rare.
+# The hub's store is shared fleet-wide, unlike the runner's own per-environment store (module docstring above) —
+# populated empirically: each entry below names the specific, bounded reason its scan is genuinely small or rare.
 
-# `ChunkFactsStore.load_all_facts`/`load_all_statuses` (issue #374) and their siblings
-# (`ChunkQueueStore.queue_positions`/`promoted_ats`) read "one bounded query per fact
-# table across the whole store" by design (see `chunk_facts_store.py`'s own module
-# docstring) — not a missing index, but the method's entire point: a fleet-wide snapshot,
-# not a per-chunk lookup. Every table below is only ever reached this way (or, for the
-# four decision-closure/tombstone tables that are also scanned for their own separate
-# reason below, reached this way among others).
+# ChunkFactsStore.load_all_facts/load_all_statuses (#374) and their queue-position siblings read this way by design.
 _FLEET_SNAPSHOT_REASON = (
     "ChunkFactsStore.load_all_facts/load_all_statuses (issue #374) and their "
     "ChunkQueueStore siblings read one bounded query per fact table across the WHOLE "
@@ -162,12 +132,7 @@ _FLEET_SNAPSHOT_REASON = (
     "per-chunk lookup, so no chunk_id index applies."
 )
 
-# `chunk_deleted`/`chunk_grouped` carry no `chunk_id` index at all (only their own
-# activity-feed `deleted_at`/`id` and `grouped_at`/`id` pairs) — every "is this chunk a
-# live tombstone" check (`find_live_holder`, `pending_close_intents`,
-# `list_open_escalations`, `is_ephemeral`, and the record/route-refs single-chunk reads)
-# scans them, on top of the fleet-wide reason above. Deletions and merges are rare
-# relative to the fleet's own chunk volume, so a scan beats an index's upkeep here too.
+# chunk_deleted/chunk_grouped carry no chunk_id index — every per-chunk tombstone check scans them.
 _TOMBSTONE_NO_KEY_INDEX_REASON = (
     "chunk_deleted/chunk_grouped carry no chunk_id index (only their own activity-feed "
     "deleted_at/id and grouped_at/id pairs) — every per-chunk tombstone check scans them, "
@@ -175,11 +140,7 @@ _TOMBSTONE_NO_KEY_INDEX_REASON = (
     "are rare relative to the fleet's own chunk volume."
 )
 
-# `ChunkDecisionsStore._not_closed_clause` (chunk_decisions_store.py) correlates a
-# `NOT EXISTS` against each of `_DECISION_CLOSURE_TABLES` on `decision_id` — a column none
-# of the four carries an index on (their own indexes are keyed on chunk_id/epoch or
-# recorded_at/id, serving their OTHER reads). On top of also being read fleet-wide by the
-# #374 snapshot methods above.
+# ChunkDecisionsStore._not_closed_clause correlates a NOT EXISTS on decision_id, unindexed on all four tables.
 _DECISION_CLOSURE_REASON = (
     "ChunkDecisionsStore._not_closed_clause correlates a NOT EXISTS against this table on "
     "decision_id, a column it carries no index on (its own indexes serve chunk_id/epoch or "
@@ -187,21 +148,14 @@ _DECISION_CLOSURE_REASON = (
     "methods above."
 )
 
-# Every table below holds an operator-created fleet entity — a registered runner, a scope,
-# a routine, a graph, a hub user, or an auth event about one of them — whose count is
-# bounded by how many of those entities exist across the WHOLE fleet's lifetime, not by
-# how much chunk/work-item volume the fleet has processed. A materially different growth
-# axis than the chunk-fact tables above.
+# Every table below holds an operator-created fleet entity, bounded by entity count, not chunk/work-item volume.
 _FLEET_CONFIG_REASON = (
     "an operator-created fleet entity (registered runner, scope, routine, graph, hub "
     "user) or an auth event about one — bounded by how many of those entities exist "
     "across the whole fleet's lifetime, not by chunk/work-item volume."
 )
 
-# A declared **singleton** (`superuser_bootstrap`'s own schema.py comment: "a singleton
-# row, so a config change naming a different email can still demote") or a table the
-# schema itself documents as "the fleet-wide hub-execution serialization slot" (#65,
-# `hub_exec_slot`) — at most one live row plus a short release history.
+# A declared singleton (superuser_bootstrap) or the fleet-wide hub-exec serialization slot (#65, hub_exec_slot).
 _SINGLETON_REASON = (
     "a declared singleton (superuser_bootstrap) or the fleet-wide single hub-exec "
     "serialization slot (#65, hub_exec_slot) — at most one live row plus a short "

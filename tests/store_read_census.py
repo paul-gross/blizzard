@@ -1,15 +1,9 @@
-"""Read-method census for the store-read-index gate (blizzard#525, Phase 2).
+"""Read-method census for the store-read-index gate (blizzard#525).
 
-Maps every reflected ``IRead*`` Protocol method to a recipe that exercises it against a
-production-wired, migrated-to-head store — the seeded world :func:`build_runner_world`
-builds once per gate run, entirely through each concept's own write Protocol
-(``bzh:matrix-tier-rules``), never raw SQL. ``RUNNER_EXEMPTIONS`` carries the runner read
-Protocols backed by no SQL at all, each reasoned.
-
-Split by store at the module level (``RUNNER_CENSUS``/``RUNNER_EXEMPTIONS`` and
-``HUB_CENSUS``/``HUB_EXEMPTIONS``) rather than one generic structure, so each store's
-own census reads and edits independently of the other's.
-"""
+Maps every reflected ``IRead*`` Protocol method to a recipe that exercises it against a production-wired,
+migrated-to-head store, seeded once per gate run entirely through each concept's own write Protocol
+(``bzh:matrix-tier-rules``), never raw SQL. Split by store (``RUNNER_CENSUS``/``RUNNER_EXEMPTIONS`` and
+``HUB_CENSUS``/``HUB_EXEMPTIONS``) so each store's own census reads and edits independently of the other's."""
 
 from __future__ import annotations
 
@@ -141,12 +135,9 @@ GRAPH_ID = "gr_1"
 @dataclass(frozen=True)
 class RunnerWorld:
     """The runner store's module-scoped seeded world — one instance built once
-    (:func:`build_runner_world`) and driven by every recipe in :data:`RUNNER_CENSUS`.
-
-    ``stores``/``read`` are the same production-wired adapters, the latter narrowed to
-    ``RunnerReadStores`` over the former's own instances (D1) — recipes read through
-    ``read``, mirroring the one collaborator every controller-facing caller resolves
-    through in production."""
+    (:func:`build_runner_world`) and driven by every recipe in :data:`RUNNER_CENSUS`. ``stores``/``read`` are the
+    same production-wired adapters, the latter narrowed to ``RunnerReadStores`` (D1) — recipes read through
+    ``read``, the one collaborator every controller-facing caller resolves through in production."""
 
     engine: Engine
     stores: RunnerStores
@@ -536,9 +527,7 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
 
 RunnerRecipe = Callable[[RunnerWorld], object]
 
-#: Every reflected ``(Protocol, method)`` the runner's ``IReadRunnerStore`` umbrella
-#: composes (plus each concept protocol it does not), each mapped to a recipe run
-#: against :func:`build_runner_world`'s single seeded world.
+#: Every reflected runner ``(Protocol, method)``, mapped to a recipe run against :func:`build_runner_world`'s world.
 RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadLeaseRecordRepository, "list_active_leases"): lambda w: w.read.lease_record.list_active_leases(),
     (IReadLeaseRecordRepository, "active_lease_for_chunk"): lambda w: w.read.lease_record.active_lease_for_chunk(
@@ -651,9 +640,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
 }
 
-#: Runner ``IRead*`` methods with no SQL behind them at all — an httpx hub client and a
-#: harness filesystem source, neither wired through :func:`build_runner_world`'s store
-#: bundle, so no recipe could drive either through it.
+#: Runner ``IRead*`` methods with no SQL behind them at all, each reasoned below.
 RUNNER_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IReadArchivedTranscriptRepository, "read_turns"): (
         "blizzard.runner.transcripts.internal.http_archived_transcript_repository."
@@ -670,9 +657,7 @@ RUNNER_EXEMPTIONS: dict[tuple[type, str], str] = {
 }
 
 
-# ========================================================================================
-# Hub (Phase 3)
-# ========================================================================================
+# --- Hub (Phase 3) -----------------------------------------------------------------------
 
 _HUB_BASE = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
 _HUB_UNTIL = _HUB_BASE + timedelta(days=365)
@@ -688,11 +673,7 @@ def _ht(offset_seconds: float) -> datetime:
 HUB_RUNNER_ID = "r1"
 HUB_RUNNER_ID_2 = "r2"
 
-#: A two-node graph (a runner-executed ``build`` judged into a hub-executed ``deliver``)
-#: minted fresh for this world, so every chunk-domain recipe below has a real node id to
-#: attribute a fact to — no umbrella/production service is required to reach any of the
-#: per-seam stores directly, so an arbitrary (but real, minted) node id is all a fact
-#: needs (bzh:facts-not-status: no fact table foreign-keys against a graph's own nodes).
+#: A two-node graph (build judged into deliver) minted fresh so every chunk-domain recipe has a real node id to cite.
 _HUB_GRAPH_NAME = "hub-gate-graph"
 _HUB_GRAPH_YAML = f"""
 name: {_HUB_GRAPH_NAME}
@@ -757,23 +738,9 @@ def _tool_turn(index: int, name: str, tool_input: dict[str, object]) -> dict:
 @dataclass(frozen=True)
 class HubWorld:
     """The hub store's module-scoped seeded world — one instance built once
-    (:func:`build_hub_world`) and driven by every recipe in :data:`HUB_CENSUS`.
-
-    ``hub`` carries the production-wired :class:`~tests.support.HubHarness` (D2) —
-    ``hub.services`` is the very ``HubServices`` bundle ``build_services`` returns in
-    production, and every census recipe reads through it (or, for the chunk seam, through
-    ``read``, the same ``ChunkReadStores`` instance ``hub.services.chunks`` already is).
-    ``write`` is a second, write-typed :class:`ChunkStores` instance
-    (:func:`~tests.support.chunk_stores`) built over the identical engine/clock from the
-    same :func:`build_chunk_stores` factory — recipes never read through it, only seeding
-    does, because ``hub.services.chunks`` is typed read-only (``bzh:controller-read-only``).
-
-    The handful of ``IRead*`` protocols with neither a ``HubServices`` field nor a
-    ``ChunkReadStores`` member — the auth/session-adjacent stores, the three garden-report
-    seams ``GardenRunService``/``GardenSweepsService``/``GardenTrendService`` each wrap,
-    and the transcript-event derivation seam — get their own directly-constructed adapter
-    over the same ``store_connections``: the same concrete classes ``hub/composition.py``
-    and ``hub/app.py``'s ``build_hosted_app`` construct, per Decision 2."""
+    (:func:`build_hub_world`) and driven by every recipe in :data:`HUB_CENSUS`. ``hub`` carries the production-wired
+    :class:`~tests.support.HubHarness` (D2); ``write`` is a second, write-typed :class:`ChunkStores` instance recipes
+    never read through, only seeding does (``hub.services.chunks`` is typed read-only, ``bzh:controller-read-only``)."""
 
     hub: HubHarness
     engine: Engine
@@ -832,14 +799,11 @@ class HubWorld:
 
 
 def build_hub_world(tmp_path: Path) -> HubWorld:
-    """Seed a migrated-to-head hub store through its own write Protocols and production
-    services (Decisions 2-4), so every read method in :data:`HUB_CENSUS` reaches real,
-    non-empty behavior. Every id below is a plain literal (mirroring
-    :func:`build_runner_world`'s own style) — the store enforces no foreign key
-    (``create_engine_from_url`` never turns ``PRAGMA foreign_keys`` on), so a fact's own
-    node id only has to be real where a fact family's OWN read resolves it against the
-    graph (:class:`IReadGraphRepository` itself), never where a chunk-fact seam merely
-    carries it."""
+    """Seed a migrated-to-head hub store through its own write Protocols and production services (Decisions 2-4), so
+    every read method in :data:`HUB_CENSUS` reaches real, non-empty behavior. Every id below is a plain literal — the
+    store enforces no foreign key (``create_engine_from_url`` never turns ``PRAGMA foreign_keys`` on), so a fact's
+    own node id only has to be real where a fact family's OWN read resolves it against the graph, never where a
+    chunk-fact seam merely carries it."""
     hub = build_hub(tmp_path)
     engine = hub.engine
     clock = hub.clock
@@ -1558,8 +1522,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
 HubRecipe = Callable[[HubWorld], object]
 
-#: Every reflected ``(Protocol, method)`` under ``blizzard.hub`` (Decision 1), each mapped
-#: to a recipe run against :func:`build_hub_world`'s single seeded world.
+#: Every reflected hub ``(Protocol, method)`` (Decision 1), mapped to a recipe against :func:`build_hub_world`'s world.
 HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadAuthStateRepository, "get"): lambda w: w.auth_state.get(w.auth_state_value),
     (IReadAuthFactsRepository, "list_recent"): lambda w: w.auth_facts.list_recent(limit=50),
@@ -1816,8 +1779,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
 }
 
-#: Hub ``IRead*`` methods with no SQL behind them at all — the CLI's own local session
-#: file, not part of any hub store wiring at all.
+#: Hub ``IRead*`` methods with no SQL behind them at all, each reasoned below.
 HUB_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IReadSessionStore, "load"): (
         "blizzard.hub.cli.session_store.SessionFile implements this over a local JSON "

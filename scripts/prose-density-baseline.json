@@ -5194,11 +5194,23 @@
    "over_cap": 2,
    "total": 105
   },
+  "store_read_census.py": {
+   "comments": 43,
+   "docstrings": 31,
+   "over_cap": 0,
+   "total": 1789
+  },
+  "store_scan_allowlist.py": {
+   "comments": 23,
+   "docstrings": 12,
+   "over_cap": 0,
+   "total": 270
+  },
   "support.py": {
-   "comments": 39,
-   "docstrings": 134,
+   "comments": 40,
+   "docstrings": 148,
    "over_cap": 1,
-   "total": 951
+   "total": 1013
   },
   "support_opencode_binary.py": {
    "comments": 0,
@@ -5484,9 +5496,9 @@
   },
   "test_chunk_fact_table_indexes.py": {
    "comments": 14,
-   "docstrings": 35,
+   "docstrings": 39,
    "over_cap": 6,
-   "total": 388
+   "total": 392
   },
   "test_chunk_lifecycle_is_ephemeral.py": {
    "comments": 0,
@@ -7373,10 +7385,10 @@
    "total": 1286
   },
   "test_runner_store_indexes.py": {
-   "comments": 13,
-   "docstrings": 11,
+   "comments": 15,
+   "docstrings": 14,
    "over_cap": 0,
-   "total": 202
+   "total": 204
   },
   "test_runner_subscription_sampler_factory.py": {
    "comments": 4,
@@ -7545,6 +7557,12 @@
    "docstrings": 74,
    "over_cap": 7,
    "total": 967
+  },
+  "test_store_read_index_gate.py": {
+   "comments": 3,
+   "docstrings": 27,
+   "over_cap": 0,
+   "total": 276
   },
   "test_subprocess_check_runner.py": {
    "comments": 3,

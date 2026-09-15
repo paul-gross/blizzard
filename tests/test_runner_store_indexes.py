@@ -193,9 +193,8 @@ def test_runner_loop_scenario_never_plans_an_automatic_covering_index(tmp_path: 
 
     assert statements  # the scenario actually read from the store
 
-    # Every table, not a declared allow-list (that's a later phase) — small singleton
-    # tables (`hub_control`, `daemon_liveness`, ...) legitimately plan as a bare scan, so
-    # only sqlite's automatic covering index is a sweep-test offense here.
+    # Every table, not a declared allow-list (that's the gate's job) — small singleton tables legitimately plan as
+    # a bare scan, so only sqlite's automatic covering index is a sweep-test offense here.
     tables = sa.inspect(engine).get_table_names()
     offenders = [
         (table, row)
