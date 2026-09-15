@@ -495,6 +495,50 @@ def test_sweeps_404s_on_an_unknown_routine_id(tmp_path: Path) -> None:
         assert resp.status_code == 404, resp.text
 
 
+# --- Retiring a scope is a reversible brake, not an unlink ------------------ #
+
+
+def test_retiring_a_linked_scope_leaves_the_routine_scope_membership_intact(tmp_path: Path) -> None:
+    """D3: retire is a brake over new runs, not an unlink — a retired scope stays in
+    both directions of the routine_scopes membership it was already part of."""
+    with garden_stack(tmp_path) as g:
+        slug = "garden-svc-retired-linked"
+        created = g.hub.post("/api/scopes", json={"slug": slug, "description": ""})
+        assert created.status_code == 201, created.text
+        linked = g.hub.put(f"/api/routines/{g.routine_id}/scopes/{slug}")
+        assert linked.status_code == 204, linked.text
+
+        retired = g.hub.post(f"/api/scopes/{slug}/retire", json={"by": "operator"})
+        assert retired.status_code == 202, retired.text
+
+        routine_scopes = g.hub.get(f"/api/routines/{g.routine_id}/scopes")
+        assert routine_scopes.status_code == 200, routine_scopes.text
+        assert slug in routine_scopes.json()
+
+        scope_routines = g.hub.get(f"/api/scopes/{slug}/routines")
+        assert scope_routines.status_code == 200, scope_routines.text
+        assert g.routine_id in scope_routines.json()
+
+
+def test_retiring_a_scope_does_not_hide_its_already_delivered_findings(tmp_path: Path) -> None:
+    """D3: retire brakes new runs into a scope, not the findings list read — a finding
+    delivered before retirement still lists under it, unchanged."""
+    with garden_stack(tmp_path) as g:
+        recorded = deliver(g, [add_op("src/app.py:1")])
+        assert recorded.status_code == 200 and recorded.json()["outcome"] == "recorded", recorded.text
+        before = live(g)
+        assert len(before) == 1
+
+        retired = g.hub.post(f"/api/scopes/{_SCOPE}/retire", json={"by": "operator"})
+        assert retired.status_code == 202, retired.text
+
+        after = g.hub.get("/api/findings", params={"scope": _SCOPE})
+        assert after.status_code == 200, after.text
+        after_findings = after.json()["findings"]
+        assert [f["finding_id"] for f in after_findings] == [f["finding_id"] for f in before]
+        assert after_findings[0]["state"] == before[0]["state"]
+
+
 # --- Phase 3 — an accepted proposal's delivered item resolves its findings ---- #
 
 
