@@ -1,9 +1,9 @@
 """``ChunkRecordStore``'s batch reads — ``get_many``, ``graph_id_of_many``, and
-``list_ready``/``list_not_ready``'s optional ``statuses`` (component tier).
+``list_ready``/``list_not_ready``'s required ``statuses`` (component tier).
 
 Proves each batch read matches its singular sibling for a normal, ephemeral, and unminted
-id, stays correct across a lowered ``BATCH_SIZE`` boundary, and that a precomputed
-``statuses`` map short-circuits ``_listed_with_status``'s own facts read entirely."""
+id, stays correct across a lowered ``BATCH_SIZE`` boundary, and that filtering over a
+given ``statuses`` map costs no more than ``list_all`` alone — no facts collaborator."""
 
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ def test_graph_id_of_many_matches_across_a_batch_boundary(tmp_path: Path, monkey
     assert result == dict.fromkeys(ids, "gr_1")
 
 
-def test_list_ready_and_list_not_ready_with_explicit_statuses_match_the_derived_default(tmp_path: Path) -> None:
+def test_list_ready_and_list_not_ready_filter_by_the_given_statuses(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     _mint(store, "ch_ready")
     store.queue.record_promote("ch_ready", at=_T0)
@@ -104,8 +104,6 @@ def test_list_ready_and_list_not_ready_with_explicit_statuses_match_the_derived_
 
     statuses = store.facts.load_all_statuses()
 
-    assert store.record.list_ready(statuses=statuses) == store.record.list_ready()
-    assert store.record.list_not_ready(statuses=statuses) == store.record.list_not_ready()
     assert [c.chunk_id for c in store.record.list_ready(statuses=statuses)] == ["ch_ready"]
     assert [c.chunk_id for c in store.record.list_not_ready(statuses=statuses)] == ["ch_not_ready"]
 

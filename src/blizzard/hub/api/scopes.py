@@ -47,8 +47,11 @@ def create_scope(request: ScopeCreateRequest, services: Annotated[HubServices, D
 
 @router.get("/scopes", response_model=list[ScopeView], dependencies=[Depends(require(FLEET_VIEW))])
 def list_scopes(services: Annotated[HubServices, Depends(get_services)]) -> list[ScopeView]:
-    """Every scope, newest first, each marked retired or not."""
-    return [_scope_view(s, retired=services.scopes.is_retired(s.slug)) for s in services.scopes.list_all()]
+    """Every scope, newest first, each marked retired or not — one bulk
+    `retired_slugs` read rather than one `is_retired` call per scope."""
+    scopes = services.scopes.list_all()
+    retired = services.scopes.retired_slugs()
+    return [_scope_view(s, retired=s.slug in retired) for s in scopes]
 
 
 @router.get("/scopes/{slug}", response_model=ScopeView, dependencies=[Depends(require(FLEET_VIEW))])

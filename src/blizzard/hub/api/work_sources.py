@@ -19,13 +19,12 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.edit import UNSET
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.work import WorkItemAuthor, WorkItemPriority, WorkItemRecord, WorkRef
+from blizzard.hub.domain.work import WorkItemAuthor, WorkItemAuthorKind, WorkItemPriority, WorkItemRecord, WorkRef
 from blizzard.hub.domain.work_items import (
     WorkItemEdit,
     WorkItemHeldByDependents,
@@ -33,7 +32,7 @@ from blizzard.hub.domain.work_items import (
     WorkItemNotEditable,
 )
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
-from blizzard.hub.work_sources.source import IWorkSource, resolve_author_view
+from blizzard.hub.work_sources.source import AuthorView, IWorkSource, resolve_author_view
 from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.work_source import (
     WorkItemAuthorView,
@@ -72,10 +71,9 @@ def _stripped(value: str, field_name: str) -> str:
 
 
 def _view(
-    item: WorkItemRecord, source_obj: IWorkSource, users: IReadUserRepository, *, live_holder: str | None
+    item: WorkItemRecord, source_obj: IWorkSource, author: AuthorView, *, live_holder: str | None
 ) -> WorkItemView:
     pointer = WorkRef(source=item.source, ref=item.ref)
-    author = resolve_author_view(item.author, users)
     return WorkItemView(
         source=item.source,
         ref=item.ref,
@@ -127,9 +125,20 @@ def list_work_items(
     source_obj, editor = _require_editor(source, services)
     items = editor.list(limit=limit)
     holders = services.chunks.work_refs.live_holders(WorkRef(source=item.source, ref=item.ref) for item in items)
+    user_ids = {
+        item.author.user_id
+        for item in items
+        if item.author.kind is WorkItemAuthorKind.USER and item.author.user_id is not None
+    }
+    users_by_id = services.users.get_many(list(user_ids))
     return WorkItemsListView(
         items=[
-            _view(item, source_obj, services.users, live_holder=holders.get(WorkRef(source=item.source, ref=item.ref)))
+            _view(
+                item,
+                source_obj,
+                resolve_author_view(item.author, users_by_id),
+                live_holder=holders.get(WorkRef(source=item.source, ref=item.ref)),
+            )
             for item in items
         ]
     )
@@ -182,7 +191,12 @@ def create_work_item(
     services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     # The freshly minted resting chunk is always its own live holder — no read needed.
     return WorkItemCreateResponse(
-        **_view(created.item, source_obj, services.users, live_holder=created.chunk_id).model_dump(),
+        **_view(
+            created.item,
+            source_obj,
+            resolve_author_view(created.item.author, services.users),
+            live_holder=created.chunk_id,
+        ).model_dump(),
         chunk_id=created.chunk_id,
     )
 
@@ -201,7 +215,12 @@ def get_work_item(source: str, ref: str, services: Annotated[HubServices, Depend
         item = editor.get(pointer)
     except WorkItemRefUnknownError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return _view(item, source_obj, services.users, live_holder=services.chunks.work_refs.find_live_holder(pointer))
+    return _view(
+        item,
+        source_obj,
+        resolve_author_view(item.author, services.users),
+        live_holder=services.chunks.work_refs.find_live_holder(pointer),
+    )
 
 
 @router.patch(
@@ -233,7 +252,12 @@ def patch_work_item(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except WorkItemNotEditable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return _view(updated, source_obj, services.users, live_holder=services.chunks.work_refs.find_live_holder(pointer))
+    return _view(
+        updated,
+        source_obj,
+        resolve_author_view(updated.author, services.users),
+        live_holder=services.chunks.work_refs.find_live_holder(pointer),
+    )
 
 
 @router.delete(
@@ -272,4 +296,6 @@ def withdraw_work_item(
         )
         services.events.publish_queue_changed()  # a deleted chunk is never offered for claim again
     holder = services.chunks.work_refs.find_live_holder(pointer)
-    return _view(withdrawn.item, source_obj, services.users, live_holder=holder)
+    return _view(
+        withdrawn.item, source_obj, resolve_author_view(withdrawn.item.author, services.users), live_holder=holder
+    )

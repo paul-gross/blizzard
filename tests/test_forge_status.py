@@ -16,7 +16,7 @@ from blizzard.hub.domain.forge_status import AnnotationReconciler
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
-from tests.support import FakeAnnotator, FakeWorkSource, build_hub, count_queries, ingest
+from tests.support import FakeAnnotator, FakeWorkSource, build_hub, chunk_facts_of, count_queries, ingest
 
 # --- WorkStatusMarker.of — pure, exhaustive over ChunkStatus ---
 
@@ -74,7 +74,7 @@ def test_live_work_refs_excludes_a_terminal_chunk(tmp_path: Path) -> None:
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    hub.services.stop.stop(chunk, by="test")
+    hub.services.stop.stop(chunk, facts=chunk_facts_of(hub, chunk_id), by="test")
 
     refs = hub.services.chunks.work_refs.live_work_refs()
 
@@ -161,7 +161,7 @@ def test_sweep_clears_a_stopped_chunk(tmp_path: Path) -> None:
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    hub.services.stop.stop(chunk, by="test")
+    hub.services.stop.stop(chunk, facts=chunk_facts_of(hub, chunk_id), by="test")
     annotator = FakeAnnotator(initial={WorkRef(source="default", ref="1"): {WorkStatusMarker.INGESTED}})
     reconciler = AnnotationReconciler(
         work_refs=hub.services.chunks.work_refs, work_sources=WorkSourceRegistry({}, {"default": annotator})

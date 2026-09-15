@@ -20,12 +20,16 @@ class ChunkChanged:
     services: HubServices
     chunk_id: str
     prev_status: str | None
+    #: The pre-write facts `before()` loaded, for a domain gate to reuse; unset from `of()`.
+    facts: ChunkFacts | None = None
 
     @classmethod
     def before(cls, services: HubServices, chunk_id: str) -> ChunkChanged:
-        """The chunk's status right now; ``None`` when the chunk does not yet exist."""
+        """The chunk's status right now, and the facts it derives from — ``status`` is
+        ``None`` and ``facts`` unset when the chunk does not yet exist. A route's own
+        domain-gate call takes ``facts`` from here instead of reloading it."""
         facts = services.chunks.facts.load_facts(chunk_id)
-        return cls(services, chunk_id, None if facts is None else facts.status().value)
+        return cls(services, chunk_id, None if facts is None else facts.status().value, facts)
 
     @classmethod
     def of(cls, services: HubServices, chunk_id: str, *, prev_status: str | None) -> ChunkChanged:
@@ -39,13 +43,13 @@ class ChunkChanged:
         status: str | None = None,
         by: str | None = None,
         key: str | None = None,
-    ) -> None:
-        """Publish the fully enriched frame, loading the post-write facts, chunk, and pinned graph;
-        status derives from those unless ``status`` overrides it. ``key`` (issue #213) names the
-        durable fact just written, :class:`~blizzard.hub.domain.work.ActivityRow`'s key format, or
-        ``None``. ``by`` (issue #364, delete-route-only) still degrades to a bare ``{chunk_id, status}``
-        frame carrying ``cause``/``prev_status``/``by`` rather than raising, since the chunk is gone."""
-        facts = self.services.chunks.facts.load_facts(self.chunk_id) or ChunkFacts(minted=True)
+    ) -> ChunkFacts:
+        """Publish the fully enriched frame, loading the post-write facts, chunk, and pinned
+        graph, and return those facts so the caller renders its response from the same read
+        instead of reloading. ``key`` names the durable fact just written, or ``None``. ``by``
+        (delete-route-only) still degrades a gone chunk to a bare ``{chunk_id, status}`` frame
+        rather than raising."""
+        facts = ChunkFacts.or_default(self.services.chunks.facts.load_facts(self.chunk_id))
         resolved_status = status if status is not None else facts.status().value
         chunk = self.services.chunks.record.get(self.chunk_id)
         graph = self.services.graphs.get(chunk.graph_id) if chunk is not None else None
@@ -53,7 +57,7 @@ class ChunkChanged:
             self.services.events.publish_chunk_changed(
                 self.chunk_id, resolved_status, prev_status=self.prev_status, cause=cause, by=by, key=key
             )
-            return
+            return facts
 
         from_graph = None
         transition = facts.newest_transition()
@@ -85,3 +89,4 @@ class ChunkChanged:
             by=by,
             key=key,
         )
+        return facts

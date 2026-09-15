@@ -46,6 +46,8 @@ class RunnerRegistryStore:
             )
 
     def list_runners(self) -> list[RunnerRegistration]:
+        # Deferred: N here is registered runners, 1 today; IWriteRunnerRegistry sits at
+        # 10 of the seam's 12-method cap, so a future batch method isn't precluded.
         with self._store.read("list_runners") as conn:
             rows = conn.execute(select(s.runner_registrations).order_by(s.runner_registrations.c.registered_at)).all()
             return [

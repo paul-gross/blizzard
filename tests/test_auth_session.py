@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.auth_core import Role
+from blizzard.hub.auth.hashing import SessionId
 from tests.support import build_hub, pointer_token, seed_session, seed_user
 
 pytestmark = pytest.mark.component
@@ -174,6 +175,28 @@ def test_expired_session_is_401(tmp_path: Path) -> None:
     hub.clock.advance(timedelta(days=2))  # past the default idle TTL
     resp = hub.client.get("/api/chunks", headers=_cookie(token))
     assert resp.status_code == 401
+
+
+# --- conditional touch (sub-granularity reads skip the session write) ---------
+
+
+def test_a_second_read_within_touch_granularity_issues_no_session_write(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    user = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, user)
+    id_hash = SessionId(token).hash
+
+    hub.clock.advance(timedelta(hours=1))  # slide well past the default touch_granularity
+    assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
+    touched = hub.services.sessions.get_by_hash(id_hash)
+    assert touched is not None
+
+    hub.clock.advance(timedelta(minutes=1))  # under the default touch_granularity
+    assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
+    still = hub.services.sessions.get_by_hash(id_hash)
+    assert still is not None
+    assert still.expires_at == touched.expires_at
+    assert still.last_seen_at == touched.last_seen_at
 
 
 # --- bearer header path (the CLI's future transport, #96) ---------------------

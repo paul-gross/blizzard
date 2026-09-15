@@ -7,20 +7,25 @@ position outranking the tail stamp on restart."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.queue import IReadChunkQueueRepository, IWriteChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.queue import QueueService
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.work import Chunk, ChunkFacts
 
 
-def tail_position(record: IReadChunkRecordRepository, queue: IReadChunkQueueRepository) -> float:
+def tail_position(
+    record: IReadChunkRecordRepository, queue: IReadChunkQueueRepository, *, statuses: Mapping[str, ChunkStatus]
+) -> float:
     """The position one past every currently-ready chunk's own effective position
     (issue #137) — the one rule :meth:`PromoteService.promote` and a routine run's own
     promote-on-mint (blizzard#392) both stamp a fresh tail position by, read *before*
-    the write that stamps it."""
-    ready = record.list_ready()
+    the write that stamps it. ``statuses`` is the caller's own already-derived fleet
+    statuses, never re-derived here."""
+    ready = record.list_ready(statuses=statuses)
     if not ready:
         return 0.0
     positions = queue.queue_positions()
@@ -34,24 +39,21 @@ class PromoteService:
     def __init__(
         self,
         *,
-        facts: IReadChunkFactsRepository,
         record: IReadChunkRecordRepository,
         queue: IWriteChunkQueueRepository,
         clock: IClock,
     ) -> None:
-        self._facts = facts
         self._record = record
         self._queue = queue
         self._clock = clock
 
-    def promote(self, chunk: Chunk) -> int | None:
+    def promote(self, chunk: Chunk, *, facts: ChunkFacts, statuses: Mapping[str, ChunkStatus]) -> int | None:
         """Append the ``chunk.promoted`` fact and stamp an explicit tail position, in one
         transaction. A complete no-op on an already-promoted chunk; otherwise stamps
         :func:`tail_position`, read *before* the write, and returns the fresh
-        ``chunk_promoted.id``. Takes the loaded chunk (``bzh:domain-takes-objects``) —
-        the edge resolves ``chunk_id`` to it (404 if unknown) before calling this."""
-        facts = self._facts.load_facts(chunk.chunk_id)
-        if facts is not None and facts.promoted:
+        ``chunk_promoted.id``. Takes the chunk, its facts, and the caller's own
+        already-derived ``statuses`` (``bzh:domain-takes-objects``) rather than reloading."""
+        if facts.promoted:
             return None
-        tail = tail_position(self._record, self._queue)
+        tail = tail_position(self._record, self._queue, statuses=statuses)
         return self._queue.record_promote_with_tail_position(chunk.chunk_id, position=tail, at=self._clock.now())

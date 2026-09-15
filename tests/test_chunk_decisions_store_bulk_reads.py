@@ -1,9 +1,9 @@
-"""``ChunkDecisionsStore.dockets_for_chunks`` — ``_pending_proposals``'s batched sibling
-(component tier).
+"""``ChunkDecisionsStore``'s bulk and SQL-filtered reads (component tier).
 
-Proves each chunk's docket matches ``decision_for_chunk`` exactly — including an empty
+Proves ``dockets_for_chunks`` matches ``decision_for_chunk`` exactly — including an empty
 list for a chunk with no proposals and exclusion of judged proposals — across a lowered
-``BATCH_SIZE`` boundary, with the global judged-set read costing one statement total."""
+``BATCH_SIZE`` boundary; and that ``list_open_decisions``/``decision_for_chunk`` filter in
+SQL and hydrate in bounded batches, with a flat query count as fleet/history size grows."""
 
 from __future__ import annotations
 
@@ -51,7 +51,9 @@ def _proposal(chunk_id: str, proposal_id: str, *, ordinal: int = 0) -> WorkItemP
     )
 
 
-def _record_decision(store: ChunkStores, chunk_id: str, decision_id: str, proposals: list[WorkItemProposalRow]) -> None:
+def _record_decision(
+    store: ChunkStores, chunk_id: str, decision_id: str, proposals: list[WorkItemProposalRow], *, at: datetime = _T0
+) -> None:
     store.decisions.record_decision(
         decision_id=decision_id,
         chunk_id=chunk_id,
@@ -59,9 +61,31 @@ def _record_decision(store: ChunkStores, chunk_id: str, decision_id: str, propos
         node_name="n",
         epoch=1,
         choices=[DecisionChoice(name="ok", description="d")],
-        at=_T0,
+        at=at,
         artifacts=[],
         proposals=proposals,
+    )
+
+
+def _resolve(store: ChunkStores, decision_id: str, *, choice: str = "pass", by: str = "op") -> None:
+    store.decisions.record_decision_resolution(decision_id, choice=choice, resolved_by=by, at=_T0)
+
+
+def _transition(store: ChunkStores, chunk_id: str, decision_id: str, *, transition_id: str) -> None:
+    """Closes ``decision_id`` — the movement fact `decision_for_chunk`'s
+    ``_not_closed_clause`` reads to drop it from a chunk's live decision."""
+    store.movement.record_transition(
+        transition_id=transition_id,
+        chunk_id=chunk_id,
+        from_node_id="nd_1",
+        to_node_id="nd_2",
+        choice_name="pass",
+        epoch=1,
+        runner_id="r1",
+        at=_T0,
+        artifacts=[],
+        proposals=[],
+        decision_id=decision_id,
     )
 
 
@@ -158,9 +182,11 @@ def test_dockets_for_chunks_does_not_duplicate_an_id_repeated_across_two_batches
     assert [e.proposal.proposal_id for e in result["ch_a"]] == ["wip_a"]
 
 
-def test_dockets_for_chunks_reads_the_judged_set_once_total_not_once_per_batch(
+def test_dockets_for_chunks_query_cost_scales_linearly_with_batch_count(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Each batch's own judged/strike reads cost the same regardless of trailing size —
+    the per-batch cost is constant, so the total never outruns the batch count."""
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
     store, engine = _store(tmp_path)
     ids = [f"ch_batch_{i}" for i in range(7)]
@@ -176,3 +202,98 @@ def test_dockets_for_chunks_reads_the_judged_set_once_total_not_once_per_batch(
     assert per_batch_cost > 0
     assert two_batch_count == one_batch_count + per_batch_cost
     assert three_batch_count == one_batch_count + 2 * per_batch_cost  # the trailing size-1 batch costs the same
+
+
+def test_list_open_decisions_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small, small_engine = _store(tmp_path / "small")
+    large, large_engine = _store(tmp_path / "large")
+    for i in range(3):
+        _mint(small, f"ch_{i}")
+        _record_decision(small, f"ch_{i}", f"dec_{i}", [_proposal(f"ch_{i}", f"wip_{i}")])
+    for i in range(9):
+        _mint(large, f"ch_{i}")
+        _record_decision(large, f"ch_{i}", f"dec_{i}", [_proposal(f"ch_{i}", f"wip_{i}")])
+
+    small_count = count_queries(small_engine, lambda: small.decisions.list_open_decisions())
+    large_count = count_queries(large_engine, lambda: large.decisions.list_open_decisions())
+
+    assert len(small.decisions.list_open_decisions()) == 3
+    assert len(large.decisions.list_open_decisions()) == 9
+    assert small_count == large_count
+
+
+def test_decision_for_chunk_query_count_is_independent_of_that_chunks_history_length(tmp_path: Path) -> None:
+    """A chunk's own closed history shouldn't cost more queries the longer it gets — the
+    ``NOT EXISTS`` filter drops every closed decision in SQL, before hydration."""
+    (tmp_path / "short").mkdir()
+    (tmp_path / "long").mkdir()
+    short, short_engine = _store(tmp_path / "short")
+    long_, long_engine = _store(tmp_path / "long")
+    _mint(short, "ch_1")
+    for i in range(3):
+        _record_decision(short, "ch_1", f"dec_closed_{i}", [])
+        _resolve(short, f"dec_closed_{i}")
+        _transition(short, "ch_1", f"dec_closed_{i}", transition_id=f"tr_{i}")
+    _record_decision(short, "ch_1", "dec_live", [])
+    _mint(long_, "ch_1")
+    for i in range(9):
+        _record_decision(long_, "ch_1", f"dec_closed_{i}", [])
+        _resolve(long_, f"dec_closed_{i}")
+        _transition(long_, "ch_1", f"dec_closed_{i}", transition_id=f"tr_{i}")
+    _record_decision(long_, "ch_1", "dec_live", [])
+
+    short_count = count_queries(short_engine, lambda: short.decisions.decision_for_chunk("ch_1"))
+    long_count = count_queries(long_engine, lambda: long_.decisions.decision_for_chunk("ch_1"))
+
+    short_result = short.decisions.decision_for_chunk("ch_1")
+    long_result = long_.decisions.decision_for_chunk("ch_1")
+    assert short_result is not None and short_result.decision_id == "dec_live"
+    assert long_result is not None and long_result.decision_id == "dec_live"
+    assert short_count == long_count
+
+
+def test_list_open_decisions_and_decision_for_chunk_across_the_four_decision_shapes(tmp_path: Path) -> None:
+    """A resolved decision, an open one, a transitioned chunk, and a chunk with several
+    decisions across its history — the shapes both SQL-filtered reads must still
+    resolve correctly, over a real migrated store."""
+    store, _ = _store(tmp_path)
+    _mint(store, "ch_resolved")
+    _mint(store, "ch_open")
+    _mint(store, "ch_transitioned")
+    _mint(store, "ch_history")
+
+    _record_decision(store, "ch_resolved", "dec_resolved", [])
+    _resolve(store, "dec_resolved")
+
+    _record_decision(store, "ch_open", "dec_open", [])
+
+    _record_decision(store, "ch_transitioned", "dec_transitioned", [])
+    _resolve(store, "dec_transitioned")
+    _transition(store, "ch_transitioned", "dec_transitioned", transition_id="tr_transitioned")
+
+    _record_decision(store, "ch_history", "dec_history_old", [])
+    _resolve(store, "dec_history_old")
+    _transition(store, "ch_history", "dec_history_old", transition_id="tr_history")
+    _record_decision(store, "ch_history", "dec_history_new", [])
+
+    open_ids = {d.decision_id for d in store.decisions.list_open_decisions()}
+    assert open_ids == {"dec_open", "dec_history_new"}
+
+    resolved = store.decisions.decision_for_chunk("ch_resolved")
+    assert resolved is not None
+    assert resolved.decision_id == "dec_resolved"
+    assert resolved.resolved_choice == "pass"
+    assert not resolved.transitioned
+
+    open_decision = store.decisions.decision_for_chunk("ch_open")
+    assert open_decision is not None
+    assert open_decision.decision_id == "dec_open"
+    assert not open_decision.resolved
+
+    assert store.decisions.decision_for_chunk("ch_transitioned") is None
+
+    history = store.decisions.decision_for_chunk("ch_history")
+    assert history is not None
+    assert history.decision_id == "dec_history_new"

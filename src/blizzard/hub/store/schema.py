@@ -1166,7 +1166,7 @@ identities = Table(
 )
 
 # A hub session, resolved by its **hashed** id; the plaintext is minted once and never
-# stored. Sliding expiry: `last_seen_at`/`expires_at` are refreshed in place on resolve.
+# stored. Sliding expiry: refreshed in place on resolve, once past `touch_granularity`.
 sessions = Table(
     "sessions",
     metadata,

@@ -6,6 +6,7 @@ by the narrowest variant a job needs (``bzh:controller-read-only``)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
 from blizzard.auth_core import Role
@@ -19,6 +20,11 @@ class IReadUserRepository(Protocol):
     def get_by_username(self, username: str) -> User | None: ...
     def get_by_email(self, email: str) -> User | None: ...
     def username_exists(self, username: str) -> bool: ...
+
+    def get_many(self, user_ids: Sequence[str]) -> dict[str, User]:
+        """`get`'s batched sibling — every id in `user_ids` that names an existing user,
+        a missing id simply absent from the result rather than raising."""
+        ...
 
     def list_all(self) -> list[User]:
         """Every user, for the admin page's own listing (issue #94) — the one caller

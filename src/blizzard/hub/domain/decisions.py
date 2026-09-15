@@ -24,7 +24,7 @@ from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.proposal_auth import ProposalPolicy
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.route_auth import RouteToken
-from blizzard.hub.domain.work import Chunk, DecisionChoice, DecisionRow
+from blizzard.hub.domain.work import Chunk, ChunkFacts, DecisionChoice, DecisionRow
 from blizzard.wire.completion import SubmittedArtifact, WorkItemProposal
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -208,23 +208,20 @@ class RequeueService:
     def __init__(
         self,
         *,
-        facts: IReadChunkFactsRepository,
         movement: IWriteChunkMovementRepository,
         route: IWriteChunkRouteRepository,
         clock: IClock,
     ) -> None:
-        self._facts = facts
         self._movement = movement
         self._route = route
         self._clock = clock
 
-    def requeue(self, chunk: Chunk) -> int:
+    def requeue(self, chunk: Chunk, *, facts: ChunkFacts) -> int:
         """Supersede the open escalation and release the route so the chunk re-derives ready.
-        Takes the loaded chunk (``bzh:domain-takes-objects``) — the edge resolves ``chunk_id``
-        to it (404 if unknown) before calling this. Raises :class:`NotEscalated` if the chunk
-        is not ``needs_human``. Returns the freshly-written ``requeues.id``."""
-        facts = self._facts.load_facts(chunk.chunk_id)
-        if facts is None or facts.open_escalation() is None:
+        Takes the loaded chunk and its already-loaded ``facts`` (``bzh:domain-takes-objects``)
+        rather than reloading the latter. Raises :class:`NotEscalated` if the chunk is not
+        ``needs_human``. Returns the freshly-written ``requeues.id``."""
+        if facts.open_escalation() is None:
             raise NotEscalated(f"chunk {chunk.chunk_id} is not escalated (needs_human)")
         now = self._clock.now()
         requeue_id = self._movement.record_requeue(chunk.chunk_id, at=now)  # supersedes the escalation

@@ -6,6 +6,8 @@ sees only :class:`~blizzard.hub.auth.models.User`.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
@@ -15,6 +17,7 @@ from blizzard.hub.auth.models import User
 from blizzard.hub.auth.users import IWriteUserRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 
 
 class UserRepository:
@@ -45,6 +48,18 @@ class UserRepository:
         with self._store.read("username_exists") as conn:
             row = conn.execute(select(s.users.c.id).where(s.users.c.username == username)).one_or_none()
             return row is not None
+
+    def get_many(self, user_ids: Sequence[str]) -> dict[str, User]:
+        """`get`'s batched sibling — one query for every id in `user_ids` rather than
+        one per row, a missing id simply absent from the result."""
+        if not user_ids:
+            return {}
+        result: dict[str, User] = {}
+        with self._store.read("get_many") as conn:
+            for batch in id_batches(user_ids):
+                rows = conn.execute(select(s.users).where(s.users.c.id.in_(batch))).all()
+                result.update({row.id: self._user(row) for row in rows})
+        return result
 
     def list_all(self) -> list[User]:
         with self._store.read("list_all") as conn:

@@ -10,8 +10,10 @@ unresolvable graph refuses rather than defaults (D5)."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunks.queue import IReadChunkQueueRepository
@@ -125,6 +127,7 @@ class RunService:
         mode: RunMode,
         note: str | None,
         author: WorkItemAuthor,
+        statuses: Mapping[str, ChunkStatus],
     ) -> RunResult:
         graph = self._graphs.get_enabled_by_name(routine.graph_name)
         if graph is None:
@@ -161,7 +164,7 @@ class RunService:
             default_model=routine.default_model,
             default_effort=routine.default_effort,
         )
-        position = tail_position(self._record, self._queue)
+        position = tail_position(self._record, self._queue, statuses=statuses)
         item, promoted_id = self._items.create_with_chunk_and_promote(
             pointer=pointer,
             title=title,

@@ -62,7 +62,12 @@ def test_full_mode_mints_ingests_and_promotes(tmp_path: Path) -> None:
     routine, _graph = _routine(hub)
 
     result = hub.services.routine_run.run(
-        routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+        routine,
+        scope=_default_scope(hub, routine),
+        mode=RunMode.FULL,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
     )
 
     assert result.effective_mode is RunMode.FULL
@@ -83,7 +88,12 @@ def test_the_minted_chunk_carries_a_resolvable_run_context(tmp_path: Path) -> No
     routine, _graph = _routine(hub)
 
     result = hub.services.routine_run.run(
-        routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+        routine,
+        scope=_default_scope(hub, routine),
+        mode=RunMode.FULL,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
     )
 
     minted = hub.services.chunks.record.get(result.chunk_id)
@@ -100,7 +110,12 @@ def test_chunk_is_pinned_to_the_routines_graph(tmp_path: Path) -> None:
     routine, graph = _routine(hub)
 
     result = hub.services.routine_run.run(
-        routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+        routine,
+        scope=_default_scope(hub, routine),
+        mode=RunMode.FULL,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
     )
 
     minted = hub.services.chunks.record.get(result.chunk_id)
@@ -113,7 +128,12 @@ def test_the_routines_model_and_effort_defaults_reach_the_minted_chunk(tmp_path:
     routine, _graph = _routine(hub, model=["opus"], effort="high")
 
     result = hub.services.routine_run.run(
-        routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+        routine,
+        scope=_default_scope(hub, routine),
+        mode=RunMode.FULL,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
     )
 
     minted = hub.services.chunks.record.get(result.chunk_id)
@@ -128,7 +148,14 @@ def test_a_scope_override_outside_the_routines_related_set_is_refused_never_mint
     unrelated = hub.services.scope_registry.ensure(ScopeSlug.parse("unrelated"))
 
     with pytest.raises(ScopeNotRelatedError):
-        hub.services.routine_run.run(routine, scope=unrelated, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        hub.services.routine_run.run(
+            routine,
+            scope=unrelated,
+            mode=RunMode.FULL,
+            note=None,
+            author=_AUTHOR,
+            statuses=hub.services.chunks.facts.load_all_statuses(),
+        )
 
 
 def test_a_scope_override_naming_a_related_scope_runs_against_it(tmp_path: Path) -> None:
@@ -137,7 +164,14 @@ def test_a_scope_override_naming_a_related_scope_runs_against_it(tmp_path: Path)
     related = hub.services.scope_registry.ensure(ScopeSlug.parse("related"))
     hub.services.routine_scope_membership.link(routine, related)
 
-    result = hub.services.routine_run.run(routine, scope=related, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(
+        routine,
+        scope=related,
+        mode=RunMode.FULL,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
+    )
 
     assert result.item.scope_slug == "related"
 
@@ -147,7 +181,12 @@ def test_delta_against_a_never_swept_pair_downgrades_to_full(tmp_path: Path) -> 
     routine, _graph = _routine(hub)
 
     result = hub.services.routine_run.run(
-        routine, scope=_default_scope(hub, routine), mode=RunMode.DELTA, note=None, author=_AUTHOR
+        routine,
+        scope=_default_scope(hub, routine),
+        mode=RunMode.DELTA,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
     )
 
     assert result.effective_mode is RunMode.FULL
@@ -162,7 +201,12 @@ def test_delta_with_a_recorded_baseline_stays_delta_and_names_its_revisions(tmp_
     _seed_baseline(hub, graph_id=graph.graph_id, routine_name=routine.name, scope_slug="blizzard")
 
     result = hub.services.routine_run.run(
-        routine, scope=_default_scope(hub, routine), mode=RunMode.DELTA, note=None, author=_AUTHOR
+        routine,
+        scope=_default_scope(hub, routine),
+        mode=RunMode.DELTA,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
     )
 
     assert result.effective_mode is RunMode.DELTA
@@ -177,7 +221,12 @@ def test_a_note_lands_in_the_charge_as_a_this_run_section(tmp_path: Path) -> Non
     routine, _graph = _routine(hub)
 
     result = hub.services.routine_run.run(
-        routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note="focus on the auth module", author=_AUTHOR
+        routine,
+        scope=_default_scope(hub, routine),
+        mode=RunMode.FULL,
+        note="focus on the auth module",
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
     )
 
     assert "This run" in result.item.body
@@ -193,7 +242,12 @@ def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> Non
 
     with pytest.raises(ScopeRetiredError):
         hub.services.routine_run.run(
-            routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+            routine,
+            scope=_default_scope(hub, routine),
+            mode=RunMode.FULL,
+            note=None,
+            author=_AUTHOR,
+            statuses=hub.services.chunks.facts.load_all_statuses(),
         )
 
 
@@ -204,7 +258,12 @@ def test_a_routine_whose_graph_has_no_enabled_mint_is_refused(tmp_path: Path) ->
 
     with pytest.raises(RoutineGraphUnresolvedError):
         hub.services.routine_run.run(
-            routine, scope=_default_scope(hub, routine), mode=RunMode.FULL, note=None, author=_AUTHOR
+            routine,
+            scope=_default_scope(hub, routine),
+            mode=RunMode.FULL,
+            note=None,
+            author=_AUTHOR,
+            statuses=hub.services.chunks.facts.load_all_statuses(),
         )
 
 

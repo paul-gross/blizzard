@@ -14,7 +14,7 @@ from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.work import WorkItemCloseOutcome, WorkRef
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, ingest
+from tests.support import HubHarness, build_hub, chunk_facts_of, ingest
 
 pytestmark = pytest.mark.component
 
@@ -83,7 +83,7 @@ def test_a_stop_with_no_landing_enqueues_nothing(tmp_path: Path) -> None:
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
 
-    hub.services.stop.stop(chunk, by="test")
+    hub.services.stop.stop(chunk, facts=chunk_facts_of(hub, chunk_id), by="test")
 
     assert _pending_intents(hub) == set()
 
@@ -94,7 +94,7 @@ def test_operator_completion_enqueues_even_with_no_landed_repos(tmp_path: Path) 
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
 
-    hub.services.complete.complete(chunk, by="test")
+    hub.services.complete.complete(chunk, facts=chunk_facts_of(hub, chunk_id), by="test")
 
     assert _pending_intents(hub) == {(chunk_id, "default", "1")}
 

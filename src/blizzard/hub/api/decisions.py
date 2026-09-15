@@ -9,15 +9,16 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import FLEET_VIEW, GATE_RESOLVE
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require, resolved_username
+from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
+from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.work import DecisionRow, DocketEntry
 from blizzard.wire.completion import CreateWorkItemProposal, UpdateWorkItemProposal
@@ -87,16 +88,12 @@ def list_decisions(services: Annotated[HubServices, Depends(get_services)]) -> O
     )
 
 
-@router.post(
-    "/decisions/{decision_id}/resolutions",
-    response_model=DecisionResolutionResponse,
-    dependencies=[Depends(require(GATE_RESOLVE))],
-)
+@router.post("/decisions/{decision_id}/resolutions", response_model=DecisionResolutionResponse)
 def resolve_decision(
     decision_id: str,
     request: DecisionResolutionRequest,
-    http_request: Request,
     services: Annotated[HubServices, Depends(get_services)],
+    identity: Annotated[ResolvedIdentity, Depends(require(GATE_RESOLVE))],
 ) -> object:
     """Resolve an open decision, first-write-wins CAS.
 
@@ -108,7 +105,7 @@ def resolve_decision(
     change = chunk_events.ChunkChanged.before(services, pre_decision.chunk_id)
     try:
         result = services.decisions.resolve(
-            pre_decision, choice=request.choice, resolved_by=resolved_username(http_request), struck=request.struck
+            pre_decision, choice=request.choice, resolved_by=identity.username, struck=request.struck
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

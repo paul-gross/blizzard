@@ -739,6 +739,12 @@ class ChunkFacts:
     # Never a status: pending is a facet of ``delivering``.
     hub_node_polls: list[HubNodePollFact] = field(default_factory=list)
 
+    @staticmethod
+    def or_default(facts: ChunkFacts | None) -> ChunkFacts:
+        """``facts``, or the unminted default — the one fallback every reader of a
+        possibly-absent pre-write ``ChunkFacts`` applies, instead of repeating it."""
+        return facts if facts is not None else ChunkFacts(minted=True)
+
     def newest_transition(self) -> TransitionFact | None:
         """The chunk's newest accepted transition — its current node derives from this.
 

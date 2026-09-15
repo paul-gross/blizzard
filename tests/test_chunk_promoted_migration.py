@@ -47,4 +47,4 @@ def test_backfill_keeps_preexisting_chunks_ready(tmp_path: Path) -> None:
     facts = store.facts.load_facts("ch_legacy")
     assert facts is not None and facts.promoted is True
     assert facts.status() is ChunkStatus.READY  # unaffected — still claimable
-    assert [c.chunk_id for c in store.record.list_ready()] == ["ch_legacy"]
+    assert [c.chunk_id for c in store.record.list_ready(statuses=store.facts.load_all_statuses())] == ["ch_legacy"]

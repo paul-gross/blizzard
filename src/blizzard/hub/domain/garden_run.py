@@ -302,18 +302,21 @@ class GardenRunService:
         self._findings = findings
 
     def list_runs(self, *, since: datetime, until: datetime) -> list[RunRow]:
-        """`chunk_records`/`chunk_facts` are read one chunk at a time — `records` is
-        already the window's own bounded set (`runs_in_window`'s own SQL `WHERE`), so
-        the per-row cost tracks runs in the window, not `list_all`/`load_all_facts`'s
-        whole-store cost, which would grow with every chunk the fleet has ever minted
-        regardless of how few runs the window actually names."""
+        """One bulk `get_many` and one bulk `load_facts_for` resolve every window run's
+        chunk and chunk facts, rather than one `get`/`load_facts` pair per run —
+        `records` is already the window's own bounded set (`runs_in_window`'s own SQL
+        `WHERE`), so the batch cost tracks runs in the window, not `list_all`'s whole-store
+        cost."""
         records = self._repo.runs_in_window(since=since, until=until)
+        chunk_ids = [record.identity.chunk_id for record in records]
+        chunks_by_id = self._chunk_records.get_many(chunk_ids)
+        facts_by_id = self._chunk_facts.load_facts_for(chunk_ids)
         rows: list[RunRow] = []
         for record in records:
-            chunk = self._chunk_records.get(record.identity.chunk_id)
+            chunk = chunks_by_id.get(record.identity.chunk_id)
             if chunk is None:
                 continue  # an ephemeral (grouped-away/deleted) chunk's run is absent from every read
-            facts = self._chunk_facts.load_facts(record.identity.chunk_id) or ChunkFacts(minted=True)
+            facts = facts_by_id.get(record.identity.chunk_id) or ChunkFacts(minted=True)
             outcome, escalation = _outcome_and_escalation(chunk.graph_id, facts)
             rows.append(
                 RunRow(

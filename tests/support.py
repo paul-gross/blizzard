@@ -56,6 +56,7 @@ from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.domain.work import (
     Chunk,
+    ChunkFacts,
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemRecord,
@@ -755,6 +756,13 @@ def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> st
         promoted = hub.client.post(f"/api/chunks/{chunk_id}/promote")
         assert promoted.status_code == 202, promoted.text
     return chunk_id
+
+
+def chunk_facts_of(hub: HubHarness, chunk_id: str) -> ChunkFacts:
+    """A chunk's current facts, or the unminted default — the same fallback every route
+    applies, for a test calling a write-verb domain service directly rather than through
+    its route (which would otherwise supply this from its own ``ChunkChanged.before``)."""
+    return ChunkFacts.or_default(hub.services.chunks.facts.load_facts(chunk_id))
 
 
 def write_chunk_pause_facts(tmp_path: Path, chunk_id: str, *facts: tuple[bool, datetime]) -> None:

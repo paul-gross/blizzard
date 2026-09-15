@@ -3,6 +3,7 @@ a chunk's promotion between them."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
@@ -40,14 +41,15 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
         way as :meth:`record_promote`: returns ``None`` on an already-promoted chunk."""
         ...
 
-    def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
-        """Append a ready chunk's new queue position; order derives."""
+    def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
+        """Append every ``(chunk_id, position)`` pair's new queue position in one write
+        transaction (issue #421 follow-up) — a whole-order replace of N chunks costs one
+        write, not N; order derives."""
         ...
 
-    def record_backlog_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
-        """Append a ``not_ready`` chunk's new backlog position; order derives.
-
-        A no-op if ``chunk_id`` was promoted since the caller resolved its backlog
-        candidates — a promote's fresh tail stamp must never be overridden by a
-        reorder that raced it (issue #137's backlog follow-up)."""
+    def record_backlog_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
+        """Same shape as :meth:`record_queue_positions`, but each pair is guarded against
+        a chunk promoted since the caller resolved its backlog candidates — a promote's
+        fresh tail stamp must never be overridden by a reorder that raced it (issue
+        #137's backlog follow-up); the guard itself is one bulk read, not one per pair."""
         ...

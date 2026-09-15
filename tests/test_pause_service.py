@@ -1,9 +1,9 @@
 """PauseService (unit tier) — the operator's per-chunk brake, facts only (issue #46).
 
-A fake stands in for the store — only ``load_facts``/``record_pause`` are meaningfully
-implemented; every other seam raises loudly if called (``bzh:domain-core`` — no store,
-no tokens).
-"""
+A fake stands in for the lifecycle store — only ``record_pause`` is meaningfully
+implemented; every other seam raises loudly if called. ``facts`` is the caller's own
+already-loaded value now (``bzh:domain-takes-objects``), so each test builds it directly
+rather than handing it to the service through a fake repo."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.pause import ChunkNotPausable, PauseService
@@ -37,26 +36,15 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 @dataclass
 class _FakeChunkRepo:
-    """Only ``load_facts``/``record_pause`` are live; anything else is a bug.
+    """Only ``record_pause`` is live; anything else is a bug."""
 
-    Callers wrap an instance in :func:`_as_write_repo` for pyright's structural check."""
-
-    facts: ChunkFacts | None
     recorded: list[tuple[str, bool, str, datetime]] = field(default_factory=list)
-
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
-        return self.facts
 
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> None:
         self.recorded.append((chunk_id, paused, by, at))
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"PauseService should not touch {name!r}")
-
-
-def _as_facts(repo: _FakeChunkRepo) -> IReadChunkFactsRepository:
-    """Assert the fake satisfies the Protocol PauseService depends on (see module docstring)."""
-    return cast(IReadChunkFactsRepository, repo)
 
 
 def _as_lifecycle(repo: _FakeChunkRepo) -> IWriteChunkLifecycleRepository:
@@ -116,11 +104,11 @@ def _done_facts() -> ChunkFacts:
 )
 def test_pause_refuses_done_stopped_and_delivering(facts_factory: object) -> None:
     clock = FixedClock(instant=_T0)
-    repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
-    service = PauseService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
+    repo = _FakeChunkRepo()
+    service = PauseService(lifecycle=_as_lifecycle(repo), clock=clock)
 
     with pytest.raises(ChunkNotPausable):
-        service.pause(_CHUNK, by="operator")
+        service.pause(_CHUNK, facts=facts_factory(), by="operator")  # type: ignore[operator]
 
     assert repo.recorded == []
 
@@ -133,10 +121,10 @@ def test_pause_refuses_done_stopped_and_delivering(facts_factory: object) -> Non
 def test_pause_allows_running_ready_and_human_gated_statuses(facts_factory: object) -> None:
     # Decided: the lever stays broad — pause is not refused on waiting_on_human/needs_human.
     clock = FixedClock(instant=_T0)
-    repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
-    service = PauseService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
+    repo = _FakeChunkRepo()
+    service = PauseService(lifecycle=_as_lifecycle(repo), clock=clock)
 
-    service.pause(_CHUNK, by="operator")
+    service.pause(_CHUNK, facts=facts_factory(), by="operator")  # type: ignore[operator]
 
     assert repo.recorded == [("chk_1", True, "operator", _T0)]
 
@@ -151,10 +139,10 @@ def test_resume_is_never_refused_not_even_for_the_statuses_pause_refuses(facts_f
     pause must not engage on finished/in-flight work, but disengaging a brake is
     always safe."""
     clock = FixedClock(instant=_T0)
-    repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
-    service = PauseService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
+    repo = _FakeChunkRepo()
+    service = PauseService(lifecycle=_as_lifecycle(repo), clock=clock)
 
-    service.resume(_CHUNK, by="operator")  # no raise
+    service.resume(_CHUNK, by="operator")  # no raise, and takes no facts at all
 
     assert repo.recorded == [("chk_1", False, "operator", _T0)]
 
@@ -162,8 +150,8 @@ def test_resume_is_never_refused_not_even_for_the_statuses_pause_refuses(facts_f
 def test_resume_twice_is_a_harmless_no_op() -> None:
     """Idempotent by repetition: the second resume is just another newest-wins fact."""
     clock = FixedClock(instant=_T0)
-    repo = _FakeChunkRepo(facts=_ready_facts())
-    service = PauseService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
+    repo = _FakeChunkRepo()
+    service = PauseService(lifecycle=_as_lifecycle(repo), clock=clock)
 
     service.resume(_CHUNK, by="operator")
     service.resume(_CHUNK, by="operator")
@@ -174,11 +162,11 @@ def test_resume_twice_is_a_harmless_no_op() -> None:
 def test_pause_refusal_carries_the_offending_status_on_the_exception() -> None:
     """The typed exception carries the status the 409 detail is built from."""
     clock = FixedClock(instant=_T0)
-    repo = _FakeChunkRepo(facts=_delivering_facts())
-    service = PauseService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
+    repo = _FakeChunkRepo()
+    service = PauseService(lifecycle=_as_lifecycle(repo), clock=clock)
 
     with pytest.raises(ChunkNotPausable) as excinfo:
-        service.pause(_CHUNK, by="operator")
+        service.pause(_CHUNK, facts=_delivering_facts(), by="operator")
 
     assert excinfo.value.status is ChunkStatus.DELIVERING
     assert excinfo.value.chunk_id == "chk_1"
@@ -190,18 +178,8 @@ def test_resume_is_idempotent_on_an_unpaused_chunk() -> None:
     # No refusal at all: resume just appends paused=False, a harmless no-op via
     # newest-fact-wins, matching POST /runners/{id}/resume.
     clock = FixedClock(instant=_T0)
-    repo = _FakeChunkRepo(facts=_ready_facts())
-    service = PauseService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
-
-    service.resume(_CHUNK, by="operator")
-
-    assert repo.recorded == [("chk_1", False, "operator", _T0)]
-
-
-def test_resume_is_idempotent_on_a_chunk_with_no_facts_at_all() -> None:
-    clock = FixedClock(instant=_T0)
-    repo = _FakeChunkRepo(facts=None)
-    service = PauseService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
+    repo = _FakeChunkRepo()
+    service = PauseService(lifecycle=_as_lifecycle(repo), clock=clock)
 
     service.resume(_CHUNK, by="operator")
 
@@ -210,10 +188,10 @@ def test_resume_is_idempotent_on_a_chunk_with_no_facts_at_all() -> None:
 
 def test_set_by_is_carried_onto_the_recorded_fact() -> None:
     clock = FixedClock(instant=_T0)
-    repo = _FakeChunkRepo(facts=_ready_facts())
-    service = PauseService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
+    repo = _FakeChunkRepo()
+    service = PauseService(lifecycle=_as_lifecycle(repo), clock=clock)
 
-    service.pause(_CHUNK, by="paul")
+    service.pause(_CHUNK, facts=_ready_facts(), by="paul")
 
     assert repo.recorded == [("chk_1", True, "paul", _T0)]
 
@@ -221,9 +199,9 @@ def test_set_by_is_carried_onto_the_recorded_fact() -> None:
 def test_pause_uses_the_injected_clock_not_the_wall_clock() -> None:
     later = datetime(2026, 6, 1, tzinfo=UTC)
     clock = FixedClock(instant=later)
-    repo = _FakeChunkRepo(facts=_ready_facts())
-    service = PauseService(facts=_as_facts(repo), lifecycle=_as_lifecycle(repo), clock=clock)
+    repo = _FakeChunkRepo()
+    service = PauseService(lifecycle=_as_lifecycle(repo), clock=clock)
 
-    service.pause(_CHUNK, by="operator")
+    service.pause(_CHUNK, facts=_ready_facts(), by="operator")
 
     assert repo.recorded == [("chk_1", True, "operator", later)]

@@ -97,7 +97,7 @@ _ADAPTER_CASES = [
     ),
     _AdapterCase(
         "ChunkRecordStore",
-        lambda store: ChunkRecordStore(store, FixedClock(_NOW), facts=ChunkFactsStore(store, FixedClock(_NOW))),
+        lambda store: ChunkRecordStore(store, FixedClock(_NOW)),
         lambda a: a.get("ch_x"),
         "get",
     ),

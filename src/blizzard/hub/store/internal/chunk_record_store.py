@@ -14,7 +14,6 @@ from sqlalchemy import select, update
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.work import Chunk, IntendedMigration, WorkRef
 from blizzard.hub.store import schema as s
@@ -35,10 +34,9 @@ from blizzard.hub.store.internal.chunk_rows import (
 class ChunkRecordStore:
     """The chunk row itself — mint, listing, and the repin columns."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock, *, facts: IReadChunkFactsRepository) -> None:
+    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
-        self._facts = facts
 
     def get(self, chunk_id: str) -> Chunk | None:
         with self._store.read("get") as conn:
@@ -122,22 +120,20 @@ class ChunkRecordStore:
                 for r in rows
             ]
 
-    def list_ready(self, *, statuses: Mapping[str, ChunkStatus] | None = None) -> list[Chunk]:
+    def list_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         return self._listed_with_status(ChunkStatus.READY, statuses=statuses)
 
-    def list_not_ready(self, *, statuses: Mapping[str, ChunkStatus] | None = None) -> list[Chunk]:
+    def list_not_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         return self._listed_with_status(ChunkStatus.NOT_READY, statuses=statuses)
 
-    def _listed_with_status(
-        self, status: ChunkStatus, *, statuses: Mapping[str, ChunkStatus] | None = None
-    ) -> list[Chunk]:
-        """:meth:`list_all` narrowed by derived status, over ``statuses`` when given, else
-        ``load_all_statuses``'s own bulk read — the queue/backlog peeks read the whole
-        fleet, so cost must not scale with it (issue #421). Reading the listing first
-        excludes a chunk deleted between the two reads, never mistaking it for unwritten."""
+    def _listed_with_status(self, status: ChunkStatus, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+        """:meth:`list_all` narrowed by ``statuses`` — the caller's own already-derived
+        fleet statuses, never this seam's own facts read (the queue/backlog peeks read
+        the whole fleet, so cost must not scale with it, issue #421). Reading the listing
+        first excludes a chunk deleted between the two reads, never mistaking it for
+        unwritten."""
         chunks = self.list_all()
-        resolved = statuses if statuses is not None else self._facts.load_all_statuses()
-        return [c for c in chunks if resolved.get(c.chunk_id) is status]
+        return [c for c in chunks if statuses.get(c.chunk_id) is status]
 
     def mint(self, chunk: Chunk) -> None:
         with self._store.write("mint") as conn:

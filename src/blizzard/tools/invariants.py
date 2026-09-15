@@ -875,7 +875,7 @@ class HubInvariants:
             violations.extend(MigrationsAtomic(conn).run())
         store_connections = HubStoreConnections(self.engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
         facts_store = ChunkFactsStore(store_connections, self.clock)
-        record_store = ChunkRecordStore(store_connections, self.clock, facts=facts_store)
+        record_store = ChunkRecordStore(store_connections, self.clock)
         for facts_check in (
             DerivationAndDelivery(facts_store, record_store),
             LiveRouteHasToken(facts_store, record_store),

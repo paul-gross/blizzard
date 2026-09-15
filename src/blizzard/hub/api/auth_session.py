@@ -66,20 +66,6 @@ def resolve_identity(request: Request, services: HubServices | None) -> Resolved
     return services.auth.touch_session(session)
 
 
-def resolved_username(request: Request) -> str:
-    """The resolved identity's username — ``"operator"`` under ``none``, the session's
-    username under ``oauth``.
-
-    Reads ``request.app.state`` directly: a plain helper a route body calls once its own
-    ``require(<permission>)`` dependency has already guaranteed services are wired."""
-    mode = request.app.state.config.auth.mode
-    if mode == AUTH_MODE_NONE:
-        return IMPLICIT_OPERATOR.username
-    services = get_services(request)
-    identity = resolve_identity(request, services)
-    return identity.username if identity is not None else IMPLICIT_OPERATOR.username
-
-
 def require(permission: Permission) -> Callable[[Request], ResolvedIdentity]:
     """A dependency factory: the returned dependency resolves the identity and raises
     ``401`` (no/expired session) or ``403`` (insufficient permission); grants under

@@ -221,11 +221,12 @@ class ClaimService:
         """The earliest-declared standing edge naming ``chunk_id`` as dependent whose
         prerequisite has not reached ``done`` — ``None`` when every standing edge is met
         or the chunk carries none. Filters the full standing set rather than a targeted
-        read, mirroring ``DependencyService``'s own cycle check: the read seam answers
-        two questions and no more (``blizzard.hub.domain.chunks.dependencies``)."""
+        read, mirroring ``DependencyService``'s own cycle check, resolving every
+        prerequisite's facts with one bulk ``load_facts_for`` call rather than one per edge."""
         edges = [e for e in self._dependencies.list_standing_edges() if e.dependent_chunk_id == chunk_id]
+        facts_by_id = self._facts.load_facts_for([edge.prerequisite_chunk_id for edge in edges])
         for edge in edges:
-            prerequisite_facts = self._facts.load_facts(edge.prerequisite_chunk_id)
+            prerequisite_facts = facts_by_id.get(edge.prerequisite_chunk_id)
             status = prerequisite_facts.status() if prerequisite_facts is not None else ChunkStatus.NOT_READY
             if status != ChunkStatus.DONE:
                 return edge.prerequisite_chunk_id

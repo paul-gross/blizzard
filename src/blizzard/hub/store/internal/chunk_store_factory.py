@@ -33,7 +33,7 @@ def build_chunk_stores(store: HubStoreConnections, clock: IClock) -> ChunkStores
     facts = ChunkFactsStore(store, clock)
     return ChunkStores(
         facts=facts,
-        record=ChunkRecordStore(store, clock, facts=facts),
+        record=ChunkRecordStore(store, clock),
         lifecycle=ChunkLifecycleStore(store, clock),
         work_refs=ChunkWorkRefsStore(store, clock, facts=facts),
         queue=ChunkQueueStore(store, clock),

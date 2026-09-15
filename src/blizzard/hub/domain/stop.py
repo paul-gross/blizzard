@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.work import Chunk, ChunkFacts
 
@@ -28,24 +27,19 @@ class ChunkNotStoppable(Exception):
 class StopService:
     """Terminally abandon a chunk and release any route it holds — ``blizzard hub stop``."""
 
-    def __init__(
-        self, *, facts: IReadChunkFactsRepository, lifecycle: IWriteChunkLifecycleRepository, clock: IClock
-    ) -> None:
-        self._facts = facts
+    def __init__(self, *, lifecycle: IWriteChunkLifecycleRepository, clock: IClock) -> None:
         self._lifecycle = lifecycle
         self._clock = clock
 
-    def stop(self, chunk: Chunk, *, by: str) -> int:
-        """Append ``chunk.stopped`` and release the chunk's live route (and any held
-        hub-exec slot), atomically.
-
-        Raises :class:`ChunkNotStoppable` for a chunk already done/stopped — no fact
-        written, no route touched. Returns the ``chunk_stopped.id`` (issue #213)."""
-        self._require_stoppable(chunk.chunk_id)
+    def stop(self, chunk: Chunk, *, facts: ChunkFacts, by: str) -> int:
+        """Append ``chunk.stopped`` and release the chunk's live route (and any held hub-exec
+        slot), atomically. Takes the caller's already-loaded ``facts``
+        (``bzh:domain-takes-objects``) rather than reloading them. Raises
+        :class:`ChunkNotStoppable` for a chunk already done/stopped. Returns the id."""
+        self._require_stoppable(chunk.chunk_id, facts)
         return self._lifecycle.record_stop(chunk.chunk_id, by=by, at=self._clock.now())
 
-    def _require_stoppable(self, chunk_id: str) -> None:
-        facts = self._facts.load_facts(chunk_id) or ChunkFacts(minted=True)
+    def _require_stoppable(self, chunk_id: str, facts: ChunkFacts) -> None:
         status = facts.status()
         if status in _REFUSED:
             raise ChunkNotStoppable(chunk_id, status)

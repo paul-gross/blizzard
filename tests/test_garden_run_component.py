@@ -55,7 +55,14 @@ def _run(hub: HubHarness, routine: Routine) -> str:
     joined through a genuine `chunk_work_refs`/`work_items` pointer, not hand-rolled."""
     scope = hub.services.scopes.get(routine.default_scope_slug)
     assert scope is not None
-    result = hub.services.routine_run.run(routine, scope=scope, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(
+        routine,
+        scope=scope,
+        mode=RunMode.FULL,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
+    )
     return result.chunk_id
 
 

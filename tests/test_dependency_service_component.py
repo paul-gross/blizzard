@@ -15,7 +15,7 @@ from sqlalchemy import select
 from blizzard.hub.domain.dependencies import NoStandingDependencyToRelease, PrerequisiteIsEphemeral
 from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, ingest
+from tests.support import HubHarness, build_hub, chunk_facts_of, ingest
 
 pytestmark = pytest.mark.component
 
@@ -33,7 +33,9 @@ def test_an_edge_onto_a_done_prerequisite_is_accepted_with_no_satisfaction_state
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
-    hub.services.complete.complete(_resolve(hub, prerequisite_id), by="user:alice")
+    hub.services.complete.complete(
+        _resolve(hub, prerequisite_id), facts=chunk_facts_of(hub, prerequisite_id), by="user:alice"
+    )
     prerequisite_facts = hub.services.chunks.facts.load_facts(prerequisite_id)
     assert prerequisite_facts is not None
     assert prerequisite_facts.status().value == "done"

@@ -63,6 +63,8 @@ class RoutineBaselineService:
         recorded_at = minted_id.minted_at if minted_id is not None else None
         if recorded_at is None:
             raise MalformedFindingSetIdError(finding_set.finding_set_id)
+        # Deferred: N here is a routine's own repo count, each with its own `since`, not
+        # the fleet's — small and bounded regardless of fleet size.
         repos = [
             RepoLandings(
                 repo=repo, revision=revision, landed_since=self._delivery.count_landed_since(repo, recorded_at)

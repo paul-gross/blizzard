@@ -153,7 +153,7 @@ def seat_hub_work_source(
     ``delete``/``resolution`` are the composition root's own instances (#362, #364,
     blizzard#394), so every write path shares the same claim-locked instances."""
     facts = ChunkFactsStore(store, clock)
-    record = ChunkRecordStore(store, clock, facts=facts)
+    record = ChunkRecordStore(store, clock)
     work_refs = ChunkWorkRefsStore(store, clock, facts=facts)
     edits = WorkItemEditService(
         items=items, work_refs=work_refs, record=record, facts=facts, clock=clock, delete=delete

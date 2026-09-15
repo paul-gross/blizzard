@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.work import Chunk, ChunkFacts
 
@@ -17,19 +16,15 @@ from blizzard.hub.domain.work import Chunk, ChunkFacts
 class CompleteService:
     """Manually complete a chunk, from any non-``done`` status — ``blizzard hub chunk done``."""
 
-    def __init__(
-        self, *, facts: IReadChunkFactsRepository, lifecycle: IWriteChunkLifecycleRepository, clock: IClock
-    ) -> None:
-        self._facts = facts
+    def __init__(self, *, lifecycle: IWriteChunkLifecycleRepository, clock: IClock) -> None:
         self._lifecycle = lifecycle
         self._clock = clock
 
-    def complete(self, chunk: Chunk, *, by: str) -> int | None:
+    def complete(self, chunk: Chunk, *, facts: ChunkFacts, by: str) -> int | None:
         """Append ``chunk.completed`` and release the chunk's live route (and any held
-        hub-exec slot), atomically. A complete no-op on an already-``done`` chunk — returns
-        ``None`` rather than writing a second fact. Otherwise returns the fresh
-        ``chunk_completed.id`` (issue #213's activity-feed key)."""
-        facts = self._facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
+        hub-exec slot), atomically. Takes the caller's already-loaded ``facts``
+        (``bzh:domain-takes-objects``) rather than reloading them. A no-op on an
+        already-``done`` chunk — returns ``None``; otherwise the fresh ``chunk_completed.id``."""
         if facts.status() is ChunkStatus.DONE:
             return None
         return self._lifecycle.record_completion(chunk.chunk_id, by=by, at=self._clock.now())

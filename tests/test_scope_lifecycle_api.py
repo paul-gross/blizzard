@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub
+from tests.support import HubHarness, build_hub, count_queries
 
 pytestmark = pytest.mark.component
 
@@ -66,6 +66,26 @@ def test_list_renders_every_scope_including_retired(tmp_path: Path) -> None:
 
     assert rows["alpha"]["retired"] is False
     assert rows["beta"]["retired"] is True
+
+
+def test_list_scopes_query_count_is_independent_of_scope_count(tmp_path: Path) -> None:
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small = build_hub(tmp_path / "small")
+    for i in range(3):
+        small.client.post("/api/scopes", json={"slug": f"scope-{i}", "description": ""})
+    large = build_hub(tmp_path / "large")
+    for i in range(9):  # 3x the small fleet
+        large.client.post("/api/scopes", json={"slug": f"scope-{i}", "description": ""})
+
+    def call(hub: HubHarness) -> None:
+        resp = hub.client.get("/api/scopes")
+        assert resp.status_code == 200, resp.text
+
+    small_count = count_queries(small.engine, lambda: call(small))
+    large_count = count_queries(large.engine, lambda: call(large))
+
+    assert small_count == large_count
 
 
 def test_get_unknown_scope_is_404(tmp_path: Path) -> None:

@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.queue import IReadChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
@@ -106,7 +107,7 @@ class _FakeChunks:
     promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict)
     live_holder: str | None = None
 
-    def list_ready(self) -> list[Chunk]:
+    def list_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
         return self.ready
 
     def queue_positions(self) -> dict[str, float]:
@@ -191,14 +192,14 @@ def test_run_unresolved_graph_raises_naming_it() -> None:
     service, *_ = _service(graphs=_FakeGraphs(resolvable={}))
 
     with pytest.raises(RoutineGraphUnresolvedError, match="default"):
-        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
 
 
 def test_run_retired_default_scope_is_refused() -> None:
     service, *_ = _service(scopes=_FakeScopes(retired={"blizzard"}))
 
     with pytest.raises(ScopeRetiredError, match="blizzard"):
-        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
 
 
 def test_run_retired_override_scope_is_refused() -> None:
@@ -207,7 +208,7 @@ def test_run_retired_override_scope_is_refused() -> None:
     service, *_ = _service(scopes=scopes, routine_scopes=_FakeRoutineScopes(related=["blizzard", "cold"]))
 
     with pytest.raises(ScopeRetiredError, match="cold"):
-        service.run(_ROUTINE, scope=cold, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope=cold, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
 
 
 def test_run_refuses_an_override_outside_the_routines_related_set() -> None:
@@ -216,7 +217,7 @@ def test_run_refuses_an_override_outside_the_routines_related_set() -> None:
     service, *_ = _service(scopes=scopes)  # routine_scopes defaults to just ["blizzard"]
 
     with pytest.raises(ScopeNotRelatedError, match="unrelated"):
-        service.run(_ROUTINE, scope=unrelated, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope=unrelated, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
 
 
 def test_run_refuses_a_related_check_before_the_retire_check() -> None:
@@ -228,13 +229,13 @@ def test_run_refuses_a_related_check_before_the_retire_check() -> None:
     service, *_ = _service(scopes=scopes)
 
     with pytest.raises(ScopeNotRelatedError):
-        service.run(_ROUTINE, scope=unrelated, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope=unrelated, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
 
 
 def test_run_delta_with_no_baseline_downgrades_to_full() -> None:
     service, items, *_ = _service()
 
-    result = service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.DELTA, note=None, author=_AUTHOR)
+    result = service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.DELTA, note=None, author=_AUTHOR, statuses={})
 
     assert result.effective_mode is RunMode.FULL
     assert result.downgraded is True
@@ -253,7 +254,7 @@ def test_run_delta_with_a_recorded_baseline_stays_delta() -> None:
     )
     service, items, *_ = _service(finding_sets=_FakeFindingSets(newest={("gardening", "blizzard"): baseline}))
 
-    result = service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.DELTA, note=None, author=_AUTHOR)
+    result = service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.DELTA, note=None, author=_AUTHOR, statuses={})
 
     assert result.effective_mode is RunMode.DELTA
     assert result.downgraded is False
@@ -264,7 +265,7 @@ def test_run_delta_with_a_recorded_baseline_stays_delta() -> None:
 def test_run_full_mode_never_downgrades_even_with_no_baseline() -> None:
     service, *_ = _service()
 
-    result = service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
 
     assert result.effective_mode is RunMode.FULL
     assert result.downgraded is False
@@ -273,7 +274,7 @@ def test_run_full_mode_never_downgrades_even_with_no_baseline() -> None:
 def test_run_threads_the_routines_model_and_effort_defaults_onto_the_chunk() -> None:
     service, items, *_ = _service()
 
-    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
 
     chunk = items.calls[0]["chunk"]
     assert chunk.default_model == ["opus"]
@@ -286,7 +287,7 @@ def test_run_computes_the_tail_position_before_the_write() -> None:
     )
     service, items, *_ = _service(chunks=chunks)
 
-    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
 
     assert items.calls[0]["position"] == 4.0
 
@@ -295,13 +296,13 @@ def test_run_raises_ingest_conflict_when_the_freshly_allocated_ref_races_a_live_
     service, *_ = _service(chunks=_FakeChunks(live_holder="ch_other"))
 
     with pytest.raises(IngestConflict):
-        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
+        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
 
 
 def test_run_uses_the_injected_clock_not_the_wall_clock() -> None:
     service, items, *_ = _service()
 
-    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
 
     assert items.calls[0]["at"] == _T0
 

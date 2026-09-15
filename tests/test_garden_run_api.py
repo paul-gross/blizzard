@@ -17,7 +17,7 @@ from blizzard.hub.domain.routines import Routine, RunMode
 from blizzard.hub.domain.scopes import ScopeSlug
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub
+from tests.support import HubHarness, build_hub, count_queries
 
 pytestmark = pytest.mark.component
 
@@ -45,7 +45,14 @@ def _routine(hub: HubHarness, *, name: str = "gardening", scope: str = "blizzard
 def _run(hub: HubHarness, routine: Routine) -> str:
     scope = hub.services.scopes.get(routine.default_scope_slug)
     assert scope is not None
-    result = hub.services.routine_run.run(routine, scope=scope, mode=RunMode.FULL, note=None, author=_AUTHOR)
+    result = hub.services.routine_run.run(
+        routine,
+        scope=scope,
+        mode=RunMode.FULL,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
+    )
     return result.chunk_id
 
 
@@ -153,6 +160,32 @@ def test_list_runs_excludes_a_run_outside_the_explicit_window(tmp_path: Path) ->
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == []
+
+
+def test_list_runs_query_count_is_independent_of_run_count(tmp_path: Path) -> None:
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few = build_hub(tmp_path / "few")
+    few_routine = _routine(few)
+    for _ in range(3):
+        _run(few, few_routine)
+    few.clock.advance(timedelta(hours=1))  # past `minted_at`, inside the default window's exclusive `until`
+
+    many = build_hub(tmp_path / "many")
+    many_routine = _routine(many)
+    for _ in range(9):  # 3x the few-run fleet
+        _run(many, many_routine)
+    many.clock.advance(timedelta(hours=1))
+
+    def call(hub: HubHarness) -> None:
+        resp = hub.client.get("/api/runs")
+        assert resp.status_code == 200, resp.text
+        assert len(resp.json()) == (3 if hub is few else 9)
+
+    few_count = count_queries(few.engine, lambda: call(few))
+    many_count = count_queries(many.engine, lambda: call(many))
+
+    assert few_count == many_count
 
 
 def test_list_runs_rejects_a_malformed_since(tmp_path: Path) -> None:

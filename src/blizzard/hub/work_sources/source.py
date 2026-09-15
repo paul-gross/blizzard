@@ -11,9 +11,11 @@ so a registry can loop over every binding."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from blizzard.hub.auth.models import User
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.domain.work import WorkItemAuthor, WorkItemAuthorKind, WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
@@ -35,10 +37,10 @@ class AuthorView:
     node_name: str | None = None
 
 
-def resolve_author_view(author: WorkItemAuthor, users: IReadUserRepository) -> AuthorView:
+def resolve_author_view(author: WorkItemAuthor, users: IReadUserRepository | Mapping[str, User]) -> AuthorView:
     """A ``WorkItemAuthor`` resolved legible for display (blizzard#362) — the one place a
-    ``user_id`` is ever resolved to a login, shared by ``HubWorkSource``'s pass-through
-    read and the editor surface's own view alike."""
+    ``user_id`` is ever resolved to a login, shared by every pass-through read and
+    listing view alike, one lookup at a time or replayed over a pre-resolved batch."""
     if author.kind is WorkItemAuthorKind.USER:
         user = users.get(author.user_id) if author.user_id is not None else None
         return AuthorView(

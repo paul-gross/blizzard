@@ -16,7 +16,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
-from blizzard.hub.auth.models import ResolvedIdentity, User
+from blizzard.hub.auth.models import Identity, ResolvedIdentity, User
 from blizzard.hub.auth.service import RoleAssignmentRefused
 from blizzard.hub.composition import HubServices
 from blizzard.wire.user import RoleAssignmentRequest, UserIdentityView, UserView
@@ -24,8 +24,7 @@ from blizzard.wire.user import RoleAssignmentRequest, UserIdentityView, UserView
 router = APIRouter(prefix="/api", tags=["auth"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _user_view(user: User, *, services: HubServices) -> UserView:
-    identities = services.identities.list_for_user(user.user_id)
+def _user_view(user: User, *, identities: list[Identity]) -> UserView:
     return UserView(
         user_id=user.user_id,
         username=user.username,
@@ -40,7 +39,9 @@ def _user_view(user: User, *, services: HubServices) -> UserView:
 @router.get("/users", response_model=list[UserView], dependencies=[Depends(require(USER_MANAGE))])
 def list_users(services: Annotated[HubServices, Depends(get_services)]) -> list[UserView]:
     """Every hub-local account — the admin page's own table."""
-    return [_user_view(u, services=services) for u in services.users.list_all()]
+    users = services.users.list_all()
+    identities_by_user = services.identities.list_for_users([u.user_id for u in users])
+    return [_user_view(u, identities=identities_by_user.get(u.user_id, [])) for u in users]
 
 
 @router.post("/users/{user_id}/role", response_model=UserView)
@@ -66,4 +67,4 @@ def assign_role(
         updated = services.auth.assign_role(actor=actor, subject=subject, to_role=to_role)
     except RoleAssignmentRefused as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    return _user_view(updated, services=services)
+    return _user_view(updated, identities=services.identities.list_for_user(updated.user_id))

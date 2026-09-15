@@ -332,7 +332,8 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
     assert migration.landed_node_executor is Executor.HUB
     assert facts.status() is ChunkStatus.DELIVERING
 
-    ready_ids = {c.chunk_id for c in hub.services.chunks.record.list_ready()}
+    statuses = hub.services.chunks.facts.load_all_statuses()
+    ready_ids = {c.chunk_id for c in hub.services.chunks.record.list_ready(statuses=statuses)}
     assert chunk_id not in ready_ids
 
 
