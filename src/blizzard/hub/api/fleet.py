@@ -26,7 +26,7 @@ from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.api.auth import AuthMode, RunnerPrincipal, require_runner_principal
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.findings import finding_view
-from blizzard.hub.api.garden_proposals import proposal_view
+from blizzard.hub.api.garden_proposals import garden_proposal_view
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import HubConfig
@@ -351,7 +351,9 @@ def get_garden_proposals(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"chunk {chunk_id} carries no run context — not a routine run",
         )
-    return [proposal_view(p, None) for p in services.open_garden_proposals.list_open_for_routine(run.routine_name)]
+    return [
+        garden_proposal_view(p, None) for p in services.open_garden_proposals.list_open_for_routine(run.routine_name)
+    ]
 
 
 def _answered_findings_or_404(chunk_id: str, services: HubServices) -> list[FindingView]:

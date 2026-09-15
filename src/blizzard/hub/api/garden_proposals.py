@@ -53,7 +53,7 @@ def closure_view(closure: GardenProposalClosure) -> GardenProposalClosureView:
     )
 
 
-def proposal_view(proposal: GardenProposal, closure: GardenProposalClosure | None) -> GardenProposalView:
+def garden_proposal_view(proposal: GardenProposal, closure: GardenProposalClosure | None) -> GardenProposalView:
     """The one ``GardenProposal`` -> ``GardenProposalView`` projection — reused as-is by
     the runner-facing fleet route (``blizzard.hub.api.fleet``) rather than restated
     there, the ``finding_view`` shape."""
@@ -93,7 +93,7 @@ def list_garden_proposals(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
     closures = services.garden_proposal_closures.get_many([p.proposal_id for p in page.proposals])
     return GardenProposalsPageView(
-        proposals=[proposal_view(p, closures.get(p.proposal_id)) for p in page.proposals],
+        proposals=[garden_proposal_view(p, closures.get(p.proposal_id)) for p in page.proposals],
         next_cursor=page.next_cursor,
     )
 
@@ -108,7 +108,7 @@ def get_garden_proposal(
 ) -> GardenProposalView:
     """One garden proposal's whole record; 404 on an unknown id."""
     proposal = _get_or_404(proposal_id, services)
-    return proposal_view(proposal, services.garden_proposal_closures.get(proposal_id))
+    return garden_proposal_view(proposal, services.garden_proposal_closures.get(proposal_id))
 
 
 @router.post("/garden-proposals/{proposal_id}/pass", response_model=GardenProposalView)
@@ -129,7 +129,7 @@ def pass_garden_proposal(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return proposal_view(proposal, closure)
+    return garden_proposal_view(proposal, closure)
 
 
 @router.post("/garden-proposals/{proposal_id}/accept", response_model=GardenProposalAcceptResponse)
@@ -184,5 +184,5 @@ def accept_garden_proposal(
         )
         services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     return GardenProposalAcceptResponse(
-        **proposal_view(proposal, accepted.closure).model_dump(), chunk_id=accepted.chunk_id
+        **garden_proposal_view(proposal, accepted.closure).model_dump(), chunk_id=accepted.chunk_id
     )
