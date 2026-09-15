@@ -250,7 +250,7 @@ def list_routine_scopes(routine_id: str, services: Annotated[HubServices, Depend
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
-    return services.routine_scope_membership.list_scopes(routine)
+    return services.routine_scopes.list_scopes(routine.routine_id)
 
 
 def _resolve_scope_for_membership(scope_slug: str, services: HubServices) -> Scope:

@@ -234,9 +234,3 @@ class RoutineScopeMembership:
         if scope.slug == routine.default_scope_slug:
             raise RoutineDefaultScopeUnlinkError(routine.routine_id, scope.slug)
         self._routine_scopes.unlink(routine.routine_id, scope.slug)
-
-    def list_scopes(self, routine: Routine) -> list[str]:
-        return self._routine_scopes.list_scopes(routine.routine_id)
-
-    def list_routines(self, scope: Scope) -> list[str]:
-        return self._routine_scopes.list_routines(scope.slug)

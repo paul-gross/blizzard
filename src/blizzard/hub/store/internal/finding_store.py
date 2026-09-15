@@ -171,12 +171,6 @@ class FindingStore:
             finding = self._of(row, facts)
         return finding, facts
 
-    def get_facts(self, finding_id: str) -> list[FindingFact]:
-        """`get_with_facts`'s facts-only projection (review:F5) — kept for callers that
-        only need the chain, e.g. `get_many`'s batched sibling never calls this alone."""
-        result = self.get_with_facts(finding_id)
-        return result[1] if result is not None else []
-
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """The pass's own bucket read (D3) — filtered on `ix_findings_routine_scope`,
         ordered by `finding_id` so every backend returns the same rows."""

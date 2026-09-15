@@ -133,9 +133,6 @@ class _FakeFindings:
     def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
         return {fid: f for fid in finding_ids if (f := self.by_id.get(fid)) is not None}
 
-    def get_facts(self, finding_id: str) -> list[FindingFact]:
-        raise NotImplementedError
-
     def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
         raise NotImplementedError
 

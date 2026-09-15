@@ -111,9 +111,6 @@ class _FakeFindings:
         self.calls.append(list(finding_ids))
         return {fid: f for fid in finding_ids if (f := self.findings.get(fid)) is not None}
 
-    def get_facts(self, finding_id: str) -> list[FindingFact]:
-        raise NotImplementedError
-
     def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
         raise NotImplementedError
 
