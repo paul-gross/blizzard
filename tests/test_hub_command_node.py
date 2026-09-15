@@ -33,6 +33,7 @@ from blizzard.hub.delivery.hub_node import (
 )
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph import HUB_PENDING_CHOICE, GraphDoc
 from blizzard.hub.domain.graph_authoring import Reification
@@ -666,6 +667,72 @@ def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Pa
     names = {a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
     assert "merged/acme-widget" not in names
     assert hub.services.chunks.delivery.count_landed_since("acme-widget", before) == 0
+
+
+@pytest.mark.component
+def test_a_stopped_chunk_fences_out_a_still_running_marker_write(tmp_path: Path) -> None:
+    """``record_stop`` mints no epoch (issue #118), so the ``run:`` list's still-live
+    epoch is exactly the chunk's newest — the epoch guard alone is inert against a stop,
+    unlike the restart case above. The regardless-of-epoch half of ``bzh:epoch-fencing``
+    is the only fence a marker write arriving after a stop has, and it must still hold:
+    no artifact row, no repo landed, no close enqueued."""
+    runner = FakeHubCommandRunner()
+    workdir = FakeHubWorkdir()
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
+    chunk_id, _build_node_id, graph = _to_merge_node(hub)
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+    before = hub.clock.now()
+
+    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
+
+    recorded = hub.services.hub_node.record_marker(
+        chunk_id,
+        node_id=merge_node.node_id,
+        node_name="merge",
+        epoch=1,  # the run's own epoch — a stop mints no fresher one to fence it out
+        name="merged/acme-widget",
+        content="sha:abc123",
+    )
+
+    assert recorded is False
+    names = {a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
+    assert "merged/acme-widget" not in names
+    assert hub.services.chunks.delivery.count_landed_since("acme-widget", before) == 0
+    assert [i for i in hub.services.chunks.delivery.pending_close_intents() if i.chunk_id == chunk_id] == []
+
+
+@pytest.mark.component
+def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Path) -> None:
+    """``record_hub_step_transition`` mirrors ``record_hub_artifact``'s guards (#65) — the
+    sibling of the marker-write case above: a stop landing mid-``run:`` must fence the
+    step's own exit transition too, not just its marker."""
+    runner = FakeHubCommandRunner()
+    workdir = FakeHubWorkdir()
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
+    chunk_id, _build_node_id, graph = _to_merge_node(hub)
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+
+    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
+
+    recorded = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec).record_hub_step_transition(
+        chunk_id,
+        from_node_id=merge_node.node_id,
+        to_node_id="done",
+        choice_name="success",
+        epoch=1,  # the run's own epoch — a stop mints no fresher one to fence it out
+        runner_id="r1",
+        transition_id="tr_stale",
+        at=hub.clock.now(),
+        artifacts=[],
+        release_route=True,
+    )
+
+    assert recorded is False
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "stopped"
+    assert all(t["from_node_name"] != "merge" for t in detail["history"])
 
 
 @pytest.mark.component

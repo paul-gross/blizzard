@@ -17,7 +17,7 @@ from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, enqueue_close_intents, latest_epoch
+from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, chunk_is_terminal, enqueue_close_intents, latest_epoch
 
 
 class ChunkArtifactsStore:
@@ -90,11 +90,14 @@ class ChunkArtifactsStore:
     ) -> bool:
         """Append one hub-node progress artifact **outside** a transition (#65),
         idempotent per ``(chunk, node, name, epoch)`` — the ``produces:`` re-run skip's
-        durable side, and the mid-run marker callback's write. Two guards, both
+        durable side, and the mid-run marker callback's write. Three guards, all
         returning False, mirroring ``ChunkHubExecStore.record_hub_step_transition``: the
-        row's existence absorbs a replay, and the chunk's CURRENT epoch absorbs a restart
-        that re-aimed it while the ``run:`` list — and the mid-run marker callback it can
-        still invoke — kept going (``bzh:epoch-fencing``)."""
+        row's existence absorbs a replay, a terminal chunk fact (``chunk_stopped``/
+        ``chunk_completed``) absorbs a still-running ``run:`` list whose chunk was stopped
+        out from under it — regardless of epoch, since stopping mints none — and the
+        chunk's CURRENT epoch absorbs a restart that re-aimed it while the ``run:`` list —
+        and the mid-run marker callback it can still invoke — kept going
+        (``bzh:epoch-fencing``)."""
         with self._store.write("record_hub_artifact") as conn:
             already = conn.execute(
                 select(s.artifacts.c.artifact_id).where(
@@ -105,6 +108,8 @@ class ChunkArtifactsStore:
                 )
             ).first()
             if already is not None:
+                return False
+            if chunk_is_terminal(conn, chunk_id):
                 return False
             if latest_epoch(conn, chunk_id) > epoch:
                 return False

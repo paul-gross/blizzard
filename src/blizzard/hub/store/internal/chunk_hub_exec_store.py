@@ -23,6 +23,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     MARKER_PREFIX,
+    chunk_is_terminal,
     enqueue_close_intents,
     graph_id_of,
     latest_epoch,
@@ -97,10 +98,12 @@ class ChunkHubExecStore:
     ) -> bool:
         """Record a generic hub command node's exit transition **atomically and idempotently**
         (#65) — ``ChunkDeliveryStore.finalize_delivery``'s counterpart, generalized to any
-        authored target. Two guards, both returning False: the transition's existence at
-        ``(chunk_id, from_node_id, epoch)`` absorbs a redelivery replay, and the chunk's
-        CURRENT epoch absorbs a restart that re-aimed it while the ``run:`` list ran
-        (``bzh:epoch-fencing``)."""
+        authored target. Three guards, all returning False: the transition's existence at
+        ``(chunk_id, from_node_id, epoch)`` absorbs a redelivery replay, a terminal chunk
+        fact (``chunk_stopped``/``chunk_completed``) absorbs a still-running ``run:`` list
+        whose chunk was stopped out from under it — regardless of epoch, since stopping
+        mints none — and the chunk's CURRENT epoch absorbs a restart that re-aimed it while
+        the ``run:`` list ran (``bzh:epoch-fencing``)."""
         with self._store.write("record_hub_step_transition") as conn:
             already = conn.execute(
                 select(s.transitions.c.transition_id).where(
@@ -110,6 +113,8 @@ class ChunkHubExecStore:
                 )
             ).first()
             if already is not None:
+                return False
+            if chunk_is_terminal(conn, chunk_id):
                 return False
             if latest_epoch(conn, chunk_id) >= epoch:
                 return False

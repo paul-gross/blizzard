@@ -354,6 +354,15 @@ def row_exists(conn, table, chunk_id: str) -> bool:  # type: ignore[no-untyped-d
     return conn.execute(select(table.c.chunk_id).where(table.c.chunk_id == chunk_id).limit(1)).first() is not None
 
 
+def chunk_is_terminal(conn: Connection, chunk_id: str) -> bool:
+    """Whether the chunk carries a terminal fact — ``chunk_stopped`` or
+    ``chunk_completed`` — read on the caller's connection so this sits inside the same
+    transaction as the write it fences. Terminal rejects every later state-advancing
+    write regardless of epoch (``bzh:epoch-fencing``): ``record_stop`` mints no epoch,
+    so the epoch guard alone cannot catch a write arriving after a stop."""
+    return row_exists(conn, s.chunk_stopped, chunk_id) or row_exists(conn, s.chunk_completed, chunk_id)
+
+
 def insert_proposals(conn: Connection, proposals: list[WorkItemProposalRow], *, at: datetime) -> None:
     for row in proposals:
         conn.execute(
