@@ -9,7 +9,7 @@ import click
 from blizzard.hub.cli import login as cli_login
 from blizzard.hub.cli.command import AuthCommand, SessionWriteCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.session_store import IWriteSessionStore
+from blizzard.hub.cli.sessions import IWriteSessionStore
 
 
 @click.command("rotate-signing-key", cls=AuthCommand)

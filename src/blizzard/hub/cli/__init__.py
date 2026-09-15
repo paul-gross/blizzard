@@ -22,7 +22,7 @@ from blizzard.hub.cli.routine import routine_group
 from blizzard.hub.cli.runner import runner_group
 from blizzard.hub.cli.runtime import host, init, migrate_cmd
 from blizzard.hub.cli.scope import scope_group
-from blizzard.hub.cli.session_store import SessionFile
+from blizzard.hub.cli.sessions.internal.session_file import SessionFile
 from blizzard.hub.cli.status import status as _status_command
 
 

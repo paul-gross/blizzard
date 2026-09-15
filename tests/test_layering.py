@@ -361,7 +361,7 @@ def test_transcript_service_imports_no_internal_module() -> None:
     assert not violations, f"transcripts/service.py must not import an internal/ module: {violations}"
 
 
-_HUB_CLI_SESSION_STORE_FILE = _HUB_DIR / "cli" / "session_store.py"
+_HUB_CLI_SESSION_STORE_FILE = _HUB_DIR / "cli" / "sessions" / "internal" / "session_file.py"
 
 
 def _session_file_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:
@@ -382,7 +382,7 @@ def _session_file_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:
 def test_session_file_is_named_only_at_its_composition_root() -> None:
     """D7: ``SessionFile`` is named only at ``hub/cli/__init__.py`` — every other module
     takes the read/write Protocol seam, however the class is reached, never the concrete
-    name itself. ``session_store.py`` (its declaring module) is exempt."""
+    name itself. ``sessions/internal/session_file.py`` (its declaring module) is exempt."""
     violations = _session_file_accesses(_SRC_DIR, exempt=_COMPOSITION_ROOTS | frozenset({_HUB_CLI_SESSION_STORE_FILE}))
     assert not violations, f"N — SessionFile must be named only at its composition root: {violations}"
 
