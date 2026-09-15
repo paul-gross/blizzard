@@ -33,7 +33,7 @@ def test_finding_list_passes_routine_scope_and_include_gone(monkeypatch: pytest.
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, params))
-        return _FakeResponse(200, [])
+        return _FakeResponse(200, {"findings": [], "next_cursor": None})
 
     monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(
@@ -44,7 +44,10 @@ def test_finding_list_passes_routine_scope_and_include_gone(monkeypatch: pytest.
 
     assert result.exit_code == 0, result.output
     assert calls == [
-        ("http://hub.local:8421/api/findings", {"routine": "nightly", "scope": "blizzard", "include_gone": "true"})
+        (
+            "http://hub.local:8421/api/findings",
+            {"routine": "nightly", "scope": "blizzard", "include_gone": "true", "limit": "1000"},
+        )
     ]
 
 
@@ -53,22 +56,25 @@ def test_finding_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
-            [
-                {
-                    "finding_id": "fin_1",
-                    "routine_name": "nightly",
-                    "scope_slug": "blizzard",
-                    "class": "stale-docstring",
-                    "locus": "a.py:1",
-                    "summary": "s",
-                    "introduced": None,
-                    "live": True,
-                    "state": "live",
-                    "note": None,
-                    "last_seen_at": "t0",
-                    "observed_count": 0,
-                }
-            ],
+            {
+                "findings": [
+                    {
+                        "finding_id": "fin_1",
+                        "routine_name": "nightly",
+                        "scope_slug": "blizzard",
+                        "class": "stale-docstring",
+                        "locus": "a.py:1",
+                        "summary": "s",
+                        "introduced": None,
+                        "live": True,
+                        "state": "live",
+                        "note": None,
+                        "last_seen_at": "t0",
+                        "observed_count": 0,
+                    }
+                ],
+                "next_cursor": None,
+            },
         )
 
     monkeypatch.setattr(httpx, "get", fake_get)
@@ -77,6 +83,60 @@ def test_finding_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.exit_code == 0, result.output
     assert "fin_1" in result.output
     assert "live" in result.output
+
+
+@pytest.mark.unit
+def test_finding_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    page_1 = {
+        "findings": [
+            {
+                "finding_id": "fin_1",
+                "routine_name": "nightly",
+                "scope_slug": "blizzard",
+                "class": "stale-docstring",
+                "locus": "a.py:1",
+                "summary": "s",
+                "introduced": None,
+                "live": True,
+                "state": "live",
+                "note": None,
+                "last_seen_at": "t0",
+                "observed_count": 0,
+            },
+        ],
+        "next_cursor": "cursor-1",
+    }
+    page_2 = {
+        "findings": [
+            {
+                "finding_id": "fin_2",
+                "routine_name": "nightly",
+                "scope_slug": "blizzard",
+                "class": "stale-docstring",
+                "locus": "b.py:1",
+                "summary": "s2",
+                "introduced": None,
+                "live": True,
+                "state": "live",
+                "note": None,
+                "last_seen_at": "t0",
+                "observed_count": 0,
+            },
+        ],
+        "next_cursor": None,
+    }
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        if params.get("cursor") is None:
+            return _FakeResponse(200, page_1)
+        return _FakeResponse(200, page_2)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["finding", "list", "--routine", "nightly", "--scope", "blizzard"])
+
+    assert result.exit_code == 0, result.output
+    assert "fin_1" in result.output
+    assert "fin_2" in result.output
 
 
 @pytest.mark.unit

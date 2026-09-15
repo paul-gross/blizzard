@@ -70,7 +70,7 @@ def _summary(hub, chunk_id: str) -> dict:  # type: ignore[no-untyped-def]
     resp = hub.client.get("/api/chunks")
     assert resp.status_code == 200, resp.text
     assert_all_timestamps_utc(resp.json())
-    (summary,) = [c for c in resp.json() if c["chunk_id"] == chunk_id]
+    (summary,) = [c for c in resp.json()["chunks"] if c["chunk_id"] == chunk_id]
     return summary
 
 

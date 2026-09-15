@@ -22,10 +22,12 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.findings import Finding, FindingFact, FindingNoteRequiredError
+from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.wire.finding import (
     FindingDetailView,
     FindingExitRequest,
     FindingFactView,
+    FindingsPageView,
     FindingSupersedeRequest,
     FindingView,
 )
@@ -102,29 +104,33 @@ def _reread(findings: list[Finding], services: HubServices) -> list[FindingView]
     return views
 
 
-@router.get("/findings", response_model=list[FindingView], dependencies=[Depends(require(FLEET_VIEW))])
+@router.get("/findings", response_model=FindingsPageView, dependencies=[Depends(require(FLEET_VIEW))])
 def list_findings(
     services: Annotated[HubServices, Depends(get_services)],
     routine: Annotated[str | None, Query()] = None,
     scope: Annotated[str | None, Query()] = None,
     include_gone: Annotated[bool, Query()] = False,
-) -> list[FindingView]:
-    """The findings bucket, widened to every routine and every scope (blizzard#486) —
-    live only, unless `include_gone` (D3), which also surfaces every exited finding, not
-    just a merely `gone` one. `routine` and `scope` are both optional, independently:
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> FindingsPageView:
+    """The findings bucket, widened to every routine and every scope (blizzard#486),
+    bounded and keyset-paginated (blizzard#526 D1/D5) — live only, unless `include_gone`
+    (D3), which also surfaces every exited finding, not just a merely `gone` one.
+    `routine` and `scope` are both optional, independently:
 
-    - both named — one routine's findings under one scope (`list_for`)
-    - `routine` named, `scope` absent — one routine's findings across every scope it
-      holds (`list_for_routine`)
+    - both named — one routine's findings under one scope
+    - `routine` named, `scope` absent — one routine's findings across every scope it holds
     - `routine` absent, `scope` named — every routine's findings under one scope
     - both absent — every finding across every routine and every scope
 
-    The last two are `list_across_routines`'s own two shapes."""
-    if routine is not None and scope is not None:
-        return [finding_view(f) for f in services.findings.list_for(routine, scope, include_gone=include_gone)]
-    if routine is not None:
-        return [finding_view(f) for f in services.findings.list_for_routine(routine, include_gone=include_gone)]
-    return [finding_view(f) for f in services.findings.list_across_routines(scope, include_gone=include_gone)]
+    All four share `list_page`'s own total `finding_id` order."""
+    try:
+        page = services.findings.list_page(
+            routine_name=routine, scope_slug=scope, include_gone=include_gone, cursor=cursor, limit=limit
+        )
+    except MalformedCursor as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    return FindingsPageView(findings=[finding_view(f) for f in page.findings], next_cursor=page.next_cursor)
 
 
 @router.get("/findings/{finding_id}", response_model=FindingDetailView, dependencies=[Depends(require(FLEET_VIEW))])

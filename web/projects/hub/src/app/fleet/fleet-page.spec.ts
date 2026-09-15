@@ -69,7 +69,7 @@ describe('FleetPage (mobile Fleet screen)', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return RUNNERS;
-      if (method === 'GET' && path === '/api/chunks') return CHUNKS;
+      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
       return {};
     });
     const fixture = await render();
@@ -86,7 +86,7 @@ describe('FleetPage (mobile Fleet screen)', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return RUNNERS;
-      if (method === 'GET' && path === '/api/chunks') return CHUNKS;
+      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
       if (path === '/api/runners/rn_online/pause') return RUNNERS.runners[0];
       return {};
     });
@@ -105,7 +105,7 @@ describe('FleetPage (mobile Fleet screen)', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return CONTRIBUTOR_ME;
       if (method === 'GET' && path === '/api/runners') return RUNNERS;
-      if (method === 'GET' && path === '/api/chunks') return CHUNKS;
+      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
       return {};
     });
     const fixture = await render();

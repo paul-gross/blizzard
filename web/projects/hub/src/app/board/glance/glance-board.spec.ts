@@ -148,7 +148,7 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
 
   beforeEach(async () => {
     stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/chunks') return CHUNKS;
+      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
       if (method === 'GET' && path === '/api/queue') return { entries: QUEUE };
       if (method === 'GET' && path === '/api/questions') return QUESTIONS;
       if (method === 'GET' && path === '/api/runners') return { runners: RUNNERS };

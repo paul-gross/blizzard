@@ -43,8 +43,8 @@ def test_json_on_a_read_verb_prints_the_raw_response_body(monkeypatch: pytest.Mo
         }
     ]
 
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(200, payload)
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
+        return _FakeResponse(200, {"chunks": payload, "next_cursor": None})
 
     monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["chunk", "list", "--json"])

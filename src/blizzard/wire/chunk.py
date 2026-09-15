@@ -143,6 +143,14 @@ class ChunkSummary(BaseModel):
     blocked: BlockedView | None = None
 
 
+class ChunksPageView(BaseModel):
+    """``GET /api/chunks``'s own bounded page (blizzard#526 D3/D4) — ``next_cursor`` is
+    ``None`` exactly when this page is the last one."""
+
+    chunks: list[ChunkSummary] = []
+    next_cursor: str | None = None
+
+
 class RouteView(BaseModel):
     """A chunk's route — where it is being worked."""
 

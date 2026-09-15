@@ -346,7 +346,7 @@ class IReadOperationalAnalytics(Protocol):
         rollups matching ``criteria``, ordered by ``chunk_id`` ascending — a total order
         two identical calls agree on. ``cursor`` is a prior
         :attr:`ChunkSpendPage.next_cursor`: any other value raises
-        :class:`~blizzard.hub.domain.analytics.MalformedCursor`."""
+        :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
         ...
 
     def outcomes_by_node(self, criteria: OperationalCriteria) -> list[OutcomeStats]:

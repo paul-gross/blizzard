@@ -2913,7 +2913,7 @@
     "queue": {
       "commands": {
         "move": {
-          "help": "Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).\n\nA client of the single-chunk fractional ``POST /api/queue/position`` (issue #137):\nreads the current order, drops CHUNK_ID out of it, clamps POSITION into what's left,\nand sends one anchor. 409 when CHUNK_ID is not in the ready list, not the backlog.",
+          "help": "Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).\n\nClient of the fractional ``POST /api/queue/position`` (issue #137); 409 when CHUNK_ID\nis not in the ready list, not the backlog.",
           "params": [
             {
               "hidden": false,
@@ -3004,7 +3004,7 @@
           "short_help": "Replace the whole ready-queue order with CHUNK_IDS, front to back."
         },
         "show": {
-          "help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``.",
+          "help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``, drained\nto its whole order (blizzard#526 D7).",
           "params": [
             {
               "hidden": false,
@@ -3030,7 +3030,7 @@
             }
           ],
           "path": "hub queue show",
-          "short_help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``."
+          "short_help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``, drained to its whole order (blizzard#526 D7)."
         }
       },
       "help": "Operator verbs over the ready queue: show its order, replace it, move one chunk.",

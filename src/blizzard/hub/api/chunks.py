@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, CHUNK_INGEST, FLEET_VIEW
@@ -41,6 +41,7 @@ from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.garden_delivery import GardenDeliveryRejected, validate_delivery
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
+from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.pause import ChunkNotPausable
 from blizzard.hub.domain.restart import ChunkNotRestartable, RestartCurrentNodeUnknown, RestartNodeUnknown
 from blizzard.hub.domain.stop import ChunkNotStoppable
@@ -67,6 +68,7 @@ from blizzard.wire.chunk import (
     ChunkPatchResponse,
     ChunkPauseRequest,
     ChunkRestartRequest,
+    ChunksPageView,
     ChunkStopRequest,
     ChunkSummary,
     GardenDeliveryRequest,
@@ -141,12 +143,17 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
     return ChunkIngestResponse(chunk_id=chunk_id)
 
 
-@router.get("/chunks", response_model=list[ChunkSummary], dependencies=[Depends(require(FLEET_VIEW))])
-def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list[ChunkSummary]:
-    """The fleet chunk list — derived status per chunk.
+@router.get("/chunks", response_model=ChunksPageView, dependencies=[Depends(require(FLEET_VIEW))])
+def list_chunks(
+    services: Annotated[HubServices, Depends(get_services)],
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> ChunksPageView:
+    """The fleet chunk list — derived status per chunk, bounded and keyset-paginated.
 
-    Reads the fleet's facts and routes with one bulk query each: the `FleetPulse.view()`
-    shape (issue #374), extended to routes and to the rendered row (issue #421)."""
+    Only the page's own rows render, but live-holder and blocked-marking derivation still
+    see the whole fleet (D6 below) — a pointer this page renders can be held live by a
+    chunk outside it, same for a dependent's prerequisite."""
     names = GraphNames(services.graphs)
     facts = services.chunks.facts.load_all_facts()
     routes = services.chunks.route.load_all_routes()
@@ -154,24 +161,35 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
     # inside a store (``bzh:dependency-inversion``, issue #457, D2).
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
     markings = derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
-    chunks = services.chunks.record.list_all()
-    # One priming call resolves every chunk's pinned graph's name/entry-node/node-names
-    # up front (issue #421).
-    names.prime(chunk.graph_id for chunk in chunks)
+    try:
+        page = services.chunks.record.list_page(cursor=cursor, limit=limit)
+    except MalformedCursor as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    # D6: live-holder resolution needs every chunk's pointers, not just this page's —
+    # narrowing to the page could miss a pointer another, unlisted chunk holds live.
+    all_chunks = services.chunks.record.list_all()
+    # One priming call resolves the page's own pinned graphs' name/entry-node/node-names
+    # up front (issue #421) — narrowed to the page, since nothing outside it is rendered.
+    names.prime(chunk.graph_id for chunk in page.chunks)
     # Derives from the chunks and statuses already loaded above, no further fact load.
-    live_holders = resolve_live_holders(((p, chunk.chunk_id) for chunk in chunks for p in chunk.work_refs), statuses)
-    return [
-        ChunkView.injected(
-            services,
-            chunk,
-            facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
-            routes.get(chunk.chunk_id),
-            names,
-            live_holders,
-            blocked=blocked_view(markings.get(chunk.chunk_id)),
-        ).summary()
-        for chunk in chunks
-    ]
+    live_holders = resolve_live_holders(
+        ((p, chunk.chunk_id) for chunk in all_chunks for p in chunk.work_refs), statuses
+    )
+    return ChunksPageView(
+        chunks=[
+            ChunkView.injected(
+                services,
+                chunk,
+                facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
+                routes.get(chunk.chunk_id),
+                names,
+                live_holders,
+                blocked=blocked_view(markings.get(chunk.chunk_id)),
+            ).summary()
+            for chunk in page.chunks
+        ],
+        next_cursor=page.next_cursor,
+    )
 
 
 def _neighbor_view(neighbor: ChunkNeighbor) -> ChunkNeighborView:
@@ -344,13 +362,8 @@ def record_garden_delivery(
             proposal_artifacts[name] = artifact.data
             proposal_artifact_id_by_name[name] = artifact.artifact_id
 
-    # A crash-retry of an already-fully-materialized delivery must stay a no-op replay
-    # (machinery.md §Delivery: "a replay finds it and returns `recorded`") even when a
-    # finding this same delivery named has been exited by a person since the original,
-    # successful attempt (blizzard#394 D3) — re-validating today's live state against
-    # yesterday's already-recorded content would turn that replay into a spurious
-    # failure. Checked before validation, not after, so no such retry re-derives
-    # `live_findings` from current state at all.
+    # Checked before validation: a replay must stay a no-op even if a finding this delivery
+    # named was since exited by a person (blizzard#394 D3) — never re-validated against live state.
     if services.garden_delivery.already_delivered(chunk_id=chunk_id, node_id=node_id, epoch=epoch):
         return GardenDeliveryResponse(outcome="recorded", detail="")
 
@@ -666,12 +679,9 @@ def _author_view(author: AuthorView) -> WorkItemAuthorView:
 
 @router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView, dependencies=[Depends(require(FLEET_VIEW))])
 def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemsView:
-    """Pass-through work items read — one entry per pointer, contents never stored.
-
-    A per-pointer resolution or forge failure degrades to an ``error`` on that entry
-    rather than failing the whole read. A chunk with no pointers is an empty list, not
-    a 404; the built-in ``hub`` source is always seated, so a bare hub carries no
-    configuration under which this ever 503s."""
+    """Pass-through work items read, one entry per pointer, contents never stored. A
+    per-pointer resolution or forge failure becomes that entry's own ``error`` instead of
+    failing the whole read; a chunk with no pointers reads as an empty list, not a 404."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")

@@ -16,7 +16,8 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.findings import Finding, FindingFact
+from blizzard.hub.domain.chunks.record import ChunkPage
+from blizzard.hub.domain.findings import Finding, FindingFact, FindingPage
 from blizzard.hub.domain.garden_run import (
     DeliveredSet,
     DeliveredSetRaw,
@@ -71,6 +72,9 @@ class _FakeChunkRecords:
     def list_all(self) -> list[Chunk]:
         return list(self.chunks.values())
 
+    def list_page(self, *, cursor: str | None = None, limit: int) -> ChunkPage:
+        raise NotImplementedError
+
 
 @dataclass
 class _FakeChunkFacts:
@@ -120,6 +124,17 @@ class _FakeFindings:
         raise NotImplementedError
 
     def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
+        raise NotImplementedError
+
+    def list_page(
+        self,
+        *,
+        routine_name: str | None,
+        scope_slug: str | None,
+        include_gone: bool = False,
+        cursor: str | None = None,
+        limit: int,
+    ) -> FindingPage:
         raise NotImplementedError
 
     def count_by_class(self, routine_name: str, class_: str) -> int:

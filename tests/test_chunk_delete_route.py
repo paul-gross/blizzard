@@ -53,7 +53,7 @@ def test_deleted_chunk_is_gone_from_every_read(tmp_path: Path) -> None:
     assert _delete_chunk(hub, chunk_id).status_code == 202
 
     assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 404
-    ids = [c["chunk_id"] for c in hub.client.get("/api/chunks").json()]
+    ids = [c["chunk_id"] for c in hub.client.get("/api/chunks").json()["chunks"]]
     assert chunk_id not in ids
 
 

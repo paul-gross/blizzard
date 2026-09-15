@@ -549,6 +549,23 @@ export type ArtifactView = {
 };
 
 /**
+ * BacklogPageView
+ *
+ * ``GET /api/backlog``'s own bounded page (blizzard#526 D3/D4): ``next_cursor``
+ * is ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local.
+ */
+export type BacklogPageView = {
+    /**
+     * Entries
+     */
+    entries?: Array<BacklogPeekEntry>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
  * BacklogPeekEntry
  *
  * One ``not_ready`` chunk, in backlog order.
@@ -576,7 +593,8 @@ export type BacklogPeekEntry = {
 /**
  * BacklogPeekResponse
  *
- * The ``not_ready`` list, in the hub's explicit order.
+ * The ``not_ready`` list's whole order, unpaginated — a write verb's caller needs
+ * it in full to confirm against, not one page (blizzard#526 D3).
  */
 export type BacklogPeekResponse = {
     /**
@@ -1304,6 +1322,23 @@ export type ChunkUsageView = {
      * Output Tokens
      */
     output_tokens: number;
+};
+
+/**
+ * ChunksPageView
+ *
+ * ``GET /api/chunks``'s own bounded page (blizzard#526 D3/D4) — ``next_cursor`` is
+ * ``None`` exactly when this page is the last one.
+ */
+export type ChunksPageView = {
+    /**
+     * Chunks
+     */
+    chunks?: Array<ChunkSummary>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
 };
 
 /**
@@ -2082,6 +2117,23 @@ export type FindingView = {
 };
 
 /**
+ * FindingsPageView
+ *
+ * ``GET /api/findings``'s own bounded page (blizzard#526 D3/D5) — ``next_cursor`` is
+ * ``None`` exactly when this page is the last one.
+ */
+export type FindingsPageView = {
+    /**
+     * Findings
+     */
+    findings?: Array<FindingView>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
  * FleetSpendView
  *
  * The fleet's usage/cost total since ``since`` and, when the caller bounded the
@@ -2346,6 +2398,23 @@ export type GardenProposalView = {
      * Title
      */
     title: string;
+};
+
+/**
+ * GardenProposalsPageView
+ *
+ * ``GET /api/garden-proposals``'s own bounded page (blizzard#526 D3/D4) —
+ * ``next_cursor`` is ``None`` exactly when this page is the last one.
+ */
+export type GardenProposalsPageView = {
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+    /**
+     * Proposals
+     */
+    proposals?: Array<GardenProposalView>;
 };
 
 /**
@@ -3374,6 +3443,23 @@ export type QuestionView = {
 };
 
 /**
+ * QueuePageView
+ *
+ * ``GET /api/queue``'s own bounded page (blizzard#526 D3/D4): ``next_cursor`` is
+ * ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local.
+ */
+export type QueuePageView = {
+    /**
+     * Entries
+     */
+    entries?: Array<QueuePeekEntry>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
  * QueuePeekEntry
  *
  * One ready chunk, in queue order.
@@ -3401,7 +3487,8 @@ export type QueuePeekEntry = {
 /**
  * QueuePeekResponse
  *
- * The ready queue, in the hub's explicit order.
+ * The ready queue's whole order, unpaginated — a write verb's caller needs it in
+ * full to confirm against, not one page (blizzard#526 D3).
  */
 export type QueuePeekResponse = {
     /**
@@ -6309,15 +6396,33 @@ export type CallbackApiAuthNameCallbackGetResponses = {
 export type GetBacklogApiBacklogGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
     url: '/api/backlog';
 };
+
+export type GetBacklogApiBacklogGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetBacklogApiBacklogGetError = GetBacklogApiBacklogGetErrors[keyof GetBacklogApiBacklogGetErrors];
 
 export type GetBacklogApiBacklogGetResponses = {
     /**
      * Successful Response
      */
-    200: BacklogPeekResponse;
+    200: BacklogPageView;
 };
 
 export type GetBacklogApiBacklogGetResponse = GetBacklogApiBacklogGetResponses[keyof GetBacklogApiBacklogGetResponses];
@@ -6375,17 +6480,33 @@ export type RepositionBacklogApiBacklogPositionPostResponse = RepositionBacklogA
 export type ListChunksApiChunksGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
     url: '/api/chunks';
 };
 
+export type ListChunksApiChunksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListChunksApiChunksGetError = ListChunksApiChunksGetErrors[keyof ListChunksApiChunksGetErrors];
+
 export type ListChunksApiChunksGetResponses = {
     /**
-     * Response List Chunks Api Chunks Get
-     *
      * Successful Response
      */
-    200: Array<ChunkSummary>;
+    200: ChunksPageView;
 };
 
 export type ListChunksApiChunksGetResponse = ListChunksApiChunksGetResponses[keyof ListChunksApiChunksGetResponses];
@@ -7145,6 +7266,14 @@ export type ListFindingsApiFindingsGetData = {
          * Include Gone
          */
         include_gone?: boolean;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
     };
     url: '/api/findings';
 };
@@ -7160,11 +7289,9 @@ export type ListFindingsApiFindingsGetError = ListFindingsApiFindingsGetErrors[k
 
 export type ListFindingsApiFindingsGetResponses = {
     /**
-     * Response List Findings Api Findings Get
-     *
      * Successful Response
      */
-    200: Array<FindingView>;
+    200: FindingsPageView;
 };
 
 export type ListFindingsApiFindingsGetResponse = ListFindingsApiFindingsGetResponses[keyof ListFindingsApiFindingsGetResponses];
@@ -8203,17 +8330,33 @@ export type IngestTranscriptSegmentsApiFleetTranscriptsPostResponse = IngestTran
 export type ListGardenProposalsApiGardenProposalsGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
     url: '/api/garden-proposals';
 };
 
+export type ListGardenProposalsApiGardenProposalsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListGardenProposalsApiGardenProposalsGetError = ListGardenProposalsApiGardenProposalsGetErrors[keyof ListGardenProposalsApiGardenProposalsGetErrors];
+
 export type ListGardenProposalsApiGardenProposalsGetResponses = {
     /**
-     * Response List Garden Proposals Api Garden Proposals Get
-     *
      * Successful Response
      */
-    200: Array<GardenProposalView>;
+    200: GardenProposalsPageView;
 };
 
 export type ListGardenProposalsApiGardenProposalsGetResponse = ListGardenProposalsApiGardenProposalsGetResponses[keyof ListGardenProposalsApiGardenProposalsGetResponses];
@@ -8603,15 +8746,33 @@ export type AnswerQuestionApiQuestionsQuestionIdAnswersPostResponse = AnswerQues
 export type GetQueueApiQueueGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
     url: '/api/queue';
 };
+
+export type GetQueueApiQueueGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetQueueApiQueueGetError = GetQueueApiQueueGetErrors[keyof GetQueueApiQueueGetErrors];
 
 export type GetQueueApiQueueGetResponses = {
     /**
      * Successful Response
      */
-    200: QueuePeekResponse;
+    200: QueuePageView;
 };
 
 export type GetQueueApiQueueGetResponse = GetQueueApiQueueGetResponses[keyof GetQueueApiQueueGetResponses];

@@ -286,7 +286,7 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
         def findings(scope: str) -> list[dict]:
             resp = hub.get("/api/findings", params={"routine": _ROUTINE, "scope": scope})
             assert resp.status_code == 200, resp.text
-            return resp.json()
+            return resp.json()["findings"]
 
         # -- found: survey → reconcile → propose → deliver, two findings minted -------
         runs_since = iso_utc(datetime.now(UTC) - timedelta(minutes=5))
@@ -303,7 +303,7 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
             ("stale-docstring", "src/app.py:2"),
         }
         assert all(r["live"] for r in found_rows)
-        assert hub.get("/api/garden-proposals").json() == []
+        assert hub.get("/api/garden-proposals").json()["proposals"] == []
 
         # -- the run list and one run's own delta read the delivered `found` run back --
         runs_until = iso_utc(datetime.now(UTC) + timedelta(minutes=5))
@@ -368,7 +368,7 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
             f"the second bail-out minted a new finding instead of observing the live one: {thicket_rows}"
         )
         assert thicket_rows[0]["observed_count"] == observed_before + 1
-        proposals = hub.get("/api/garden-proposals").json()
+        proposals = hub.get("/api/garden-proposals").json()["proposals"]
         assert len(proposals) == 1, proposals
         assert proposals[0]["class"] == "handoff"
         assert proposals[0]["routine_name"] == _ROUTINE
@@ -391,7 +391,7 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
         assert all(found_after[fid] == count + 1 for fid, count in found_before.items()), (
             f"the corrected delta's observed ops did not land: {found_before} -> {found_after}"
         )
-        assert len(hub.get("/api/garden-proposals").json()) == 1  # still only the bail-out's
+        assert len(hub.get("/api/garden-proposals").json()["proposals"]) == 1  # still only the bail-out's
 
         # -- virgin: no live findings at all; the docket cites reconcile's own refs and
         #    materializes onto the ids this delivery minted for them -------------------
@@ -408,7 +408,9 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
             ("stale-docstring", "src/app.py:2"),
         }
         virgin_ids = {r["finding_id"] for r in virgin_rows}
-        virgin_proposal = next(p for p in hub.get("/api/garden-proposals").json() if set(p["findings"]) == virgin_ids)
+        virgin_proposal = next(
+            p for p in hub.get("/api/garden-proposals").json()["proposals"] if set(p["findings"]) == virgin_ids
+        )
         assert virgin_proposal["class"] == "handoff"
         assert virgin_proposal["routine_name"] == _ROUTINE
         assert set(virgin_proposal["findings"]) == virgin_ids, (

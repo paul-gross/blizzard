@@ -96,6 +96,25 @@ def test_graph_id_of_many_matches_across_a_batch_boundary(tmp_path: Path, monkey
     assert result == dict.fromkeys(ids, "gr_1")
 
 
+def test_list_page_excludes_ephemeral_ids_across_a_batch_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    store, engine = _store(tmp_path)
+    ids = [f"ch_batch_{i}" for i in range(7)]  # 3 batches of size 3, 3, 1 under the lowered cap
+    for chunk_id in ids:
+        _mint(store, chunk_id)
+    grouped = {"ch_batch_1", "ch_batch_4"}
+    with engine.begin() as conn:
+        for chunk_id in grouped:
+            record_grouped_row_conn(conn, chunk_id, grouped_into="ch_batch_0", at=_T0)
+
+    page = store.record.list_page(limit=len(ids))
+
+    assert {c.chunk_id for c in page.chunks} == set(ids) - grouped
+    assert page.next_cursor is None
+
+
 def test_list_ready_and_list_not_ready_filter_by_the_given_statuses(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     _mint(store, "ch_ready")

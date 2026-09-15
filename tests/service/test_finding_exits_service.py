@@ -150,7 +150,7 @@ def seed(g: Garden, count: int, *, introduced: str | None = None) -> list[str]:
 def live(g: Garden) -> list[dict[str, Any]]:
     resp = g.hub.get("/api/findings", params={"routine": _ROUTINE, "scope": _SCOPE})
     assert resp.status_code == 200, resp.text
-    return resp.json()
+    return resp.json()["findings"]
 
 
 def read_back(g: Garden, finding_id: str) -> dict[str, Any]:
@@ -520,7 +520,7 @@ def test_delivering_an_accepted_proposals_minted_item_resolves_its_findings(tmp_
             ],
         )
         assert proposed.json()["outcome"] == "recorded", proposed.text
-        (proposal,) = g.hub.get("/api/garden-proposals").json()
+        (proposal,) = g.hub.get("/api/garden-proposals").json()["proposals"]
         assert proposal["findings"] == [first, second], proposal
 
         accepted = g.hub.post(f"/api/garden-proposals/{proposal['proposal_id']}/accept", json={"reason": "taking it"})

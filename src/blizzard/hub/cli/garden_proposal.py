@@ -60,7 +60,7 @@ def garden_proposal_group() -> None:
 @garden_proposal_group.command("list", cls=FleetCommand)
 def garden_proposal_list(cli: CliContext) -> None:
     """List every garden proposal, newest first."""
-    rows = cli.get("/api/garden-proposals", "GET /garden-proposals").json()
+    rows = cli.get_all("/api/garden-proposals", "GET /garden-proposals", key="proposals")
     cli.show(rows, GardenProposalListing(rows))
 
 

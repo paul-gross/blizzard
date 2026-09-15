@@ -129,8 +129,8 @@ describe('GardeningFindingsPage', () => {
       const overridden = opts.routeOverride?.(method, path);
       if (overridden !== undefined) return overridden;
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/findings') return [];
-      if (method === 'GET' && path === '/api/garden-proposals') return [];
+      if (method === 'GET' && path === '/api/findings') return { findings: [], next_cursor: null };
+      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') return ROUTINES;
       if (method === 'GET' && path === '/api/scopes') return SCOPES;
       return {};
@@ -153,7 +153,7 @@ describe('GardeningFindingsPage', () => {
 
   /** Every fixture that needs rows in the bucket answers `/api/findings` with them. */
   const withBucket = (method: string, path: string) =>
-    method === 'GET' && path === '/api/findings' ? BUCKET : undefined;
+    method === 'GET' && path === '/api/findings' ? { findings: BUCKET, next_cursor: null } : undefined;
 
   function pressed(el: HTMLElement, testid: string): string | null | undefined {
     return el.querySelector(`[data-testid="${testid}"]`)?.getAttribute('aria-pressed');
@@ -282,8 +282,9 @@ describe('GardeningFindingsPage', () => {
         const method = input.method.toUpperCase();
         let body: unknown = {};
         if (method === 'GET' && url.pathname === '/api/me') body = OPERATOR_ME_RESPONSE;
-        else if (method === 'GET' && url.pathname === '/api/findings') body = [...BUCKET, FINDING_IN_SCOPE_ALL];
-        else if (method === 'GET' && url.pathname === '/api/garden-proposals') body = [];
+        else if (method === 'GET' && url.pathname === '/api/findings')
+          body = { findings: [...BUCKET, FINDING_IN_SCOPE_ALL], next_cursor: null };
+        else if (method === 'GET' && url.pathname === '/api/garden-proposals') body = { proposals: [], next_cursor: null };
         else if (method === 'GET' && url.pathname === '/api/routines') body = ROUTINES;
         else if (method === 'GET' && url.pathname === '/api/scopes') body = [...SCOPES, SCOPE_ALL];
         return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -334,7 +335,7 @@ describe('GardeningFindingsPage', () => {
     it("renders the bucket's own empty rest state when the read resolves with no rows", async () => {
       const { fixture, el } = await mount({
         routeOverride: (method, path) => {
-          if (method === 'GET' && path === '/api/findings') return [];
+          if (method === 'GET' && path === '/api/findings') return { findings: [], next_cursor: null };
           return undefined;
         },
       });

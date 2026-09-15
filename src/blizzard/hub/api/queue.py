@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import FLEET_VIEW, QUEUE_REORDER
@@ -24,16 +24,19 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.dependencies import derive_blocked_prerequisites
 from blizzard.hub.domain.errors import ChunkNotFound
-from blizzard.hub.domain.queue import ChunkNotGroupable, FoldWouldCloseCycle, QueueList
+from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
+from blizzard.hub.domain.queue import ChunkNotGroupable, FoldWouldCloseCycle, QueueList, QueuePage
 from blizzard.hub.domain.work import Chunk
 from blizzard.wire.chunk import WorkRefModel
 from blizzard.wire.queue import (
+    BacklogPageView,
     BacklogPeekEntry,
     BacklogPeekResponse,
     BacklogPositionRequest,
     BacklogReplaceRequest,
     ChunkGroupRequest,
     ChunkGroupResponse,
+    QueuePageView,
     QueuePeekEntry,
     QueuePeekResponse,
     QueuePositionRequest,
@@ -153,11 +156,36 @@ class ReadyQueue:
         )
 
 
-@router.get("/queue", response_model=QueuePeekResponse, dependencies=[Depends(require(FLEET_VIEW))])
-def get_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
-    """The hub-ordered ready queue, read-only — honours reorder/replace + grouping."""
+def _page_view(page: QueuePage, markings: Mapping[str, list[str]]) -> QueuePageView:
+    return QueuePageView(
+        entries=[
+            QueuePeekEntry(
+                chunk_id=entry.chunk.chunk_id,
+                graph_id=entry.chunk.graph_id,
+                position=entry.position,
+                work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in entry.chunk.work_refs],
+                blocked=blocked_view(markings.get(entry.chunk.chunk_id)),
+            )
+            for entry in page.entries
+        ],
+        next_cursor=page.next_cursor,
+    )
+
+
+@router.get("/queue", response_model=QueuePageView, dependencies=[Depends(require(FLEET_VIEW))])
+def get_queue(
+    services: Annotated[HubServices, Depends(get_services)],
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> QueuePageView:
+    """The hub-ordered ready queue, read-only and keyset-paginated (blizzard#526 D3/D4/D7)
+    — honours reorder/replace + grouping."""
     statuses = services.chunks.facts.load_all_statuses()
-    return ReadyQueue.of(services, statuses).view
+    try:
+        page = services.queue.page(QueueList.READY, statuses=statuses, cursor=cursor, limit=limit)
+    except MalformedCursor as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    return _page_view(page, _blocked_markings(services, statuses))
 
 
 @router.put("/queue", response_model=QueuePeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
@@ -222,12 +250,36 @@ class Backlog:
         )
 
 
-@router.get("/backlog", response_model=BacklogPeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
-def get_backlog(services: Annotated[HubServices, Depends(get_services)]) -> BacklogPeekResponse:
-    """The hub-ordered ``not_ready`` list, read-only — an operator triage surface, so it
-    requires ``QUEUE_REORDER`` rather than the ready queue's ``FLEET_VIEW``."""
+def _backlog_page_view(page: QueuePage, markings: Mapping[str, list[str]]) -> BacklogPageView:
+    return BacklogPageView(
+        entries=[
+            BacklogPeekEntry(
+                chunk_id=entry.chunk.chunk_id,
+                graph_id=entry.chunk.graph_id,
+                position=entry.position,
+                work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in entry.chunk.work_refs],
+                blocked=blocked_view(markings.get(entry.chunk.chunk_id)),
+            )
+            for entry in page.entries
+        ],
+        next_cursor=page.next_cursor,
+    )
+
+
+@router.get("/backlog", response_model=BacklogPageView, dependencies=[Depends(require(QUEUE_REORDER))])
+def get_backlog(
+    services: Annotated[HubServices, Depends(get_services)],
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> BacklogPageView:
+    """The hub-ordered ``not_ready`` list, read-only and keyset-paginated (blizzard#526
+    D3/D4/D7) — an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``."""
     statuses = services.chunks.facts.load_all_statuses()
-    return Backlog.of(services, statuses).view
+    try:
+        page = services.queue.page(QueueList.NOT_READY, statuses=statuses, cursor=cursor, limit=limit)
+    except MalformedCursor as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    return _backlog_page_view(page, _blocked_markings(services, statuses))
 
 
 @router.put("/backlog", response_model=BacklogPeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])

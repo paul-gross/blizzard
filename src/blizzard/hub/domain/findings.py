@@ -18,8 +18,7 @@ FACT_KINDS = frozenset(
     {"add", "observed", "gone", "resolved", "gone-confirmed", "wont-fix", "not-a-finding", "superseded", "reopened"}
 )
 
-#: The human-driven verbs that take a finding out of the live set for good (blizzard#394
-#: D2) — `reopened` is deliberately excluded, since it is the fact kind that undoes one.
+#: The human-driven verbs that exit a finding for good; `reopened` is excluded since it undoes one (blizzard#394 D2).
 EXIT_KINDS = frozenset({"resolved", "gone-confirmed", "wont-fix", "not-a-finding", "superseded"})
 
 #: The ground itself changed — work landed, or a person confirmed non-reproduction.
@@ -55,19 +54,15 @@ class Finding:
     locus: str
     summary: str
     introduced: str | None
-    #: The `introduced` commit's own authored instant — nullable, never backfilled
-    #: (blizzard#394 D5): null wherever unresolved, by design.
+    #: The `introduced` commit's authored instant; null wherever unresolved, never backfilled (blizzard#394 D5).
     introduced_at: datetime | None
-    #: When a routine first recorded this finding — the `add` fact's own instant.
-    #: Distinct from `introduced_at`: that is when the *commit* landed, this is when
-    #: the garden first *saw* it. Derived, never stored.
+    #: When the garden first saw this finding (the `add` fact's instant), not when the commit landed (`introduced_at`).
     first_observed_at: datetime | None
     #: schema.py's `findings` table carries no such column (D2-D4).
     live: bool
     #: "live", "gone", or one of `EXIT_KINDS` — the newest fact's own kind (blizzard#394).
     state: str
-    #: The newest fact's own note, whatever kind it is; `None` for a kind that carries
-    #: none (blizzard#394).
+    #: The newest fact's own note; `None` for a kind that carries none (blizzard#394).
     note: str | None
     last_seen_at: datetime | None
     observed_count: int
@@ -81,11 +76,9 @@ class FindingFact:
     kind: str
     recorded_at: datetime
     note: str | None = None
-    #: Who recorded a human-driven fact — `None` for a run-driven `add`/`observed`/`gone`
-    #: (blizzard#394).
+    #: Who recorded a human-driven fact; `None` for a run-driven `add`/`observed`/`gone` (blizzard#394).
     actor: str | None = None
-    #: The proposal a `resolved` fact answered, when the delivery-triggered drain
-    #: recorded it (blizzard#394) — always `None` for a hand resolution.
+    #: The proposal a `resolved` fact answered, when the drain recorded it; `None` for a hand resolution (blizzard#394).
     proposal_id: str | None = None
     #: The absorbing finding, set only on a `superseded` fact (blizzard#394).
     superseded_by: str | None = None
@@ -138,6 +131,15 @@ def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
 
 
+@dataclass(frozen=True)
+class FindingPage:
+    """A bounded, keyset-paginated page of :meth:`IReadFindingRepository.list_page`
+    (blizzard#526 D5) — ``next_cursor`` is ``None`` exactly when this page is the last one."""
+
+    findings: list[Finding]
+    next_cursor: str | None
+
+
 class IReadFindingRepository(Protocol):
     """Read-only finding access. Controllers at the edges depend on this variant."""
 
@@ -176,21 +178,33 @@ class IReadFindingRepository(Protocol):
         ...
 
     def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
-        """Every finding across every routine (blizzard#486) — `scope_slug=None` reads
-        every scope too, a named one narrows to just it. `list_for`/`list_for_routine`'s
-        own routine-narrowed siblings, minus the `routine_name` filter. Live only,
-        unless `include_gone` (D3), which also surfaces every exited finding.
-
-        Neither `ix_findings_routine_scope` nor `ix_findings_routine_class` can serve
-        this read — both lead with `routine_name`, which this read never filters on —
-        so this table-scans by construction; blizzard#486 puts the scale question out
-        of scope rather than pre-emptively indexing for it."""
+        """Every finding across every routine (blizzard#486); `scope_slug=None` reads every
+        scope. Table-scans by construction — neither `ix_findings_routine_scope` nor
+        `ix_findings_routine_class` serves a read with no `routine_name` filter;
+        blizzard#486 leaves the scale question open rather than pre-emptively indexing."""
         ...
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name`
         (blizzard-product:/delivered/garden/machinery.md §What the store buys) — a count,
         never the rows themselves."""
+        ...
+
+    def list_page(
+        self,
+        *,
+        routine_name: str | None,
+        scope_slug: str | None,
+        include_gone: bool = False,
+        cursor: str | None = None,
+        limit: int,
+    ) -> FindingPage:
+        """Bounded, keyset-paginated read unifying `list_for`/`list_for_routine`/
+        `list_across_routines` (blizzard#526 D1/D5), ordered by `finding_id` ascending.
+        Liveness is derived in Python after the SQL read (D3), so a short window can
+        undercount post-filter matches — implementation tops up windows until `limit`
+        matches or exhaustion. `cursor` is a prior :attr:`FindingPage.next_cursor`; any
+        other raises :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
         ...
 
     def has_resolution_for_proposal(self, proposal_id: str) -> bool:

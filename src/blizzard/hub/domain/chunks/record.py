@@ -4,10 +4,20 @@ mutable configuration columns."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.work import Chunk, IntendedMigration
+
+
+@dataclass(frozen=True)
+class ChunkPage:
+    """A bounded, keyset-paginated page of :meth:`IReadChunkRecordRepository.list_page`
+    (blizzard#526 D4) — ``next_cursor`` is ``None`` exactly when this page is the last one."""
+
+    chunks: list[Chunk]
+    next_cursor: str | None
 
 
 class IReadChunkRecordRepository(Protocol):
@@ -38,6 +48,12 @@ class IReadChunkRecordRepository(Protocol):
         ...
 
     def list_all(self) -> list[Chunk]: ...
+
+    def list_page(self, *, cursor: str | None = None, limit: int) -> ChunkPage:
+        """``list_all``'s bounded sibling: newest-minted first, ``chunk_id`` breaking a
+        same-instant tie (blizzard#526 D4). ``cursor`` is a prior
+        :attr:`ChunkPage.next_cursor`; any other raises :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
+        ...
 
 
 class IWriteChunkRecordRepository(IReadChunkRecordRepository, Protocol):

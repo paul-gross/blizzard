@@ -67,7 +67,7 @@ def test_summary_environment_count_counts_the_routes_environments(tmp_path: Path
         json={"chunk_id": single, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-c"]},
     )
 
-    summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()}
+    summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()["chunks"]}
     assert summaries[grouped]["environment_count"] == 2
     assert summaries[single]["environment_count"] == 1
     assert summaries[unrouted]["environment_count"] == 0
@@ -123,7 +123,7 @@ def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
     assert hub.services.chunks.route.route_of(finished) is not None
     assert hub.client.post(f"/api/chunks/{stopped}/stop", json={"by": "operator"}).status_code == 202
 
-    summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()}
+    summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()["chunks"]}
     assert summaries[running]["status"] == "running"
     assert (summaries[running]["runner_id"], summaries[running]["environment_count"]) == ("r1", 2)
     assert summaries[finished]["status"] == "done"

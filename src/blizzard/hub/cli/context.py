@@ -57,6 +57,31 @@ class CliContext:
     ) -> httpx.Response:
         return self._verb("get", path, operation, params=params, on_status=on_status)
 
+    def get_all(
+        self,
+        path: str,
+        operation: str,
+        *,
+        key: str,
+        params: dict[str, str] | None = None,
+        on_status: dict[int, str] | None = None,
+    ) -> list[Any]:
+        """Drain every page of a keyset-paginated list read (blizzard#526 D7), concatenating
+        ``key``'s rows across pages. Fixed at ``limit=1000`` so it never truncates as the
+        fleet grows; no verb exposes ``--cursor``/``--limit`` of its own (``blizzard:cli-contract``)."""
+        page_params = dict(params or {})
+        page_params["limit"] = "1000"
+        rows: list[Any] = []
+        cursor: str | None = None
+        while True:
+            if cursor is not None:
+                page_params["cursor"] = cursor
+            body = self.get(path, operation, params=page_params, on_status=on_status).json()
+            rows.extend(body[key])
+            cursor = body.get("next_cursor")
+            if cursor is None:
+                return rows
+
     def post(
         self, path: str, operation: str, *, json_body: object | None = None, on_status: dict[int, str] | None = None
     ) -> httpx.Response:
@@ -91,12 +116,10 @@ class CliContext:
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
     ) -> Iterator[str]:
-        """A ``GET`` read one decoded line at a time — the NDJSON bulk-export seam (D4).
-        Dispatches through ``httpx``'s module-level ``stream`` context manager, mirroring
-        :meth:`send`'s module-level dispatch so a test's ``monkeypatch.setattr`` still
-        intercepts it. A refusal is resolved — status and, where needed, body — before any
-        line is yielded, so it surfaces exactly like the buffered path's :meth:`check`
-        rather than partway through the caller's iteration."""
+        """A ``GET`` read one decoded line at a time (the NDJSON bulk-export seam, D4).
+        Dispatches through ``httpx``'s module-level ``stream``, mirroring :meth:`send` so
+        ``monkeypatch.setattr`` still intercepts it; a refusal resolves before any line is
+        yielded, so it surfaces like :meth:`check`'s buffered path, not mid-iteration."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
         try:
             with httpx.stream(

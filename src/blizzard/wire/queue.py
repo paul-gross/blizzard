@@ -24,9 +24,18 @@ class QueuePeekEntry(BaseModel):
 
 
 class QueuePeekResponse(BaseModel):
-    """The ready queue, in the hub's explicit order."""
+    """The ready queue's whole order, unpaginated — a write verb's caller needs it in
+    full to confirm against, not one page (blizzard#526 D3)."""
 
     entries: list[QueuePeekEntry] = []
+
+
+class QueuePageView(BaseModel):
+    """``GET /api/queue``'s own bounded page (blizzard#526 D3/D4): ``next_cursor`` is
+    ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local."""
+
+    entries: list[QueuePeekEntry] = []
+    next_cursor: str | None = None
 
 
 class QueueReplaceRequest(BaseModel):
@@ -60,9 +69,18 @@ class BacklogPeekEntry(BaseModel):
 
 
 class BacklogPeekResponse(BaseModel):
-    """The ``not_ready`` list, in the hub's explicit order."""
+    """The ``not_ready`` list's whole order, unpaginated — a write verb's caller needs
+    it in full to confirm against, not one page (blizzard#526 D3)."""
 
     entries: list[BacklogPeekEntry] = []
+
+
+class BacklogPageView(BaseModel):
+    """``GET /api/backlog``'s own bounded page (blizzard#526 D3/D4): ``next_cursor``
+    is ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local."""
+
+    entries: list[BacklogPeekEntry] = []
+    next_cursor: str | None = None
 
 
 class BacklogReplaceRequest(BaseModel):

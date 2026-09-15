@@ -39,13 +39,13 @@ class FleetStatus:
 @click.command(cls=FleetCommand)
 def status(cli: CliContext) -> None:
     """The fleet view: every chunk with its derived status, the runners, and open questions."""
-    chunks = cli.get("/api/chunks", "GET /chunks")
+    chunks = cli.get_all("/api/chunks", "GET /chunks", key="chunks")
     runners = cli.get("/api/runners", "GET /runners")
     questions = cli.get("/api/questions", "GET /questions")
     spend = cli.get("/api/spend", "GET /spend", params={"since": _FLEET_SPEND_SINCE})
 
     view = FleetStatus(
-        chunks=chunks.json(),
+        chunks=chunks,
         runners=runners.json().get("runners", []),
         questions=questions.json(),
         spend=spend.json(),

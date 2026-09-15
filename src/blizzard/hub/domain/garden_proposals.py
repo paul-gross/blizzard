@@ -47,12 +47,27 @@ class GardenProposal:
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
 
 
+@dataclass(frozen=True)
+class GardenProposalPage:
+    """A bounded, keyset-paginated page of :meth:`IReadGardenProposalRepository.list_page`
+    (blizzard#526 D4) — ``next_cursor`` is ``None`` on the last one."""
+
+    proposals: list[GardenProposal]
+    next_cursor: str | None
+
+
 class IReadGardenProposalRepository(Protocol):
     """Read-only garden-proposal access. Controllers at the edges depend on this variant."""
 
     def get(self, proposal_id: str) -> GardenProposal | None: ...
 
     def list_all(self) -> list[GardenProposal]: ...
+
+    def list_page(self, *, cursor: str | None = None, limit: int) -> GardenProposalPage:
+        """`list_all`'s bounded sibling, ordered ``(created_at desc, proposal_id desc)``
+        (blizzard#526 D4). ``cursor`` is a prior :attr:`GardenProposalPage.next_cursor`;
+        any other raises :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
+        ...
 
     def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
         """Every proposal `routine_name` has raised, newest first — `list_all`'s

@@ -24,12 +24,12 @@ from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.dependencies import plan_fold, would_close_a_cycle
 from blizzard.hub.domain.errors import ChunkNotFound
+from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.work import Chunk
 
 _log = get_logger("blizzard.hub.queue")
 
-# The fold's own fixed dependency-edge actor (D5, issue #460) — grouping stays
-# actor-less on the wire; every edge a fold carries is stamped with this constant.
+# Grouping stays actor-less on the wire; every fold edge is stamped with this fixed actor (D5, issue #460).
 FOLD_ACTOR = "fold"
 
 
@@ -69,6 +69,38 @@ class FoldWouldCloseCycle(Exception):
         self.folded_chunk_ids = folded_chunk_ids
 
 
+def _decode_queue_cursor(cursor: str) -> tuple[float, str]:
+    """``QueueService.page``'s whole cursor format: an effective-position/chunk_id pair
+    (blizzard#526 D4)."""
+    parts = decode_cursor(cursor)
+    if (
+        len(parts) != 2
+        or isinstance(parts[0], bool)
+        or not isinstance(parts[0], int | float)
+        or not isinstance(parts[1], str)
+    ):
+        raise MalformedCursor(cursor)
+    return float(parts[0]), parts[1]
+
+
+@dataclass(frozen=True)
+class QueueEntry:
+    """One paged queue/backlog row (blizzard#526 D4) — the chunk plus its absolute
+    0-based whole-list position, so drained pages read ``0…n-1`` like an unpaginated peek."""
+
+    chunk: Chunk
+    position: int
+
+
+@dataclass(frozen=True)
+class QueuePage:
+    """A bounded, keyset-paginated page of :meth:`QueueService.page` (blizzard#526 D4) —
+    ``next_cursor`` is ``None`` exactly when this page is the last one."""
+
+    entries: list[QueueEntry]
+    next_cursor: str | None
+
+
 class QueueService:
     """Reorder the ``ready`` queue and the ``not_ready`` list, each as its own explicit
     hub-side property, ranked independently (``bzh:ranking-is-per-list``)."""
@@ -79,13 +111,46 @@ class QueueService:
         self._clock = clock
 
     def ordered(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
-        """``list_``'s chunks in order — ascending by effective position. ``statuses`` is
-        the caller's own already-derived fleet statuses (``load_all_statuses()``), never
-        re-derived here."""
+        """``list_``'s chunks in order — ascending by effective position, ``chunk_id``
+        breaking a same-instant tie (blizzard#526 D4). ``statuses`` is the caller's own
+        already-derived fleet statuses (``load_all_statuses()``), never re-derived here."""
         positions = self._queue.queue_positions()
         promoted_ats = self._queue.promoted_ats()
         candidates = self._candidates(list_, statuses=statuses)
-        return sorted(candidates, key=lambda c: self._effective_position(c, positions, promoted_ats))
+        return sorted(candidates, key=lambda c: (self._effective_position(c, positions, promoted_ats), c.chunk_id))
+
+    def page(
+        self,
+        list_: QueueList,
+        *,
+        statuses: Mapping[str, ChunkStatus],
+        cursor: str | None = None,
+        limit: int,
+    ) -> QueuePage:
+        """``list_``'s chunks bounded and keyset-paginated (blizzard#526 D4/D7); the
+        keyset applies over :meth:`ordered`'s already-materialized order, not a second
+        SQL read. ``position`` is each entry's absolute index in the whole list, so a
+        since-repositioned cursor chunk still resumes by key. ``cursor`` is a prior
+        :attr:`QueuePage.next_cursor`, else raising :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
+        if limit < 1:
+            raise ValueError(f"limit must be at least 1, got {limit}")
+        positions = self._queue.queue_positions()
+        promoted_ats = self._queue.promoted_ats()
+        candidates = self._candidates(list_, statuses=statuses)
+        keyed = sorted((self._effective_position(c, positions, promoted_ats), c.chunk_id, c) for c in candidates)
+        after = _decode_queue_cursor(cursor) if cursor is not None else None
+        entries: list[QueueEntry] = []
+        entry_keys: list[tuple[float, str]] = []
+        for index, (effective_position, chunk_id, chunk) in enumerate(keyed):
+            if after is not None and (effective_position, chunk_id) <= after:
+                continue
+            entries.append(QueueEntry(chunk=chunk, position=index))
+            entry_keys.append((effective_position, chunk_id))
+            if len(entries) == limit + 1:
+                break
+        page_entries = entries[:limit]
+        next_cursor = encode_cursor(*entry_keys[limit - 1]) if len(entries) > limit else None
+        return QueuePage(entries=page_entries, next_cursor=next_cursor)
 
     def ordered_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """Ready chunks in queue order — ascending by effective position."""
@@ -117,7 +182,7 @@ class QueueService:
         positions = self._queue.queue_positions()
         promoted_ats = self._queue.promoted_ats()
         candidates = [c for c in self._candidates(list_, statuses=statuses) if c.chunk_id != chunk.chunk_id]
-        ordered = sorted(candidates, key=lambda c: self._effective_position(c, positions, promoted_ats))
+        ordered = sorted(candidates, key=lambda c: (self._effective_position(c, positions, promoted_ats), c.chunk_id))
 
         if after is None:
             new_position = self._effective_position(ordered[0], positions, promoted_ats) - 1.0 if ordered else 0.0
@@ -187,8 +252,7 @@ class GroupResult:
 
     survivor: Chunk
     status: ChunkStatus
-    # The last ``chunk_grouped.id`` this call wrote (issue #213) — ``None`` when
-    # ``merge_ids`` resolved to zero targets.
+    # The last ``chunk_grouped.id`` this call wrote; ``None`` when ``merge_ids`` resolved to zero targets (issue #213).
     grouped_id: int | None = None
 
 

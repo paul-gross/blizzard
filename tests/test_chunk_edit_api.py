@@ -72,7 +72,7 @@ def test_a_freshly_ingested_chunk_carries_the_default_graph_and_no_model_prefere
     assert detail["default_effort"] is None
     default_graph_id = detail["graph_id"]
 
-    summary = next(c for c in hub.client.get("/api/chunks").json() if c["chunk_id"] == chunk_id)
+    summary = next(c for c in hub.client.get("/api/chunks").json()["chunks"] if c["chunk_id"] == chunk_id)
     assert summary["default_model"] == []
     assert summary["default_effort"] is None
     assert summary["graph_id"] == default_graph_id

@@ -41,7 +41,7 @@ const CHUNK_ROW = {
 function hubRoutes(method: string, path: string): unknown {
   if (method !== 'GET') return {};
   if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-  if (path === '/api/chunks') return [CHUNK_ROW];
+  if (path === '/api/chunks') return { chunks: [CHUNK_ROW], next_cursor: null };
   if (/^\/api\/chunks\/[^/]+$/.test(path)) {
     return {
       ...CHUNK_ROW,

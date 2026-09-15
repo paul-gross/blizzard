@@ -161,7 +161,7 @@ def test_group_merges_pointers_and_discards_the_rest(tmp_path: Path) -> None:
     assert refs == {"1", "2", "3"}
     # The merged-away chunks are ephemeral — gone from the queue and the fleet list.
     assert _peek_ids(hub) == [survivor]
-    listed = {row["chunk_id"] for row in hub.client.get("/api/chunks").json()}
+    listed = {row["chunk_id"] for row in hub.client.get("/api/chunks").json()["chunks"]}
     assert listed == {survivor}
     assert hub.client.get(f"/api/chunks/{b}").status_code == 404
 

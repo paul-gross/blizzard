@@ -126,8 +126,8 @@ async function render() {
     if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
     if (method === 'GET' && path === '/api/scopes') return SCOPES;
     if (method === 'GET' && path === '/api/routines') return ROUTINES;
-    if (method === 'GET' && path === '/api/findings') return FINDINGS;
-    if (method === 'GET' && path === '/api/garden-proposals') return [];
+    if (method === 'GET' && path === '/api/findings') return { findings: FINDINGS, next_cursor: null };
+    if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
     return {};
   });
   await TestBed.configureTestingModule({

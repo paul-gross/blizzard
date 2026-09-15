@@ -17,14 +17,14 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.findings import FactEntry, Finding, FindingExitService, FindingFact
+from blizzard.hub.domain.findings import FactEntry, Finding, FindingExitService, FindingFact, FindingPage
 from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosure,
     GardenProposalClosureKind,
     GardenProposalItemOutcome,
 )
 from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
-from blizzard.hub.domain.garden_proposals import GardenProposal
+from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalPage
 from blizzard.hub.domain.work import Chunk, WorkRef
 
 pytestmark = pytest.mark.unit
@@ -115,6 +115,9 @@ class _FakeProposals:
     def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
         raise NotImplementedError
 
+    def list_page(self, *, cursor: str | None = None, limit: int) -> GardenProposalPage:
+        raise NotImplementedError
+
     def count_by_class(self, routine_name: str, class_: str) -> int:
         raise NotImplementedError
 
@@ -143,6 +146,17 @@ class _FakeFindings:
         raise NotImplementedError
 
     def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
+        raise NotImplementedError
+
+    def list_page(
+        self,
+        *,
+        routine_name: str | None,
+        scope_slug: str | None,
+        include_gone: bool = False,
+        cursor: str | None = None,
+        limit: int,
+    ) -> FindingPage:
         raise NotImplementedError
 
     def count_by_class(self, routine_name: str, class_: str) -> int:

@@ -137,7 +137,7 @@ def test_request_attaches_the_stored_bearer_token(monkeypatch: pytest.MonkeyPatc
 
     def fake_get(url: str, *, timeout: float, headers: dict[str, str] | None = None, params=None) -> _FakeResponse:
         captured["headers"] = headers
-        return _FakeResponse(200, [])
+        return _FakeResponse(200, {"chunks": [], "next_cursor": None})
 
     monkeypatch.setattr(httpx, "get", fake_get)
     monkeypatch.setattr(SessionFile, "load", lambda self, base: "stored-token")
@@ -152,7 +152,7 @@ def test_request_omits_the_headers_kwarg_when_no_session_is_stored(monkeypatch: 
     def fake_get(url: str, *, timeout: float, params=None) -> _FakeResponse:
         # No `headers` kwarg accepted at all — proves `_request` doesn't pass one when
         # no session is stored (every existing CLI unit test's fake relies on this).
-        return _FakeResponse(200, [])
+        return _FakeResponse(200, {"chunks": [], "next_cursor": None})
 
     monkeypatch.setattr(httpx, "get", fake_get)
     monkeypatch.setattr(SessionFile, "load", lambda self, base: None)

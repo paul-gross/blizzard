@@ -102,7 +102,7 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
     unconfigured = WorkRef(source="retired", ref="9")
     unconfigured_id = hub.services.ingest.ingest([unconfigured], graph=graph)
 
-    rows = {r["chunk_id"]: r for r in hub.client.get("/api/chunks").json()}
+    rows = {r["chunk_id"]: r for r in hub.client.get("/api/chunks").json()["chunks"]}
     assert rows[chunk_id]["current_node_name"] == "triage"  # the entry node, pre-first-transition
     assert rows[chunk_id]["work_refs"] == [
         {**_P1, "label": "default#1", "web_url": "http://forge.local/acme/widget/issues/1"}
@@ -114,7 +114,7 @@ def test_ingest_rests_not_ready_and_promote_makes_it_claimable(tmp_path: Path) -
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "not_ready"
-    assert [r["chunk_id"] for r in hub.client.get("/api/chunks").json()] == [chunk_id]  # on the board
+    assert [r["chunk_id"] for r in hub.client.get("/api/chunks").json()["chunks"]] == [chunk_id]  # on the board
     assert hub.client.get("/api/queue").json()["entries"] == []  # never claimed
 
     promote = hub.client.post(f"/api/chunks/{chunk_id}/promote")
@@ -180,7 +180,7 @@ def test_ingest_rejects_a_token_no_configured_source_claims(tmp_path: Path) -> N
     assert "other" in detail
     assert "widget" in detail
     # The whole request rejects together — nothing was minted.
-    assert hub.client.get("/api/chunks").json() == []
+    assert hub.client.get("/api/chunks").json()["chunks"] == []
 
 
 def test_ingest_succeeds_when_a_configured_source_claims_the_pointer(tmp_path: Path) -> None:

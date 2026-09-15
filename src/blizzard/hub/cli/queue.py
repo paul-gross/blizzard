@@ -27,9 +27,10 @@ def queue_group() -> None:
 
 @queue_group.command("show", cls=FleetCommand)
 def queue_show(cli: CliContext) -> None:
-    """The hub-ordered ready queue, read-only — a client of ``GET /api/queue``."""
-    body = cli.get("/api/queue", "GET /queue").json()
-    cli.show(body, QueueListing(body.get("entries", [])))
+    """The hub-ordered ready queue, read-only — a client of ``GET /api/queue``, drained
+    to its whole order (blizzard#526 D7)."""
+    entries = cli.get_all("/api/queue", "GET /queue", key="entries")
+    cli.show({"entries": entries}, QueueListing(entries))
 
 
 @queue_group.command("set", cls=FleetCommand)
@@ -59,11 +60,10 @@ def queue_set(cli: CliContext, chunk_ids: tuple[str, ...]) -> None:
 def queue_move(cli: CliContext, chunk_id: str, position: int) -> None:
     """Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).
 
-    A client of the single-chunk fractional ``POST /api/queue/position`` (issue #137):
-    reads the current order, drops CHUNK_ID out of it, clamps POSITION into what's left,
-    and sends one anchor. 409 when CHUNK_ID is not in the ready list, not the backlog."""
-    peek = cli.get("/api/queue", "GET /queue")
-    rest = [entry["chunk_id"] for entry in peek.json().get("entries", []) if entry["chunk_id"] != chunk_id]
+    Client of the fractional ``POST /api/queue/position`` (issue #137); 409 when CHUNK_ID
+    is not in the ready list, not the backlog."""
+    entries = cli.get_all("/api/queue", "GET /queue", key="entries")
+    rest = [entry["chunk_id"] for entry in entries if entry["chunk_id"] != chunk_id]
     index = min(max(position, 0), len(rest))
     after_chunk_id = rest[index - 1] if index > 0 else None
     resp = cli.post(

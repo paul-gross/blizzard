@@ -98,7 +98,7 @@ def test_returns_the_proposals_findings_via_the_shared_projection(tmp_path: Path
 
     # The operator's own `GET /api/findings` reads through the identical projection —
     # the fleet route reuses it rather than restating it.
-    operator = hub.client.get("/api/findings", params={"routine": _ROUTINE, "scope": _SCOPE}).json()
+    operator = hub.client.get("/api/findings", params={"routine": _ROUTINE, "scope": _SCOPE}).json()["findings"]
     by_id = {row["finding_id"]: row for row in operator}
     for row in resp.json():
         assert row == by_id[row["finding_id"]]

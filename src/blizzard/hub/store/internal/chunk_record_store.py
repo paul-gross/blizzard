@@ -9,12 +9,16 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from datetime import datetime
+from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import Select, and_, or_, select, update
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
+from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.hub.domain.chunks.record import ChunkPage, IWriteChunkRecordRepository
+from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.work import Chunk, IntendedMigration, WorkRef
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
@@ -29,6 +33,35 @@ from blizzard.hub.store.internal.chunk_rows import (
     insert_chunk_rows,
     is_ephemeral_id,
 )
+
+#: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks (blizzard#526 D4).
+_CURSOR_ARITY = 2
+
+
+def _encode_chunk_cursor(chunk: Chunk) -> str:
+    return encode_cursor(iso_utc(chunk.minted_at), chunk.chunk_id)
+
+
+def _decode_chunk_cursor(cursor: str) -> tuple[datetime, str]:
+    parts = decode_cursor(cursor)
+    if len(parts) != _CURSOR_ARITY or not isinstance(parts[0], str) or not isinstance(parts[1], str):
+        raise MalformedCursor(cursor)
+    try:
+        minted_at = as_utc(datetime.fromisoformat(parts[0]))
+    except ValueError:
+        raise MalformedCursor(cursor) from None
+    return minted_at, parts[1]
+
+
+def _chunk_page_stmt(after: tuple[datetime, str] | None, limit: int) -> Select[Any]:
+    stmt = select(s.chunks)
+    if after is not None:
+        minted_at, chunk_id = after
+        c = s.chunks.c
+        # The portable spelling of `(minted_at, chunk_id) < (minted_at, chunk_id)` —
+        # row-value comparison support varies by backend (`bzh:sql-portable`).
+        stmt = stmt.where(or_(c.minted_at < minted_at, and_(c.minted_at == minted_at, c.chunk_id < chunk_id)))
+    return stmt.order_by(s.chunks.c.minted_at.desc(), s.chunks.c.chunk_id.desc()).limit(limit)
 
 
 class ChunkRecordStore:
@@ -119,6 +152,46 @@ class ChunkRecordStore:
                 )
                 for r in rows
             ]
+
+    def list_page(self, *, cursor: str | None = None, limit: int) -> ChunkPage:
+        """`list_all`'s bounded sibling (blizzard#526 D4): a SQL keyset window with
+        ephemeral chunks excluded in Python after the read, so a window landing wholly
+        on ephemeral rows can come back short of `limit` live chunks. Each retry doubles
+        the window rather than stopping there, so a `next_cursor` walk still sees every
+        visible chunk exactly once."""
+        if limit < 1:
+            raise ValueError(f"limit must be at least 1, got {limit}")
+        after = _decode_chunk_cursor(cursor) if cursor is not None else None
+        fetch = limit + 1
+        with self._store.read("list_page") as conn:
+            while True:
+                rows = conn.execute(_chunk_page_stmt(after, fetch)).all()
+                ephemeral: set[str] = set()
+                for batch in id_batches([r.chunk_id for r in rows]):
+                    ephemeral |= ephemeral_ids_in(conn, batch)
+                surviving = [r for r in rows if r.chunk_id not in ephemeral]
+                if len(surviving) > limit or len(rows) < fetch:
+                    break
+                fetch *= 2
+            page_rows = surviving[:limit]
+            pointers: dict[str, list[WorkRef]] = defaultdict(list)
+            for batch in id_batches([r.chunk_id for r in page_rows]):
+                for p in conn.execute(select(s.chunk_work_refs).where(s.chunk_work_refs.c.chunk_id.in_(batch))).all():
+                    pointers[p.chunk_id].append(WorkRef(source=p.source, ref=p.ref))
+        chunks = [
+            Chunk(
+                chunk_id=r.chunk_id,
+                graph_id=r.graph_id,
+                work_refs=pointers[r.chunk_id],
+                minted_at=r.minted_at,
+                default_model=DEFAULT_MODEL.decode(r.default_model),
+                default_effort=r.default_effort,
+                intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
+            )
+            for r in page_rows
+        ]
+        next_cursor = _encode_chunk_cursor(chunks[-1]) if len(surviving) > limit and chunks else None
+        return ChunkPage(chunks=chunks, next_cursor=next_cursor)
 
     def list_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         return self._listed_with_status(ChunkStatus.READY, statuses=statuses)

@@ -108,7 +108,7 @@ describe('GardeningProposalDetail', () => {
   ) {
     const paramMap$ = new BehaviorSubject(convertToParamMap(proposalId === null ? {} : { proposalId }));
     stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') return proposals;
+      if (method === 'GET' && path === '/api/garden-proposals') return { proposals, next_cursor: null };
       if (method === 'GET' && path === '/api/me') return me;
       if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
       if (method === 'GET' && path === '/api/work-sources/hub/items/42') {
@@ -277,7 +277,7 @@ describe('GardeningProposalDetail', () => {
       const { fixture, el } = await render([WAITING_A], OPERATOR_ME_RESPONSE, WAITING_A.proposal_id);
       stub.restore();
       stub = stubRequestClient(hubClient, (method, path) => {
-        if (method === 'GET' && path === '/api/garden-proposals') return [WAITING_A];
+        if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [WAITING_A], next_cursor: null };
         if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
         if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
         if (method === 'POST' && path === '/api/findings/resolve') return stubError(422, { detail: 'note required' });

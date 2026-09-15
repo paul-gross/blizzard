@@ -247,7 +247,7 @@ def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_pat
         assert total["cost_partial"] is True  # a cost-absent row flags the total partial
 
         # The summary listing carries the derived cost total too.
-        row = next(c for c in hub.get("/api/chunks").json() if c["chunk_id"] == chunk_id)
+        row = next(c for c in hub.get("/api/chunks").json()["chunks"] if c["chunk_id"] == chunk_id)
         assert row["cost"]["cost_usd"] == pytest.approx(0.10)
         assert row["cost"]["cost_partial"] is True
 

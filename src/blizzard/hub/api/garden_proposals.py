@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW
@@ -27,12 +27,14 @@ from blizzard.hub.domain.garden_proposal_resolution import resolve_proposal_find
 from blizzard.hub.domain.garden_proposals import GardenProposal
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
+from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.garden_proposal import (
     GardenProposalAcceptRequest,
     GardenProposalAcceptResponse,
     GardenProposalClosureView,
     GardenProposalPassRequest,
+    GardenProposalsPageView,
     GardenProposalView,
 )
 
@@ -78,12 +80,22 @@ def _get_or_404(proposal_id: str, services: HubServices) -> GardenProposal:
     return proposal
 
 
-@router.get("/garden-proposals", response_model=list[GardenProposalView], dependencies=[Depends(require(FLEET_VIEW))])
-def list_garden_proposals(services: Annotated[HubServices, Depends(get_services)]) -> list[GardenProposalView]:
-    """Every garden proposal, newest first."""
-    proposals = services.garden_proposals.list_all()
-    closures = services.garden_proposal_closures.get_many([p.proposal_id for p in proposals])
-    return [proposal_view(p, closures.get(p.proposal_id)) for p in proposals]
+@router.get("/garden-proposals", response_model=GardenProposalsPageView, dependencies=[Depends(require(FLEET_VIEW))])
+def list_garden_proposals(
+    services: Annotated[HubServices, Depends(get_services)],
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> GardenProposalsPageView:
+    """Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526 D3/D4)."""
+    try:
+        page = services.garden_proposals.list_page(cursor=cursor, limit=limit)
+    except MalformedCursor as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    closures = services.garden_proposal_closures.get_many([p.proposal_id for p in page.proposals])
+    return GardenProposalsPageView(
+        proposals=[proposal_view(p, closures.get(p.proposal_id)) for p in page.proposals],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get(

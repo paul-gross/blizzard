@@ -83,14 +83,17 @@ function hubRoutes(me: object = OPERATOR_ME_RESPONSE) {
       };
     }
     if (path === '/api/chunks') {
-      return [
-        CHUNK(RUNNING, 'running'),
-        CHUNK(ASKED, 'waiting_on_human'),
-        CHUNK(READY, 'ready'),
-        CHUNK(READY_NEXT, 'ready'),
-        CHUNK(BACKLOG, 'not_ready'),
-        CHUNK(BACKLOG_NEXT, 'not_ready'),
-      ];
+      return {
+        chunks: [
+          CHUNK(RUNNING, 'running'),
+          CHUNK(ASKED, 'waiting_on_human'),
+          CHUNK(READY, 'ready'),
+          CHUNK(READY_NEXT, 'ready'),
+          CHUNK(BACKLOG, 'not_ready'),
+          CHUNK(BACKLOG_NEXT, 'not_ready'),
+        ],
+        next_cursor: null,
+      };
     }
     if (path === '/api/questions') {
       return [

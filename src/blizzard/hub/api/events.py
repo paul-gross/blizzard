@@ -25,6 +25,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT
 from blizzard.hub.domain.work import ActivityFeed, ActivityRow, EventFeed, EventRow
 from blizzard.wire.activity import ActivityResponse, ActivityView
 from blizzard.wire.events import EventsResponse, EventView
@@ -82,7 +83,7 @@ def list_events(
     runner_id: Annotated[str | None, Query()] = None,
     chunk_id: Annotated[str | None, Query()] = None,
     since: Annotated[datetime | None, Query()] = None,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> EventsResponse:
     """The ``event_log`` unified with open escalations (issue #125), most-severe-newest first, bounded.
 
@@ -142,7 +143,7 @@ class Activity:
 def list_activity(
     services: Annotated[HubServices, Depends(get_services)],
     since: Annotated[datetime | None, Query()] = None,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> ActivityResponse:
     """The activity backfill (issue #213) — the three already-bounded per-source activity reads merged,
     sorted newest-first, and capped.

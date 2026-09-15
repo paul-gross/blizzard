@@ -6,7 +6,7 @@ count is unchanged as fleet size grows and never reaches `load_facts`/`route_of`
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -14,6 +14,7 @@ import pytest
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.pagination import MAX_LIMIT
 from blizzard.hub.domain.work import ChunkFacts, WorkRef
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -21,6 +22,7 @@ from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from tests.support import build_hub, count_queries, hub_store_connections, ingest, seed_chunk, seed_graph
+from tests.test_ingest_and_queue import _BUILD_REVIEW_DELIVER_YAML, _pass
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -45,7 +47,7 @@ def test_list_chunks_query_count_is_independent_of_fleet_size(tmp_path: Path) ->
     def call(hub, key: str) -> None:  # type: ignore[no-untyped-def]
         resp = hub.client.get("/api/chunks")
         assert resp.status_code == 200, resp.text
-        results[key] = len(resp.json())
+        results[key] = len(resp.json()["chunks"])
 
     small_count = count_queries(small.engine, lambda: call(small, "small"))
     large_count = count_queries(large.engine, lambda: call(large, "large"))
@@ -106,7 +108,7 @@ def test_list_chunks_calls_bulk_reads_and_never_load_facts_or_route_of(tmp_path:
     resp = hub.client.get("/api/chunks")
 
     assert resp.status_code == 200, resp.text
-    assert len(resp.json()) == 2
+    assert len(resp.json()["chunks"]) == 2
     assert counting_facts.load_all_facts_calls == 1
     assert counting_route.load_all_routes_calls == 1
     assert counting_facts.load_facts_calls == 0
@@ -148,7 +150,7 @@ def test_list_chunks_renders_work_refs_with_no_fact_load_or_live_holders_call(tm
     resp = hub.client.get("/api/chunks")
 
     assert resp.status_code == 200, resp.text
-    by_source_ref = {(row["work_refs"][0]["source"], row["work_refs"][0]["ref"]): row for row in resp.json()}
+    by_source_ref = {(row["work_refs"][0]["source"], row["work_refs"][0]["ref"]): row for row in resp.json()["chunks"]}
     assert by_source_ref[("default", "1")]["work_refs"][0]["web_url"] == "http://forge.local/acme/widget/issues/1"
     assert by_source_ref[("hub", created["ref"])]["work_refs"][0]["web_url"] == f"/board/chunk/{created['chunk_id']}"
     assert counting_work_refs.find_live_holder_calls == 0
@@ -181,7 +183,7 @@ def test_list_chunks_never_calls_graphs_get(tmp_path: Path) -> None:
     resp = hub.client.get("/api/chunks")
 
     assert resp.status_code == 200, resp.text
-    assert len(resp.json()) == 2
+    assert len(resp.json()["chunks"]) == 2
     assert counting_graphs.get_calls == 0
 
 
@@ -207,9 +209,186 @@ def test_list_chunks_query_count_is_independent_of_distinct_graph_pin_count(tmp_
     def call(hub) -> int:  # type: ignore[no-untyped-def]
         resp = hub.client.get("/api/chunks")
         assert resp.status_code == 200, resp.text
-        return len(resp.json())
+        return len(resp.json()["chunks"])
 
     few_count = count_queries(few.engine, lambda: call(few))
     many_count = count_queries(many.engine, lambda: call(many))
 
     assert few_count == many_count
+
+
+# Keyset pagination (blizzard#526 D3/D4/D6).
+
+
+def _delete_chunk(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
+    """``DELETE /api/chunks/{id}`` — ``httpx``'s own ``delete()`` refuses ``json``, so
+    this goes through ``request`` instead (mirrors ``test_chunk_delete_route.py``'s own)."""
+    resp = hub.client.request("DELETE", f"/api/chunks/{chunk_id}", json={})
+    assert resp.status_code == 202, resp.text
+
+
+def _all_pages(hub, *, limit: int) -> list[dict]:  # type: ignore[no-untyped-def, type-arg]
+    """Walks ``GET /api/chunks`` at a fixed ``limit``, following ``next_cursor`` until
+    it comes back null, and concatenates every page's own chunks in order."""
+    chunks: list[dict] = []  # type: ignore[type-arg]
+    cursor: str | None = None
+    while True:
+        params: dict[str, object] = {"limit": limit}
+        if cursor is not None:
+            params["cursor"] = cursor
+        resp = hub.client.get("/api/chunks", params=params)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert len(body["chunks"]) <= limit
+        chunks.extend(body["chunks"])
+        cursor = body["next_cursor"]
+        if cursor is None:
+            break
+    return chunks
+
+
+def test_sort_key_ties_paged_concatenation_matches_the_full_unpaginated_order(tmp_path: Path) -> None:
+    """`chunk_id desc` makes the sort total when `minted_at` ties (blizzard#526 D4);
+    paging at `limit=1` must reproduce a single large-limit read's order exactly."""
+    hub = build_hub(tmp_path)
+    with hub.engine.begin() as conn:
+        seed_graph(conn, "gr_ties", at=_T0)
+        seed_chunk(conn, "ch_b", graph_id="gr_ties", at=_T0)
+        seed_chunk(conn, "ch_a", graph_id="gr_ties", at=_T0)  # same minted_at as ch_b — a tie
+        seed_chunk(conn, "ch_d", graph_id="gr_ties", at=_T0 + timedelta(seconds=1))
+        seed_chunk(conn, "ch_c", graph_id="gr_ties", at=_T0 + timedelta(seconds=1))  # ties with ch_d
+        seed_chunk(conn, "ch_e", graph_id="gr_ties", at=_T0 + timedelta(seconds=2))
+
+    full = hub.client.get("/api/chunks", params={"limit": MAX_LIMIT})
+    assert full.status_code == 200, full.text
+    full_ids = [c["chunk_id"] for c in full.json()["chunks"]]
+    assert len(full_ids) == 5
+
+    paged_ids = [c["chunk_id"] for c in _all_pages(hub, limit=1)]
+
+    assert paged_ids == full_ids
+    assert len(set(paged_ids)) == len(paged_ids)
+
+
+def test_ephemeral_only_window_still_pages_every_visible_chunk_exactly_once(tmp_path: Path) -> None:
+    """A window landing entirely on grouped-away/deleted rows must retry with a doubled
+    window rather than short-paging (blizzard#526 D6): three deleted chunks sit ahead of
+    three live ones that a `limit=2` page must still surface."""
+    hub = build_hub(tmp_path)
+    with hub.engine.begin() as conn:
+        seed_graph(conn, "gr_window", at=_T0)
+        seed_chunk(conn, "ch_eph_1", graph_id="gr_window", at=_T0 + timedelta(seconds=6))
+        seed_chunk(conn, "ch_eph_2", graph_id="gr_window", at=_T0 + timedelta(seconds=5))
+        seed_chunk(conn, "ch_eph_3", graph_id="gr_window", at=_T0 + timedelta(seconds=4))
+        seed_chunk(conn, "ch_live_a", graph_id="gr_window", at=_T0 + timedelta(seconds=3))
+        seed_chunk(conn, "ch_live_b", graph_id="gr_window", at=_T0 + timedelta(seconds=2))
+        seed_chunk(conn, "ch_live_c", graph_id="gr_window", at=_T0 + timedelta(seconds=1))
+
+    _delete_chunk(hub, "ch_eph_1")
+    _delete_chunk(hub, "ch_eph_2")
+    _delete_chunk(hub, "ch_eph_3")
+
+    full = hub.client.get("/api/chunks", params={"limit": MAX_LIMIT})
+    assert full.status_code == 200, full.text
+    full_ids = [c["chunk_id"] for c in full.json()["chunks"]]
+    assert full_ids == ["ch_live_a", "ch_live_b", "ch_live_c"]
+
+    paged_ids = [c["chunk_id"] for c in _all_pages(hub, limit=2)]
+
+    assert paged_ids == full_ids
+    assert len(set(paged_ids)) == len(paged_ids)
+
+
+def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path) -> None:
+    """D6: live-holder/blocked derivation reads the whole fleet though only the page's
+    own chunks render, so a marking must be identical whether its cause shares the page
+    or not — forced here by putting every chunk on its own page (`limit=1`)."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_REVIEW_DELIVER_YAML}).status_code == 201
+
+    # (a) old + fresh holders of one pointer, over the `hub` source since its `web_url`
+    # varies with the live holder — `default`'s ignores `live_holder` entirely.
+    old_holder_id = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]}).json()["chunk_id"]
+    build_id = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": old_holder_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    ).json()["envelope"]["node"]["node_id"]
+    commit = [{"name": "w", "kind": "git_commit", "repo": "acme/widget", "branch_name": "b", "commit_hash": "c"}]
+    to_review = _pass(hub, old_holder_id, build_id, 1, artifacts=commit)
+    review_id = to_review["next_envelope"]["node"]["node_id"]
+    assert (
+        hub.client.post(f"/api/fleet/chunks/{old_holder_id}/leases", json={"epoch": 2, "runner_id": "r1"}).status_code
+        == 202
+    )
+    _pass(hub, old_holder_id, review_id, 2, artifacts=[])
+    assert hub.client.get(f"/api/chunks/{old_holder_id}").json()["status"] == "done"
+
+    hub.clock.advance(timedelta(seconds=1))
+    live_holder_id = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]}).json()["chunk_id"]
+
+    # (b) a separate dependent/prerequisite pair (the `test_blocked_marking_api.py` shape).
+    hub.clock.advance(timedelta(seconds=1))
+    prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}])
+    hub.clock.advance(timedelta(seconds=1))
+    dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}])
+    declare = hub.client.post(
+        f"/api/chunks/{dependent_id}/dependencies", json={"prerequisite_chunk_id": prerequisite_id}
+    )
+    assert declare.status_code == 202, declare.text
+
+    full = hub.client.get("/api/chunks", params={"limit": MAX_LIMIT})
+    assert full.status_code == 200, full.text
+    full_by_id = {c["chunk_id"]: c for c in full.json()["chunks"]}
+
+    def hub_pointer_url(entry: dict) -> str | None:  # type: ignore[type-arg]
+        (ref,) = [w for w in entry["work_refs"] if w["source"] == "hub"]
+        return ref["web_url"]
+
+    # Both holders render the *same* live-holder link (the live one's own id) — proving
+    # the terminal row still saw the live chunk that is what makes it non-live at all.
+    assert hub_pointer_url(full_by_id[old_holder_id]) == f"/board/chunk/{live_holder_id}"
+    assert hub_pointer_url(full_by_id[live_holder_id]) == f"/board/chunk/{live_holder_id}"
+    assert full_by_id[dependent_id]["blocked"] == {"prerequisite_chunk_id": prerequisite_id, "unmet_count": 1}
+    assert full_by_id[prerequisite_id]["blocked"] is None
+
+    paged_by_id = {c["chunk_id"]: c for c in _all_pages(hub, limit=1)}
+
+    for chunk_id in (old_holder_id, live_holder_id, dependent_id, prerequisite_id):
+        assert paged_by_id[chunk_id]["work_refs"] == full_by_id[chunk_id]["work_refs"], chunk_id
+        assert paged_by_id[chunk_id]["blocked"] == full_by_id[chunk_id]["blocked"], chunk_id
+
+
+def test_limit_over_the_ceiling_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get("/api/chunks", params={"limit": MAX_LIMIT + 1})
+    assert resp.status_code == 422, resp.text
+
+
+def test_limit_below_one_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get("/api/chunks", params={"limit": 0})
+    assert resp.status_code == 422, resp.text
+
+
+def test_malformed_cursor_is_422_naming_the_cursor(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get("/api/chunks", params={"cursor": "not-valid-base64!!!"})
+    assert resp.status_code == 422, resp.text
+    assert "malformed cursor" in resp.json()["detail"]
+
+
+def test_next_cursor_is_non_null_until_the_final_page(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed(hub, 5)
+
+    first = hub.client.get("/api/chunks", params={"limit": 3})
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    assert len(first_body["chunks"]) == 3
+    assert first_body["next_cursor"] is not None
+
+    second = hub.client.get("/api/chunks", params={"limit": 3, "cursor": first_body["next_cursor"]})
+    assert second.status_code == 200, second.text
+    second_body = second.json()
+    assert len(second_body["chunks"]) == 2
+    assert second_body["next_cursor"] is None

@@ -73,4 +73,23 @@ describe('injectHubBacklogQuery (bzh:ranking-is-per-list)', () => {
 
     expect(stub.forRoute('/api/backlog', 'GET')).toHaveLength(1);
   });
+
+  it('drains a multi-page backlog and concatenates the pages in order (blizzard#526)', async () => {
+    let calls = 0;
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/backlog') {
+        calls += 1;
+        return calls === 1
+          ? { entries: [{ chunk_id: 'ch_backlog_1', graph_id: 'gr_1', position: 0, work_refs: [] }], next_cursor: 'cursor-1' }
+          : { entries: [{ chunk_id: 'ch_backlog_2', graph_id: 'gr_1', position: 1, work_refs: [] }], next_cursor: null };
+      }
+      return {};
+    });
+    const fixture = TestBed.createComponent(BacklogQueryHost);
+    fixture.componentRef.setInput('canReorder', true);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.query.data()?.map((e) => e.chunk_id)).toEqual(['ch_backlog_1', 'ch_backlog_2']);
+    expect(stub.forRoute('/api/backlog', 'GET')).toHaveLength(2);
+  });
 });

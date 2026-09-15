@@ -150,7 +150,7 @@ describe('injectHubFindingsBucketQuery', () => {
   afterEach(() => stub?.restore());
 
   it('fires immediately with both routine and scope null — a null half is a meaningful "all", not a pending precondition', async () => {
-    stub = stubFetchCapturingUrl([]);
+    stub = stubFetchCapturingUrl({ findings: [], next_cursor: null });
     TestBed.configureTestingModule({
       imports: [TestFindingsBucketQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
@@ -169,20 +169,23 @@ describe('injectHubFindingsBucketQuery', () => {
   });
 
   it('reads the bucket off GET /api/findings?routine=&scope=&include_gone=true', async () => {
-    stub = stubFetchCapturingUrl([
-      {
-        finding_id: 'fin_1',
-        routine_name: 'comments',
-        scope_slug: 'blizzard',
-        class: 'stale-docstring',
-        locus: 'src/a.py:1',
-        summary: 'a',
-        state: 'live',
-        live: true,
-        observed_count: 1,
-        last_seen_at: '2026-01-01T00:00:00Z',
-      },
-    ]);
+    stub = stubFetchCapturingUrl({
+      findings: [
+        {
+          finding_id: 'fin_1',
+          routine_name: 'comments',
+          scope_slug: 'blizzard',
+          class: 'stale-docstring',
+          locus: 'src/a.py:1',
+          summary: 'a',
+          state: 'live',
+          live: true,
+          observed_count: 1,
+          last_seen_at: '2026-01-01T00:00:00Z',
+        },
+      ],
+      next_cursor: null,
+    });
     TestBed.configureTestingModule({
       imports: [TestFindingsBucketQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
@@ -202,7 +205,7 @@ describe('injectHubFindingsBucketQuery', () => {
   });
 
   it('omits scope alone when only routine is named — every scope under that one routine', async () => {
-    stub = stubFetchCapturingUrl([]);
+    stub = stubFetchCapturingUrl({ findings: [], next_cursor: null });
     TestBed.configureTestingModule({
       imports: [TestFindingsBucketQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],

@@ -161,7 +161,7 @@ def test_accept_declining_to_mint_records_declined_and_no_chunk(tmp_path: Path) 
     assert body["closure"]["item_outcome"] == "declined"
     assert body["closure"]["reason"] == "handled by hand"
     assert body["closure"]["source"] is None and body["closure"]["ref"] is None
-    assert hub.client.get("/api/chunks").json() == []  # nothing minted
+    assert hub.client.get("/api/chunks").json()["chunks"] == []  # nothing minted
 
 
 def test_accept_promotes_nothing_and_leaves_the_finding_untouched(tmp_path: Path) -> None:
@@ -224,7 +224,7 @@ def test_a_second_accept_is_409_naming_the_existing_closure_and_mints_nothing_mo
     second = hub.client.post("/api/garden-proposals/gprop_1/accept", json={})
 
     assert second.status_code == 409, second.text
-    assert len(hub.client.get("/api/chunks").json()) == 1  # nothing minted a second time
+    assert len(hub.client.get("/api/chunks").json()["chunks"]) == 1  # nothing minted a second time
 
 
 def test_accept_after_a_pass_is_409(tmp_path: Path) -> None:
@@ -235,4 +235,4 @@ def test_accept_after_a_pass_is_409(tmp_path: Path) -> None:
     resp = hub.client.post("/api/garden-proposals/gprop_1/accept", json={})
 
     assert resp.status_code == 409, resp.text
-    assert hub.client.get("/api/chunks").json() == []
+    assert hub.client.get("/api/chunks").json()["chunks"] == []

@@ -28,20 +28,23 @@ class _FakeResponse:
 
 @pytest.mark.unit
 def test_garden_proposal_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
         return _FakeResponse(
             200,
-            [
-                {
-                    "proposal_id": "gprop_1",
-                    "routine_name": "nightly",
-                    "class": "fix-the-source",
-                    "title": "Author a docstring standard",
-                    "body": "the case",
-                    "findings": ["fin_1"],
-                    "created_at": "t0",
-                }
-            ],
+            {
+                "proposals": [
+                    {
+                        "proposal_id": "gprop_1",
+                        "routine_name": "nightly",
+                        "class": "fix-the-source",
+                        "title": "Author a docstring standard",
+                        "body": "the case",
+                        "findings": ["fin_1"],
+                        "created_at": "t0",
+                    }
+                ],
+                "next_cursor": None,
+            },
         )
 
     monkeypatch.setattr(httpx, "get", fake_get)
@@ -50,6 +53,50 @@ def test_garden_proposal_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -
     assert result.exit_code == 0, result.output
     assert "gprop_1" in result.output
     assert "fix-the-source" in result.output
+
+
+@pytest.mark.unit
+def test_garden_proposal_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    page_1 = {
+        "proposals": [
+            {
+                "proposal_id": "gprop_1",
+                "routine_name": "nightly",
+                "class": "fix-the-source",
+                "title": "Author a docstring standard",
+                "body": "the case",
+                "findings": ["fin_1"],
+                "created_at": "t0",
+            }
+        ],
+        "next_cursor": "cursor-1",
+    }
+    page_2 = {
+        "proposals": [
+            {
+                "proposal_id": "gprop_2",
+                "routine_name": "nightly",
+                "class": "fix-the-source",
+                "title": "Author a second standard",
+                "body": "the other case",
+                "findings": ["fin_2"],
+                "created_at": "t1",
+            }
+        ],
+        "next_cursor": None,
+    }
+
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
+        if isinstance(params, dict) and params.get("cursor") is not None:
+            return _FakeResponse(200, page_2)
+        return _FakeResponse(200, page_1)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["garden-proposal", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "gprop_1" in result.output
+    assert "gprop_2" in result.output
 
 
 @pytest.mark.unit

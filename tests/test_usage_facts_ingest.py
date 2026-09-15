@@ -78,7 +78,7 @@ def test_usage_fact_lands_per_step_and_derives_the_chunk_total(tmp_path: Path) -
     assert detail["cost"]["cost_usd"] == pytest.approx(0.10)
     assert detail["cost"]["cost_partial"] is False
 
-    listing = hub.client.get("/api/chunks").json()
+    listing = hub.client.get("/api/chunks").json()["chunks"]
     row = next(c for c in listing if c["chunk_id"] == chunk_id)
     assert row["cost"]["cost_usd"] == pytest.approx(0.10)
     assert row["cost"]["cost_partial"] is False

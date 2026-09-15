@@ -85,8 +85,8 @@ describe('GardeningFindingDetail', () => {
       const overridden = opts.routeOverride?.(method, path);
       if (overridden !== undefined) return overridden;
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/findings') return [];
-      if (method === 'GET' && path === '/api/garden-proposals') return [];
+      if (method === 'GET' && path === '/api/findings') return { findings: [], next_cursor: null };
+      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       return {};
     });
     await TestBed.configureTestingModule({
@@ -199,7 +199,7 @@ describe('GardeningFindingDetail', () => {
     const { fixture } = await mount('fnd_10', {
       routeOverride: (method, path) => {
         if (method === 'GET' && path === '/api/findings/fnd_10') return FINDING_LIVE;
-        if (method === 'GET' && path === '/api/garden-proposals') return [PROPOSAL_ACCEPTED_MINTED];
+        if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [PROPOSAL_ACCEPTED_MINTED], next_cursor: null };
         if (method === 'GET' && path === '/api/work-sources/hub/items/42') return WORK_ITEM_42;
         return undefined;
       },
