@@ -8,13 +8,15 @@ Builds the store-backed ``host`` composition with the work-item read seam replac
 from __future__ import annotations
 
 import functools
+import re
 import tempfile
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO
+from typing import IO, Any
 
 import sqlalchemy as sa
 from fastapi import FastAPI, Request
@@ -934,18 +936,88 @@ def seed_work_item(
     )
 
 
+@contextmanager
+def capture_statements(engine: Engine) -> Iterator[list[tuple[str, Any]]]:
+    """Every statement ``engine`` issues while the context is open, in issue order —
+    statement text plus its bound parameters, ready to re-run later (e.g. under
+    ``EXPLAIN QUERY PLAN``) with no drift from what was actually sent."""
+    statements: list[tuple[str, Any]] = []
+
+    def _listener(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+        statements.append((statement, parameters))
+
+    event.listen(engine, "before_cursor_execute", _listener)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", _listener)
+
+
 def count_queries(engine: Engine, fn: Callable[[], object]) -> int:
     """How many statements ``fn`` issues on ``engine`` — what a bulk-read test asserts is
     flat as the fleet grows, rather than growing per chunk."""
-    count = 0
-
-    def before_cursor_execute(*_: object) -> None:
-        nonlocal count
-        count += 1
-
-    event.listen(engine, "before_cursor_execute", before_cursor_execute)
-    try:
+    with capture_statements(engine) as statements:
         fn()
-    finally:
-        event.remove(engine, "before_cursor_execute", before_cursor_execute)
-    return count
+    return len(statements)
+
+
+def explain_query_plan(engine: Engine, statement: str, parameters: Any) -> Sequence[sa.Row[Any]]:
+    """Runs ``EXPLAIN QUERY PLAN`` for one captured statement, re-executed with its exact
+    captured parameters."""
+    with engine.connect() as conn:
+        return conn.exec_driver_sql(f"EXPLAIN QUERY PLAN {statement}", parameters).all()
+
+
+_SCAN_OR_SEARCH = re.compile(r"^(SCAN|SEARCH) (\S+)(.*)$")
+_ALIASED_FROM_ITEM = re.compile(r"\b(?:FROM|JOIN)\s+(\w+)\s+AS\s+(\w+)", re.IGNORECASE)
+
+
+def _statement_aliases(statement: str) -> dict[str, str]:
+    """Maps every ``<table> AS <alias>`` from item in ``statement`` back to its real table —
+    a plan row names the alias sqlite was given, not the table it reads (e.g. ``leases``
+    joined to itself as ``later_escalation_leases`` for a self-correlated NOT EXISTS)."""
+    return {alias: table for table, alias in _ALIASED_FROM_ITEM.findall(statement)}
+
+
+def _offending_table(detail: str, tables: set[str], aliases: dict[str, str]) -> str | None:
+    """``detail`` is a plan row's last column, e.g. ``SCAN t``, ``SEARCH t USING INDEX ix (...)``, or ``SEARCH t USING
+    AUTOMATIC COVERING INDEX (...)``; ``t`` may itself be an alias, resolved back to its real table via ``aliases``.
+    Offends when the resolved table names one of ``tables`` and is either a bare scan with no ``USING [COVERING]
+    INDEX`` clause, or any search/scan through sqlite's own automatic index — a real named index is never an
+    offense."""
+    match = _SCAN_OR_SEARCH.match(detail)
+    if match is None:
+        return None
+    verb, name, rest = match.groups()
+    table = aliases.get(name, name)
+    if table not in tables:
+        return None
+    if "AUTOMATIC" in rest:
+        return table
+    if verb == "SCAN" and "USING" not in rest:
+        return table
+    return None
+
+
+def offending_index_scans(
+    engine: Engine, statements: Iterable[tuple[str, Any]], tables: Iterable[str]
+) -> list[tuple[str, sa.Row[Any]]]:
+    """Re-runs every distinct captured ``SELECT`` in ``statements`` under ``EXPLAIN QUERY
+    PLAN`` and returns ``(table, plan row)`` for each row that scans or automatic-indexes
+    into one of ``tables`` instead of a real named index — the shared classifier a
+    component-tier gate drives per store against its own table vocabulary."""
+    vocabulary = set(tables)
+    offenders: list[tuple[str, sa.Row[Any]]] = []
+    seen: set[str] = set()
+    for statement, parameters in statements:
+        if not statement.lstrip().upper().startswith("SELECT"):
+            continue
+        if statement in seen:
+            continue
+        seen.add(statement)
+        aliases = _statement_aliases(statement)
+        for row in explain_query_plan(engine, statement, parameters):
+            table = _offending_table(row.detail, vocabulary, aliases)
+            if table is not None:
+                offenders.append((table, row))
+    return offenders
