@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.foundation.event_log import EventLogSeverity
+
 
 class ActivityView(BaseModel):
     """One activity-feed row on the wire — present-when-meaningful: a field its source
@@ -29,7 +31,7 @@ class ActivityView(BaseModel):
     cause: str | None = None
     graph_id: str | None = None
     # event-logged
-    severity: str | None = None
+    severity: EventLogSeverity | None = None
     kind: str | None = None
     # runner-changed
     by: str | None = None

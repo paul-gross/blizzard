@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from blizzard.foundation.event_log import EventLogSeverity
+
 
 class EventView(BaseModel):
     """One operational event on the wire — an ``event_log`` row or a projected open
@@ -20,7 +22,7 @@ class EventView(BaseModel):
 
     id: int
     recorded_at: str  # iso-utc
-    severity: str  # info | warning | critical
+    severity: EventLogSeverity
     kind: str
     runner_id: str | None = None
     chunk_id: str | None = None

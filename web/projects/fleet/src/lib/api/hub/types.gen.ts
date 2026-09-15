@@ -76,7 +76,7 @@ export type ActivityView = {
     /**
      * Severity
      */
-    severity?: string | null;
+    severity?: 'critical' | 'warning' | 'info' | null;
     /**
      * Status
      */
@@ -1835,7 +1835,7 @@ export type EventView = {
     /**
      * Severity
      */
-    severity: string;
+    severity: 'critical' | 'warning' | 'info';
 };
 
 /**
@@ -7211,7 +7211,7 @@ export type ListEventsApiEventsGetData = {
         /**
          * Severity
          */
-        severity?: string | null;
+        severity?: 'critical' | 'warning' | 'info' | null;
         /**
          * Runner Id
          */

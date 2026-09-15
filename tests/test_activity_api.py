@@ -184,6 +184,32 @@ def test_deleted_chunks_events_are_excluded_but_runner_scoped_events_survive(tmp
     assert deletion_rows[0]["chunk_id"] == "ch_deleted"
 
 
+def test_a_legacy_severity_outside_the_vocabulary_is_served_narrowed_to_its_kinds_declared_one(
+    tmp_path: Path,
+) -> None:
+    """No migration (issue #106): a pre-fix hub once wrote ``severity="error"`` for
+    ``hub-node-unroutable-outcome``; the store adapter narrows a persisted row like it at
+    the read boundary instead, to the severity its kind now declares."""
+    hub = build_hub(tmp_path)
+    store = chunk_stores(hub.engine, hub.clock)
+    store.events.record_event(
+        severity="error",  # type: ignore[arg-type]  # a legacy, since-fixed value
+        kind="hub-node-unroutable-outcome",
+        runner_id="hub",
+        chunk_id=None,
+        lease_id=None,
+        node_name=None,
+        message="legacy row",
+        detail=None,
+        at=hub.clock.now(),
+    )
+
+    rows = _activity(hub)
+    events = [r for r in rows if r["type"] == "event-logged"]
+    assert len(events) == 1
+    assert events[0]["severity"] == "critical"
+
+
 def test_runner_bearer_token_is_rejected(tmp_path: Path) -> None:
     token = _seed_enrolled(tmp_path)
     hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)

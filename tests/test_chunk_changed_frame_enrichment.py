@@ -470,7 +470,7 @@ def test_event_logged_carries_event_log_key(tmp_path: Path) -> None:
                 {
                     "seq": 1,
                     "kind": "event.recorded",
-                    "payload": {"severity": "warning", "kind": "spend-ceiling", "message": "80% of budget"},
+                    "payload": {"severity": "warning", "kind": "attempt-failed", "message": "80% of budget"},
                 }
             ],
         },

@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
 from blizzard.auth_core import FLEET_VIEW
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.stream import Cursor, Stream
 from blizzard.foundation.store.utc import as_utc, iso_utc
@@ -79,7 +80,7 @@ class Events:
 )
 def list_events(
     services: Annotated[HubServices, Depends(get_services)],
-    severity: Annotated[str | None, Query()] = None,
+    severity: Annotated[EventLogSeverity | None, Query()] = None,
     runner_id: Annotated[str | None, Query()] = None,
     chunk_id: Annotated[str | None, Query()] = None,
     since: Annotated[datetime | None, Query()] = None,

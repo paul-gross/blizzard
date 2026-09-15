@@ -130,7 +130,7 @@ def test_activity_backfill_merges_several_cause_families_bounded_and_newest_firs
                 "/_drive/report-event",
                 json={
                     "severity": "warning",
-                    "kind": "activity-feed-probe",
+                    "kind": "worker-context-warned",
                     "message": "a probed operational event",
                     "chunk_id": chunk_id,
                 },
@@ -173,7 +173,7 @@ def test_activity_backfill_merges_several_cause_families_bounded_and_newest_firs
         causes = {r["cause"] for r in chunk_rows if r["type"] == "chunk-changed"}
         assert {"minted", "promoted", "claimed", "node-completed", "escalated", "paused", "resumed"} <= causes, feed
 
-        event_rows = [r for r in feed if r["type"] == "event-logged" and r["kind"] == "activity-feed-probe"]
+        event_rows = [r for r in feed if r["type"] == "event-logged" and r["kind"] == "worker-context-warned"]
         assert len(event_rows) == 1, feed
         assert event_rows[0]["severity"] == "warning"
         assert event_rows[0]["chunk_id"] == chunk_id
@@ -201,5 +201,5 @@ def test_activity_backfill_merges_several_cause_families_bounded_and_newest_firs
         assert "minted" not in narrowed_chunk_causes, narrowed
         assert "promoted" not in narrowed_chunk_causes, narrowed
         assert {"claimed", "node-completed", "escalated", "paused", "resumed"} <= narrowed_chunk_causes, narrowed
-        assert any(r["type"] == "event-logged" and r["kind"] == "activity-feed-probe" for r in narrowed), narrowed
+        assert any(r["type"] == "event-logged" and r["kind"] == "worker-context-warned" for r in narrowed), narrowed
         assert any(r["type"] == "runner-changed" and r["kind"] == "locally-paused" for r in narrowed), narrowed

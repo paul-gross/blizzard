@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.events.broker import EventBroker
-from tests.support import build_hub, drain_stream, emitted_events, pointer_token
+from tests.support import HubHarness, build_hub, chunk_stores, drain_stream, emitted_events, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -165,6 +165,82 @@ def test_route_emission_lands_in_the_replay_buffer(tmp_path: Path) -> None:
         "chunk-changed",  # claim -> running
         "queue-changed",  # claim removed it from the queue
     ]
+
+
+def _push_event_fact(hub: HubHarness, *, kind: str, severity: str, message: str = "message") -> dict:
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "event.recorded",
+                    "payload": {"severity": severity, "kind": kind, "message": message},
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_event_recorded_rejects_a_kind_outside_the_vocabulary(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    ack = _push_event_fact(hub, kind="not-a-real-kind", severity="critical")
+    assert ack["rejected"] == [1]
+    assert hub.client.get("/api/events").json()["events"] == []
+
+
+def test_event_recorded_rejects_a_severity_outside_the_vocabulary(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    ack = _push_event_fact(hub, kind="worker-lost", severity="urgent")
+    assert ack["rejected"] == [1]
+    assert hub.client.get("/api/events").json()["events"] == []
+
+
+def test_event_recorded_rejects_a_declared_kind_paired_with_the_wrong_severity(tmp_path: Path) -> None:
+    """``worker-lost`` declares ``critical`` — pairing it with a wire ``info`` is outside
+    the closed vocabulary just as much as an unrecognized kind or severity is."""
+    hub = build_hub(tmp_path)
+    ack = _push_event_fact(hub, kind="worker-lost", severity="info")
+    assert ack["rejected"] == [1]
+    assert hub.client.get("/api/events").json()["events"] == []
+
+
+def test_event_recorded_with_a_declared_kind_and_its_declared_severity_is_applied(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    ack = _push_event_fact(hub, kind="worker-lost", severity="critical")
+    assert ack["applied"] == [1]
+    events = hub.client.get("/api/events").json()["events"]
+    assert len(events) == 1
+    assert events[0]["kind"] == "worker-lost"
+    assert events[0]["severity"] == "critical"
+
+
+def test_a_legacy_severity_outside_the_vocabulary_is_served_narrowed_to_its_kinds_declared_one(
+    tmp_path: Path,
+) -> None:
+    """No migration (issue #106): a pre-fix hub once wrote ``severity="error"`` for
+    ``hub-node-unroutable-outcome``; the store adapter narrows a persisted row like it at
+    the read boundary instead, to the severity its kind now declares."""
+    hub = build_hub(tmp_path)
+    store = chunk_stores(hub.engine, hub.clock)
+    store.events.record_event(
+        severity="error",  # type: ignore[arg-type]  # a legacy, since-fixed value
+        kind="hub-node-unroutable-outcome",
+        runner_id="hub",
+        chunk_id=None,
+        lease_id=None,
+        node_name=None,
+        message="legacy row",
+        detail=None,
+        at=hub.clock.now(),
+    )
+
+    events = hub.client.get("/api/events").json()["events"]
+    assert len(events) == 1
+    assert events[0]["severity"] == "critical"
 
 
 def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> None:

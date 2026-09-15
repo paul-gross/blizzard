@@ -4,10 +4,21 @@ import { type EventView, listEventsApiEventsGet } from '../api/hub';
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from '../polling';
 import { hubEventsKey } from '../query-keys';
 
+/** The severity vocabulary's closed wire set (`GET /api/events`'s own query param) —
+ * declared once here so a filter value crossing from a generic UI string into the
+ * typed query narrows against this list rather than an ad hoc per-value check. */
+export const EVENT_SEVERITIES = ['critical', 'warning', 'info'] as const;
+export type EventSeverity = (typeof EVENT_SEVERITIES)[number];
+
+/** `value` narrowed to {@link EventSeverity}, or `null` outside the closed set. */
+export function narrowEventSeverity(value: string): EventSeverity | null {
+  return (EVENT_SEVERITIES as readonly string[]).includes(value) ? (value as EventSeverity) : null;
+}
+
 /** The event feed's filter axes — `null`/`undefined` on any of them means
  * "unfiltered" for that axis, matching the hub's own query-param contract. */
 export interface HubEventsFilters {
-  readonly severity?: string | null;
+  readonly severity?: EventSeverity | null;
   readonly runnerId?: string | null;
   readonly chunkId?: string | null;
 }

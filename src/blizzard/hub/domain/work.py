@@ -7,14 +7,14 @@ The derivations are pure functions over already-loaded domain facts
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
-from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.artifacts import ArtifactRow
@@ -497,7 +497,7 @@ class EventRow:
 
     id: int
     recorded_at: datetime
-    severity: str
+    severity: EventLogSeverity
     kind: str
     runner_id: str | None
     chunk_id: str | None
@@ -521,11 +521,10 @@ class EscalationOpen:
 #: Default cap on ``list_events`` — an unbounded read of an append-only table is an unbounded response.
 DEFAULT_EVENT_LIST_LIMIT = 200
 
-#: The closed severity vocabulary's sort order — critical first, an out-of-vocabulary
-#: value sinking below every declared one. The single source both :class:`EventFeed`'s
-#: in-memory sort and the store adapter's SQL ordering derive from
+#: The closed severity vocabulary's sort order — critical first. The single source both
+#: :class:`EventFeed`'s in-memory sort and the store adapter's SQL ordering derive from
 #: (``blizzard-context:/domain/operations.md``).
-SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
+SEVERITY_RANK: Mapping[EventLogSeverity, int] = {"critical": 0, "warning": 1, "info": 2}
 
 _EVENT_NEEDS_HUMAN: EventLogKind = "needs-human"
 
@@ -543,11 +542,7 @@ class EventFeed:
     def of(cls, events: list[EventRow], escalations: list[EscalationOpen]) -> EventFeed:
         projected = [cls._projected(i, esc) for i, esc in enumerate(escalations)]
         merged = [*events, *projected]
-        return cls(
-            sorted(
-                merged, key=lambda e: (SEVERITY_RANK.get(e.severity, len(SEVERITY_RANK)), -e.recorded_at.timestamp())
-            )
-        )
+        return cls(sorted(merged, key=lambda e: (SEVERITY_RANK[e.severity], -e.recorded_at.timestamp())))
 
     @staticmethod
     def _projected(index: int, esc: EscalationOpen) -> EventRow:
@@ -593,7 +588,7 @@ class ActivityRow:
     cause: str | None = None
     graph_id: str | None = None
     # event-logged
-    severity: str | None = None
+    severity: EventLogSeverity | None = None
     kind: str | None = None
     # runner-changed
     by: str | None = None
