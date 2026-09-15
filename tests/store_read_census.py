@@ -1699,6 +1699,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         statuses=w.read.facts.load_all_statuses()
     ),
     (IReadChunkRecordRepository, "list_all"): lambda w: w.read.record.list_all(),
+    (IReadChunkRecordRepository, "list_page"): lambda w: w.read.record.list_page(limit=50),
     (IReadChunkRouteRepository, "route_of"): lambda w: w.read.route.route_of(w.chunk_route_a),
     (IReadChunkRouteRepository, "load_all_routes"): lambda w: w.read.route.load_all_routes(),
     (IReadChunkRouteRepository, "routes_for"): lambda w: w.read.route.routes_for([w.chunk_route_a, w.chunk_route_b]),
@@ -1718,6 +1719,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFindingRepository, "list_for"): lambda w: w.hub.services.findings.list_for("gardening", "blizzard"),
     (IReadFindingRepository, "list_for_routine"): lambda w: w.hub.services.findings.list_for_routine("gardening"),
     (IReadFindingRepository, "list_across_routines"): lambda w: w.hub.services.findings.list_across_routines(),
+    (IReadFindingRepository, "list_page"): lambda w: w.hub.services.findings.list_page(
+        routine_name=None, scope_slug=None, limit=50
+    ),
     (IReadFindingRepository, "count_by_class"): lambda w: w.hub.services.findings.count_by_class(
         "gardening", "stale-docstring"
     ),
@@ -1743,6 +1747,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadGardenProposalRepository, "get"): lambda w: w.hub.services.garden_proposals.get(w.garden_proposal_1),
     (IReadGardenProposalRepository, "list_all"): lambda w: w.hub.services.garden_proposals.list_all(),
+    (IReadGardenProposalRepository, "list_page"): lambda w: w.hub.services.garden_proposals.list_page(limit=50),
     (IReadGardenProposalRepository, "list_for_routine"): lambda w: w.hub.services.garden_proposals.list_for_routine(
         "gardening"
     ),
