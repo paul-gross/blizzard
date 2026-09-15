@@ -127,8 +127,10 @@ class GardenSweepsService:
         self._routine_scopes = routine_scopes
 
     def sweeps(self, routine: Routine, *, since: datetime, until: datetime) -> GardenSweeps:
-        facts = self._repo.sweeps_for_routine(routine.name)
-        declared = self._routine_scopes.list_scopes(routine.routine_id)
+        declared = set(self._routine_scopes.list_scopes(routine.routine_id))
         retired = self._scopes.retired_slugs()
         live_declared = [slug for slug in declared if slug not in retired]
+        # A scope unlinked since being swept must not resurface via its own fact — the
+        # union below is only for a scope still in `declared` that's since been retired.
+        facts = [fact for fact in self._repo.sweeps_for_routine(routine.name) if fact.scope_slug in declared]
         return compute_sweeps(facts, routine_name=routine.name, scope_slugs=live_declared, since=since, until=until)

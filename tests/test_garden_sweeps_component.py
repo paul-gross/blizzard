@@ -167,33 +167,42 @@ def test_the_newest_set_by_produced_at_is_reported(tmp_path: Path) -> None:
 
 def test_last_swept_covers_the_declared_set_scoped_by_link_and_retirement(tmp_path: Path) -> None:
     """D1/D3: a linked, non-retired scope never swept reads `never`; an unlinked scope
-    is omitted regardless of retirement; a linked, retired scope keeps its row if this
-    routine swept it, but is omitted if it never was."""
+    is omitted regardless of retirement or of its own sweep history; a linked, retired
+    scope keeps its row if this routine swept it, but is omitted if it never was."""
     _, engine = migrate_to(tmp_path, "head")
     routine = _routine(default_scope_slug="linked-never-swept")
+    linked_slugs = ("linked-never-swept", "linked-retired-swept", "linked-retired-never-swept")
+    retired_slugs = ("linked-retired-swept", "linked-retired-never-swept", "not-linked-retired")
+    all_slugs = (*linked_slugs, "not-linked", "not-linked-swept", "not-linked-retired")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
-        for slug in ("linked-never-swept", "not-linked", "linked-retired-swept", "linked-retired-never-swept"):
+        for slug in all_slugs:
             conn.execute(insert(s.scopes).values(slug=slug, description="", created_at=_NOW))
-        for slug in ("linked-retired-swept", "linked-retired-never-swept"):
+        for slug in retired_slugs:
             conn.execute(
                 insert(s.scope_lifecycle_facts).values(slug=slug, retired=True, set_at=_NOW, set_by="operator")
             )
         _seed_routine(conn, routine)
-        for slug in ("linked-never-swept", "linked-retired-swept", "linked-retired-never-swept"):
+        for slug in linked_slugs:
             _link(conn, routine.routine_id, slug)
-        _seed_artifact(conn, "art_1", chunk_id="ch_1", produced_at=datetime(2026, 1, 2, tzinfo=UTC))
-        _seed_finding_set(
-            conn,
-            "fins_1",
-            artifact_id="art_1",
-            chunk_id="ch_1",
-            scope_slug="linked-retired-swept",
-            routine_name="nightly",
-            revisions={},
-            measurement=None,
-        )
+        for artifact_id, finding_set_id, scope_slug in (
+            ("art_1", "fins_1", "linked-retired-swept"),
+            # Swept while this routine still had it linked, but unlinked before this
+            # read — a stale fact must not resurface a scope no longer in the set.
+            ("art_2", "fins_2", "not-linked-swept"),
+        ):
+            _seed_artifact(conn, artifact_id, chunk_id="ch_1", produced_at=datetime(2026, 1, 2, tzinfo=UTC))
+            _seed_finding_set(
+                conn,
+                finding_set_id,
+                artifact_id=artifact_id,
+                chunk_id="ch_1",
+                scope_slug=scope_slug,
+                routine_name="nightly",
+                revisions={},
+                measurement=None,
+            )
     service = _service(engine)
 
     sweeps = service.sweeps(routine, since=_SINCE, until=_UNTIL)
