@@ -152,6 +152,6 @@ def list_activity(
     UTC so it never raises against the store's aware timestamps."""
     since_utc = as_utc(since) if since is not None else services.clock.now() - timedelta(hours=24)
     chunk_changed = services.chunks.events.activity_facts_since(since_utc, limit=limit)
-    events = services.chunks.events.list_events(since=since_utc, limit=limit)
+    events = services.chunks.events.activity_events_since(since_utc, limit=limit)
     runner_changed = services.registry.list_pause_facts_since(since_utc, limit=limit)
     return Activity(ActivityFeed.of(chunk_changed, events, runner_changed, limit=limit).rows).response()

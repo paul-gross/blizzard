@@ -38,6 +38,16 @@ class IReadChunkEventsRepository(Protocol):
         returns rows unsorted across sources."""
         ...
 
+    def activity_events_since(self, since: datetime, *, limit: int) -> list[EventRow]:
+        """``event_log`` rows for the activity feed's ``event-logged`` half — newest
+        first (``recorded_at`` desc, ``id`` desc tiebreak), a deleted chunk's rows
+        excluded, bounded by ``limit`` after that ordering. A runner-scoped row
+        (``chunk_id IS NULL``) is never excluded by the deleted-chunk filter.
+
+        Distinct from :meth:`list_events`: that read is severity-ranked for
+        ``GET /api/events`` and can drop a recent row a pure-recency cap would keep."""
+        ...
+
 
 class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
     """Read-write chunk-events access."""

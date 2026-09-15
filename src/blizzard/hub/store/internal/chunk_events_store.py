@@ -15,7 +15,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Select, case, select
+from sqlalchemy import Connection, Select, case, or_, select
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
@@ -262,6 +262,36 @@ class ChunkEventsStore:
             )
             stmt = stmt.order_by(severity_rank.asc(), s.event_log.c.recorded_at.desc(), s.event_log.c.id.desc()).limit(
                 limit
+            )
+            return [
+                EventRow(
+                    id=row.id,
+                    recorded_at=row.recorded_at,
+                    severity=row.severity,
+                    kind=row.kind,
+                    runner_id=row.runner_id,
+                    chunk_id=row.chunk_id,
+                    lease_id=row.lease_id,
+                    node_name=row.node_name,
+                    message=row.message,
+                    detail=json.loads(row.detail) if row.detail is not None else None,
+                )
+                for row in conn.execute(stmt).all()
+            ]
+
+    def activity_events_since(self, since: datetime, *, limit: int) -> list[EventRow]:
+        """See
+        :meth:`~blizzard.hub.domain.chunks.events.IReadChunkEventsRepository.activity_events_since` —
+        the feed's own event source: recency-ordered, deleted-chunk-excluding, distinct
+        from ``list_events``'s severity-ranked contract."""
+        with self._store.read("activity_events_since") as conn:
+            deleted = _deleted_chunk_ids_stmt()
+            stmt = (
+                select(s.event_log)
+                .where(s.event_log.c.recorded_at >= since)
+                .where(or_(s.event_log.c.chunk_id.is_(None), s.event_log.c.chunk_id.not_in(deleted)))
+                .order_by(s.event_log.c.recorded_at.desc(), s.event_log.c.id.desc())
+                .limit(limit)
             )
             return [
                 EventRow(
