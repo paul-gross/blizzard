@@ -12,10 +12,21 @@ from datetime import datetime
 from typing import Protocol
 
 __all__ = [
+    "PROVIDER_ANTHROPIC",
+    "PROVIDER_OPENAI",
     "ExternalSubscriptionUsageSnapshot",
     "ExternalSubscriptionUsageWindow",
     "ISubscriptionSampler",
 ]
+
+# The Anthropic provider-sampler binding's own selector value (blizzard#436) — distinct from
+# `wire.facts.LEGACY_ANTHROPIC_SLUG`, which identifies a *declaration*, not a provider; the
+# two happen to share a literal today, but a config change to one must not silently unbind
+# the other.
+PROVIDER_ANTHROPIC = "anthropic"
+
+# The OpenAI (ChatGPT plan) binding's selector — reached only by an explicit `[[subscription]]`.
+PROVIDER_OPENAI = "openai"
 
 
 @dataclass(frozen=True)

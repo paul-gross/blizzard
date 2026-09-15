@@ -17,7 +17,7 @@ from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
-from blizzard.wire.facts import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
+from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 
 pytestmark = pytest.mark.unit
 

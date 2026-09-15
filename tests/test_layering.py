@@ -30,6 +30,8 @@ _MOVED_HOMES = {
     "TokenHash": "blizzard.foundation.tokens",
     "EventLogKind": "blizzard.foundation.event_log",
     "EVENT_LOG_SEVERITY": "blizzard.foundation.event_log",
+    "PROVIDER_ANTHROPIC": "blizzard.runner.subscriptions.subscription_sampler",
+    "PROVIDER_OPENAI": "blizzard.runner.subscriptions.subscription_sampler",
 }
 
 
