@@ -2913,7 +2913,7 @@
     "queue": {
       "commands": {
         "move": {
-          "help": "Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).\n\nA client of the single-chunk fractional ``POST /api/queue/position`` (issue #137):\nreads the current order (drained to its whole order, blizzard#526 D7), drops\nCHUNK_ID out of it, clamps POSITION into what's left, and sends one anchor. 409 when\nCHUNK_ID is not in the ready list, not the backlog.",
+          "help": "Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).\n\nClient of the fractional ``POST /api/queue/position`` (issue #137); 409 when CHUNK_ID\nis not in the ready list, not the backlog.",
           "params": [
             {
               "hidden": false,
