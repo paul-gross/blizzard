@@ -98,6 +98,8 @@ class _FakeIdentityRepository:
 class _FakeSessionRepository:
     def __init__(self) -> None:
         self.by_hash: dict[str, Session] = {}
+        #: Every ``touch`` invocation, for tests asserting a granularity-skipped write.
+        self.touch_calls: list[tuple[str, datetime, datetime]] = []
 
     def get_by_hash(self, id_hash: str) -> Session | None:
         return self.by_hash.get(id_hash)
@@ -106,6 +108,7 @@ class _FakeSessionRepository:
         self.by_hash[session.id_hash] = session
 
     def touch(self, id_hash: str, *, last_seen_at: datetime, expires_at: datetime) -> None:
+        self.touch_calls.append((id_hash, last_seen_at, expires_at))
         session = self.by_hash[id_hash]
         self.by_hash[id_hash] = Session(
             id_hash=session.id_hash,
@@ -250,6 +253,52 @@ def test_touch_session_slides_expiry_forward() -> None:
     slid = sessions.by_hash[session.id_hash]
     assert slid.expires_at > first_expiry
     assert slid.last_seen_at == clock.now()
+
+
+def test_touch_session_skips_the_write_when_the_slide_is_under_touch_granularity() -> None:
+    clock = FixedClock(_T0)
+    service, users, sessions, _ident, _, _ = _service(clock, idle_ttl=timedelta(hours=1))
+    user = _user()
+    users.create(user)
+    _, session = service.mint_session(user)
+
+    clock.advance(timedelta(minutes=4))  # under the default 5-minute touch_granularity
+    identity = service.touch_session(session)
+
+    assert identity is not None
+    assert sessions.touch_calls == []
+
+
+def test_touch_session_writes_once_the_slide_reaches_touch_granularity() -> None:
+    clock = FixedClock(_T0)
+    service, users, sessions, _ident, _, _ = _service(clock, idle_ttl=timedelta(hours=1))
+    user = _user()
+    users.create(user)
+    _, session = service.mint_session(user)
+
+    clock.advance(timedelta(minutes=5))  # exactly the default touch_granularity
+    identity = service.touch_session(session)
+
+    assert identity is not None
+    assert len(sessions.touch_calls) == 1
+    _, _, expires_at = sessions.touch_calls[0]
+    assert expires_at == clock.now() + timedelta(hours=1)
+
+
+def test_touch_session_honors_a_constructor_overridden_touch_granularity() -> None:
+    clock = FixedClock(_T0)
+    service, users, sessions, _ident, _, _ = _service(
+        clock, idle_ttl=timedelta(hours=1), touch_granularity=timedelta(minutes=1)
+    )
+    user = _user()
+    users.create(user)
+    _, session = service.mint_session(user)
+
+    clock.advance(timedelta(minutes=1))
+    identity = service.touch_session(session)
+
+    assert identity is not None
+    assert len(sessions.touch_calls) == 1
 
 
 def test_touch_session_returns_none_once_idle_expired() -> None:

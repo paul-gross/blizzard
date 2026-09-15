@@ -51,6 +51,9 @@ IDLE_TTL = timedelta(hours=24)
 #: at T is never valid past ``T + ABSOLUTE_MAX_AGE``, even if touched continuously.
 ABSOLUTE_MAX_AGE = timedelta(days=30)
 
+#: The minimum expiry slide worth a write — a smaller slide skips the write outright.
+TOUCH_GRANULARITY = timedelta(minutes=5)
+
 #: ``secrets.token_urlsafe`` byte count for a minted ``state`` value.
 STATE_BYTES = 24
 
@@ -108,6 +111,7 @@ class AuthService:
         auth_facts: AuthFactsService,
         idle_ttl: timedelta = IDLE_TTL,
         absolute_max_age: timedelta = ABSOLUTE_MAX_AGE,
+        touch_granularity: timedelta = TOUCH_GRANULARITY,
     ) -> None:
         self._users = users
         self._identities = identities
@@ -118,13 +122,14 @@ class AuthService:
         self._auth_facts = auth_facts
         self._idle_ttl = idle_ttl
         self._absolute_max_age = absolute_max_age
+        self._touch_granularity = touch_granularity
 
     def touch_session(self, session: Session) -> ResolvedIdentity | None:
         """Slide ``session``'s expiry and resolve its owning user's identity.
 
-        ``None`` when the session has already idle-expired, has crossed its absolute
-        maximum age, or its user no longer exists. Takes the already-loaded
-        :class:`~blizzard.hub.auth.models.Session` (``bzh:domain-takes-objects``)."""
+        ``None`` when idle-expired, past its absolute maximum age, or its user no
+        longer exists (takes the already-loaded ``Session``). Skips the write below
+        ``touch_granularity`` — both checks above still gate on the unwritten value."""
         now = self._clock.now()
         if session.expires_at <= now:
             return None
@@ -134,7 +139,8 @@ class AuthService:
         if user is None:
             return None
         new_expires_at = min(session.created_at + self._absolute_max_age, now + self._idle_ttl)
-        self._sessions.touch(session.id_hash, last_seen_at=now, expires_at=new_expires_at)
+        if new_expires_at - session.expires_at >= self._touch_granularity:
+            self._sessions.touch(session.id_hash, last_seen_at=now, expires_at=new_expires_at)
         return ResolvedIdentity(
             user_id=user.user_id,
             username=user.username,
