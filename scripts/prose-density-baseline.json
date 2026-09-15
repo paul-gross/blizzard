@@ -5208,9 +5208,9 @@
   },
   "support.py": {
    "comments": 40,
-   "docstrings": 148,
+   "docstrings": 151,
    "over_cap": 1,
-   "total": 1013
+   "total": 1023
   },
   "support_opencode_binary.py": {
    "comments": 0,
@@ -5496,9 +5496,9 @@
   },
   "test_chunk_fact_table_indexes.py": {
    "comments": 14,
-   "docstrings": 39,
-   "over_cap": 6,
-   "total": 392
+   "docstrings": 33,
+   "over_cap": 5,
+   "total": 386
   },
   "test_chunk_lifecycle_is_ephemeral.py": {
    "comments": 0,

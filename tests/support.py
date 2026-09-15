@@ -969,18 +969,27 @@ def explain_query_plan(engine: Engine, statement: str, parameters: Any) -> Seque
 
 
 _SCAN_OR_SEARCH = re.compile(r"^(SCAN|SEARCH) (\S+)(.*)$")
+_ALIASED_FROM_ITEM = re.compile(r"\b(?:FROM|JOIN)\s+(\w+)\s+AS\s+(\w+)", re.IGNORECASE)
 
 
-def _offending_table(detail: str, tables: set[str]) -> str | None:
-    """``detail`` is a plan row's last column, e.g. ``SCAN t``, ``SEARCH t USING INDEX ix
-    (...)``, or ``SEARCH t USING AUTOMATIC COVERING INDEX (...)``. Offends when it names one
-    of ``tables`` and is either a bare scan with no ``USING [COVERING] INDEX`` clause at all,
-    or any search/scan through sqlite's own automatic (covering or partial-covering) index —
-    a real named index is never an offense."""
+def _statement_aliases(statement: str) -> dict[str, str]:
+    """Maps every ``<table> AS <alias>`` from item in ``statement`` back to its real table —
+    a plan row names the alias sqlite was given, not the table it reads (e.g. ``leases``
+    joined to itself as ``later_escalation_leases`` for a self-correlated NOT EXISTS)."""
+    return {alias: table for table, alias in _ALIASED_FROM_ITEM.findall(statement)}
+
+
+def _offending_table(detail: str, tables: set[str], aliases: dict[str, str]) -> str | None:
+    """``detail`` is a plan row's last column, e.g. ``SCAN t``, ``SEARCH t USING INDEX ix (...)``, or ``SEARCH t USING
+    AUTOMATIC COVERING INDEX (...)``; ``t`` may itself be an alias, resolved back to its real table via ``aliases``.
+    Offends when the resolved table names one of ``tables`` and is either a bare scan with no ``USING [COVERING]
+    INDEX`` clause, or any search/scan through sqlite's own automatic index — a real named index is never an
+    offense."""
     match = _SCAN_OR_SEARCH.match(detail)
     if match is None:
         return None
-    verb, table, rest = match.groups()
+    verb, name, rest = match.groups()
+    table = aliases.get(name, name)
     if table not in tables:
         return None
     if "AUTOMATIC" in rest:
@@ -1006,8 +1015,9 @@ def offending_index_scans(
         if statement in seen:
             continue
         seen.add(statement)
+        aliases = _statement_aliases(statement)
         for row in explain_query_plan(engine, statement, parameters):
-            table = _offending_table(row.detail, vocabulary)
+            table = _offending_table(row.detail, vocabulary, aliases)
             if table is not None:
                 offenders.append((table, row))
     return offenders

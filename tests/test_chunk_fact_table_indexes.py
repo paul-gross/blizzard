@@ -1,15 +1,9 @@
-"""Fact-table ``chunk_id`` indexes (blizzard#421) and the hot-path indexes blizzard#519
-adds over the store's other unindexed predicates and orderings (component tier).
+"""Fact-table ``chunk_id`` indexes (blizzard#421), blizzard#519's hot-path indexes, and blizzard#517's spend range
+(component tier) — migrated-to-head sqlite-on-disk.
 
-This pins a narrower claim than ``tests/test_store_read_index_gate.py``'s gate makes:
-not just that a read avoids scanning, but *which named index* it plans through —
-``tests/test_store_read_index_gate.py`` owns the general "every hub/runner read avoids
-an unallowed scan" coverage; this file keeps the exact-named-index pins that gate does
-not make. Migrated-to-head sqlite-on-disk. Proves every per-chunk fact-table read
-``ChunkFactsStore.load_facts``/``_route_of_conn`` issue plans as an index search against its own
-``ix_<table>_chunk_id`` rather than a full table scan — the ``tests/test_finding_store.py``
-shape, over the table set the ``20260829_1930_fact_tables_chunk_id_index`` revision indexes,
-plus blizzard#519's other hot-path reads and blizzard#517's spend range."""
+Pins *which named index* each plan uses (narrower than ``test_store_read_index_gate.py``'s scan-avoidance gate):
+``ChunkFactsStore.load_facts``/``_route_of_conn`` must plan an index search against ``ix_<table>_chunk_id``, over the
+``20260829_1930_fact_tables_chunk_id_index`` table set plus blizzard#519's hot-path reads."""
 
 from __future__ import annotations
 

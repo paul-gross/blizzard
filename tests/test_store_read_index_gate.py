@@ -1,15 +1,17 @@
-"""The store-read-index gate (blizzard#525) — runner (Phase 2) and hub (Phase 3) halves.
+"""The store-read-index gate (blizzard#525) — runner and hub halves.
 
 Drives every read method of every runner/hub ``IRead*`` Protocol against a real, migrated-to-head sqlite store and
 fails if any plans a scan or automatic covering index over a table not on ``tests/store_scan_allowlist.py``'s
-allow-lists, coverage enforced by reflection equality against ``tests/store_read_census.py``'s census/exemptions
-(Decision 1). ``test_runner_store_indexes.py``/``test_chunk_fact_table_indexes.py`` keep their own narrower purpose."""
+allow-lists, coverage enforced by reflection equality against ``tests/store_read_census.py``'s census/exemptions.
+``test_runner_store_indexes.py``/``test_chunk_fact_table_indexes.py`` keep their own narrower purpose."""
 
 from __future__ import annotations
 
 import importlib
 import inspect
 import pkgutil
+from collections.abc import Iterator
+from dataclasses import dataclass
 from types import ModuleType
 from typing import Any
 
@@ -46,16 +48,15 @@ pytestmark = pytest.mark.component
 
 
 def _reflect_read_protocol_methods(package: ModuleType) -> set[tuple[type, str]]:
-    """Walk ``package`` for every ``IRead*`` ``Protocol`` class (Decision 1), keyed ``(ProtocolClass, method_name)``
+    """Walk ``package`` for every ``IRead*`` ``Protocol`` class, keyed ``(ProtocolClass, method_name)``
     for each method declared **directly** in that class's own body (``vars(cls)``) — never one only inherited from a
     composed base, so an umbrella such as ``IReadRunnerStore`` contributes none of its own. Called once for
     ``blizzard.runner`` and once for ``blizzard.hub``, rather than duplicated per store."""
     keys: set[tuple[type, str]] = set()
     for modinfo in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
-        try:
-            module = importlib.import_module(modinfo.name)
-        except Exception:
-            continue
+        if modinfo.name.endswith(".migrations.env"):
+            continue  # alembic's env.py assumes an active `alembic` CLI context (alembic.context.config)
+        module = importlib.import_module(modinfo.name)
         for name, obj in inspect.getmembers(module, inspect.isclass):
             if not name.startswith("IRead") or obj.__module__ != module.__name__:
                 continue
@@ -72,9 +73,9 @@ def _offending_scans_by_method(
     engine: sa.Engine, world: object, census: dict[tuple[type, str], Any], tables: set[str]
 ) -> list[tuple[type, str, str, sa.Row[Any]]]:
     """Every ``(Protocol, method, table, plan row)`` offense, driving each census recipe under its own capture so an
-    offense is attributable to the read that caused it — what the allow-list's method-scoped entries (Decision 6) and
-    the hygiene check below both need. ``tables`` is the caller's own ``schema.metadata`` table-name vocabulary
-    (Decision 3), so this stays a plain reflection over the recipe rather than importing either store's ``schema``."""
+    offense is attributable to the read that caused it — what the allow-list's method-scoped entries and the hygiene
+    check below both need. ``tables`` is the caller's own ``schema.metadata`` table-name vocabulary, passed in rather
+    than imported, so this stays a plain reflection over the recipe with no store-specific import of its own."""
     offenders: list[tuple[type, str, str, sa.Row[Any]]] = []
     for (protocol, method), recipe in census.items():
         with support.capture_statements(engine) as statements:
@@ -101,21 +102,78 @@ def _covered(
 
 
 @pytest.fixture(scope="module")
-def runner_world(tmp_path_factory: pytest.TempPathFactory) -> RunnerWorld:
+def runner_world(tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunnerWorld]:
     """One migrated-to-head runner store, seeded once through its own write Protocols
-    (Decisions 2-4) and shared read-only by every test below."""
+    and shared read-only by every test below."""
     root = tmp_path_factory.mktemp("runner-store-gate")
     config = runner_runtime.init_environment(root)
     engine = create_engine_from_url(config.db_url)
-    return build_runner_world(engine)
+    try:
+        yield build_runner_world(engine)
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture(scope="module")
-def hub_world(tmp_path_factory: pytest.TempPathFactory) -> HubWorld:
+def hub_world(tmp_path_factory: pytest.TempPathFactory) -> Iterator[HubWorld]:
     """One migrated-to-head hub store, seeded once through its own write Protocols and
-    production services (Decisions 2-4) and shared read-only by every test below."""
+    production services, and shared read-only by every test below."""
     root = tmp_path_factory.mktemp("hub-store-gate")
-    return build_hub_world(root)
+    world = build_hub_world(root)
+    try:
+        yield world
+    finally:
+        world.hub.client.close()
+        world.engine.dispose()
+
+
+@dataclass(frozen=True)
+class _StoreCase:
+    """One store's own (world, schema, census, allow-list) tuple — the shape both the
+    table-vocabulary and allow-list-hygiene checks below drive identically per store."""
+
+    label: str
+    world: RunnerWorld | HubWorld
+    schema_module: ModuleType
+    census: dict[tuple[type, str], Any]
+    allowed_scans: list[TableWideAllowance | MethodScopedAllowance]
+
+
+@pytest.fixture(params=["runner", "hub"])
+def store_case(request: pytest.FixtureRequest, runner_world: RunnerWorld, hub_world: HubWorld) -> _StoreCase:
+    if request.param == "runner":
+        return _StoreCase("runner", runner_world, runner_schema, RUNNER_CENSUS, RUNNER_ALLOWED_SCANS)
+    return _StoreCase("hub", hub_world, hub_schema, HUB_CENSUS, HUB_ALLOWED_SCANS)
+
+
+def test_table_vocabulary_matches_the_migrated_database(store_case: _StoreCase) -> None:
+    """The gate's table vocabulary is the store's own ``schema.metadata`` table names —
+    asserted equal to what the migrated database actually reflects, so the gate's own
+    vocabulary and the live schema cannot silently drift apart."""
+    schema_tables = set(store_case.schema_module.metadata.tables.keys())
+    # Alembic's own bookkeeping table, not part of the store's own schema.metadata.
+    reflected_tables = set(sa.inspect(store_case.world.engine).get_table_names()) - {"alembic_version"}
+    assert schema_tables == reflected_tables
+
+
+def test_allow_list_hygiene(store_case: _StoreCase) -> None:
+    schema_tables = set(store_case.schema_module.metadata.tables.keys())
+    offenders = _offending_scans_by_method(store_case.world.engine, store_case.world, store_case.census, schema_tables)
+    offending_tables = {table for _protocol, _method, table, _row in offenders}
+    offending_method_tables = {(protocol, method, table) for protocol, method, table, _row in offenders}
+
+    for entry in store_case.allowed_scans:
+        assert entry.row_bound <= ROW_THRESHOLD, f"{entry} declares a row bound above ROW_THRESHOLD={ROW_THRESHOLD}"
+        assert entry.table in schema_tables, f"{entry} names a table absent from schema.metadata: {entry.table!r}"
+        if isinstance(entry, TableWideAllowance):
+            assert entry.table in offending_tables, (
+                f"{entry} is stale — no captured {store_case.label} read scans/auto-indexes {entry.table!r} any more"
+            )
+        else:
+            assert (entry.protocol, entry.method, entry.table) in offending_method_tables, (
+                f"{entry} is stale — {entry.protocol.__name__}.{entry.method} no longer scans/auto-indexes "
+                f"{entry.table!r}"
+            )
 
 
 def test_runner_census_is_exhaustive() -> None:
@@ -149,36 +207,6 @@ def test_runner_read_methods_never_scan_an_unallowed_table(runner_world: RunnerW
         "an offending scan/automatic-index is not covered by tests/store_scan_allowlist.py's "
         f"RUNNER_ALLOWED_SCANS: {uncovered}"
     )
-
-
-def test_runner_table_vocabulary_matches_the_migrated_database(runner_world: RunnerWorld) -> None:
-    """Decision 5's table vocabulary is the store's own ``schema.metadata`` table names —
-    asserted equal to what the migrated database actually reflects, so the gate's own
-    vocabulary and the live schema cannot silently drift apart."""
-    schema_tables = set(runner_schema.metadata.tables.keys())
-    # Alembic's own bookkeeping table, not part of the store's own schema.metadata.
-    reflected_tables = set(sa.inspect(runner_world.engine).get_table_names()) - {"alembic_version"}
-    assert schema_tables == reflected_tables
-
-
-def test_runner_allow_list_hygiene(runner_world: RunnerWorld) -> None:
-    schema_tables = set(runner_schema.metadata.tables.keys())
-    offenders = _offending_scans_by_method(runner_world.engine, runner_world, RUNNER_CENSUS, schema_tables)
-    offending_tables = {table for _protocol, _method, table, _row in offenders}
-    offending_method_tables = {(protocol, method, table) for protocol, method, table, _row in offenders}
-
-    for entry in RUNNER_ALLOWED_SCANS:
-        assert entry.row_bound <= ROW_THRESHOLD, f"{entry} declares a row bound above ROW_THRESHOLD={ROW_THRESHOLD}"
-        assert entry.table in schema_tables, f"{entry} names a table absent from schema.metadata: {entry.table!r}"
-        if isinstance(entry, TableWideAllowance):
-            assert entry.table in offending_tables, (
-                f"{entry} is stale — no captured runner read scans/auto-indexes {entry.table!r} any more"
-            )
-        else:
-            assert (entry.protocol, entry.method, entry.table) in offending_method_tables, (
-                f"{entry} is stale — {entry.protocol.__name__}.{entry.method} no longer scans/auto-indexes "
-                f"{entry.table!r}"
-            )
 
 
 # --- hub -------------------------------------------------------------------------------
@@ -217,60 +245,34 @@ def test_hub_read_methods_never_scan_an_unallowed_table(hub_world: HubWorld) -> 
     )
 
 
-def test_hub_table_vocabulary_matches_the_migrated_database(hub_world: HubWorld) -> None:
-    """Decision 5's table vocabulary is the store's own ``schema.metadata`` table names —
-    asserted equal to what the migrated database actually reflects, so the gate's own
-    vocabulary and the live schema cannot silently drift apart."""
-    schema_tables = set(hub_schema.metadata.tables.keys())
-    # Alembic's own bookkeeping table, not part of the store's own schema.metadata.
-    reflected_tables = set(sa.inspect(hub_world.engine).get_table_names()) - {"alembic_version"}
-    assert schema_tables == reflected_tables
-
-
-def test_hub_allow_list_hygiene(hub_world: HubWorld) -> None:
-    schema_tables = set(hub_schema.metadata.tables.keys())
-    offenders = _offending_scans_by_method(hub_world.engine, hub_world, HUB_CENSUS, schema_tables)
-    offending_tables = {table for _protocol, _method, table, _row in offenders}
-    offending_method_tables = {(protocol, method, table) for protocol, method, table, _row in offenders}
-
-    for entry in HUB_ALLOWED_SCANS:
-        assert entry.row_bound <= ROW_THRESHOLD, f"{entry} declares a row bound above ROW_THRESHOLD={ROW_THRESHOLD}"
-        assert entry.table in schema_tables, f"{entry} names a table absent from schema.metadata: {entry.table!r}"
-        if isinstance(entry, TableWideAllowance):
-            assert entry.table in offending_tables, (
-                f"{entry} is stale — no captured hub read scans/auto-indexes {entry.table!r} any more"
-            )
-        else:
-            assert (entry.protocol, entry.method, entry.table) in offending_method_tables, (
-                f"{entry} is stale — {entry.protocol.__name__}.{entry.method} no longer scans/auto-indexes "
-                f"{entry.table!r}"
-            )
-
-
 def test_hub_mutation_dropping_an_index_the_census_exercises_is_caught_by_the_classifier(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> None:
-    """Decision 8's mutation self-test (AC3.2): drops ``ix_artifacts_chunk_id_node_id_epoch`` on a dedicated migrated
-    hub database and asserts ``support.offending_index_scans`` reports ``artifacts`` for the read it serves —
+    """The gate's mutation self-test: drops ``ix_artifacts_chunk_id_node_id_epoch`` on a dedicated migrated hub
+    database and asserts ``support.offending_index_scans`` reports ``artifacts`` for the read it serves —
     load-bearing proof that weakening ``support._offending_table``'s bare-``SCAN``/``AUTOMATIC`` match fails here."""
     root = tmp_path_factory.mktemp("hub-store-gate-mutation")
     world = build_hub_world(root)
-    index_name = "ix_artifacts_chunk_id_node_id_epoch"
+    try:
+        index_name = "ix_artifacts_chunk_id_node_id_epoch"
 
-    with world.engine.begin() as conn:
-        indexes_before = {row[1] for row in conn.exec_driver_sql("PRAGMA index_list(artifacts)").all()}
-    assert index_name in indexes_before, f"{index_name} no longer exists on artifacts — pick another real hub index"
+        with world.engine.begin() as conn:
+            indexes_before = {row[1] for row in conn.exec_driver_sql("PRAGMA index_list(artifacts)").all()}
+        assert index_name in indexes_before, f"{index_name} no longer exists on artifacts — pick another real hub index"
 
-    recipe = HUB_CENSUS[(IReadChunkArtifactsRepository, "load_artifacts")]
-    with world.engine.begin() as conn:
-        conn.exec_driver_sql(f"DROP INDEX {index_name}")
+        recipe = HUB_CENSUS[(IReadChunkArtifactsRepository, "load_artifacts")]
+        with world.engine.begin() as conn:
+            conn.exec_driver_sql(f"DROP INDEX {index_name}")
 
-    tables = set(hub_schema.metadata.tables.keys())
-    with support.capture_statements(world.engine) as statements:
-        recipe(world)
-    offenders = support.offending_index_scans(world.engine, statements, tables)
-    offending_tables = {table for table, _row in offenders}
-    assert "artifacts" in offending_tables, (
-        f"dropping {index_name} did not surface artifacts as an offending scan — "
-        f"load_artifacts's own recipe no longer exercises that index; offenders were {offenders}"
-    )
+        tables = set(hub_schema.metadata.tables.keys())
+        with support.capture_statements(world.engine) as statements:
+            recipe(world)
+        offenders = support.offending_index_scans(world.engine, statements, tables)
+        offending_tables = {table for table, _row in offenders}
+        assert "artifacts" in offending_tables, (
+            f"dropping {index_name} did not surface artifacts as an offending scan — "
+            f"load_artifacts's own recipe no longer exercises that index; offenders were {offenders}"
+        )
+    finally:
+        world.hub.client.close()
+        world.engine.dispose()

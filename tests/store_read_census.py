@@ -657,7 +657,7 @@ RUNNER_EXEMPTIONS: dict[tuple[type, str], str] = {
 }
 
 
-# --- Hub (Phase 3) -----------------------------------------------------------------------
+# --- Hub -----------------------------------------------------------------------------------
 
 _HUB_BASE = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
 _HUB_UNTIL = _HUB_BASE + timedelta(days=365)
@@ -799,8 +799,8 @@ class HubWorld:
 
 
 def build_hub_world(tmp_path: Path) -> HubWorld:
-    """Seed a migrated-to-head hub store through its own write Protocols and production services (Decisions 2-4), so
-    every read method in :data:`HUB_CENSUS` reaches real, non-empty behavior. Every id below is a plain literal — the
+    """Seed a migrated-to-head hub store through its own write Protocols and production services, so every read
+    method in :data:`HUB_CENSUS` reaches real, non-empty behavior. Every id below is a plain literal — the
     store enforces no foreign key (``create_engine_from_url`` never turns ``PRAGMA foreign_keys`` on), so a fact's
     own node id only has to be real where a fact family's OWN read resolves it against the graph, never where a
     chunk-fact seam merely carries it."""
@@ -1522,7 +1522,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
 HubRecipe = Callable[[HubWorld], object]
 
-#: Every reflected hub ``(Protocol, method)`` (Decision 1), mapped to a recipe against :func:`build_hub_world`'s world.
+#: Every reflected hub ``(Protocol, method)``, mapped to a recipe against :func:`build_hub_world`'s world.
 HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadAuthStateRepository, "get"): lambda w: w.auth_state.get(w.auth_state_value),
     (IReadAuthFactsRepository, "list_recent"): lambda w: w.auth_facts.list_recent(limit=50),

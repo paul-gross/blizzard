@@ -31,8 +31,8 @@ class TableWideAllowance:
 class MethodScopedAllowance:
     """A deliberate whole-table read of a table that is otherwise properly indexed for
     its OTHER access patterns — allowed only for the one read that bypasses the index,
-    never widened to the whole table (Decision 6), so a future per-key read added
-    against the same table stays held to using the real index."""
+    never widened to the whole table, so a future per-key read added against the same
+    table stays held to using the real index."""
 
     protocol: type
     method: str
@@ -219,9 +219,9 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     TableWideAllowance(
         "answer_deliveries",
         200,
-        "board-detail-only (its own schema.py comment: 'the chunk's status already "
-        "flipped to running at question.answered') with no index at all — one row per "
-        "answered question, a small fraction of the fleet's own question volume.",
+        "board-detail-only per src/blizzard/hub/store/schema.py's own comment beside "
+        "answer_deliveries, with no index at all — one row per answered question, a "
+        "small fraction of the fleet's own question volume.",
     ),
     TableWideAllowance(
         "event_log",
