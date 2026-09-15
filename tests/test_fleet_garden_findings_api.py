@@ -93,7 +93,7 @@ def test_returns_the_scoped_live_bucket_via_the_shared_projection(tmp_path: Path
     # The operator's own `GET /api/findings` reads through the identical projection —
     # the fleet route reuses it rather than restating it.
     operator = hub.client.get("/api/findings", params={"routine": _ROUTINE, "scope": _SCOPE})
-    assert body == operator.json()
+    assert body == operator.json()["findings"]
 
 
 def test_excludes_an_exited_finding_and_takes_no_include_gone_flag(tmp_path: Path) -> None:

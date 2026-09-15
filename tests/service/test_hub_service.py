@@ -301,7 +301,7 @@ def test_chunk_pause_field_reflects_the_operator_chunk_brake(tmp_path: Path) -> 
         chunk_id = _ingest(forge, hub, "pause over the wire")
 
         def _summary() -> dict:
-            return next(c for c in hub.get("/api/chunks").json() if c["chunk_id"] == chunk_id)
+            return next(c for c in hub.get("/api/chunks").json()["chunks"] if c["chunk_id"] == chunk_id)
 
         assert hub.get(f"/api/chunks/{chunk_id}").json()["pause"] is None
         assert "paused" not in _summary(), "the card is a passive status view — no pause fact on the summary"

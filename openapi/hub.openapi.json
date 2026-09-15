@@ -826,6 +826,32 @@
         "title": "ArtifactView",
         "type": "object"
       },
+      "BacklogPageView": {
+        "description": "``GET /api/backlog``'s own bounded page (blizzard#526 D3/D4) \u2014 ``next_cursor``\nis ``None`` exactly when this page is the last one, the same convention every other\npaginated hub read uses. ``position`` on each entry is still its absolute index in\nthe whole order, not a page-local one.",
+        "properties": {
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BacklogPeekEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "title": "BacklogPageView",
+        "type": "object"
+      },
       "BacklogPeekEntry": {
         "description": "One ``not_ready`` chunk, in backlog order.",
         "properties": {
@@ -869,7 +895,7 @@
         "type": "object"
       },
       "BacklogPeekResponse": {
-        "description": "The ``not_ready`` list, in the hub's explicit order.",
+        "description": "The ``not_ready`` list, in the hub's explicit order \u2014 the whole order,\nunpaginated. ``PUT /api/backlog``/``POST /api/backlog/position`` all still answer\nwith this (blizzard#526 D3): a write verb's caller needs the whole resulting order\nto confirm against, not one page of it.",
         "properties": {
           "entries": {
             "default": [],
@@ -2030,6 +2056,32 @@
           "cost_usd"
         ],
         "title": "ChunkUsageView",
+        "type": "object"
+      },
+      "ChunksPageView": {
+        "description": "``GET /api/chunks``'s own bounded page (blizzard#526 D3/D4) \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one, the same convention every other\npaginated hub read uses.",
+        "properties": {
+          "chunks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChunkSummary"
+            },
+            "title": "Chunks",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "title": "ChunksPageView",
         "type": "object"
       },
       "CliTokenRequest": {
@@ -3231,6 +3283,32 @@
         "title": "FindingView",
         "type": "object"
       },
+      "FindingsPageView": {
+        "description": "``GET /api/findings``'s own bounded page (blizzard#526 D3/D5) \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one, the same convention every other\npaginated hub read uses.",
+        "properties": {
+          "findings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FindingView"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "title": "FindingsPageView",
+        "type": "object"
+      },
       "FleetSpendView": {
         "description": "The fleet's usage/cost total since ``since`` and, when the caller bounded the\nwindow, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``\nmarks ``cost_usd`` as a lower bound.",
         "properties": {
@@ -3623,6 +3701,32 @@
           "created_at"
         ],
         "title": "GardenProposalView",
+        "type": "object"
+      },
+      "GardenProposalsPageView": {
+        "description": "``GET /api/garden-proposals``'s own bounded page (blizzard#526 D3/D4) \u2014\n``next_cursor`` is ``None`` exactly when this page is the last one, the same\nconvention every other paginated hub read uses.",
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "proposals": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GardenProposalView"
+            },
+            "title": "Proposals",
+            "type": "array"
+          }
+        },
+        "title": "GardenProposalsPageView",
         "type": "object"
       },
       "GardenSweepsView": {
@@ -5244,6 +5348,32 @@
         "title": "QuestionView",
         "type": "object"
       },
+      "QueuePageView": {
+        "description": "``GET /api/queue``'s own bounded page (blizzard#526 D3/D4) \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one, the same convention every other\npaginated hub read uses. ``position`` on each entry is still its absolute index in\nthe whole order, not a page-local one.",
+        "properties": {
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/QueuePeekEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "title": "QueuePageView",
+        "type": "object"
+      },
       "QueuePeekEntry": {
         "description": "One ready chunk, in queue order.",
         "properties": {
@@ -5287,7 +5417,7 @@
         "type": "object"
       },
       "QueuePeekResponse": {
-        "description": "The ready queue, in the hub's explicit order.",
+        "description": "The ready queue, in the hub's explicit order \u2014 the whole order, unpaginated.\n``PUT /api/queue``/``POST /api/queue/position`` and the runner's own\n``GET /api/fleet/queue/peek`` all still answer with this (blizzard#526 D3): a write\nverb's caller needs the whole resulting order to confirm against, not one page of\nit.",
         "properties": {
           "entries": {
             "default": [],
@@ -10552,18 +10682,58 @@
     },
     "/api/backlog": {
       "get": {
-        "description": "The hub-ordered ``not_ready`` list, read-only \u2014 an operator triage surface, so it\nrequires ``QUEUE_REORDER`` rather than the ready queue's ``FLEET_VIEW``.",
+        "description": "The hub-ordered ``not_ready`` list, read-only, bounded and keyset-paginated\n(blizzard#526 D3/D4/D7) \u2014 an operator triage surface, so it requires\n``QUEUE_REORDER`` rather than the ready queue's ``FLEET_VIEW``.",
         "operationId": "get_backlog_api_backlog_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BacklogPeekResponse"
+                  "$ref": "#/components/schemas/BacklogPageView"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Backlog",
@@ -10656,22 +10826,58 @@
     },
     "/api/chunks": {
       "get": {
-        "description": "The fleet chunk list \u2014 derived status per chunk.\n\nReads the fleet's facts and routes with one bulk query each: the `FleetPulse.view()`\nshape (issue #374), extended to routes and to the rendered row (issue #421).",
+        "description": "The fleet chunk list \u2014 derived status per chunk, bounded and keyset-paginated\n(blizzard#526 D3/D4/D6).\n\nReads the fleet's facts and routes with one bulk query each: the `FleetPulse.view()`\nshape (issue #374), extended to routes and to the rendered row (issue #421). Only the\npage's own rows are rendered, but live-holder and blocked-marking derivation still see\nthe whole fleet (D6) \u2014 a pointer this page renders can be held live by a chunk outside\nit, and a dependent's blocked marking can name a prerequisite outside it too.",
         "operationId": "list_chunks_api_chunks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ChunkSummary"
-                  },
-                  "title": "Response List Chunks Api Chunks Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/ChunksPageView"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Chunks",
@@ -11930,7 +12136,7 @@
     },
     "/api/findings": {
       "get": {
-        "description": "The findings bucket, widened to every routine and every scope (blizzard#486) \u2014\nlive only, unless `include_gone` (D3), which also surfaces every exited finding, not\njust a merely `gone` one. `routine` and `scope` are both optional, independently:\n\n- both named \u2014 one routine's findings under one scope (`list_for`)\n- `routine` named, `scope` absent \u2014 one routine's findings across every scope it\n  holds (`list_for_routine`)\n- `routine` absent, `scope` named \u2014 every routine's findings under one scope\n- both absent \u2014 every finding across every routine and every scope\n\nThe last two are `list_across_routines`'s own two shapes.",
+        "description": "The findings bucket, widened to every routine and every scope (blizzard#486),\nbounded and keyset-paginated (blizzard#526 D1/D5) \u2014 live only, unless `include_gone`\n(D3), which also surfaces every exited finding, not just a merely `gone` one.\n`routine` and `scope` are both optional, independently:\n\n- both named \u2014 one routine's findings under one scope\n- `routine` named, `scope` absent \u2014 one routine's findings across every scope it holds\n- `routine` absent, `scope` named \u2014 every routine's findings under one scope\n- both absent \u2014 every finding across every routine and every scope\n\nAll four share `list_page`'s own total `finding_id` order.",
         "operationId": "list_findings_api_findings_get",
         "parameters": [
           {
@@ -11974,6 +12180,34 @@
               "title": "Include Gone",
               "type": "boolean"
             }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -11981,11 +12215,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/FindingView"
-                  },
-                  "title": "Response List Findings Api Findings Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/FindingsPageView"
                 }
               }
             },
@@ -13283,7 +13513,7 @@
     },
     "/api/fleet/queue/peek": {
       "get": {
-        "description": "The runner's FILL read \u2014 the same ready queue as ``GET /api/queue``.",
+        "description": "The runner's FILL read \u2014 the whole ready-queue order, out of scope for\nblizzard#526's pagination (unlike the operator-facing, now-paginated\n``GET /api/queue``): a filling runner needs every ready chunk in one read.",
         "operationId": "peek_queue_api_fleet_queue_peek_get",
         "responses": {
           "200": {
@@ -13601,22 +13831,58 @@
     },
     "/api/garden-proposals": {
       "get": {
-        "description": "Every garden proposal, newest first.",
+        "description": "Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526 D3/D4).",
         "operationId": "list_garden_proposals_api_garden_proposals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/GardenProposalView"
-                  },
-                  "title": "Response List Garden Proposals Api Garden Proposals Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/GardenProposalsPageView"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Garden Proposals",
@@ -14236,18 +14502,58 @@
     },
     "/api/queue": {
       "get": {
-        "description": "The hub-ordered ready queue, read-only \u2014 honours reorder/replace + grouping.",
+        "description": "The hub-ordered ready queue, read-only, bounded and keyset-paginated\n(blizzard#526 D3/D4/D7) \u2014 honours reorder/replace + grouping. ``position`` on each\nentry is still its absolute index in the whole order, not a page-local one.",
         "operationId": "get_queue_api_queue_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/QueuePeekResponse"
+                  "$ref": "#/components/schemas/QueuePageView"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Queue",

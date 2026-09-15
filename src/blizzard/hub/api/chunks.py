@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, CHUNK_INGEST, FLEET_VIEW
@@ -41,6 +41,7 @@ from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.garden_delivery import GardenDeliveryRejected, validate_delivery
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
+from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.pause import ChunkNotPausable
 from blizzard.hub.domain.restart import ChunkNotRestartable, RestartCurrentNodeUnknown, RestartNodeUnknown
 from blizzard.hub.domain.stop import ChunkNotStoppable
@@ -67,6 +68,7 @@ from blizzard.wire.chunk import (
     ChunkPatchResponse,
     ChunkPauseRequest,
     ChunkRestartRequest,
+    ChunksPageView,
     ChunkStopRequest,
     ChunkSummary,
     GardenDeliveryRequest,
@@ -141,12 +143,20 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
     return ChunkIngestResponse(chunk_id=chunk_id)
 
 
-@router.get("/chunks", response_model=list[ChunkSummary], dependencies=[Depends(require(FLEET_VIEW))])
-def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list[ChunkSummary]:
-    """The fleet chunk list — derived status per chunk.
+@router.get("/chunks", response_model=ChunksPageView, dependencies=[Depends(require(FLEET_VIEW))])
+def list_chunks(
+    services: Annotated[HubServices, Depends(get_services)],
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> ChunksPageView:
+    """The fleet chunk list — derived status per chunk, bounded and keyset-paginated
+    (blizzard#526 D3/D4/D6).
 
     Reads the fleet's facts and routes with one bulk query each: the `FleetPulse.view()`
-    shape (issue #374), extended to routes and to the rendered row (issue #421)."""
+    shape (issue #374), extended to routes and to the rendered row (issue #421). Only the
+    page's own rows are rendered, but live-holder and blocked-marking derivation still see
+    the whole fleet (D6) — a pointer this page renders can be held live by a chunk outside
+    it, and a dependent's blocked marking can name a prerequisite outside it too."""
     names = GraphNames(services.graphs)
     facts = services.chunks.facts.load_all_facts()
     routes = services.chunks.route.load_all_routes()
@@ -154,24 +164,35 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
     # inside a store (``bzh:dependency-inversion``, issue #457, D2).
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
     markings = derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
-    chunks = services.chunks.record.list_all()
-    # One priming call resolves every chunk's pinned graph's name/entry-node/node-names
-    # up front (issue #421).
-    names.prime(chunk.graph_id for chunk in chunks)
+    try:
+        page = services.chunks.record.list_page(cursor=cursor, limit=limit)
+    except MalformedCursor as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    # D6: live-holder resolution needs every chunk's pointers, not just this page's —
+    # narrowing to the page could miss a pointer another, unlisted chunk holds live.
+    all_chunks = services.chunks.record.list_all()
+    # One priming call resolves the page's own pinned graphs' name/entry-node/node-names
+    # up front (issue #421) — narrowed to the page, since nothing outside it is rendered.
+    names.prime(chunk.graph_id for chunk in page.chunks)
     # Derives from the chunks and statuses already loaded above, no further fact load.
-    live_holders = resolve_live_holders(((p, chunk.chunk_id) for chunk in chunks for p in chunk.work_refs), statuses)
-    return [
-        ChunkView.injected(
-            services,
-            chunk,
-            facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
-            routes.get(chunk.chunk_id),
-            names,
-            live_holders,
-            blocked=blocked_view(markings.get(chunk.chunk_id)),
-        ).summary()
-        for chunk in chunks
-    ]
+    live_holders = resolve_live_holders(
+        ((p, chunk.chunk_id) for chunk in all_chunks for p in chunk.work_refs), statuses
+    )
+    return ChunksPageView(
+        chunks=[
+            ChunkView.injected(
+                services,
+                chunk,
+                facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
+                routes.get(chunk.chunk_id),
+                names,
+                live_holders,
+                blocked=blocked_view(markings.get(chunk.chunk_id)),
+            ).summary()
+            for chunk in page.chunks
+        ],
+        next_cursor=page.next_cursor,
+    )
 
 
 def _neighbor_view(neighbor: ChunkNeighbor) -> ChunkNeighborView:

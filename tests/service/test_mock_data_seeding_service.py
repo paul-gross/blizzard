@@ -90,7 +90,7 @@ def _parse_ceiling_paused_runner(stdout: str) -> str:
 def _chunks_by_id(hub: httpx.Client) -> dict[str, dict]:
     resp = hub.get("/api/chunks")
     assert resp.status_code == 200, resp.text
-    return {row["chunk_id"]: row for row in resp.json()}
+    return {row["chunk_id"]: row for row in resp.json()["chunks"]}
 
 
 def _chunk_detail(hub: httpx.Client, chunk_id: str) -> dict:

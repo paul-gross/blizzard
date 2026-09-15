@@ -82,7 +82,7 @@ class IReadAnalyticsEventQueries(Protocol):
         in one total order (``bzh:sql-portable``) both encodings share; absent a concurrent
         re-derive replacing rows, a cursor walk repeats and skips nothing. ``cursor`` is a
         prior :attr:`EventPage.next_cursor`: any other value raises
-        :class:`~blizzard.hub.domain.analytics.MalformedCursor`."""
+        :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
         ...
 
     def counts_by_file(self, criteria: EventQueryCriteria) -> list[CountRow]:

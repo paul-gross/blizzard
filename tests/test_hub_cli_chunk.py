@@ -658,19 +658,22 @@ def test_release_dependency_maps_404(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.unit
 def test_chunk_list_marks_a_blocked_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
         return _FakeResponse(
             200,
-            [
-                {
-                    "chunk_id": "ch_1",
-                    "status": "not_ready",
-                    "current_node_id": "nd_1",
-                    "cost": {},
-                    "blocked": {"prerequisite_chunk_id": "ch_prereq"},
-                },
-                {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": {}},
-            ],
+            {
+                "chunks": [
+                    {
+                        "chunk_id": "ch_1",
+                        "status": "not_ready",
+                        "current_node_id": "nd_1",
+                        "cost": {},
+                        "blocked": {"prerequisite_chunk_id": "ch_prereq"},
+                    },
+                    {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": {}},
+                ],
+                "next_cursor": None,
+            },
         )
 
     monkeypatch.setattr(httpx, "get", fake_get)
@@ -680,3 +683,35 @@ def test_chunk_list_marks_a_blocked_chunk(monkeypatch: pytest.MonkeyPatch) -> No
     lines = result.output.splitlines()
     assert "[blocked on ch_prereq]" in lines[0]
     assert "[blocked" not in lines[1]
+
+
+@pytest.mark.unit
+def test_chunk_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The hub paginates ``GET /api/chunks`` — ``chunk list`` must keep following
+    ``next_cursor`` until it goes null rather than stopping after the first page."""
+    page_1 = {
+        "chunks": [
+            {"chunk_id": "ch_1", "status": "ready", "current_node_id": "nd_1", "cost": {}},
+            {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": {}},
+        ],
+        "next_cursor": "cursor-1",
+    }
+    page_2 = {
+        "chunks": [
+            {"chunk_id": "ch_3", "status": "ready", "current_node_id": "nd_1", "cost": {}},
+        ],
+        "next_cursor": None,
+    }
+
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
+        if isinstance(params, dict) and params.get("cursor") is not None:
+            return _FakeResponse(200, page_2)
+        return _FakeResponse(200, page_1)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["chunk", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "ch_1" in result.output
+    assert "ch_2" in result.output
+    assert "ch_3" in result.output

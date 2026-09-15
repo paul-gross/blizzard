@@ -7,13 +7,46 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import Select, and_, func, insert, or_, select
 
-from blizzard.hub.domain.garden_proposals import GardenProposal, IWriteGardenProposalRepository
+from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalPage, IWriteGardenProposalRepository
+from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.schema import garden_proposal_findings, garden_proposals
+
+#: `list_page`'s whole cursor format: the last returned row's own sort key
+#: (blizzard#526 D4) — `(created_at, proposal_id)`, already total.
+_CURSOR_ARITY = 2
+
+
+def _encode_proposal_cursor(proposal: GardenProposal) -> str:
+    return encode_cursor(iso_utc(proposal.created_at), proposal.proposal_id)
+
+
+def _decode_proposal_cursor(cursor: str) -> tuple[datetime, str]:
+    parts = decode_cursor(cursor)
+    if len(parts) != _CURSOR_ARITY or not isinstance(parts[0], str) or not isinstance(parts[1], str):
+        raise MalformedCursor(cursor)
+    try:
+        created_at = as_utc(datetime.fromisoformat(parts[0]))
+    except ValueError:
+        raise MalformedCursor(cursor) from None
+    return created_at, parts[1]
+
+
+def _proposal_page_stmt(after: tuple[datetime, str] | None, limit: int) -> Select[Any]:
+    stmt = select(garden_proposals)
+    if after is not None:
+        created_at, proposal_id = after
+        c = garden_proposals.c
+        # The portable spelling of `(created_at, proposal_id) < (created_at, proposal_id)`
+        # — row-value comparison support varies by backend (`bzh:sql-portable`).
+        stmt = stmt.where(or_(c.created_at < created_at, and_(c.created_at == created_at, c.proposal_id < proposal_id)))
+    return stmt.order_by(garden_proposals.c.created_at.desc(), garden_proposals.c.proposal_id.desc()).limit(limit)
 
 
 class GardenProposalStore:
@@ -78,6 +111,21 @@ class GardenProposalStore:
             ).all()
             findings = self._findings_for(conn, [row.proposal_id for row in rows])
             return [self._of(row, findings[row.proposal_id]) for row in rows]
+
+    def list_page(self, *, cursor: str | None = None, limit: int) -> GardenProposalPage:
+        """`list_all`'s bounded sibling (blizzard#526 D4) — same total order, a SQL
+        keyset window. No post-read filter narrows a garden proposal the way findings'
+        liveness does, so no top-up: one over-fetch-by-one window suffices."""
+        if limit < 1:
+            raise ValueError(f"limit must be at least 1, got {limit}")
+        after = _decode_proposal_cursor(cursor) if cursor is not None else None
+        with self._store.read("list_page") as conn:
+            rows = conn.execute(_proposal_page_stmt(after, limit + 1)).all()
+            page_rows = rows[:limit]
+            findings = self._findings_for(conn, [row.proposal_id for row in page_rows])
+        proposals = [self._of(row, findings[row.proposal_id]) for row in page_rows]
+        next_cursor = _encode_proposal_cursor(proposals[-1]) if len(rows) > limit else None
+        return GardenProposalPage(proposals=proposals, next_cursor=next_cursor)
 
     def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
         """`list_all`'s routine-narrowed sibling — newest first, the same

@@ -16,18 +16,35 @@ from blizzard.hub.domain.findings import (
     FactEntry,
     Finding,
     FindingFact,
+    FindingPage,
     FindingSet,
     IWriteFindingRepository,
     IWriteFindingSetRepository,
     UnknownFactKindError,
     derive_liveness,
 )
+from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 
 #: `_facts_for_many`'s own per-statement id-batch size (review:F6) — see that method's
 #: docstring for why an unbounded `IN (...)` cannot be allowed to grow with the caller.
 _FACTS_BATCH_SIZE = 500
+
+#: `list_page`'s whole cursor format: a plain finding id — `finding_id` alone is
+#: already total (blizzard#526 D4), unlike chunks' `minted_at`.
+_CURSOR_ARITY = 1
+
+
+def _encode_finding_cursor(finding: Finding) -> str:
+    return encode_cursor(finding.finding_id)
+
+
+def _decode_finding_cursor(cursor: str) -> str:
+    parts = decode_cursor(cursor)
+    if len(parts) != _CURSOR_ARITY or not isinstance(parts[0], str):
+        raise MalformedCursor(cursor)
+    return parts[0]
 
 
 class FindingStore:
@@ -195,6 +212,48 @@ class FindingStore:
             facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
             result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
+
+    def list_page(
+        self,
+        *,
+        routine_name: str | None,
+        scope_slug: str | None,
+        include_gone: bool = False,
+        cursor: str | None = None,
+        limit: int,
+    ) -> FindingPage:
+        """`list_for`/`list_for_routine`/`list_across_routines` unified into one bounded,
+        keyset-paginated read (blizzard#526 D1/D5). Liveness is derived in Python after
+        each SQL window (D3), so a window can come back short of `limit` matching
+        findings — this tops up window after window, each narrowed by `finding_id`, until
+        `limit` matches accumulate or the table is exhausted, rather than returning a
+        short page while more findings still stand."""
+        if limit < 1:
+            raise ValueError(f"limit must be at least 1, got {limit}")
+        window_after = _decode_finding_cursor(cursor) if cursor is not None else None
+        window_size = limit + 1
+        matched: list[Finding] = []
+        with self._store.read("list_page") as conn:
+            while len(matched) <= limit:
+                stmt = select(findings).order_by(findings.c.finding_id).limit(window_size)
+                if routine_name is not None:
+                    stmt = stmt.where(findings.c.routine_name == routine_name)
+                if scope_slug is not None:
+                    stmt = stmt.where(findings.c.scope_slug == scope_slug)
+                if window_after is not None:
+                    stmt = stmt.where(findings.c.finding_id > window_after)
+                rows = conn.execute(stmt).all()
+                if not rows:
+                    break
+                facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
+                window_findings = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
+                matched.extend(f for f in window_findings if include_gone or f.live)
+                window_after = rows[-1].finding_id
+                if len(rows) < window_size:
+                    break
+        page = matched[:limit]
+        next_cursor = _encode_finding_cursor(page[-1]) if len(matched) > limit else None
+        return FindingPage(findings=page, next_cursor=next_cursor)
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name` — filtered on

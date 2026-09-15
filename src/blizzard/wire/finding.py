@@ -106,6 +106,15 @@ class FindingView(BaseModel):
     observed_count: int
 
 
+class FindingsPageView(BaseModel):
+    """``GET /api/findings``'s own bounded page (blizzard#526 D3/D5) — ``next_cursor`` is
+    ``None`` exactly when this page is the last one, the same convention every other
+    paginated hub read uses."""
+
+    findings: list[FindingView] = []
+    next_cursor: str | None = None
+
+
 class FindingFactView(BaseModel):
     """One entry in a finding's fact chain, oldest-first — `FindingFact` on the wire
     (blizzard#487)."""

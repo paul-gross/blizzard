@@ -80,10 +80,10 @@ def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(
     resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard"})
 
     assert resp.status_code == 200, resp.text
-    assert [row["finding_id"] for row in resp.json()] == ["fin_1"]
+    assert [row["finding_id"] for row in resp.json()["findings"]] == ["fin_1"]
 
     resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard", "include_gone": True})
-    assert {row["finding_id"] for row in resp.json()} == {"fin_1", "fin_4"}
+    assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_1", "fin_4"}
 
 
 def test_list_widens_across_the_four_routine_scope_combinations(tmp_path: Path) -> None:
@@ -125,22 +125,22 @@ def test_list_widens_across_the_four_routine_scope_combinations(tmp_path: Path) 
     # named routine, named scope
     resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard"})
     assert resp.status_code == 200, resp.text
-    assert {row["finding_id"] for row in resp.json()} == {"fin_1"}
+    assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_1"}
 
     # named routine, absent scope
     resp = hub.client.get("/api/findings", params={"routine": "nightly"})
     assert resp.status_code == 200, resp.text
-    assert {row["finding_id"] for row in resp.json()} == {"fin_1", "fin_2"}
+    assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_1", "fin_2"}
 
     # absent routine, named scope
     resp = hub.client.get("/api/findings", params={"scope": "blizzard"})
     assert resp.status_code == 200, resp.text
-    assert {row["finding_id"] for row in resp.json()} == {"fin_1", "fin_3"}
+    assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_1", "fin_3"}
 
     # absent routine, absent scope
     resp = hub.client.get("/api/findings")
     assert resp.status_code == 200, resp.text
-    assert {row["finding_id"] for row in resp.json()} == {"fin_1", "fin_2", "fin_3"}
+    assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_1", "fin_2", "fin_3"}
 
 
 def test_list_include_gone_behaves_the_same_across_routine_absent_combinations(tmp_path: Path) -> None:
@@ -161,15 +161,15 @@ def test_list_include_gone_behaves_the_same_across_routine_absent_combinations(t
 
     # both absent
     resp = hub.client.get("/api/findings")
-    assert resp.json() == []
+    assert resp.json()["findings"] == []
     resp = hub.client.get("/api/findings", params={"include_gone": True})
-    assert {row["finding_id"] for row in resp.json()} == {"fin_1"}
+    assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_1"}
 
     # scope only
     resp = hub.client.get("/api/findings", params={"scope": "blizzard"})
-    assert resp.json() == []
+    assert resp.json()["findings"] == []
     resp = hub.client.get("/api/findings", params={"scope": "blizzard", "include_gone": True})
-    assert {row["finding_id"] for row in resp.json()} == {"fin_1"}
+    assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_1"}
 
 
 def test_get_renders_one_finding(tmp_path: Path) -> None:
@@ -287,7 +287,130 @@ def test_list_read_carries_no_facts_key(tmp_path: Path) -> None:
     resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard"})
 
     assert resp.status_code == 200, resp.text
-    assert "facts" not in resp.json()[0]
+    assert "facts" not in resp.json()["findings"][0]
+
+
+def _seed_paging_fixture(hub) -> None:  # type: ignore[no-untyped-def]
+    """`fin_1`..`fin_8` under one routine/scope, `fin_2`/`fin_5`/`fin_6` marked gone —
+    interleaved among the live ones rather than clustered at either end, so a small
+    SQL window can land entirely on gone rows and exercise `list_page`'s top-up."""
+    _seed_scope(hub, "blizzard")
+    store = FindingStore(hub_store_connections(hub.engine))
+    gone_ids = {"fin_2", "fin_5", "fin_6"}
+    for i in range(1, 9):
+        finding_id = f"fin_{i}"
+        store.add(
+            finding_id,
+            routine_name="nightly",
+            scope_slug="blizzard",
+            class_="stale-docstring",
+            locus=f"a.py:{i}",
+            summary=f"s{i}",
+            introduced=None,
+            at=_NOW,
+        )
+        if finding_id in gone_ids:
+            store.record_fact(finding_id, kind="gone", at=_NOW, note="no longer reproduces")
+
+
+def _page_through(hub, *, params: dict[str, object], pages: int) -> list[str]:  # type: ignore[no-untyped-def]
+    """Follows `next_cursor` from `params` (carrying no `cursor` of its own) to
+    exhaustion, concatenating every page's `finding_id`s in order. `pages` bounds the
+    loop generously so a broken `next_cursor` fails the test rather than hanging it."""
+    finding_ids: list[str] = []
+    cursor: str | None = None
+    for _ in range(pages):
+        page_params = dict(params)
+        if cursor is not None:
+            page_params["cursor"] = cursor
+        resp = hub.client.get("/api/findings", params=page_params)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        finding_ids.extend(row["finding_id"] for row in body["findings"])
+        cursor = body["next_cursor"]
+        if cursor is None:
+            break
+    assert cursor is None, "ran out of `pages` before `next_cursor` went null"
+    return finding_ids
+
+
+def test_list_page_pages_through_interleaved_gone_findings_matching_the_full_order(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_paging_fixture(hub)
+    base_params = {"routine": "nightly", "scope": "blizzard"}
+
+    full_live = hub.client.get("/api/findings", params={**base_params, "limit": 1000})
+    assert full_live.status_code == 200, full_live.text
+    full_live_body = full_live.json()
+    expected_live_order = [row["finding_id"] for row in full_live_body["findings"]]
+    assert expected_live_order == ["fin_1", "fin_3", "fin_4", "fin_7", "fin_8"]
+    assert full_live_body["next_cursor"] is None
+
+    paged_live = _page_through(hub, params={**base_params, "limit": 1}, pages=len(expected_live_order) + 1)
+    assert paged_live == expected_live_order
+
+    full_all = hub.client.get("/api/findings", params={**base_params, "include_gone": True, "limit": 1000})
+    assert full_all.status_code == 200, full_all.text
+    full_all_body = full_all.json()
+    expected_all_order = [f"fin_{i}" for i in range(1, 9)]
+    assert [row["finding_id"] for row in full_all_body["findings"]] == expected_all_order
+    assert full_all_body["next_cursor"] is None
+
+    paged_all = _page_through(
+        hub, params={**base_params, "include_gone": True, "limit": 2}, pages=len(expected_all_order) + 1
+    )
+    assert paged_all == expected_all_order
+
+
+def test_list_over_ceiling_limit_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+
+    resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard", "limit": 1001})
+
+    assert resp.status_code == 422, resp.text
+
+
+def test_list_zero_limit_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+
+    resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard", "limit": 0})
+
+    assert resp.status_code == 422, resp.text
+
+
+def test_list_a_malformed_cursor_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+
+    resp = hub.client.get(
+        "/api/findings",
+        params={"routine": "nightly", "scope": "blizzard", "cursor": "not-valid-base64!!!"},
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert "malformed cursor" in resp.json()["detail"]
+
+
+def test_list_next_cursor_is_non_null_mid_page_and_null_on_the_last_page(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_paging_fixture(hub)
+    base_params = {"routine": "nightly", "scope": "blizzard", "include_gone": True}
+
+    first = hub.client.get("/api/findings", params={**base_params, "limit": 3})
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    assert len(first_body["findings"]) == 3
+    assert first_body["next_cursor"] is not None
+
+    second = hub.client.get("/api/findings", params={**base_params, "limit": 1000, "cursor": first_body["next_cursor"]})
+    assert second.status_code == 200, second.text
+    second_body = second.json()
+    assert second_body["next_cursor"] is None
+    assert [row["finding_id"] for row in first_body["findings"]] + [
+        row["finding_id"] for row in second_body["findings"]
+    ] == [f"fin_{i}" for i in range(1, 9)]
 
 
 def test_get_unknown_id_is_404(tmp_path: Path) -> None:

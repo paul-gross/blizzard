@@ -229,7 +229,7 @@ def test_create_mints_exactly_one_chunk_on_the_default_graph_holding_the_new_poi
 
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
 
-    chunks = hub.client.get("/api/chunks").json()
+    chunks = hub.client.get("/api/chunks").json()["chunks"]
     assert [chunk["chunk_id"] for chunk in chunks] == [created["chunk_id"]]
     assert chunks[0]["graph_id"] == default.graph_id
     assert [(ref["source"], ref["ref"]) for ref in chunks[0]["work_refs"]] == [("hub", created["ref"])]

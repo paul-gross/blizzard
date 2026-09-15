@@ -97,7 +97,7 @@ def chunk_group() -> None:
 @chunk_group.command("list", cls=FleetCommand)
 def chunk_list(cli: CliContext) -> None:
     """The fleet chunk list — derived status per chunk."""
-    rows = cli.get("/api/chunks", "GET /chunks").json()
+    rows = cli.get_all("/api/chunks", "GET /chunks", key="chunks")
     cli.show(rows, ChunkListing(rows))
 
 

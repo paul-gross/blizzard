@@ -12,7 +12,6 @@ from typing import Any
 
 from sqlalchemy import Select, func, select
 
-from blizzard.hub.domain.analytics import MalformedCursor
 from blizzard.hub.domain.analytics.events import KIND_FILE_READ, KIND_SKILL_INVOCATION
 from blizzard.hub.domain.analytics.queries import (
     CountRow,
@@ -21,6 +20,7 @@ from blizzard.hub.domain.analytics.queries import (
     EventRecord,
     IReadAnalyticsEventQueries,
 )
+from blizzard.hub.domain.pagination import MalformedCursor
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 

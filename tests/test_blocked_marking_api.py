@@ -40,7 +40,7 @@ def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str) -> None:
 def _list_entry(hub: HubHarness, chunk_id: str) -> dict:  # type: ignore[type-arg]
     resp = hub.client.get("/api/chunks")
     assert resp.status_code == 200, resp.text
-    (entry,) = [c for c in resp.json() if c["chunk_id"] == chunk_id]
+    (entry,) = [c for c in resp.json()["chunks"] if c["chunk_id"] == chunk_id]
     return entry
 
 

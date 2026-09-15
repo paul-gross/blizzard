@@ -60,11 +60,12 @@ def finding_list(cli: CliContext, routine: str, scope: str, include_gone: bool) 
 
     This is the read a running pass calls to cross-reference its own bucket
     (blizzard-context:/domain/findings-and-proposals.md)."""
-    rows = cli.get(
+    rows = cli.get_all(
         "/api/findings",
         "GET /findings",
+        key="findings",
         params={"routine": routine, "scope": scope, "include_gone": str(include_gone).lower()},
-    ).json()
+    )
     cli.show(rows, FindingListing(rows))
 
 

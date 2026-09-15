@@ -56,9 +56,12 @@ def _cost(cost_usd: float, *, partial: bool) -> dict:
 
 def _responses(chunk_cost: dict, fleet_cost: dict, runners: list[dict] | None = None) -> dict[str, object]:
     return {
-        f"{DEFAULT_HUB_URL}/api/chunks": [
-            {"chunk_id": "ch_1", "status": "running", "current_node_id": "nd_1", "cost": chunk_cost},
-        ],
+        f"{DEFAULT_HUB_URL}/api/chunks": {
+            "chunks": [
+                {"chunk_id": "ch_1", "status": "running", "current_node_id": "nd_1", "cost": chunk_cost},
+            ],
+            "next_cursor": None,
+        },
         f"{DEFAULT_HUB_URL}/api/runners": {"runners": runners or []},
         f"{DEFAULT_HUB_URL}/api/questions": [],
         f"{DEFAULT_HUB_URL}/api/spend": {"since": "1970-01-01T00:00:00+00:00", **fleet_cost},
@@ -168,13 +171,46 @@ def test_status_names_both_brakes_with_the_local_reason_inline(monkeypatch: pyte
     assert f"[paused: hub+local — {reason}]" in result.output
 
 
+def test_status_drains_every_page_of_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The hub paginates ``GET /api/chunks`` — ``hub status`` must keep following
+    ``next_cursor`` until it goes null rather than stopping after the first page."""
+    cost = _cost(0.0, partial=False)
+    page_1 = {
+        "chunks": [
+            {"chunk_id": "ch_1", "status": "running", "current_node_id": "nd_1", "cost": cost},
+        ],
+        "next_cursor": "cursor-1",
+    }
+    page_2 = {
+        "chunks": [
+            {"chunk_id": "ch_2", "status": "running", "current_node_id": "nd_1", "cost": cost},
+        ],
+        "next_cursor": None,
+    }
+    responses = _responses(cost, cost)
+
+    def fake_get(url: str, *, timeout: float, params: dict[str, str] | None = None) -> _FakeResponse:
+        if url == f"{DEFAULT_HUB_URL}/api/chunks":
+            if params is None or params.get("cursor") is None:
+                return _FakeResponse(page_1)
+            return _FakeResponse(page_2)
+        return _FakeResponse(responses[url])
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["status"])
+
+    assert result.exit_code == 0, result.output
+    assert "ch_1" in result.output
+    assert "ch_2" in result.output
+
+
 def test_status_marks_a_blocked_chunk_naming_the_prerequisite(monkeypatch: pytest.MonkeyPatch) -> None:
     """`hub status` shares `ChunkRow` with `hub chunk list`, so the blocked marking
     (issue #476) is proven once here to cover both."""
     cost = _cost(0.0, partial=False)
     responses = _responses(cost, cost)
-    chunks = cast("list[dict]", responses[f"{DEFAULT_HUB_URL}/api/chunks"])
-    chunks[0]["blocked"] = {"prerequisite_chunk_id": "ch_prereq"}
+    envelope = cast("dict", responses[f"{DEFAULT_HUB_URL}/api/chunks"])
+    envelope["chunks"][0]["blocked"] = {"prerequisite_chunk_id": "ch_prereq"}
     _install(monkeypatch, responses)
 
     result = CliRunner().invoke(hub_group, ["status"])

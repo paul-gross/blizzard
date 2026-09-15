@@ -34,7 +34,7 @@ def _queue_response(chunk_ids: list[str]) -> _FakeResponse:
 def _stub(monkeypatch: pytest.MonkeyPatch, peek_order: list[str]) -> list[tuple[str, object]]:
     calls: list[tuple[str, object]] = []
 
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
         calls.append((url, None))
         return _queue_response(peek_order)
 
@@ -64,6 +64,56 @@ def test_queue_move_to_front_sends_null_after_chunk_id(monkeypatch: pytest.Monke
     ]
 
 
+def _queue_page_response(chunk_ids: list[str], *, next_cursor: str | None) -> _FakeResponse:
+    entries = [{"chunk_id": cid, "graph_id": "gr_1", "position": i} for i, cid in enumerate(chunk_ids)]
+    return _FakeResponse(200, {"entries": entries, "next_cursor": next_cursor})
+
+
+def _stub_two_pages(
+    monkeypatch: pytest.MonkeyPatch, first_page: list[str], second_page: list[str], *, cursor: str = "cur_2"
+) -> list[tuple[str, object]]:
+    """``GET /api/queue`` split across two pages — ``fake_get`` inspects the drain's own
+    ``cursor`` param to decide which page to serve, so this proves the CLI's paging loop
+    itself rather than a canned whole-order response."""
+    calls: list[tuple[str, object]] = []
+
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
+        assert isinstance(params, dict)
+        # `cli.get_all` mutates and reuses one `params` dict across pages — capture a
+        # copy per call, or every recorded call would end up sharing its final state.
+        calls.append((url, dict(params)))
+        if params.get("cursor") == cursor:
+            return _queue_page_response(second_page, next_cursor=None)
+        return _queue_page_response(first_page, next_cursor=cursor)
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _queue_page_response(first_page + second_page, next_cursor=None)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    return calls
+
+
+@pytest.mark.unit
+def test_queue_move_drains_a_multi_page_ready_order_before_anchoring(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ch_d only exists on the second page — an index that only makes sense once both
+    # pages are combined proves `queue move` doesn't silently truncate to the first one.
+    calls = _stub_two_pages(monkeypatch, ["ch_a", "ch_b"], ["ch_c", "ch_d"])
+
+    result = CliRunner().invoke(hub_group, ["queue", "move", "ch_a", "3"])
+
+    assert result.exit_code == 0, result.output
+    get_calls = [call for call in calls if call[0].endswith("/api/queue")]
+    assert len(get_calls) == 2
+    assert get_calls[0][1].get("cursor") is None  # type: ignore[union-attr]
+    assert get_calls[1][1].get("cursor") == "cur_2"  # type: ignore[union-attr]
+    assert calls[-1] == (
+        "http://127.0.0.1:8421/api/queue/position",
+        {"chunk_id": "ch_a", "after_chunk_id": "ch_d"},
+    )
+
+
 @pytest.mark.unit
 def test_queue_move_to_the_middle_sends_the_preceding_chunk_as_after_chunk_id(
     monkeypatch: pytest.MonkeyPatch,
@@ -90,7 +140,7 @@ def test_queue_move_past_the_end_clamps_and_anchors_after_the_last_remaining_chu
 
 @pytest.mark.unit
 def test_queue_move_reports_409_when_chunk_is_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
         return _queue_response(["ch_a", "ch_b"])
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -111,7 +161,7 @@ def test_queue_move_falls_back_to_the_updated_both_lists_refusal_when_the_body_n
 ) -> None:
     # When a 409 body carries no ``detail``, the CLI's own ``on_status`` fallback is
     # what the operator sees — proven here to name both lists, independent of the body.
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
         return _queue_response(["ch_a", "ch_b"])
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -158,7 +208,7 @@ def test_queue_set_falls_back_to_the_updated_both_lists_refusal_when_the_body_na
 
 @pytest.mark.unit
 def test_queue_show_marks_a_blocked_entry(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
         return _FakeResponse(
             200,
             {

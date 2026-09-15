@@ -43,6 +43,53 @@ def _ids(entries: list[dict]) -> list[str]:
     return [e["chunk_id"] for e in entries]
 
 
+def _ingest_tied(hub: HubHarness, n: int) -> list[str]:
+    """Ingest and promote ``n`` chunks with no clock advance between them, so every one
+    lands on the exact same promoted-at fallback position — proving the ``chunk_id``
+    tiebreak, not clock order, is what makes the ready queue's order total."""
+    ids = []
+    for i in range(n):
+        pointer = {"source": "default", "ref": f"tied-{i}"}
+        resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]})
+        assert resp.status_code == 201, resp.text
+        chunk_id = resp.json()["chunk_id"]
+        assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+        ids.append(chunk_id)
+    return ids
+
+
+def _ingest_backlog_tied(hub: HubHarness, n: int) -> list[str]:
+    """Ingest ``n`` chunks with no clock advance between them, left ``not_ready`` —
+    every one lands on the exact same mint-time fallback position, so only the
+    ``chunk_id`` tiebreak makes their order total."""
+    ids = []
+    for i in range(n):
+        pointer = {"source": "default", "ref": f"tied-backlog-{i}"}
+        resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]})
+        assert resp.status_code == 201, resp.text
+        ids.append(resp.json()["chunk_id"])
+    return ids
+
+
+def _drain(hub: HubHarness, path: str, *, limit: int) -> list[dict]:
+    """Page through ``path`` with ``limit``, following ``next_cursor`` to exhaustion and
+    concatenating every page's entries."""
+    entries: list[dict] = []
+    cursor: str | None = None
+    for _ in range(1000):  # generous bound on iterations for a small fixture
+        params: dict[str, str] = {"limit": str(limit)}
+        if cursor is not None:
+            params["cursor"] = cursor
+        resp = hub.client.get(path, params=params)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        entries.extend(body["entries"])
+        cursor = body["next_cursor"]
+        if cursor is None:
+            return entries
+    raise AssertionError("did not exhaust the pages in time")
+
+
 # --- GET /api/queue ---------------------------------------------------------
 
 
@@ -267,6 +314,101 @@ def test_post_backlog_position_self_anchor_is_422(tmp_path: Path) -> None:
     a = _ingest_backlog(hub, 1)
     resp = hub.client.post("/api/backlog/position", json={"chunk_id": a, "after_chunk_id": a})
     assert resp.status_code == 422
+
+
+# --- GET /api/queue, GET /api/backlog — keyset pagination (blizzard#526) ------------
+
+
+def test_get_queue_pages_with_mint_time_ties_match_the_full_order(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    tied = _ingest_tied(hub, 2)  # same promoted-at fallback — the chunk_id tiebreak decides order
+    hub.clock.advance(timedelta(seconds=1))
+    rest = [_ingest(hub, i) for i in range(3, 6)]
+
+    full = hub.client.get("/api/queue", params={"limit": "1000"})
+    assert full.status_code == 200, full.text
+    full_body = full.json()
+    assert full_body["next_cursor"] is None
+    assert set(_ids(full_body["entries"])) == set(tied) | set(rest)
+
+    paged = _drain(hub, "/api/queue", limit=1)
+    full_pairs = [(e["chunk_id"], e["position"]) for e in full_body["entries"]]
+    paged_pairs = [(e["chunk_id"], e["position"]) for e in paged]
+    # (a) the paged concatenation is exactly the full order, no dupes/gaps; (b) each
+    # entry's `position` is its absolute index in the whole list, unaffected by paging.
+    assert paged_pairs == full_pairs
+
+
+def test_get_backlog_pages_with_mint_time_ties_match_the_full_order(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    tied = _ingest_backlog_tied(hub, 2)  # same mint-time fallback — the chunk_id tiebreak decides order
+    hub.clock.advance(timedelta(seconds=1))
+    rest = [_ingest_backlog(hub, i) for i in range(3, 6)]
+
+    full = hub.client.get("/api/backlog", params={"limit": "1000"})
+    assert full.status_code == 200, full.text
+    full_body = full.json()
+    assert full_body["next_cursor"] is None
+    assert set(_ids(full_body["entries"])) == set(tied) | set(rest)
+
+    paged = _drain(hub, "/api/backlog", limit=1)
+    full_pairs = [(e["chunk_id"], e["position"]) for e in full_body["entries"]]
+    paged_pairs = [(e["chunk_id"], e["position"]) for e in paged]
+    assert paged_pairs == full_pairs
+
+
+@pytest.mark.parametrize("path", ["/api/queue", "/api/backlog"])
+def test_a_limit_over_the_ceiling_is_422(tmp_path: Path, path: str) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get(path, params={"limit": "1001"})
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.parametrize("path", ["/api/queue", "/api/backlog"])
+def test_a_limit_of_zero_is_422(tmp_path: Path, path: str) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get(path, params={"limit": "0"})
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.parametrize("path", ["/api/queue", "/api/backlog"])
+def test_a_malformed_cursor_is_422(tmp_path: Path, path: str) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get(path, params={"cursor": "not-valid-base64!!!"})
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"] == "malformed cursor"
+
+
+def test_get_queue_next_cursor_is_set_mid_list_and_null_on_the_last_page(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    a, b, c = _ingest(hub, 1), _ingest(hub, 2), _ingest(hub, 3)
+
+    first = hub.client.get("/api/queue", params={"limit": "2"})
+    assert first.status_code == 200, first.text
+    assert _ids(first.json()["entries"]) == [a, b]
+    cursor = first.json()["next_cursor"]
+    assert cursor is not None
+
+    second = hub.client.get("/api/queue", params={"limit": "2", "cursor": cursor})
+    assert second.status_code == 200, second.text
+    assert _ids(second.json()["entries"]) == [c]
+    assert second.json()["next_cursor"] is None
+
+
+def test_get_backlog_next_cursor_is_set_mid_list_and_null_on_the_last_page(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    a, b, c = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2), _ingest_backlog(hub, 3)
+
+    first = hub.client.get("/api/backlog", params={"limit": "2"})
+    assert first.status_code == 200, first.text
+    assert _ids(first.json()["entries"]) == [a, b]
+    cursor = first.json()["next_cursor"]
+    assert cursor is not None
+
+    second = hub.client.get("/api/backlog", params={"limit": "2", "cursor": cursor})
+    assert second.status_code == 200, second.text
+    assert _ids(second.json()["entries"]) == [c]
+    assert second.json()["next_cursor"] is None
 
 
 # --- Cross-list refusal — each route resolves candidates against its own list only,

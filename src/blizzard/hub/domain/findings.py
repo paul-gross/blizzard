@@ -138,6 +138,16 @@ def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
 
 
+@dataclass(frozen=True)
+class FindingPage:
+    """A bounded, keyset-paginated page of :meth:`IReadFindingRepository.list_page`
+    (blizzard#526 D5) — ``next_cursor`` is ``None`` exactly when this page is the last
+    one, the same convention every other paginated hub read uses."""
+
+    findings: list[Finding]
+    next_cursor: str | None
+
+
 class IReadFindingRepository(Protocol):
     """Read-only finding access. Controllers at the edges depend on this variant."""
 
@@ -191,6 +201,26 @@ class IReadFindingRepository(Protocol):
         """How often `class_` recurs for `routine_name`
         (blizzard-product:/delivered/garden/machinery.md §What the store buys) — a count,
         never the rows themselves."""
+        ...
+
+    def list_page(
+        self,
+        *,
+        routine_name: str | None,
+        scope_slug: str | None,
+        include_gone: bool = False,
+        cursor: str | None = None,
+        limit: int,
+    ) -> FindingPage:
+        """`list_for`/`list_for_routine`/`list_across_routines` unified into one bounded,
+        keyset-paginated read (blizzard#526 D1/D5) — `routine_name`/`scope_slug` each
+        independently optional, the same four combinations `GET /api/findings` offers.
+        Ordered by `finding_id` ascending, already total (D4). Liveness is derived in
+        Python after the SQL read (D3), so a SQL window can come back short of `limit`
+        matching findings: the read tops up windows until `limit` matches or exhaustion,
+        rather than returning a short page while more still stand. `cursor` is a prior
+        :attr:`FindingPage.next_cursor`: any other value raises
+        :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
         ...
 
     def has_resolution_for_proposal(self, proposal_id: str) -> bool:

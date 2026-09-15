@@ -57,6 +57,34 @@ class CliContext:
     ) -> httpx.Response:
         return self._verb("get", path, operation, params=params, on_status=on_status)
 
+    def get_all(
+        self,
+        path: str,
+        operation: str,
+        *,
+        key: str,
+        params: dict[str, str] | None = None,
+        on_status: dict[int, str] | None = None,
+    ) -> list[Any]:
+        """Drain every page of a keyset-paginated list read (blizzard#526 D7) — issues
+        ``GET`` requests following each page's own ``next_cursor`` until it is absent,
+        concatenating ``key``'s rows. Every call passes ``limit=1000`` explicitly, so a
+        verb suffices in one request at today's fleet scale, but reading more never
+        truncates — a verb never exposes ``--cursor``/``--limit`` of its own
+        (``blizzard:cli-contract``)."""
+        page_params = dict(params or {})
+        page_params["limit"] = "1000"
+        rows: list[Any] = []
+        cursor: str | None = None
+        while True:
+            if cursor is not None:
+                page_params["cursor"] = cursor
+            body = self.get(path, operation, params=page_params, on_status=on_status).json()
+            rows.extend(body[key])
+            cursor = body.get("next_cursor")
+            if cursor is None:
+                return rows
+
     def post(
         self, path: str, operation: str, *, json_body: object | None = None, on_status: dict[int, str] | None = None
     ) -> httpx.Response:
