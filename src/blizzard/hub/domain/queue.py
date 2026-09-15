@@ -97,11 +97,10 @@ class QueueService:
 
     def replace_order(self, list_: QueueList, ordered: list[Chunk]) -> None:
         """Idempotent whole-order replacement: one ascending explicit position fact per
-        chunk in ``ordered``, front to back, in one write transaction (issue #421
-        follow-up). Takes already-resolved ``Chunk`` objects, never ids
-        (``bzh:domain-takes-objects``). ``list_`` only selects which store write routes
-        the positions (guarded for ``not_ready``, see :meth:`_write_fn`) — the list
-        itself is never read here."""
+        chunk in ``ordered``, front to back, in one write transaction. Takes
+        already-resolved ``Chunk`` objects, never ids (``bzh:domain-takes-objects``).
+        ``list_`` only selects which store write routes the positions (guarded for
+        ``not_ready``, see :meth:`_write_fn`) — the list itself is never read here."""
         write = self._write_fn(list_)
         write([(chunk.chunk_id, float(position)) for position, chunk in enumerate(ordered)], at=self._clock.now())
         _log.info("queue order replaced", list=list_.value, chunk_ids=[c.chunk_id for c in ordered])
@@ -111,11 +110,9 @@ class QueueService:
     ) -> None:
         """Single-chunk fractional reorder within ``list_``: stamp ``chunk`` a new
         explicit position immediately after ``after`` (top when ``after is None``),
-        without restamping every other chunk in the list (issue #137). Repeated midpoint
-        bisection eventually exhausts the representable doubles between two neighbours;
-        that case renormalizes via :meth:`replace_order` and recomputes the midpoint.
-        ``statuses`` is the caller's own already-derived fleet statuses, reused as-is
-        across the renormalize's own re-read of positions/promoted_ats."""
+        without restamping every other chunk (issue #137). Bisection exhausting the
+        representable doubles renormalizes via :meth:`replace_order`; ``statuses`` is
+        the caller's own already-derived fleet statuses, reused as-is throughout."""
         write = self._write_fn(list_)
         positions = self._queue.queue_positions()
         promoted_ats = self._queue.promoted_ats()

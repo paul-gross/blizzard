@@ -2,9 +2,8 @@
 ``list_ready``/``list_not_ready``'s required ``statuses`` (component tier).
 
 Proves each batch read matches its singular sibling for a normal, ephemeral, and unminted
-id, stays correct across a lowered ``BATCH_SIZE`` boundary, and that ``list_ready``
-filtering over a given ``statuses`` map costs no more than ``list_all`` alone — the
-store holds no facts collaborator of its own to fall back on."""
+id, stays correct across a lowered ``BATCH_SIZE`` boundary, and that filtering over a
+given ``statuses`` map costs no more than ``list_all`` alone — no facts collaborator."""
 
 from __future__ import annotations
 

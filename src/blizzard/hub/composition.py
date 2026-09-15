@@ -472,14 +472,14 @@ def build_services(
             hub_node_executor=hub_node,
         ),
         decisions=DecisionService(facts=chunk_facts, route=chunk_route, decisions=chunk_decisions, clock=clock),
-        requeue=RequeueService(facts=chunk_facts, movement=chunk_movement, route=chunk_route, clock=clock),
+        requeue=RequeueService(movement=chunk_movement, route=chunk_route, clock=clock),
         restart=RestartService(
             facts=chunk_facts, movement=chunk_movement, graphs=graph_store, clock=clock, claim_lock=claim_lock
         ),
         detach=DetachService(route=chunk_route, clock=clock),
-        pause=PauseService(facts=chunk_facts, lifecycle=chunk_lifecycle, clock=clock),
-        stop=StopService(facts=chunk_facts, lifecycle=chunk_lifecycle, clock=clock),
-        complete=CompleteService(facts=chunk_facts, lifecycle=chunk_lifecycle, clock=clock),
+        pause=PauseService(lifecycle=chunk_lifecycle, clock=clock),
+        stop=StopService(lifecycle=chunk_lifecycle, clock=clock),
+        complete=CompleteService(lifecycle=chunk_lifecycle, clock=clock),
         edit=EditService(facts=chunk_facts, record=chunk_record, graphs=graph_store, claim_lock=claim_lock),
         dependencies=DependencyService(
             facts=chunk_facts,

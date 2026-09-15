@@ -1,10 +1,9 @@
 """``ChunkQueueStore``'s plural position writes (component tier).
 
 ``record_queue_positions``/``record_backlog_positions`` each write a whole batch of
-``(chunk_id, position)`` pairs in one write transaction (issue #421 follow-up) — proves
-the statement count stays flat as the batch grows, and that the backlog variant's
-promoted-chunk guard still skips a chunk promoted since the caller resolved its
-candidates, now as one bulk ``.in_()`` read rather than one per pair."""
+``(chunk_id, position)`` pairs in one write transaction — proves the statement count
+stays flat as the batch grows, and that the backlog variant's promoted-chunk guard still
+skips a chunk promoted since the caller resolved candidates, as one bulk ``.in_()`` read."""
 
 from __future__ import annotations
 
