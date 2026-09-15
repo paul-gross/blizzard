@@ -18,7 +18,7 @@ from blizzard.hub.runtime import migration_runner as hub_migration_runner
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import migration_runner as runner_migration_runner
 from tests.runner_fakes import runner_migration_prototype
-from tests.support import hub_migration_prototype
+from tests.support import build_hub, checkpoint_sqlite, hub_migration_prototype
 
 
 def _schema(db_url: str) -> tuple[str, set[tuple[str, str, str]]]:
@@ -54,3 +54,18 @@ def test_the_runner_prototype_matches_a_fresh_migration(tmp_path: Path) -> None:
     shutil.copyfile(runner_migration_prototype(), copied_db)
 
     assert _schema(f"sqlite:///{copied_db}") == _schema(f"sqlite:///{fresh_db}")
+
+
+@pytest.mark.component
+def test_a_second_build_hub_over_the_same_directory_keeps_the_first_ones_state(tmp_path: Path) -> None:
+    from tests.test_graphs_api import _GRAPH_YAML
+
+    first = build_hub(tmp_path)
+    graph_id = first.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).json()["graph_id"]
+    # Fold the write into the main file, so a copy over it cannot be masked by a WAL
+    # sidecar that still holds the row.
+    checkpoint_sqlite(f"sqlite:///{tmp_path / 'hub.db'}")
+
+    second = build_hub(tmp_path)
+
+    assert second.client.get(f"/api/graphs/{graph_id}").status_code == 200

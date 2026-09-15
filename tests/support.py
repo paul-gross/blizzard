@@ -540,12 +540,12 @@ def hub_migration_prototype() -> Path:
             root = Path(_hub_prototype_tmp.name)
             db_url = f"sqlite:///{root / 'hub.db'}"
             migration_runner(HubConfig(root=root, db_url=db_url)).upgrade("head")
-            _checkpoint_sqlite(db_url)
+            checkpoint_sqlite(db_url)
             _hub_prototype_db = root / "hub.db"
         return _hub_prototype_db
 
 
-def _checkpoint_sqlite(db_url: str) -> None:
+def checkpoint_sqlite(db_url: str) -> None:
     """Flush a sqlite file's WAL back into itself and drop the connection — a bare copy
     of the ``.db`` file is only a complete store once no ``-wal``/``-shm`` sidecar is
     load-bearing."""
@@ -592,7 +592,13 @@ def build_hub(
         auth=AuthConfig(mode=auth_mode, superuser=superuser),
         trusted_proxies=tuple(trusted_proxies),
     )
-    shutil.copyfile(hub_migration_prototype(), tmp_path / "hub.db")
+    # A second build over the same ``tmp_path`` reopens the store the first one wrote;
+    # copying over it would discard that state, so only a fresh directory takes the copy.
+    db_path = tmp_path / "hub.db"
+    if db_path.exists():
+        migration_runner(config).upgrade("head")
+    else:
+        shutil.copyfile(hub_migration_prototype(), db_path)
     engine = create_engine_from_url(db_url)
 
     built_sources: dict[str, IWorkSource] = dict(
