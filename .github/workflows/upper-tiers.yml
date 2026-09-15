@@ -3,8 +3,8 @@
 # `pr.yml` and `push.yml` both call this exactly as they call `gate.yml`, so these
 # two jobs are defined once and never drift between triggers — the same reasoning
 # `gate.yml`'s header states for the merge gate itself. `release.yml` does not call
-# this: its combined tag-release job also builds and runs the FULL sweep + e2e in one
-# step, a structurally different shape from the bounded CI profile below.
+# this: its own service/crash-sweep/e2e jobs run the FULL sweep + e2e alongside the
+# service tier, a structurally different shape from the bounded CI profile below.
 #
 # Both tiers need what a single-repo checkout does not carry: the sibling
 # `blizzard-mock` worktree (the mock fleet + fixture scaffold) and a local winter
@@ -20,8 +20,9 @@
 # the sweep's bounded CI profile (`crash_sweep_ci: "1"` — a representative crash point
 # per boundary family plus the whole-process cases and the recovery-critical windows);
 # the FULL sweep stays the documented local command (`mise run crash-sweep`) and runs in
-# the tag `release` workflow's own job. The wall-time figures for both profiles are owned
-# by blizzard-context verification/blizzard/commands/test-tiers/crash-sweep.md, not here.
+# the tag `release` workflow's own `crash-sweep` job. The wall-time figures for both
+# profiles are owned by
+# blizzard-context verification/blizzard/commands/test-tiers/crash-sweep.md, not here.
 # `crash_sweep_ci` is an explicit input — nothing varies between today's two callers, but
 # a future FULL-sweep caller of this reusable workflow can pass an empty value to run the
 # whole registry instead of the bounded subset.

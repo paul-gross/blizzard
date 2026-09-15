@@ -5,11 +5,12 @@
 # from the tag. Prerelease candidates are `v*-rc.*` tags.
 #
 # The full suite at a tag is the merge gate (unit + component) PLUS the three upper
-# tiers — the service tier, the FULL kill-9 crash sweep (every registry point, not the
-# bounded CI subset the master `push` gate runs), and the e2e acceptance loop including
-# the Playwright browser scenario. All three need the multi-repo checkout (blizzard +
-# blizzard-mock + the public blizzard-workspace as the winter source) laid out as the
-# siblings their discovery expects — the same setup the `push` workflow proves green.
+# tiers, each its own parallel job — the service tier, the FULL kill-9 crash sweep
+# (every registry point, not the bounded CI subset the master `push` gate runs), and the
+# e2e acceptance loop including the Playwright browser scenario. All three need the
+# multi-repo checkout (blizzard + blizzard-mock + the public blizzard-workspace as the
+# winter source) laid out as the siblings their discovery expects — the same setup the
+# `push` workflow proves green.
 #
 # The GitHub Release is published with the workflow's built-in GITHUB_TOKEN — no
 # external registry and no user-supplied secret. The wheel is attached to the
@@ -28,8 +29,110 @@ jobs:
   gate:
     uses: ./.github/workflows/gate.yml
 
-  full-suite-tiers:
-    name: service + FULL crash sweep + e2e
+  service-tier:
+    name: service tier (blizzard:service-test)
+    needs: [gate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout blizzard
+        uses: actions/checkout@v4
+        with:
+          path: blizzard
+      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
+        uses: actions/checkout@v4
+        with:
+          repository: paul-gross/blizzard-mock
+          path: blizzard-mock
+      - name: checkout blizzard-workspace (the winter source)
+        uses: actions/checkout@v4
+        with:
+          repository: paul-gross/blizzard-workspace
+          path: blizzard-workspace
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: blizzard
+          # Relative to working-directory, so the default `**/uv.lock` alone only
+          # sees blizzard's own lockfile — name blizzard-mock's sibling lockfile
+          # too, so its `uv sync` below shares this same cache.
+          cache-dependency-glob: |
+            uv.lock
+            ../blizzard-mock/uv.lock
+      - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
+        uses: jdx/mise-action@v2
+        with:
+          # Pinned: mise's VERSION endpoint can advertise a release before that
+          # release's assets exist, and the unpinned action then 404s fetching one.
+          version: 2026.9.2
+          install: false
+      - name: git identity for fixture/forge git operations
+        run: |
+          git config --global user.email "ci@blizzard.local"
+          git config --global user.name "blizzard CI"
+      - name: provision blizzard (hub + runner daemons)
+        run: cd blizzard && uv sync
+      - name: provision blizzard-mock (mock fleet + fixture + mock-claude-code)
+        run: cd blizzard-mock && uv sync
+      - name: service tier (blizzard:service-test)
+        env:
+          BLIZZARD_SERVICE: "1"
+          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
+        run: cd blizzard && uv run pytest tests/service/ -v
+
+  crash-sweep:
+    name: FULL kill-9 crash sweep (blizzard:crash-sweep)
+    needs: [gate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout blizzard
+        uses: actions/checkout@v4
+        with:
+          path: blizzard
+      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
+        uses: actions/checkout@v4
+        with:
+          repository: paul-gross/blizzard-mock
+          path: blizzard-mock
+      - name: checkout blizzard-workspace (the winter source)
+        uses: actions/checkout@v4
+        with:
+          repository: paul-gross/blizzard-workspace
+          path: blizzard-workspace
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: blizzard
+          # Relative to working-directory, so the default `**/uv.lock` alone only
+          # sees blizzard's own lockfile — name blizzard-mock's sibling lockfile
+          # too, so its `uv sync` below shares this same cache.
+          cache-dependency-glob: |
+            uv.lock
+            ../blizzard-mock/uv.lock
+      - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
+        uses: jdx/mise-action@v2
+        with:
+          # Pinned: mise's VERSION endpoint can advertise a release before that
+          # release's assets exist, and the unpinned action then 404s fetching one.
+          version: 2026.9.2
+          install: false
+      - name: git identity for fixture/forge git operations
+        run: |
+          git config --global user.email "ci@blizzard.local"
+          git config --global user.name "blizzard CI"
+      - name: provision blizzard (hub + runner daemons)
+        run: cd blizzard && uv sync
+      - name: provision blizzard-mock (mock fleet + fixture + mock-claude-code)
+        run: cd blizzard-mock && uv sync
+      - name: FULL kill-9 crash sweep (every registry point) — `mise run crash-sweep`
+        env:
+          BLIZZARD_CRASH_SWEEP: "1"
+          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
+        run: cd blizzard && uv run pytest -m crash_sweep tests/crash/ -v
+
+  e2e:
+    name: e2e acceptance loop (blizzard:e2e)
     needs: [gate]
     runs-on: ubuntu-latest
     steps:
@@ -93,16 +196,6 @@ jobs:
         # and board-shell never appears. This mirrors the local `npm run build` step
         # that fills these dirs before `mise run e2e` (src/blizzard/static/README.md).
         run: cd blizzard/web && npm ci && npm run build
-      - name: service tier (blizzard:service-test)
-        env:
-          BLIZZARD_SERVICE: "1"
-          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
-        run: cd blizzard && uv run pytest tests/service/ -v
-      - name: FULL kill-9 crash sweep (every registry point) — `mise run crash-sweep`
-        env:
-          BLIZZARD_CRASH_SWEEP: "1"
-          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
-        run: cd blizzard && uv run pytest -m crash_sweep tests/crash/ -v
       - name: e2e acceptance loop incl. the browser scenario — `mise run e2e`
         env:
           BLIZZARD_E2E: "1"
@@ -111,7 +204,7 @@ jobs:
 
   release:
     name: build wheel + image, publish release
-    needs: [gate, full-suite-tiers]
+    needs: [gate, service-tier, crash-sweep, e2e]
     runs-on: ubuntu-latest
     # A job-level `permissions:` block REPLACES the workflow-level one rather than
     # merging with it — every unlisted scope becomes `none`. `packages: write`
