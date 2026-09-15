@@ -100,8 +100,9 @@ def test_a_set_with_no_measurement_contributes_no_reading() -> None:
 
 
 def test_a_retired_scope_this_routine_has_swept_is_still_listed() -> None:
-    """D3: `scope_slugs` carries only non-retired scopes — a retired scope must still
-    surface if `facts` names it."""
+    """D3: `scope_slugs` carries only the routine's declared set, retired scopes
+    already filtered out by the caller — a retired scope must still surface if `facts`
+    names it."""
     facts = [_fact("fins_1", scope_slug="retired-scope", day=2)]
 
     sweeps = compute_sweeps(facts, routine_name="nightly", scope_slugs=["live-scope"], since=_SINCE, until=_UNTIL)

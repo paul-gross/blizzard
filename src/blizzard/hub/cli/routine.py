@@ -333,8 +333,9 @@ class SweepsDetail:
     "--until", required=True, type=click.DateTime(), help="The measurement window's end, in local time (exclusive)."
 )
 def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime) -> None:
-    """NAME's per-scope last-swept table — every non-retired scope, plus any retired
-    scope NAME has swept — and its measurement series over --since/--until.
+    """NAME's per-scope last-swept table — its declared scope set, retired scopes
+    filtered out unless already swept while linked — and its measurement series over
+    --since/--until.
 
     NAME is resolved to its routine_id through the routine list (D3)."""
     rows = cli.get("/api/routines", "GET /routines").json()

@@ -15157,7 +15157,7 @@
     },
     "/api/routines/{routine_id}/sweeps": {
       "get": {
-        "description": "``routine_id``'s per-scope last-swept table (D2, D3, D4) \u2014 every non-retired\nscope, plus any retired scope this routine has swept \u2014 and its measurement series\n(D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a malformed instant\nor a non-positive span.",
+        "description": "``routine_id``'s per-scope last-swept table (D2, D3, D4) \u2014 the routine's declared\nset, retired scopes filtered out unless already swept while linked \u2014 and its\nmeasurement series (D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a\nmalformed instant or a non-positive span.",
         "operationId": "routine_sweeps_api_routines__routine_id__sweeps_get",
         "parameters": [
           {

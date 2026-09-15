@@ -595,7 +595,9 @@ def build_services(
         garden_delivery=GardenDelivery(delivery=garden_delivery_store, clock=clock),
         commit_resolver=commit_resolver,
         garden_trend=GardenTrendService(repo=garden_trend_store),
-        garden_sweeps=GardenSweepsService(repo=garden_sweeps_store, scopes=scope_store),
+        garden_sweeps=GardenSweepsService(
+            repo=garden_sweeps_store, scopes=scope_store, routine_scopes=routine_scope_store
+        ),
         garden_run=GardenRunService(
             repo=garden_run_store, chunk_records=chunk_record, chunk_facts=chunk_facts, findings=finding_store
         ),

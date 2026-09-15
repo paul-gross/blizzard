@@ -432,13 +432,13 @@ def test_the_trend_is_served_over_http_and_through_the_real_cli(tmp_path: Path) 
 
 
 def test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_series(tmp_path: Path) -> None:
-    """Every non-retired scope, including one never swept; a retired scope this routine
-    has swept stays listed; the measurement series is cut to the window while
-    last-swept is not."""
+    """The routine's declared set, including one linked scope never swept, but not a
+    scope that exists and was never linked; a retired scope this routine has swept
+    stays listed; the measurement series is cut to the window while last-swept is not."""
     with garden_stack(tmp_path) as g:
         t0, t0_local = datetime.now(UTC), datetime.now()
-        never_swept, retired_swept = "garden-svc-never", "garden-svc-retired"
-        for slug in (never_swept, retired_swept):
+        not_linked, retired_swept = "garden-svc-not-linked", "garden-svc-retired"
+        for slug in (not_linked, retired_swept):
             created = g.hub.post("/api/scopes", json={"slug": slug, "description": ""})
             assert created.status_code == 201, created.text
         linked = g.hub.put(f"/api/routines/{g.routine_id}/scopes/{retired_swept}")
@@ -461,8 +461,7 @@ def test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_se
         assert body["routine_name"] == _ROUTINE
 
         by_scope = {row["scope_slug"]: row for row in body["last_swept"]}
-        assert by_scope[never_swept]["finding_set_id"] is None
-        assert by_scope[never_swept]["produced_at"] is None
+        assert not_linked not in by_scope
         assert by_scope[_SCOPE]["finding_set_id"] is not None
         assert by_scope[retired_swept]["finding_set_id"] is not None
 
@@ -483,7 +482,7 @@ def test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_se
             "--json",
         ).stdout
         from_cli = json.loads(cli_out)
-        assert {row["scope_slug"] for row in from_cli["last_swept"]} == {_SCOPE, never_swept, retired_swept}
+        assert {row["scope_slug"] for row in from_cli["last_swept"]} == {_SCOPE, retired_swept}
 
 
 def test_sweeps_404s_on_an_unknown_routine_id(tmp_path: Path) -> None:
