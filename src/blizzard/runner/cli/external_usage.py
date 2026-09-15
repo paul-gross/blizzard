@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+import httpx
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.utc import iso_utc
@@ -40,11 +41,12 @@ def external_usage_probe(slug: str | None, directory: str) -> None:
     if slug not in declared:
         raise click.ClickException(f"no declared subscription with slug {slug!r} (declared: {sorted(declared)})")
     declaration = declared[slug]
-    sampler = select_sampler(declaration, clock=SystemClock())
-    if sampler is None:
-        click.echo(f"no sample: {declaration.provider!r} (slug {declaration.slug!r}) has no known sampler binding")
-        return
-    snapshot = sampler.sample()
+    with httpx.Client() as client:
+        sampler = select_sampler(declaration, clock=SystemClock(), http_client=lambda: client)
+        if sampler is None:
+            click.echo(f"no sample: {declaration.provider!r} (slug {declaration.slug!r}) has no known sampler binding")
+            return
+        snapshot = sampler.sample()
     if snapshot is None:
         click.echo("no sample: the sampler reported nothing (see the warning log for why)")
         return

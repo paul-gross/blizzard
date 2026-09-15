@@ -49,6 +49,25 @@ _log = get_logger("blizzard.runner.loop")
 _HTTP_TIMEOUT = 30.0
 
 
+class _LazyUsageHttpClient:
+    """One ``httpx.Client`` every declared subscription's sampler shares, built only when a
+    sample first runs (blizzard#436, hub:95) — a runner with no live subscription opens no
+    connection pool. Implements :class:`~blizzard.runner.loop.context.ICloseableUsageHttpClient`
+    and the zero-arg provider shape every sampler's ``http_client`` expects."""
+
+    def __init__(self) -> None:
+        self._client: httpx.Client | None = None
+
+    def __call__(self) -> httpx.Client:
+        if self._client is None:
+            self._client = httpx.Client()
+        return self._client
+
+    def close(self) -> None:
+        if self._client is not None:
+            self._client.close()
+
+
 @dataclass(frozen=True)
 class LoopWiring:
     """Constructs the loop's collaborators from resolved config.
@@ -86,14 +105,17 @@ class LoopWiring:
         # harness's own binding to resolve one, not merely to be registered at all.
         harnesses.transcript_source(CLAUDE_CODE_HARNESS_ID)
         # The subscription-sampling seam (blizzard#436) — each declaration paired with its
-        # resolved binding; an unknown provider selects `None` (declared, unsampled).
+        # resolved binding; an unknown provider selects `None` (declared, unsampled). Every
+        # sampler shares one lazily-built HTTP client, owned by this context (blizzard#436,
+        # hub:95), rather than opening its own.
         _clock = SystemClock()
+        usage_http_client = _LazyUsageHttpClient()
         resolved_subscriptions = tuple(
             ResolvedSubscription(
                 slug=declaration.slug,
                 name=declaration.name,
                 sample_interval_seconds=declaration.sample_interval_seconds,
-                sampler=select_sampler(declaration, clock=_clock),
+                sampler=select_sampler(declaration, clock=_clock, http_client=usage_http_client),
             )
             for declaration in config.resolved_subscriptions()
         )
@@ -143,6 +165,7 @@ class LoopWiring:
             chunk_views=ReadThroughChunkViews(hub),
             provider=provider,
             subscriptions=resolved_subscriptions,
+            usage_http_client=usage_http_client,
             process=LinuxProcessProbe(),
             worktree_git=SubprocessWorktreeGit(),
             # The check-runner seam (issue #114) — see `runner/loop/checks.py`.
@@ -184,7 +207,11 @@ class LoopWiring:
         """Run one synchronous reconciliation tick — the CLI verb and e2e driver."""
         config = self.config
         with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
-            tick(self.context(HttpHubClient(client)))
+            ctx = self.context(HttpHubClient(client))
+            try:
+                tick(ctx)
+            finally:
+                ctx.usage_http_client.close()
 
     def backfill_transcripts(self, *, dry_run: bool, limit: int | None = None) -> TranscriptBackfillReport:
         """Run one transcript-backfill pass (blizzard#250) — the operator verb's own entry,
@@ -192,13 +219,21 @@ class LoopWiring:
         context is built."""
         config = self.config
         with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
-            return TranscriptBackfill(self.context(HttpHubClient(client))).run(dry_run=dry_run, limit=limit)
+            ctx = self.context(HttpHubClient(client))
+            try:
+                return TranscriptBackfill(ctx).run(dry_run=dry_run, limit=limit)
+            finally:
+                ctx.usage_http_client.close()
 
     def reship_transcript(self, segment_id: str) -> TranscriptReshipReport:
         """Re-ship one already-imported segment — wired here for the reason above."""
         config = self.config
         with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
-            return TranscriptBackfill(self.context(HttpHubClient(client))).reship(segment_id)
+            ctx = self.context(HttpHubClient(client))
+            try:
+                return TranscriptBackfill(ctx).reship(segment_id)
+            finally:
+                ctx.usage_http_client.close()
 
 
 @dataclass(frozen=True)
@@ -258,6 +293,7 @@ class PeriodicDriver:
         # a gracefully stopped runner is a single-file store again. Inside the `try` below,
         # not before it: a raising `context()` call must still reach `finally`'s dispose.
         engine = create_engine_from_url(config.db_url)
+        ctx: LoopContext | None = None
         try:
             ctx = self._wiring.context(HttpHubClient(self._client), engine=engine)
             _log.info("reconciliation loop started", runner_id=config.runner_id, interval=self._interval)
@@ -268,6 +304,8 @@ class PeriodicDriver:
                     _log.error("tick failed", detail=str(exc))
                 self._stop.wait(self._interval)
         finally:
+            if ctx is not None:
+                ctx.usage_http_client.close()
             self._client.close()
             engine.dispose()
             _log.info("reconciliation loop stopped", runner_id=config.runner_id)

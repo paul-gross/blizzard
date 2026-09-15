@@ -7,7 +7,8 @@ that parameter object, plus the loop's static config.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import IWorkspaceProvider
@@ -111,6 +112,22 @@ class ResolvedSubscription:
     sampler: ISubscriptionSampler | None
 
 
+class ICloseableUsageHttpClient(Protocol):
+    """Owns the shared, lazily-built HTTP client every declared subscription's sampler draws
+    from (blizzard#436, hub:95); whoever owns this ``LoopContext``'s lifetime closes it
+    exactly once, whether or not a client was ever actually built."""
+
+    def close(self) -> None: ...
+
+
+class _NoUsageHttpClient:
+    """The no-op default for a context built without composing the subscription seam
+    (most direct test constructions) — closing it does nothing."""
+
+    def close(self) -> None:
+        return None
+
+
 @dataclass(frozen=True)
 class LoopContext:
     """Everything a step function reads — passed in, never module-global."""
@@ -143,6 +160,9 @@ class LoopContext:
     #: Every declared provider subscription, resolved (blizzard#436) — each sampled when
     #: due against its own ``sample_interval_seconds`` and ``slug``-keyed anchor.
     subscriptions: tuple[ResolvedSubscription, ...] = ()
+    #: The shared subscription-sampling HTTP client's owner (blizzard#436, hub:95) — see
+    #: :class:`ICloseableUsageHttpClient`.
+    usage_http_client: ICloseableUsageHttpClient = field(default_factory=_NoUsageHttpClient)
 
     def adapter_for(self, session: SessionReference) -> IHarnessLifecycleAndVerdict:
         """Resolve an existing session's adapter from its recorded owner — may raise
