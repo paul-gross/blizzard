@@ -1,6 +1,6 @@
 # Push to master — the merge gate plus the extra tiers and a dev build.
 #
-# Runs the full PR gate, then the SERVICE tier and the kill-9 CRASH SWEEP as REAL
+# Runs the full PR gate with the SERVICE tier and the kill-9 CRASH SWEEP alongside as REAL
 # gates (blizzard-context verification/blizzard.md: blizzard:service-test,
 # blizzard:crash-sweep), then publishes a dev-build wheel as a workflow artifact for
 # fleet dogfooding.
@@ -38,7 +38,6 @@ jobs:
     uses: ./.github/workflows/gate.yml
 
   upper-tiers:
-    needs: [gate]
     uses: ./.github/workflows/upper-tiers.yml
     with:
       crash_sweep_ci: "1"
