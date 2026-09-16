@@ -95,6 +95,7 @@ from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimResponse, RouteTokenRekeyResponse
+from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
@@ -347,6 +348,8 @@ class FakeHub:
         self.registered_capacities: list[int | None] = []  # env_capacity per register call (issue #69)
         self.registered_urls: list[str | None] = []  # url per register call (issue #95)
         self.registered_redirect_uris: list[tuple[str, ...]] = []  # redirect_uris per register call (issue #95)
+        # capabilities per register call (blizzard#433)
+        self.registered_capabilities: list[tuple[RunnerCapability, ...]] = []
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
         # chunk ids `get_envelope` 404s for (blizzard#9); `chunk_statuses` never raises for
@@ -475,6 +478,7 @@ class FakeHub:
         env_capacity: int | None = None,
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
+        capabilities: tuple[RunnerCapability, ...] = (),
     ) -> None:
         if self.down:
             raise HubClientError("fake hub is down")
@@ -482,6 +486,7 @@ class FakeHub:
         self.registered_capacities.append(env_capacity)
         self.registered_urls.append(url)
         self.registered_redirect_uris.append(redirect_uris)
+        self.registered_capabilities.append(capabilities)
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
         if self.down:
@@ -700,6 +705,9 @@ class FakeHarness:
         # test can script "resolves nothing strictly, but still has an adapter default" for skip cases.
         self.resolved_model_strict: str | None = "fake-model"
         self.harness_version: str | None = None
+        # `resolvable_tier_ids`'s scripted reply (blizzard#433); default echoes a single
+        # fake tier so a capability-snapshot test sees a non-empty list without opting in.
+        self.tier_ids: tuple[str, ...] = ("fake-tier",)
         self.resolved_effort: str | None = None
         self.resolved_compaction_window: str | None = None
         # Scriptable, not the null source (blizzard#245); defaults to an empty
@@ -822,6 +830,9 @@ class FakeHarness:
     def resolve_compaction_window(self, value: str | None) -> str | None:
         return self.resolved_compaction_window if self.resolved_compaction_window is not None else value
 
+    def resolvable_tier_ids(self) -> tuple[str, ...]:
+        return self.tier_ids
+
     def observe_version(self) -> str | None:
         return self.harness_version
 
@@ -866,6 +877,7 @@ class TieredFakeHarness(FakeHarness):
         super().__init__(handle=handle, verdict=None)
         self._tiers = tiers
         self.resolved_model = default
+        self.tier_ids = tuple(tiers.keys())
 
     def resolve_model_strict(self, preferences: Sequence[str]) -> str | None:
         for entry in preferences:

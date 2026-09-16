@@ -6399,6 +6399,44 @@
         "title": "RunRowView",
         "type": "object"
       },
+      "RunnerCapability": {
+        "description": "One harness binding this runner can execute (blizzard#433) \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding.",
+        "properties": {
+          "default": {
+            "default": false,
+            "title": "Default",
+            "type": "boolean"
+          },
+          "harness_id": {
+            "title": "Harness Id",
+            "type": "string"
+          },
+          "tiers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tiers",
+            "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "harness_id"
+        ],
+        "title": "RunnerCapability",
+        "type": "object"
+      },
       "RunnerEnrollmentResponse": {
         "description": "A freshly minted (or rotated) bearer token \u2014 issue #86a.\n\n``token`` is the plaintext, visible only here \u2014 only its sha256 hash is kept. A\nre-enroll rotates: the old token stops resolving the moment this response lands.",
         "properties": {
@@ -6538,6 +6576,14 @@
       "RunnerRegistrationRequest": {
         "description": "Register a runner into the fleet \u2014 runner id + workspace binding.\n\n``env_capacity`` is the runner's configured environment-pool size; ``None`` when the\nclient reports none, never a guessed total. Re-registration overwrites it.",
         "properties": {
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerCapability"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
           "env_capacity": {
             "anyOf": [
               {
@@ -13670,7 +13716,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level (issue #86a); issue #95's optional\n``url``/``redirect_uris`` extension rides the same authenticated write.",
+        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level (issue #86a); issue #95's optional\n``url``/``redirect_uris`` extension, and blizzard#433's ``capabilities`` snapshot,\nride the same authenticated write.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {

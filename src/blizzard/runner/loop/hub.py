@@ -26,6 +26,7 @@ from blizzard.wire.route import (
     RouteClaimTerminalDenial,
     RouteTokenRekeyResponse,
 )
+from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
 
 
@@ -137,12 +138,15 @@ class IHubClient(IChunkStatusReader, Protocol):
         env_capacity: int | None = None,
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
+        capabilities: tuple[RunnerCapability, ...] = (),
     ) -> None:
         """``POST /api/fleet/runners`` — register into the fleet registry.
 
         Idempotent upsert, and the runner-level liveness heartbeat. Called before the
         paused read so the runner is registered by the time it reads its state back.
-        Every optional field is an unconditional overwrite on each (re-)registration."""
+        Every optional field is an unconditional overwrite on each (re-)registration,
+        ``capabilities`` (blizzard#433) included: an empty tuple clears a previously
+        reported snapshot rather than leaving it standing."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

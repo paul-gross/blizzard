@@ -942,7 +942,8 @@ export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = fals
  * Register a runner — runner id + workspace binding; idempotent upsert.
  *
  * Runner-auth is checked at the router level (issue #86a); issue #95's optional
- * ``url``/``redirect_uris`` extension rides the same authenticated write.
+ * ``url``/``redirect_uris`` extension, and blizzard#433's ``capabilities`` snapshot,
+ * ride the same authenticated write.
  */
 export const registerRunnerApiFleetRunnersPost = <ThrowOnError extends boolean = false>(options: Options<RegisterRunnerApiFleetRunnersPostData, ThrowOnError>): RequestResult<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError> => (options.client ?? client).post<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError>({
     url: '/api/fleet/runners',

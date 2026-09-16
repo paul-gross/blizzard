@@ -4122,6 +4122,32 @@ export type RunRowView = {
 };
 
 /**
+ * RunnerCapability
+ *
+ * One harness binding this runner can execute (blizzard#433) — the id, its observed
+ * version (``None`` when the binding exposes none), the tier ids it can resolve, and
+ * whether it is this runner's default binding.
+ */
+export type RunnerCapability = {
+    /**
+     * Default
+     */
+    default?: boolean;
+    /**
+     * Harness Id
+     */
+    harness_id: string;
+    /**
+     * Tiers
+     */
+    tiers?: Array<string>;
+    /**
+     * Version
+     */
+    version?: string | null;
+};
+
+/**
  * RunnerEnrollmentResponse
  *
  * A freshly minted (or rotated) bearer token — issue #86a.
@@ -4245,6 +4271,10 @@ export type RunnerPauseRequest = {
  * client reports none, never a guessed total. Re-registration overwrites it.
  */
 export type RunnerRegistrationRequest = {
+    /**
+     * Capabilities
+     */
+    capabilities?: Array<RunnerCapability>;
     /**
      * Env Capacity
      */

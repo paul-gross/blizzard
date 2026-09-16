@@ -181,6 +181,12 @@ class IHarnessModelResolution(Protocol):
         unrecognized, unsupported, and ``None`` all return ``None``."""
         ...
 
+    def resolvable_tier_ids(self) -> tuple[str, ...]:
+        """The tier ids this adapter can resolve (blizzard#433) — built-ins and any
+        operator-declared alias alike, an overridden id appearing once. The capability
+        snapshot's own source; never itself a spawn-time resolution."""
+        ...
+
 
 class IHarnessVerdictParsing(Protocol):
     """Parsing a worker's raw output into a verdict, a usability check, and its free-text

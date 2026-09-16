@@ -57,6 +57,7 @@ from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
 from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.queue import QueuePeekEntry
+from blizzard.wire.runner import RunnerCapability
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -3205,3 +3206,34 @@ def test_pull_registers_every_declared_redirect_uri(tmp_path):  # type: ignore[n
 
     assert hub.registered_redirect_uris == [uris]
     assert hub.registered_urls == ["http://127.0.0.1:8431"]
+
+
+@pytest.mark.unit
+def test_pull_sends_a_deterministic_single_binding_capability_snapshot(tmp_path):  # type: ignore[no-untyped-def]
+    # A registry holding one available binding (today's only shape) always names it the
+    # default (blizzard#433) — no separate runner config key decides this.
+    store = _store(tmp_path)
+    hub = FakeHub()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.harness_version = "1.2.3"
+    harness.tier_ids = ("blizzard:frontier", "blizzard:advanced", "blizzard:basic")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+    )
+
+    Pull(ctx).run()
+
+    assert hub.registered_capabilities == [
+        (
+            RunnerCapability(
+                harness_id="claude_code",
+                version="1.2.3",
+                tiers=["blizzard:frontier", "blizzard:advanced", "blizzard:basic"],
+                default=True,
+            ),
+        )
+    ]

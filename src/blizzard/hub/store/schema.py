@@ -1091,6 +1091,10 @@ runner_registrations = Table(
     # The runner's allowed redirect URIs (issue #95), JSON `list[str]` — exact-matched
     # against a presented `redirect_uri` before a JWT is minted (the open-redirect guard).
     Column("redirect_uris", Text, nullable=True),
+    # The runner's reported capability snapshot (blizzard#433), JSON `list[dict]` — one
+    # object per harness binding (`harness_id`/`version`/`tiers`/`default`). Refreshed
+    # in place, whole, on each re-registration; nullable for a runner that reports none.
+    Column("capabilities", Text, nullable=True),
 )
 
 runner_pause_facts = Table(

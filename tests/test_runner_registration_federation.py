@@ -64,3 +64,52 @@ def test_unauthenticated_registration_with_redirect_uris_is_rejected_under_enfor
 
     registration = hub.services.registry.get_runner("runner-a")
     assert registration is None
+
+
+def test_registration_persists_the_capability_snapshot(tmp_path: Path) -> None:
+    """blizzard#433 — a request naming a harness/tier snapshot stores it whole."""
+    hub = build_hub(tmp_path)
+    capabilities = [
+        {
+            "harness_id": "claude_code",
+            "version": "1.2.3",
+            "tiers": ["blizzard:frontier", "blizzard:basic"],
+            "default": True,
+        }
+    ]
+    resp = _register(hub, capabilities=capabilities)
+    assert resp.status_code == 201, resp.text
+
+    registration = hub.services.registry.get_runner("runner-a")
+    assert registration is not None
+    assert len(registration.capabilities) == 1
+    capability = registration.capabilities[0]
+    assert capability.harness_id == "claude_code"
+    assert capability.version == "1.2.3"
+    assert capability.tiers == ("blizzard:frontier", "blizzard:basic")
+    assert capability.default is True
+
+
+def test_registration_without_capabilities_leaves_it_empty(tmp_path: Path) -> None:
+    """A request predating blizzard#433 (or a harness-less runner) parses unchanged."""
+    hub = build_hub(tmp_path)
+    resp = _register(hub)
+    assert resp.status_code == 201, resp.text
+
+    registration = hub.services.registry.get_runner("runner-a")
+    assert registration is not None
+    assert registration.capabilities == ()
+
+
+def test_reregistration_drops_a_removed_binding_from_the_snapshot(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(
+        hub,
+        capabilities=[{"harness_id": "claude_code", "version": "1.0.0", "tiers": ["blizzard:basic"], "default": True}],
+    )
+
+    _register(hub)
+
+    registration = hub.services.registry.get_runner("runner-a")
+    assert registration is not None
+    assert registration.capabilities == ()

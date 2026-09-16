@@ -15,6 +15,7 @@ from sqlalchemy import insert, select
 from blizzard.hub.domain.registry import (
     ExternalSubscriptionUsageWindow,
     IWriteRunnerRegistry,
+    RunnerCapability,
     RunnerRegistration,
     SubscriptionUsageRecord,
 )
@@ -125,11 +126,22 @@ class RunnerRegistryStore:
         env_capacity: int | None,
         public_url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
+        capabilities: tuple[RunnerCapability, ...] = (),
         at: datetime,
     ) -> bool:
         # Written unconditionally on both branches, `None`/empty verbatim included: the
         # overwrite on refresh is what converges a changed value on re-registration.
         redirect_uris_json = json.dumps(list(redirect_uris)) if redirect_uris else None
+        capabilities_json = (
+            json.dumps(
+                [
+                    {"harness_id": c.harness_id, "version": c.version, "tiers": list(c.tiers), "default": c.default}
+                    for c in capabilities
+                ]
+            )
+            if capabilities
+            else None
+        )
         with self._store.write("upsert_registration") as conn:
             existing = conn.execute(
                 select(s.runner_registrations.c.runner_id).where(s.runner_registrations.c.runner_id == runner_id)
@@ -144,6 +156,7 @@ class RunnerRegistryStore:
                         env_capacity=env_capacity,
                         public_url=public_url,
                         redirect_uris=redirect_uris_json,
+                        capabilities=capabilities_json,
                     )
                 )
                 return True
@@ -156,6 +169,7 @@ class RunnerRegistryStore:
                     env_capacity=env_capacity,
                     public_url=public_url,
                     redirect_uris=redirect_uris_json,
+                    capabilities=capabilities_json,
                 )
             )
             return False
@@ -307,6 +321,15 @@ class RunnerRegistryStore:
             )
             for slug, name, sampled_at, windows_json in external_usage
         )
+        capabilities = tuple(
+            RunnerCapability(
+                harness_id=c["harness_id"],
+                version=c.get("version"),
+                tiers=tuple(c.get("tiers") or ()),
+                default=bool(c.get("default", False)),
+            )
+            for c in (json.loads(row.capabilities) if row.capabilities else [])
+        )
         return RunnerRegistration(
             runner_id=row.runner_id,
             workspace_id=row.workspace_id,
@@ -321,6 +344,7 @@ class RunnerRegistryStore:
             public_url=row.public_url,
             redirect_uris=tuple(json.loads(row.redirect_uris)) if row.redirect_uris else (),
             subscription_usage=subscription_usage,
+            capabilities=capabilities,
         )
 
 

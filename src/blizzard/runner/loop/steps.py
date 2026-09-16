@@ -19,7 +19,7 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import LeaseRecord, Liveness, as_utc
-from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import (
     REAPED,
@@ -41,6 +41,7 @@ from blizzard.wire.facts import (
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     RUNNER_LOCALLY_PAUSED,
 )
+from blizzard.wire.runner import RunnerCapability
 
 #: This module's public API — the loop steps it owns, in tick order.
 __all__ = [
@@ -309,6 +310,26 @@ class Fenced:
         return any(epoch >= ref.epoch for epoch in view.restart_epochs)
 
 
+def _capability_snapshot(harnesses: IHarnessRegistry) -> tuple[RunnerCapability, ...]:
+    """This runner's own harness/tier snapshot (blizzard#433): one entry per known
+    binding, each carrying the tier ids its adapter can resolve and its observed
+    version (``None`` when the binding exposes none). The FIRST entry — today's only
+    one, ``known_harnesses`` being single-entry — is marked ``default``: the runner's
+    existing default harness, with no separate config key of its own."""
+    snapshot: list[RunnerCapability] = []
+    for index, harness_id in enumerate(harnesses.known_harnesses):
+        adapter = harnesses.adapter(harness_id)
+        snapshot.append(
+            RunnerCapability(
+                harness_id=harness_id,
+                version=adapter.observe_version(),
+                tiers=list(adapter.resolvable_tier_ids()),
+                default=index == 0,
+            )
+        )
+    return tuple(snapshot)
+
+
 class Pull(Step):
     def run(self) -> None:
         """Exchange facts with the hub: sync the registry, reconcile ownership, drain the buffer.
@@ -338,6 +359,7 @@ class Pull(Step):
                 env_capacity=ctx.config.env_capacity,
                 url=ctx.config.public_url or None,
                 redirect_uris=ctx.config.redirect_uris,
+                capabilities=_capability_snapshot(ctx.harnesses),
             )
             paused = ctx.hub.fetch_runner_paused(ctx.config.runner_id)
         except HubClientError:

@@ -329,6 +329,9 @@ class _HangingAdapter:
     def resolve_compaction_window(self, value: str | None) -> str | None:
         return value
 
+    def resolvable_tier_ids(self) -> tuple[str, ...]:
+        return ()
+
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
         raise AssertionError("unreachable — spawn never returns")
 
@@ -470,6 +473,9 @@ class _FixedPidAdapter:
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
         return value
+
+    def resolvable_tier_ids(self) -> tuple[str, ...]:
+        return ()
 
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
         return None

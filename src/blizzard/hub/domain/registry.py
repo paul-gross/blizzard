@@ -62,10 +62,27 @@ class RunnerRegistration:
     #: Every declared subscription's newest reported sample, raw, one per slug (issue #218) —
     #: staleness is applied per slug at derive time, not here.
     subscription_usage: tuple[SubscriptionUsageRecord, ...] = ()
+    #: The runner's reported capability snapshot (blizzard#433) — every harness/tier it can
+    #: execute right now. Overwritten whole on each re-registration, empty for a runner that
+    #: has never reported one.
+    capabilities: tuple[RunnerCapability, ...] = ()
 
     def usage_record(self, slug: str) -> SubscriptionUsageRecord | None:
         """This runner's newest raw sample for ``slug``, or ``None`` if never reported."""
         return next((r for r in self.subscription_usage if r.slug == slug), None)
+
+
+@dataclass(frozen=True)
+class RunnerCapability:
+    """One harness binding a registered runner reported it can execute (blizzard#433) —
+    the hub-domain mirror of the wire shape, kept import-free of it (``bzh:domain-core``).
+    ``version`` is ``None`` when the binding exposes none; ``default`` marks the runner's
+    own default binding, at most one per snapshot."""
+
+    harness_id: str
+    version: str | None = None
+    tiers: tuple[str, ...] = ()
+    default: bool = False
 
 
 @dataclass(frozen=True)
@@ -187,12 +204,14 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         env_capacity: int | None,
         public_url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
+        capabilities: tuple[RunnerCapability, ...] = (),
         at: datetime,
     ) -> bool:
         """Register a runner (idempotent upsert), refreshing ``last_seen_at``; returns True if the row
-        was newly created. ``env_capacity`` (issue #69) and ``public_url``/``redirect_uris`` (issue #95)
-        are written on **both** the insert and the refresh branch, so a change converges on the next
-        re-registration; an absent value is written verbatim, resetting the stored field to null."""
+        was newly created. ``env_capacity`` (issue #69), ``public_url``/``redirect_uris`` (issue #95), and
+        ``capabilities`` (blizzard#433) are written on **both** the insert and the refresh branch, so a
+        change converges on the next re-registration; an absent value is written verbatim, resetting the
+        stored field to null/empty."""
         ...
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
@@ -251,18 +270,21 @@ class FleetService:
         env_capacity: int | None = None,
         public_url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
+        capabilities: tuple[RunnerCapability, ...] = (),
     ) -> bool:
         """Register (or refresh) a runner; returns True on a first registration.
 
-        ``env_capacity`` (issue #69) and ``public_url``/``redirect_uris`` (issue #95) are the runner's
-        own reported facts, unconditionally overwritten on every (re-)registration so a change
-        converges; ``None`` from a client that predates a field stores as null."""
+        ``env_capacity`` (issue #69), ``public_url``/``redirect_uris`` (issue #95), and
+        ``capabilities`` (blizzard#433) are the runner's own reported facts, unconditionally
+        overwritten on every (re-)registration so a change converges; ``None``/empty from a
+        client that predates a field stores as null/empty."""
         created = self._registry.upsert_registration(
             runner_id,
             workspace_id=workspace_id,
             env_capacity=env_capacity,
             public_url=public_url,
             redirect_uris=redirect_uris,
+            capabilities=capabilities,
             at=self._clock.now(),
         )
         _log.info(
@@ -271,6 +293,7 @@ class FleetService:
             workspace_id=workspace_id,
             env_capacity=env_capacity,
             public_url=public_url,
+            capabilities=[c.harness_id for c in capabilities],
             first_time=created,
         )
         return created

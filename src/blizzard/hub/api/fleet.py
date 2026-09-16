@@ -34,6 +34,7 @@ from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedDependency, ClaimDeniedPaused, ClaimDeniedTerminal
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import FollowLatest, Graph, Mint
+from blizzard.hub.domain.registry import RunnerCapability
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -706,14 +707,20 @@ def register_runner(
     """Register a runner — runner id + workspace binding; idempotent upsert.
 
     Runner-auth is checked at the router level (issue #86a); issue #95's optional
-    ``url``/``redirect_uris`` extension rides the same authenticated write."""
+    ``url``/``redirect_uris`` extension, and blizzard#433's ``capabilities`` snapshot,
+    ride the same authenticated write."""
     fleet.assert_owns(request.runner_id)
+    capabilities = tuple(
+        RunnerCapability(harness_id=c.harness_id, version=c.version, tiers=tuple(c.tiers), default=c.default)
+        for c in request.capabilities
+    )
     first = services.fleet.register(
         request.runner_id,
         request.workspace_id,
         env_capacity=request.env_capacity,
         public_url=request.url,
         redirect_uris=tuple(request.redirect_uris),
+        capabilities=capabilities,
     )
     services.events.publish_runner_changed(request.runner_id, kind="registered")
     return RunnerRegistrationResponse(runner_id=request.runner_id, first_registration=first)

@@ -901,6 +901,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260914_1000_hub_harness_provenance", "graph_sessions", ("harnesses",)),
     ("hub", "20260914_1000_hub_harness_provenance", "chunks", ("default_harnesses",)),
     ("hub", "20260914_1000_hub_harness_provenance", "routines", ("default_harnesses",)),
+    ("hub", "20260916_1000_hub_authored_harnesses", "runner_registrations", ("capabilities",)),
     # runner tree — instance 6
     (
         "runner",
