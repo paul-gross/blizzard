@@ -184,7 +184,7 @@ class ClaudeCodeAdapter:
     def resolve_model(self, preferences: Sequence[str]) -> str:
         """Left-to-right; first entry that resolves wins; an empty or fully-unresolvable list
         falls back to the adapter default — :meth:`resolve_model_strict` is the walk, this is
-        its one fallback-composing caller (blizzard#432 D6)."""
+        its one fallback-composing caller."""
         resolved = self.resolve_model_strict(preferences)
         if resolved is not None:
             return resolved
@@ -201,7 +201,7 @@ class ClaudeCodeAdapter:
     def resolve_model_strict(self, preferences: Sequence[str]) -> str | None:
         """Left-to-right; first entry that resolves wins; unresolvable entries skipped;
         ``None`` when nothing in ``preferences`` resolved — no adapter-default fallback,
-        the distinction a multi-harness selection needs (blizzard#432 D6)."""
+        the distinction a multi-harness selection needs."""
         skipped: list[str] = []
         for entry in preferences:
             resolved = self._resolve_one_model(entry)

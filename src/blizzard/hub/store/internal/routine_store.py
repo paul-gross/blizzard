@@ -32,7 +32,6 @@ class ModelColumn:
 
 
 MODEL = ModelColumn()
-# `routines.default_harnesses`'s own instance of the JSON `list[str]` shape — `MODEL`'s sibling column.
 HARNESSES = ModelColumn()
 
 

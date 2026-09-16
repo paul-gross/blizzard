@@ -1680,7 +1680,7 @@
         "type": "object"
       },
       "ChunkPatchResponse": {
-        "description": "The result of one ``PATCH /chunks/{id}`` (issues #124, #144, blizzard#432) \u2014 the chunk's\neditable build properties after the edit, carried together since a PATCH can apply more than\none at once.",
+        "description": "The result of one ``PATCH /chunks/{id}`` (issues #124, #144) \u2014 the chunk's\neditable build properties after the edit, carried together since a PATCH can apply more than\none at once.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",

@@ -225,7 +225,7 @@ class ChunkRecordStore:
         self, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
     ) -> None:
         """Repin a not-ready or ready-unclaimed chunk's default model/effort/harnesses
-        (issues #27, #120, #144, blizzard#432) — all three in one write; see
+        (issues #27, #120, #144) — all three in one write; see
         :meth:`~blizzard.hub.domain.chunks.record.IWriteChunkRecordRepository.set_defaults`."""
         with self._store.write("set_defaults") as conn:
             conn.execute(

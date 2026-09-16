@@ -233,8 +233,8 @@ class SessionResolver:
 
 @dataclass(frozen=True)
 class SkippedHarness:
-    """One acceptable-set member :class:`HarnessSelector` passed over, and why (blizzard#432
-    D12) — the account an exhausted selection escalates with."""
+    """One acceptable-set member :class:`HarnessSelector` passed over, and why —
+    the account an exhausted selection escalates with."""
 
     harness_id: str
     reason: str  # "unknown" | "unavailable" | "no-authored-tier"
@@ -243,7 +243,7 @@ class SkippedHarness:
 @dataclass(frozen=True)
 class HarnessSelection:
     """A fresh mint's resolved owner among a node's acceptable set, or ``None`` when nothing
-    in it could serve (blizzard#432 D6-D8, D12) — paired with why every skipped member was
+    in it could serve — paired with why every skipped member was
     skipped, whether or not selection ultimately succeeded."""
 
     harness_id: str | None

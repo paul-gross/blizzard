@@ -202,7 +202,7 @@ def mint_chunk(
     the caller's own already-stamped ``at`` (``bzh:injected-clock``). Every call site but
     a routine run's own passes neither preference — the empty-preference policy (issue
     #144) given one home here; a routine run is the first to source one, from its own
-    routine's defaults (blizzard#392, blizzard#432)."""
+    routine's defaults (blizzard#392)."""
     return Chunk(
         chunk_id=Id.mint_at(CHUNK_PREFIX, at).value,
         graph_id=graph_id,

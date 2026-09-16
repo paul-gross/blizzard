@@ -15,7 +15,7 @@ class RoutineCreateRequest(BaseModel):
     default_scope_slug: str
     default_model: list[str] = []
     default_effort: str | None = None
-    # The routine's default harness preference (blizzard#432) — the `default_model` shape.
+    # The routine's default harness preference — the `default_model` shape.
     default_harnesses: list[str] = []
 
 

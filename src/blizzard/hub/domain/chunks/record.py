@@ -72,7 +72,7 @@ class IWriteChunkRecordRepository(IReadChunkRecordRepository, Protocol):
         self, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
     ) -> None:
         """Repin a not-ready or ready-unclaimed chunk's default model/effort/harnesses
-        (issue #144, blizzard#432) — see :meth:`set_graph`. All three together in one
+        (issue #144) — see :meth:`set_graph`. All three together in one
         write, never one at a time, so the trio cannot be left half-applied at a crash.
         An empty list / ``None`` is a real value — *express no preference*, the minted
         state — not "leave unchanged"."""

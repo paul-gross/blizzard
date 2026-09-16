@@ -123,7 +123,7 @@ graph_sessions = Table(
     Column("rotate_max_invocations", Integer, nullable=True),
     # The compaction window, opaque like `effort`; null declares none.
     Column("compaction_window", String, nullable=True),
-    # The session's acceptable harness set (blizzard#432) — JSON `list[str]`, authored
+    # The session's acceptable harness set — JSON `list[str]`, authored
     # order, the `model` column's own shape. Null declares no constraint.
     Column("harnesses", Text, nullable=True),
 )
@@ -205,7 +205,7 @@ routines = Table(
     # empty: an empty preference means express none.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
-    # The routine's default harness preference (blizzard#432) — the `default_model`
+    # The routine's default harness preference — the `default_model`
     # shape: JSON `list[str]`, nullable, minted empty meaning express none.
     Column("default_harnesses", Text, nullable=True),
     Column("created_at", UtcDateTime, nullable=False),
@@ -239,7 +239,7 @@ chunks = Table(
     # Both nullable and minted empty: an empty preference means *express none*.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
-    # The chunk's default harness preference (blizzard#432) — the `default_model` shape:
+    # The chunk's default harness preference — the `default_model` shape:
     # JSON `list[str]`, nullable, minted empty meaning express none.
     Column("default_harnesses", Text, nullable=True),
     # The chunk's standing intent to migrate at its next transition (issue #124) — a JSON

@@ -120,8 +120,8 @@ class Validator:
                 self.errors.append(f"session `{name}`: `rotate.{field_name}` must be a positive number")
 
     def _check_harnesses(self, name: str, harnesses: list[str]) -> None:
-        """A session's acceptable harness set (blizzard#432 D1): every entry non-blank,
-        no duplicate — an authored empty list is rejected earlier, at parse (D2)."""
+        """A session's acceptable harness set: every entry non-blank, no duplicate —
+        an authored empty list is rejected earlier, at parse."""
         seen: set[str] = set()
         for entry in harnesses:
             if not entry.strip():

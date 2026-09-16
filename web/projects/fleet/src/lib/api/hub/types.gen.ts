@@ -1092,7 +1092,7 @@ export type ChunkPatchRequest = {
 /**
  * ChunkPatchResponse
  *
- * The result of one ``PATCH /chunks/{id}`` (issues #124, #144, blizzard#432) — the chunk's
+ * The result of one ``PATCH /chunks/{id}`` (issues #124, #144) — the chunk's
  * editable build properties after the edit, carried together since a PATCH can apply more than
  * one at once.
  */

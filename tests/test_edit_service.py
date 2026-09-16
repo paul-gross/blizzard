@@ -225,6 +225,17 @@ def test_set_defaults_also_writes_default_harnesses() -> None:
     assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium", ["claude_code"])]
 
 
+def test_set_defaults_omitting_default_harnesses_leaves_it_at_its_current_value() -> None:
+    """Omitted (the default) is UNSET, not a clear — distinct from an explicit ``[]``."""
+    chunk = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0, default_harnesses=["claude_code"])
+    repo = _FakeChunkRepo(facts=_not_ready_facts())
+    service = _service(repo)
+
+    service.set_defaults(chunk, default_model=["blizzard:basic"], default_effort="medium")
+
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium", ["claude_code"])]
+
+
 def test_set_graph_writes_on_a_ready_unclaimed_chunk() -> None:
     """Issue #120 — a promoted-but-unclaimed chunk is still editable."""
     repo = _FakeChunkRepo(facts=_ready_facts())

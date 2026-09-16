@@ -138,16 +138,16 @@ class EditService:
         *,
         default_model: list[str],
         default_effort: str | None,
-        default_harnesses: list[str] | None = None,
+        default_harnesses: list[str] | UnsetType = UNSET,
     ) -> None:
         """Repin the chunk's default model/effort/harnesses — a thin wrapper over
-        :meth:`edit` (issues #124, #144, blizzard#432)."""
+        :meth:`edit` (issues #124, #144)."""
         self.edit(
             chunk,
             ChunkEdit(
                 default_model=default_model,
                 default_effort=default_effort,
-                default_harnesses=list(default_harnesses or []),
+                default_harnesses=default_harnesses,
             ),
         )
 

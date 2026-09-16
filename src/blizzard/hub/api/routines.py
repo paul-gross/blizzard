@@ -66,7 +66,7 @@ def _routine_view(routine: Routine) -> RoutineView:
 
 
 def _validated_harnesses(entries: list[str]) -> list[str]:
-    """``default_harnesses``'s own unique/non-blank pair (blizzard#432 D2) — the same
+    """``default_harnesses``'s own unique/non-blank pair — the same
     rule ``ChunkPatchBody._default_harnesses`` raises, an empty list left as the
     express-no-constraint clear ``default_model`` already carries."""
     stripped = [entry.strip() for entry in entries]

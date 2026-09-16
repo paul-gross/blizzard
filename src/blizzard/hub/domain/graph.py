@@ -374,7 +374,7 @@ class RotatePolicy:
         )
 
 
-# Every key this hub's session parser reads by name (issue #351, blizzard#432).
+# Every key this hub's session parser reads by name (issue #351).
 SESSION_KNOWN_KEYS = frozenset({"model", "effort", "rotate", "compaction_window", "harnesses"})
 
 
