@@ -118,6 +118,7 @@ def test_patch_applies_graph_id_and_both_defaults_together(tmp_path: Path) -> No
         "graph_id": alt_graph_id,
         "default_model": ["blizzard:basic", "gpt-5.3-codex"],
         "default_effort": "medium",
+        "default_harnesses": [],
         "intended_migration": None,
     }
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
@@ -161,6 +162,87 @@ def test_patch_can_clear_both_defaults_back_to_no_preference(tmp_path: Path) -> 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["default_model"] == []
     assert detail["default_effort"] is None
+
+
+def test_patch_naming_only_default_harnesses_leaves_the_other_two_defaults_intact(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    seed = hub.client.patch(
+        f"/api/chunks/{chunk_id}", json={"default_model": ["blizzard:basic"], "default_effort": "high"}
+    )
+    assert seed.status_code == 202, seed.text
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": ["claude_code"]})
+
+    assert resp.status_code == 202, resp.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["default_model"] == ["blizzard:basic"]
+    assert detail["default_effort"] == "high"
+    assert detail["default_harnesses"] == ["claude_code"]
+
+
+def test_patch_applies_all_three_defaults_in_one_call(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    resp = hub.client.patch(
+        f"/api/chunks/{chunk_id}",
+        json={
+            "default_model": ["blizzard:basic"],
+            "default_effort": "high",
+            "default_harnesses": ["claude_code", "codex"],
+        },
+    )
+
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["default_harnesses"] == ["claude_code", "codex"]
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["default_model"] == ["blizzard:basic"]
+    assert detail["default_effort"] == "high"
+    assert detail["default_harnesses"] == ["claude_code", "codex"]
+
+
+def test_patch_can_clear_default_harnesses_back_to_no_preference(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    seed = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": ["claude_code"]})
+    assert seed.status_code == 202, seed.text
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": []})
+
+    assert resp.status_code == 202, resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["default_harnesses"] == []
+
+
+def test_patch_duplicate_default_harnesses_entry_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": ["claude_code", "claude_code"]})
+
+    assert resp.status_code == 422, resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["default_harnesses"] == []
+
+
+def test_patch_blank_default_harnesses_entry_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": ["claude_code", "  "]})
+
+    assert resp.status_code == 422, resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["default_harnesses"] == []
+
+
+def test_patch_default_harnesses_refuses_once_claimed(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    _claim(hub, chunk_id)
+
+    resp = hub.client.patch(f"/api/chunks/{chunk_id}", json={"default_harnesses": ["claude_code"]})
+
+    assert resp.status_code == 409, resp.text
+    assert "default_harnesses" in resp.json()["detail"]
 
 
 def test_patch_unknown_graph_id_is_404(tmp_path: Path) -> None:

@@ -163,6 +163,7 @@ class RunService:
             graph=graph,
             default_model=routine.default_model,
             default_effort=routine.default_effort,
+            default_harnesses=routine.default_harnesses,
         )
         position = tail_position(self._record, self._queue, statuses=statuses)
         item, promoted_id = self._items.create_with_chunk_and_promote(

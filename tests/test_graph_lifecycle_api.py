@@ -35,6 +35,25 @@ nodes:
           to: build
 """
 
+_GRAPH_WITH_HARNESSES = """
+name: harness-set
+entry: build
+sessions:
+  code:
+    harnesses: [claude_code, codex]
+nodes:
+  build:
+    executor: runner
+    prompt: do the work
+    session: fresh:code
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: done
+"""
+
 
 def _mint(hub, definition_yaml: str = _GRAPH_A) -> str:  # type: ignore[no-untyped-def]
     resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
@@ -63,6 +82,16 @@ def test_a_freshly_minted_graph_reports_enabled_and_not_retired(tmp_path: Path) 
 
     assert detail["enabled"] is True
     assert detail["retired"] is False
+
+
+def test_a_sessions_harnesses_set_is_returned_on_the_session_view(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _GRAPH_WITH_HARNESSES)
+
+    detail = hub.client.get(f"/api/graphs/{graph_id}").json()
+
+    session = next(s for s in detail["sessions"] if s["name"] == "code")
+    assert session["harnesses"] == ["claude_code", "codex"]
 
 
 def test_retire_does_not_change_the_immutable_graph_row(tmp_path: Path) -> None:

@@ -131,11 +131,31 @@ def test_every_known_session_key_is_accepted() -> None:
                     "effort": "medium",
                     "rotate": {"max_invocations": 30},
                     "compaction_window": "150000",
+                    "harnesses": ["claude_code"],
                 }
             }
         )
     )
     assert doc.sessions["code"].compaction_window == "150000"
+    assert doc.sessions["code"].harnesses == ["claude_code"]
+
+
+# harnesses (blizzard#432) — the acceptable harness set, `model`'s own parse shape.
+# --------------------------------------------------------------------------- #
+
+
+def test_harnesses_parses_in_authored_order() -> None:
+    doc = GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", "codex"]}}))
+    assert doc.sessions["code"].harnesses == ["claude_code", "codex"]
+
+
+def test_a_single_string_harnesses_normalizes_to_a_one_entry_list() -> None:
+    doc = GraphDoc.of(_doc(sessions={"gate": {"harnesses": "claude_code"}}))
+    assert doc.sessions["gate"].harnesses == ["claude_code"]
+
+
+def test_a_bare_declaration_carries_no_harnesses_constraint() -> None:
+    assert GraphDoc.of(_doc(sessions={"gate": {}})).sessions["gate"].harnesses == []
 
 
 def test_an_unknown_session_key_is_rejected_naming_the_key() -> None:
@@ -285,6 +305,37 @@ def test_a_declared_but_unreferenced_session_is_legal() -> None:
     assert result.ok, result.errors
 
 
+# harnesses validation (blizzard#432 D2) — an authored empty list is rejected at parse
+# (unlike an omitted key); a duplicate or blank entry is rejected by the validator; fleet
+# availability is never consulted, so a well-formed set naming an unknown harness mints.
+# --------------------------------------------------------------------------- #
+
+
+def test_an_empty_harnesses_list_is_rejected_naming_the_rule() -> None:
+    with pytest.raises(GraphParseError) as exc_info:
+        GraphDoc.of(_doc(sessions={"code": {"harnesses": []}}))
+    assert "harnesses" in str(exc_info.value)
+    assert "empty list" in str(exc_info.value)
+
+
+def test_a_duplicate_harnesses_entry_is_rejected_naming_the_rule() -> None:
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", "claude_code"]}}))).result
+    assert not result.ok
+    assert any("`harnesses` entries must be unique" in e for e in result.errors)
+
+
+def test_a_blank_harnesses_entry_is_rejected_naming_the_rule() -> None:
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", "  "]}}))).result
+    assert not result.ok
+    assert any("`harnesses` entries must be non-empty strings" in e for e in result.errors)
+
+
+def test_a_well_formed_harnesses_set_naming_a_harness_no_runner_holds_mints_successfully() -> None:
+    # Fleet availability is never consulted here (D2) — the hub validates shape only.
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": ["no-such-harness"]}}))).result
+    assert result.ok, result.errors
+
+
 # Reification and the store round trip.
 # --------------------------------------------------------------------------- #
 
@@ -319,6 +370,7 @@ def test_mint_and_load_round_trip_the_declarations_identically() -> None:
                 "code": {
                     "model": ["blizzard:basic", "gpt-5.3-codex"],
                     "rotate": {"max_context_tokens": 120000, "max_invocations": 30},
+                    "harnesses": ["claude_code", "codex"],
                 },
                 "gate": {},
             },

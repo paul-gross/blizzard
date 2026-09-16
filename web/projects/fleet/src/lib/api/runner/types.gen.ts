@@ -309,6 +309,10 @@ export type ChunkDetail = {
      */
     default_effort?: string | null;
     /**
+     * Default Harnesses
+     */
+    default_harnesses?: Array<string>;
+    /**
      * Default Model
      */
     default_model?: Array<string>;
@@ -467,6 +471,10 @@ export type ChunkSummary = {
      * Default Effort
      */
     default_effort?: string | null;
+    /**
+     * Default Harnesses
+     */
+    default_harnesses?: Array<string>;
     /**
      * Default Model
      */

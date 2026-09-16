@@ -58,6 +58,8 @@ class GraphDetail:
             parts.append(f"effort={session['effort']}")
         if session.get("compaction_window"):
             parts.append(f"compaction_window={session['compaction_window']}")
+        if session.get("harnesses"):
+            parts.append(f"harnesses={','.join(session['harnesses'])}")
         rotate = session.get("rotate") or {}
         bounds = ", ".join(f"{k}={v}" for k, v in rotate.items() if v is not None)
         if bounds:

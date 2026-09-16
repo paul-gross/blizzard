@@ -39,6 +39,7 @@ def _routine(
     scope: str = "blizzard",
     model: list[str] | None = None,
     effort: str | None = None,
+    harnesses: list[str] | None = None,
 ) -> tuple[Routine, Graph]:
     graph = _default_graph(hub)
     routine = hub.services.routine_authoring.create(
@@ -47,6 +48,7 @@ def _routine(
         default_scope_slug=ScopeSlug.parse(scope),
         default_model=model,
         default_effort=effort,
+        default_harnesses=harnesses,
     )
     return routine, graph
 
@@ -140,6 +142,24 @@ def test_the_routines_model_and_effort_defaults_reach_the_minted_chunk(tmp_path:
     assert minted is not None
     assert minted.default_model == ["opus"]
     assert minted.default_effort == "high"
+
+
+def test_the_routines_harnesses_default_reaches_the_minted_chunk(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    routine, _graph = _routine(hub, harnesses=["claude_code", "codex"])
+
+    result = hub.services.routine_run.run(
+        routine,
+        scope=_default_scope(hub, routine),
+        mode=RunMode.FULL,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
+    )
+
+    minted = hub.services.chunks.record.get(result.chunk_id)
+    assert minted is not None
+    assert minted.default_harnesses == ["claude_code", "codex"]
 
 
 def test_a_scope_override_outside_the_routines_related_set_is_refused_never_minted(tmp_path: Path) -> None:

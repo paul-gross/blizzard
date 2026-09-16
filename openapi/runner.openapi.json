@@ -450,6 +450,14 @@
             ],
             "title": "Default Effort"
           },
+          "default_harnesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Harnesses",
+            "type": "array"
+          },
           "default_model": {
             "default": [],
             "items": {
@@ -780,6 +788,14 @@
               }
             ],
             "title": "Default Effort"
+          },
+          "default_harnesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Harnesses",
+            "type": "array"
           },
           "default_model": {
             "default": [],

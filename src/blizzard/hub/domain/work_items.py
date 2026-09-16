@@ -42,18 +42,25 @@ def prepare_mint(
     graph: Graph,
     default_model: list[str] | None = None,
     default_effort: str | None = None,
+    default_harnesses: list[str] | None = None,
 ) -> tuple[WorkRef, Chunk, datetime]:
     """The guard sequence every item-minting create path shares: allocate the ref,
     refuse a live holder, mint the resting chunk. Shared by :meth:`WorkItemEditService.create`,
     :meth:`WorkItemEditService.materialize_create`, and a routine run's own mint
     (blizzard#392) — the last of these the only caller sourcing ``default_model``/
-    ``default_effort`` from anywhere but ``mint_chunk``'s own empty-preference default."""
+    ``default_effort``/``default_harnesses`` from anywhere but ``mint_chunk``'s own
+    empty-preference default (blizzard#432)."""
     ref = items.allocate_ref(source)
     pointer = WorkRef(source=source, ref=ref)
     require_no_live_holder(work_refs, pointer)
     at = clock.now()
     chunk = mint_chunk(
-        [pointer], graph_id=graph.graph_id, at=at, default_model=default_model, default_effort=default_effort
+        [pointer],
+        graph_id=graph.graph_id,
+        at=at,
+        default_model=default_model,
+        default_effort=default_effort,
+        default_harnesses=default_harnesses,
     )
     return pointer, chunk, at
 

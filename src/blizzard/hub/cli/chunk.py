@@ -32,6 +32,8 @@ class ChunkDetail:
         # read-back exists for both. `-` is "express no preference", not unknown.
         models = ", ".join(body.get("default_model") or []) or "-"
         yield f"  default model: {models}   default effort: {body.get('default_effort') or '-'}"
+        harnesses = ", ".join(body.get("default_harnesses") or []) or "-"
+        yield f"  default harnesses: {harnesses}"
         pointers = body.get("work_refs") or []
         if pointers:
             labels = ", ".join(p.get("label") or f"{p['source']}#{p['ref']}" for p in pointers)
@@ -167,16 +169,33 @@ def chunk_ingest(cli: CliContext, pointers: tuple[str, ...]) -> None:
     ),
 )
 @click.option("--default-effort", "default_effort", default=None, help="Repin CHUNK's default effort.")
+@click.option(
+    "--default-harnesses",
+    "default_harnesses",
+    multiple=True,
+    help=(
+        "Repin CHUNK's default harness preference. Repeatable and ORDERED — the first entry "
+        "that resolves at session mint wins."
+    ),
+)
 def chunk_set(
-    cli: CliContext, chunk_id: str, graph_id: str | None, default_model: tuple[str, ...], default_effort: str | None
+    cli: CliContext,
+    chunk_id: str,
+    graph_id: str | None,
+    default_model: tuple[str, ...],
+    default_effort: str | None,
+    default_harnesses: tuple[str, ...],
 ) -> None:
-    """Repin CHUNK's graph and/or default model/effort in one call (issues #104, #144).
+    """Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144,
+    blizzard#432).
 
     A pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and
     applied all-or-nothing. At least one option is required; 409 for the defaults once
     CHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271)."""
-    if graph_id is None and not default_model and default_effort is None:
-        raise click.UsageError("at least one of --graph/--default-model/--default-effort is required")
+    if graph_id is None and not default_model and default_effort is None and not default_harnesses:
+        raise click.UsageError(
+            "at least one of --graph/--default-model/--default-effort/--default-harnesses is required"
+        )
     body: dict[str, object] = {}
     if graph_id is not None:
         body["graph_id"] = graph_id
@@ -184,6 +203,8 @@ def chunk_set(
         body["default_model"] = list(default_model)
     if default_effort is not None:
         body["default_effort"] = default_effort
+    if default_harnesses:
+        body["default_harnesses"] = list(default_harnesses)
     resp = cli.patch(
         f"/api/chunks/{chunk_id}",
         "PATCH /chunks/{id}",
@@ -198,6 +219,8 @@ def chunk_set(
         parts.append(f"default model → {', '.join(view.get('default_model') or []) or '-'}")
     if default_effort is not None:
         parts.append(f"default effort → {view.get('default_effort') or '-'}")
+    if default_harnesses:
+        parts.append(f"default harnesses → {', '.join(view.get('default_harnesses') or []) or '-'}")
     cli.show_lines(view, f"{chunk_id}: {', '.join(parts)}")
 
 

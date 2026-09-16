@@ -345,6 +345,38 @@ def test_set_with_no_option_at_all_is_a_usage_error() -> None:
 
 
 @pytest.mark.unit
+def test_set_sends_repeated_default_harnesses_flags_as_an_ordered_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(
+            202,
+            {
+                "chunk_id": "ch_1",
+                "graph_id": "gr_1",
+                "default_model": [],
+                "default_effort": None,
+                "default_harnesses": ["claude_code", "codex"],
+                "intended_migration": None,
+            },
+        )
+
+    monkeypatch.setattr(httpx, "patch", fake_patch)
+    result = CliRunner().invoke(
+        hub_group,
+        ["chunk", "set", "ch_1", "--default-harnesses", "claude_code", "--default-harnesses", "codex"],
+        env={"BZ_HUB_URL": "http://hub.local:8421"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        ("http://hub.local:8421/api/chunks/ch_1", {"default_harnesses": ["claude_code", "codex"]}),
+    ]
+    assert "default harnesses → claude_code, codex" in result.output
+
+
+@pytest.mark.unit
 def test_show_reads_both_defaults_back_in_text_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """`chunk set` can write both, so text mode has to read both back — otherwise an
     operator can only see what they wrote via `--json`."""
@@ -395,6 +427,30 @@ def test_show_dashes_a_chunk_expressing_no_preference(monkeypatch: pytest.Monkey
 
     assert result.exit_code == 0, result.output
     assert "default model: -   default effort: -" in result.output
+
+
+@pytest.mark.unit
+def test_show_reads_default_harnesses_back_in_text_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            {
+                "chunk_id": "ch_1",
+                "status": "not_ready",
+                "graph_id": "gr_1",
+                "current_node_name": "build",
+                "default_model": [],
+                "default_effort": None,
+                "default_harnesses": ["claude_code", "codex"],
+                "cost": {},
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "default harnesses: claude_code, codex" in result.output
 
 
 # `chunk show` — blocked marking and neighborhood (issue #476/#457/#462).

@@ -81,6 +81,7 @@ def test_routine_create_posts_name_graph_and_scope(monkeypatch: pytest.MonkeyPat
                 "default_scope_slug": "blizzard",
                 "default_model": [],
                 "default_effort": None,
+                "default_harnesses": [],
             },
         )
     ]
@@ -103,6 +104,33 @@ def test_routine_create_collects_repeated_model_options(monkeypatch: pytest.Monk
 
     assert calls[0][1]["default_model"] == ["a", "b"]  # type: ignore[index]
     assert calls[0][1]["default_effort"] == "high"  # type: ignore[index]
+
+
+@pytest.mark.unit
+def test_routine_create_collects_repeated_harnesses_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(201, {"routine_id": "rtn_1", "name": "nightly"})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    CliRunner().invoke(
+        hub_group,
+        [
+            "routine",
+            "create",
+            "nightly",
+            "alpha",
+            "blizzard",
+            "--harnesses",
+            "claude_code",
+            "--harnesses",
+            "codex",
+        ],
+    )
+
+    assert calls[0][1]["default_harnesses"] == ["claude_code", "codex"]  # type: ignore[index]
 
 
 @pytest.mark.unit
@@ -169,6 +197,31 @@ def test_routine_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -
     assert "nightly" in result.output
     assert "blizzard" in result.output
     assert "basic" in result.output
+
+
+@pytest.mark.unit
+def test_routine_show_prints_the_harnesses_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        if url.endswith("/scopes"):
+            return _FakeResponse(200, ["blizzard"])
+        return _FakeResponse(
+            200,
+            {
+                "routine_id": "rtn_1",
+                "name": "nightly",
+                "graph_name": "alpha",
+                "default_scope_slug": "blizzard",
+                "default_model": [],
+                "default_effort": None,
+                "default_harnesses": ["claude_code", "codex"],
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["routine", "show", "rtn_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "default harnesses: claude_code, codex" in result.output
 
 
 @pytest.mark.unit
@@ -242,6 +295,7 @@ def test_routine_edit_reads_the_current_name_then_patches(monkeypatch: pytest.Mo
                 "default_scope_slug": "blizzard",
                 "default_model": [],
                 "default_effort": None,
+                "default_harnesses": [],
             },
         )
     ]

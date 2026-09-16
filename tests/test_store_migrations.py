@@ -898,6 +898,12 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260830_1835_work_item_runs", "garden_proposals", ("source_artifact_id", "ref")),
     ("hub", "20260906_1130_routine_scopes_join", "graph_nodes", ("mode",), "removed"),
     ("hub", "20260907_1000_event_log_runner_id_nullable", "transcript_segments", ("content_digest",)),
+    ("hub", "20260914_1000_hub_harness_provenance", "graph_sessions", ("harnesses",)),
+    ("hub", "20260914_1000_hub_harness_provenance", "chunks", ("default_harnesses",)),
+    # `routines` has no entry here: its create-table revision (20260828_1000_scopes_and_
+    # routines.py) imports `routines` live off `schema.py` rather than a frozen local
+    # snapshot (`default_model`/`default_effort` are absent from this list for the same
+    # reason), so `default_harnesses` is already present from that revision onward.
     # runner tree — instance 6
     (
         "runner",

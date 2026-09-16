@@ -1275,6 +1275,14 @@
             ],
             "title": "Default Effort"
           },
+          "default_harnesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Harnesses",
+            "type": "array"
+          },
           "default_model": {
             "default": [],
             "items": {
@@ -1618,6 +1626,20 @@
             ],
             "title": "Default Effort"
           },
+          "default_harnesses": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Harnesses"
+          },
           "default_model": {
             "anyOf": [
               {
@@ -1658,7 +1680,7 @@
         "type": "object"
       },
       "ChunkPatchResponse": {
-        "description": "The result of one ``PATCH /chunks/{id}`` (issues #124, #144) \u2014 the chunk's editable build\nproperties after the edit, carried together since a PATCH can apply more than one at once.",
+        "description": "The result of one ``PATCH /chunks/{id}`` (issues #124, #144, blizzard#432) \u2014 the chunk's\neditable build properties after the edit, carried together since a PATCH can apply more than\none at once.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -1674,6 +1696,14 @@
               }
             ],
             "title": "Default Effort"
+          },
+          "default_harnesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Harnesses",
+            "type": "array"
           },
           "default_model": {
             "default": [],
@@ -1913,6 +1943,14 @@
               }
             ],
             "title": "Default Effort"
+          },
+          "default_harnesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Harnesses",
+            "type": "array"
           },
           "default_model": {
             "default": [],
@@ -4073,7 +4111,7 @@
         "type": "object"
       },
       "GraphSessionView": {
-        "description": "One graph-level named session declaration (issue #144).\n\n``model`` is a prioritized preference list of opaque strings, resolved left-to-right at\nsession mint; the hub interprets none of it, ``effort``, or ``compaction_window``.",
+        "description": "One graph-level named session declaration (issue #144).\n\n``model`` is a prioritized preference list of opaque strings, resolved left-to-right at\nsession mint; the hub interprets none of it, ``effort``, or ``compaction_window``.\n``harnesses`` is the session's own acceptable harness set, authored order\n(blizzard#432) \u2014 empty means no constraint.",
         "properties": {
           "compaction_window": {
             "anyOf": [
@@ -4096,6 +4134,14 @@
               }
             ],
             "title": "Effort"
+          },
+          "harnesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Harnesses",
+            "type": "array"
           },
           "model": {
             "default": [],
@@ -5940,6 +5986,14 @@
             ],
             "title": "Default Effort"
           },
+          "default_harnesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Harnesses",
+            "type": "array"
+          },
           "default_model": {
             "default": [],
             "items": {
@@ -5982,6 +6036,14 @@
               }
             ],
             "title": "Default Effort"
+          },
+          "default_harnesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Harnesses",
+            "type": "array"
           },
           "default_model": {
             "default": [],
@@ -6148,6 +6210,14 @@
               }
             ],
             "title": "Default Effort"
+          },
+          "default_harnesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Harnesses",
+            "type": "array"
           },
           "default_model": {
             "default": [],

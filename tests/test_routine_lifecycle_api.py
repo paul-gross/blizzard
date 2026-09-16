@@ -167,6 +167,44 @@ def test_edit_changes_graph_default_scope_and_model_effort_defaults(tmp_path: Pa
     assert body["default_effort"] == "high"
 
 
+def test_create_and_edit_carry_a_harnesses_default(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub, _GRAPH_A)
+    _mint_graph(hub, _GRAPH_B)
+    routine = _create(hub, default_harnesses=["claude_code"])
+    assert routine["default_harnesses"] == ["claude_code"]
+
+    resp = hub.client.patch(
+        f"/api/routines/{routine['routine_id']}",
+        json={
+            "name": "nightly",
+            "graph_name": "beta",
+            "default_scope_slug": "blizzard",
+            "default_harnesses": ["codex"],
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["default_harnesses"] == ["codex"]
+
+
+def test_create_with_a_duplicate_harnesses_entry_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+
+    resp = hub.client.post(
+        "/api/routines",
+        json={
+            "name": "nightly",
+            "graph_name": "alpha",
+            "default_scope_slug": "blizzard",
+            "default_harnesses": ["claude_code", "claude_code"],
+        },
+    )
+
+    assert resp.status_code == 422, resp.text
+
+
 def test_edit_naming_an_unresolved_graph_is_refused_naming_it(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _mint_graph(hub)

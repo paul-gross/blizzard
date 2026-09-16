@@ -1171,7 +1171,7 @@
           "short_help": "Resume a paused CHUNK \u2014 the runner resumes the parked worker in place (issue #46)."
         },
         "set": {
-          "help": "Repin CHUNK's graph and/or default model/effort in one call (issues #104, #144).\n\nA pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and\napplied all-or-nothing. At least one option is required; 409 for the defaults once\nCHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271).",
+          "help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144,\nblizzard#432).\n\nA pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and\napplied all-or-nothing. At least one option is required; 409 for the defaults once\nCHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271).",
           "params": [
             {
               "hidden": false,
@@ -1220,6 +1220,17 @@
             {
               "hidden": false,
               "kind": "option",
+              "name": "default_harnesses",
+              "opts": [
+                "--default-harnesses"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
               "name": "as_json",
               "opts": [
                 "--json"
@@ -1241,7 +1252,7 @@
             }
           ],
           "path": "hub chunk set",
-          "short_help": "Repin CHUNK's graph and/or default model/effort in one call (issues #104, #144)."
+          "short_help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144, blizzard#432)."
         },
         "show": {
           "help": "One chunk's full aggregate \u2014 status, current node, route, pointers, cost.",
@@ -3148,6 +3159,17 @@
             {
               "hidden": false,
               "kind": "option",
+              "name": "default_harnesses",
+              "opts": [
+                "--harnesses"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
               "name": "as_json",
               "opts": [
                 "--json"
@@ -3172,7 +3194,7 @@
           "short_help": "Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope."
         },
         "edit": {
-          "help": "Change ROUTINE_ID's graph, default scope, and model/effort defaults; its name\nnever changes here.",
+          "help": "Change ROUTINE_ID's graph, default scope, and model/effort/harnesses defaults; its\nname never changes here.",
           "params": [
             {
               "hidden": false,
@@ -3232,6 +3254,17 @@
             {
               "hidden": false,
               "kind": "option",
+              "name": "default_harnesses",
+              "opts": [
+                "--harnesses"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
               "name": "as_json",
               "opts": [
                 "--json"
@@ -3253,7 +3286,7 @@
             }
           ],
           "path": "hub routine edit",
-          "short_help": "Change ROUTINE_ID's graph, default scope, and model/effort defaults; its name never changes here."
+          "short_help": "Change ROUTINE_ID's graph, default scope, and model/effort/harnesses defaults; its name never changes here."
         },
         "list": {
           "help": "List every routine, newest first \u2014 routine_id, name, graph, default scope.",

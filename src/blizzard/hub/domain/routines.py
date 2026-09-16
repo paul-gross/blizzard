@@ -69,6 +69,9 @@ class Routine:
     created_at: datetime
     default_model: list[str] = field(default_factory=list)
     default_effort: str | None = None
+    # The routine's default harness preference (blizzard#432) — the `default_model`
+    # shape it clones: empty means *express no preference*.
+    default_harnesses: list[str] = field(default_factory=list)
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
@@ -101,6 +104,7 @@ class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
         default_scope_slug: str,
         default_model: list[str],
         default_effort: str | None,
+        default_harnesses: list[str],
     ) -> Routine:
         """Change everything but ``name``/``routine_id`` in place (D3)."""
         ...
@@ -166,6 +170,7 @@ class RoutineAuthoring:
         default_scope_slug: ScopeSlug,
         default_model: list[str] | None = None,
         default_effort: str | None = None,
+        default_harnesses: list[str] | None = None,
     ) -> Routine:
         if self._routines.get_by_name(name) is not None:
             raise RoutineNameTakenError(name)
@@ -179,6 +184,7 @@ class RoutineAuthoring:
             created_at=self._clock.now(),
             default_model=list(default_model or []),
             default_effort=default_effort,
+            default_harnesses=list(default_harnesses or []),
         )
         self._routines.create(routine)
         self._routine_scopes.link(routine.routine_id, scope.slug)
@@ -193,6 +199,7 @@ class RoutineAuthoring:
         default_scope_slug: ScopeSlug,
         default_model: list[str] | None = None,
         default_effort: str | None = None,
+        default_harnesses: list[str] | None = None,
     ) -> Routine:
         if name != routine.name:
             raise RoutineNameImmutableError(routine.name)
@@ -204,6 +211,7 @@ class RoutineAuthoring:
             default_scope_slug=scope.slug,
             default_model=list(default_model or []),
             default_effort=default_effort,
+            default_harnesses=list(default_harnesses or []),
         )
         # The new default is linked; a previous default is deliberately left linked —
         # the routine still sweeps it, and a set larger than its default is legal.

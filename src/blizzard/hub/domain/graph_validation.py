@@ -107,6 +107,7 @@ class Validator:
             self.errors.append(f"session `{name}`: `effort` must be a non-empty string")
         if decl.compaction_window is not None and not decl.compaction_window.strip():
             self.errors.append(f"session `{name}`: `compaction_window` must be a non-empty string")
+        self._check_harnesses(name, decl.harnesses)
         rotate = decl.rotate
         if rotate is None:
             return
@@ -117,6 +118,17 @@ class Validator:
         ):
             if value is not None and value <= 0:
                 self.errors.append(f"session `{name}`: `rotate.{field_name}` must be a positive number")
+
+    def _check_harnesses(self, name: str, harnesses: list[str]) -> None:
+        """A session's acceptable harness set (blizzard#432 D1): every entry non-blank,
+        no duplicate — an authored empty list is rejected earlier, at parse (D2)."""
+        seen: set[str] = set()
+        for entry in harnesses:
+            if not entry.strip():
+                self.errors.append(f"session `{name}`: `harnesses` entries must be non-empty strings")
+            elif entry in seen:
+                self.errors.append(f"session `{name}`: `harnesses` entries must be unique — duplicate `{entry}`")
+            seen.add(entry)
 
     def _check_artifacts(self) -> None:
         """Every graph-scoped `artifacts:` name is legal, collides with no node's `produces:`

@@ -123,6 +123,9 @@ graph_sessions = Table(
     Column("rotate_max_invocations", Integer, nullable=True),
     # The compaction window, opaque like `effort`; null declares none.
     Column("compaction_window", String, nullable=True),
+    # The session's acceptable harness set (blizzard#432) — JSON `list[str]`, authored
+    # order, the `model` column's own shape. Null declares no constraint.
+    Column("harnesses", Text, nullable=True),
 )
 
 # The graph-scoped `artifacts:` declarations — the `graph_sessions` shape, one row
@@ -202,6 +205,9 @@ routines = Table(
     # empty: an empty preference means express none.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
+    # The routine's default harness preference (blizzard#432) — the `default_model`
+    # shape: JSON `list[str]`, nullable, minted empty meaning express none.
+    Column("default_harnesses", Text, nullable=True),
     Column("created_at", UtcDateTime, nullable=False),
     UniqueConstraint("name", name="uq_routines_name"),
 )
@@ -233,6 +239,9 @@ chunks = Table(
     # Both nullable and minted empty: an empty preference means *express none*.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
+    # The chunk's default harness preference (blizzard#432) — the `default_model` shape:
+    # JSON `list[str]`, nullable, minted empty meaning express none.
+    Column("default_harnesses", Text, nullable=True),
     # The chunk's standing intent to migrate at its next transition (issue #124) — a JSON
     # `{"mode", "graph_id", "node_name"}` blob, read whole; NULL while no intent is set.
     Column("intended_migration", Text, nullable=True),

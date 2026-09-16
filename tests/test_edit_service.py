@@ -78,7 +78,7 @@ class _FakeChunkRepo:
 
     facts: ChunkFacts | None
     graphs_set: list[tuple[str, str]] = field(default_factory=list)
-    defaults_set: list[tuple[str, list[str], str | None]] = field(default_factory=list)
+    defaults_set: list[tuple[str, list[str], str | None, list[str]]] = field(default_factory=list)
     intended_migrations_set: list[tuple[str, IntendedMigration | None]] = field(default_factory=list)
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
@@ -87,8 +87,10 @@ class _FakeChunkRepo:
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
         self.graphs_set.append((chunk_id, graph_id))
 
-    def set_defaults(self, chunk_id: str, *, default_model: list[str], default_effort: str | None) -> None:
-        self.defaults_set.append((chunk_id, default_model, default_effort))
+    def set_defaults(
+        self, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
+    ) -> None:
+        self.defaults_set.append((chunk_id, default_model, default_effort, default_harnesses))
 
     def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
         self.intended_migrations_set.append((chunk_id, intended))
@@ -209,7 +211,18 @@ def test_set_defaults_writes_on_a_not_ready_chunk() -> None:
 
     service.set_defaults(_CHUNK, default_model=["blizzard:basic"], default_effort="medium")
 
-    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium")]
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium", [])]
+
+
+def test_set_defaults_also_writes_default_harnesses() -> None:
+    repo = _FakeChunkRepo(facts=_not_ready_facts())
+    service = _service(repo)
+
+    service.set_defaults(
+        _CHUNK, default_model=["blizzard:basic"], default_effort="medium", default_harnesses=["claude_code"]
+    )
+
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium", ["claude_code"])]
 
 
 def test_set_graph_writes_on_a_ready_unclaimed_chunk() -> None:
@@ -229,7 +242,7 @@ def test_set_defaults_writes_on_a_ready_unclaimed_chunk() -> None:
 
     service.set_defaults(_CHUNK, default_model=["blizzard:basic"], default_effort="medium")
 
-    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium")]
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium", [])]
 
 
 @pytest.mark.parametrize(
@@ -350,7 +363,7 @@ def test_defaults_stay_editable_on_a_ready_chunk_that_has_already_moved() -> Non
 
     service.set_defaults(_CHUNK, default_model=["blizzard:basic"], default_effort="medium")
 
-    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium")]
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium", [])]
 
 
 def test_set_graph_reports_chunk_not_editable_before_checking_a_retired_target() -> None:
@@ -415,7 +428,7 @@ def test_edit_with_no_intended_migration_field_at_all_leaves_it_untouched() -> N
 
     assert repo.intended_migrations_set == []
     # `default_effort` was not supplied, so the write carries its current value.
-    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], None)]
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], None, [])]
     # graph_id was never supplied — confirms UNSET, not just "no migration field".
     assert ChunkEdit().graph_id is UNSET
 
@@ -516,7 +529,35 @@ def test_edit_applies_every_supplied_field_in_one_edit() -> None:
     )
 
     assert repo.graphs_set == [("chk_1", "gr_2")]
-    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "high")]
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "high", [])]
+
+
+def test_edit_naming_only_default_harnesses_leaves_the_other_two_defaults_at_their_current_values() -> None:
+    chunk = Chunk(
+        chunk_id="chk_1",
+        graph_id="gr_1",
+        work_refs=[],
+        minted_at=_T0,
+        default_model=["blizzard:basic"],
+        default_effort="medium",
+    )
+    repo = _FakeChunkRepo(facts=_ready_facts())
+    service = _service(repo)
+
+    service.edit(chunk, ChunkEdit(default_harnesses=["claude_code"]))
+
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium", ["claude_code"])]
+
+
+def test_edit_refuses_default_harnesses_once_claimed() -> None:
+    repo = _FakeChunkRepo(facts=_running_facts())
+    service = _service(repo)
+
+    with pytest.raises(ChunkNotEditable) as excinfo:
+        service.edit(_CHUNK, ChunkEdit(default_harnesses=["claude_code"]))
+
+    assert excinfo.value.field == "default_harnesses"
+    assert repo.defaults_set == []
 
 
 def test_edit_refuses_a_mixed_body_on_one_field_and_writes_nothing() -> None:

@@ -629,6 +629,7 @@ def patch_chunk(
         graph_id=updated.graph_id,
         default_model=list(updated.default_model),
         default_effort=updated.default_effort,
+        default_harnesses=list(updated.default_harnesses),
         intended_migration=ChunkView.of(services, updated, facts=facts).intended_migration(),
     )
 
