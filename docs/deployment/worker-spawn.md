@@ -82,8 +82,9 @@ Code's xhigh. Nothing substitutes downward when a tier is unmapped — aliases a
 degradation is authored.
 
 A model preference list resolves left to right: the first entry the runner can resolve wins, an unresolvable entry (an
-unmapped alias, another harness's name) is skipped rather than failing the spawn, and a fully unresolvable list falls
-back to the runner's default model with a logged note naming what it skipped.
+unmapped alias, another harness's name) is skipped rather than failing the spawn. For a single acceptable harness — the
+declared `harnesses:`/chunk `default_harnesses` set naming exactly one, or naming none at all — a fully unresolvable
+list falls back to the runner's default model with a logged note naming what it skipped, exactly as today.
 
 A session's model is applied at mint and on no resume after, resting on the harness restoring a resumed session's own
 model — a harness configuration that defeats that restore runs the lineage on the wrong model with every test tier still
@@ -92,13 +93,27 @@ session's effort across `--resume` (it reverts to the settings-resolved default)
 drop on every member of a resuming pool — the runner therefore passes `--effort` on every invocation, at a small
 measured cost.
 
+## Acceptable harness set
+
+A `sessions:` entry's `harnesses:` (and a chunk's `default_harnesses`) name the acceptable set a fresh mint may spawn
+under, resolved harness-primary, model-inner: `HarnessSelector` walks the set in declared order, and for whichever
+harness this runner can dispatch to, that harness's own model preference resolves as above — never the other way
+around, so a later harness resolving an earlier-preferred model still loses to an earlier harness resolving a later
+one. With two or more acceptable harnesses, resolution is strict: a harness resolving none of the model preference is
+skipped entirely rather than falling back within it, so the single-harness fallback above holds only for that
+single-member case — a multi-harness set instead moves on to the next member, and only escalates
+(`no-acceptable-harness`, [observability.md](./observability.md)) once every member is exhausted. A retry keeps its
+prior lease's own owner when that owner is still a member of the (possibly since-edited) acceptable set, and escalates
+the same way when it has fallen out of one.
+
 ## Compaction windows
 
-A `sessions:` entry can carry an optional fourth facet, a compaction window: an opaque string passed straight through to
-Claude Code's `--autocompact` flag on every fleet-driven invocation (spawn, judge, resume-with-message). Whether a
-harness restores a resumed session's compaction window is unmeasured, so the runner never bets on stickiness: it stamps
-the resolved window on the lease at mint and reasserts it from that stamp on every resume, as it does effort; an
-unrecognized or empty value is dropped with one log line, never failing a spawn.
+A `sessions:` entry can carry an optional compaction window facet — one of five, alongside model, effort, rotation
+bounds, and the harness set — an opaque string passed straight through to Claude Code's `--autocompact` flag on every
+fleet-driven invocation (spawn, judge, resume-with-message). Whether a harness restores a resumed session's compaction
+window is unmeasured, so the runner never bets on stickiness: it stamps the resolved window on the lease at mint and
+reasserts it from that stamp on every resume, as it does effort; an unrecognized or empty value is dropped with one log
+line, never failing a spawn.
 
 The window-versus-rotation ordering is the whole authoring decision: set below `rotate.max_context_tokens` — the only
 rotation bound a window is commensurable with — the window fires repeatedly inside one long node, costing the worker its

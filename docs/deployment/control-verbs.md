@@ -57,11 +57,11 @@ starts clean. restart keeps the claim: route, tenure, and held environments surv
 worktree with the work on disk and the superseded step's artifacts readable — and like pause, no retry is consumed, so
 restarting a thrashing step repeatedly never escalates the chunk being rescued.
 
-The re-entry is stamped by the target graph's declarations — its `sessions:` model, effort, and compaction window —
-which is the point: a chunk thrashing under a stale window moves onto the fixed mint and re-enters under it immediately,
-with no node-step run to manufacture a transition. Whatever parked the chunk goes with a restart: an open ask is
-answered with a fixed system answer, an open gate decision closed, an open escalation superseded — nothing is left to
-re-park it at a node it no longer occupies.
+The re-entry is stamped by the target graph's declarations — its `sessions:` model, effort, compaction window, and
+harness set — which is the point: a chunk thrashing under a stale window moves onto the fixed mint and re-enters under
+it immediately, with no node-step run to manufacture a transition. Whatever parked the chunk goes with a restart: an
+open ask is answered with a fixed system answer, an open gate decision closed, an open escalation superseded — nothing
+is left to re-park it at a node it no longer occupies.
 
 `--node` defaults to the chunk's current node — the common case, restarting a thrashing step; on a chunk that has never
 moved, the default is the entry node of whichever graph the move lands on. Like stop and unlike detach, restart needs no
