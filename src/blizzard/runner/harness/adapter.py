@@ -157,7 +157,15 @@ class IHarnessModelResolution(Protocol):
         first resolvable entry wins; an unresolvable entry is skipped, never an error; an
         empty or fully-unresolvable list falls back to the adapter default. Tier aliases
         are unordered roles, never a scale — nothing substitutes downward (pinned by
-        ``tests/test_pin_runner_harness.py``)."""
+        ``tests/test_pin_runner_harness.py``). Expressed in terms of :meth:`resolve_model_strict`,
+        the one home the adapter-default fallback keeps (blizzard#432 D6)."""
+        ...
+
+    def resolve_model_strict(self, preferences: Sequence[str]) -> str | None:
+        """:meth:`resolve_model`'s own strict half: the same left-to-right walk, but ``None``
+        rather than the adapter default when nothing in ``preferences`` resolves (blizzard#432
+        D6) — the "nothing authored resolved" a multi-harness selection reads, which
+        :meth:`resolve_model`'s always-a-model contract cannot itself express."""
         ...
 
     def resolve_effort(self, value: str | None) -> str | None:

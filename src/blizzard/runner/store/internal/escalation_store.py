@@ -13,8 +13,9 @@ from blizzard.runner.store.schema import escalation_closures, lease_closures, le
 
 _log = get_logger("blizzard.runner.store")
 
-# The closure reasons "open escalation" derives from (issue #51): ordinary, and the owner-unresolvable mint's own.
-_ESCALATION_REASONS = ("escalated", "owner-unresolvable-mint")
+# The closure reasons "open escalation" derives from (issue #51): ordinary, the
+# owner-unresolvable mint's own, and the no-acceptable-harness mint's own (blizzard#432 D12).
+_ESCALATION_REASONS = ("escalated", "owner-unresolvable-mint", "no-acceptable-harness-mint")
 
 
 class EscalationStore:

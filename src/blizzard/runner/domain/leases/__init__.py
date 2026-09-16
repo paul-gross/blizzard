@@ -144,7 +144,9 @@ class ClosedLeaseRecord:
     """A lease joined with its closure fact — the panel's recent-history read (issue #29).
     ``reason`` is the closure vocabulary: ``transitioned`` | ``reaped`` | ``failed`` |
     ``escalated`` | ``parked`` | ``released`` | ``owner-unresolvable-mint`` (zero-budget,
-    minted only to escalate an unresolvable resume owner)."""
+    minted only to escalate an unresolvable resume owner) | ``no-acceptable-harness-mint``
+    (zero-budget, minted only to escalate a mint no acceptable harness could serve,
+    blizzard#432 D12)."""
 
     lease: LeaseRecord
     reason: str

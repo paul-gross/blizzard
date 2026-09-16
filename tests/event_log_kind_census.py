@@ -37,6 +37,7 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "needs-human": Projected("hub/domain/work.py:EventFeed._projected", "critical"),
     "worker-lost": Recorded("runner/loop/attempt.py:Attempt.fail", "critical"),
     "owner-unresolvable": Recorded("runner/loop/attempt.py:Attempt.escalate_owner_unresolvable", "critical"),
+    "no-acceptable-harness": Recorded("runner/loop/attempt.py:Attempt.escalate_no_acceptable_harness", "critical"),
     "hub-node-unroutable-outcome": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._route", "critical"),
     "attempt-failed": Recorded("runner/loop/attempt.py:Attempt.fail", "warning"),
     "command-failed": Recorded("runner/loop/outbound.py:OutboundFacts.command_failed", "warning"),

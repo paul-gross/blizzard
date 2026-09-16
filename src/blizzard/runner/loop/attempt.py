@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -17,6 +18,7 @@ from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHar
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
+from blizzard.runner.loop.session import SkippedHarness
 from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.runner.loop.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
 from blizzard.wire.facts import EVENT_RECORDED
@@ -35,6 +37,11 @@ PREEMPTED = "preempted"  # an operator restart re-aimed the chunk (#370): envs a
 
 # The owner-unresolvable escalation mint's own closure reason (store-only, never published).
 ESCALATION_MINT = "owner-unresolvable-mint"
+
+# The no-acceptable-harness escalation mint's own closure reason (store-only, never
+# published) — blizzard#432 D12's owner-less mint, distinct from `ESCALATION_MINT` above
+# since neither recorded owner nor prior session backs it.
+NO_ACCEPTABLE_HARNESS_MINT = "no-acceptable-harness-mint"
 
 # ABANDON — the reassigned/detached release, in two windows. Release runs BEFORE the closure so
 # the still-active lease stays the handle recovery re-derives the idempotent abandon from.
@@ -65,6 +72,10 @@ _ATTEMPT_ABANDONED: EventLogKind = "attempt-abandoned"
 
 #: Surfaced when an existing session's recorded harness owner cannot be dispatched to.
 _OWNER_UNRESOLVABLE: EventLogKind = "owner-unresolvable"
+
+#: Surfaced when a fresh mint's every acceptable harness is unknown, unavailable, or
+#: resolves no authored tier (blizzard#432 D12).
+_NO_ACCEPTABLE_HARNESS: EventLogKind = "no-acceptable-harness"
 
 
 @dataclass(frozen=True)
@@ -160,6 +171,23 @@ class Attempt:
             return
         except HubClientError:
             return  # the closed attempt is durable; FILL/ADVANCE re-drives next tick
+        acceptable = envelope.node.session_harnesses
+        if acceptable and lease.harness_id not in acceptable:
+            # The failed attempt's own owner has fallen out of a since-edited acceptable
+            # set (blizzard#432 D9) — never a candidate to advance past to the next member,
+            # so this is a membership check, not a resolvability one (that half already ran
+            # ahead of `fail`'s own requeue-or-escalate branch, via `_owner_block`). `fail`
+            # already closed this lease, so this reaches D12's owner-less mint, not the
+            # still-open-lease entry `_owner_block` guards.
+            assert lease.harness_id is not None  # every requeue-reachable lease was minted under a recorded owner
+            Spawner(self.ctx).escalate_no_acceptable_harness(
+                lease.chunk_id,
+                envelope,
+                attempted=acceptable,
+                skipped=(SkippedHarness(lease.harness_id, "not-a-member"),),
+                via="requeue",
+            )
+            return
         _log.info("requeuing at node", chunk_id=lease.chunk_id, node=lease.node_name)
         # A retry mints a new session, but stays under the failed lease's own mint owner —
         # carried even when that mint never reached spawn-return.
@@ -275,6 +303,37 @@ class Attempt:
         # resolution `record_resume_clear` closes here, not a fourth pending state.
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         self.escalate(reason=f"owner {status}: {session.harness_id}")
+
+    def escalate_no_acceptable_harness(
+        self, *, attempted: Sequence[str], skipped: Sequence[SkippedHarness], via: str
+    ) -> None:
+        """Escalate this owner-less, never-spawned lease in place because no member of the
+        envelope's acceptable harness set could serve the mint (blizzard#432 D12) —
+        ``Spawner.escalate_no_acceptable_harness``'s own shared entry, reached alike from a
+        fresh mint's exhausted selection and from :meth:`requeue`'s membership guard. Closes
+        it itself, same as :meth:`_escalate_owner_unresolvable`: never an open lease, so
+        neither a pid to kill nor an elicitation that could be in flight."""
+        lease = self.lease
+        now = self.ctx.clock.now()
+        message = f"escalated — no acceptable harness could serve this mint (via {via})"
+        event = {
+            "severity": EVENT_LOG_SEVERITY[_NO_ACCEPTABLE_HARNESS],
+            "kind": _NO_ACCEPTABLE_HARNESS,
+            "chunk_id": lease.chunk_id,
+            "lease_id": lease.lease_id,
+            "node_name": lease.node_name,
+            "message": message,
+            "detail": {
+                "via": via,
+                "attempted": list(attempted),
+                "skipped": [{"harness_id": s.harness_id, "reason": s.reason} for s in skipped],
+            },
+        }
+        self.close(ESCALATED, now, event, closure_reason=NO_ACCEPTABLE_HARNESS_MINT)
+        # Resolved inline, same as `_escalate_owner_unresolvable` — escalated is a third
+        # resolution `record_resume_clear` closes here, not a fourth pending state.
+        self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        self.escalate(reason="no acceptable harness")
 
     def abandon(self, *, killed: bool = False, via: str) -> None:
         """Release a chunk the hub reassigned, detached, or no longer knows about (blizzard#9) —

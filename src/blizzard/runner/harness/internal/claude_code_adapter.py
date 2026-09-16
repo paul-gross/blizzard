@@ -182,7 +182,26 @@ class ClaudeCodeAdapter:
         return result.stdout.strip() or result.stderr.strip() or None
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
-        """Left-to-right; first entry that resolves wins; unresolvable entries skipped."""
+        """Left-to-right; first entry that resolves wins; an empty or fully-unresolvable list
+        falls back to the adapter default — :meth:`resolve_model_strict` is the walk, this is
+        its one fallback-composing caller (blizzard#432 D6)."""
+        resolved = self.resolve_model_strict(preferences)
+        if resolved is not None:
+            return resolved
+        if preferences:
+            # Never a spawn failure: an all-unresolvable list is what a mixed-harness
+            # fleet produces, so fall back and say so.
+            _log.info(
+                "no model preference resolved; falling back to the adapter default",
+                skipped=list(preferences),
+                fallback=self._model,
+            )
+        return self._model
+
+    def resolve_model_strict(self, preferences: Sequence[str]) -> str | None:
+        """Left-to-right; first entry that resolves wins; unresolvable entries skipped;
+        ``None`` when nothing in ``preferences`` resolved — no adapter-default fallback,
+        the distinction a multi-harness selection needs (blizzard#432 D6)."""
         skipped: list[str] = []
         for entry in preferences:
             resolved = self._resolve_one_model(entry)
@@ -191,15 +210,7 @@ class ClaudeCodeAdapter:
                     _log.info("skipped unresolvable model preferences", skipped=skipped, resolved=resolved)
                 return resolved
             skipped.append(entry)
-        if skipped:
-            # Never a spawn failure: an all-unresolvable list is what a mixed-harness
-            # fleet produces, so fall back and say so.
-            _log.info(
-                "no model preference resolved; falling back to the adapter default",
-                skipped=skipped,
-                fallback=self._model,
-            )
-        return self._model
+        return None
 
     def _resolve_one_model(self, entry: str) -> str | None:
         """One preference entry to a native name, or ``None`` if this adapter cannot."""

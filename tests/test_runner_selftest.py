@@ -320,6 +320,9 @@ class _HangingAdapter:
     def resolve_model(self, preferences: Sequence[str]) -> str:
         return "fake-model"
 
+    def resolve_model_strict(self, preferences: Sequence[str]) -> str | None:
+        return "fake-model" if preferences else None
+
     def resolve_effort(self, value: str | None) -> str | None:
         return value
 
@@ -458,6 +461,9 @@ class _FixedPidAdapter:
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         return "fake-model"
+
+    def resolve_model_strict(self, preferences: Sequence[str]) -> str | None:
+        return "fake-model" if preferences else None
 
     def resolve_effort(self, value: str | None) -> str | None:
         return value

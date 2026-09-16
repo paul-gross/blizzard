@@ -30,7 +30,7 @@ from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
 from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
-from blizzard.runner.loop.session import SessionResolver
+from blizzard.runner.loop.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.steps import ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.transcript_backfill import (
@@ -190,6 +190,7 @@ class LoopWiring:
                 harnesses=harnesses,
                 transcripts_wired=True,
             ),
+            harness_selector=HarnessSelector(harnesses=harnesses),
             env_release=EnvironmentRelease(
                 environments=stores.environments,
                 leases=stores.lease_record,
