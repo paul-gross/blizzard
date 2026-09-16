@@ -32,7 +32,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.spawn import Spawner
-from blizzard.runner.loop.steps import Advance, Reap
+from blizzard.runner.loop.steps import Advance, Fill, Reap
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import LEASE_MINTED
 from tests.runner_fakes import (
@@ -40,6 +40,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    claimed_outcome,
     make_context,
     make_envelope,
     make_store,
@@ -500,6 +501,73 @@ def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(
 
     assert provider.released == []
     assert store.held_environment_ids() == ["e1"]
+
+
+# `InterruptedClaims.reconcile`'s deliberate absence of an open-takeover skip.
+# --------------------------------------------------------------------------- #
+
+
+def test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A hub-side park-supersede reaches this reconcile arm and reclaims into a fresh
+    attempt at the held binding, deliberately, even while an open takeover still stands
+    over the chunk — the park's own guarantee does not outlive the park itself."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+    )
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(chunk_id="ch_1", status=ChunkStatus.READY, latest_epoch=1)
+    env = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    hub.queue = []  # nothing new to fill — only the interrupted-claim reclaim should act
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    Fill(ctx).run()
+
+    assert len(hub.claims) == 1  # reclaimed rather than skipped
+    assert len(harness.spawns) == 1
+    assert store.active_lease_for_chunk("ch_1") is not None
+
+
+def test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A restart against a lease an escalation already closed reaches this reconcile arm
+    and adopts undeferred, deliberately, even while an already-fenced takeover still
+    stands open over the chunk."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    store.set_route_token("ch_1", token="tok_x", at=_NOW)
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        workdir="/ws/e1",
+        fence_epoch=2,
+        opened_at=_NOW,
+    )
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=2, route_runner_id="r1"
+    )
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], epoch=2)
+    hub.queue = []
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    Fill(ctx).run()
+
+    assert len(harness.spawns) == 1  # adopted rather than skipped
+    assert store.active_lease_for_chunk("ch_1") is not None
 
 
 # The takeover reads the session's stamps (D4, issue #144).

@@ -165,6 +165,48 @@ def test_fill_claims_acquires_binds_and_spawns(tmp_path):  # type: ignore[no-unt
 
 
 @pytest.mark.unit
+def test_fill_spawns_a_node_with_no_authored_retry_budget_at_the_configured_default(tmp_path):  # type: ignore[no-untyped-def]
+    """``nodes.md``: omitting ``retries:`` does not lift the bound — the runner supplies its
+    own configured default. Asserted against a non-default ``default_retries_max`` (5, not
+    the fixture's usual 2) so a mutant that hardcodes 2 back in cannot pass wearing green."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, retries_max=None)
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, default_retries_max=5)
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
+
+    Fill(ctx).run()
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.retries_max == 5
+
+
+@pytest.mark.unit
+def test_fill_spawns_a_node_with_an_authored_retry_budget_overriding_the_configured_default(tmp_path):  # type: ignore[no-untyped-def]
+    """An authored `retries:` overrides the runner's configured default — the resolution's
+    other branch from the omitted-authorship fallback pinned above, needed since every
+    other envelope's authored budget already equals the ordinary default (2)."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, retries_max=7)
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, default_retries_max=2)
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
+
+    Fill(ctx).run()
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.retries_max == 7
+
+
+@pytest.mark.unit
 def test_existing_session_spawn_dispatches_to_exact_owner_and_preserves_it(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     default = FakeHarness(handle=_HANDLE, verdict="pass")

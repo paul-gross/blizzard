@@ -194,6 +194,18 @@ def test_unreachable_node_is_a_warning_not_an_error() -> None:
     assert any("unreachable" in w for w in result.warnings)
 
 
+def test_entry_reaching_no_terminal_is_a_warning_not_an_error() -> None:
+    """``edges.md``: an entry with no path to the terminal is a mint-time warning, and the
+    definition still mints — the reachability warning's second arm, distinct from an
+    unreachable node."""
+    doc = _min_build_deliver()
+    doc["nodes"]["deliver"]["judgement"]["choices"]["landed"]["to"] = "build"  # type: ignore[index]
+    result = Validator.of(GraphDoc.of(doc)).result
+    assert result.ok  # warnings do not reject
+    assert not any("unreachable" in w for w in result.warnings)  # both nodes are reached
+    assert any("no path from entry" in w and "terminal" in w for w in result.warnings)
+
+
 # --- Checks gating (issue #114) ------------------------------------------------
 
 
