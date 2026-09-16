@@ -1,13 +1,11 @@
-<div class="nh-tab" data-testid="chunk-node-history-tab">
-  <div class="nh-timeline" role="region" aria-labelledby="nh-timeline-heading">
-    <div class="s-head"><span class="tag" id="nh-timeline-heading">Timeline</span></div>
-    <fleet-chunk-detail-timeline-selection
-      [detail]="detail()"
-      [selectedKey]="selectedKey()"
-      (pickStep)="pickStep.emit($event)"
-    />
-  </div>
-  <section class="nh-step">
+<fleet-kit-master-detail data-testid="chunk-node-history-tab" paneId="node-history" backLabel="Node history" listCaption="Timeline">
+  <fleet-chunk-detail-timeline-selection
+    kit-master-detail-list
+    [detail]="detail()"
+    [selectedKey]="selectedKey()"
+    (pickStep)="pickStep.emit($event)"
+  />
+  <ng-container kit-master-detail-detail>
     @if (selectedKey() === null) {
       <fleet-kit-async-state
         state="empty"
@@ -32,5 +30,5 @@
         }
       </div>
     }
-  </section>
-</div>
+  </ng-container>
+</fleet-kit-master-detail>

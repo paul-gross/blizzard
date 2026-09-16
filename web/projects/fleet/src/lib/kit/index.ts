@@ -17,6 +17,7 @@ export { KitBeacon, type BeaconTone } from './kit-beacon';
 export { KitButton } from './kit-button';
 export { KitChip, KitChips, type KitChipOption } from './kit-chips';
 export { KitMarkdown } from './kit-markdown';
+export { KitMasterDetail } from './kit-master-detail';
 export { KitMenu, KitMenuPanel } from './kit-menu';
 export { KitMenuItem, KitMenuItemRadio } from './kit-menu-item';
 export { KitOption } from './kit-option';

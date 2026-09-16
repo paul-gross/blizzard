@@ -683,7 +683,10 @@ describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-swee
           await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=node-history`);
           await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);
           let nodeHistory = root.querySelector<HTMLElement>('[data-testid="chunk-node-history-tab"]')!;
-          expect(root.querySelector('.nh-step'), `${width}px: node history shows detail beside its list`).toBeNull();
+          expect(
+            nodeHistory.querySelector('.kmd-detail'),
+            `${width}px: node history shows detail beside its list`,
+          ).toBeNull();
           expect(root.querySelector('[data-testid="node-history-back"]'), `${width}px: node history list has Back`).toBeNull();
           expectNoOverflow(nodeHistory, `${width}px node history list`);
           root.querySelector<HTMLElement>('[data-testid="selection-step"]')?.click();
@@ -729,7 +732,10 @@ describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-swee
         await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="section-node-history"]') !== null);
         await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=node-history`);
         await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="selection-step"]') !== null);
-        expect(root.querySelector('.nh-step'), 'desktop node history lost its simultaneous detail pane').not.toBeNull();
+        expect(
+          root.querySelector('[data-testid="chunk-node-history-tab"] .kmd-detail'),
+          'desktop node history lost its simultaneous detail pane',
+        ).not.toBeNull();
         await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
         await pumpUntil(harness.fixture, () => root.querySelector('[data-testid="artifacts-tab-artifact"]') !== null);
         expect(root.querySelector('[data-testid="artifacts-tab-nav"]'), 'desktop artifacts lost its nav').not.toBeNull();

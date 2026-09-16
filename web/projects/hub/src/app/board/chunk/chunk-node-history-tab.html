@@ -1,22 +1,21 @@
-<div class="nh-tab" [class.list-only]="drilldown() && !hasSelection()" data-testid="chunk-node-history-tab">
-  @if (showTimeline()) {
-    <div class="nh-timeline" role="region" aria-labelledby="nh-timeline-heading">
-      <div class="s-head"><span class="tag" id="nh-timeline-heading">Timeline</span></div>
-      <fleet-chunk-detail-timeline-selection
-        [detail]="detail()"
-        [selectedKey]="selectedKey()"
-        [graphLinkBase]="graphLinkBase"
-        (pickStep)="pickStep.emit($event)"
-      />
-    </div>
-  }
-  @if (showStep()) {
-    <section class="nh-step">
-      @if (drilldown()) {
-        <button type="button" class="nh-back" data-testid="node-history-back" (click)="pickStep.emit(null)">
-          <fleet-kit-back-bar label="Node history" />
-        </button>
-      }
+<fleet-kit-master-detail
+  data-testid="chunk-node-history-tab"
+  paneId="node-history"
+  testidPrefix="node-history"
+  backLabel="Node history"
+  listCaption="Timeline"
+  [drilldown]="drilldown()"
+  [hasSelection]="hasSelection()"
+  (back)="pickStep.emit(null)"
+>
+  <fleet-chunk-detail-timeline-selection
+    kit-master-detail-list
+    [detail]="detail()"
+    [selectedKey]="selectedKey()"
+    [graphLinkBase]="graphLinkBase"
+    (pickStep)="pickStep.emit($event)"
+  />
+  <ng-container kit-master-detail-detail>
     @if (selectedKey() === null) {
       <fleet-kit-async-state
         state="empty"
@@ -109,6 +108,5 @@
         </div>
       </fleet-kit-accordion-section>
     }
-    </section>
-  }
-</div>
+  </ng-container>
+</fleet-kit-master-detail>

@@ -11,9 +11,12 @@
   text-decoration: none;
 }
 fleet-chunk-general-tab,
-app-chunk-node-history-tab,
 app-chunk-transcripts-tab,
 fleet-chunk-artifacts-panel {
   flex: 1;
   min-height: 0;
 }
+/* No rule targets `app-chunk-node-history-tab` itself — it is `display: contents`; its
+   presentational child (`fleet-kit-master-detail`) carries its own `flex: 1; min-height: 0`
+   host (`kit-master-detail.css`), the same pattern `chunk-page.css` already documents for
+   the hub's own `app-chunk-artifacts-tab`/`app-chunk-node-history-container`. */

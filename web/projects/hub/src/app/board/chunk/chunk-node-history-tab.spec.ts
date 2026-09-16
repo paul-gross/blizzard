@@ -116,7 +116,7 @@ describe('ChunkNodeHistoryTab', () => {
     const fixture = await render({ drilldown: true });
     let el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
-    expect(el.querySelector('.nh-step')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-node-history-tab"] .kmd-detail')).toBeNull();
 
     fixture.componentRef.setInput('selectedKey', 'nd_build:1');
     await fixture.whenStable();
