@@ -63,8 +63,9 @@ class FactsCheck(Check):
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
+        facts_by_id = self.facts.load_all_facts()
         for chunk in self.record.list_all():
-            violations.extend(self.for_chunk(chunk.chunk_id, self.facts.load_facts(chunk.chunk_id)))
+            violations.extend(self.for_chunk(chunk.chunk_id, facts_by_id.get(chunk.chunk_id)))
         return violations
 
     def for_chunk(self, chunk_id: str, facts: ChunkFacts | None) -> list[Violation]:

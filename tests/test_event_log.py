@@ -19,7 +19,7 @@ from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import EscalationOpen, EventFeed, EventRow
 from blizzard.hub.store import schema as s
-from tests.support import chunk_stores, migrate_to, seed_chunk, seed_graph
+from tests.support import chunk_stores, count_queries, migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
 
@@ -209,6 +209,34 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
     opens = store.escalations.list_open_escalations()
     assert sorted(e.chunk_id for e in opens) == ["ch_a", "ch_e"]
     assert next(e.takeover_command for e in opens if e.chunk_id == "ch_a") == "cd a && resume"
+
+
+@pytest.mark.component
+def test_list_open_escalations_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
+    """``list_open_escalations``'s ``load_facts_for`` batch costs a bounded number of
+    statements per read, not one more per candidate chunk as the fleet grows."""
+
+    def _fleet(root: Path, n: int) -> tuple[ChunkStores, Engine]:
+        root.mkdir()
+        _, engine = migrate_to(root, "head")
+        with engine.begin() as conn:
+            seed_graph(conn, "gr_1", at=_T0)
+            for i in range(n):
+                seed_chunk(conn, f"ch_{i}", graph_id="gr_1", at=_T0)
+        store = chunk_stores(engine, FixedClock(_T0))
+        for i in range(n):
+            store.escalations.record_escalation(f"ch_{i}", epoch=1, takeover_command="cd a && resume", at=_at(10))
+        return store, engine
+
+    small, small_engine = _fleet(tmp_path / "small", 3)
+    large, large_engine = _fleet(tmp_path / "large", 9)
+
+    small_count = count_queries(small_engine, lambda: small.escalations.list_open_escalations())
+    large_count = count_queries(large_engine, lambda: large.escalations.list_open_escalations())
+
+    assert len(small.escalations.list_open_escalations()) == 3
+    assert len(large.escalations.list_open_escalations()) == 9
+    assert small_count == large_count
 
 
 def test_event_feed_sorts_severity_then_recency() -> None:

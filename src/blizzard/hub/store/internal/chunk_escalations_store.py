@@ -29,11 +29,12 @@ class ChunkEscalationsStore:
     def list_open_escalations(self) -> list[EscalationOpen]:
         """Every open escalation fleet-wide, each decided by ``ChunkFacts.open_escalation``
         (#293) — the rule's one implementation, never a second derivation from raw rows."""
-        newest_by_chunk = self._newest_escalation_per_chunk()
+        candidates = self._escalation_candidates(self._newest_escalation_per_chunk())
+        facts_by_id = self._facts.load_facts_for(candidates)
         return [
             EscalationOpen(chunk_id=chunk_id, recorded_at=open_.recorded_at, takeover_command=open_.takeover_command)
-            for chunk_id in self._escalation_candidates(newest_by_chunk)
-            if (facts := self._facts.load_facts(chunk_id)) is not None
+            for chunk_id in candidates
+            if (facts := facts_by_id.get(chunk_id)) is not None
             and (open_ := facts.open_escalation()) is not None
         ]
 
@@ -121,10 +122,11 @@ class ChunkEscalationsStore:
 
     def _escalation_candidates(self, newest_by_chunk) -> list[str]:  # type: ignore[no-untyped-def]
         """Chunks whose newest escalation *might* still be open — a **drop-only** narrowing that
-        keeps ``load_facts`` off the obviously-closed ones. Sound because every arm below is
-        one the authoritative rule also has, so a chunk dropped here is one ``open_escalation``
-        would drop too; arms it lacks (completion) only leave extra work for the fold, never a
-        wrong answer."""
+        trades the two statements above (the lease and requeue reads) for a smaller batch into
+        ``load_facts_for``: fewer rows in that one read, not fewer calls. Sound because every arm
+        below is one the authoritative rule also has, so a chunk dropped here is one
+        ``open_escalation`` would drop too; arms it lacks (completion) only leave extra work for
+        the fold, never a wrong answer."""
         if not newest_by_chunk:
             return []
         chunk_ids = list(newest_by_chunk)
