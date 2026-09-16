@@ -324,14 +324,14 @@
     },
     {
       "id": "takeover-park-supersede-reclaims",
-      "statement": "A hub-side supersede of an ordinary park leaves the chunk ready with no local requeue mark, so InterruptedClaims.reconcile falls to its reclaim arm and the held workdir goes to a fresh attempt — the no-attempt-runs-during-a-takeover guarantee lasts exactly as long as the park itself.",
+      "statement": "A hub-side supersede of an ordinary park leaves the chunk ready with no local requeue mark, so InterruptedClaims.reconcile falls to its reclaim arm and the held workdir goes to a fresh attempt rather than being skipped for the open takeover that had parked it.",
       "owner": "tests/test_runner_takeover.py#test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover",
       "owner_kind": "test",
       "owner_assert": {
-        "quote": "the guarantee lasts exactly as long as the park itself"
+        "quote": "does not outlive the park itself"
       },
       "markers": [
-        "guarantee lasts exactly as long as the park"
+        "guarantee does not outlive the park"
       ],
       "sites": [
         {
@@ -343,14 +343,14 @@
     },
     {
       "id": "takeover-restart-past-escalation-undeferred",
-      "statement": "A restart recorded against a lease the escalation already closed releases no route, so InterruptedClaims.reconcile falls to its adopt arm and the re-entry proceeds undeferred even while an already-fenced takeover is still recorded as open over the chunk.",
+      "statement": "A restart recorded against a lease the escalation already closed releases no route, so InterruptedClaims.reconcile falls to its adopt arm and the re-entry proceeds rather than being deferred for the already-fenced takeover still open over the chunk.",
       "owner": "tests/test_runner_takeover.py#test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed",
       "owner_kind": "test",
       "owner_assert": {
-        "quote": "against a lease the escalation already closed, nothing defers"
+        "quote": "reaches this reconcile arm and adopts undeferred"
       },
       "markers": [
-        "escalation already closed nothing defers it"
+        "already fenced takeover still stands open"
       ],
       "sites": [
         {

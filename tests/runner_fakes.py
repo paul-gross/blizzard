@@ -1069,12 +1069,9 @@ def make_envelope(
 ) -> NodeEnvelope:
     """A minimal runner-node envelope for a step test.
 
-    ``epoch`` defaults to 0 (fresh, never-leased); pass the carried-forward floor to
-    model a reclaim. ``session`` defaults ``FRESH``; ``produces`` is a bare name
-    (``kind=asset``) or an explicit :class:`~blizzard.wire.graph.ProducesEntry`; ``graph_artifacts`` defaults empty.
-    ``retries_max`` defaults to a declared budget of 2, matching every caller's prior
-    behavior; pass ``None`` to model a node that omits ``retries:``, which drives the
-    runner's own configured default instead."""
+    ``epoch`` defaults to 0 (never-leased); ``session`` defaults ``FRESH``; ``produces`` is a bare name
+    (``kind=asset``) or explicit :class:`~blizzard.wire.graph.ProducesEntry`; ``graph_artifacts`` defaults empty;
+    ``retries_max`` defaults to 2, with ``None`` modeling an omitted `retries:`."""
     from blizzard.foundation.node_steps import Executor, JudgedBy
     from blizzard.wire.envelope import EnvelopeChoice
 

@@ -208,7 +208,7 @@ class InterruptedClaims:
     ctx: LoopContext
 
     def reconcile(self) -> None:
-        """Deliberately carries no open-takeover skip — see ``test_runner_takeover.py``'s
+        """Deliberately carries no open-takeover skip — see ``tests/test_runner_takeover.py``'s
         ``test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover`` and
         ``test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed``."""
         requeue_pending = self.ctx.stores.requeue.pending_requeue_chunk_ids()  # one read per FILL, not per chunk

@@ -20,7 +20,7 @@ from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT, CheckOutcome
-from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
+from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.loop.tick import tick
@@ -71,6 +71,16 @@ def _seed_running_lease(store, *, lease="lease_1", chunk="ch_1", node_id="nd_bui
         spawned_at=_NOW,
     )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+
+# The omitted-retries default is specifically two, not merely "whatever is configured".
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_default_retries_max_is_two() -> None:
+    """``nodes.md``: an omitted `retries:` resolves to two retries specifically."""
+    assert DEFAULT_RETRIES_MAX == 2
 
 
 # RESUME keys on the pause FACT, never the derived status (issue #46).

@@ -5076,9 +5076,9 @@
   },
   "runner_fakes.py": {
    "comments": 80,
-   "docstrings": 99,
-   "over_cap": 11,
-   "total": 1130
+   "docstrings": 96,
+   "over_cap": 10,
+   "total": 1127
   },
   "service/__init__.py": {
    "comments": 0,
@@ -6815,10 +6815,10 @@
    "total": 24
   },
   "test_pin_runner_loop.py": {
-   "comments": 25,
-   "docstrings": 23,
+   "comments": 27,
+   "docstrings": 24,
    "over_cap": 0,
-   "total": 314
+   "total": 323
   },
   "test_pin_runner_misc.py": {
    "comments": 12,
@@ -7337,10 +7337,10 @@
    "total": 107
   },
   "test_runner_loop.py": {
-   "comments": 349,
-   "docstrings": 159,
+   "comments": 350,
+   "docstrings": 162,
    "over_cap": 7,
-   "total": 2894
+   "total": 2915
   },
   "test_runner_loop_build.py": {
    "comments": 3,
@@ -7490,7 +7490,7 @@
    "comments": 86,
    "docstrings": 35,
    "over_cap": 0,
-   "total": 641
+   "total": 643
   },
   "test_runner_takeover_api.py": {
    "comments": 6,

@@ -508,15 +508,16 @@ def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(
 
 
 def test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """``takeover.md``: 'supersede that park at the hub and the held workdir goes to a
-    fresh attempt' — the guarantee lasts exactly as long as the park itself, so it holds
-    even while the takeover that opened the park is still recorded as open."""
+    """A hub-side park-supersede reaches this reconcile arm and reclaims into a fresh
+    attempt at the held binding, deliberately, even while an open takeover still stands
+    over the chunk — the park's own guarantee does not outlive the park itself."""
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     store.record_takeover(
         takeover_id="tko_1",
         chunk_id="ch_1",
-        lease_id=None,
+        lease_id="lease_1",
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         workdir="/ws/e1",
         fence_epoch=None,
@@ -538,11 +539,12 @@ def test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover(tmp
 
 
 def test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """``takeover.md``: 'against a lease the escalation already closed, nothing defers
-    it' — the restart's re-entry proceeds undeferred even while an already-fenced
-    takeover is still recorded as open over the chunk."""
+    """A restart against a lease an escalation already closed reaches this reconcile arm
+    and adopts undeferred, deliberately, even while an already-fenced takeover still
+    stands open over the chunk."""
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     store.set_route_token("ch_1", token="tok_x", at=_NOW)
     store.record_takeover(
         takeover_id="tko_1",
