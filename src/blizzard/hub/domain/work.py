@@ -182,6 +182,8 @@ class Chunk:
     # declaring neither inherits; empty/``None`` means *express no preference*.
     default_model: list[str] = field(default_factory=list)
     default_effort: str | None = None
+    # The chunk's default harness preference, `default_model`'s shape: empty is no preference.
+    default_harnesses: list[str] = field(default_factory=list)
     # The chunk's standing intent to migrate onto another graph at its next transition
     # (issue #124) — ``None`` while no intent is set.
     intended_migration: IntendedMigration | None = None
@@ -194,6 +196,7 @@ def mint_chunk(
     at: datetime,
     default_model: list[str] | None = None,
     default_effort: str | None = None,
+    default_harnesses: list[str] | None = None,
 ) -> Chunk:
     """Mint a resting chunk pinned to ``graph_id`` holding ``work_refs``, timestamped at
     the caller's own already-stamped ``at`` (``bzh:injected-clock``). Every call site but
@@ -207,6 +210,7 @@ def mint_chunk(
         minted_at=at,
         default_model=list(default_model or []),
         default_effort=default_effort,
+        default_harnesses=list(default_harnesses or []),
     )
 
 

@@ -197,6 +197,10 @@
  *     explorer's two row levels once rebuilt on `KitSelectRow`, their content now
  *     projected into another component's button: a long graph name, its version count,
  *     and its right-anchored short id stay inside the list's own edge at 520/390/320px.
+ *   - projects/fleet/src/lib/graphs/graph-session-table.shell-sweep.spec.ts — the
+ *     session declaration table's six columns (the Harnesses column sitting between
+ *     Model and Effort): all six genuinely sit side by side with no column overlap
+ *     or table overflow, at 800px, graph detail's own width.
  *   - projects/hub/src/app/fleet/fleet-view.shell-sweep.spec.ts — the hub's mobile
  *     Fleet screen (the bottom-nav Fleet tab): each runner card genuinely stacks below
  *     the last with no horizontal overflow at 390/320px, and a card carrying claims, a
@@ -248,6 +252,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-explorer-list.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-session-table.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/fleet/fleet-view.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts' },
 ];

@@ -362,7 +362,7 @@ def test_edited_produces_no_activity_row(tmp_path: Path) -> None:
     """No fact table backs ``edited`` — a deliberate exclusion, not a gap."""
     store, _ = _store(tmp_path)
     store.record.set_graph("ch_1", graph_id="gr_2")
-    store.record.set_defaults("ch_1", default_model=["opus"], default_effort="high")
+    store.record.set_defaults("ch_1", default_model=["opus"], default_effort="high", default_harnesses=[])
     rows = store.events.activity_facts_since(_T0, limit=50)
     assert all(r.cause != "edited" for r in rows)
 

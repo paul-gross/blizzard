@@ -130,6 +130,8 @@ class ChunkSummary(BaseModel):
     # inherits. Empty/None is the minted state and means *express no preference*, not "unknown".
     default_model: list[str] = []
     default_effort: str | None = None
+    # The chunk's default harness preference — the `default_model` shape.
+    default_harnesses: list[str] = []
     runner_id: str | None = None
     # The count of environments the chunk's live route holds (issue #69) — 0 when unrouted; a grouped
     # chunk counts them all, so a per-runner sum does not undercount.
@@ -378,17 +380,21 @@ class ChunkPatchRequest(BaseModel):
     graph_id: str | None = None
     default_model: list[str] | None = None
     default_effort: str | None = None
+    # `None` means "leave unchanged", the `default_model` wire convention.
+    default_harnesses: list[str] | None = None
     intended_migration: IntendedMigrationPatch | None = None
 
 
 class ChunkPatchResponse(BaseModel):
-    """The result of one ``PATCH /chunks/{id}`` (issues #124, #144) — the chunk's editable build
-    properties after the edit, carried together since a PATCH can apply more than one at once."""
+    """The result of one ``PATCH /chunks/{id}`` (issues #124, #144) — the chunk's
+    editable build properties after the edit, carried together since a PATCH can apply more than
+    one at once."""
 
     chunk_id: str
     graph_id: str
     default_model: list[str] = []
     default_effort: str | None = None
+    default_harnesses: list[str] = []
     intended_migration: IntendedMigrationView | None = None
 
 
@@ -452,6 +458,8 @@ class ChunkDetail(BaseModel):
     # The chunk's default model preference and effort — see :class:`ChunkSummary`.
     default_model: list[str] = []
     default_effort: str | None = None
+    # The chunk's default harness preference — the `default_model` shape.
+    default_harnesses: list[str] = []
     # The chunk's standing migration intent (issue #124) — non-None iff an `auto` or `forced` intent
     # is set. See IntendedMigrationView.
     intended_migration: IntendedMigrationView | None = None

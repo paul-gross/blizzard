@@ -41,6 +41,7 @@ _FIELD_WINDOW: Final[dict[str, frozenset[ChunkStatus]]] = {
     "graph_id": PRE_CLAIM_STATUSES,
     "default_model": PRE_CLAIM_STATUSES,
     "default_effort": PRE_CLAIM_STATUSES,
+    "default_harnesses": PRE_CLAIM_STATUSES,
     "intended_migration": _INTENDED_MIGRATION_WINDOW,
 }
 
@@ -100,11 +101,12 @@ class ChunkEdit:
     """The fields a single all-or-nothing edit request supplies (issue #124).
 
     ``intended_migration`` and ``default_effort`` accept ``None`` to mean "clear it";
-    an empty ``default_model`` list is the same clear."""
+    an empty ``default_model``/``default_harnesses`` list is the same clear."""
 
     graph_id: str | UnsetType = field(default=UNSET)
     default_model: list[str] | UnsetType = field(default=UNSET)
     default_effort: str | None | UnsetType = field(default=UNSET)
+    default_harnesses: list[str] | UnsetType = field(default=UNSET)
     intended_migration: IntendedMigration | None | UnsetType = field(default=UNSET)
 
 
@@ -130,10 +132,24 @@ class EditService:
         """Repin the chunk to ``graph`` — a thin wrapper over :meth:`edit` (issue #124)."""
         self.edit(chunk, ChunkEdit(graph_id=graph.graph_id), graph_target=graph)
 
-    def set_defaults(self, chunk: Chunk, *, default_model: list[str], default_effort: str | None) -> None:
-        """Repin the chunk's default model/effort — a thin wrapper over :meth:`edit`
-        (issues #124, #144)."""
-        self.edit(chunk, ChunkEdit(default_model=default_model, default_effort=default_effort))
+    def set_defaults(
+        self,
+        chunk: Chunk,
+        *,
+        default_model: list[str],
+        default_effort: str | None,
+        default_harnesses: list[str] | UnsetType = UNSET,
+    ) -> None:
+        """Repin the chunk's default model/effort/harnesses — a thin wrapper over
+        :meth:`edit` (issues #124, #144)."""
+        self.edit(
+            chunk,
+            ChunkEdit(
+                default_model=default_model,
+                default_effort=default_effort,
+                default_harnesses=default_harnesses,
+            ),
+        )
 
     def edit(
         self,
@@ -151,6 +167,7 @@ class EditService:
         graph_id = edit.graph_id
         default_model = edit.default_model
         default_effort = edit.default_effort
+        default_harnesses = edit.default_harnesses
         intended_migration = edit.intended_migration
 
         with self._claim_lock:
@@ -170,6 +187,9 @@ class EditService:
             if default_effort is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "default_effort")
 
+            if default_harnesses is not UNSET:
+                self._require_editable(chunk.chunk_id, status, "default_harnesses")
+
             if intended_migration is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "intended_migration")
                 if intended_migration is not None:
@@ -177,13 +197,16 @@ class EditService:
 
             if graph_id is not UNSET:
                 self._record.set_graph(chunk.chunk_id, graph_id=graph_id)
-            if default_model is not UNSET or default_effort is not UNSET:
-                # One write for the pair, so an edit naming only one of them must carry
-                # the chunk's current value for the other rather than clearing it.
+            if default_model is not UNSET or default_effort is not UNSET or default_harnesses is not UNSET:
+                # One write for the trio, so an edit naming only one of them must carry
+                # the chunk's current value for the other two rather than clearing them.
                 self._record.set_defaults(
                     chunk.chunk_id,
                     default_model=list(chunk.default_model) if default_model is UNSET else default_model,
                     default_effort=chunk.default_effort if default_effort is UNSET else default_effort,
+                    default_harnesses=list(chunk.default_harnesses)
+                    if default_harnesses is UNSET
+                    else default_harnesses,
                 )
             if intended_migration is not UNSET:
                 self._record.set_intended_migration(chunk.chunk_id, intended=intended_migration)

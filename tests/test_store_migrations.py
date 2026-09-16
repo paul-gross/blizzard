@@ -898,6 +898,9 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260830_1835_work_item_runs", "garden_proposals", ("source_artifact_id", "ref")),
     ("hub", "20260906_1130_routine_scopes_join", "graph_nodes", ("mode",), "removed"),
     ("hub", "20260907_1000_event_log_runner_id_nullable", "transcript_segments", ("content_digest",)),
+    ("hub", "20260914_1000_hub_harness_provenance", "graph_sessions", ("harnesses",)),
+    ("hub", "20260914_1000_hub_harness_provenance", "chunks", ("default_harnesses",)),
+    ("hub", "20260914_1000_hub_harness_provenance", "routines", ("default_harnesses",)),
     # runner tree — instance 6
     (
         "runner",

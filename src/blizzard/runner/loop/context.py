@@ -23,7 +23,7 @@ from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.loop.session import SessionResolver
+from blizzard.runner.loop.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
@@ -146,6 +146,8 @@ class LoopContext:
     elicitation_files: ElicitationFiles
     usage: UsageRecorder
     sessions: SessionResolver
+    #: The fresh-mint owner selector over the acceptable harness set; a resume never reaches it.
+    harness_selector: HarnessSelector
     env_release: EnvironmentRelease
     #: Required; every recorded session's owner resolves through it, with no single-harness fallback.
     harnesses: IHarnessRegistry

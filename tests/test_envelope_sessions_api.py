@@ -43,6 +43,7 @@ sessions:
     rotate:
       max_context_tokens: 120000
       max_invocations: 30
+    harnesses: ["claude", "codex"]
   gate:
     model: ["blizzard:basic"]
 nodes:
@@ -108,6 +109,7 @@ def test_the_declaration_reaches_the_envelope_read(tmp_path: Path) -> None:
         "max_transcript_bytes": None,
         "max_invocations": 30,
     }
+    assert node["session_harnesses"] == ["claude", "codex"]
 
 
 def test_the_declaration_outranks_the_chunk_default_field_by_field(tmp_path: Path) -> None:
@@ -117,7 +119,12 @@ def test_the_declaration_outranks_the_chunk_default_field_by_field(tmp_path: Pat
     # `gate` names a model but no effort, so the chunk's effort fills that gap while its
     # model stays outranked.
     patched = hub.client.patch(
-        f"/api/chunks/{chunk_id}", json={"default_model": ["blizzard:advanced"], "default_effort": "high"}
+        f"/api/chunks/{chunk_id}",
+        json={
+            "default_model": ["blizzard:advanced"],
+            "default_effort": "high",
+            "default_harnesses": ["gemini"],
+        },
     )
     assert patched.status_code == 202, patched.text
 
@@ -126,6 +133,7 @@ def test_the_declaration_outranks_the_chunk_default_field_by_field(tmp_path: Pat
     assert node["session_model"] == ["blizzard:basic", "gpt-5.3-codex"]  # the declaration
     assert node["session_effort"] == "medium"  # also the declaration
     assert node["session_compaction_window"] == "100000"  # declaration-only, no chunk fallback exists
+    assert node["session_harnesses"] == ["claude", "codex"]  # the declaration, whole list
 
 
 def test_a_chunk_default_reaches_a_graph_that_declares_no_sessions(tmp_path: Path) -> None:
@@ -135,7 +143,12 @@ def test_a_chunk_default_reaches_a_graph_that_declares_no_sessions(tmp_path: Pat
     chunk_id = ingest(hub, [_POINTER], promote=False)
     _mint_and_pin(hub, chunk_id, _NO_SESSIONS_YAML)
     patched = hub.client.patch(
-        f"/api/chunks/{chunk_id}", json={"default_model": ["blizzard:advanced"], "default_effort": "high"}
+        f"/api/chunks/{chunk_id}",
+        json={
+            "default_model": ["blizzard:advanced"],
+            "default_effort": "high",
+            "default_harnesses": ["gemini"],
+        },
     )
     assert patched.status_code == 202, patched.text
 
@@ -146,6 +159,7 @@ def test_a_chunk_default_reaches_a_graph_that_declares_no_sessions(tmp_path: Pat
     assert node["session_effort"] == "high"
     assert node["session_compaction_window"] is None  # no chunk-level default exists to fall back to
     assert node["session_rotate"] is None
+    assert node["session_harnesses"] == ["gemini"]
 
 
 def test_a_chunk_expressing_no_preference_on_a_pre_144_graph_carries_nothing(tmp_path: Path) -> None:
@@ -160,6 +174,7 @@ def test_a_chunk_expressing_no_preference_on_a_pre_144_graph_carries_nothing(tmp
     assert node["session_effort"] is None
     assert node["session_compaction_window"] is None
     assert node["session_rotate"] is None
+    assert node["session_harnesses"] == []
 
 
 def test_the_declaration_reaches_the_claim_envelope_too(tmp_path: Path) -> None:
@@ -175,4 +190,6 @@ def test_the_declaration_reaches_the_claim_envelope_too(tmp_path: Path) -> None:
     )
 
     assert resp.status_code == 201, resp.text
-    assert resp.json()["envelope"]["node"]["session_name"] == "code"
+    node = resp.json()["envelope"]["node"]
+    assert node["session_name"] == "code"
+    assert node["session_harnesses"] == ["claude", "codex"]

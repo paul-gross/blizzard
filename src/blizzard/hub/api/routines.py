@@ -60,8 +60,25 @@ def _routine_view(routine: Routine) -> RoutineView:
         default_scope_slug=routine.default_scope_slug,
         default_model=list(routine.default_model),
         default_effort=routine.default_effort,
+        default_harnesses=list(routine.default_harnesses),
         created_at=iso_utc(routine.created_at),
     )
+
+
+def _validated_harnesses(entries: list[str]) -> list[str]:
+    """``default_harnesses``'s own unique/non-blank pair — the same
+    rule ``ChunkPatchBody._default_harnesses`` raises, an empty list left as the
+    express-no-constraint clear ``default_model`` already carries."""
+    stripped = [entry.strip() for entry in entries]
+    if any(not entry for entry in stripped):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_harnesses entries must not be blank"
+        )
+    if len(set(stripped)) != len(stripped):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_harnesses entries must be unique"
+        )
+    return stripped
 
 
 @router.post(
@@ -83,6 +100,7 @@ def create_routine(
             default_scope_slug=slug,
             default_model=request.default_model,
             default_effort=request.default_effort,
+            default_harnesses=_validated_harnesses(request.default_harnesses),
         )
     except (ScopeSlugError, RoutineNameTakenError, RoutineGraphUnresolvedError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
@@ -328,6 +346,7 @@ def edit_routine(
             default_scope_slug=slug,
             default_model=request.default_model,
             default_effort=request.default_effort,
+            default_harnesses=_validated_harnesses(request.default_harnesses),
         )
     except (ScopeSlugError, RoutineNameImmutableError, RoutineGraphUnresolvedError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

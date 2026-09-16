@@ -24,6 +24,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import (
+    DEFAULT_HARNESSES,
     DEFAULT_MODEL,
     INTENDED_MIGRATION,
     chunk_row,
@@ -110,6 +111,7 @@ class ChunkRecordStore:
                         minted_at=r.minted_at,
                         default_model=DEFAULT_MODEL.decode(r.default_model),
                         default_effort=r.default_effort,
+                        default_harnesses=DEFAULT_HARNESSES.decode(r.default_harnesses),
                         intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
                     )
         return result
@@ -148,6 +150,7 @@ class ChunkRecordStore:
                     minted_at=r.minted_at,
                     default_model=DEFAULT_MODEL.decode(r.default_model),
                     default_effort=r.default_effort,
+                    default_harnesses=DEFAULT_HARNESSES.decode(r.default_harnesses),
                     intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
                 )
                 for r in rows
@@ -186,6 +189,7 @@ class ChunkRecordStore:
                 minted_at=r.minted_at,
                 default_model=DEFAULT_MODEL.decode(r.default_model),
                 default_effort=r.default_effort,
+                default_harnesses=DEFAULT_HARNESSES.decode(r.default_harnesses),
                 intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
             )
             for r in page_rows
@@ -217,9 +221,11 @@ class ChunkRecordStore:
         with self._store.write("set_graph") as conn:
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
 
-    def set_defaults(self, chunk_id: str, *, default_model: list[str], default_effort: str | None) -> None:
-        """Repin a not-ready or ready-unclaimed chunk's default model/effort (issues #27,
-        #120, #144) — both in one write; see
+    def set_defaults(
+        self, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
+    ) -> None:
+        """Repin a not-ready or ready-unclaimed chunk's default model/effort/harnesses
+        (issues #27, #120, #144) — all three in one write; see
         :meth:`~blizzard.hub.domain.chunks.record.IWriteChunkRecordRepository.set_defaults`."""
         with self._store.write("set_defaults") as conn:
             conn.execute(
@@ -228,6 +234,7 @@ class ChunkRecordStore:
                 .values(
                     default_model=DEFAULT_MODEL.encode(default_model),
                     default_effort=default_effort,
+                    default_harnesses=DEFAULT_HARNESSES.encode(default_harnesses),
                 )
             )
 

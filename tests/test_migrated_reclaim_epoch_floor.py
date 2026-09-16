@@ -20,6 +20,7 @@ from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
+from blizzard.runner.loop.session import HarnessSelector
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from tests.runner_fakes import (
@@ -121,6 +122,9 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
     provider = FakeProvider({"e9": "/ws/e9"})
     _hub_client = HttpHubClient(hub.client)
     harness = FakeHarness(handle=_HANDLE, verdict=None)
+    _harnesses = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
+    )
     ctx = LoopContext(
         stores=make_stores(store),
         clock=hub.clock,
@@ -134,6 +138,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
+        harness_selector=HarnessSelector(harnesses=_harnesses),
         env_release=EnvironmentRelease(
             environments=store,
             leases=store,
@@ -141,9 +146,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
             provider=provider,
             worker_files=WorkerStdoutFiles("", store),
         ),
-        harnesses=HarnessRegistry(
-            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
-        ),
+        harnesses=_harnesses,
     )
     Fill(ctx).run()
 

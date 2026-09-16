@@ -21,6 +21,7 @@ from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
+from blizzard.runner.loop.session import HarnessSelector
 from blizzard.runner.loop.steps import Pull
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from tests.runner_fakes import (
@@ -128,6 +129,9 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
     probe = FakeProbe(alive={(100, "start-100")})
     _hub_client = HttpHubClient(hub.client)
     harness = FakeHarness(handle=_HANDLE, verdict=None)
+    _harnesses = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
+    )
     ctx = LoopContext(
         stores=make_stores(store),
         clock=hub.clock,
@@ -141,6 +145,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
+        harness_selector=HarnessSelector(harnesses=_harnesses),
         env_release=EnvironmentRelease(
             environments=store,
             leases=store,
@@ -148,9 +153,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
             provider=provider,
             worker_files=WorkerStdoutFiles("", store),
         ),
-        harnesses=HarnessRegistry(
-            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
-        ),
+        harnesses=_harnesses,
     )
 
     Pull(ctx).run()
@@ -219,6 +222,9 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
     probe = FakeProbe(alive={(100, "start-100")})
     _hub_client = HttpHubClient(hub.client)
     harness = FakeHarness(handle=_HANDLE, verdict=None)
+    _harnesses = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
+    )
     ctx = LoopContext(
         stores=make_stores(store),
         clock=hub.clock,
@@ -232,6 +238,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
+        harness_selector=HarnessSelector(harnesses=_harnesses),
         env_release=EnvironmentRelease(
             environments=store,
             leases=store,
@@ -239,9 +246,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
             provider=provider,
             worker_files=WorkerStdoutFiles("", store),
         ),
-        harnesses=HarnessRegistry(
-            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
-        ),
+        harnesses=_harnesses,
     )
 
     Pull(ctx).run()

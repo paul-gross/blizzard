@@ -83,6 +83,8 @@ class NodeConfig(BaseModel):
     # an adapter resolves (`bzh:pluggable-seams`). Empty / ``None`` *expresses no preference*.
     session_model: list[str] = []
     session_effort: str | None = None
+    # The resolved acceptable harness set, `session_model`'s shape — selection among it is the runner's concern.
+    session_harnesses: list[str] = []
     # The pool's rotation bounds; ``None`` when none were authored — nothing bounds the lineage.
     session_rotate: RotatePolicyView | None = None
     # The declared pool's compaction window, opaque like ``session_effort`` — ``None`` expresses no

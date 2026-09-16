@@ -32,6 +32,7 @@ class ModelColumn:
 
 
 MODEL = ModelColumn()
+HARNESSES = ModelColumn()
 
 
 class RoutineStore:
@@ -50,6 +51,7 @@ class RoutineStore:
                     default_scope_slug=routine.default_scope_slug,
                     default_model=MODEL.encode(routine.default_model),
                     default_effort=routine.default_effort,
+                    default_harnesses=HARNESSES.encode(routine.default_harnesses),
                     created_at=routine.created_at,
                 )
             )
@@ -62,6 +64,7 @@ class RoutineStore:
         default_scope_slug: str,
         default_model: list[str],
         default_effort: str | None,
+        default_harnesses: list[str],
     ) -> Routine:
         with self._store.write("edit") as conn:
             conn.execute(
@@ -72,6 +75,7 @@ class RoutineStore:
                     default_scope_slug=default_scope_slug,
                     default_model=MODEL.encode(default_model),
                     default_effort=default_effort,
+                    default_harnesses=HARNESSES.encode(default_harnesses),
                 )
             )
             row = conn.execute(select(routines).where(routines.c.routine_id == routine_id)).one()
@@ -102,6 +106,7 @@ class RoutineStore:
             created_at=row.created_at,
             default_model=MODEL.decode(row.default_model),
             default_effort=row.default_effort,
+            default_harnesses=HARNESSES.decode(row.default_harnesses),
         )
 
 

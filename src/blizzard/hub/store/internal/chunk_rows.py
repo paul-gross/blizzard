@@ -123,6 +123,7 @@ class QuestionQuery:
 
 INTENDED_MIGRATION = MigrationColumn()
 DEFAULT_MODEL = ModelColumn()
+DEFAULT_HARNESSES = ModelColumn()
 QUESTIONS = QuestionQuery()
 
 # The generic ``merged/<repo>`` landing marker (issue #67) — mirrors domain/work.py's own
@@ -143,6 +144,7 @@ def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
             # leans on its `server_default`.
             default_model=DEFAULT_MODEL.encode(chunk.default_model),
             default_effort=chunk.default_effort,
+            default_harnesses=DEFAULT_HARNESSES.encode(chunk.default_harnesses),
         )
     )
     for pointer in chunk.work_refs:
@@ -448,5 +450,6 @@ def chunk_row(conn, row) -> Chunk:  # type: ignore[no-untyped-def]
         minted_at=row.minted_at,
         default_model=DEFAULT_MODEL.decode(row.default_model),
         default_effort=row.default_effort,
+        default_harnesses=DEFAULT_HARNESSES.decode(row.default_harnesses),
         intended_migration=INTENDED_MIGRATION.decode(row.intended_migration),
     )

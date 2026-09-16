@@ -27,6 +27,7 @@ from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLeas
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.preamble import (
     DEFAULT_BLIZZARD_PREAMBLE,
     RESUME_BLIZZARD_UNCHANGED,
@@ -37,11 +38,12 @@ from blizzard.runner.harness.preamble import (
     resume_cross_node,
 )
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.produces import ProducesReconciler
-from blizzard.runner.loop.session import SessionResolver
+from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, SessionResolver, SkippedHarness
 from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
@@ -52,7 +54,7 @@ from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.wire.chunk import ChunkStatusView, ChunkUsageTotalView
 from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
-from blizzard.wire.facts import ESCALATION_RECORDED, LEASE_MINTED
+from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
 from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
@@ -62,6 +64,7 @@ from tests.runner_fakes import (
     FakeProvider,
     FakeWorktreeGit,
     SqlAlchemyRunnerStore,
+    TieredFakeHarness,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -358,6 +361,295 @@ def test_requeue_after_a_pre_spawn_failure_keeps_the_minted_owner(tmp_path):  # 
 
     assert default.spawns == []
     assert other.resume_froms == [None]
+
+
+# Harness selection
+
+
+@pytest.mark.unit
+def test_harness_selection_prefers_declared_order_over_model_preference_order():  # type: ignore[no-untyped-def]
+    """A later member resolving the more-preferred model still loses to an earlier member
+    resolving a less-preferred one — declared order is the selection key, never which
+    preference matched — and selection over the same envelope is deterministic."""
+    h_early = TieredFakeHarness(
+        tiers={"custom-b": "sonnet"}, handle=WorkerHandle(session_id="s", pid=1, process_start_time="t")
+    )
+    h_late = TieredFakeHarness(
+        tiers={"custom-a": "opus"}, handle=WorkerHandle(session_id="s", pid=2, process_start_time="t")
+    )
+    registry = HarnessRegistry(
+        {
+            "h_early": HarnessBinding(adapter=h_early, transcript_source=h_early.transcript_source()),
+            "h_late": HarnessBinding(adapter=h_late, transcript_source=h_late.transcript_source()),
+        }
+    )
+    envelope = make_envelope(
+        "ch_1",
+        "build",
+        node_id="nd_build",
+        choices=_CHOICES,
+        session_harnesses=["h_early", "h_late"],
+        session_model=["custom-a", "custom-b"],
+    )
+    selector = HarnessSelector(harnesses=registry)
+
+    first = selector.select(envelope.node)
+    second = selector.select(envelope.node)
+
+    assert first == second == HarnessSelection(harness_id="h_early", skipped=())
+
+
+@pytest.mark.unit
+def test_harness_selection_skips_unresolvable_and_untiered_members_in_order():  # type: ignore[no-untyped-def]
+    h_no_tier = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None)
+    h_no_tier.resolved_model_strict = None
+    h_ok = FakeHarness(handle=WorkerHandle(session_id="s", pid=2, process_start_time="t"), verdict=None)
+    h_ok.resolved_model_strict = "ok-model"
+    registry = HarnessRegistry(
+        {
+            "h_unavail": HarnessBinding(),
+            "h_no_tier": HarnessBinding(adapter=h_no_tier, transcript_source=h_no_tier.transcript_source()),
+            "h_ok": HarnessBinding(adapter=h_ok, transcript_source=h_ok.transcript_source()),
+        }
+    )
+    envelope = make_envelope(
+        "ch_1",
+        "build",
+        node_id="nd_build",
+        choices=_CHOICES,
+        session_harnesses=["h_missing", "h_unavail", "h_no_tier", "h_ok"],
+        session_model=["some-pref"],
+    )
+
+    selection = HarnessSelector(harnesses=registry).select(envelope.node)
+
+    assert selection == HarnessSelection(
+        harness_id="h_ok",
+        skipped=(
+            SkippedHarness("h_missing", "unknown"),
+            SkippedHarness("h_unavail", "unavailable"),
+            SkippedHarness("h_no_tier", "no-authored-tier"),
+        ),
+    )
+
+
+@pytest.mark.unit
+def test_harness_selection_empty_model_preference_selects_first_available_member():  # type: ignore[no-untyped-def]
+    h1 = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None)
+    h1.resolved_model_strict = None  # would fail strict resolution — irrelevant with no preference at all
+    registry = HarnessRegistry({"h1": HarnessBinding(adapter=h1, transcript_source=h1.transcript_source())})
+    envelope = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, session_harnesses=["h_missing", "h1"]
+    )
+
+    selection = HarnessSelector(harnesses=registry).select(envelope.node)
+
+    assert selection == HarnessSelection(harness_id="h1", skipped=(SkippedHarness("h_missing", "unknown"),))
+
+
+@pytest.mark.unit
+def test_harness_selection_single_member_selects_regardless_of_model_resolvability():  # type: ignore[no-untyped-def]
+    """The single-member exception: with nothing else to select, the model check never
+    runs at all, and `resolve_model`'s own left-to-right-then-adapter-default fallback is
+    left to compute the stamp exactly as it does today."""
+    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", process=FakeProbe())
+    registry = HarnessRegistry({"h1": HarnessBinding(adapter=adapter, transcript_source=NullTranscriptSource())})
+    envelope = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, session_harnesses=["h1"], session_model=["gpt-5.3-codex"]
+    )
+
+    selection = HarnessSelector(harnesses=registry).select(envelope.node)
+
+    assert selection == HarnessSelection(harness_id="h1", skipped=())
+    assert adapter.resolve_model(envelope.node.session_model) == "claude-opus-5"
+
+
+@pytest.mark.unit
+def test_harness_selection_native_name_in_a_two_member_set_does_not_match_the_other_harness():  # type: ignore[no-untyped-def]
+    claude = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", process=FakeProbe())
+    foreign = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None)
+    foreign.resolved_model_strict = None  # "sonnet" means nothing to a harness that isn't claude_code
+    registry = HarnessRegistry(
+        {
+            "foreign": HarnessBinding(adapter=foreign, transcript_source=foreign.transcript_source()),
+            "claude_code": HarnessBinding(adapter=claude, transcript_source=NullTranscriptSource()),
+        }
+    )
+    envelope = make_envelope(
+        "ch_1",
+        "build",
+        node_id="nd_build",
+        choices=_CHOICES,
+        session_harnesses=["foreign", "claude_code"],
+        session_model=["sonnet"],
+    )
+
+    selection = HarnessSelector(harnesses=registry).select(envelope.node)
+
+    assert selection == HarnessSelection(
+        harness_id="claude_code", skipped=(SkippedHarness("foreign", "no-authored-tier"),)
+    )
+
+
+@pytest.mark.unit
+def test_fresh_mint_with_no_acceptable_set_mints_under_the_runner_default(tmp_path):  # type: ignore[no-untyped-def]
+    """Unchanged from today: an envelope authoring no ``session_harnesses`` never reaches
+    the selector at all."""
+    store = _store(tmp_path)
+    default = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store, hub=FakeHub(), provider=FakeProvider({"e1": "/ws/e1"}), harness=default, probe=FakeProbe()
+    )
+
+    Spawner(ctx).spawn(
+        "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+    )
+
+    assert default.spawns != []
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.harness_id == CLAUDE_CODE_HARNESS_ID
+
+
+@pytest.mark.unit
+def test_fresh_mint_selects_the_acceptable_harness_and_a_retry_stays_under_it(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    default = FakeHarness(handle=_HANDLE, verdict=None)
+    chosen = FakeHarness(
+        handle=WorkerHandle(session_id="chosen-a", pid=200, process_start_time="chosen-start"), verdict=None
+    )
+    chosen.resolved_model = "chosen-model"
+    registry = HarnessRegistry(
+        {
+            CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+            "chosen": HarnessBinding(adapter=chosen, transcript_source=chosen.transcript_source()),
+        }
+    )
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, session_harnesses=["chosen"])
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = envelope
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=default, probe=FakeProbe())
+    ctx = replace(
+        ctx,
+        harnesses=registry,
+        sessions=SessionResolver(leases=store, harnesses=registry, transcripts_wired=True),
+        harness_selector=HarnessSelector(harnesses=registry),
+    )
+
+    Spawner(ctx).spawn("ch_1", envelope, [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test")
+
+    assert default.spawns == []
+    assert len(chosen.spawns) == 1
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.harness_id == "chosen" and lease.resolved_model == "chosen-model"
+
+    # A within-node retry mints under the same selected harness — it never re-runs selection.
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    Attempt(ctx, lease).fail(reason="reaped", via="test")
+
+    assert store.active_lease(lease.lease_id) is None  # closed by `fail`, then requeued
+    retried = store.active_lease_for_chunk("ch_1")
+    assert retried is not None and retried.lease_id != lease.lease_id and retried.harness_id == "chosen"
+    assert len(chosen.spawns) == 2
+    assert default.spawns == []
+
+
+@pytest.mark.unit
+def test_requeue_escalates_when_the_failed_harness_falls_out_of_the_acceptable_set(tmp_path):  # type: ignore[no-untyped-def]
+    """The retry's missing guard is membership, not resolvability. `fail` always closes the
+    failed lease before calling `requeue`, so `requeue` is driven directly here — its own
+    membership check needs no closed lease to reach, unlike the still-open-lease guard `fail` uses."""
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_mint_owner("lease_1", "dropped")
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    default = FakeHarness(handle=_HANDLE, verdict=None)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, session_harnesses=["other"]
+    )
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=default, probe=FakeProbe())
+    failed = store.active_lease("lease_1")
+    assert failed is not None and failed.harness_id == "dropped"
+
+    Attempt(ctx, failed).requeue()
+
+    assert default.spawns == []
+    # `requeue` never touches `lease_1` — only `fail` closes it in production. The membership
+    # guard mints and closes its own owner-less lease to escalate on, never reopening this one.
+    active = store.active_lease_for_chunk("ch_1")
+    assert active is not None and active.lease_id == "lease_1"
+    escalations = [e for e in store.open_escalations() if e.chunk_id == "ch_1"]
+    assert len(escalations) == 1 and escalations[0].lease_id != "lease_1"
+    events = [b for b in store.pending_outbound() if b.kind == EVENT_RECORDED and b.chunk_id == "ch_1"]
+    assert len(events) == 1
+    payload = json.loads(events[0].payload)
+    assert payload["kind"] == "no-acceptable-harness"
+    assert payload["detail"] == {
+        "via": "requeue",
+        "attempted": ["other"],
+        "skipped": [{"harness_id": "dropped", "reason": "not-a-member"}],
+    }
+
+
+@pytest.mark.unit
+def test_fresh_mint_with_no_acceptable_harness_escalates_and_never_double_escalates(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    default = FakeHarness(handle=_HANDLE, verdict="pass")
+    untiered = FakeHarness(handle=WorkerHandle(session_id="s", pid=2, process_start_time="t"), verdict=None)
+    untiered.resolved_model_strict = None
+    registry = HarnessRegistry(
+        {
+            CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+            "untiered": HarnessBinding(adapter=untiered, transcript_source=untiered.transcript_source()),
+        }
+    )
+    envelope = make_envelope(
+        "ch_1",
+        "build",
+        node_id="nd_build",
+        choices=_CHOICES,
+        session_harnesses=["missing", "untiered"],
+        session_model=["some-pref"],
+    )
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = envelope
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=default, probe=FakeProbe())
+    ctx = replace(ctx, harnesses=registry, harness_selector=HarnessSelector(harnesses=registry))
+
+    Spawner(ctx).spawn("ch_1", envelope, [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test")
+
+    assert default.spawns == [] and untiered.spawns == []
+    assert store.active_lease_for_chunk("ch_1") is None
+    escalations = [e for e in store.open_escalations() if e.chunk_id == "ch_1"]
+    assert len(escalations) == 1
+    events = [b for b in store.pending_outbound() if b.kind == EVENT_RECORDED and b.chunk_id == "ch_1"]
+    assert len(events) == 1
+    payload = json.loads(events[0].payload)
+    assert payload["kind"] == "no-acceptable-harness"
+    assert payload["detail"] == {
+        "via": "test",
+        "attempted": ["missing", "untiered"],
+        "skipped": [
+            {"harness_id": "missing", "reason": "unknown"},
+            {"harness_id": "untiered", "reason": "no-authored-tier"},
+        ],
+    }
+
+    # A second pass over the same chunk stacks no second escalation.
+    Spawner(ctx).spawn("ch_1", envelope, [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test")
+    assert len(store.open_escalations()) == 1
 
 
 @pytest.mark.unit

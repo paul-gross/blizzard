@@ -69,6 +69,20 @@ def test_create_with_an_empty_model_preference_reads_back_empty(tmp_path: Path) 
     assert store.get("rtn_1").default_model == []  # type: ignore[union-attr]
 
 
+def test_create_with_a_harnesses_preference_reads_back(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.create(_routine(default_harnesses=["claude_code", "codex"]))
+
+    assert store.get("rtn_1").default_harnesses == ["claude_code", "codex"]  # type: ignore[union-attr]
+
+
+def test_create_with_no_harnesses_preference_reads_back_empty(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.create(_routine(default_harnesses=[]))
+
+    assert store.get("rtn_1").default_harnesses == []  # type: ignore[union-attr]
+
+
 def test_get_by_name(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.create(_routine())
@@ -97,7 +111,12 @@ def test_edit_changes_everything_but_name_and_id(tmp_path: Path) -> None:
     store.create(_routine())
 
     edited = store.edit(
-        "rtn_1", graph_name="beta", default_scope_slug="blizzard", default_model=["basic"], default_effort="low"
+        "rtn_1",
+        graph_name="beta",
+        default_scope_slug="blizzard",
+        default_model=["basic"],
+        default_effort="low",
+        default_harnesses=["claude_code"],
     )
 
     assert edited.routine_id == "rtn_1"
@@ -105,6 +124,7 @@ def test_edit_changes_everything_but_name_and_id(tmp_path: Path) -> None:
     assert edited.graph_name == "beta"
     assert edited.default_model == ["basic"]
     assert edited.default_effort == "low"
+    assert edited.default_harnesses == ["claude_code"]
     assert store.get("rtn_1") == edited
 
 

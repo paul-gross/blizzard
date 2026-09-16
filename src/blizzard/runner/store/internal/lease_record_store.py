@@ -37,6 +37,9 @@ _PREEMPTED_REASON = "preempted"
 # `Attempt.close`'s own closure reason for the never-spawned owner-unresolvable escalation mint.
 _ESCALATION_MINT_REASON = "owner-unresolvable-mint"
 
+# `Attempt.close`'s closure reason for the no-acceptable-harness mint — `_ESCALATION_MINT_REASON`'s own shape.
+_NO_ACCEPTABLE_HARNESS_MINT_REASON = "no-acceptable-harness-mint"
+
 # Pinned by tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held's
 # sibling lease cases.
 _OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
@@ -108,7 +111,9 @@ class LeaseRecordStore:
         preempted = select(lease_closures.c.lease_id).where(lease_closures.c.reason == _PREEMPTED_REASON)
         # The mint's own closure reason names it directly — an ordinary exhausted-retries
         # escalation, spawned or REAP-orphaned alike, closes plain `escalated` and still counts.
-        escalation_mints = select(lease_closures.c.lease_id).where(lease_closures.c.reason == _ESCALATION_MINT_REASON)
+        escalation_mints = select(lease_closures.c.lease_id).where(
+            lease_closures.c.reason.in_((_ESCALATION_MINT_REASON, _NO_ACCEPTABLE_HARNESS_MINT_REASON))
+        )
         stmt = (
             select(func.count())
             .select_from(lease_context)

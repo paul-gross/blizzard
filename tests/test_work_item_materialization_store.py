@@ -220,6 +220,10 @@ def test_upgrade_adds_runner_id_and_materializations_leaving_existing_rows_reada
                 proposed_at=_T0,
             )
         )
+    # `seed_work_item` now always writes `chunks.default_harnesses`; added by hand here since
+    # it lands in a later revision than this test's pinned boundary, where the add is then a no-op.
+    with engine.begin() as conn:
+        conn.execute(sa.text("ALTER TABLE chunks ADD COLUMN default_harnesses TEXT"))
     work_item_store = WorkItemStore(hub_store_connections(engine))
     author = WorkItemAuthor.user("u1")
     legacy_item = seed_work_item(work_item_store, graph_id="gr_1", author=author, at=_T0)

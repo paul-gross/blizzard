@@ -32,6 +32,7 @@ class ChunkPatchBody:
             graph_id=graph_target.graph_id if graph_target is not None else UNSET,
             default_model=self._default_model(),
             default_effort=self._default_effort(),
+            default_harnesses=self._default_harnesses(),
             intended_migration=intended_migration,
         )
         self.services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
@@ -53,6 +54,21 @@ class ChunkPatchBody:
         if any(not entry for entry in stripped):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_model entries must not be blank"
+            )
+        return stripped
+
+    def _default_harnesses(self) -> list[str] | UnsetType:
+        entries = self.request.default_harnesses
+        if entries is None:
+            return UNSET
+        stripped = [entry.strip() for entry in entries]
+        if any(not entry for entry in stripped):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_harnesses entries must not be blank"
+            )
+        if len(set(stripped)) != len(stripped):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_harnesses entries must be unique"
             )
         return stripped
 

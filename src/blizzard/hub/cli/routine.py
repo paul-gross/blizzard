@@ -20,6 +20,10 @@ _ROUTINE_MODEL_HELP = (
     "The routine's default model preference. Repeatable and ORDERED — the first entry "
     "that resolves at session mint wins."
 )
+_ROUTINE_HARNESSES_HELP = (
+    "The routine's default harness preference. Repeatable and ORDERED — the first entry "
+    "that resolves at session mint wins."
+)
 
 
 class RoutineListing(Listing):
@@ -40,6 +44,8 @@ class RoutineDetail:
         yield f"  default scope: {body['default_scope_slug']}"
         models = ", ".join(body.get("default_model") or []) or "-"
         yield f"  default model: {models}   default effort: {body.get('default_effort') or '-'}"
+        harnesses = ", ".join(body.get("default_harnesses") or []) or "-"
+        yield f"  default harnesses: {harnesses}"
         yield f"  scopes: {', '.join(self.scopes)}"
 
 
@@ -54,6 +60,7 @@ def routine_group() -> None:
 @click.argument("default_scope_slug")
 @click.option("--model", "default_model", multiple=True, help=_ROUTINE_MODEL_HELP)
 @click.option("--effort", "default_effort", default=None, help="The routine's default effort.")
+@click.option("--harnesses", "default_harnesses", multiple=True, help=_ROUTINE_HARNESSES_HELP)
 def routine_create(
     cli: CliContext,
     name: str,
@@ -61,6 +68,7 @@ def routine_create(
     default_scope_slug: str,
     default_model: tuple[str, ...],
     default_effort: str | None,
+    default_harnesses: tuple[str, ...],
 ) -> None:
     """Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.
 
@@ -75,6 +83,7 @@ def routine_create(
             "default_scope_slug": default_scope_slug,
             "default_model": list(default_model),
             "default_effort": default_effort,
+            "default_harnesses": list(default_harnesses),
         },
     )
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
@@ -114,6 +123,7 @@ def routine_show(cli: CliContext, routine_id: str) -> None:
 @click.option("--scope", "default_scope_slug", required=True, help="The routine's default scope slug.")
 @click.option("--model", "default_model", multiple=True, help=_ROUTINE_MODEL_HELP)
 @click.option("--effort", "default_effort", default=None, help="The routine's default effort.")
+@click.option("--harnesses", "default_harnesses", multiple=True, help=_ROUTINE_HARNESSES_HELP)
 def routine_edit(
     cli: CliContext,
     routine_id: str,
@@ -121,9 +131,10 @@ def routine_edit(
     default_scope_slug: str,
     default_model: tuple[str, ...],
     default_effort: str | None,
+    default_harnesses: tuple[str, ...],
 ) -> None:
-    """Change ROUTINE_ID's graph, default scope, and model/effort defaults; its name
-    never changes here."""
+    """Change ROUTINE_ID's graph, default scope, and model/effort/harnesses defaults; its
+    name never changes here."""
     resp = cli.get(
         f"/api/routines/{routine_id}", "GET /routines/{id}", on_status={404: f"unknown routine {routine_id}"}
     )
@@ -137,6 +148,7 @@ def routine_edit(
             "default_scope_slug": default_scope_slug,
             "default_model": list(default_model),
             "default_effort": default_effort,
+            "default_harnesses": list(default_harnesses),
         },
     )
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -24,7 +25,7 @@ from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHar
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.session import ResumedSession
+from blizzard.runner.loop.session import ResumedSession, SkippedHarness
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")
@@ -100,9 +101,26 @@ class Spawner:
         The sole funnel into the resolved owner's ``.spawn``, so a re-spawn joins its pool."""
         if self.suppressed(via=via, chunk_id=chunk_id):
             return
-        # A pool rotation's replacement mints under its prior head's own owner, never a
-        # freshly selected one; only genuinely fresh work defaults to the named constant.
-        owner = resume_from.harness_id if resume_from is not None else (harness_id or CLAUDE_CODE_HARNESS_ID)
+        # A pool rotation's replacement or a retry (`Attempt.requeue`) mints under its own prior
+        # owner — neither a selection candidate; only fresh work reaches the selector or its no-set fallback.
+        if resume_from is not None:
+            owner = resume_from.harness_id
+        elif harness_id is not None:
+            owner = harness_id
+        elif envelope.node.session_harnesses:
+            selection = self.ctx.harness_selector.select(envelope.node)
+            if selection.harness_id is None:
+                self.escalate_no_acceptable_harness(
+                    chunk_id,
+                    envelope,
+                    attempted=envelope.node.session_harnesses,
+                    skipped=selection.skipped,
+                    via=via,
+                )
+                return
+            owner = selection.harness_id
+        else:
+            owner = CLAUDE_CODE_HARNESS_ID
         # Resolve before minting: an owner this runner cannot serve must block its resume,
         # not leave a lease another harness could later adopt. Logged, not raised, so this blocks only this spawn.
         harness = self._resolve_harness(owner, via=via)
@@ -210,6 +228,35 @@ class Spawner:
 
         Attempt(self.ctx, lease).escalate_owner_unresolvable(session=session, exc=exc, via="resume-owner")
 
+    def escalate_no_acceptable_harness(
+        self,
+        chunk_id: str,
+        envelope: NodeEnvelope,
+        *,
+        attempted: Sequence[str],
+        skipped: Sequence[SkippedHarness],
+        via: str,
+    ) -> None:
+        """No member of the envelope's acceptable harness set could serve this mint: escalate
+        the chunk in place rather than mint under the runner default or loop blocked forever.
+        Mints an owner-less, never-spawned lease purely to give
+        ``Attempt.escalate_no_acceptable_harness`` an existing lease to close — reached alike
+        from a fresh mint's exhausted selection and a retry whose recorded owner fell out of the set."""
+        if self.suppressed(via=via, chunk_id=chunk_id):
+            return
+        if self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id) is not None:
+            return  # already escalated — nothing here supersedes it
+        now = self.ctx.clock.now()
+        minted = self._mint(chunk_id, envelope, resume=None, harness_id=None, at=now, retries_max=0)
+        _CP_AFTER_MINT.reached()
+        lease = self.ctx.stores.lease_record.active_lease(minted.lease_id)
+        assert lease is not None  # just minted above, and nothing else has touched it yet
+        # Deferred: `blizzard.runner.loop.attempt` imports `Spawner` at module scope, so
+        # importing `Attempt` back at module scope here would cycle.
+        from blizzard.runner.loop.attempt import Attempt
+
+        Attempt(self.ctx, lease).escalate_no_acceptable_harness(attempted=attempted, skipped=skipped, via=via)
+
     def _resolve_harness(self, harness_id: str, *, via: str) -> IHarnessLifecycleAndVerdict | None:
         """Resolve ``harness_id``, logging and returning ``None`` — never raising — when it
         is unknown or unavailable: the same guard :meth:`DormantSession._resolve_harness`
@@ -255,15 +302,15 @@ class Spawner:
         envelope: NodeEnvelope,
         *,
         resume: ResumedSession | None,
-        harness_id: str,
+        harness_id: str | None,
         at: datetime,
         retries_max: int | None = None,
     ) -> MintedLease:
-        """Pin the mint's graph artifacts, record the lease, stash its capability-token hash,
-        and buffer the hub's fact. ``retries_max`` overrides the node's own declared budget
-        when given — used only by :meth:`_escalate_unresolvable_resume_owner`'s zero-budget,
-        never-spawned mint; every ordinary caller leaves it unset and gets the node's own
-        budget."""
+        """Pin the mint's graph artifacts, record the lease, stash its capability-token hash, and
+        buffer the hub's fact. ``retries_max`` overrides the node's own declared budget when given
+        — used only by the two zero-budget, never-spawned escalation mints; every ordinary caller
+        leaves it unset. ``harness_id=None`` is the escalation-only mode: no member of the
+        acceptable set resolved, so it resolves no stamps and records no mint owner."""
         # Mint above the max of both floors (bzh:epoch-fencing, #112): the local fence alone is 0
         # for a chunk this runner never drove, so a migrated chunk would mint below hub truth.
         epoch = max(self.ctx.stores.lease_record.latest_epoch(chunk_id), envelope.epoch) + 1
@@ -274,7 +321,11 @@ class Spawner:
             if retries_max is not None
             else (node.retries_max if node.retries_max is not None else self.ctx.config.default_retries_max)
         )
-        model, effort, compaction_window = self.ctx.sessions.session_stamps(node, resume, harness_id=harness_id)
+        model, effort, compaction_window = (
+            self.ctx.sessions.session_stamps(node, resume, harness_id=harness_id)
+            if harness_id is not None
+            else (None, None, None)
+        )
         # Before `record_lease`: a crash here leaves only an orphan row a retry
         # writes again identically — never a lease whose mint's declarations are absent.
         self.ctx.stores.graph_artifacts.record_graph_artifacts(
@@ -302,9 +353,10 @@ class Spawner:
                 created_at=at,
             )
         )
-        # Stamped before spawn ever runs: a crash or a launch failure between here and
-        # spawn-return still leaves this mint's own owner durable for a retry to read back.
-        self.ctx.stores.session.record_mint_owner(lease_id, harness_id)
+        # Stamped before spawn ever runs: a crash or launch failure between here and spawn-return
+        # still leaves the mint's owner durable for a retry — skipped for an escalation-only mint.
+        if harness_id is not None:
+            self.ctx.stores.session.record_mint_owner(lease_id, harness_id)
         if self.ctx.events is not None:
             self.ctx.events.publish_lease_changed(lease_id, chunk_id, cause="created")
         # A per-lease capability token (issue #113): only its hash is stashed durably, the

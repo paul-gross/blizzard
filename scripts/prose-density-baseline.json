@@ -685,16 +685,16 @@
    "total": 65
   },
   "blizzard_mock/mock_hub/domain/models.py": {
-   "comments": 29,
+   "comments": 30,
    "docstrings": 47,
    "over_cap": 11,
-   "total": 296
+   "total": 300
   },
   "blizzard_mock/mock_hub/domain/service.py": {
    "comments": 47,
    "docstrings": 136,
    "over_cap": 5,
-   "total": 981
+   "total": 984
   },
   "blizzard_mock/mock_hub/domain/state.py": {
    "comments": 6,
@@ -703,10 +703,10 @@
    "total": 105
   },
   "blizzard_mock/mock_hub/domain/wire.py": {
-   "comments": 18,
+   "comments": 19,
    "docstrings": 33,
    "over_cap": 7,
-   "total": 339
+   "total": 342
   },
   "blizzard_mock/mock_hub/internal/__init__.py": {
    "comments": 0,
@@ -888,7 +888,7 @@
    "comments": 4,
    "docstrings": 5,
    "over_cap": 1,
-   "total": 57
+   "total": 59
   },
   "blizzard/foundation/events/__init__.py": {
    "comments": 0,
@@ -1080,7 +1080,7 @@
    "comments": 0,
    "docstrings": 8,
    "over_cap": 1,
-   "total": 84
+   "total": 100
   },
   "blizzard/hub/api/chunk_events.py": {
    "comments": 3,
@@ -1098,13 +1098,13 @@
    "comments": 10,
    "docstrings": 71,
    "over_cap": 3,
-   "total": 480
+   "total": 482
   },
   "blizzard/hub/api/chunks.py": {
    "comments": 27,
    "docstrings": 78,
    "over_cap": 0,
-   "total": 754
+   "total": 755
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -1158,7 +1158,7 @@
    "comments": 1,
    "docstrings": 26,
    "over_cap": 0,
-   "total": 244
+   "total": 245
   },
   "blizzard/hub/api/health.py": {
    "comments": 0,
@@ -1210,9 +1210,9 @@
   },
   "blizzard/hub/api/routines.py": {
    "comments": 4,
-   "docstrings": 50,
+   "docstrings": 53,
    "over_cap": 1,
-   "total": 487
+   "total": 506
   },
   "blizzard/hub/api/runners.py": {
    "comments": 5,
@@ -1458,7 +1458,7 @@
    "comments": 3,
    "docstrings": 80,
    "over_cap": 1,
-   "total": 527
+   "total": 549
   },
   "blizzard/hub/cli/command.py": {
    "comments": 1,
@@ -1500,7 +1500,7 @@
    "comments": 0,
    "docstrings": 21,
    "over_cap": 0,
-   "total": 179
+   "total": 181
   },
   "blizzard/hub/cli/item.py": {
    "comments": 0,
@@ -1536,7 +1536,7 @@
    "comments": 0,
    "docstrings": 39,
    "over_cap": 0,
-   "total": 354
+   "total": 366
   },
   "blizzard/hub/cli/runner.py": {
    "comments": 1,
@@ -1792,9 +1792,9 @@
   },
   "blizzard/hub/domain/chunks/record.py": {
    "comments": 0,
-   "docstrings": 33,
+   "docstrings": 34,
    "over_cap": 0,
-   "total": 83
+   "total": 86
   },
   "blizzard/hub/domain/chunks/route.py": {
    "comments": 0,
@@ -1860,7 +1860,7 @@
    "comments": 8,
    "docstrings": 41,
    "over_cap": 2,
-   "total": 209
+   "total": 232
   },
   "blizzard/hub/domain/enrollment.py": {
    "comments": 2,
@@ -1872,7 +1872,7 @@
    "comments": 2,
    "docstrings": 22,
    "over_cap": 1,
-   "total": 223
+   "total": 226
   },
   "blizzard/hub/domain/errors.py": {
    "comments": 0,
@@ -1959,10 +1959,10 @@
    "total": 161
   },
   "blizzard/hub/domain/graph.py": {
-   "comments": 48,
+   "comments": 50,
    "docstrings": 126,
    "over_cap": 9,
-   "total": 788
+   "total": 800
   },
   "blizzard/hub/domain/graph_authoring.py": {
    "comments": 4,
@@ -1978,9 +1978,9 @@
   },
   "blizzard/hub/domain/graph_validation.py": {
    "comments": 14,
-   "docstrings": 38,
+   "docstrings": 40,
    "over_cap": 1,
-   "total": 361
+   "total": 373
   },
   "blizzard/hub/domain/ingest.py": {
    "comments": 0,
@@ -2064,13 +2064,13 @@
    "comments": 0,
    "docstrings": 22,
    "over_cap": 1,
-   "total": 187
+   "total": 188
   },
   "blizzard/hub/domain/routines.py": {
-   "comments": 5,
+   "comments": 6,
    "docstrings": 39,
    "over_cap": 0,
-   "total": 236
+   "total": 243
   },
   "blizzard/hub/domain/run_context.py": {
    "comments": 1,
@@ -2097,10 +2097,10 @@
    "total": 285
   },
   "blizzard/hub/domain/work.py": {
-   "comments": 55,
+   "comments": 56,
    "docstrings": 371,
    "over_cap": 15,
-   "total": 1418
+   "total": 1422
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 9,
@@ -2118,7 +2118,7 @@
    "comments": 0,
    "docstrings": 60,
    "over_cap": 1,
-   "total": 301
+   "total": 307
   },
   "blizzard/hub/events/__init__.py": {
    "comments": 0,
@@ -2316,7 +2316,7 @@
    "comments": 5,
    "docstrings": 36,
    "over_cap": 0,
-   "total": 248
+   "total": 255
   },
   "blizzard/hub/store/internal/chunk_route_store.py": {
    "comments": 3,
@@ -2325,10 +2325,10 @@
    "total": 215
   },
   "blizzard/hub/store/internal/chunk_rows.py": {
-   "comments": 18,
+   "comments": 19,
    "docstrings": 90,
    "over_cap": 5,
-   "total": 452
+   "total": 456
   },
   "blizzard/hub/store/internal/chunk_store_factory.py": {
    "comments": 0,
@@ -2394,7 +2394,7 @@
    "comments": 11,
    "docstrings": 40,
    "over_cap": 0,
-   "total": 498
+   "total": 500
   },
   "blizzard/hub/store/internal/routine_scope_store.py": {
    "comments": 1,
@@ -2403,10 +2403,10 @@
    "total": 59
   },
   "blizzard/hub/store/internal/routine_store.py": {
-   "comments": 1,
+   "comments": 2,
    "docstrings": 11,
    "over_cap": 0,
-   "total": 109
+   "total": 115
   },
   "blizzard/hub/store/internal/run_context_store.py": {
    "comments": 0,
@@ -3008,6 +3008,12 @@
    "over_cap": 0,
    "total": 65
   },
+  "blizzard/hub/store/migrations/versions/20260916_1000_authored_harnesses.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 43
+  },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
    "docstrings": 0,
@@ -3015,10 +3021,10 @@
    "total": 0
   },
   "blizzard/hub/store/schema.py": {
-   "comments": 486,
+   "comments": 492,
    "docstrings": 6,
    "over_cap": 39,
-   "total": 1439
+   "total": 1448
   },
   "blizzard/hub/system_artifacts/__init__.py": {
    "comments": 3,
@@ -3646,9 +3652,9 @@
   },
   "blizzard/runner/harness/adapter.py": {
    "comments": 7,
-   "docstrings": 105,
+   "docstrings": 109,
    "over_cap": 3,
-   "total": 250
+   "total": 257
   },
   "blizzard/runner/harness/compatibility.py": {
    "comments": 7,
@@ -3682,9 +3688,9 @@
   },
   "blizzard/runner/harness/internal/claude_code_adapter.py": {
    "comments": 68,
-   "docstrings": 31,
+   "docstrings": 36,
    "over_cap": 7,
-   "total": 531
+   "total": 542
   },
   "blizzard/runner/harness/internal/claude_code_normalizer.py": {
    "comments": 40,
@@ -3867,16 +3873,16 @@
    "total": 5
   },
   "blizzard/runner/loop/attempt.py": {
-   "comments": 57,
-   "docstrings": 81,
+   "comments": 64,
+   "docstrings": 84,
    "over_cap": 5,
-   "total": 530
+   "total": 579
   },
   "blizzard/runner/loop/build.py": {
    "comments": 26,
    "docstrings": 44,
    "over_cap": 5,
-   "total": 313
+   "total": 314
   },
   "blizzard/runner/loop/checks.py": {
    "comments": 2,
@@ -3897,10 +3903,10 @@
    "total": 368
   },
   "blizzard/runner/loop/context.py": {
-   "comments": 47,
+   "comments": 48,
    "docstrings": 23,
    "over_cap": 18,
-   "total": 177
+   "total": 179
   },
   "blizzard/runner/loop/dormant.py": {
    "comments": 36,
@@ -3999,16 +4005,16 @@
    "total": 76
   },
   "blizzard/runner/loop/session.py": {
-   "comments": 15,
-   "docstrings": 48,
+   "comments": 16,
+   "docstrings": 62,
    "over_cap": 0,
-   "total": 231
+   "total": 284
   },
   "blizzard/runner/loop/spawn.py": {
-   "comments": 28,
-   "docstrings": 43,
+   "comments": 32,
+   "docstrings": 48,
    "over_cap": 1,
-   "total": 358
+   "total": 410
   },
   "blizzard/runner/loop/steps.py": {
    "comments": 68,
@@ -4185,10 +4191,10 @@
    "total": 170
   },
   "blizzard/runner/store/internal/lease_record_store.py": {
-   "comments": 17,
+   "comments": 18,
    "docstrings": 6,
    "over_cap": 2,
-   "total": 225
+   "total": 230
   },
   "blizzard/runner/store/internal/lease_resume_intent_store.py": {
    "comments": 2,
@@ -4665,10 +4671,10 @@
    "total": 31
   },
   "blizzard/wire/chunk.py": {
-   "comments": 39,
-   "docstrings": 136,
+   "comments": 42,
+   "docstrings": 137,
    "over_cap": 18,
-   "total": 621
+   "total": 629
   },
   "blizzard/wire/completion.py": {
    "comments": 15,
@@ -4683,10 +4689,10 @@
    "total": 104
   },
   "blizzard/wire/envelope.py": {
-   "comments": 25,
+   "comments": 26,
    "docstrings": 18,
    "over_cap": 5,
-   "total": 138
+   "total": 140
   },
   "blizzard/wire/events.py": {
    "comments": 1,
@@ -4746,7 +4752,7 @@
    "comments": 7,
    "docstrings": 41,
    "over_cap": 2,
-   "total": 175
+   "total": 176
   },
   "blizzard/wire/history.py": {
    "comments": 0,
@@ -4785,10 +4791,10 @@
    "total": 79
   },
   "blizzard/wire/routine.py": {
-   "comments": 0,
+   "comments": 1,
    "docstrings": 19,
    "over_cap": 0,
-   "total": 91
+   "total": 95
   },
   "blizzard/wire/runner.py": {
    "comments": 13,
@@ -5066,7 +5072,7 @@
    "comments": 1,
    "docstrings": 12,
    "over_cap": 1,
-   "total": 51
+   "total": 52
   },
   "journey/__init__.py": {
    "comments": 0,
@@ -5093,10 +5099,10 @@
    "total": 251
   },
   "runner_fakes.py": {
-   "comments": 80,
-   "docstrings": 96,
+   "comments": 82,
+   "docstrings": 100,
    "over_cap": 10,
-   "total": 1127
+   "total": 1157
   },
   "service/__init__.py": {
    "comments": 0,
@@ -5249,10 +5255,10 @@
    "total": 261
   },
   "service/test_wire_parity_service.py": {
-   "comments": 11,
-   "docstrings": 12,
+   "comments": 12,
+   "docstrings": 15,
    "over_cap": 1,
-   "total": 222
+   "total": 248
   },
   "service/test_work_items_service.py": {
    "comments": 9,
@@ -5564,7 +5570,7 @@
    "comments": 12,
    "docstrings": 27,
    "over_cap": 0,
-   "total": 485
+   "total": 567
   },
   "test_chunk_fact_table_indexes.py": {
    "comments": 14,
@@ -5960,7 +5966,7 @@
    "comments": 12,
    "docstrings": 37,
    "over_cap": 0,
-   "total": 549
+   "total": 590
   },
   "test_elicitation_launch_collect.py": {
    "comments": 46,
@@ -5969,16 +5975,16 @@
    "total": 279
   },
   "test_envelope.py": {
-   "comments": 27,
+   "comments": 32,
    "docstrings": 8,
    "over_cap": 0,
-   "total": 307
+   "total": 366
   },
   "test_envelope_sessions_api.py": {
-   "comments": 10,
+   "comments": 11,
    "docstrings": 8,
    "over_cap": 1,
-   "total": 178
+   "total": 195
   },
   "test_escalation.py": {
    "comments": 4,
@@ -6338,7 +6344,7 @@
    "comments": 13,
    "docstrings": 14,
    "over_cap": 0,
-   "total": 226
+   "total": 255
   },
   "test_graph_lifecycle_service.py": {
    "comments": 0,
@@ -6359,10 +6365,10 @@
    "total": 259
   },
   "test_graph_sessions.py": {
-   "comments": 23,
+   "comments": 28,
    "docstrings": 8,
    "over_cap": 0,
-   "total": 348
+   "total": 398
   },
   "test_graph_store_bulk_reads.py": {
    "comments": 7,
@@ -6428,7 +6434,7 @@
    "comments": 10,
    "docstrings": 13,
    "over_cap": 1,
-   "total": 715
+   "total": 771
   },
   "test_hub_cli_enroll.py": {
    "comments": 1,
@@ -6458,7 +6464,7 @@
    "comments": 1,
    "docstrings": 17,
    "over_cap": 0,
-   "total": 428
+   "total": 456
   },
   "test_hub_cli_item.py": {
    "comments": 7,
@@ -6497,10 +6503,10 @@
    "total": 116
   },
   "test_hub_cli_routine.py": {
-   "comments": 6,
+   "comments": 7,
    "docstrings": 9,
    "over_cap": 0,
-   "total": 699
+   "total": 753
   },
   "test_hub_cli_scope.py": {
    "comments": 1,
@@ -6554,7 +6560,7 @@
    "comments": 18,
    "docstrings": 9,
    "over_cap": 0,
-   "total": 255
+   "total": 260
   },
   "test_hub_signing_service.py": {
    "comments": 8,
@@ -6722,7 +6728,7 @@
    "comments": 20,
    "docstrings": 6,
    "over_cap": 2,
-   "total": 176
+   "total": 179
   },
   "test_migration_apply.py": {
    "comments": 61,
@@ -7052,13 +7058,13 @@
    "comments": 1,
    "docstrings": 10,
    "over_cap": 0,
-   "total": 301
+   "total": 327
   },
   "test_routine_lifecycle_api.py": {
    "comments": 4,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 402
+   "total": 440
   },
   "test_routine_run_api.py": {
    "comments": 2,
@@ -7076,13 +7082,13 @@
    "comments": 0,
    "docstrings": 11,
    "over_cap": 0,
-   "total": 298
+   "total": 318
   },
   "test_routine_store.py": {
-   "comments": 4,
+   "comments": 6,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 212
+   "total": 232
   },
   "test_run_context_store.py": {
    "comments": 0,
@@ -7289,10 +7295,10 @@
    "total": 180
   },
   "test_runner_harness_adapter.py": {
-   "comments": 88,
+   "comments": 91,
    "docstrings": 30,
    "over_cap": 0,
-   "total": 1524
+   "total": 1544
   },
   "test_runner_harness_claude_code_normalizer.py": {
    "comments": 20,
@@ -7361,10 +7367,10 @@
    "total": 107
   },
   "test_runner_loop.py": {
-   "comments": 350,
-   "docstrings": 162,
+   "comments": 367,
+   "docstrings": 173,
    "over_cap": 7,
-   "total": 2915
+   "total": 3207
   },
   "test_runner_loop_build.py": {
    "comments": 3,
@@ -7460,7 +7466,7 @@
    "comments": 26,
    "docstrings": 22,
    "over_cap": 2,
-   "total": 601
+   "total": 607
   },
   "test_runner_session_harness_provenance.py": {
    "comments": 1,
@@ -7667,10 +7673,10 @@
    "total": 77
   },
   "test_store_migrations.py": {
-   "comments": 46,
+   "comments": 47,
    "docstrings": 74,
    "over_cap": 7,
-   "total": 967
+   "total": 970
   },
   "test_store_read_index_gate.py": {
    "comments": 3,
@@ -7889,10 +7895,10 @@
    "total": 330
   },
   "test_work_item_materialization_store.py": {
-   "comments": 13,
+   "comments": 15,
    "docstrings": 9,
    "over_cap": 0,
-   "total": 563
+   "total": 567
   },
   "test_work_item_proposals_apply.py": {
    "comments": 16,

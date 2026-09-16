@@ -25,6 +25,12 @@ since no other runner can dispatch to that exact session either — but once the
 ([chunk-operations/takeover.md](./chunk-operations/takeover.md)) alongside that remedy; either way, clearing the
 escalation still takes one of the supersessions below.
 
+`no-acceptable-harness` (critical): distinct from `owner-unresolvable` above in reaching only a fresh mint, with no
+existing session to name — every member of the node's acceptable harness set ([worker-spawn.md](./worker-spawn.md)
+owns that set and its resolution) is unknown, unavailable, or resolves none of the session's model preference. The
+chunk escalates in place rather than minting under the runner's default harness; with no session ever spawned, the
+escalation carries no takeover command either.
+
 Escalations appear in the same feed as a needs-human event kind — one row, one surface; a row leaves when its escalation
 is superseded by any of a requeue, an operator `chunk restart`, the next attempt's lease, or the chunk ending `stopped`
 or `done`.

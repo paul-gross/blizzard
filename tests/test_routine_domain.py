@@ -93,6 +93,7 @@ class _FakeRoutineRepo:
         default_scope_slug: str,
         default_model: list[str],
         default_effort: str | None,
+        default_harnesses: list[str],
     ) -> Routine:
         self.edited.append(
             {
@@ -101,6 +102,7 @@ class _FakeRoutineRepo:
                 "default_scope_slug": default_scope_slug,
                 "default_model": default_model,
                 "default_effort": default_effort,
+                "default_harnesses": default_harnesses,
             }
         )
         current = self.by_id[routine_id]
@@ -112,6 +114,7 @@ class _FakeRoutineRepo:
             created_at=current.created_at,
             default_model=default_model,
             default_effort=default_effort,
+            default_harnesses=default_harnesses,
         )
         self.by_id[routine_id] = updated
         return updated
@@ -200,6 +203,27 @@ def test_create_naming_a_default_scope_mints_it() -> None:
     assert routine.default_scope_slug == "blizzard"
 
 
+def test_create_with_no_harnesses_preference_mints_empty() -> None:
+    authoring, _, _, _ = _authoring()
+
+    routine = authoring.create(name="nightly", graph_name="alpha", default_scope_slug=ScopeSlug.parse("blizzard"))
+
+    assert routine.default_harnesses == []
+
+
+def test_create_carries_a_harnesses_preference() -> None:
+    authoring, _, _, _ = _authoring()
+
+    routine = authoring.create(
+        name="nightly",
+        graph_name="alpha",
+        default_scope_slug=ScopeSlug.parse("blizzard"),
+        default_harnesses=["claude_code", "codex"],
+    )
+
+    assert routine.default_harnesses == ["claude_code", "codex"]
+
+
 def test_edit_naming_a_different_name_is_refused_naming_the_current_one() -> None:
     authoring, _, _, _ = _authoring()
     routine = authoring.create(name="nightly", graph_name="alpha", default_scope_slug=ScopeSlug.parse("blizzard"))
@@ -219,12 +243,14 @@ def test_edit_changes_graph_scope_and_defaults() -> None:
         default_scope_slug=ScopeSlug.parse("other"),
         default_model=["blizzard:advanced"],
         default_effort="high",
+        default_harnesses=["claude_code"],
     )
 
     assert edited.graph_name == "beta"
     assert edited.default_scope_slug == "other"
     assert edited.default_model == ["blizzard:advanced"]
     assert edited.default_effort == "high"
+    assert edited.default_harnesses == ["claude_code"]
 
 
 def test_edit_naming_an_unresolved_graph_is_refused_naming_it() -> None:

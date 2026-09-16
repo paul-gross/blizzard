@@ -1232,6 +1232,26 @@ def test_an_empty_preference_list_is_the_adapter_default() -> None:
 
 
 @pytest.mark.unit
+def test_resolve_model_strict_mirrors_resolve_model_when_something_resolves() -> None:
+    # The same left-to-right walk, same winner.
+    adapter = _adapter(binary="claude")
+    assert adapter.resolve_model_strict(["blizzard:advanced", "blizzard:basic"]) == "opus"
+
+
+@pytest.mark.unit
+def test_resolve_model_strict_is_none_for_an_empty_list() -> None:
+    # No adapter-default fallback — `resolve_model`'s own contract, not this one's, which
+    # reports "nothing authored resolved" instead.
+    assert _adapter(binary="claude", model="claude-opus-5").resolve_model_strict([]) is None
+
+
+@pytest.mark.unit
+def test_resolve_model_strict_is_none_when_nothing_resolves() -> None:
+    adapter = _adapter(binary="claude", model="claude-opus-5")
+    assert adapter.resolve_model_strict(["gpt-5.3-codex", "blizzard:experimental"]) is None
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("value", ["low", "medium", "high", "max"])
 def test_resolve_effort_passes_the_well_known_ordinal_through(value: str) -> None:
     assert _adapter(binary="claude").resolve_effort(value) == value

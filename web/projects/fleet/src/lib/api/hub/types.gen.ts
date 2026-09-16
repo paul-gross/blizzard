@@ -876,6 +876,10 @@ export type ChunkDetail = {
      */
     default_effort?: string | null;
     /**
+     * Default Harnesses
+     */
+    default_harnesses?: Array<string>;
+    /**
      * Default Model
      */
     default_model?: Array<string>;
@@ -1071,6 +1075,10 @@ export type ChunkPatchRequest = {
      */
     default_effort?: string | null;
     /**
+     * Default Harnesses
+     */
+    default_harnesses?: Array<string> | null;
+    /**
      * Default Model
      */
     default_model?: Array<string> | null;
@@ -1084,8 +1092,9 @@ export type ChunkPatchRequest = {
 /**
  * ChunkPatchResponse
  *
- * The result of one ``PATCH /chunks/{id}`` (issues #124, #144) — the chunk's editable build
- * properties after the edit, carried together since a PATCH can apply more than one at once.
+ * The result of one ``PATCH /chunks/{id}`` (issues #124, #144) — the chunk's
+ * editable build properties after the edit, carried together since a PATCH can apply more than
+ * one at once.
  */
 export type ChunkPatchResponse = {
     /**
@@ -1096,6 +1105,10 @@ export type ChunkPatchResponse = {
      * Default Effort
      */
     default_effort?: string | null;
+    /**
+     * Default Harnesses
+     */
+    default_harnesses?: Array<string>;
     /**
      * Default Model
      */
@@ -1222,6 +1235,10 @@ export type ChunkSummary = {
      * Default Effort
      */
     default_effort?: string | null;
+    /**
+     * Default Harnesses
+     */
+    default_harnesses?: Array<string>;
     /**
      * Default Model
      */
@@ -2634,8 +2651,8 @@ export type GraphPolicyRequest = {
  *
  * One graph-level named session declaration (issue #144).
  *
- * ``model`` is a prioritized preference list of opaque strings, resolved left-to-right at
- * session mint; the hub interprets none of it, ``effort``, or ``compaction_window``.
+ * ``model`` is a preference list resolved left-to-right at mint; the hub interprets none
+ * of it, ``effort``, ``compaction_window``, or ``harnesses`` (its own acceptable set).
  */
 export type GraphSessionView = {
     /**
@@ -2646,6 +2663,10 @@ export type GraphSessionView = {
      * Effort
      */
     effort?: string | null;
+    /**
+     * Harnesses
+     */
+    harnesses?: Array<string>;
     /**
      * Model
      */
@@ -3136,6 +3157,10 @@ export type NodeConfig = {
      * Session Effort
      */
     session_effort?: string | null;
+    /**
+     * Session Harnesses
+     */
+    session_harnesses?: Array<string>;
     /**
      * Session Model
      */
@@ -3841,6 +3866,10 @@ export type RoutineCreateRequest = {
      */
     default_effort?: string | null;
     /**
+     * Default Harnesses
+     */
+    default_harnesses?: Array<string>;
+    /**
      * Default Model
      */
     default_model?: Array<string>;
@@ -3869,6 +3898,10 @@ export type RoutineEditRequest = {
      * Default Effort
      */
     default_effort?: string | null;
+    /**
+     * Default Harnesses
+     */
+    default_harnesses?: Array<string>;
     /**
      * Default Model
      */
@@ -3984,6 +4017,10 @@ export type RoutineView = {
      * Default Effort
      */
     default_effort?: string | null;
+    /**
+     * Default Harnesses
+     */
+    default_harnesses?: Array<string>;
     /**
      * Default Model
      */

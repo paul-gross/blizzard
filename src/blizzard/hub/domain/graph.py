@@ -375,7 +375,7 @@ class RotatePolicy:
 
 
 # Every key this hub's session parser reads by name (issue #351).
-SESSION_KNOWN_KEYS = frozenset({"model", "effort", "rotate", "compaction_window"})
+SESSION_KNOWN_KEYS = frozenset({"model", "effort", "rotate", "compaction_window", "harnesses"})
 
 
 @dataclass(frozen=True)
@@ -383,13 +383,14 @@ class SessionDecl:
     """One graph-level named session declaration (issue #144).
 
     Carries workflow *policy* only (``bzh:app-agnostic-graphs``); ``model``, ``effort``,
-    and ``compaction_window`` are all opaque to the hub."""
+    ``compaction_window``, and ``harnesses`` (its own acceptable set) are opaque to the hub."""
 
     name: str
     model: list[str] = field(default_factory=list)
     effort: str | None = None
     rotate: RotatePolicy | None = None
     compaction_window: str | None = None
+    harnesses: list[str] = field(default_factory=list)
 
     @classmethod
     def of(cls, key: object, raw: object) -> SessionDecl:
@@ -406,6 +407,16 @@ class SessionDecl:
         # A single string is the one-entry spelling, normalized to the same one-entry list
         # the sequence form parses to, so readers see exactly one shape.
         model = [str(raw_model)] if isinstance(raw_model, str) else [str(m) for m in body.items("model")]
+        raw_harnesses = body.get("harnesses")
+        # An authored empty list names an acceptable set of nothing, unlike an omitted key —
+        # so it is rejected here rather than silently accepted as the same empty shape.
+        if isinstance(raw_harnesses, list) and not raw_harnesses:
+            raise GraphParseError(
+                f"session {name!r}: `harnesses` must not be an empty list — omit the key to accept every harness"
+            )
+        harnesses = (
+            [str(raw_harnesses)] if isinstance(raw_harnesses, str) else [str(h) for h in body.items("harnesses")]
+        )
         raw_rotate = body.get("rotate")
         return cls(
             name=name,
@@ -413,6 +424,7 @@ class SessionDecl:
             effort=body.text("effort"),
             rotate=RotatePolicy.of(raw_rotate, session=name) if raw_rotate is not None else None,
             compaction_window=body.text("compaction_window"),
+            harnesses=harnesses,
         )
 
 

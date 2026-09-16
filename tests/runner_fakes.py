@@ -41,7 +41,7 @@ from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.loop.session import SessionResolver
+from blizzard.runner.loop.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
@@ -696,6 +696,9 @@ class FakeHarness:
         # Scripted `resolve_model`/`resolve_effort` replies (issue #144); default echoes
         # the input verbatim for a test that doesn't care about resolution.
         self.resolved_model = "fake-model"
+        # `resolve_model_strict`'s own scripted reply, independent of `resolved_model` above, so a
+        # test can script "resolves nothing strictly, but still has an adapter default" for skip cases.
+        self.resolved_model_strict: str | None = "fake-model"
         self.harness_version: str | None = None
         self.resolved_effort: str | None = None
         self.resolved_compaction_window: str | None = None
@@ -810,6 +813,9 @@ class FakeHarness:
     def resolve_model(self, preferences: Sequence[str]) -> str:
         return self.resolved_model
 
+    def resolve_model_strict(self, preferences: Sequence[str]) -> str | None:
+        return self.resolved_model_strict
+
     def resolve_effort(self, value: str | None) -> str | None:
         return self.resolved_effort if self.resolved_effort is not None else value
 
@@ -848,6 +854,27 @@ class FakeHarness:
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source
+
+
+class TieredFakeHarness(FakeHarness):
+    """A :class:`FakeHarness` whose ``resolve_model``/``resolve_model_strict`` do a real,
+    left-to-right lookup against ``tiers`` — the second, differently-tiered adapter
+    multi-harness selection needs to prove against, since today's single-adapter fleet
+    cannot exercise it natively."""
+
+    def __init__(self, *, tiers: dict[str, str], handle: WorkerHandle, default: str = "fake-model") -> None:
+        super().__init__(handle=handle, verdict=None)
+        self._tiers = tiers
+        self.resolved_model = default
+
+    def resolve_model_strict(self, preferences: Sequence[str]) -> str | None:
+        for entry in preferences:
+            if entry in self._tiers:
+                return self._tiers[entry]
+        return None
+
+    def resolve_model(self, preferences: Sequence[str]) -> str:
+        return self.resolve_model_strict(preferences) or self.resolved_model
 
 
 class FakeSubscriptionSampler:
@@ -999,6 +1026,7 @@ def make_context(
             harnesses=_harnesses,
             transcripts_wired=_transcripts_wired,
         ),
+        harness_selector=HarnessSelector(harnesses=_harnesses),
         env_release=EnvironmentRelease(
             environments=store, leases=store, clock=_clock, provider=_provider, worker_files=_files, events=events
         ),
@@ -1057,6 +1085,7 @@ def make_envelope(
     session_source: str | None = None,
     session_name: str | None = None,
     session_model: list[str] | None = None,
+    session_harnesses: list[str] | None = None,
     session_effort: str | None = None,
     session_compaction_window: str | None = None,
     session_rotate: RotatePolicyView | None = None,
@@ -1084,6 +1113,7 @@ def make_envelope(
         session_source=session_source,
         session_name=session_name,
         session_model=session_model or [],
+        session_harnesses=session_harnesses or [],
         session_effort=session_effort,
         session_compaction_window=session_compaction_window,
         session_rotate=session_rotate,

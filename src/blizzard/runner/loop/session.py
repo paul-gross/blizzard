@@ -229,3 +229,56 @@ class SessionResolver:
                 detail=str(exc),
             )
             return None
+
+
+@dataclass(frozen=True)
+class SkippedHarness:
+    """One acceptable-set member :class:`HarnessSelector` passed over, and why —
+    the account an exhausted selection escalates with."""
+
+    harness_id: str
+    reason: str  # "unknown" | "unavailable" | "no-authored-tier"
+
+
+@dataclass(frozen=True)
+class HarnessSelection:
+    """A fresh mint's resolved owner among a node's acceptable set, or ``None`` when nothing
+    in it could serve — paired with why every skipped member was
+    skipped, whether or not selection ultimately succeeded."""
+
+    harness_id: str | None
+    skipped: tuple[SkippedHarness, ...] = ()
+
+
+@dataclass(frozen=True)
+class HarnessSelector:
+    """Chooses a fresh mint's owner among ``node.session_harnesses`` — deterministic
+    orchestration over the adapter seam (``bzh:deterministic-shell``), handed the registry
+    it walks rather than constructing one (``bzh:dependency-injection``). ``Spawner.spawn``
+    is its only caller: a resume or a forced continuation never reaches selection at all."""
+
+    harnesses: IHarnessRegistry
+
+    def select(self, node: NodeConfig) -> HarnessSelection:
+        """The earliest member of ``node.session_harnesses`` this runner can dispatch to, in
+        declared order — a later member resolving an earlier-preferred model still loses to
+        an earlier member resolving a later one. A member the registry cannot serve is
+        skipped and recorded. A single member skips the model check; with two or more, a
+        member resolving none of ``node.session_model`` strictly is skipped the same way."""
+        members = node.session_harnesses
+        strict = len(members) > 1 and bool(node.session_model)
+        skipped: list[SkippedHarness] = []
+        for harness_id in members:
+            try:
+                adapter = self.harnesses.adapter(harness_id)
+            except UnknownHarnessError:
+                skipped.append(SkippedHarness(harness_id, "unknown"))
+                continue
+            except UnavailableHarnessError:
+                skipped.append(SkippedHarness(harness_id, "unavailable"))
+                continue
+            if strict and adapter.resolve_model_strict(node.session_model) is None:
+                skipped.append(SkippedHarness(harness_id, "no-authored-tier"))
+                continue
+            return HarnessSelection(harness_id=harness_id, skipped=tuple(skipped))
+        return HarnessSelection(harness_id=None, skipped=tuple(skipped))
