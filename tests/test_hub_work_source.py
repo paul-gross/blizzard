@@ -25,10 +25,11 @@ from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import WorkItemAuthor, WorkItemClosure, WorkItemPriority, WorkRef
+from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkItemClosure, WorkItemPriority, WorkRef
 from blizzard.hub.domain.work_items import (
     WorkItemEdit,
     WorkItemEditService,
+    WorkItemHeldByDependents,
     WorkItemHeldByLiveChunk,
     WorkItemNotEditable,
 )
@@ -453,6 +454,32 @@ def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Pat
     with pytest.raises(WorkItemHeldByLiveChunk) as excinfo:
         source.withdraw(pointer, by="operator")
     assert excinfo.value.chunk_id == created.chunk_id
+
+
+def test_withdraw_is_refused_while_the_unacquired_holder_is_a_standing_prerequisite(tmp_path: Path) -> None:
+    """``chunk.md`` §Deletion: withdrawal is refused wherever deleting the holder would
+    be — including an unacquired holder standing as another chunk's prerequisite, not
+    just the live-holder case above."""
+    source, _, chunks, _, engine, clock = _source(tmp_path)
+    graph = _graph(engine)
+    created = source.create(
+        title="t",
+        body="b",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        graph=graph,
+    )
+    pointer = WorkRef(source="hub", ref=created.item.ref)
+    # The holder is left unacquired (no route recorded) — the cascade reaches
+    # `DeleteService.delete`, not the live-holder refusal.
+    dependent = Chunk(chunk_id="ch_dependent", graph_id=graph.graph_id, work_refs=[], minted_at=clock.instant)
+    chunks.record.mint(dependent)
+    chunks.dependencies.declare(dependent.chunk_id, created.chunk_id, by="operator", at=clock.instant)
+
+    with pytest.raises(WorkItemHeldByDependents) as excinfo:
+        source.withdraw(pointer, by="operator")
+    assert excinfo.value.chunk_id == created.chunk_id
+    assert excinfo.value.dependent_chunk_ids == [dependent.chunk_id]
 
 
 def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Path) -> None:
