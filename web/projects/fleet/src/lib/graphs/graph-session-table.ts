@@ -5,7 +5,8 @@ import type { GraphSessionView } from '../api/hub';
 /**
  * The graph detail's **session declaration** table (issue #144) — the graph-level
  * `sessions:` map, read-only: each declaration's prioritized model preference list,
- * effort, compaction window (blizzard#343), and rotation bounds.
+ * acceptable harness set (blizzard#432), effort, compaction window (blizzard#343), and
+ * rotation bounds.
  *
  * It is what makes a node meta line reading `fresh:code` legible: `sessionLabel`
  * recombines the wire's `session`/`session_source` pair into the authored form, but the

@@ -13,6 +13,7 @@ const SESSIONS: readonly GraphSessionView[] = [
   {
     name: 'code',
     model: ['blizzard:basic', 'gpt-5.3-codex'],
+    harnesses: ['claude', 'codex'],
     effort: 'medium',
     compaction_window: '100000',
     rotate: { max_context_tokens: 120000, max_invocations: 30 },
@@ -31,7 +32,7 @@ describe('GraphSessionTable', () => {
     }).compileComponents();
   });
 
-  it('renders one row per declaration, with the model list, effort, compaction window, and declared bounds', async () => {
+  it('renders one row per declaration, with the model list, harnesses, effort, compaction window, and declared bounds', async () => {
     const fixture = TestBed.createComponent(GraphSessionTable);
     fixture.componentRef.setInput('sessions', SESSIONS);
     await fixture.whenStable();
@@ -42,6 +43,7 @@ describe('GraphSessionTable', () => {
 
     const code = el.querySelector('[data-session-name="code"]') as HTMLElement;
     expect(code.textContent).toContain('blizzard:basic, gpt-5.3-codex');
+    expect(code.textContent).toContain('claude, codex');
     expect(code.textContent).toContain('medium');
     expect(code.textContent).toContain('100000');
     // Only the two thresholds the declaration actually set, and `max_invocations`
@@ -51,7 +53,7 @@ describe('GraphSessionTable', () => {
     expect(code.textContent).not.toContain('transcript bytes');
   });
 
-  it('dashes an undeclared model list, effort, compaction window, and rotate policy', async () => {
+  it('dashes an undeclared model list, harnesses, effort, compaction window, and rotate policy', async () => {
     const fixture = TestBed.createComponent(GraphSessionTable);
     fixture.componentRef.setInput('sessions', SESSIONS);
     await fixture.whenStable();
@@ -59,8 +61,9 @@ describe('GraphSessionTable', () => {
 
     const gate = el.querySelector('[data-session-name="gate"]') as HTMLElement;
     const gateCells = gate.querySelectorAll('td');
-    // Session / Model / Effort / Compact window / Rotate, in that column order.
-    expect(gateCells[3].textContent?.trim()).toBe('—');
+    // Session / Model / Harnesses / Effort / Compact window / Rotate, in that column order.
+    expect(gateCells[2].textContent?.trim()).toBe('—');
+    expect(gateCells[4].textContent?.trim()).toBe('—');
 
     const planning = el.querySelector('[data-session-name="planning"]') as HTMLElement;
     expect(planning.textContent).toContain('blizzard:advanced');
