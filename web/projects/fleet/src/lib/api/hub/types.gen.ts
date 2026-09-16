@@ -3510,6 +3510,32 @@ export type QueuePeekEntry = {
 };
 
 /**
+ * QueuePeekRequest
+ *
+ * The matched fleet peek's own request body — ``POST /api/fleet/queue/peek``
+ * (blizzard#433 Phase 3, D7). Carries the calling runner's own capability snapshot and
+ * its queue policy; never a ``runner_id`` — the matched verb answers for the
+ * authenticated principal alone.
+ *
+ * ``capabilities`` empty (a runner asserting none) applies no capability filter — only
+ * the blocked-dependency dimension applies, matching the unfiltered reach-ahead the
+ * legacy ``GET`` already gives the head entry. ``policy`` is an open string
+ * (``docs/versioning.md``'s round-trip-the-unrecognized rule, D8): ``"hold"`` stops at
+ * an unusable head and yields no entry; anything else, including a value this hub does
+ * not recognize, reads as ``"pass-over"``, the default.
+ */
+export type QueuePeekRequest = {
+    /**
+     * Capabilities
+     */
+    capabilities?: Array<RunnerCapability>;
+    /**
+     * Policy
+     */
+    policy?: string;
+};
+
+/**
  * QueuePeekResponse
  *
  * The ready queue's whole order, unpaginated — a write verb's caller needs it in
@@ -8194,6 +8220,31 @@ export type PeekQueueApiFleetQueuePeekGetResponses = {
 };
 
 export type PeekQueueApiFleetQueuePeekGetResponse = PeekQueueApiFleetQueuePeekGetResponses[keyof PeekQueueApiFleetQueuePeekGetResponses];
+
+export type PeekMatchedQueueApiFleetQueuePeekPostData = {
+    body: QueuePeekRequest;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/queue/peek';
+};
+
+export type PeekMatchedQueueApiFleetQueuePeekPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PeekMatchedQueueApiFleetQueuePeekPostError = PeekMatchedQueueApiFleetQueuePeekPostErrors[keyof PeekMatchedQueueApiFleetQueuePeekPostErrors];
+
+export type PeekMatchedQueueApiFleetQueuePeekPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: QueuePeekResponse;
+};
+
+export type PeekMatchedQueueApiFleetQueuePeekPostResponse = PeekMatchedQueueApiFleetQueuePeekPostResponses[keyof PeekMatchedQueueApiFleetQueuePeekPostResponses];
 
 export type ClaimRouteApiFleetRoutesPostData = {
     body: RouteClaim;

@@ -1255,6 +1255,55 @@ def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills(tmp_path)
     assert set(store.held_environment_ids()) == {"e1", "e2"}
 
 
+@pytest.mark.unit
+def test_fill_peeks_with_this_runners_own_capability_snapshot_and_queue_strict_policy(tmp_path):  # type: ignore[no-untyped-def]
+    """blizzard#433 Phase 3: the matched peek's own request carries the same capability
+    snapshot the registration push does (``capability_snapshot``), and translates
+    ``queue_strict`` into the wire policy string — ``True`` -> ``"hold"``, the default
+    ``False`` -> ``"pass-over"``."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.harness_version = "1.2.3"
+    harness.tier_ids = ("blizzard:frontier",)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", queue_strict=True),
+    )
+
+    Fill(ctx).run()
+
+    assert len(hub.peek_queue_requests) == 1
+    request = hub.peek_queue_requests[0]
+    assert request.policy == "hold"
+    assert [c.harness_id for c in request.capabilities] == ["claude_code"]
+    assert request.capabilities[0].default is True
+    assert request.capabilities[0].version == "1.2.3"
+    assert request.capabilities[0].tiers == ["blizzard:frontier"]
+
+
+@pytest.mark.unit
+def test_fill_peeks_pass_over_by_default(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1"),
+    )
+
+    Fill(ctx).run()
+
+    assert hub.peek_queue_requests[0].policy == "pass-over"
+
+
 # ADVANCE — exited worker (buffer) + PULL flush (deliver)
 
 

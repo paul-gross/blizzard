@@ -93,7 +93,7 @@ from blizzard.wire.envelope import (
 from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekEntry, QueuePeekResponse
+from blizzard.wire.queue import QueuePeekEntry, QueuePeekRequest, QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimResponse, RouteTokenRekeyResponse
 from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
@@ -317,6 +317,9 @@ class FakeHub:
         self.default_runner_id = default_runner_id
         self.queue: list[QueuePeekEntry] = []
         self.peek_queue_calls = 0  # counts `peek_queue` calls (blizzard#459) — one per Fill.run()
+        # One entry per `peek_queue` call, naming the request it carried (blizzard#433
+        # Phase 3) — lets a test assert on the capabilities/policy the call site sends.
+        self.peek_queue_requests: list[QueuePeekRequest] = []
         self.claim_outcome: RouteClaimOutcome | None = None
         self.apply_responses: list[ApplyResponse] = []
         self.envelopes: dict[str, NodeEnvelope] = {}
@@ -361,8 +364,9 @@ class FakeHub:
         self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for (issue #84b)
         self.rekey_responses: dict[str, str] = {}  # chunk_id -> the plaintext to hand back
 
-    def peek_queue(self) -> QueuePeekResponse:
+    def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
         self.peek_queue_calls += 1
+        self.peek_queue_requests.append(request)
         return QueuePeekResponse(entries=list(self.queue))
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:

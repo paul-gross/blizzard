@@ -16,7 +16,7 @@ from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekResponse
+from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
 from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
@@ -84,8 +84,13 @@ class IChunkStatusReader(Protocol):
 class IHubClient(IChunkStatusReader, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
-    def peek_queue(self) -> QueuePeekResponse:
-        """``GET /api/fleet/queue/peek`` — the hub-ordered ready queue."""
+    def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
+        """The FILL read — at most one matched entry while this runner holds a token
+        (``POST /api/fleet/queue/peek``, D7/D8, blizzard#433 Phase 3); the reference
+        binding falls back to the legacy, unfiltered ``GET /api/fleet/queue/peek`` on a
+        ``401`` (an unenrolled runner, or the matched verb's own always-raising demand
+        for a principal), so every caller here sees one uniform call regardless of
+        which verb actually served it."""
         ...
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:

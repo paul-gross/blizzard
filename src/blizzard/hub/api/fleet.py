@@ -60,7 +60,7 @@ from blizzard.wire.finding import FindingView
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.garden_proposal import GardenProposalView
 from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekResponse
+from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
 from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
@@ -201,9 +201,34 @@ class MigrationTargets:
 @router.get("/queue/peek", response_model=QueuePeekResponse)
 def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
     """The runner's FILL read — the whole ready-queue order, unlike the now-paginated
-    ``GET /api/queue``: a filling runner needs every ready chunk in one read."""
+    ``GET /api/queue``: a filling runner needs every ready chunk in one read. Kept as-is
+    for a previous-minor caller (D7, blizzard#433 Phase 3); ``POST /queue/peek`` below is
+    the matched counterpart."""
     statuses = services.chunks.facts.load_all_statuses()
     return queue_api.ReadyQueue.of(services, statuses).view
+
+
+@router.post("/queue/peek", response_model=QueuePeekResponse)
+def peek_matched_queue(
+    request: QueuePeekRequest,
+    services: Annotated[HubServices, Depends(get_services)],
+    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+) -> QueuePeekResponse:
+    """The matched fleet peek (D7/D8/D11, blizzard#433 Phase 3) — at most one ready
+    entry, the first the calling principal can both work (its own declared
+    capabilities, against ``EligibilityCheck``) and claim (not dependency-blocked), with
+    ``request.policy`` applied to both dimensions together.
+
+    Demands a resolvable principal in **every** auth mode, unlike the router's own
+    mode-gated dependency (``runner_auth_mode`` leaves that one inert under ``warn``) —
+    the same always-raising idiom ``get_lease_transcript_segments`` uses
+    (``_demand_lease_owner``'s docstring), since an upgraded-but-unenrolled runner would
+    otherwise read a permanently empty queue as an idle fleet rather than as a runner
+    that has not enrolled."""
+    if principal is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no resolvable runner token")
+    statuses = services.chunks.facts.load_all_statuses()
+    return queue_api.MatchedPeek.of(services, statuses, request).view
 
 
 @router.get("/system-artifacts", response_model=list[SystemArtifactView])

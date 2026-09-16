@@ -63,7 +63,7 @@ from blizzard.hub.domain.garden_proposals import IReadGardenProposalRepository
 from blizzard.hub.domain.garden_run import IReadGardenRunRepository
 from blizzard.hub.domain.garden_sweeps import IReadGardenSweepsRepository
 from blizzard.hub.domain.garden_trend import IReadGardenTrendRepository
-from blizzard.hub.domain.graph import Graph, IReadGraphRepository
+from blizzard.hub.domain.graph import Graph, IReadGraphRepository, IReadManyGraphs
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RunMode
@@ -1782,6 +1782,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadGraphRepository, "list_summaries"): lambda w: w.hub.services.graphs.list_summaries(),
     (IReadGraphRepository, "graph_id_of_enabled_name"): lambda w: w.hub.services.graphs.graph_id_of_enabled_name(
         _HUB_GRAPH_NAME
+    ),
+    (IReadManyGraphs, "get_many"): lambda w: w.hub.services.graphs.get_many(
+        [w.graph.graph_id, w.default_graph.graph_id]
     ),
     (IReadRunnerRegistry, "get_runner"): lambda w: w.hub.services.registry.get_runner(HUB_RUNNER_ID),
     (IReadRunnerRegistry, "list_runners"): lambda w: w.hub.services.registry.list_runners(),

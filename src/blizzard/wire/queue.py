@@ -3,13 +3,18 @@
 ``GET /api/queue`` (and the runner's fleet-side ``GET /api/fleet/queue/peek``) returns
 the hub-ordered ready queue, read-only. ``GET /api/backlog`` is its ``not_ready``-list
 counterpart, ranked independently (``bzh:ranking-is-per-list``); their wire models are
-kept separate rather than shared. Order derives from appended facts."""
+kept separate rather than shared. Order derives from appended facts.
+
+``POST /api/fleet/queue/peek`` (blizzard#433 Phase 3) is a second verb on the same path
+— the matched fleet peek, answering at most one entry for the calling principal alone;
+the response model it shares with the ``GET`` above stays unchanged."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel
 
 from blizzard.wire.chunk import BlockedView, WorkRefModel
+from blizzard.wire.runner import RunnerCapability
 
 
 class QueuePeekEntry(BaseModel):
@@ -28,6 +33,23 @@ class QueuePeekResponse(BaseModel):
     full to confirm against, not one page (blizzard#526 D3)."""
 
     entries: list[QueuePeekEntry] = []
+
+
+class QueuePeekRequest(BaseModel):
+    """The matched fleet peek's own request body — ``POST /api/fleet/queue/peek``
+    (blizzard#433 Phase 3, D7). Carries the calling runner's own capability snapshot and
+    its queue policy; never a ``runner_id`` — the matched verb answers for the
+    authenticated principal alone.
+
+    ``capabilities`` empty (a runner asserting none) applies no capability filter — only
+    the blocked-dependency dimension applies, matching the unfiltered reach-ahead the
+    legacy ``GET`` already gives the head entry. ``policy`` is an open string
+    (``docs/versioning.md``'s round-trip-the-unrecognized rule, D8): ``"hold"`` stops at
+    an unusable head and yields no entry; anything else, including a value this hub does
+    not recognize, reads as ``"pass-over"``, the default."""
+
+    capabilities: list[RunnerCapability] = []
+    policy: str = "pass-over"
 
 
 class QueuePageView(BaseModel):

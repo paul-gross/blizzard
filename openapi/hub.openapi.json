@@ -5480,6 +5480,26 @@
         "title": "QueuePeekEntry",
         "type": "object"
       },
+      "QueuePeekRequest": {
+        "description": "The matched fleet peek's own request body \u2014 ``POST /api/fleet/queue/peek``\n(blizzard#433 Phase 3, D7). Carries the calling runner's own capability snapshot and\nits queue policy; never a ``runner_id`` \u2014 the matched verb answers for the\nauthenticated principal alone.\n\n``capabilities`` empty (a runner asserting none) applies no capability filter \u2014 only\nthe blocked-dependency dimension applies, matching the unfiltered reach-ahead the\nlegacy ``GET`` already gives the head entry. ``policy`` is an open string\n(``docs/versioning.md``'s round-trip-the-unrecognized rule, D8): ``\"hold\"`` stops at\nan unusable head and yields no entry; anything else, including a value this hub does\nnot recognize, reads as ``\"pass-over\"``, the default.",
+        "properties": {
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerCapability"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "policy": {
+            "default": "pass-over",
+            "title": "Policy",
+            "type": "string"
+          }
+        },
+        "title": "QueuePeekRequest",
+        "type": "object"
+      },
       "QueuePeekResponse": {
         "description": "The ready queue's whole order, unpaginated \u2014 a write verb's caller needs it in\nfull to confirm against, not one page (blizzard#526 D3).",
         "properties": {
@@ -13652,7 +13672,7 @@
     },
     "/api/fleet/queue/peek": {
       "get": {
-        "description": "The runner's FILL read \u2014 the whole ready-queue order, unlike the now-paginated\n``GET /api/queue``: a filling runner needs every ready chunk in one read.",
+        "description": "The runner's FILL read \u2014 the whole ready-queue order, unlike the now-paginated\n``GET /api/queue``: a filling runner needs every ready chunk in one read. Kept as-is\nfor a previous-minor caller (D7, blizzard#433 Phase 3); ``POST /queue/peek`` below is\nthe matched counterpart.",
         "operationId": "peek_queue_api_fleet_queue_peek_get",
         "responses": {
           "200": {
@@ -13667,6 +13687,46 @@
           }
         },
         "summary": "Peek Queue",
+        "tags": [
+          "fleet"
+        ]
+      },
+      "post": {
+        "description": "The matched fleet peek (D7/D8/D11, blizzard#433 Phase 3) \u2014 at most one ready\nentry, the first the calling principal can both work (its own declared\ncapabilities, against ``EligibilityCheck``) and claim (not dependency-blocked), with\n``request.policy`` applied to both dimensions together.\n\nDemands a resolvable principal in **every** auth mode, unlike the router's own\nmode-gated dependency (``runner_auth_mode`` leaves that one inert under ``warn``) \u2014\nthe same always-raising idiom ``get_lease_transcript_segments`` uses\n(``_demand_lease_owner``'s docstring), since an upgraded-but-unenrolled runner would\notherwise read a permanently empty queue as an idle fleet rather than as a runner\nthat has not enrolled.",
+        "operationId": "peek_matched_queue_api_fleet_queue_peek_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueuePeekRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuePeekResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Peek Matched Queue",
         "tags": [
           "fleet"
         ]

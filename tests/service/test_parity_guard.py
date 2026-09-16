@@ -23,7 +23,7 @@ pytestmark = [pytest.mark.service, service_gate]
 #: One row per ``IHubClient`` endpoint method, verbatim from
 #: ``src/blizzard/runner/loop/internal/http_hub.py`` (the reference binding).
 _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
-    "peek_queue": ("GET", "/api/fleet/queue/peek"),
+    "peek_queue": ("POST", "/api/fleet/queue/peek"),
     "claim_route": ("POST", "/api/fleet/routes"),
     "submit_completion": ("POST", "/api/fleet/chunks/{chunk_id}/completions"),
     "submit_decision": ("POST", "/api/fleet/chunks/{chunk_id}/decisions"),

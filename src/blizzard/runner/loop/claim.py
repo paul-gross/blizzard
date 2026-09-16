@@ -13,12 +13,13 @@ from blizzard.runner.environments.provider import (
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.loop.capability_snapshot import capability_snapshot
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.wire.envelope import NodeEnvelope
-from blizzard.wire.queue import QueuePeekEntry
+from blizzard.wire.queue import QueuePeekEntry, QueuePeekRequest
 from blizzard.wire.route import RouteClaim
 
 _log = get_logger("blizzard.runner.loop")
@@ -49,8 +50,15 @@ class ReadyQueue:
 
     @classmethod
     def peeked(cls, ctx: LoopContext) -> ReadyQueue:
+        request = QueuePeekRequest(
+            capabilities=list(capability_snapshot(ctx.harnesses)),
+            # The same knob `_next` reach-ahead already honors locally — sent per call
+            # (D8, blizzard#433 Phase 3) rather than read hub-side, so the matched verb
+            # applies the identical hold-or-pass-over policy to both dimensions.
+            policy="hold" if ctx.config.queue_strict else "pass-over",
+        )
         try:
-            peeked = ctx.hub.peek_queue()
+            peeked = ctx.hub.peek_queue(request)
         except HubClientError:
             return cls(ctx, _entries=[])
         return cls(ctx, _entries=list(peeked.entries))

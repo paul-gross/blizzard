@@ -322,6 +322,63 @@ class GraphStore:
                     return row.graph_id
             return None
 
+    def get_many(self, graph_ids: Sequence[str]) -> dict[str, Graph]:
+        """``get``'s batched sibling (D11, blizzard#433 Phase 3) — every requested id's
+        whole :class:`Graph`, keyed by graph id, read as one batched-``IN`` query per
+        table rather than :meth:`_reify`'s own five-query fan-out repeated per graph."""
+        if not graph_ids:
+            return {}
+        result: dict[str, Graph] = {}
+        with self._store.read("get_many") as conn:
+            for batch in id_batches(graph_ids):
+                result.update(self._reify_many(conn, batch))
+        return result
+
+    def _reify_many(self, conn, graph_ids: Sequence[str]) -> dict[str, Graph]:  # type: ignore[no-untyped-def]
+        graph_rows = conn.execute(select(graphs).where(graphs.c.graph_id.in_(graph_ids))).all()
+        if not graph_rows:
+            return {}
+        batch_ids = [row.graph_id for row in graph_rows]
+        node_rows = conn.execute(select(graph_nodes).where(graph_nodes.c.graph_id.in_(batch_ids))).all()
+        node_ids = {nr.node_id for nr in node_rows}
+        node_graph_of = {nr.node_id: nr.graph_id for nr in node_rows}
+        choice_rows = conn.execute(select(graph_choices).where(graph_choices.c.node_id.in_(node_ids))).all()
+        choices_by_node: dict[str, list[Choice]] = defaultdict(list)
+        for cr in choice_rows:
+            choices_by_node[cr.node_id].append(CHOICES.of(cr))
+        nodes_by_graph: dict[str, list[Node]] = defaultdict(list)
+        for nr in node_rows:
+            nodes_by_graph[nr.graph_id].append(NODES.of(nr, choices=choices_by_node[nr.node_id]))
+        edge_rows = conn.execute(select(graph_edges).where(graph_edges.c.from_node_id.in_(node_ids))).all()
+        edges_by_graph: dict[str, list[Edge]] = defaultdict(list)
+        for er in edge_rows:
+            edges_by_graph[node_graph_of[er.from_node_id]].append(EDGES.of(er))
+        session_rows = conn.execute(
+            select(graph_sessions).where(graph_sessions.c.graph_id.in_(batch_ids)).order_by(graph_sessions.c.ordinal)
+        ).all()
+        sessions_by_graph: dict[str, list[SessionDecl]] = defaultdict(list)
+        for sr in session_rows:
+            sessions_by_graph[sr.graph_id].append(SESSIONS.of(sr))
+        artifact_rows = conn.execute(
+            select(graph_artifacts).where(graph_artifacts.c.graph_id.in_(batch_ids)).order_by(graph_artifacts.c.ordinal)
+        ).all()
+        artifacts_by_graph: dict[str, list[GraphArtifact]] = defaultdict(list)
+        for ar in artifact_rows:
+            artifacts_by_graph[ar.graph_id].append(GRAPH_ARTIFACTS.of(ar))
+        return {
+            row.graph_id: Graph(
+                graph_id=row.graph_id,
+                name=row.name,
+                entry_node_id=row.entry_node_id,
+                nodes=nodes_by_graph.get(row.graph_id, []),
+                edges=edges_by_graph.get(row.graph_id, []),
+                created_at=row.created_at,
+                sessions=sessions_by_graph.get(row.graph_id, []),
+                artifacts=artifacts_by_graph.get(row.graph_id, []),
+            )
+            for row in graph_rows
+        }
+
     def load_graph_summaries(self, graph_ids: Sequence[str]) -> dict[str, GraphSummary]:
         """``{graph_id: GraphSummary}`` for every requested id that exists. Graphs are
         immutable/insert-only — no ephemeral concept to exclude, just "exists or

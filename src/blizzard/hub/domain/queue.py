@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -23,9 +23,12 @@ from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.dependencies import plan_fold, would_close_a_cycle
+from blizzard.hub.domain.eligibility import EligibilityCheck
 from blizzard.hub.domain.errors import ChunkNotFound
+from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.registry import RunnerCapability
+from blizzard.hub.domain.work import Chunk, ChunkFacts
 
 _log = get_logger("blizzard.hub.queue")
 
@@ -39,6 +42,82 @@ class QueueList(Enum):
 
     READY = "ready"
     NOT_READY = "not_ready"
+
+
+class QueueMatchPolicy(Enum):
+    """The matched fleet peek's hold-or-pass-over policy (D8) — applied to the
+    capability-eligibility and blocked-dependency dimensions together, never one alone.
+    :meth:`of` never raises: an unrecognized wire value reads as :attr:`PASS_OVER`
+    (``docs/versioning.md``'s round-trip-the-unrecognized rule)."""
+
+    HOLD = "hold"
+    PASS_OVER = "pass-over"
+
+    @classmethod
+    def of(cls, value: str) -> QueueMatchPolicy:
+        return cls.HOLD if value == cls.HOLD.value else cls.PASS_OVER
+
+
+@dataclass(frozen=True)
+class MatchedEntry:
+    """The one ready chunk :func:`select_matched_entry` returns, at its own position in
+    the unmutated ready order (D8) — the order itself is never reshaped, only scanned
+    past."""
+
+    chunk: Chunk
+    position: int
+
+
+def _capability_ineligible(
+    chunk: Chunk, graph: Graph, facts: ChunkFacts | None, capabilities: Sequence[RunnerCapability]
+) -> bool:
+    """Whether ``capabilities`` cannot work ``chunk``'s current node. Asserting no
+    capabilities at all — an empty snapshot, or a request declaring none — applies no
+    filter, matching the legacy peek's unfiltered reach-ahead for the head entry; this is
+    a deliberate divergence from :class:`EligibilityCheck` itself, which reads an empty
+    snapshot as satisfying nothing."""
+    if not capabilities:
+        return False
+    node_id = (facts.current_node_id() if facts is not None else None) or graph.entry_node_id
+    node = graph.node_by_id(node_id)
+    if node is None:  # pragma: no cover - a pinned graph always resolves its own node
+        return True
+    return not EligibilityCheck(chunk, graph, node, capabilities).eligible
+
+
+def select_matched_entry(
+    chunks: Sequence[Chunk],
+    *,
+    graphs: Mapping[str, Graph],
+    facts: Mapping[str, ChunkFacts],
+    capabilities: Sequence[RunnerCapability],
+    blocked: Mapping[str, list[str]],
+    policy: QueueMatchPolicy,
+) -> MatchedEntry | None:
+    """The matched fleet peek's own selection (D7/D8): the first entry in ``chunks``'s
+    own order the caller can both work (capability-eligible) and claim (not
+    dependency-blocked) — moved hub-side for this path so a runner passing over an entry
+    locally and re-peeking is not simply handed it again, the way the runner-loop's own
+    ``ReadyQueue._next`` (``claim.py``) reaches ahead over a **cached** peek today.
+
+    Under :attr:`QueueMatchPolicy.HOLD`, only the head is examined: an unusable head
+    yields ``None`` rather than reaching past it. Under
+    :attr:`QueueMatchPolicy.PASS_OVER` (the default), the whole order is scanned for the
+    first usable entry. Neither branch mutates or reorders ``chunks`` — a skipped entry
+    keeps its position, and nothing about the skip is recorded or returned."""
+    for position, chunk in enumerate(chunks):
+        graph = graphs.get(chunk.graph_id)
+        if graph is None:  # pragma: no cover - a pinned graph always resolves
+            unusable = True
+        else:
+            unusable = chunk.chunk_id in blocked or _capability_ineligible(
+                chunk, graph, facts.get(chunk.chunk_id), capabilities
+            )
+        if not unusable:
+            return MatchedEntry(chunk=chunk, position=position)
+        if policy is QueueMatchPolicy.HOLD:
+            return None
+    return None
 
 
 class ChunkNotGroupable(ValueError):

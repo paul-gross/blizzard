@@ -6,6 +6,8 @@ the idempotent envelope re-read, the chunk poll, and a transport failure surfaci
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -13,7 +15,9 @@ from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.internal import http_hub as http_hub_module
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.wire.completion import CompletionSubmission
+from blizzard.wire.queue import QueuePeekRequest
 from blizzard.wire.route import RouteClaim
+from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
@@ -28,7 +32,41 @@ def test_peek_queue_parses_entries() -> None:
         assert request.url.path == "/api/fleet/queue/peek"
         return httpx.Response(200, json={"entries": [{"chunk_id": "ch_1", "graph_id": "gr_1", "position": 0}]})
 
-    peek = _client(handler).peek_queue()
+    peek = _client(handler).peek_queue(QueuePeekRequest())
+    assert [e.chunk_id for e in peek.entries] == ["ch_1"]
+
+
+@pytest.mark.unit
+def test_peek_queue_posts_the_request_body() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"entries": []})
+
+    request = QueuePeekRequest(capabilities=[RunnerCapability(harness_id="claude", default=True)], policy="hold")
+    _client(handler).peek_queue(request)
+    assert seen["body"] == request.model_dump(mode="json")
+
+
+@pytest.mark.unit
+def test_peek_queue_falls_back_to_the_legacy_get_on_a_401() -> None:
+    """D7/D12's resolution (blizzard#433 Phase 3): the matched verb's own always-raising
+    demand for a principal — or an unenrolled runner carrying no token at all — reads as
+    a ``401``, and this one call internally serves it off the legacy, unfiltered verb
+    instead. ``IHubClient`` callers see one uniform call either way."""
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.method)
+        if request.method == "POST":
+            return httpx.Response(401, json={"detail": "no resolvable runner token"})
+        assert request.url.path == "/api/fleet/queue/peek"
+        return httpx.Response(200, json={"entries": [{"chunk_id": "ch_1", "graph_id": "gr_1", "position": 0}]})
+
+    peek = _client(handler).peek_queue(QueuePeekRequest())
+    assert calls == ["POST", "GET"]
     assert [e.chunk_id for e in peek.entries] == ["ch_1"]
 
 
@@ -218,7 +256,7 @@ def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None
         ],
     )
     client.push_transcripts(batch)
-    client.peek_queue()  # a plain route, to prove it still rides the client's own default
+    client.peek_queue(QueuePeekRequest())  # a plain route, to prove it still rides the client's own default
 
     assert seen_timeouts[0] == 5.0  # the transcript route's own short override
     assert seen_timeouts[1] == 30.0  # every other route: unaffected, still the shared default
@@ -365,7 +403,7 @@ def test_transport_failure_raises_hub_client_error() -> None:
         return httpx.Response(500, text="boom")
 
     with pytest.raises(HubClientError):
-        _client(handler).peek_queue()
+        _client(handler).peek_queue(QueuePeekRequest())
 
 
 @pytest.mark.unit

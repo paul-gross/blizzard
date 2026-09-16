@@ -196,6 +196,9 @@ _HUMAN: dict[tuple[str, str], Permission] = {
 #: ``require_runner_principal``-at-router-level confinement); no per-route permission.
 _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/queue/peek"),
+    # The matched fleet peek (D7, blizzard#433 Phase 3) — a second verb on the same
+    # path; the ``GET`` above stays for a previous-minor caller.
+    ("POST", "/api/fleet/queue/peek"),
     ("GET", "/api/fleet/chunk-statuses"),
     ("GET", "/api/fleet/chunks/{chunk_id}"),
     ("GET", "/api/fleet/chunks/{chunk_id}/work-items"),

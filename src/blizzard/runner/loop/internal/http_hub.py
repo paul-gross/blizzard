@@ -20,7 +20,7 @@ from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekResponse
+from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
 from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
@@ -53,8 +53,17 @@ class HttpHubClient:
     def __init__(self, client: httpx.Client) -> None:
         self._client = client
 
-    def peek_queue(self) -> QueuePeekResponse:
-        resp = self._get(f"{_FLEET_API}/queue/peek")
+    def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
+        path = f"{_FLEET_API}/queue/peek"
+        try:
+            resp = self._client.post(path, json=request.model_dump(mode="json"))
+        except httpx.HTTPError as exc:
+            raise self._wrap(exc, f"POST {path}") from exc
+        if resp.status_code == httpx.codes.UNAUTHORIZED:
+            # No token, or the matched verb's own always-raising demand for a principal
+            # (D7) — the legacy verb serves this caller in every auth mode instead.
+            return QueuePeekResponse.model_validate(self._get(path).json())
+        self._raise_for_status(resp, f"POST {path}")
         return QueuePeekResponse.model_validate(resp.json())
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
