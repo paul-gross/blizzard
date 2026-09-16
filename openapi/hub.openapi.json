@@ -4892,6 +4892,14 @@
             ],
             "title": "Session Effort"
           },
+          "session_harnesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Session Harnesses",
+            "type": "array"
+          },
           "session_model": {
             "default": [],
             "items": {

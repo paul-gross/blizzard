@@ -17,6 +17,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.wire.facts import ESCALATION_RECORDED, QUESTION_ASKED, RunnerFact, RunnerFactBatch
+from blizzard.wire.route import RouteClaim
 from tests.e2e.test_acceptance_loop import REPO, _free_port, _runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.service.support import (
@@ -141,7 +142,32 @@ def test_question_ask_answer_round_trips_through_the_mock_hub() -> None:
         assert polled_again.answer == "a"
 
 
-# 4. Runner env-release on chunk-unknown (behavioral — the real runner loop)
+# 4. The effective harness set on the claim envelope (blizzard#432 D5, D10)
+
+
+def test_the_session_harness_set_reaches_the_real_hub_clients_claim_envelope() -> None:
+    """``HttpHubClient.claim_route`` deserializes the mock hub's wire reply into a real
+    :class:`~blizzard.wire.envelope.NodeConfig`; this proves ``session_harnesses`` parses
+    off that reply rather than only that the mock's own JSON carries the key."""
+    bin_dir = require_mock_fleet()
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:
+        spec = mock_hub_chunk_spec(_WORK_REF_URL)
+        spec["nodes"]["build"]["session_model"] = ["blizzard:basic"]
+        spec["nodes"]["build"]["session_harnesses"] = ["claude", "codex"]
+        resp = hub.post("/_seed/chunk", json=spec)
+        assert resp.status_code == 201, resp.text
+        chunk_id = resp.json()["chunk_id"]
+
+        outcome = client.claim_route(
+            RouteClaim(chunk_id=chunk_id, runner_id="runner-parity", workspace_id="ws1", environment_ids=["e1"])
+        )
+
+        assert outcome.claimed is not None, outcome
+        assert outcome.claimed.envelope.node.session_harnesses == ["claude", "codex"]
+
+
+# 5. Runner env-release on chunk-unknown (behavioral — the real runner loop)
 
 
 def _tick_env() -> dict[str, str]:

@@ -3160,6 +3160,10 @@ export type NodeConfig = {
      */
     session_effort?: string | null;
     /**
+     * Session Harnesses
+     */
+    session_harnesses?: Array<string>;
+    /**
      * Session Model
      */
     session_model?: Array<string>;

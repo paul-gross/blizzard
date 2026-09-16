@@ -229,8 +229,8 @@ def test_envelope_checks_gating_fields_default_off() -> None:
 # --- The effective session declaration (issue #144) — precedence resolved hub-side ---
 
 
-def _chunk_with_defaults(model: list[str], effort: str | None) -> Chunk:
-    return replace(_chunk(), default_model=model, default_effort=effort)
+def _chunk_with_defaults(model: list[str], effort: str | None, harnesses: list[str] | None = None) -> Chunk:
+    return replace(_chunk(), default_model=model, default_effort=effort, default_harnesses=harnesses or [])
 
 
 def test_a_declaration_only_node_carries_the_declaration() -> None:
@@ -305,3 +305,62 @@ def test_a_node_name_session_target_carries_no_pool_but_still_the_chunk_default(
     assert env.node.session_source == "build"
     assert env.node.session_name is None
     assert env.node.session_model == ["blizzard:advanced"]
+
+
+# --- The effective harness set (blizzard#432 D5) — the `model` precedence rule, cloned ---
+
+
+def test_a_declared_harness_set_replaces_the_chunk_default_as_a_whole_list() -> None:
+    # Whole-list replacement, not merged: a declared `harnesses` wins outright over the
+    # chunk default, unlike `model`/`effort`'s field-by-field merge.
+    node = replace(_node(), session_source="code")
+    decl = SessionDecl(name="code", harnesses=["claude"])
+    chunk = _chunk_with_defaults([], None, harnesses=["claude", "codex"])
+
+    env = Envelope(chunk=chunk, graph=_graph(decl), node=node, artifacts=[], epoch=1).wire
+
+    assert env.node.session_harnesses == ["claude"]
+
+
+def test_a_declaration_without_harnesses_inherits_the_chunk_default() -> None:
+    node = replace(_node(), session_source="code")
+    decl = SessionDecl(name="code", model=["blizzard:basic"])
+    chunk = _chunk_with_defaults([], None, harnesses=["claude", "codex"])
+
+    env = Envelope(chunk=chunk, graph=_graph(decl), node=node, artifacts=[], epoch=1).wire
+
+    assert env.node.session_harnesses == ["claude", "codex"]
+
+
+def test_a_bare_fresh_node_takes_the_chunk_default_harnesses() -> None:
+    chunk = _chunk_with_defaults([], None, harnesses=["claude", "codex"])
+
+    env = Envelope(chunk=chunk, graph=_graph(), node=_node(), artifacts=[], epoch=1).wire
+
+    assert env.node.session_harnesses == ["claude", "codex"]
+
+
+def test_a_bare_resume_node_takes_the_chunk_default_harnesses() -> None:
+    node = replace(_node(), session=SessionMode.RESUME)
+    chunk = _chunk_with_defaults([], None, harnesses=["claude", "codex"])
+
+    env = Envelope(chunk=chunk, graph=_graph(), node=node, artifacts=[], epoch=1).wire
+
+    assert env.node.session_harnesses == ["claude", "codex"]
+
+
+def test_a_node_name_session_target_takes_the_chunk_default_harnesses() -> None:
+    # `resume:<node>` names no pool (issue #115), so it falls straight to the chunk
+    # default, same as the bare forms.
+    node = replace(_node(), session_source="build")
+    chunk = _chunk_with_defaults([], None, harnesses=["claude", "codex"])
+
+    env = Envelope(chunk=chunk, graph=_graph(SessionDecl(name="code")), node=node, artifacts=[], epoch=1).wire
+
+    assert env.node.session_harnesses == ["claude", "codex"]
+
+
+def test_neither_a_declaration_nor_a_chunk_default_yields_an_empty_effective_harness_set() -> None:
+    env = Envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1).wire
+
+    assert env.node.session_harnesses == []
