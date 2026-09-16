@@ -202,6 +202,11 @@
  *     the last with no horizontal overflow at 390/320px, and a card carrying claims, a
  *     slot bar, and a grouped subscription pace bar with a long name stays inside its
  *     own width.
+ *   - projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts — the
+ *     `KitMasterDetail` shell's collapse rule: the list pane sits beside the detail
+ *     pane, sized to `--master-list-col`, at 1024px, and genuinely stacks above it with
+ *     no horizontal overflow at 390/320px — the `@media (min-width: 720px)` row/column
+ *     flip jsdom cannot resolve.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -244,6 +249,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-explorer-list.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/fleet/fleet-view.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.

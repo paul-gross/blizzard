@@ -1,0 +1,30 @@
+@if (showList()) {
+  <div
+    class="kmd-list"
+    [class.kmd-list--only]="!showDetail()"
+    [attr.role]="listCaption() ? 'region' : null"
+    [attr.aria-labelledby]="listCaption() ? listCaptionId() : null"
+  >
+    @if (listCaption()) {
+      <div class="s-head"><span class="tag" [id]="listCaptionId()">{{ listCaption() }}</span></div>
+    }
+    <ng-content select="[kit-master-detail-list]" />
+  </div>
+}
+@if (showDetail()) {
+  <section
+    class="kmd-detail"
+    [attr.role]="detailCaption() ? 'region' : null"
+    [attr.aria-labelledby]="detailCaption() ? detailCaptionId() : null"
+  >
+    @if (drilldown()) {
+      <button type="button" class="kmd-back" [attr.data-testid]="testidPrefix() + '-back'" (click)="back.emit()">
+        <fleet-kit-back-bar [label]="backLabel()" />
+      </button>
+    }
+    @if (detailCaption()) {
+      <div class="s-head"><span class="tag" [id]="detailCaptionId()">{{ detailCaption() }}</span></div>
+    }
+    <ng-content select="[kit-master-detail-detail]" />
+  </section>
+}
