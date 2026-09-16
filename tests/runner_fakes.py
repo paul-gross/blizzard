@@ -859,8 +859,8 @@ class FakeHarness:
 class TieredFakeHarness(FakeHarness):
     """A :class:`FakeHarness` whose ``resolve_model``/``resolve_model_strict`` do a real,
     left-to-right lookup against ``tiers`` — the second, differently-tiered adapter
-    blizzard#432's multi-harness selection needs to prove against (today's single-adapter
-    fleet cannot exercise it natively, D6-D8's own tested assumption)."""
+    multi-harness selection needs to prove against, since today's single-adapter fleet
+    cannot exercise it natively."""
 
     def __init__(self, *, tiers: dict[str, str], handle: WorkerHandle, default: str = "fake-model") -> None:
         super().__init__(handle=handle, verdict=None)

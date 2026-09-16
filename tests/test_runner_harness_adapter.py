@@ -1233,15 +1233,15 @@ def test_an_empty_preference_list_is_the_adapter_default() -> None:
 
 @pytest.mark.unit
 def test_resolve_model_strict_mirrors_resolve_model_when_something_resolves() -> None:
-    # blizzard#432 D6 — the same left-to-right walk, same winner.
+    # The same left-to-right walk, same winner.
     adapter = _adapter(binary="claude")
     assert adapter.resolve_model_strict(["blizzard:advanced", "blizzard:basic"]) == "opus"
 
 
 @pytest.mark.unit
 def test_resolve_model_strict_is_none_for_an_empty_list() -> None:
-    # No adapter-default fallback (blizzard#432 D6) — `resolve_model`'s own contract, not
-    # this one's, which reports "nothing authored resolved" instead.
+    # No adapter-default fallback — `resolve_model`'s own contract, not this one's, which
+    # reports "nothing authored resolved" instead.
     assert _adapter(binary="claude", model="claude-opus-5").resolve_model_strict([]) is None
 
 

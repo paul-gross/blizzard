@@ -142,7 +142,7 @@ def test_question_ask_answer_round_trips_through_the_mock_hub() -> None:
         assert polled_again.answer == "a"
 
 
-# 4. The effective harness set on the claim envelope (blizzard#432 D5, D10)
+# 4. The effective harness set on the claim envelope
 
 
 def test_the_session_harness_set_reaches_the_real_hub_clients_claim_envelope() -> None:

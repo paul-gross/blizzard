@@ -6,8 +6,8 @@ import type { GraphSessionView } from '../api/hub';
 import { GraphSessionTable } from './graph-session-table';
 
 /**
- * The session declaration table's six-column layout (blizzard#432 — the new Harnesses
- * column added between Model and Effort) — a real layout claim jsdom cannot make. jsdom
+ * The session declaration table's six-column layout (the Harnesses column sits between
+ * Model and Effort) — a real layout claim jsdom cannot make. jsdom
  * never lays out `table.sessions`'s cells, so `web:unit-test` can see the harness list's
  * text land in the right `<td>` but not whether the six columns actually sit side by side
  * without a wide harness or model list pushing a later column past the table's own edge.

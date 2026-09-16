@@ -363,13 +363,13 @@ def test_requeue_after_a_pre_spawn_failure_keeps_the_minted_owner(tmp_path):  # 
     assert other.resume_froms == [None]
 
 
-# Harness selection (blizzard#432 D6-D9, D12)
+# Harness selection
 
 
 @pytest.mark.unit
 def test_harness_selection_prefers_declared_order_over_model_preference_order():  # type: ignore[no-untyped-def]
     """A later member resolving the more-preferred model still loses to an earlier member
-    resolving a less-preferred one (D8) — declared order is the selection key, never which
+    resolving a less-preferred one — declared order is the selection key, never which
     preference matched — and selection over the same envelope is deterministic."""
     h_early = TieredFakeHarness(
         tiers={"custom-b": "sonnet"}, handle=WorkerHandle(session_id="s", pid=1, process_start_time="t")
@@ -449,7 +449,7 @@ def test_harness_selection_empty_model_preference_selects_first_available_member
 
 @pytest.mark.unit
 def test_harness_selection_single_member_selects_regardless_of_model_resolvability():  # type: ignore[no-untyped-def]
-    """D8's exception falls out of D6: with nothing else to select, the model check never
+    """The single-member exception: with nothing else to select, the model check never
     runs at all, and `resolve_model`'s own left-to-right-then-adapter-default fallback is
     left to compute the stamp exactly as it does today."""
     adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", process=FakeProbe())

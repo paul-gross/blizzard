@@ -140,7 +140,7 @@ def test_every_known_session_key_is_accepted() -> None:
     assert doc.sessions["code"].harnesses == ["claude_code"]
 
 
-# harnesses (blizzard#432) — the acceptable harness set, `model`'s own parse shape.
+# harnesses — the acceptable harness set, `model`'s own parse shape.
 # --------------------------------------------------------------------------- #
 
 
@@ -329,7 +329,7 @@ def test_a_blank_harnesses_entry_is_rejected_naming_the_rule() -> None:
 
 
 def test_a_well_formed_harnesses_set_naming_a_harness_no_runner_holds_mints_successfully() -> None:
-    # Fleet availability is never consulted here (D2) — the hub validates shape only.
+    # Fleet availability is never consulted here — the hub validates shape only.
     result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": ["no-such-harness"]}}))).result
     assert result.ok, result.errors
 

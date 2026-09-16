@@ -307,7 +307,7 @@ def test_a_node_name_session_target_carries_no_pool_but_still_the_chunk_default(
     assert env.node.session_model == ["blizzard:advanced"]
 
 
-# --- The effective harness set (blizzard#432 D5) — the `model` precedence rule, cloned ---
+# --- The effective harness set — the `model` precedence rule, cloned ---
 
 
 def test_a_declared_harness_set_replaces_the_chunk_default_as_a_whole_list() -> None:
