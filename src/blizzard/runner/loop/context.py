@@ -146,8 +146,7 @@ class LoopContext:
     elicitation_files: ElicitationFiles
     usage: UsageRecorder
     sessions: SessionResolver
-    #: The fresh-mint owner selector over an envelope's acceptable harness set (blizzard#432
-    #: D7); a resume or a forced continuation never reaches it.
+    #: The fresh-mint owner selector over the acceptable harness set; a resume never reaches it.
     harness_selector: HarnessSelector
     env_release: EnvironmentRelease
     #: Required; every recorded session's owner resolves through it, with no single-harness fallback.

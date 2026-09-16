@@ -305,10 +305,8 @@ def test_a_declared_but_unreferenced_session_is_legal() -> None:
     assert result.ok, result.errors
 
 
-# harnesses validation (blizzard#432 D2) — an authored empty list is rejected at parse
-# (unlike an omitted key); a duplicate or blank entry is rejected by the validator; fleet
-# availability is never consulted, so a well-formed set naming an unknown harness mints.
-# --------------------------------------------------------------------------- #
+# harnesses validation — an authored empty list is rejected at parse; a duplicate or blank
+# entry fails validation; fleet availability is never checked, so an unknown harness name still mints.
 
 
 def test_an_empty_harnesses_list_is_rejected_naming_the_rule() -> None:

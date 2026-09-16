@@ -555,11 +555,9 @@ def test_fresh_mint_selects_the_acceptable_harness_and_a_retry_stays_under_it(tm
 
 @pytest.mark.unit
 def test_requeue_escalates_when_the_failed_harness_falls_out_of_the_acceptable_set(tmp_path):  # type: ignore[no-untyped-def]
-    """blizzard#432 D9 — the retry's missing guard is membership, not resolvability. In
-    production `fail` always closes the failed lease before calling `requeue`, so the
-    escalation this reaches is D12's owner-less mint, never the still-open-lease entry
-    `_owner_block` guards; `requeue` is driven directly here, as its sibling tests already
-    do, since its own membership check needs no closed lease to reach."""
+    """The retry's missing guard is membership, not resolvability. `fail` always closes the
+    failed lease before calling `requeue`, so `requeue` is driven directly here — its own
+    membership check needs no closed lease to reach, unlike the still-open-lease guard `fail` uses."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -588,9 +586,8 @@ def test_requeue_escalates_when_the_failed_harness_falls_out_of_the_acceptable_s
     Attempt(ctx, failed).requeue()
 
     assert default.spawns == []
-    # `requeue` never touches `lease_1` itself — only `fail` closes it, which production
-    # code always runs first; the membership guard mints and closes its own owner-less
-    # lease to escalate on, never reopening or substituting for the caller's own.
+    # `requeue` never touches `lease_1` — only `fail` closes it in production. The membership
+    # guard mints and closes its own owner-less lease to escalate on, never reopening this one.
     active = store.active_lease_for_chunk("ch_1")
     assert active is not None and active.lease_id == "lease_1"
     escalations = [e for e in store.open_escalations() if e.chunk_id == "ch_1"]

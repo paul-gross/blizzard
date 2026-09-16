@@ -37,8 +37,7 @@ _PREEMPTED_REASON = "preempted"
 # `Attempt.close`'s own closure reason for the never-spawned owner-unresolvable escalation mint.
 _ESCALATION_MINT_REASON = "owner-unresolvable-mint"
 
-# `Attempt.close`'s own closure reason for the never-spawned no-acceptable-harness escalation
-# mint (blizzard#432 D12) — the same zero-budget shape as `_ESCALATION_MINT_REASON` above.
+# `Attempt.close`'s closure reason for the no-acceptable-harness mint — `_ESCALATION_MINT_REASON`'s own shape.
 _NO_ACCEPTABLE_HARNESS_MINT_REASON = "no-acceptable-harness-mint"
 
 # Pinned by tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held's

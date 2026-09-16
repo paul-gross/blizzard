@@ -32,8 +32,7 @@ class ModelColumn:
 
 
 MODEL = ModelColumn()
-# `routines.default_harnesses`'s own instance of the same JSON `list[str]` shape
-# (blizzard#432) — `MODEL`'s sibling column, not its value.
+# `routines.default_harnesses`'s own instance of the JSON `list[str]` shape — `MODEL`'s sibling column.
 HARNESSES = ModelColumn()
 
 

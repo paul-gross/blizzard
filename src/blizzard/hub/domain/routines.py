@@ -69,8 +69,7 @@ class Routine:
     created_at: datetime
     default_model: list[str] = field(default_factory=list)
     default_effort: str | None = None
-    # The routine's default harness preference (blizzard#432) — the `default_model`
-    # shape it clones: empty means *express no preference*.
+    # The routine's default harness preference, `default_model`'s shape: empty is no preference.
     default_harnesses: list[str] = field(default_factory=list)
 
 

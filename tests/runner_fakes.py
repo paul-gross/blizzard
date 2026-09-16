@@ -696,9 +696,8 @@ class FakeHarness:
         # Scripted `resolve_model`/`resolve_effort` replies (issue #144); default echoes
         # the input verbatim for a test that doesn't care about resolution.
         self.resolved_model = "fake-model"
-        # `resolve_model_strict`'s own scripted reply (blizzard#432 D6) — independent of
-        # `resolved_model` above, so a test can script "this harness resolves nothing
-        # strictly, but still has an adapter default" for the selector's own skip cases.
+        # `resolve_model_strict`'s own scripted reply, independent of `resolved_model` above, so a
+        # test can script "resolves nothing strictly, but still has an adapter default" for skip cases.
         self.resolved_model_strict: str | None = "fake-model"
         self.harness_version: str | None = None
         self.resolved_effort: str | None = None

@@ -4111,7 +4111,7 @@
         "type": "object"
       },
       "GraphSessionView": {
-        "description": "One graph-level named session declaration (issue #144).\n\n``model`` is a prioritized preference list of opaque strings, resolved left-to-right at\nsession mint; the hub interprets none of it, ``effort``, or ``compaction_window``.\n``harnesses`` is the session's own acceptable harness set, authored order\n(blizzard#432) \u2014 empty means no constraint.",
+        "description": "One graph-level named session declaration (issue #144).\n\n``model`` is a preference list resolved left-to-right at mint; the hub interprets none\nof it, ``effort``, ``compaction_window``, or ``harnesses`` (its own acceptable set).",
         "properties": {
           "compaction_window": {
             "anyOf": [

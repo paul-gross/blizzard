@@ -48,8 +48,7 @@ def prepare_mint(
     refuse a live holder, mint the resting chunk. Shared by :meth:`WorkItemEditService.create`,
     :meth:`WorkItemEditService.materialize_create`, and a routine run's own mint
     (blizzard#392) — the last of these the only caller sourcing ``default_model``/
-    ``default_effort``/``default_harnesses`` from anywhere but ``mint_chunk``'s own
-    empty-preference default (blizzard#432)."""
+    ``default_effort``/``default_harnesses`` from anywhere but ``mint_chunk``'s own empty-preference default."""
     ref = items.allocate_ref(source)
     pointer = WorkRef(source=source, ref=ref)
     require_no_live_holder(work_refs, pointer)

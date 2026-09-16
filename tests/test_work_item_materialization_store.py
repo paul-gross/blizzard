@@ -220,10 +220,8 @@ def test_upgrade_adds_runner_id_and_materializations_leaving_existing_rows_reada
                 proposed_at=_T0,
             )
         )
-    # `seed_work_item` inserts through the live store, which — as of blizzard#432 —
-    # always writes `chunks.default_harnesses`; that column lands only in a later
-    # revision than this test's own pinned boundary, so it is added by hand here,
-    # ahead of schedule. The later revision's own guarded add is a no-op once it runs.
+    # `seed_work_item` now always writes `chunks.default_harnesses`; added by hand here since
+    # it lands in a later revision than this test's pinned boundary, where the add is then a no-op.
     with engine.begin() as conn:
         conn.execute(sa.text("ALTER TABLE chunks ADD COLUMN default_harnesses TEXT"))
     work_item_store = WorkItemStore(hub_store_connections(engine))

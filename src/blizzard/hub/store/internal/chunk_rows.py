@@ -123,8 +123,7 @@ class QuestionQuery:
 
 INTENDED_MIGRATION = MigrationColumn()
 DEFAULT_MODEL = ModelColumn()
-# `chunks.default_harnesses`'s own instance of the same JSON `list[str]` shape
-# (blizzard#432) — `DEFAULT_MODEL`'s sibling column, not its value.
+# `chunks.default_harnesses`'s own instance of the JSON `list[str]` shape — `DEFAULT_MODEL`'s sibling column.
 DEFAULT_HARNESSES = ModelColumn()
 QUESTIONS = QuestionQuery()
 

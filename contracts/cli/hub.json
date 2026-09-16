@@ -1171,7 +1171,7 @@
           "short_help": "Resume a paused CHUNK \u2014 the runner resumes the parked worker in place (issue #46)."
         },
         "set": {
-          "help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144,\nblizzard#432).\n\nA pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and\napplied all-or-nothing. At least one option is required; 409 for the defaults once\nCHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271).",
+          "help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144).\n\nA pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and\napplied all-or-nothing. At least one option is required; 409 for the defaults once\nCHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271).",
           "params": [
             {
               "hidden": false,
@@ -1252,7 +1252,7 @@
             }
           ],
           "path": "hub chunk set",
-          "short_help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144, blizzard#432)."
+          "short_help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144)."
         },
         "show": {
           "help": "One chunk's full aggregate \u2014 status, current node, route, pointers, cost.",

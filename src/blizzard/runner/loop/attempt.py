@@ -38,9 +38,7 @@ PREEMPTED = "preempted"  # an operator restart re-aimed the chunk (#370): envs a
 # The owner-unresolvable escalation mint's own closure reason (store-only, never published).
 ESCALATION_MINT = "owner-unresolvable-mint"
 
-# The no-acceptable-harness escalation mint's own closure reason (store-only, never
-# published) — blizzard#432 D12's owner-less mint, distinct from `ESCALATION_MINT` above
-# since neither recorded owner nor prior session backs it.
+# The no-acceptable-harness escalation mint's own closure reason (store-only, never published).
 NO_ACCEPTABLE_HARNESS_MINT = "no-acceptable-harness-mint"
 
 # ABANDON — the reassigned/detached release, in two windows. Release runs BEFORE the closure so
@@ -73,8 +71,7 @@ _ATTEMPT_ABANDONED: EventLogKind = "attempt-abandoned"
 #: Surfaced when an existing session's recorded harness owner cannot be dispatched to.
 _OWNER_UNRESOLVABLE: EventLogKind = "owner-unresolvable"
 
-#: Surfaced when a fresh mint's every acceptable harness is unknown, unavailable, or
-#: resolves no authored tier (blizzard#432 D12).
+#: Surfaced when a fresh mint's every acceptable harness is unknown, unavailable, or resolves no authored tier.
 _NO_ACCEPTABLE_HARNESS: EventLogKind = "no-acceptable-harness"
 
 
@@ -173,12 +170,8 @@ class Attempt:
             return  # the closed attempt is durable; FILL/ADVANCE re-drives next tick
         acceptable = envelope.node.session_harnesses
         if acceptable and lease.harness_id not in acceptable:
-            # The failed attempt's own owner has fallen out of a since-edited acceptable
-            # set (blizzard#432 D9) — never a candidate to advance past to the next member,
-            # so this is a membership check, not a resolvability one (that half already ran
-            # ahead of `fail`'s own requeue-or-escalate branch, via `_owner_block`). `fail`
-            # already closed this lease, so this reaches D12's owner-less mint, not the
-            # still-open-lease entry `_owner_block` guards.
+            # The failed attempt's owner has fallen out of a since-edited acceptable set — a
+            # membership check, not resolvability (`_owner_block` already ran that half above).
             assert lease.harness_id is not None  # every requeue-reachable lease was minted under a recorded owner
             Spawner(self.ctx).escalate_no_acceptable_harness(
                 lease.chunk_id,
@@ -307,12 +300,9 @@ class Attempt:
     def escalate_no_acceptable_harness(
         self, *, attempted: Sequence[str], skipped: Sequence[SkippedHarness], via: str
     ) -> None:
-        """Escalate this owner-less, never-spawned lease in place because no member of the
-        envelope's acceptable harness set could serve the mint (blizzard#432 D12) —
-        ``Spawner.escalate_no_acceptable_harness``'s own shared entry, reached alike from a
-        fresh mint's exhausted selection and from :meth:`requeue`'s membership guard. Closes
-        it itself, same as :meth:`_escalate_owner_unresolvable`: never an open lease, so
-        neither a pid to kill nor an elicitation that could be in flight."""
+        """Escalate this owner-less, never-spawned lease because no acceptable harness could
+        serve the mint — reached alike from a fresh mint's exhausted selection and from
+        :meth:`requeue`'s membership guard. Never an open lease, so no pid to kill."""
         lease = self.lease
         now = self.ctx.clock.now()
         message = f"escalated — no acceptable harness could serve this mint (via {via})"

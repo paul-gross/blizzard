@@ -186,8 +186,7 @@ def chunk_set(
     default_effort: str | None,
     default_harnesses: tuple[str, ...],
 ) -> None:
-    """Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144,
-    blizzard#432).
+    """Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144).
 
     A pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and
     applied all-or-nothing. At least one option is required; 409 for the defaults once

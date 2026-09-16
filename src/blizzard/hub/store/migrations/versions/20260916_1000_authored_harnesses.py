@@ -1,9 +1,6 @@
-"""Authored harness sets — session/chunk/routine defaults (blizzard#432).
+"""Authored harness sets — session/chunk/routine defaults.
 
-Three guarded, nullable columns, one per table: ``graph_sessions.harnesses``,
-``chunks.default_harnesses``, ``routines.default_harnesses`` — un-backfilled, so NULL
-declares none, the ``graph_sessions_compaction_window`` shape.
-
+Three guarded, nullable columns, one per table — un-backfilled, so NULL declares none.
 Revision ID: 20260916_1000_hub_authored_harnesses
 Revises: 20260914_1000_hub_harness_provenance
 """

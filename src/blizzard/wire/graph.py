@@ -84,10 +84,8 @@ class RotatePolicyView(BaseModel):
 class GraphSessionView(BaseModel):
     """One graph-level named session declaration (issue #144).
 
-    ``model`` is a prioritized preference list of opaque strings, resolved left-to-right at
-    session mint; the hub interprets none of it, ``effort``, or ``compaction_window``.
-    ``harnesses`` is the session's own acceptable harness set, authored order
-    (blizzard#432) — empty means no constraint."""
+    ``model`` is a preference list resolved left-to-right at mint; the hub interprets none
+    of it, ``effort``, ``compaction_window``, or ``harnesses`` (its own acceptable set)."""
 
     name: str
     model: list[str] = []

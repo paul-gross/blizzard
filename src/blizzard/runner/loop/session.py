@@ -252,25 +252,19 @@ class HarnessSelection:
 
 @dataclass(frozen=True)
 class HarnessSelector:
-    """Chooses a fresh mint's owner among ``node.session_harnesses`` (blizzard#432 D6-D8) —
-    deterministic orchestration over the adapter seam (``bzh:deterministic-shell``), handed
-    the registry it walks rather than constructing one (``bzh:dependency-injection``).
-    ``Spawner.spawn`` is its only caller: a resume or a forced continuation (a pool
-    rotation's replacement, a retry's own recorded owner) never reaches selection at all."""
+    """Chooses a fresh mint's owner among ``node.session_harnesses`` — deterministic
+    orchestration over the adapter seam (``bzh:deterministic-shell``), handed the registry
+    it walks rather than constructing one (``bzh:dependency-injection``). ``Spawner.spawn``
+    is its only caller: a resume or a forced continuation never reaches selection at all."""
 
     harnesses: IHarnessRegistry
 
     def select(self, node: NodeConfig) -> HarnessSelection:
-        """The earliest member of ``node.session_harnesses`` this runner can dispatch to,
-        in declared order — never by which preference it matched, so a later member
-        resolving an earlier-preferred model still loses to an earlier member resolving a
-        later one (D8). A member the registry cannot serve is skipped and recorded, never
-        substituted for. A single member skips the model check entirely: with nothing else
-        to select, :meth:`~blizzard.runner.harness.adapter.IHarnessModelResolution.resolve_model`'s
-        own left-to-right-then-adapter-default fallback runs unchanged. With two or more,
-        a member resolving none of ``node.session_model`` strictly is skipped the same way
-        as an unservable one; an empty ``session_model`` is trivially satisfied by every
-        member, so the first the registry can serve wins."""
+        """The earliest member of ``node.session_harnesses`` this runner can dispatch to, in
+        declared order — a later member resolving an earlier-preferred model still loses to
+        an earlier member resolving a later one. A member the registry cannot serve is
+        skipped and recorded. A single member skips the model check; with two or more, a
+        member resolving none of ``node.session_model`` strictly is skipped the same way."""
         members = node.session_harnesses
         strict = len(members) > 1 and bool(node.session_model)
         skipped: list[SkippedHarness] = []

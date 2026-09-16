@@ -383,9 +383,7 @@ class SessionDecl:
     """One graph-level named session declaration (issue #144).
 
     Carries workflow *policy* only (``bzh:app-agnostic-graphs``); ``model``, ``effort``,
-    ``compaction_window``, and ``harnesses`` are all opaque to the hub. ``harnesses`` is
-    the session's own acceptable harness set, authored-order, distinct from ``model``'s
-    preference-order-over-an-unbounded-set shape (blizzard#432 D1)."""
+    ``compaction_window``, and ``harnesses`` (its own acceptable set) are opaque to the hub."""
 
     name: str
     model: list[str] = field(default_factory=list)
@@ -410,9 +408,8 @@ class SessionDecl:
         # the sequence form parses to, so readers see exactly one shape.
         model = [str(raw_model)] if isinstance(raw_model, str) else [str(m) for m in body.items("model")]
         raw_harnesses = body.get("harnesses")
-        # An authored empty list names an acceptable set of nothing — unlike an omitted
-        # key, which expresses no constraint at all — so it is rejected here rather than
-        # silently accepted as the same empty shape.
+        # An authored empty list names an acceptable set of nothing, unlike an omitted key —
+        # so it is rejected here rather than silently accepted as the same empty shape.
         if isinstance(raw_harnesses, list) and not raw_harnesses:
             raise GraphParseError(
                 f"session {name!r}: `harnesses` must not be an empty list — omit the key to accept every harness"
