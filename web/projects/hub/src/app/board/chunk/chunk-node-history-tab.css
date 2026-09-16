@@ -1,51 +1,13 @@
+/* `fleet-kit-master-detail` generates the real box (`kit-master-detail.css`'s own
+   `:host { flex: 1; min-height: 0 }`) — this host stays `display: contents` so that
+   split container is a direct flex item of `ChunkNodeHistoryContainer`'s own
+   `display: contents` host in turn, the same chain `chunk-artifacts-tab.css` already
+   establishes for `fleet-chunk-artifacts-panel`. The detail pane's 8px inset is this
+   consumer's own choice (`kit-master-detail.css`'s `--kit-master-detail-detail-inset`
+   hook) — the runner's own copy of this tab leaves it at the shell's zero default. */
 :host {
-  display: block;
-  flex: 1;
-  min-height: 0;
-}
-.nh-tab {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-}
-.nh-timeline {
-  flex: none;
-  border-bottom: 1px solid var(--line);
-}
-.nh-tab.list-only .nh-timeline {
-  flex: 1;
-  overflow-y: auto;
-  border-bottom: none;
-}
-.nh-step {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 8px;
-}
-.nh-back {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-.nh-back fleet-kit-back-bar {
-  width: 100%;
-  box-sizing: border-box;
-}
-.s-head {
-  padding: 6px 8px 0;
-}
-.tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
+  display: contents;
+  --kit-master-detail-detail-inset: 8px;
 }
 .art {
   display: block;
@@ -58,21 +20,4 @@
 .nh-transcript-body {
   position: relative;
   padding: 6px 8px;
-}
-@media (min-width: 720px) {
-  .nh-tab {
-    flex-direction: row;
-    overflow: hidden;
-  }
-  .nh-timeline {
-    flex: none;
-    width: 320px;
-    max-height: none;
-    overflow-y: auto;
-    border-bottom: none;
-    border-right: 1px solid var(--line);
-  }
-  .nh-step {
-    overflow-y: auto;
-  }
 }

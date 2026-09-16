@@ -154,7 +154,7 @@ describe('Mobile chunk drill-down', () => {
 
     expect(el.querySelector('[data-testid="section-node-history"]')).toBeNull();
     expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
-    expect(el.querySelector('.nh-step')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-node-history-tab"] .kmd-detail')).toBeNull();
 
     (el.querySelector<HTMLButtonElement>('[data-testid="selection-step"]'))?.click();
     await settle(harness.fixture);
@@ -170,7 +170,7 @@ describe('Mobile chunk drill-down', () => {
     el = harness.fixture.nativeElement as HTMLElement;
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=node-history`);
     expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
-    expect(el.querySelector('.nh-step')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-node-history-tab"] .kmd-detail')).toBeNull();
     expect(document.activeElement).toBe(el.querySelector('[data-step-key="nd_build:1"]'));
   });
 

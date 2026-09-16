@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { type ArtifactView, ChunkArtifactBody, ChunkTimelineSelection, KitAsyncState, type hubApi } from 'fleet';
+import { type ArtifactView, ChunkArtifactBody, ChunkTimelineSelection, KitAsyncState, KitMasterDetail, type hubApi } from 'fleet';
 
 /**
  * The runner chunk detail page's Node history tab — the shared
@@ -9,6 +9,10 @@ import { type ArtifactView, ChunkArtifactBody, ChunkTimelineSelection, KitAsyncS
  * (`reject_runner_principal`), so this tab stops at artifacts, with no
  * {@link KitAccordionSection} around them either — one section, always visible,
  * nothing to collapse against.
+ *
+ * The list/detail split is {@link KitMasterDetail}'s; this tab projects only its own
+ * timeline (list) and artifacts (detail) content and passes it no `drilldown` — the
+ * runner's own always-both-panes presentation is the shell's default with nothing set.
  *
  * `graphLinkBase` is left at {@link ChunkTimelineSelection}'s own `null` default — the
  * runner has no `/graphs` route to point a multi-graph row's badge at
@@ -21,7 +25,7 @@ import { type ArtifactView, ChunkArtifactBody, ChunkTimelineSelection, KitAsyncS
 @Component({
   selector: 'app-chunk-node-history-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactBody, ChunkTimelineSelection, KitAsyncState],
+  imports: [ChunkArtifactBody, ChunkTimelineSelection, KitAsyncState, KitMasterDetail],
   templateUrl: './chunk-node-history-tab.html',
   styleUrl: './chunk-node-history-tab.css',
 })
