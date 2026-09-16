@@ -7,7 +7,7 @@ from typing import Any
 import click
 
 from blizzard.hub.cli.context import DEFAULT_HUB_URL, ENV_HUB_URL, CliContext
-from blizzard.hub.cli.session_store import IReadSessionStore
+from blizzard.hub.cli.sessions import IReadSessionStore
 
 
 class HubCommand(click.Command):
@@ -65,11 +65,11 @@ class AuthCommand(HubCommand):
         return CliContext.of(params.pop("hub_url"), session_reader)
 
 
-class SessionWriteCommand(AuthCommand):
-    """An ``AuthCommand`` with write capability over the local session store (issue
-    #96) — ``login``/``logout``, reached through ``ctx.params`` rather than
+class SessionServiceCommand(AuthCommand):
+    """An ``AuthCommand`` that hands the session application service to the controller
+    (hub:98) — ``login``/``logout``, reached through ``ctx.params`` rather than
     ``@click.pass_context`` so it stays outside the recorded CLI surface."""
 
     def invoke(self, ctx: click.Context) -> Any:
-        ctx.params["session_store"] = ctx.obj
+        ctx.params["session_service"] = ctx.obj
         return super().invoke(ctx)

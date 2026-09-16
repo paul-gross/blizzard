@@ -70,7 +70,7 @@ def _sampler(
     return OpenAISubscriptionSampler(
         credentials_path=str(credentials_path),
         usage_api_base="https://chatgpt.test/backend-api",
-        http_client=httpx.Client(transport=transport),
+        http_client=lambda: httpx.Client(transport=transport),
         clock=clock or FixedClock(_NOW),
     )
 

@@ -328,12 +328,45 @@ _COMPOSITION_ROOTS = frozenset(
     }
 )
 
-_GATED_COMPOSITION_NAMES = ("build_stores", "build_stores_and_connections", "ClaudeCodeAdapter")
+_RUNNER_COMPOSITION_MODULE = "blizzard.runner.composition"
+
+
+def _runner_composition_imports(root: Path, *, exempt: frozenset[Path]) -> list[str]:
+    violations: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        if path in exempt:
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == _RUNNER_COMPOSITION_MODULE:
+                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} imports from {node.module}")
+            elif isinstance(node, ast.ImportFrom) and node.module == "blizzard.runner":
+                if any(alias.name == "composition" for alias in node.names):
+                    violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} imports composition")
+            elif isinstance(node, ast.Import) and any(alias.name == _RUNNER_COMPOSITION_MODULE for alias in node.names):
+                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} imports {_RUNNER_COMPOSITION_MODULE}")
+    return violations
+
+
+def test_only_the_composition_roots_import_the_runner_composition_module() -> None:
+    """D5/hub:99: `blizzard.runner.composition` is a wiring module, not a Protocol or a
+    bundle seam — importing it in any form outside the seven composition roots means
+    constructing runner stores outside their one approved wiring site
+    (``bzh:dependency-injection``). Fail-closed: no name exemptions, unlike the old
+    allowlist this replaces, which missed `build_read_stores`."""
+    violations = _runner_composition_imports(_SRC_DIR, exempt=_COMPOSITION_ROOTS)
+    assert not violations, (
+        f"D5 — blizzard.runner.composition must only be imported at its composition roots: {violations}"
+    )
+
+
+_GATED_COMPOSITION_NAMES = ("ClaudeCodeAdapter",)
 _CLAUDE_CODE_FACTORY = _RUNNER_DIR / "harness" / "internal" / "claude_code_registry.py"
 
 
-def test_concrete_stores_and_claude_code_adapter_stay_in_their_wiring_modules() -> None:
-    """L: concrete stores stay in roots; the harness adapter also allows its factory."""
+def test_claude_code_adapter_stays_in_its_wiring_module() -> None:
+    """L: the harness adapter is named only by the one factory that constructs it —
+    every composition root takes the registry it builds instead."""
     violations: list[str] = []
     for path in sorted(_SRC_DIR.rglob("*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -341,13 +374,11 @@ def test_concrete_stores_and_claude_code_adapter_stay_in_their_wiring_modules() 
             if not isinstance(node, ast.ImportFrom):
                 continue
             hit = set(_GATED_COMPOSITION_NAMES) & {alias.name for alias in node.names}
-            if path in _COMPOSITION_ROOTS:
-                hit -= {"build_stores", "build_stores_and_connections"}
             if path == _CLAUDE_CODE_FACTORY:
                 hit -= {"ClaudeCodeAdapter"}
             if hit:
                 violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
-    assert not violations, f"L — concrete dependencies escaped their approved wiring modules: {violations}"
+    assert not violations, f"L — ClaudeCodeAdapter escaped its approved wiring module: {violations}"
 
 
 _TRANSCRIPT_SERVICE_FILE = _RUNNER_DIR / "transcripts" / "service.py"
@@ -361,7 +392,7 @@ def test_transcript_service_imports_no_internal_module() -> None:
     assert not violations, f"transcripts/service.py must not import an internal/ module: {violations}"
 
 
-_HUB_CLI_SESSION_STORE_FILE = _HUB_DIR / "cli" / "session_store.py"
+_HUB_CLI_SESSION_STORE_FILE = _HUB_DIR / "cli" / "sessions" / "internal" / "session_file.py"
 
 
 def _session_file_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:
@@ -382,9 +413,36 @@ def _session_file_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:
 def test_session_file_is_named_only_at_its_composition_root() -> None:
     """D7: ``SessionFile`` is named only at ``hub/cli/__init__.py`` — every other module
     takes the read/write Protocol seam, however the class is reached, never the concrete
-    name itself. ``session_store.py`` (its declaring module) is exempt."""
+    name itself. ``sessions/internal/session_file.py`` (its declaring module) is exempt."""
     violations = _session_file_accesses(_SRC_DIR, exempt=_COMPOSITION_ROOTS | frozenset({_HUB_CLI_SESSION_STORE_FILE}))
     assert not violations, f"N — SessionFile must be named only at its composition root: {violations}"
+
+
+def _write_session_store_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:
+    violations: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        if path in exempt:
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            names_write_store = (isinstance(node, ast.Name) and node.id == "IWriteSessionStore") or (
+                isinstance(node, ast.Attribute) and node.attr == "IWriteSessionStore"
+            )
+            if names_write_store:
+                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} names IWriteSessionStore")  # type: ignore[union-attr]
+    return violations
+
+
+def test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root() -> None:
+    """D4/hub:98: only `hub/cli/sessions/` (the Protocol's own package) may name
+    `IWriteSessionStore` — every other hub CLI module, including `auth.py`'s
+    login/logout, takes the `SessionService` application service instead, never the raw
+    write seam (``bzh:controller-read-only``)."""
+    hub_cli_dir = _HUB_DIR / "cli"
+    sessions_dir = hub_cli_dir / "sessions"
+    exempt = _COMPOSITION_ROOTS | set(sessions_dir.rglob("*.py"))
+    violations = _write_session_store_accesses(hub_cli_dir, exempt=exempt)
+    assert not violations, f"D4 — IWriteSessionStore must be named only inside sessions/: {violations}"
 
 
 _RUNNER_API_DIR = _RUNNER_DIR / "api"

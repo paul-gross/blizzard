@@ -14,6 +14,7 @@ from blizzard.runner.harness.transcript import (
     NullTranscriptSource,
     TranscriptPosition,
 )
+from tests.runner_fakes import FakeProbe
 
 
 @pytest.mark.unit
@@ -53,12 +54,12 @@ def test_null_transcript_source_size_bytes_is_unknown_not_zero() -> None:
 
 @pytest.mark.unit
 def test_claude_code_adapter_defaults_to_the_null_transcript_source() -> None:
-    source = ClaudeCodeAdapter().transcript_source()
+    source = ClaudeCodeAdapter(process=FakeProbe()).transcript_source()
     assert isinstance(source, NullTranscriptSource)
 
 
 @pytest.mark.unit
 def test_claude_code_adapter_returns_the_injected_transcript_source() -> None:
     injected = NullTranscriptSource()
-    adapter = ClaudeCodeAdapter(transcript_source=injected)
+    adapter = ClaudeCodeAdapter(transcript_source=injected, process=FakeProbe())
     assert adapter.transcript_source() is injected

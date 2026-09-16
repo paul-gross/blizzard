@@ -11,7 +11,7 @@ from typing import Any, Protocol
 import click
 import httpx
 
-from blizzard.hub.cli.session_store import IReadSessionStore
+from blizzard.hub.cli.sessions import IReadSessionStore
 
 
 class View(Protocol):

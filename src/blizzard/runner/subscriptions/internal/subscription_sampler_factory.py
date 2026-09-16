@@ -6,6 +6,8 @@ no known binding selects ``None`` — declared, but unsampled, never a config-lo
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import httpx
 
 from blizzard.foundation.clock import IClock
@@ -19,7 +21,7 @@ def select_sampler(
     declaration: SubscriptionDeclaration,
     *,
     clock: IClock,
-    http_client: httpx.Client | None = None,
+    http_client: Callable[[], httpx.Client],
 ) -> ISubscriptionSampler | None:
     """The sampler ``declaration.provider`` binds to, or ``None`` for an unknown provider."""
     if declaration.provider == PROVIDER_ANTHROPIC:

@@ -11,12 +11,12 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, replace
-from typing import Protocol
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict, WorkerHandle, WorkerPreamble
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
+from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.selftest.model import (
     AUTOMATED_RESUME,
     END_TO_END_EDIT_COMMIT,
@@ -47,17 +47,6 @@ _JUDGEMENT_PROMPT = (
     "<Choice>pass</Choice> if it did, else <Choice>fail</Choice>."
 )
 _RESUME_MESSAGE = "selftest: automated follow-up resume — no action needed, just acknowledge."
-
-
-class IProcessProbe(Protocol):
-    """The process-liveness and best-effort-kill reads these checks need, narrowed to this
-    module so nothing here imports across a boundary (``bzh:dependency-inversion``)."""
-
-    def is_alive(self, pid: int, process_start_time: str) -> bool: ...
-
-    def start_time(self, pid: int) -> str | None: ...
-
-    def kill(self, pid: int) -> None: ...
 
 
 @dataclass(frozen=True)

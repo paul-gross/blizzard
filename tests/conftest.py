@@ -17,7 +17,7 @@ import pytest
 
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.cli import session_store
+from blizzard.hub.cli.sessions.internal import session_file
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 
@@ -84,7 +84,7 @@ def _isolated_session_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     the same ambient-host-state hazard :func:`_strip_worker_identity_env` closes for env vars.
     """
     monkeypatch.setattr(
-        session_store.platformdirs, "user_config_dir", lambda _app: str(tmp_path / "config" / "blizzard")
+        session_file.platformdirs, "user_config_dir", lambda _app: str(tmp_path / "config" / "blizzard")
     )
 
 

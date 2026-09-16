@@ -14,13 +14,21 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import build_hosted_app, create_app
-from blizzard.runner.config import CONFIG_FILENAME, LEGACY_ANTHROPIC_SLUG, ConfigError, RunnerConfig
+from blizzard.runner.config import (
+    CONFIG_FILENAME,
+    LEGACY_ANTHROPIC_SLUG,
+    ConfigError,
+    RunnerConfig,
+    SubscriptionDeclaration,
+)
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking
+from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
+from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
+from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.runner_fakes import FakeHub, FakeProbe, make_store, make_stores
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -97,6 +105,64 @@ def test_loop_wiring_threads_external_usage_credentials_path_into_the_sampler(tm
     assert resolved.sample_interval_seconds == 123
     assert isinstance(resolved.sampler, AnthropicSubscriptionSampler)
     assert resolved.sampler._credentials_path == scratch
+
+
+@pytest.mark.unit
+def test_the_loops_declared_subscriptions_share_one_root_owned_http_client(tmp_path: Path) -> None:
+    """The laziness invariant ("a sampler that never samples opens no pool") lives at the
+    composition root (blizzard#436, hub:95): every declared subscription's sampler draws
+    from the *same* shared client, not one each."""
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_root=str(tmp_path / "workspace"),
+        subscriptions=(
+            SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC),
+            SubscriptionDeclaration(slug="codex", name="Codex", provider=PROVIDER_OPENAI),
+        ),
+    )
+
+    ctx = LoopWiring(config, "", "").context(FakeHub())
+
+    assert [s.slug for s in ctx.subscriptions] == ["anthropic", "codex"]
+    first_sampler, second_sampler = (s.sampler for s in ctx.subscriptions)
+    assert isinstance(first_sampler, AnthropicSubscriptionSampler)
+    assert isinstance(second_sampler, OpenAISubscriptionSampler)
+    assert first_sampler._http_client is ctx.usage_http_client
+    assert second_sampler._http_client is ctx.usage_http_client
+
+
+@pytest.mark.unit
+def test_the_loops_usage_http_client_is_not_built_merely_by_composing_the_context(tmp_path: Path) -> None:
+    """No declared subscription ever samples in this test — composing the context alone
+    must open no real connection pool (blizzard#436, hub:95); only calling the provider
+    builds one."""
+    config = RunnerConfig(
+        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+    )
+
+    ctx = LoopWiring(config, "", "").context(FakeHub())
+
+    assert isinstance(ctx.usage_http_client, _LazyUsageHttpClient)
+    assert ctx.usage_http_client._client is None
+
+
+@pytest.mark.unit
+def test_the_loops_usage_http_client_owner_closes_a_client_it_actually_built(tmp_path: Path) -> None:
+    """Whoever owns the ``LoopContext`` closes the shared client exactly once, and closing
+    it actually closes the real ``httpx.Client`` a sampler built (blizzard#436, hub:95)."""
+    config = RunnerConfig(
+        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+    )
+
+    ctx = LoopWiring(config, "", "").context(FakeHub())
+    assert isinstance(ctx.usage_http_client, _LazyUsageHttpClient)
+    client = ctx.usage_http_client()
+    assert not client.is_closed
+
+    ctx.usage_http_client.close()
+
+    assert client.is_closed
 
 
 @pytest.mark.unit

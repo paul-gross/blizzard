@@ -7,6 +7,7 @@ against Claude Code's own OAuth usage endpoint, independent of the coding-harnes
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -48,10 +49,10 @@ class AnthropicSubscriptionSampler:
         *,
         credentials_path: str | None = None,
         usage_api_base: str = DEFAULT_USAGE_API_BASE,
-        http_client: httpx.Client | None = None,
+        http_client: Callable[[], httpx.Client],
         clock: IClock,
     ) -> None:
-        # `credentials_path` is read-only here, and the client is constructed lazily.
+        # `credentials_path` is read-only here; the caller supplies the (shared) client.
         self._credentials_path = credentials_path or DEFAULT_CREDENTIALS_PATH
         self._usage_api_base = usage_api_base
         self._http_client = http_client
@@ -62,7 +63,7 @@ class AnthropicSubscriptionSampler:
         if access_token is None:
             return None
         try:
-            resp = self._usage_client().get(
+            resp = self._http_client().get(
                 f"{self._usage_api_base}{_USAGE_PATH}",
                 headers={
                     "Authorization": f"Bearer {access_token}",
@@ -95,15 +96,6 @@ class AnthropicSubscriptionSampler:
             _log.warning("external subscription usage sample failed: no parseable windows in response")
             return None
         return ExternalSubscriptionUsageSnapshot(sampled_at=self._clock.now(), windows=tuple(windows))
-
-    def _usage_client(self) -> httpx.Client:
-        """The injected ``httpx.Client``, or a lazily-constructed real one.
-
-        Lazy, so a sampler that never samples opens no connection pool, and cached once
-        created, so repeated samples reuse one connection."""
-        if self._http_client is None:
-            self._http_client = httpx.Client()
-        return self._http_client
 
     def _read_access_token(self) -> str | None:
         """The OAuth bearer token from the credential file, or ``None`` on any failure.

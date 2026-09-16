@@ -33,7 +33,7 @@ from blizzard.hub.auth.models import AuthStateEntry, Identity, SuperuserBootstra
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.cli.session_store import IReadSessionStore
+from blizzard.hub.cli.sessions import IReadSessionStore
 from blizzard.hub.domain.analytics.events import IReadTranscriptEvents
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.analytics.operational import IReadOperationalAnalytics, OperationalCriteria
@@ -1823,7 +1823,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
 #: Hub ``IRead*`` methods with no SQL behind them at all, each reasoned below.
 HUB_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IReadSessionStore, "load"): (
-        "blizzard.hub.cli.session_store.SessionFile implements this over a local JSON "
+        "blizzard.hub.cli.sessions.internal.session_file.SessionFile implements this over a local JSON "
         "file under the CLI operator's own config dir — no SQL, and not part of any hub "
         "HubServices/ChunkReadStores wiring."
     ),

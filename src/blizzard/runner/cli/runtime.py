@@ -5,20 +5,27 @@ from __future__ import annotations
 import os
 import signal
 import types
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import click
 
 from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
+from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
+from blizzard.runner.composition import build_read_stores
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.stores import RunnerReadStores
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0
@@ -148,3 +155,16 @@ def tick_cmd(directory: str) -> None:
         ensure_current_revision(config)
     LoopWiring.of(config).tick_once()
     click.echo("tick complete")
+
+
+@contextmanager
+def read_stores(config: RunnerConfig) -> Iterator[RunnerReadStores]:
+    """The runner's read-only store bundle for a short-lived CLI verb — builds its own
+    engine and disposes it on exit (D5, hub:99), mirroring `daemon.py`'s `uds_client`
+    precedent for a composition-root helper another module calls into rather than
+    repeating the construction."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        yield build_read_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+    finally:
+        engine.dispose()
