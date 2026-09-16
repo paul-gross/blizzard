@@ -34,8 +34,7 @@ class ChunkEscalationsStore:
         return [
             EscalationOpen(chunk_id=chunk_id, recorded_at=open_.recorded_at, takeover_command=open_.takeover_command)
             for chunk_id in candidates
-            if (facts := facts_by_id.get(chunk_id)) is not None
-            and (open_ := facts.open_escalation()) is not None
+            if (facts := facts_by_id.get(chunk_id)) is not None and (open_ := facts.open_escalation()) is not None
         ]
 
     def record_escalation(
