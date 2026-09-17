@@ -61,6 +61,17 @@ class RouteClaimDependencyDenial(BaseModel):
     detail: str = "chunk depends on an unmet prerequisite"
 
 
+class RouteClaimIncompatibleDenial(BaseModel):
+    """The 409 body: the claiming runner's stored capabilities can no longer run every
+    statically reachable runner-owned lineage from the chunk's current node (blizzard#433
+    D9) — refused outright, not a race loss. Distinct from the other three 409 shapes by
+    its own ``incompatible_runner_id`` field."""
+
+    chunk_id: str
+    incompatible_runner_id: str
+    detail: str = "runner capabilities no longer satisfy the chunk's reachable lineage"
+
+
 class RouteClaimPausedDenial(BaseModel):
     """The 403 body: the claiming runner is paused at the hub registry (issue #44).
 

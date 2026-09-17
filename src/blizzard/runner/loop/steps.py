@@ -461,10 +461,17 @@ class Fill(Step):
             )
             return
         slots = ctx.config.max_agents - len(ctx.stores.lease_record.list_active_leases())
-        queue = ReadyQueue.peeked(ctx)  # one hub peek for the whole fill (blizzard#459)
-        for _ in range(max(slots, 0)):
-            if not queue.claim_one():
-                break
+        if capability_snapshot(ctx.harnesses):
+            # A capability-asserting runner peeks per attempt, not once per fill
+            # (blizzard#433 D10) — D8's single-entry response leaves no cache to reuse.
+            for _ in range(max(slots, 0)):
+                if not ReadyQueue.peeked(ctx).claim_one():
+                    break
+        else:
+            queue = ReadyQueue.peeked(ctx)  # one hub peek for the whole fill (blizzard#459) — legacy path only
+            for _ in range(max(slots, 0)):
+                if not queue.claim_one():
+                    break
 
 
 class Advance(Step):

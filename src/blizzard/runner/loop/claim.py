@@ -41,9 +41,12 @@ class ReadyQueue:
     """The hub's ready queue, as the source FILL takes work from — peek the head, acquire its
     environments all-or-nothing, bind them locally, then race for the route.
 
-    ``_entries`` is this one ``Fill.run()`` call's own local peeked snapshot (blizzard#459):
-    peeked ONCE via :meth:`peeked`, then selected from and dropped in place by each
-    ``claim_one()`` this run makes, rather than re-peeking the hub per attempt."""
+    ``_entries`` is one peek's own local snapshot: on the legacy (non-capability-asserting)
+    path, ``Fill.run()`` peeks ONCE via :meth:`peeked` for the whole run, then selects from
+    and drops in place by each ``claim_one()`` it makes (blizzard#459). A capability-
+    asserting runner instead peeks fresh before every ``claim_one()`` (blizzard#433 D10):
+    the matched verb's single-entry response (D8) leaves no cached order to select from,
+    so each instance here holds at most one entry either way."""
 
     ctx: LoopContext
     _entries: list[QueuePeekEntry] = field(default_factory=list)
@@ -117,6 +120,11 @@ class ReadyQueue:
             )
             self.ctx.env_release.release_binding(chunk_id, acquired)
             return not strict_dependency_hold
+        if outcome.denied_incompatible is not None:
+            # Not a race loss or a dependency block (blizzard#433 D9) — nothing to hold at.
+            _log.info("route claim denied — runner incompatible with chunk", chunk_id=chunk_id)
+            self.ctx.env_release.release_binding(chunk_id, acquired)
+            return True
         if outcome.conflict is not None or outcome.claimed is None:
             _log.info("route claim lost the race", chunk_id=chunk_id)
             self.ctx.env_release.release_binding(chunk_id, acquired)  # someone else won — undo our binding

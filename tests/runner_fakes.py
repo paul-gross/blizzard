@@ -316,6 +316,9 @@ class FakeHub:
         # the chunk; `make_context` keeps this in sync with `LoopConfig.runner_id` (blizzard#38).
         self.default_runner_id = default_runner_id
         self.queue: list[QueuePeekEntry] = []
+        # A per-call scripted sequence (blizzard#433 D10): when set, each `peek_queue`
+        # call pops its own response instead of reading the static `queue` above.
+        self.queue_responses: list[list[QueuePeekEntry]] = []
         self.peek_queue_calls = 0  # counts `peek_queue` calls (blizzard#459) — one per Fill.run()
         # One entry per `peek_queue` call, naming the request it carried (blizzard#433
         # Phase 3) — lets a test assert on the capabilities/policy the call site sends.
@@ -367,6 +370,8 @@ class FakeHub:
     def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
         self.peek_queue_calls += 1
         self.peek_queue_requests.append(request)
+        if self.queue_responses:
+            return QueuePeekResponse(entries=self.queue_responses.pop(0))
         return QueuePeekResponse(entries=list(self.queue))
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:

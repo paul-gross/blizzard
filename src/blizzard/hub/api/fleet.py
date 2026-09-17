@@ -31,7 +31,13 @@ from blizzard.hub.api.ingest_broadcast import IngestBroadcast
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.hub_node import PollPolicy
-from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedDependency, ClaimDeniedPaused, ClaimDeniedTerminal
+from blizzard.hub.domain.claim import (
+    ClaimConflict,
+    ClaimDeniedDependency,
+    ClaimDeniedIncompatible,
+    ClaimDeniedPaused,
+    ClaimDeniedTerminal,
+)
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import FollowLatest, Graph, Mint
 from blizzard.hub.domain.registry import RunnerCapability
@@ -65,6 +71,7 @@ from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
     RouteClaimDependencyDenial,
+    RouteClaimIncompatibleDenial,
     RouteClaimPausedDenial,
     RouteClaimResponse,
     RouteClaimTerminalDenial,
@@ -480,8 +487,9 @@ def claim_route(
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> object:
     """Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,
-    already terminal ({done, stopped}, issue #118), or standing on an unmet prerequisite
-    (blizzard#458), else the first node envelope."""
+    already terminal ({done, stopped}, issue #118), standing on an unmet prerequisite
+    (blizzard#458), or incompatible with the runner's stored capabilities (blizzard#433
+    D9), else the first node envelope."""
     fleet.assert_owns(claim.runner_id)
     chunk = services.chunks.record.get(claim.chunk_id)
     if chunk is None:
@@ -509,6 +517,11 @@ def claim_route(
             chunk_id=claim.chunk_id, prerequisite_chunk_id=exc.prerequisite_chunk_id
         )
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=dependency_denial.model_dump())
+    except ClaimDeniedIncompatible as exc:
+        incompatible_denial = RouteClaimIncompatibleDenial(
+            chunk_id=claim.chunk_id, incompatible_runner_id=exc.runner_id
+        )
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=incompatible_denial.model_dump())
     except ClaimConflict as exc:
         conflict = RouteClaimConflict(chunk_id=claim.chunk_id, held_by_runner_id=exc.held_by_runner_id)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())

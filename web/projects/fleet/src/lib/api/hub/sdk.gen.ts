@@ -950,8 +950,9 @@ export const peekMatchedQueueApiFleetQueuePeekPost = <ThrowOnError extends boole
  * Claim Route
  *
  * Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,
- * already terminal ({done, stopped}, issue #118), or standing on an unmet prerequisite
- * (blizzard#458), else the first node envelope.
+ * already terminal ({done, stopped}, issue #118), standing on an unmet prerequisite
+ * (blizzard#458), or incompatible with the runner's stored capabilities (blizzard#433
+ * D9), else the first node envelope.
  */
 export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = false>(options: Options<ClaimRouteApiFleetRoutesPostData, ThrowOnError>): RequestResult<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError> => (options.client ?? client).post<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError>({
     url: '/api/fleet/routes',

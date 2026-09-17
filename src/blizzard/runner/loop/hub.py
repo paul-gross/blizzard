@@ -21,6 +21,7 @@ from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
     RouteClaimDependencyDenial,
+    RouteClaimIncompatibleDenial,
     RouteClaimPausedDenial,
     RouteClaimResponse,
     RouteClaimTerminalDenial,
@@ -51,14 +52,15 @@ class ChunkNotFoundError(HubClientError):
 class RouteClaimOutcome:
     """The result of a route claim: exactly one of ``claimed`` / ``conflict`` /
     ``denied_paused`` (#44) / ``denied_terminal`` (#118) / ``denied_dependency``
-    (blizzard#458) set. A conflict is a race this claim lost; every denial means the hub
-    refused it before any race."""
+    (blizzard#458) / ``denied_incompatible`` (blizzard#433 D9) set. A conflict is a race
+    this claim lost; every denial means the hub refused it before any race."""
 
     claimed: RouteClaimResponse | None = None
     conflict: RouteClaimConflict | None = None
     denied_paused: RouteClaimPausedDenial | None = None
     denied_terminal: RouteClaimTerminalDenial | None = None
     denied_dependency: RouteClaimDependencyDenial | None = None
+    denied_incompatible: RouteClaimIncompatibleDenial | None = None
 
     @property
     def won(self) -> bool:

@@ -160,6 +160,32 @@ def test_claim_route_409_with_a_prerequisite_chunk_id_field_is_a_dependency_deni
 
 
 @pytest.mark.unit
+def test_claim_route_409_with_an_incompatible_runner_id_field_is_an_incompatibility_denial_not_a_conflict() -> None:
+    """The fourth 409 shape (blizzard#433 D9), told apart from the other three by its
+    own ``incompatible_runner_id`` field rather than ``status``, ``prerequisite_chunk_id``,
+    or ``held_by_runner_id``."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            409,
+            json={
+                "chunk_id": "ch_1",
+                "incompatible_runner_id": "r1",
+                "detail": "runner capabilities no longer satisfy the chunk's reachable lineage",
+            },
+        )
+
+    outcome = _client(handler).claim_route(
+        RouteClaim(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
+    )
+    assert not outcome.won
+    assert outcome.conflict is None
+    assert outcome.denied_terminal is None
+    assert outcome.denied_dependency is None
+    assert outcome.denied_incompatible is not None and outcome.denied_incompatible.incompatible_runner_id == "r1"
+
+
+@pytest.mark.unit
 def test_claim_route_403_is_a_paused_denial_not_a_conflict() -> None:
     """A distinct outcome from the 409 race loss (issue #44): the hub's registry has
     this runner paused and refused the claim outright."""

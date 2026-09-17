@@ -13734,7 +13734,7 @@
     },
     "/api/fleet/routes": {
       "post": {
-        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,\nalready terminal ({done, stopped}, issue #118), or standing on an unmet prerequisite\n(blizzard#458), else the first node envelope.",
+        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,\nalready terminal ({done, stopped}, issue #118), standing on an unmet prerequisite\n(blizzard#458), or incompatible with the runner's stored capabilities (blizzard#433\nD9), else the first node envelope.",
         "operationId": "claim_route_api_fleet_routes_post",
         "requestBody": {
           "content": {
