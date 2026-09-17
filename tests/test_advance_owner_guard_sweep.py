@@ -491,7 +491,8 @@ def test_pool_head_owner_unresolvable_at_node_entry_escalates_but_a_sibling_chun
     )
 
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-sibling", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
+        handle=WorkerHandle(session_id="sess-sibling", pid=200, process_start_time="start-200", pgid=200),
+        verdict="pass",
     )
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), clock=FixedClock(_NOW))
@@ -564,7 +565,8 @@ def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_s
     )
 
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-sibling", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
+        handle=WorkerHandle(session_id="sess-sibling", pid=200, process_start_time="start-200", pgid=200),
+        verdict="pass",
     )
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), clock=FixedClock(_NOW))

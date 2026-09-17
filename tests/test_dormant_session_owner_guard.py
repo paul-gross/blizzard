@@ -231,7 +231,9 @@ def test_resume_on_unmet_produces_blocked_by_unresolvable_owner_escalates_in_pla
     )
     hub.chunks["ch_done"] = _done_chunk("ch_done")
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict=None, assessment=""
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
+        verdict=None,
+        assessment="",
     )
     probe = FakeProbe(alive=set())  # the worker already exited
     provider = FakeProvider({"e1": "/ws/e1", "e_done": "/ws/e_done"})

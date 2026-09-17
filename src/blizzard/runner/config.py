@@ -482,7 +482,8 @@ class RunnerConfig:
     effort_aliases: tuple[tuple[str, str], ...] = ()
     #: OpenCode's own binary path (D6), independent of `harness_binary` (still Claude Code's).
     opencode_binary: str = DEFAULT_OPENCODE_BINARY
-    #: OpenCode's tier -> `provider/model` mapping (D6); unmapped tiers skip this binding rather than spawn unprovisioned.
+    #: OpenCode's tier -> `provider/model` mapping (D6); unmapped tiers skip this binding
+    #: rather than spawn unprovisioned.
     opencode_model_aliases: tuple[tuple[str, str], ...] = ()
     #: OpenCode's effort -> `--variant` mapping (D6); unmapped values pass through unchanged.
     opencode_effort_aliases: tuple[tuple[str, str], ...] = ()

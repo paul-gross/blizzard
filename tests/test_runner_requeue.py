@@ -229,7 +229,9 @@ def test_fill_requeue_resume_carries_the_failed_leases_own_harness_owner(tmp_pat
     hub.envelopes["ch_1"] = envelope
     hub.queue = []  # nothing new to fill — only the requeue-resume path should act
     default = FakeHarness(handle=_HANDLE, verdict=None)
-    other = FakeHarness(handle=WorkerHandle(session_id="sess-c", pid=300, process_start_time="start-300", pgid=300), verdict=None)
+    other = FakeHarness(
+        handle=WorkerHandle(session_id="sess-c", pid=300, process_start_time="start-300", pgid=300), verdict=None
+    )
     ctx = make_context(
         store,
         hub=hub,

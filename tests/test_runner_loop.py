@@ -286,7 +286,8 @@ def test_requeue_mints_a_fresh_session_under_the_failed_sessions_exact_owner(tmp
         conn.exec_driver_sql("UPDATE leases SET harness_id = 'other' WHERE lease_id = 'lease_1'")
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     other = FakeHarness(
-        handle=WorkerHandle(session_id="other-fresh", pid=200, process_start_time="other-start", pgid=200), verdict="pass"
+        handle=WorkerHandle(session_id="other-fresh", pid=200, process_start_time="other-start", pgid=200),
+        verdict="pass",
     )
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
@@ -340,7 +341,8 @@ def test_requeue_after_a_pre_spawn_failure_keeps_the_minted_owner(tmp_path):  # 
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     other = FakeHarness(
-        handle=WorkerHandle(session_id="other-fresh", pid=200, process_start_time="other-start", pgid=200), verdict="pass"
+        handle=WorkerHandle(session_id="other-fresh", pid=200, process_start_time="other-start", pgid=200),
+        verdict="pass",
     )
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
@@ -454,7 +456,9 @@ def test_harness_selection_single_member_selects_regardless_of_model_resolvabili
     """The single-member exception: with nothing else to select, the model check never
     runs at all, and `resolve_model`'s own left-to-right-then-adapter-default fallback is
     left to compute the stamp exactly as it does today."""
-    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", process=FakeProbe(), launcher=ProcessLauncher(FakeProbe()))
+    adapter = ClaudeCodeAdapter(
+        binary="claude", model="claude-opus-5", process=FakeProbe(), launcher=ProcessLauncher(FakeProbe())
+    )
     registry = HarnessRegistry({"h1": HarnessBinding(adapter=adapter, transcript_source=NullTranscriptSource())})
     envelope = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=_CHOICES, session_harnesses=["h1"], session_model=["gpt-5.3-codex"]
@@ -468,7 +472,9 @@ def test_harness_selection_single_member_selects_regardless_of_model_resolvabili
 
 @pytest.mark.unit
 def test_harness_selection_native_name_in_a_two_member_set_does_not_match_the_other_harness():  # type: ignore[no-untyped-def]
-    claude = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", process=FakeProbe(), launcher=ProcessLauncher(FakeProbe()))
+    claude = ClaudeCodeAdapter(
+        binary="claude", model="claude-opus-5", process=FakeProbe(), launcher=ProcessLauncher(FakeProbe())
+    )
     foreign = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     foreign.resolved_model_strict = None  # "sonnet" means nothing to a harness that isn't claude_code
     registry = HarnessRegistry(
@@ -1589,7 +1595,8 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     harness1 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
+        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100", pgid=100),
+        verdict="pass",
     )
     ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
     Fill(ctx1).run()
@@ -1606,7 +1613,8 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
         ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env),
     ]
     harness2 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200", pgid=200), verdict="fail"
+        handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200", pgid=200),
+        verdict="fail",
     )
     ctx2 = make_context(
         store,
@@ -1668,7 +1676,8 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     harness1 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
+        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100", pgid=100),
+        verdict="pass",
     )
     ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
     Fill(ctx1).run()
@@ -1679,7 +1688,8 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
         ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_reentry_env),
     ]
     harness2 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200", pgid=200), verdict="fail"
+        handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200", pgid=200),
+        verdict="fail",
     )
     ctx2 = make_context(
         store,
@@ -3208,7 +3218,8 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     harness1 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
+        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100", pgid=100),
+        verdict="pass",
     )
     ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
     Fill(ctx1).run()
@@ -3220,7 +3231,8 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
     hub.envelopes["ch_1"] = build_env
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
     harness2 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-build-1", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
+        handle=WorkerHandle(session_id="sess-build-1", pid=200, process_start_time="start-200", pgid=200),
+        verdict="pass",
     )
     ctx2 = make_context(
         store,

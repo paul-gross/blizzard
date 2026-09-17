@@ -19,7 +19,8 @@ from blizzard.runner.loop.process import IProcessProbe
 # ``man 2 prctl`` — arms the child's own death signal.
 _PR_SET_PDEATHSIG = 1
 
-# Resolved at import time, never post-fork: post-fork `dlopen` is a documented deadlock hazard in a multithreaded process.
+# Resolved at import time, never post-fork: post-fork `dlopen` is a documented deadlock
+# hazard in a multithreaded process.
 _LIBC = ctypes.CDLL(None, use_errno=True)
 
 
@@ -32,7 +33,9 @@ def _die_with_parent() -> None:
     _LIBC.prctl(_PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
 
 
-# The one thread every launch's fork()/exec() runs on (D4): `PR_SET_PDEATHSIG` tracks the calling OS thread, not the daemon, so it must outlive the tick thread `PeriodicDriver.stop()` tears down.
+# The one thread every launch's fork()/exec() runs on (D4): `PR_SET_PDEATHSIG` tracks the
+# calling OS thread, not the daemon, so it must outlive the tick thread `PeriodicDriver.stop()`
+# tears down.
 _SPAWN_EXECUTOR: Executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
 
 

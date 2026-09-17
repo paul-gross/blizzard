@@ -1497,7 +1497,9 @@ def test_pump_lease_drains_a_segment_across_several_incomplete_reads() -> None:
     ]
     source = _SequencedTranscriptSource("sess-a", batches)
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1), verdict=None, transcript_source=source
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1),
+        verdict=None,
+        transcript_source=source,
     )
     store = make_store("sqlite://")
     ctx = make_context(
@@ -1566,7 +1568,9 @@ def test_pump_lease_marks_incomplete_when_its_deadline_expires_mid_drain() -> No
     inner = _SequencedTranscriptSource("sess-a", batches)
     source = _ClockAdvancingAfterNCallsSource(inner, clock=clock, jump=timedelta(seconds=10), after=2)
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1), verdict=None, transcript_source=source
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1),
+        verdict=None,
+        transcript_source=source,
     )
     store = make_store("sqlite://")
     ctx = make_context(
@@ -1653,7 +1657,9 @@ def test_pump_lease_marks_a_second_segment_truncated_when_never_even_attempted()
         advance_after="sess-a",
     )
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1), verdict=None, transcript_source=source
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1),
+        verdict=None,
+        transcript_source=source,
     )
     store = make_store("sqlite://")
     ctx = make_context(

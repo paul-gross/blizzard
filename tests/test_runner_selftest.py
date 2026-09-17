@@ -465,7 +465,9 @@ class _FixedPidAdapter:
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> WorkerHandle:
-        return WorkerHandle(session_id=session_hint or "sid", pid=self.spawn_pid, process_start_time="spawn-t", pgid=self.spawn_pid)
+        return WorkerHandle(
+            session_id=session_hint or "sid", pid=self.spawn_pid, process_start_time="spawn-t", pgid=self.spawn_pid
+        )
 
     def honors_session_hint(self) -> bool:
         return True
@@ -513,7 +515,9 @@ class _FixedPidAdapter:
     ) -> WorkerHandle:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(json.dumps({"result": "<Choice>pass</Choice>"}))
-        return WorkerHandle(session_id=session_id, pid=self.spawn_pid, process_start_time="judge-t", pgid=self.spawn_pid)
+        return WorkerHandle(
+            session_id=session_id, pid=self.spawn_pid, process_start_time="judge-t", pgid=self.spawn_pid
+        )
 
     def parse_verdict(self, output: str) -> str | None:
         return "pass" if "<Choice>pass</Choice>" in output else None

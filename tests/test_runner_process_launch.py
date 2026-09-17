@@ -6,6 +6,7 @@ mid-``driver.stop()``; ``ProcessLauncher`` proxies fork/exec through its own exe
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import time
@@ -58,7 +59,5 @@ def test_stopping_the_launching_thread_does_not_kill_an_already_launched_child()
 
 
 def _reap(pid: int) -> None:
-    try:
+    with contextlib.suppress(ChildProcessError):
         os.waitpid(pid, 0)
-    except ChildProcessError:
-        pass
