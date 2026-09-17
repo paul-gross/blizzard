@@ -455,10 +455,7 @@ class OpenCodeAdapter:
         texts = [
             event.part.text
             for event in events
-            if event.type == "text"
-            and event.part is not None
-            and event.part.text
-            and event.part.session_id == root
+            if event.type == "text" and event.part is not None and event.part.text and event.part.session_id == root
         ]
         return "\n".join(texts)
 

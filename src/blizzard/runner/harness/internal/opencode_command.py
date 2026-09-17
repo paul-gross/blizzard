@@ -83,9 +83,7 @@ class OpenCodeCommand:
         cmd.append(prompt)
         return cmd
 
-    def takeover_argv(
-        self, *, session_id: str, model: str | None = None, variant: str | None = None
-    ) -> list[str]:
+    def takeover_argv(self, *, session_id: str, model: str | None = None, variant: str | None = None) -> list[str]:
         """The exec'd interactive TUI argv (issue #258) — no ``--format json``, no
         ``--auto``: an attended session is a human at a terminal who approves tool use
         live, never fleet automation."""

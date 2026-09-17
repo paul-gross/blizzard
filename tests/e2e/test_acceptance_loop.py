@@ -424,7 +424,12 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
 
     ``host``/``port`` bind to a free port rather than the base config's default, which
     can collide with this machine's live dogfood runner (issue #143, Phase 4;
-    see ``AGENTS.local.md``)."""
+    see ``AGENTS.local.md``). Both mock harness binaries are always wired: ``harness_binary``
+    keeps meaning Claude Code exactly as it always has (harness selection is a per-node
+    declaration, not a config-level switch — ``[[session]] harnesses`` picks OpenCode, never
+    this function), and ``opencode_binary`` lets a scenario's graph opt a node into it by
+    naming ``opencode`` in ``session_harnesses`` — inert for every scenario that never does.
+    """
     base = init_runner_environment(runner_dir)  # scaffolds config + migrates the store
     return dataclasses.replace(
         base,
@@ -437,6 +442,7 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
         # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
         # omitted (``None``).
         harness_permission_mode=None,
+        opencode_binary=str(bin_dir / "mock-opencode"),
         # A path that is never created, so the external-usage sampler's missing-credentials
         # soft failure trips before any request is built (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),

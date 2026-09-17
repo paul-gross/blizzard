@@ -182,6 +182,36 @@ BUILD_SCRIPT = (
 )
 JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
+# The OpenCode-safe build node: identical to `BUILD_SCRIPT`, except every `subprocess.run`
+# call captures its own output instead of inheriting the mock's stdout. The real OpenCode CLI
+# never lets a tool's raw output land directly on `opencode run --format json`'s own stdout —
+# every tool result is reported as a structured event — and `mock-opencode`'s adapter reads
+# its very first stdout line as the fresh-session identity (execution spec, "Fresh-session
+# handshake"), so a script that lets `git commit`'s own banner print ahead of it (harmless
+# for Claude Code's own end-of-run envelope parse) would corrupt that first line here.
+OPENCODE_BUILD_SCRIPT = (
+    "import subprocess, pathlib\n"
+    f"repo = {REPO_NAME!r}\n"
+    '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
+    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'
+    'subprocess.run(["git", "-C", repo, "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",'
+    ' "commit", "-m", "feat: land a change from the mock harness"], check=True, capture_output=True)\n'
+    "_branch = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    "_commit = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True, capture_output=True)\n'
+    "subprocess.run(\n"
+    '    ["blizzard", "runner", "artifact", "commit",\n'
+    '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+    "    check=True, capture_output=True,\n"
+    ")\n"
+)
+
 
 def transcript_segment_turn(index: int, kind: str, text: str) -> dict:
     """One ``TurnSegmentView`` as the wire carries it, at its defaults."""
@@ -248,6 +278,58 @@ def mock_hub_chunk_spec(work_ref: str) -> dict:
                         "conflict": {"description": "A repo did not merge cleanly.", "to": "build"},
                     },
                 },
+            },
+        },
+        "work_refs": [{"source": "mock", "ref": work_ref}],
+    }
+
+
+#: The pool name ``build`` and ``review`` share (issue #144) — a second node declaring the
+#: SAME ``session_name`` resumes the first node's already-minted session rather than minting
+#: its own, which is exactly the cross-node-resume shape :func:`mock_hub_opencode_chunk_spec`
+#: exists to exercise.
+OPENCODE_SESSION_POOL = "opencode-pool"
+
+#: ``review``'s base turn: a no-op, mirroring ``tests/e2e/test_acceptance_loop.py``'s own
+#: scripted review node — the verdict comes from the judgement resume, not the base turn.
+OPENCODE_REVIEW_SCRIPT = "pass\n"
+OPENCODE_REVIEW_JUDGEMENT = "verdict('pass', 'resumed the same OpenCode session; review complete')\n"
+
+
+def mock_hub_opencode_chunk_spec(work_ref: str) -> dict:
+    """A scripted build -> review -> done chunk run entirely under OpenCode (D9/D10).
+
+    ``build`` and ``review`` are two distinct node-steps sharing one ``session_name`` pool:
+    ``build`` mints the pool's head fresh (a genuine OpenCode fresh-session handshake) and
+    resumes it once more for its own judgement; ``review`` then resumes that SAME session a
+    third and fourth time (its base turn, then its judgement) — the cross-node resume the
+    execution spec's OpenCode binding must serve exactly as Claude Code's own session pools
+    already do."""
+    return {
+        "graph_id": "gr_service_opencode",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "session": "resume",
+                "session_name": OPENCODE_SESSION_POOL,
+                "session_harnesses": ["opencode"],
+                "judged_by": "worker",
+                "prompt": OPENCODE_BUILD_SCRIPT,
+                "judgement_prompt": JUDGEMENT_SCRIPT,
+                "choices": [{"name": "pass", "description": "committed and green", "to": "review"}],
+                "retries_max": 1,
+            },
+            "review": {
+                "executor": "runner",
+                "session": "resume",
+                "session_name": OPENCODE_SESSION_POOL,
+                "session_harnesses": ["opencode"],
+                "judged_by": "worker",
+                "prompt": OPENCODE_REVIEW_SCRIPT,
+                "judgement_prompt": OPENCODE_REVIEW_JUDGEMENT,
+                "choices": [{"name": "pass", "description": "cold-eyes review: ready to land", "to": "done"}],
+                "retries_max": 1,
             },
         },
         "work_refs": [{"source": "mock", "ref": work_ref}],

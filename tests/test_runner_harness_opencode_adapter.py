@@ -70,7 +70,18 @@ def test_fresh_mint_carries_model_and_format_json_and_auto() -> None:
     cmd = OpenCodeCommand("opencode").build(
         OpenCodeInvocationKind.FRESH, prompt="do the thing", model="openai/gpt-5.6", variant="max", auto=True
     )
-    assert cmd == ["opencode", "run", "--format", "json", "--model", "openai/gpt-5.6", "--variant", "max", "--auto", "do the thing"]
+    assert cmd == [
+        "opencode",
+        "run",
+        "--format",
+        "json",
+        "--model",
+        "openai/gpt-5.6",
+        "--variant",
+        "max",
+        "--auto",
+        "do the thing",
+    ]
 
 
 @pytest.mark.unit
@@ -85,9 +96,15 @@ def test_resume_omits_model_and_carries_session() -> None:
 @pytest.mark.unit
 def test_judge_and_nudge_compose_the_same_shape_as_resume() -> None:
     builder = OpenCodeCommand("opencode")
-    judge_cmd = builder.build(OpenCodeInvocationKind.JUDGE, prompt="assess", session_id="ses_1", variant="max", auto=True)
-    nudge_cmd = builder.build(OpenCodeInvocationKind.NUDGE, prompt="continue", session_id="ses_1", variant="max", auto=True)
-    answer_cmd = builder.build(OpenCodeInvocationKind.ANSWER, prompt="here's the answer", session_id="ses_1", variant="max", auto=True)
+    judge_cmd = builder.build(
+        OpenCodeInvocationKind.JUDGE, prompt="assess", session_id="ses_1", variant="max", auto=True
+    )
+    nudge_cmd = builder.build(
+        OpenCodeInvocationKind.NUDGE, prompt="continue", session_id="ses_1", variant="max", auto=True
+    )
+    answer_cmd = builder.build(
+        OpenCodeInvocationKind.ANSWER, prompt="here's the answer", session_id="ses_1", variant="max", auto=True
+    )
     for cmd, prompt in ((judge_cmd, "assess"), (nudge_cmd, "continue"), (answer_cmd, "here's the answer")):
         assert cmd[:6] == ["opencode", "run", "--format", "json", "--session", "ses_1"]
         assert "--variant" in cmd and cmd[cmd.index("--variant") + 1] == "max"
@@ -599,7 +616,12 @@ def test_sum_transcript_usage_dedups_a_step_described_by_both_event_and_exported
     mixed = adapter.sum_transcript_usage(event_lines + message_lines, "spawn")
 
     expected = (80, 20 + 4, 10, 2)
-    assert (events_only.input_tokens, events_only.output_tokens, events_only.cache_read_tokens, events_only.cache_create_tokens) == expected
+    assert (
+        events_only.input_tokens,
+        events_only.output_tokens,
+        events_only.cache_read_tokens,
+        events_only.cache_create_tokens,
+    ) == expected
     assert (mixed.input_tokens, mixed.output_tokens, mixed.cache_read_tokens, mixed.cache_create_tokens) == expected
     # A transcript never carries a dollar figure, regardless of what the events themselves reported.
     assert mixed.cost_usd is None
@@ -623,7 +645,9 @@ def test_sum_transcript_usage_skips_tokenless_user_messages_without_raising() ->
 
 @pytest.mark.unit
 def test_sum_transcript_usage_ignores_unparseable_lines() -> None:
-    sample = _adapter().sum_transcript_usage(["", "not json", "{}", '{"type": "future_event", "sessionID": "x"}'], "spawn")
+    sample = _adapter().sum_transcript_usage(
+        ["", "not json", "{}", '{"type": "future_event", "sessionID": "x"}'], "spawn"
+    )
 
     assert (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens) == (
         0,
