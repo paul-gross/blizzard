@@ -205,8 +205,9 @@ class ClaudeCodeAdapter:
     def resolvable_tier_ids(self) -> tuple[str, ...]:
         """Every tier id this adapter can resolve (blizzard#433): the built-ins merged
         with the runner's own ``[models.aliases]`` table, an overridden id appearing
-        once — the same override-by-key precedence :meth:`_resolve_one_model` applies."""
-        return tuple({**_BUILTIN_TIERS, **self._model_aliases}.keys())
+        once — the same override-by-key precedence :meth:`_resolve_one_model` applies.
+        Shared with OpenCode (``harness_shared.resolvable_tier_ids``)."""
+        return harness_shared.resolvable_tier_ids(_BUILTIN_TIERS, self._model_aliases)
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
         """``"auto"`` or a token-count spelling, else dropped and logged once (blizzard#343)."""

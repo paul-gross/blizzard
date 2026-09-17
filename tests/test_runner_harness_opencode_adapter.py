@@ -206,6 +206,39 @@ def test_resolve_compaction_window_is_always_unsupported() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# `resolvable_tier_ids` (blizzard#433): the capability snapshot's own tier enumeration.
+
+
+@pytest.mark.unit
+def test_resolvable_tier_ids_is_empty_with_no_config_at_all() -> None:
+    # No built-in OpenCode tiers (unlike Claude Code's three): with nothing configured,
+    # nothing is resolvable.
+    adapter = _adapter()
+    assert adapter.resolvable_tier_ids() == ()
+
+
+@pytest.mark.unit
+def test_resolvable_tier_ids_names_a_configured_alias() -> None:
+    adapter = _adapter(model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),))
+    assert set(adapter.resolvable_tier_ids()) == {"blizzard:frontier"}
+
+
+@pytest.mark.unit
+def test_resolvable_tier_ids_merges_every_configured_alias_once() -> None:
+    # Override-by-key precedence, matching `_resolve_one_model`: two distinct aliases
+    # both appear, each exactly once.
+    adapter = _adapter(
+        model_aliases=(
+            ("blizzard:frontier", "openai/gpt-5.6-luna"),
+            ("blizzard:basic", "openai/gpt-5.6-mini"),
+        )
+    )
+    tiers = adapter.resolvable_tier_ids()
+    assert tiers.count("blizzard:frontier") == 1
+    assert set(tiers) == {"blizzard:frontier", "blizzard:basic"}
+
+
+# --------------------------------------------------------------------------- #
 # Harness selection (harness-selection spec): an unmapped tier is a skip, not a spawn.
 
 

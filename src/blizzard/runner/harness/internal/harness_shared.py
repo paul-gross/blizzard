@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import subprocess
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import IO
 
 from blizzard.foundation.logging import get_logger
@@ -111,6 +111,15 @@ def resolve_model(
             fallback=fallback_label if fallback_label is not None else default,
         )
     return default
+
+
+def resolvable_tier_ids(builtin_tiers: Mapping[str, str], model_aliases: Mapping[str, str]) -> tuple[str, ...]:
+    """Every tier id an adapter can resolve (blizzard#433): ``builtin_tiers`` merged with
+    the runner's own alias table, an overridden id appearing once — the same
+    override-by-key precedence each adapter's own ``_resolve_one_model`` applies.
+    Identical for both bindings; only OpenCode's empty ``builtin_tiers`` differs from
+    Claude Code's three."""
+    return tuple({**builtin_tiers, **model_aliases}.keys())
 
 
 def find_choice_verdict(text: str) -> str | None:

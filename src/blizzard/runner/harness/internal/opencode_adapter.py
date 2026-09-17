@@ -200,6 +200,12 @@ class OpenCodeAdapter:
             _log.info("unrecognized effort value; ignoring", effort=value, known=sorted(_EFFORT_ORDINAL))
         return None
 
+    def resolvable_tier_ids(self) -> tuple[str, ...]:
+        """Every tier id this adapter can resolve (blizzard#433): OpenCode ships no
+        built-in tier mapping, so only the runner's own ``[opencode.models.aliases]``
+        table is resolvable here. Shared with Claude Code (``harness_shared.resolvable_tier_ids``)."""
+        return harness_shared.resolvable_tier_ids({}, self._model_aliases)
+
     def resolve_compaction_window(self, value: str | None) -> str | None:
         """Always unsupported (D8): OpenCode's compaction reserve and automatic-compaction
         switch do not represent Claude Code's numeric threshold, so no value here is ever
