@@ -61,7 +61,9 @@ class WorkerHandle:
     pid: int
     process_start_time: str  # stable across pid reuse — REAP keys on (pid, start_time)
     pgid: int  # the owned process group (D3) — every launch gets one; never absent in memory
-    confirm_durable: Callable[[], None] = field(default=lambda: None, compare=False)  # F1's disarm signal; no-op default
+    confirm_durable: Callable[[], None] = field(
+        default=lambda: None, compare=False
+    )  # F1's disarm signal; no-op default
 
     def await_identity(self, timeout: float) -> WorkerHandle:
         """Already identified at launch — this handle is its own phase two."""

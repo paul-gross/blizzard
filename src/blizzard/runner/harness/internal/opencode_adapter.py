@@ -68,7 +68,9 @@ class _PendingOpenCodeIdentity:
     process_start_time: str
     stdout_path: str
     process: IProcessProbe
-    confirm_durable: Callable[[], None] = field(default=lambda: None, compare=False)  # F1's disarm signal; no-op default
+    confirm_durable: Callable[[], None] = field(
+        default=lambda: None, compare=False
+    )  # F1's disarm signal; no-op default
 
     def await_identity(self, timeout: float) -> WorkerHandle:
         deadline = time.monotonic() + timeout

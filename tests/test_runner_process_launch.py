@@ -106,7 +106,8 @@ def _launch_in_a_throwaway_process(pid_file: str, *, confirm: bool) -> tuple[int
     if confirm:
         args.append("confirm")
     subprocess.run(args, check=True, timeout=10)
-    pid_str, pgid_str = open(pid_file).read().split()
+    with open(pid_file) as f:
+        pid_str, pgid_str = f.read().split()
     return int(pid_str), int(pgid_str)
 
 
