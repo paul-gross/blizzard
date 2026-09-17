@@ -5481,7 +5481,7 @@
         "type": "object"
       },
       "QueuePeekRequest": {
-        "description": "The matched fleet peek's own request body \u2014 ``POST /api/fleet/queue/peek``. Carries\nthe calling runner's capability snapshot and queue policy; never a ``runner_id``,\nsince the matched verb answers for the authenticated principal alone. ``policy``'s\nsemantics: :class:`~blizzard.hub.domain.queue.QueueMatchPolicy`.",
+        "description": "The matched fleet peek's own request body \u2014 ``POST /api/fleet/queue/peek``. Carries\nthe calling runner's capability snapshot and queue policy; never a ``runner_id``,\nsince the matched verb answers for the authenticated principal alone. ``policy=\"hold\"``\nstops at an unusable head; any other value, including an unrecognized one, is pass-over.",
         "properties": {
           "capabilities": {
             "default": [],

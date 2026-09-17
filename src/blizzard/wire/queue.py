@@ -34,8 +34,8 @@ class QueuePeekResponse(BaseModel):
 class QueuePeekRequest(BaseModel):
     """The matched fleet peek's own request body — ``POST /api/fleet/queue/peek``. Carries
     the calling runner's capability snapshot and queue policy; never a ``runner_id``,
-    since the matched verb answers for the authenticated principal alone. ``policy``'s
-    semantics: :class:`~blizzard.hub.domain.queue.QueueMatchPolicy`."""
+    since the matched verb answers for the authenticated principal alone. ``policy="hold"``
+    stops at an unusable head; any other value, including an unrecognized one, is pass-over."""
 
     capabilities: list[RunnerCapability] = []
     policy: str = "pass-over"
