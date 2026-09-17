@@ -14,7 +14,12 @@ from dataclasses import dataclass, replace
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.adapter import (
+    DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
+    IHarnessLifecycleAndVerdict,
+    WorkerHandle,
+    WorkerPreamble,
+)
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.selftest.model import (
@@ -32,10 +37,6 @@ from blizzard.wire.envelope import EnvelopeChoice, NodeConfig, NodeEnvelope
 # loudly rather than wedging the canary forever.
 _EXIT_TIMEOUT_SECONDS = 30.0
 _EXIT_POLL_INTERVAL_SECONDS = 0.05
-
-# Bounds the gate's own wait for a launch's identity — generous next to a real harness's
-# spawn latency, since a wedged one is what `_EXIT_TIMEOUT_SECONDS` below is really for.
-_IDENTITY_AWAIT_TIMEOUT_SECONDS = 30.0
 
 # The automated-resume reap budget: bounded so a probe that never confirms the kill
 # took cannot itself wedge the canary — a reap timeout still reports the check's result.
@@ -114,7 +115,7 @@ class Spawn:
             pending = scratch.adapter.spawn(
                 cls._envelope(), cls._preamble(scratch.workdir), session_hint=scratch.session_id
             )
-            handle = pending.await_identity(_IDENTITY_AWAIT_TIMEOUT_SECONDS)
+            handle = pending.await_identity(DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS)
         except Exception as exc:  # the adapter is untrusted external-CLI surface
             return cls(SelfTestCheck(SPAWN_SESSION_ID, False, f"spawn raised: {exc}"), None)
         # The harness-neutral claim (D1/D2): non-empty and authoritative. Hint-equality is

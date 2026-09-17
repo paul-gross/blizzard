@@ -82,7 +82,7 @@ def _two_harness_ctx():  # type: ignore[no-untyped-def]
     )
     # Never spawned through either fake — sessions are seeded directly below — so the
     # handle is a placeholder no assertion here reads.
-    unused_handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0")
+    unused_handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)
     harness_a = FakeHarness(handle=unused_handle, verdict=None, transcript_source=source_a)
     harness_b = FakeHarness(handle=unused_handle, verdict=None, transcript_source=source_b)
     ctx = make_context(

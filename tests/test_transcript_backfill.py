@@ -79,7 +79,7 @@ def _ctx(*, sessions: dict[str, list[NormalizedTurn]], on_disk: set[str] | None 
         hub=FakeHub(),
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=FakeHarness(
-            handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"),
+            handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1),
             verdict=None,
             transcript_source=source,
         ),

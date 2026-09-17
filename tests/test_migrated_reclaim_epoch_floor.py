@@ -38,7 +38,7 @@ from tests.support import build_hub, ingest, report_lease
 pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "112"}
-_HANDLE = WorkerHandle(session_id="sess-fresh", pid=200, process_start_time="start-200")
+_HANDLE = WorkerHandle(session_id="sess-fresh", pid=200, process_start_time="start-200", pgid=200)
 
 # The source graph, named `default-delivery` so `ensure_default` resolves the ingested
 # chunk here; its single `build` node migrates to `triage-delivery` rather than in place.

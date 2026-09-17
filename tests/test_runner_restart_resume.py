@@ -31,7 +31,7 @@ from tests.runner_fakes import (
 )
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
@@ -185,10 +185,43 @@ def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path):  # ty
     lease = store.active_lease("lease_1")
     assert lease is not None
     assert (lease.lease_id, lease.epoch, lease.session_id, lease.pid) == ("lease_1", 1, "sess-a", 4321)
+    # The resumed process's own group is durable too (D3) — every launch, resume included,
+    # gets a fresh session/group leader, so the resumed pid IS its own pgid.
+    assert lease.pgid == 4321
     # No retry consumed — no new lease minted, no closure recorded.
     assert store.attempt_count("ch_1", "nd_build") == 1
     # Intent consumed — a second RESUME pass is a no-op.
     assert store.resume_intent_lease_ids() == set()
+
+
+@pytest.mark.unit
+def test_resume_records_its_own_pgid_rather_than_clobbering_a_prior_one_with_null(tmp_path):  # type: ignore[no-untyped-def]
+    """A prior generation's own recorded pgid must never be silently nulled by a resume that
+    forgot its own — each generation's group-kill target is always the CURRENT one."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_spawn(  # a prior generation already recorded a real group
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        pgid=100,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _running_chunk()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.resume_pid = 4321
+    probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    Resume(ctx).run()
+
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+    assert lease.pgid == 4321  # this generation's own group, never left None
 
 
 @pytest.mark.unit

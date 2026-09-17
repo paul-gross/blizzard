@@ -341,7 +341,11 @@ class Judgement:
             compaction_window=lease.resolved_compaction_window,
         )
         self.ctx.stores.elicitations.record_elicitation_started(
-            lease.lease_id, lease.epoch, pid=handle.pid, process_start_time=handle.process_start_time
+            lease.lease_id,
+            lease.epoch,
+            pid=handle.pid,
+            process_start_time=handle.process_start_time,
+            pgid=handle.pgid,
         )
 
     def _judged(self, output: str) -> None:

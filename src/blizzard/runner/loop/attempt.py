@@ -92,10 +92,17 @@ class Attempt:
         pre-two-phase-spawn lease, or a resumed one whose own launch never re-recorded a
         group. The epoch fence is what actually makes a stray survivor harmless; this is
         hygiene, not the guarantee, but a group kill also reaps a worker's own descendants
-        a bare pid kill cannot reach."""
+        a bare pid kill cannot reach.
+
+        Re-checks liveness against the recorded ``(pid, process_start_time)`` first: enough
+        elapsed time can let the OS recycle a dead pid's pgid for an unrelated process
+        group, and a bare ``killpg`` with no such check would SIGKILL whatever now holds it
+        rather than this lease's own, long-gone worker."""
         lease = self.lease
-        if lease.pid is None:
+        if lease.pid is None or lease.process_start_time is None:
             return
+        if not self.ctx.process.is_alive(lease.pid, lease.process_start_time):
+            return  # already gone (or replaced by pid/pgid reuse) — nothing of ours to kill
         if lease.pgid is not None:
             self.ctx.process.kill_group(lease.pgid)
         else:
@@ -516,7 +523,11 @@ class Attempt:
         elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
         if elicitation is None:
             return
-        if elicitation.pid is not None:
+        # Group-kill by preference (D3), mirroring `_kill_process` above: an elicitation's
+        # own recorded group reaches its descendants too, a bare pid kill cannot.
+        if elicitation.pgid is not None:
+            self.ctx.process.kill_group(elicitation.pgid)
+        elif elicitation.pid is not None:
             self.ctx.process.kill(elicitation.pid)  # best-effort hygiene, mirroring the worker kill above
         self.ctx.stores.elicitations.clear_elicitation(lease.lease_id, lease.epoch)
         self.ctx.elicitation_files.cleanup(lease.lease_id, lease.epoch, through_attempt=elicitation.relaunch_count)

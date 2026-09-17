@@ -34,7 +34,7 @@ pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
@@ -184,9 +184,31 @@ def test_a_hung_elicitation_past_staleness_fails_even_while_alive(tmp_path):  # 
 
     Advance(ctx).run()  # collect — past the bound even though the process is still alive
 
-    assert elicitation.pid in probe.killed  # the hung process is killed, not merely ignored
+    assert elicitation.pgid in probe.killed_groups  # the hung process is killed, not merely ignored
     assert store.in_flight_elicitation("lease_1", 1) is None
     assert store.active_lease("lease_1") is None  # closed
+
+
+def test_a_judge_launch_records_its_own_process_group_and_is_group_killed(tmp_path):  # type: ignore[no-untyped-def]
+    """A judge launch's own process group (D3) is durable the moment it starts, and a lease
+    closing on top of it group-kills rather than merely killing the bare pid — the same
+    ownership a fresh spawn or resume gets, reaching an elicitation's own descendants too."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)  # the lease's own worker: pid 100, no recorded group
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", judge_pid=200, judge_pgid=200)
+    probe = FakeProbe()
+    ctx = _ctx(store, harness=harness, probe=probe)
+
+    Advance(ctx).run()  # launch
+    elicitation = store.in_flight_elicitation("lease_1", 1)
+    assert elicitation is not None and elicitation.pgid == 200
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+
+    Attempt(ctx, lease).abandon(via="test")
+
+    assert 200 in probe.killed_groups
+    assert 200 not in probe.killed  # group-killed, never also plain-pid-killed
 
 
 def test_unusable_output_relaunches_without_consuming_a_retry(tmp_path):  # type: ignore[no-untyped-def]
@@ -226,7 +248,7 @@ def test_closing_a_lease_kills_its_in_flight_elicitation(tmp_path):  # type: ign
     assert lease is not None
     Attempt(ctx, lease).abandon(via="test")
 
-    assert elicitation.pid in probe.killed
+    assert elicitation.pgid in probe.killed_groups
     assert store.in_flight_elicitation("lease_1", 1) is None
 
 
@@ -248,7 +270,7 @@ def test_pause_park_kills_the_in_flight_elicitation_and_the_later_unpause_re_min
     assert lease is not None
     Attempt(ctx, lease).park_paused(via="test")
 
-    assert elicitation.pid in probe.killed
+    assert elicitation.pgid in probe.killed_groups
     assert store.in_flight_elicitation("lease_1", 1) is None
 
     # The later unpause re-mints the lease token — no in-flight record left to race it.
@@ -275,5 +297,5 @@ def test_preempt_kills_the_in_flight_elicitation(tmp_path):  # type: ignore[no-u
     assert lease is not None
     Attempt(ctx, lease).preempt(via="test")
 
-    assert elicitation.pid in probe.killed
+    assert elicitation.pgid in probe.killed_groups
     assert store.in_flight_elicitation("lease_1", 1) is None

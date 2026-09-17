@@ -62,7 +62,7 @@ from tests.runner_fakes import (
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
 def _store(tmp_path: Path):  # type: ignore[no-untyped-def]

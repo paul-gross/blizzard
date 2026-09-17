@@ -91,7 +91,7 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
     )
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"),
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
         verdict="fail",
         assessment="the shared assessment",
     )

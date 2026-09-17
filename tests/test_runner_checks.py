@@ -84,7 +84,7 @@ def test_advance_runs_checks_records_facts_and_injects_them_into_the_submission(
     )
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     check_runner = FakeCheckRunner()  # every check green by default
     ctx = make_context(
@@ -132,7 +132,7 @@ def test_advance_records_a_red_check_and_still_buffers_the_completion(tmp_path: 
     )
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="fail"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="fail"
     )
     check_runner = FakeCheckRunner({"mise run test": CheckOutcome(passed=False, output_tail="2 failed")})
     ctx = make_context(
@@ -168,7 +168,7 @@ def test_advance_with_no_checks_runs_nothing_and_carries_empty_check_results(tmp
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     check_runner = FakeCheckRunner()
     ctx = make_context(
@@ -199,7 +199,7 @@ def _ctx_for_unit(store, *, check_runner: FakeCheckRunner, clock: FixedClock):
         store,
         hub=FakeHub(),
         provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict="pass"),
+        harness=FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict="pass"),
         probe=FakeProbe(),
         check_runner=check_runner,
         clock=clock,
@@ -354,7 +354,7 @@ def test_advance_injects_the_check_results_into_the_judgement_prompt(tmp_path: P
     )
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="fail"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="fail"
     )
     check_runner = FakeCheckRunner({"mise run test": CheckOutcome(passed=False, output_tail="2 failed")})
     ctx = make_context(
@@ -408,7 +408,7 @@ def test_advance_gates_a_requires_checks_pass_with_a_red_check_and_consumes_a_re
         "ch_1", "build", node_id="nd_build", choices=_CHOICES, checks=["mise run test"], requires_checks={"pass"}
     )
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     check_runner = FakeCheckRunner({"mise run test": CheckOutcome(passed=False, output_tail="boom")})
     ctx = make_context(
@@ -444,7 +444,7 @@ def test_advance_lets_a_red_check_route_through_a_non_gated_fail(tmp_path: Path)
     )
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="fail"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="fail"
     )
     check_runner = FakeCheckRunner({"mise run test": CheckOutcome(passed=False, output_tail="boom")})
     ctx = make_context(
@@ -479,7 +479,7 @@ def test_advance_accepts_a_requires_checks_pass_when_checks_are_green(tmp_path: 
     )
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     check_runner = FakeCheckRunner()  # green
     ctx = make_context(

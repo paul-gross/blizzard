@@ -39,7 +39,7 @@ from tests.support import build_hub, pointer_token, report_lease
 pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "38"}
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 # A gateless build -> deliver graph, minimal enough to claim and lease against.
 _PLAIN_YAML = """

@@ -35,6 +35,7 @@ class ElicitationStore:
             epoch=int(r.epoch),
             pid=int(r.pid) if r.pid is not None else None,
             process_start_time=str(r.process_start_time) if r.process_start_time is not None else None,
+            pgid=int(r.pgid) if r.pgid is not None else None,
             output_path=str(r.output_path),
             first_launched_at=r.first_launched_at,
             relaunch_count=int(r.relaunch_count),
@@ -59,6 +60,7 @@ class ElicitationStore:
                     epoch=epoch,
                     pid=None,
                     process_start_time=None,
+                    pgid=None,
                     output_path=output_path,
                     first_launched_at=at,
                     relaunch_count=0,
@@ -66,14 +68,16 @@ class ElicitationStore:
             )
         _log.info("elicitation launch recorded", lease_id=lease_id, epoch=epoch, output_path=output_path)
 
-    def record_elicitation_started(self, lease_id: str, epoch: int, *, pid: int, process_start_time: str) -> None:
+    def record_elicitation_started(
+        self, lease_id: str, epoch: int, *, pid: int, process_start_time: str, pgid: int | None = None
+    ) -> None:
         with self._store.begin() as conn:
             conn.execute(
                 in_flight_elicitations.update()
                 .where(and_(in_flight_elicitations.c.lease_id == lease_id, in_flight_elicitations.c.epoch == epoch))
-                .values(pid=pid, process_start_time=process_start_time)
+                .values(pid=pid, process_start_time=process_start_time, pgid=pgid)
             )
-        _log.info("elicitation started", lease_id=lease_id, epoch=epoch, pid=pid)
+        _log.info("elicitation started", lease_id=lease_id, epoch=epoch, pid=pid, pgid=pgid)
 
     def record_elicitation_relaunch(self, lease_id: str, epoch: int, *, output_path: str) -> None:
         with self._store.begin() as conn:
@@ -88,6 +92,7 @@ class ElicitationStore:
                 .values(
                     pid=None,
                     process_start_time=None,
+                    pgid=None,
                     output_path=output_path,
                     relaunch_count=int(existing.relaunch_count) + 1,
                 )

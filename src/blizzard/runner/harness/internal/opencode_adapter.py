@@ -77,7 +77,7 @@ class _PendingOpenCodeIdentity:
     :class:`WorkerHandle` instead, whose ``await_identity`` is its own trivial phase two."""
 
     pid: int
-    pgid: int | None
+    pgid: int  # every launch gets one (D3) — see `ProcessLauncher.launch`
     process_start_time: str
     stdout_path: str
     process: IProcessProbe

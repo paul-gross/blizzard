@@ -36,7 +36,7 @@ from tests.runner_fakes import (
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
@@ -138,7 +138,7 @@ def test_the_re_entry_mints_a_session_rather_than_resuming_the_pool_head(tmp_pat
     preempted lease left behind is not resumed — a new head is minted in its place."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    handle = WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200")
+    handle = WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200)
     harness = FakeHarness(handle=handle, verdict=None)
     ctx = _ctx(store, _restarted_hub(), harness=harness, probe=FakeProbe(alive={(100, "start-100")}))
 
@@ -334,7 +334,7 @@ def test_a_restart_does_not_spend_the_nodes_retry_budget(tmp_path):  # type: ign
             session_name="main",
         )
         pid = 100 + round_
-        handle = WorkerHandle(session_id=f"sess-{round_}", pid=pid, process_start_time=f"start-{pid}")
+        handle = WorkerHandle(session_id=f"sess-{round_}", pid=pid, process_start_time=f"start-{pid}", pgid=pid)
         live = store.active_lease_for_chunk("ch_1")
         assert live is not None and live.pid is not None and live.process_start_time is not None
         ctx = _ctx(

@@ -312,6 +312,13 @@ class DormantSession:
             lease.lease_id,
             pid=pid,
             process_start_time=self.ctx.process.start_time(pid) or "",
+            # Every launch goes through `ProcessLauncher`, which always starts a fresh
+            # session/group leader (`start_new_session=True`): this generation's pgid is
+            # its own pid, by the same POSIX contract `LaunchedProcess.pgid` documents.
+            # Recording it here — rather than leaving the default `None` — is what makes
+            # THIS generation's group ownership durable; leaving it out would silently
+            # null out whatever pgid a prior generation left standing (D3).
+            pgid=pid,
             session=lease.session,  # unchanged — same concrete session under the same lease
             spawned_at=stamped,
             harness_version=version,

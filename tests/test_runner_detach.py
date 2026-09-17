@@ -30,7 +30,7 @@ from tests.runner_fakes import (
 )
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
@@ -388,12 +388,70 @@ def test_pull_abandons_a_live_lease_whose_chunk_the_hub_reports_unknown(tmp_path
 
     Pull(ctx).run()
 
-    assert probe.killed == [100]  # worker reaped (best-effort — already exited)
+    # The recorded (pid, start_time) reads dead — no kill is issued at all, rather than a
+    # blind killpg/kill that could hit an unrelated process the OS later reused the pid for.
+    assert probe.killed == []
+    assert probe.killed_groups == []
     assert provider.released == ["e1"]  # environment released
     assert store.active_lease("lease_1") is None  # lease closed
     assert store.latest_epoch("ch_1") == 1  # no epoch bump
     assert store.pending_outbound() == []  # no requeue, no escalation
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
+
+
+@pytest.mark.unit
+def test_pull_group_kills_a_still_live_detached_worker(tmp_path):  # type: ignore[no-untyped-def]
+    """The companion case: a recorded (pid, start_time) that still reads alive IS killed —
+    the liveness re-check gates the kill, it does not disable it."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_spawn(  # this generation's own group is durable (D3)
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        pgid=100,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    hub = FakeHub()
+    hub.not_found = {"ch_1"}
+    provider = FakeProvider({"e1": "/ws/e1"})
+    probe = FakeProbe(alive={(100, "start-100")})  # still genuinely running
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    Pull(ctx).run()
+
+    assert probe.killed_groups == [100]
+    assert probe.killed == []  # the group kill covers it — no redundant bare-pid kill
+
+
+@pytest.mark.unit
+def test_pull_skips_the_kill_when_the_recorded_pid_was_reused_by_another_process(tmp_path):  # type: ignore[no-untyped-def]
+    """The pid/pgid-reuse hazard F13 closes: a LIVE pid whose start time no longer matches
+    the recorded one is not this lease's worker any more — the OS gave that pid to an
+    unrelated process, and a bare `killpg` with no re-check would hit it instead."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        pgid=100,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    hub = FakeHub()
+    hub.not_found = {"ch_1"}
+    provider = FakeProvider({"e1": "/ws/e1"})
+    # pid 100 is alive, but under a DIFFERENT start time — the OS recycled it.
+    probe = FakeProbe(alive={(100, "some-other-processes-start-time")})
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    Pull(ctx).run()
+
+    assert probe.killed == []
+    assert probe.killed_groups == []
+    assert store.active_lease("lease_1") is None  # the lease still closes regardless
 
 
 @pytest.mark.unit
@@ -526,12 +584,12 @@ def test_tick_releases_a_chunk_unknown_at_the_hub_and_the_next_tick_does_not_rec
     hub = FakeHub()
     hub.not_found = {"ch_1"}
     provider = FakeProvider({"e1": "/ws/e1"})
-    probe = FakeProbe()  # the worker has already exited
+    probe = FakeProbe()  # the worker has already exited — recorded (pid, start_time) reads dead
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
     tick(ctx)
 
-    assert probe.killed == [100]
+    assert probe.killed == []  # already gone — no blind kill of a possibly-reused pid
     assert provider.released == ["e1"]
     assert store.active_lease("lease_1") is None
     assert store.live_tenure_chunk_ids() == []

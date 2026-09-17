@@ -39,7 +39,7 @@ def _app_with_status(
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", max_agents=max_agents)
     _harness = harness or FakeHarness(
-        handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1"),
+        handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1", pgid=1),
         verdict=None,
     )
     service = RunnerStatusService(

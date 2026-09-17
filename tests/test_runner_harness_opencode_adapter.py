@@ -95,6 +95,9 @@ def test_resume_omits_model_and_carries_session() -> None:
 
 @pytest.mark.unit
 def test_judge_and_nudge_compose_the_same_shape_as_resume() -> None:
+    """NUDGE serves both a produces-nudge and a parked-answer delivery (review F14): the two
+    are distinct CALLER intents with no OpenCode CLI-level difference, so there is no
+    separate ANSWER kind to also exercise here — NUDGE already covers both."""
     builder = OpenCodeCommand("opencode")
     judge_cmd = builder.build(
         OpenCodeInvocationKind.JUDGE, prompt="assess", session_id="ses_1", variant="max", auto=True
@@ -102,10 +105,7 @@ def test_judge_and_nudge_compose_the_same_shape_as_resume() -> None:
     nudge_cmd = builder.build(
         OpenCodeInvocationKind.NUDGE, prompt="continue", session_id="ses_1", variant="max", auto=True
     )
-    answer_cmd = builder.build(
-        OpenCodeInvocationKind.ANSWER, prompt="here's the answer", session_id="ses_1", variant="max", auto=True
-    )
-    for cmd, prompt in ((judge_cmd, "assess"), (nudge_cmd, "continue"), (answer_cmd, "here's the answer")):
+    for cmd, prompt in ((judge_cmd, "assess"), (nudge_cmd, "continue")):
         assert cmd[:6] == ["opencode", "run", "--format", "json", "--session", "ses_1"]
         assert "--variant" in cmd and cmd[cmd.index("--variant") + 1] == "max"
         assert "--auto" in cmd
@@ -114,16 +114,12 @@ def test_judge_and_nudge_compose_the_same_shape_as_resume() -> None:
 
 @pytest.mark.unit
 def test_takeover_argv_has_no_format_json_and_no_auto() -> None:
+    """Interactive takeover has no kind on `OpenCodeInvocationKind` at all (review F14) — it
+    is composed by this wholly separate method, never through `OpenCodeCommand.build`."""
     argv = OpenCodeCommand("opencode").takeover_argv(session_id="ses_1", model="openai/gpt-5.6", variant="max")
     assert argv == ["opencode", "--session", "ses_1", "--model", "openai/gpt-5.6", "--variant", "max"]
     assert "--format" not in argv
     assert "--auto" not in argv
-
-
-@pytest.mark.unit
-def test_build_rejects_the_interactive_kind() -> None:
-    with pytest.raises(ValueError):
-        OpenCodeCommand("opencode").build(OpenCodeInvocationKind.TAKEOVER, prompt="x")
 
 
 # --------------------------------------------------------------------------- #

@@ -29,7 +29,7 @@ from tests.test_runner_restart_resume import _running_chunk
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _STALE_LATER = _NOW + timedelta(hours=2)  # past HEARTBEAT_STALENESS_THRESHOLD (~1h)
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]

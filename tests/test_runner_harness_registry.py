@@ -17,7 +17,7 @@ from tests.runner_fakes import FakeHarness, FakeTranscriptSource
 
 
 def _harness() -> FakeHarness:
-    return FakeHarness(handle=WorkerHandle(session_id="session", pid=1, process_start_time="start"), verdict=None)
+    return FakeHarness(handle=WorkerHandle(session_id="session", pid=1, process_start_time="start", pgid=1), verdict=None)
 
 
 @pytest.mark.unit

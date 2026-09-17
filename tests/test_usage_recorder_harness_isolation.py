@@ -84,7 +84,7 @@ def test_envelope_less_fallback_sums_each_harnesss_own_transcript_no_cross_read(
     source_b = FakeTranscriptSource(lines_by_session={_SHARED_SESSION_ID: ["other_harness's own line"]})
     # Never spawned through either fake — usage recovery reads only its transcript source
     # — so the handle is a placeholder no assertion here reads.
-    unused_handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0")
+    unused_handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)
     harness_a = FakeHarness(handle=unused_handle, verdict=None, transcript_usage=sample_a, transcript_source=source_a)
     harness_b = FakeHarness(handle=unused_handle, verdict=None, transcript_usage=sample_b, transcript_source=source_b)
     registry = HarnessRegistry(
@@ -136,7 +136,7 @@ def test_envelope_parse_still_records_with_the_transcripts_lane_off(tmp_path) ->
         cache_create_tokens=0,
         cost_usd=0.01,
     )
-    unused_handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0")
+    unused_handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)
     harness = FakeHarness(handle=unused_handle, verdict=None, usage_by_kind={"spawn": sample})
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=None)})
     recorder = UsageRecorder(
@@ -164,7 +164,7 @@ def test_transcript_fallback_with_no_transcript_source_records_nothing_rather_th
     reached, finds nothing it can read, and simply records no sample."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store, lease_id="lease_a", chunk_id="ch_a", harness_id=CLAUDE_CODE_HARNESS_ID, pid=1)
-    unused_handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0")
+    unused_handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)
     harness = FakeHarness(handle=unused_handle, verdict=None)
     # A known owner, adapter-bound, but with no transcript source of its own.
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=None)})

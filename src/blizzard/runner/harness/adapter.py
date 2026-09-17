@@ -18,6 +18,17 @@ from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
 
 
+#: The default bound on :meth:`PendingWorkerHandle.await_identity` — generous next to a
+#: real harness's spawn latency, since a wedged one is what this timeout is for. Claude
+#: Code's own ``await_identity`` is instant (it already knows its preassigned
+#: ``--session-id``); this only matters to a harness that must read a stream for it. The
+#: ONE place this bound is declared: the reconciliation loop's own spawn
+#: (``blizzard.runner.loop.spawn``) and the selftest canary's gate
+#: (``blizzard.runner.selftest.checks``) both import it rather than each declaring their
+#: own copy that tuning one could silently leave the other behind.
+DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS = 30.0
+
+
 class HarnessSpawnError(RuntimeError):
     """The harness binary could not be launched (missing binary, bad workdir).
 
@@ -64,7 +75,7 @@ class WorkerHandle:
     session_id: str  # harness-assigned where it self-assigns, else the honored hint
     pid: int
     process_start_time: str  # stable across pid reuse — REAP keys on (pid, start_time)
-    pgid: int | None = None  # the owned process group (D3); unset only for a legacy caller
+    pgid: int  # the owned process group (D3) — every launch gets one; never absent in memory
 
     def await_identity(self, timeout: float) -> WorkerHandle:
         """Already identified at launch — this handle is its own phase two."""
@@ -86,7 +97,7 @@ class PendingWorkerHandle(Protocol):
     def process_start_time(self) -> str: ...
 
     @property
-    def pgid(self) -> int | None: ...
+    def pgid(self) -> int: ...
 
     def await_identity(self, timeout: float) -> WorkerHandle:
         """Block up to ``timeout`` seconds for this launch's authoritative session id.

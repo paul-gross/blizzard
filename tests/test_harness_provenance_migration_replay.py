@@ -143,7 +143,7 @@ def test_backfilled_session_resumes_on_an_answer(tmp_path) -> None:  # type: ign
         answered_at="t2",
     )
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-resume-old", pid=200, process_start_time="start-200"), verdict=None
+        handle=WorkerHandle(session_id="sess-resume-old", pid=200, process_start_time="start-200", pgid=200), verdict=None
     )
     harness.harness_version = "claude-code/9.9.9"
     ctx = make_context(
@@ -183,7 +183,7 @@ def test_backfilled_session_is_judged_after_exit(tmp_path) -> None:  # type: ign
     hub = FakeHub()
     hub.envelopes["ch_judge"] = make_envelope("ch_judge", "build", node_id="nd_build", choices=_CHOICES)
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-judge-old", pid=300, process_start_time="start-300"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-judge-old", pid=300, process_start_time="start-300", pgid=300), verdict="pass"
     )
     # pid 300 is not in the probe's live set — the worker already exited.
     ctx = make_context(
@@ -245,7 +245,7 @@ def test_backfilled_session_transcript_reads_from_the_claude_code_source(tmp_pat
         }
     )
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-transcript-old", pid=400, process_start_time="start-400"),
+        handle=WorkerHandle(session_id="sess-transcript-old", pid=400, process_start_time="start-400", pgid=400),
         verdict=None,
         transcript_source=source,
     )
@@ -278,7 +278,7 @@ def test_backfilled_session_takeover_opens_under_claude_code(tmp_path) -> None: 
     store.record_binding(chunk_id="ch_takeover", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-takeover-old", pid=500, process_start_time="start-500"), verdict=None
+        handle=WorkerHandle(session_id="sess-takeover-old", pid=500, process_start_time="start-500", pgid=500), verdict=None
     )
     registry = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}

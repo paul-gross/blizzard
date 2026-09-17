@@ -76,7 +76,7 @@ from tests.runner_fakes import (
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _ALIVE = (100, "start-100")  # (pid, start_time) for a running worker
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
@@ -215,7 +215,7 @@ def test_existing_session_spawn_dispatches_to_exact_owner_and_preserves_it(tmp_p
     store = _store(tmp_path)
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     owner = FakeHarness(
-        handle=WorkerHandle(session_id="shared", pid=200, process_start_time="other-start"), verdict="pass"
+        handle=WorkerHandle(session_id="shared", pid=200, process_start_time="other-start", pgid=200), verdict="pass"
     )
     ctx = make_context(
         store,
@@ -285,7 +285,7 @@ def test_requeue_mints_a_fresh_session_under_the_failed_sessions_exact_owner(tmp
         conn.exec_driver_sql("UPDATE leases SET harness_id = 'other' WHERE lease_id = 'lease_1'")
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     other = FakeHarness(
-        handle=WorkerHandle(session_id="other-fresh", pid=200, process_start_time="other-start"), verdict="pass"
+        handle=WorkerHandle(session_id="other-fresh", pid=200, process_start_time="other-start", pgid=200), verdict="pass"
     )
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
@@ -339,7 +339,7 @@ def test_requeue_after_a_pre_spawn_failure_keeps_the_minted_owner(tmp_path):  # 
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     other = FakeHarness(
-        handle=WorkerHandle(session_id="other-fresh", pid=200, process_start_time="other-start"), verdict="pass"
+        handle=WorkerHandle(session_id="other-fresh", pid=200, process_start_time="other-start", pgid=200), verdict="pass"
     )
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
@@ -373,10 +373,10 @@ def test_harness_selection_prefers_declared_order_over_model_preference_order():
     resolving a less-preferred one — declared order is the selection key, never which
     preference matched — and selection over the same envelope is deterministic."""
     h_early = TieredFakeHarness(
-        tiers={"custom-b": "sonnet"}, handle=WorkerHandle(session_id="s", pid=1, process_start_time="t")
+        tiers={"custom-b": "sonnet"}, handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1)
     )
     h_late = TieredFakeHarness(
-        tiers={"custom-a": "opus"}, handle=WorkerHandle(session_id="s", pid=2, process_start_time="t")
+        tiers={"custom-a": "opus"}, handle=WorkerHandle(session_id="s", pid=2, process_start_time="t", pgid=2)
     )
     registry = HarnessRegistry(
         {
@@ -402,9 +402,9 @@ def test_harness_selection_prefers_declared_order_over_model_preference_order():
 
 @pytest.mark.unit
 def test_harness_selection_skips_unresolvable_and_untiered_members_in_order():  # type: ignore[no-untyped-def]
-    h_no_tier = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None)
+    h_no_tier = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     h_no_tier.resolved_model_strict = None
-    h_ok = FakeHarness(handle=WorkerHandle(session_id="s", pid=2, process_start_time="t"), verdict=None)
+    h_ok = FakeHarness(handle=WorkerHandle(session_id="s", pid=2, process_start_time="t", pgid=2), verdict=None)
     h_ok.resolved_model_strict = "ok-model"
     registry = HarnessRegistry(
         {
@@ -436,7 +436,7 @@ def test_harness_selection_skips_unresolvable_and_untiered_members_in_order():  
 
 @pytest.mark.unit
 def test_harness_selection_empty_model_preference_selects_first_available_member():  # type: ignore[no-untyped-def]
-    h1 = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None)
+    h1 = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     h1.resolved_model_strict = None  # would fail strict resolution — irrelevant with no preference at all
     registry = HarnessRegistry({"h1": HarnessBinding(adapter=h1, transcript_source=h1.transcript_source())})
     envelope = make_envelope(
@@ -468,7 +468,7 @@ def test_harness_selection_single_member_selects_regardless_of_model_resolvabili
 @pytest.mark.unit
 def test_harness_selection_native_name_in_a_two_member_set_does_not_match_the_other_harness():  # type: ignore[no-untyped-def]
     claude = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", process=FakeProbe())
-    foreign = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None)
+    foreign = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     foreign.resolved_model_strict = None  # "sonnet" means nothing to a harness that isn't claude_code
     registry = HarnessRegistry(
         {
@@ -516,7 +516,7 @@ def test_fresh_mint_selects_the_acceptable_harness_and_a_retry_stays_under_it(tm
     store = _store(tmp_path)
     default = FakeHarness(handle=_HANDLE, verdict=None)
     chosen = FakeHarness(
-        handle=WorkerHandle(session_id="chosen-a", pid=200, process_start_time="chosen-start"), verdict=None
+        handle=WorkerHandle(session_id="chosen-a", pid=200, process_start_time="chosen-start", pgid=200), verdict=None
     )
     chosen.resolved_model = "chosen-model"
     registry = HarnessRegistry(
@@ -608,7 +608,7 @@ def test_requeue_escalates_when_the_failed_harness_falls_out_of_the_acceptable_s
 def test_fresh_mint_with_no_acceptable_harness_escalates_and_never_double_escalates(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     default = FakeHarness(handle=_HANDLE, verdict="pass")
-    untiered = FakeHarness(handle=WorkerHandle(session_id="s", pid=2, process_start_time="t"), verdict=None)
+    untiered = FakeHarness(handle=WorkerHandle(session_id="s", pid=2, process_start_time="t", pgid=2), verdict=None)
     untiered.resolved_model_strict = None
     registry = HarnessRegistry(
         {
@@ -1546,7 +1546,7 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-unty
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
@@ -1588,7 +1588,7 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     harness1 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
     Fill(ctx1).run()
@@ -1605,7 +1605,7 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
         ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env),
     ]
     harness2 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200"), verdict="fail"
+        handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200", pgid=200), verdict="fail"
     )
     ctx2 = make_context(
         store,
@@ -1629,7 +1629,7 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
     # targeted `resume:build` — must resume BUILD's own session, not the reviewer's.
     hub.envelopes["ch_1"] = review_env  # `_advance_exited_worker`'s own idempotent re-read
     harness3 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-should-not-be-used", pid=300, process_start_time="start-300"),
+        handle=WorkerHandle(session_id="sess-should-not-be-used", pid=300, process_start_time="start-300", pgid=300),
         verdict="pass",
     )
     ctx3 = make_context(
@@ -1667,7 +1667,7 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     harness1 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
     Fill(ctx1).run()
@@ -1678,7 +1678,7 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
         ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_reentry_env),
     ]
     harness2 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200"), verdict="fail"
+        handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200", pgid=200), verdict="fail"
     )
     ctx2 = make_context(
         store,
@@ -1694,7 +1694,7 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
 
     hub.envelopes["ch_1"] = review_env  # `_advance_exited_worker`'s own idempotent re-read
     harness3 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-should-not-be-used", pid=300, process_start_time="start-300"),
+        handle=WorkerHandle(session_id="sess-should-not-be-used", pid=300, process_start_time="start-300", pgid=300),
         verdict="pass",
     )
     ctx3 = make_context(
@@ -1724,7 +1724,7 @@ def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  
         "ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.RESUME
     )
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=201, process_start_time="start-201"), verdict=None
+        handle=WorkerHandle(session_id="sess-b", pid=201, process_start_time="start-201", pgid=201), verdict=None
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
@@ -1755,7 +1755,7 @@ def _first_build_spawn(store, hub, provider, env, *, session, at, config=None): 
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     harness = FakeHarness(
-        handle=WorkerHandle(session_id=session, pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id=session, pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     ctx = make_context(
         store,
@@ -1775,7 +1775,7 @@ def _reenter_node(store, hub, provider, env, *, session, pid, at, config=None): 
     hub.envelopes["ch_1"] = env
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=env)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id=session, pid=pid, process_start_time=f"start-{pid}"), verdict="pass"
+        handle=WorkerHandle(session_id=session, pid=pid, process_start_time=f"start-{pid}", pgid=pid), verdict="pass"
     )
     ctx = make_context(
         store,
@@ -2462,7 +2462,7 @@ def test_verdict_less_exit_fails_and_requeues(tmp_path):  # type: ignore[no-unty
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=201, process_start_time="start-201"), verdict=None
+        handle=WorkerHandle(session_id="sess-b", pid=201, process_start_time="start-201", pgid=201), verdict=None
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
@@ -2496,7 +2496,7 @@ def test_reap_orphan_requeues(tmp_path):  # type: ignore[no-untyped-def]
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=202, process_start_time="start-202"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-b", pid=202, process_start_time="start-202", pgid=202), verdict="pass"
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
@@ -2517,7 +2517,7 @@ def test_reap_stalled_but_alive_worker(tmp_path):  # type: ignore[no-untyped-def
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=999, process_start_time="start-999"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-b", pid=999, process_start_time="start-999", pgid=999), verdict="pass"
     )
     probe = FakeProbe(alive={_ALIVE})  # pid 100 is still alive
     ctx = make_context(
@@ -2593,7 +2593,7 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
     # Three verdict-less attempts: attempt 1 & 2 requeue, attempt 3 escalates.
     provider = FakeProvider({"e1": "/ws/e1"})
     for i in range(1, 4):
-        handle = WorkerHandle(session_id=f"sess-{i}", pid=300 + i, process_start_time=f"start-{i}")
+        handle = WorkerHandle(session_id=f"sess-{i}", pid=300 + i, process_start_time=f"start-{i}", pgid=300 + i)
         harness = FakeHarness(handle=handle, verdict=None)
         ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
         if i == 1:
@@ -2919,7 +2919,7 @@ def test_cost_cap_under_cap_continues_normally(tmp_path):  # type: ignore[no-unt
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=1.0)  # well under the $5 cap
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
     )
     ctx = make_context(
         store,
@@ -2950,7 +2950,7 @@ def test_cost_cap_absent_never_parks_regardless_of_spend(tmp_path):  # type: ign
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=9999.0)
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
@@ -3207,7 +3207,7 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     harness1 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
     Fill(ctx1).run()
@@ -3219,7 +3219,7 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
     hub.envelopes["ch_1"] = build_env
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
     harness2 = FakeHarness(
-        handle=WorkerHandle(session_id="sess-build-1", pid=200, process_start_time="start-200"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-build-1", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
     )
     ctx2 = make_context(
         store,

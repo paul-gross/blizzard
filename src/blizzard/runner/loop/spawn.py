@@ -19,6 +19,7 @@ from blizzard.runner.domain.leases import (
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import (
+    DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
     HarnessSpawnError,
     IHarnessLifecycleAndVerdict,
     WorkerIdentityError,
@@ -49,11 +50,6 @@ _CP_AFTER_IDENTITY = crashpoint(
     "spawn.after-identity.before-session-record", "identity known; authoritative session not yet durable"
 )
 _CP_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
-
-# Bounds phase two's wait for a launch's authoritative session id. Claude Code's own
-# `await_identity` is instant (it already knows its preassigned `--session-id`), so this
-# only matters to a future harness that must read a stream for it.
-_IDENTITY_AWAIT_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -195,16 +191,18 @@ class Spawner:
         )
         _CP_AFTER_PROVISIONAL.reached()  # ownership durable; identity not yet known
         try:
-            handle = pending.await_identity(_IDENTITY_AWAIT_TIMEOUT_SECONDS)
+            handle = pending.await_identity(DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS)
         except WorkerIdentityError as exc:
             # A real process exists — kill the group this launch's own provisional record
-            # already named (D3) rather than assume pgid == pid, then close the generation
-            # as unidentified (D2) and re-raise the same launch-failure shape
-            # `HarnessSpawnError` takes: no attempt was ever recorded, so the chunk simply
-            # retries next tick, and REAP's ordinary "unspawned lease" sweep would reach
-            # (and re-kill, harmlessly) the same group were this raise ever missed.
-            if pending.pgid is not None:
-                self.ctx.process.kill_group(pending.pgid)
+            # already named (D3), then close the generation as unidentified (D2) and
+            # re-raise the same launch-failure shape `HarnessSpawnError` takes. The lease
+            # itself is already ACTIVE with a durable provisional generation at this point,
+            # so the chunk cannot simply re-spawn on the next tick: REAP's ordinary
+            # "unspawned lease" sweep is what closes this generation via `Attempt.fail`
+            # (idempotently re-doing the same `record_identity_failed` close were this raise
+            # ever missed), consuming one of the lease's retries, before the node can be
+            # re-entered at all.
+            self.ctx.process.kill_group(pending.pgid)
             self.ctx.stores.liveness.record_identity_failed(lease.lease_id, at=self.ctx.clock.now())
             OutboundFacts(self.ctx).command_failed(
                 chunk_id=chunk_id,

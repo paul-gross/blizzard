@@ -24,7 +24,7 @@ from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, ma
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 9, 13, 12, 0, 0, tzinfo=UTC)
-_HANDLE = WorkerHandle(session_id="sess-1", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-1", pid=100, process_start_time="start-100", pgid=100)
 
 
 class _RaisingOnCall:

@@ -481,6 +481,7 @@ in_flight_elicitations = Table(
     Column("epoch", Integer, nullable=False),
     Column("pid", Integer, nullable=True),
     Column("process_start_time", String, nullable=True),
+    Column("pgid", Integer, nullable=True),  # this launch's owned process group (D3)
     Column("output_path", String, nullable=False),
     Column("first_launched_at", UtcDateTime, nullable=False),
     Column("relaunch_count", Integer, nullable=False),

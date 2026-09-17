@@ -33,7 +33,7 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 _LATER = datetime(2026, 7, 17, 13, 0, 0, tzinfo=UTC)
 _EVEN_LATER = datetime(2026, 7, 17, 14, 0, 0, tzinfo=UTC)
-_HANDLE = WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200")
+_HANDLE = WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
@@ -229,7 +229,7 @@ def test_fill_requeue_resume_carries_the_failed_leases_own_harness_owner(tmp_pat
     hub.envelopes["ch_1"] = envelope
     hub.queue = []  # nothing new to fill — only the requeue-resume path should act
     default = FakeHarness(handle=_HANDLE, verdict=None)
-    other = FakeHarness(handle=WorkerHandle(session_id="sess-c", pid=300, process_start_time="start-300"), verdict=None)
+    other = FakeHarness(handle=WorkerHandle(session_id="sess-c", pid=300, process_start_time="start-300", pgid=300), verdict=None)
     ctx = make_context(
         store,
         hub=hub,

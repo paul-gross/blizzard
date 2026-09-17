@@ -656,6 +656,7 @@ class FakeHarness:
         transcript_source: IHarnessTranscriptSource | None = None,
         judge_side_effect: Callable[[], None] | None = None,
         judge_pid: int = 8888,
+        judge_pgid: int | None = None,
         judge_process_start_time: str = "judge-start",
         judge_output: str = "<judged output>",
         judge_output_usable: bool = True,
@@ -666,6 +667,10 @@ class FakeHarness:
         # `handle`'s worker pid by default, so a probe scripted around the worker's liveness
         # never accidentally also governs the elicitation's.
         self._judge_pid = judge_pid
+        # Defaults to `judge_pid` (D3): a real launch's pgid always equals its own pid
+        # (`start_new_session=True`), the same invariant `spawn`'s own handle below mirrors —
+        # an explicit `judge_pgid=None` opts a test back into "unset", the un-armable-gap shape.
+        self._judge_pgid = judge_pgid if judge_pgid is not None else judge_pid
         self._judge_process_start_time = judge_process_start_time
         # What `judge` writes to its `output_path` — content is irrelevant to this fake's
         # own `parse_verdict`/`parse_usage`/`parse_assessment`, which ignore it (they read
@@ -780,7 +785,10 @@ class FakeHarness:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(self.judge_output)
         return WorkerHandle(
-            session_id=self._handle.session_id, pid=self._judge_pid, process_start_time=self._judge_process_start_time
+            session_id=self._handle.session_id,
+            pid=self._judge_pid,
+            process_start_time=self._judge_process_start_time,
+            pgid=self._judge_pgid,
         )
 
     def resume_with_message(
@@ -1075,7 +1083,7 @@ def _default_harness_registry(harness: IHarnessAdapter | None) -> HarnessRegistr
     _harness = (
         harness
         if harness is not None
-        else FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None)
+        else FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     )
     return HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness, transcript_source=_harness.transcript_source())}

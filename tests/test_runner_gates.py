@@ -30,7 +30,7 @@ from tests.runner_fakes import (
 )
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
@@ -171,7 +171,7 @@ def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # typ
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 

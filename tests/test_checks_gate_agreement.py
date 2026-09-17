@@ -146,7 +146,7 @@ def _runner_fails(tmp_path: Path, requires_checks: bool, results: list[tuple[str
         requires_checks={"pass"} if requires_checks else set(),
     )
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
-    harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="s"), verdict="pass")
+    harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="s", pgid=100), verdict="pass")
     check_runner = FakeCheckRunner({c: CheckOutcome(passed=p, output_tail="") for c, p in results})
     ctx = make_context(
         store,
