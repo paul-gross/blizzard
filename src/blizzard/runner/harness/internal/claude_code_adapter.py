@@ -7,13 +7,12 @@ session-sticky, so each is reasserted on every resume. Every child env comes fro
 
 from __future__ import annotations
 
-import contextlib
 import json
 import re
 import subprocess
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import IO, Any
+from typing import Any
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import (
@@ -24,6 +23,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
@@ -32,9 +32,6 @@ from blizzard.runner.loop.process_launch import IProcessLauncher, ProcessLaunche
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
-
-_CHOICE_OPEN = "<Choice>"
-_CHOICE_CLOSE = "</Choice>"
 
 # The model a worker runs on when nothing expressed a preference, pinned so a spawn never
 # inherits the operator's ambient default.
@@ -64,9 +61,6 @@ _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 # `--autocompact`'s own vocabulary shape (blizzard#343): a recognition check, not the
 # CLI's own 100k-1M range (enforced CLI-side, never re-implemented here).
 _COMPACTION_WINDOW_RE = re.compile(r"auto|[0-9]+[kK]?")
-
-# Bounds `observe_version`'s probe so a wedged binary costs one skipped read, not a hang.
-_VERSION_PROBE_TIMEOUT_SECONDS = 5
 
 
 @dataclass(frozen=True)
@@ -110,19 +104,6 @@ class ResultEnvelope:
     def cost_usd(self) -> float | None:
         cost = self.fields.get("total_cost_usd")
         return float(cost) if isinstance(cost, int | float) else None
-
-
-@contextlib.contextmanager
-def _stdout_target(path: str) -> Iterator[IO[bytes] | None]:
-    """The injected per-lease stdout file, opened for append, else ``None`` (no redirect).
-
-    A context manager so no caller leaks the descriptor across a failed ``Popen``; the
-    path is always supplied, never computed here (``bzh:dependency-injection``)."""
-    if not path:
-        yield None
-        return
-    with open(path, "ab") as f:
-        yield f
 
 
 class ClaudeCodeAdapter:
@@ -174,49 +155,21 @@ class ClaudeCodeAdapter:
         logged rather than propagated, since a caller reads this BEFORE the worker
         launches and must never let a wedged or absent binary delay that launch.
         Uncached, so a self-updated binary is reflected on the very next call."""
-        try:
-            result = subprocess.run(
-                [self._binary, "--version"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=_VERSION_PROBE_TIMEOUT_SECONDS,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            _log.warning("harness version probe failed", binary=self._binary, detail=str(exc))
-            return None
-        return result.stdout.strip() or result.stderr.strip() or None
+        return harness_shared.observe_version(self._binary)
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         """Left-to-right; first entry that resolves wins; an empty or fully-unresolvable list
-        falls back to the adapter default — :meth:`resolve_model_strict` is the walk, this is
-        its one fallback-composing caller."""
-        resolved = self.resolve_model_strict(preferences)
-        if resolved is not None:
-            return resolved
-        if preferences:
-            # Never a spawn failure: an all-unresolvable list is what a mixed-harness
-            # fleet produces, so fall back and say so.
-            _log.info(
-                "no model preference resolved; falling back to the adapter default",
-                skipped=list(preferences),
-                fallback=self._model,
-            )
-        return self._model
+        falls back to the adapter default. Shared with OpenCode
+        (``harness_shared.resolve_model``); ``_resolve_one_model`` is this adapter's own
+        native-name resolution."""
+        return harness_shared.resolve_model(self._resolve_one_model, self._model, preferences)
 
     def resolve_model_strict(self, preferences: Sequence[str]) -> str | None:
         """Left-to-right; first entry that resolves wins; unresolvable entries skipped;
         ``None`` when nothing in ``preferences`` resolved — no adapter-default fallback,
-        the distinction a multi-harness selection needs."""
-        skipped: list[str] = []
-        for entry in preferences:
-            resolved = self._resolve_one_model(entry)
-            if resolved is not None:
-                if skipped:
-                    _log.info("skipped unresolvable model preferences", skipped=skipped, resolved=resolved)
-                return resolved
-            skipped.append(entry)
-        return None
+        the distinction a multi-harness selection needs. Shared with OpenCode
+        (``harness_shared.resolve_model_strict``)."""
+        return harness_shared.resolve_model_strict(self._resolve_one_model, preferences)
 
     def _resolve_one_model(self, entry: str) -> str | None:
         """One preference entry to a native name, or ``None`` if this adapter cannot."""
@@ -308,9 +261,12 @@ class ClaudeCodeAdapter:
         cmd.append("\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part))
 
         env = self._spawn_env(envelope, preamble, session_id)
-        # Injected per-lease files, so a killed worker's output survives the process; both
-        # go through `_stdout_target` for its cleanup guarantee, and an empty path is DEVNULL.
-        with _stdout_target(preamble.stdout_path) as stdout_file, _stdout_target(preamble.stderr_path) as stderr_file:
+        # Injected per-lease files surviving the process; both go through
+        # `harness_shared.stdout_target`, empty meaning DEVNULL.
+        with (
+            harness_shared.stdout_target(preamble.stdout_path) as stdout_file,
+            harness_shared.stdout_target(preamble.stderr_path) as stderr_file,
+        ):
             try:
                 launched = self._launcher.launch(
                     cmd,
@@ -423,7 +379,7 @@ class ClaudeCodeAdapter:
         # Injected per-lease file (epic #57), mirroring `spawn`'s `preamble.stdout_path`.
         # `stdout_file`/``stderr`` unset (``None``) inherit the runner's own — unchanged
         # from before this launched through the shared owner.
-        with _stdout_target(stdout_path) as stdout_file:
+        with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None)
         return launched.pid
 
@@ -444,26 +400,14 @@ class ClaudeCodeAdapter:
         return f"cd {workdir} && {self._binary} --resume {session_id}{flags}"
 
     def parse_verdict(self, output: str) -> str | None:
-        text = self._result_text(output)
-        start = text.find(_CHOICE_OPEN)
-        if start == -1:
-            return None
-        end = text.find(_CHOICE_CLOSE, start)
-        if end == -1:
-            return None
-        name = text[start + len(_CHOICE_OPEN) : end].strip()
-        return name or None
+        return harness_shared.find_choice_verdict(self._result_text(output))
 
     def has_usable_output(self, output: str) -> bool:
         return ResultEnvelope.of(output) is not None
 
     def parse_assessment(self, output: str) -> str:
         """The reply text following ``</Choice>`` — the worker's prose assessment."""
-        text = self._result_text(output)
-        close = text.find(_CHOICE_CLOSE)
-        if close == -1:
-            return ""
-        return text[close + len(_CHOICE_CLOSE) :].strip()
+        return harness_shared.text_after_choice_close(self._result_text(output)) or ""
 
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
         envelope = ResultEnvelope.of(output)
@@ -546,22 +490,9 @@ class ClaudeCodeAdapter:
         this lease. ``spawn``, ``resume_with_message``, and a takeover (via the seam,
         issue #258) all build from this, so a daemon resume is as fully identified as a
         fresh one — ``--resume`` does not inherit the original spawn env."""
-        env = AllowlistedEnv.of(self._env_passthrough).variables
-        env["BLIZZARD_ENV_IDS"] = ",".join(e.environment_id for e in preamble.environments)
-        env["BLIZZARD_ENV_WORKDIRS"] = ",".join(e.workdir for e in preamble.environments)
-        env["BLIZZARD_SESSION_ID"] = session_id
-        env["BLIZZARD_CHUNK_ID"] = chunk_id
-        # Runner-minted identity, inherited per process tree, so a sibling worker cannot
-        # misattribute a beat.
-        env["BLIZZARD_LEASE_ID"] = preamble.lease_id
-        env["BLIZZARD_RUNNER_URL"] = preamble.local_api_url
-        env["BLIZZARD_LEASE_TOKEN"] = preamble.lease_token
-        # The command a worker runs to record an undecidable choice; `setdefault`, so a
-        # caller that already named one keeps it.
-        env.setdefault("BLIZZARD_RUNNER_ASK_CMD", "blizzard runner ask")
-        if elicitation:
-            env["BLIZZARD_ELICITATION"] = "1"
-        return env
+        return harness_shared.build_identity_env(
+            preamble, chunk_id, session_id, self._env_passthrough, elicitation=elicitation
+        )
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
         return self.identity_env(preamble, envelope.chunk_id, session_id)

@@ -18,7 +18,11 @@ import pytest
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerIdentityError, WorkerPreamble
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
-from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter, _PendingOpenCodeIdentity
+from blizzard.runner.harness.internal.opencode_adapter import (
+    _MAX_IDENTITY_PREAMBLE_LINES,
+    OpenCodeAdapter,
+    _PendingOpenCodeIdentity,
+)
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERSION
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -372,6 +376,46 @@ def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
+def test_first_event_tolerates_leading_non_json_lines(tmp_path: Path) -> None:
+    """Identity arrives on the worker's own SHARED stdout — an earlier writer (a tool
+    banner, a stray line) may put non-JSON ahead of the real first record. Byte zero need
+    not be it: the handshake skips leading noise and finds identity further down."""
+    stdout_path = tmp_path / "lease-1.stdout"
+    identity_line = json.dumps(
+        {
+            "type": "step_start",
+            "sessionID": "ses_after_banner",
+            "part": {"id": "prt_start", "sessionID": "ses_after_banner", "messageID": "msg_1", "type": "step-start"},
+        }
+    )
+    stdout_path.write_text(f"A tool banner opencode never asked for\nnot json either\n{identity_line}\n")
+    adapter = _adapter(binary="opencode", process=FakeProbe(alive={(4242, "start-token")}))
+    pending = _PendingOpenCodeIdentity(
+        pid=4242, pgid=4242, process_start_time="start-token", stdout_path=str(stdout_path), process=adapter._process
+    )
+
+    handle = pending.await_identity(1.0)
+
+    assert handle.session_id == "ses_after_banner"
+
+
+@pytest.mark.component
+def test_first_event_raises_once_the_leading_noise_bound_is_exceeded(tmp_path: Path) -> None:
+    """The leading-noise tolerance is bounded: a permanently noisy stream with no valid
+    identity in the first ``_MAX_IDENTITY_PREAMBLE_LINES`` lines fails the handshake
+    outright, rather than waiting on ``await_identity``'s own timeout."""
+    stdout_path = tmp_path / "lease-1.stdout"
+    stdout_path.write_text("not json\n" * (_MAX_IDENTITY_PREAMBLE_LINES + 1))
+    adapter = _adapter(binary="opencode", process=FakeProbe(alive={(4242, "start-token")}))
+    pending = _PendingOpenCodeIdentity(
+        pid=4242, pgid=4242, process_start_time="start-token", stdout_path=str(stdout_path), process=adapter._process
+    )
+
+    with pytest.raises(WorkerIdentityError):
+        pending.await_identity(1.0)
+
+
+@pytest.mark.component
 def test_resume_spawn_never_performs_the_handshake(tmp_path: Path) -> None:
     """A resume already knows its session id — no polling, an instant `WorkerHandle`."""
     binary = worker_binary(tmp_path)
@@ -596,6 +640,28 @@ def test_parse_usage_and_has_usable_output_tolerate_malformed_capture() -> None:
     assert adapter.parse_assessment("not json at all") == ""
     assert adapter.has_usable_output("not json at all") is False
     assert adapter.parse_usage("not json at all", "spawn") is None
+
+
+@pytest.mark.unit
+def test_parse_events_skips_one_malformed_trailing_line_and_keeps_the_rest() -> None:
+    """A killed-mid-write worker can leave one truncated line behind an otherwise-complete
+    capture; OpenCode has no transcript fallback to re-derive a lost verdict from, so
+    skipping just that one bad line is the entire tolerance this binding can offer."""
+    payload = _fixture("success")
+    output = _jsonl(payload["events"]) + "\nnot json at all, and truncated besides"
+    adapter = _adapter()
+
+    assert adapter.parse_verdict(output) == "pass"
+    assert adapter.has_usable_output(output) is True
+    sample = adapter.parse_usage(output, "spawn")
+    assert sample is not None
+    assert (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens) == (
+        120,
+        45 + 18,
+        30,
+        15,
+    )
+    assert sample.cost_usd == 0.0123
 
 
 @pytest.mark.unit

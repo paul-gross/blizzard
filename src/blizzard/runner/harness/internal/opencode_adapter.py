@@ -29,6 +29,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.internal.opencode_shapes import (
     OpenCodeMessage,
@@ -37,7 +38,6 @@ from blizzard.runner.harness.internal.opencode_shapes import (
     OpenCodeShapeError,
     parse_model_reference,
     parse_run_event,
-    parse_run_jsonl,
 )
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
@@ -47,9 +47,6 @@ from blizzard.runner.loop.process_launch import IProcessLauncher, ProcessLaunche
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
-
-_CHOICE_OPEN = "<Choice>"
-_CHOICE_CLOSE = "</Choice>"
 
 # The namespaced tier-alias prefix (issue #144, shared with Claude Code): an entry carrying
 # it is a *role*, resolved through the runner's own table; one without it is a native name.
@@ -61,11 +58,11 @@ _TIER_PREFIX = "blizzard:"
 # execution spec's "Models, effort, permissions, and compaction" section describes.
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 
-# Bounds `observe_version`'s probe so a wedged binary costs one skipped read, not a hang.
-_VERSION_PROBE_TIMEOUT_SECONDS = 5
-
 # How often a fresh mint's pending handle re-reads the stdout capture while awaiting identity.
 _IDENTITY_POLL_INTERVAL_SECONDS = 0.05
+
+# Leading non-identity lines the handshake tolerates before giving up as a spawn failure.
+_MAX_IDENTITY_PREAMBLE_LINES = 20
 
 
 @dataclass(frozen=True)
@@ -102,23 +99,31 @@ class _PendingOpenCodeIdentity:
             time.sleep(_IDENTITY_POLL_INTERVAL_SECONDS)
 
     def _first_event(self) -> OpenCodeRunEvent | None:
-        """The first complete JSONL line captured so far, parsed — ``None`` while the line
-        is not yet fully written. A malformed or non-JSON first line is never "not yet",
-        it is a spawn failure (D2): no empty or hinted id is ever recorded as success."""
+        """The first line, among those captured so far, that parses as a complete OpenCode
+        identity record — tolerating up to :data:`_MAX_IDENTITY_PREAMBLE_LINES` leading
+        non-JSON lines ahead of it. ``None`` while fewer complete lines than that bound
+        have arrived (not yet written, not malformed); exceeding the bound with none valid
+        raises, rather than waiting on ``await_identity``'s own timeout to notice."""
         try:
             with open(self.stdout_path, "rb") as f:
                 content = f.read()
         except OSError:
             return None
-        first_line, newline, _rest = content.partition(b"\n")
-        if not newline or not first_line.strip():
-            return None
-        try:
-            text = first_line.decode("utf-8")
-            decoded = json.loads(text)
-            return parse_run_event(decoded)
-        except (UnicodeDecodeError, ValueError, OpenCodeShapeError) as exc:
-            raise WorkerIdentityError(f"malformed identity in the first OpenCode record: {exc}") from exc
+        complete_lines = content.split(b"\n")[:-1]  # a trailing partial line is never complete
+        for raw_line in complete_lines[:_MAX_IDENTITY_PREAMBLE_LINES]:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                decoded = json.loads(line.decode("utf-8"))
+                return parse_run_event(decoded)
+            except (UnicodeDecodeError, ValueError, OpenCodeShapeError):
+                continue
+        if len(complete_lines) >= _MAX_IDENTITY_PREAMBLE_LINES:
+            raise WorkerIdentityError(
+                f"no valid identity within the first {_MAX_IDENTITY_PREAMBLE_LINES} lines of OpenCode's output"
+            )
+        return None
 
 
 class OpenCodeAdapter:
@@ -159,41 +164,20 @@ class OpenCodeAdapter:
         self._launcher: IProcessLauncher = launcher if launcher is not None else ProcessLauncher(process)
 
     def observe_version(self) -> str | None:
-        try:
-            result = subprocess.run(
-                [self._binary, "--version"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=_VERSION_PROBE_TIMEOUT_SECONDS,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            _log.warning("harness version probe failed", binary=self._binary, detail=str(exc))
-            return None
-        return result.stdout.strip() or result.stderr.strip() or None
+        """Shared verbatim with Claude Code (``harness_shared.observe_version``); only
+        ``self._binary`` differs between the two."""
+        return harness_shared.observe_version(self._binary)
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
-        resolved = self.resolve_model_strict(preferences)
-        if resolved is not None:
-            return resolved
-        if preferences:
-            _log.info(
-                "no model preference resolved; falling back to the adapter default",
-                skipped=list(preferences),
-                fallback=self._model or "(opencode's own configured default)",
-            )
-        return self._model
+        return harness_shared.resolve_model(
+            self._resolve_one_model,
+            self._model,
+            preferences,
+            fallback_label=self._model or "(opencode's own configured default)",
+        )
 
     def resolve_model_strict(self, preferences: Sequence[str]) -> str | None:
-        skipped: list[str] = []
-        for entry in preferences:
-            resolved = self._resolve_one_model(entry)
-            if resolved is not None:
-                if skipped:
-                    _log.info("skipped unresolvable model preferences", skipped=skipped, resolved=resolved)
-                return resolved
-            skipped.append(entry)
-        return None
+        return harness_shared.resolve_model_strict(self._resolve_one_model, preferences)
 
     def _resolve_one_model(self, entry: str) -> str | None:
         """One preference entry to a native ``provider/model`` pair, or ``None`` if this
@@ -273,7 +257,7 @@ class OpenCodeAdapter:
             auto=True,
         )
         env = self._spawn_env(envelope, preamble, resume_from or "")
-        with open(preamble.stdout_path, "ab") as stdout_file:
+        with harness_shared.stdout_target(preamble.stdout_path) as stdout_file:
             try:
                 launched = self._launcher.launch(
                     cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL
@@ -332,7 +316,7 @@ class OpenCodeAdapter:
             else AllowlistedEnv.of(self._env_passthrough).variables
         )
         try:
-            with open(output_path, "wb") as stdout_file:
+            with harness_shared.stdout_target(output_path, mode="wb") as stdout_file:
                 launched = self._launcher.launch(
                     cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL
                 )
@@ -371,11 +355,8 @@ class OpenCodeAdapter:
             if preamble is not None
             else AllowlistedEnv.of(self._env_passthrough).variables
         )
-        if stdout_path:
-            with open(stdout_path, "ab") as stdout_file:
-                launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None)
-        else:
-            launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=None, stderr=None)
+        with harness_shared.stdout_target(stdout_path) as stdout_file:
+            launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None)
         return launched.pid
 
     def resume_command(
@@ -398,17 +379,11 @@ class OpenCodeAdapter:
     def identity_env(
         self, preamble: WorkerPreamble, chunk_id: str, session_id: str, *, elicitation: bool = False
     ) -> dict[str, str]:
-        env = AllowlistedEnv.of(self._env_passthrough).variables
-        env["BLIZZARD_ENV_IDS"] = ",".join(e.environment_id for e in preamble.environments)
-        env["BLIZZARD_ENV_WORKDIRS"] = ",".join(e.workdir for e in preamble.environments)
-        env["BLIZZARD_SESSION_ID"] = session_id
-        env["BLIZZARD_CHUNK_ID"] = chunk_id
-        env["BLIZZARD_LEASE_ID"] = preamble.lease_id
-        env["BLIZZARD_RUNNER_URL"] = preamble.local_api_url
-        env["BLIZZARD_LEASE_TOKEN"] = preamble.lease_token
-        env.setdefault("BLIZZARD_RUNNER_ASK_CMD", "blizzard runner ask")
-        if elicitation:
-            env["BLIZZARD_ELICITATION"] = "1"
+        """Shared base with Claude Code (``harness_shared.build_identity_env``), layering
+        this binding's own runner-owned OpenCode config vars on top."""
+        env = harness_shared.build_identity_env(
+            preamble, chunk_id, session_id, self._env_passthrough, elicitation=elicitation
+        )
         if self._worker_config_path:
             # The runner-owned permission/plugin document (D7) — supplied both as a path
             # and as its own serialized content, exactly as the compatibility proof's
@@ -429,16 +404,23 @@ class OpenCodeAdapter:
 
     @staticmethod
     def _parse_events(output: str) -> tuple[OpenCodeRunEvent, ...]:
-        """Every event this invocation's own captured stdout carries, in emission order.
-
-        Malformed JSONL parses to no events rather than raising: a process killed mid-write
-        can leave a truncated or non-JSON capture, and that reads as "nothing usable" here
-        — the same tolerance :class:`~.claude_code_adapter.ResultEnvelope` gives a killed
-        Claude Code worker's partial stdout, just with nothing to reverse-scan for."""
-        try:
-            return parse_run_jsonl(output)
-        except OpenCodeShapeError:
-            return ()
+        """Every event this invocation's own captured stdout carries, in emission order,
+        skipping any individual line that fails to parse rather than discarding the whole
+        capture over it — OpenCode has no transcript fallback to re-derive a lost verdict
+        from (unlike Claude Code's ``ResultEnvelope``), so this per-line skip is the whole
+        of its tolerance. Parses line by line rather than calling
+        :func:`~.opencode_shapes.parse_run_jsonl`, which raises on the first bad line."""
+        events: list[OpenCodeRunEvent] = []
+        for line in output.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                decoded = json.loads(stripped)
+                events.append(parse_run_event(decoded))
+            except (json.JSONDecodeError, OpenCodeShapeError):
+                continue
+        return tuple(events)
 
     @staticmethod
     def _root_session_id(events: Sequence[OpenCodeRunEvent]) -> str | None:
@@ -512,15 +494,7 @@ class OpenCodeAdapter:
         return sum(known)
 
     def parse_verdict(self, output: str) -> str | None:
-        text = self._root_text(self._parse_events(output))
-        start = text.find(_CHOICE_OPEN)
-        if start == -1:
-            return None
-        end = text.find(_CHOICE_CLOSE, start)
-        if end == -1:
-            return None
-        name = text[start + len(_CHOICE_OPEN) : end].strip()
-        return name or None
+        return harness_shared.find_choice_verdict(self._root_text(self._parse_events(output)))
 
     def has_usable_output(self, output: str) -> bool:
         """True once the root turn produced at least one completed model step — the
@@ -531,10 +505,9 @@ class OpenCodeAdapter:
 
     def parse_assessment(self, output: str) -> str:
         events = self._parse_events(output)
-        text = self._root_text(events)
-        close = text.find(_CHOICE_CLOSE)
-        if close != -1:
-            return text[close + len(_CHOICE_CLOSE) :].strip()
+        after_close = harness_shared.text_after_choice_close(self._root_text(events))
+        if after_close is not None:
+            return after_close
         # No choice was ever made — an explicit session error is the one thing worth
         # surfacing in its place; anything else is legitimately empty.
         return self._session_error(events) or ""

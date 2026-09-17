@@ -621,7 +621,9 @@ def test_a_hung_version_probe_reads_none_and_the_spawn_right_after_still_runs(
     """``observe_version``, read immediately BEFORE the spawn, hangs past its own bound and
     reads back ``None`` instead of blocking — the spawn right after it, on the same binary,
     is entirely unaffected."""
-    monkeypatch.setattr("blizzard.runner.harness.internal.claude_code_adapter._VERSION_PROBE_TIMEOUT_SECONDS", 0.2)
+    # `observe_version` is shared verbatim with OpenCode — the bound lives on
+    # `harness_shared`, not on this adapter module.
+    monkeypatch.setattr("blizzard.runner.harness.internal.harness_shared.VERSION_PROBE_TIMEOUT_SECONDS", 0.2)
     script = tmp_path / "hung-version-claude"
     script.write_text(_VERSION_HANGS_HARNESS)
     script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
