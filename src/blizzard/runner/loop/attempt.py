@@ -86,6 +86,21 @@ class Attempt:
     ctx: LoopContext
     lease: LeaseRecord
 
+    def _kill_process(self) -> None:
+        """Best-effort teardown of this lease's own worker process (D3): by its recorded
+        process group when one is durable and current for THIS pid, else by bare pid — a
+        pre-two-phase-spawn lease, or a resumed one whose own launch never re-recorded a
+        group. The epoch fence is what actually makes a stray survivor harmless; this is
+        hygiene, not the guarantee, but a group kill also reaps a worker's own descendants
+        a bare pid kill cannot reach."""
+        lease = self.lease
+        if lease.pid is None:
+            return
+        if lease.pgid is not None:
+            self.ctx.process.kill_group(lease.pgid)
+        else:
+            self.ctx.process.kill(lease.pid)
+
     def fail(self, *, reason: LeaseChangeCause, via: str) -> None:
         """Close a failed attempt, then requeue at the node or escalate per the budget.
 
@@ -94,8 +109,7 @@ class Attempt:
         a retry whose owner this runner can no longer dispatch to escalates immediately instead."""
         lease = self.lease
         now = self.ctx.clock.now()
-        if lease.pid is not None:
-            self.ctx.process.kill(lease.pid)  # best-effort hygiene; the epoch fence is the guarantee
+        self._kill_process()  # best-effort hygiene; the epoch fence is the guarantee
         self._kill_in_flight_elicitation()
         # Best-effort: a worker that never crashed to stderr wrote no tail, the ordinary case.
         tail = self.ctx.worker_files.stderr_tail(lease)
@@ -274,8 +288,7 @@ class Attempt:
         whichever wake/collect call reached here."""
         lease = self.lease
         now = self.ctx.clock.now()
-        if lease.pid is not None:
-            self.ctx.process.kill(lease.pid)  # best-effort hygiene; nothing is live behind it
+        self._kill_process()  # best-effort hygiene; nothing is live behind it
         self._kill_in_flight_elicitation()
         status = "unavailable" if isinstance(exc, UnavailableHarnessError) else "unknown"
         message = f"escalated — recorded harness owner {status} ({session.harness_id!r}, via {via})"
@@ -333,8 +346,8 @@ class Attempt:
         ``released``, and any open ask park is retired alongside (blizzard#202)."""
         lease = self.lease
         now = self.ctx.clock.now()
-        if lease.pid is not None and not killed:
-            self.ctx.process.kill(lease.pid)
+        if not killed:
+            self._kill_process()
         self._kill_in_flight_elicitation()
         _CP_ABANDON_AFTER_KILL.reached()  # recovery is the next tick's re-scan
         self.ctx.env_release.release_chunk(lease.chunk_id)
@@ -358,8 +371,7 @@ class Attempt:
         survive. Not gated by the local brake: a kill is not a spawn."""
         lease = self.lease
         now = self.ctx.clock.now()
-        if lease.pid is not None:
-            self.ctx.process.kill(lease.pid)
+        self._kill_process()
         self._kill_in_flight_elicitation()
         _CP_PAUSE_PARK_AFTER_KILL.reached()  # worker dead; the park is not yet durable
         self.ctx.stores.pause.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
@@ -397,8 +409,7 @@ class Attempt:
             )
             return
         now = self.ctx.clock.now()
-        if lease.pid is not None:
-            self.ctx.process.kill(lease.pid)  # best-effort hygiene; the epoch fence is the guarantee
+        self._kill_process()  # best-effort hygiene; the epoch fence is the guarantee
         self._kill_in_flight_elicitation()
         _CP_PREEMPT_AFTER_KILL.reached()  # recovery is the next tick's re-scan, off the still-higher fence
         park = self.ctx.stores.asks.open_park(lease.lease_id)

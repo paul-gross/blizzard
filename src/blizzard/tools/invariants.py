@@ -87,6 +87,36 @@ class OneLiveLeasePerChunk(QueryCheck):
         return violations
 
 
+class NoUnownedLiveLeaseProcess(QueryCheck):
+    """Once a lease closes, no generation it launched is left ambiguously provisional
+    (D1/D2) — a pid recorded with neither an identified session nor a recorded identity
+    failure. A still-OPEN lease legitimately sits provisional between a two-phase spawn's
+    own phase one and phase two (or while REAP has not yet reached it), so this checks
+    only CLOSED leases: REAP's ordinary sweep always resolves a provisional generation one
+    way or the other (killing its owned group first) before ``Attempt.fail`` can close the
+    lease over it, so a closed lease with a still-ambiguous generation means an orphaned
+    launch's group was never torn down and recorded — the two-phase spawn's own
+    correctness claim, and the invariant `bzh:crash-point-registry`'s three new spawn
+    windows owe the checker."""
+
+    def run(self) -> list[Violation]:
+        closed = select(runner.lease_closures.c.lease_id)
+        stmt = (
+            select(runner.lease_spawns.c.lease_id, runner.lease_spawns.c.id)
+            .where(runner.lease_spawns.c.lease_id.in_(closed))
+            .where(runner.lease_spawns.c.pid.is_not(None))
+            .where(runner.lease_spawns.c.session_id.is_(None))
+            .where(runner.lease_spawns.c.identity_failed_at.is_(None))
+        )
+        return [
+            Violation(
+                "runner:no-unowned-live-lease-process",
+                f"closed lease {row.lease_id} generation {row.id} was never identified or marked failed",
+            )
+            for row in self.conn.execute(stmt)
+        ]
+
+
 class UniqueEnvBinding(QueryCheck):
     """A held env id (a binding with no release fact) is bound to at most one chunk. Two
     chunks sharing a held env would double-book it."""
@@ -708,6 +738,7 @@ class RunnerInvariants:
         with self.engine.connect() as conn:
             checks: tuple[QueryCheck, ...] = (
                 OneLiveLeasePerChunk(conn),
+                NoUnownedLiveLeaseProcess(conn),
                 UniqueEnvBinding(conn),
                 GaplessOutboundSeq(conn),
                 GaplessTranscriptOutboundSeq(conn),

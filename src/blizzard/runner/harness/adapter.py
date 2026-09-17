@@ -25,6 +25,16 @@ class HarnessSpawnError(RuntimeError):
     rather than an internal adapter (issue #125)."""
 
 
+class WorkerIdentityError(RuntimeError):
+    """``PendingWorkerHandle.await_identity`` could not confirm the launch's session id —
+    a timeout, a malformed reply, or the process exiting before identity arrived.
+
+    Distinct from :class:`HarnessSpawnError`: a real process already exists by the time
+    this can be raised, so its caller (:class:`~blizzard.runner.loop.spawn.Spawner`) must
+    kill the group it already durably recorded, never merely treat it as "nothing
+    started"."""
+
+
 @dataclass(frozen=True)
 class WorkerPreamble:
     """The runner's machine-local preamble prepended to the envelope (issue #17).
@@ -44,11 +54,46 @@ class WorkerPreamble:
 
 @dataclass(frozen=True)
 class WorkerHandle:
-    """What ``spawn`` returns — the facts recorded at spawn-return."""
+    """The facts a launch is authoritative on once identified (D1/D2) — this IS a
+    :class:`PendingWorkerHandle` for any harness that already knows its session id at
+    launch (every binding today, Claude Code's preassigned ``--session-id`` included):
+    ``await_identity`` is trivially itself, never a real wait. A future harness whose
+    identity only arrives from its own stream (e.g. reading its stdout after launch)
+    returns a distinct pending type instead, one with no ``session_id`` until identified."""
 
     session_id: str  # harness-assigned where it self-assigns, else the honored hint
     pid: int
     process_start_time: str  # stable across pid reuse — REAP keys on (pid, start_time)
+    pgid: int | None = None  # the owned process group (D3); unset only for a legacy caller
+
+    def await_identity(self, timeout: float) -> WorkerHandle:
+        """Already identified at launch — this handle is its own phase two."""
+        return self
+
+
+class PendingWorkerHandle(Protocol):
+    """``spawn``'s own phase-one return (D1): the launched process's OS facts — pid, start
+    time, and owned group — durable-worthy before any identity is known. A Protocol, not a
+    dataclass, since ``await_identity`` may block or read a stream rather than merely
+    return data already in hand. Every member is a read-only property, never a plain
+    mutable attribute — the only shape a frozen dataclass like :class:`WorkerHandle` can
+    structurally satisfy."""
+
+    @property
+    def pid(self) -> int: ...
+
+    @property
+    def process_start_time(self) -> str: ...
+
+    @property
+    def pgid(self) -> int | None: ...
+
+    def await_identity(self, timeout: float) -> WorkerHandle:
+        """Block up to ``timeout`` seconds for this launch's authoritative session id.
+
+        Raises :class:`WorkerIdentityError` on a timeout, a malformed reply, or the
+        process exiting before identity arrived — never returns an empty session id."""
+        ...
 
 
 class IHarnessWorkerLifecycle(Protocol):
@@ -66,12 +111,23 @@ class IHarnessWorkerLifecycle(Protocol):
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> WorkerHandle:
-        """Start a headless worker; return its session id, pid, and start time.
+    ) -> PendingWorkerHandle:
+        """Start a headless worker; return its pending handle (D1) — pid, start time, and
+        process group, immediately, before identity is confirmed.
 
         ``model``/``effort``/``compaction_window`` (issue #144, blizzard#343) arrive already
         resolved; ``model`` applies at **mint only**, the other two on **every** invocation.
-        ``resume_from`` (#115) continues a session; the returned id is authoritative."""
+        ``resume_from`` (#115) continues a session; the handle's eventual ``await_identity``
+        result is authoritative."""
+        ...
+
+    def honors_session_hint(self) -> bool:
+        """True iff a fresh spawn's identified session id always equals ``session_hint``.
+
+        Claude Code declares ``True`` (it launches with a preassigned ``--session-id``); a
+        harness that self-assigns its own id declares ``False`` — the selftest's spawn gate
+        (``blizzard.runner.selftest.checks.Spawn``) only demands hint-equality where this is
+        ``True``, never as a harness-neutral requirement."""
         ...
 
     def observe_version(self) -> str | None:

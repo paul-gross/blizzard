@@ -179,7 +179,7 @@ def test_spawn_with_resume_from_emits_resume_flag_and_echoes_its_continuation_id
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture()
 
-    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint", resume_from="prior-sid")
+    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint", resume_from="prior-sid").await_identity(0)
 
     cmd = captured["cmd"]
     assert "--resume" in cmd
@@ -195,7 +195,7 @@ def test_spawn_without_resume_from_is_unchanged(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture()
 
-    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint")
+    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint").await_identity(0)
 
     cmd = captured["cmd"]
     assert "--session-id" in cmd
@@ -575,7 +575,7 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path) -> None:
         local_api_url="http://127.0.0.1:8431",
     )
 
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-123").await_identity(0)
 
     assert handle.session_id == "sess-123"  # Claude honors the pre-assigned id
     assert handle.pid > 0

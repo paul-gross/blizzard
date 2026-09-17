@@ -33,6 +33,10 @@ from blizzard.wire.envelope import EnvelopeChoice, NodeConfig, NodeEnvelope
 _EXIT_TIMEOUT_SECONDS = 30.0
 _EXIT_POLL_INTERVAL_SECONDS = 0.05
 
+# Bounds the gate's own wait for a launch's identity — generous next to a real harness's
+# spawn latency, since a wedged one is what `_EXIT_TIMEOUT_SECONDS` below is really for.
+_IDENTITY_AWAIT_TIMEOUT_SECONDS = 30.0
+
 # The automated-resume reap budget: bounded so a probe that never confirms the kill
 # took cannot itself wedge the canary — a reap timeout still reports the check's result.
 _REAP_TIMEOUT_SECONDS = 5.0
@@ -107,12 +111,19 @@ class Spawn:
     @classmethod
     def of(cls, scratch: Scratch) -> Spawn:
         try:
-            handle = scratch.adapter.spawn(
+            pending = scratch.adapter.spawn(
                 cls._envelope(), cls._preamble(scratch.workdir), session_hint=scratch.session_id
             )
+            handle = pending.await_identity(_IDENTITY_AWAIT_TIMEOUT_SECONDS)
         except Exception as exc:  # the adapter is untrusted external-CLI surface
             return cls(SelfTestCheck(SPAWN_SESSION_ID, False, f"spawn raised: {exc}"), None)
-        if handle.session_id != scratch.session_id:
+        # The harness-neutral claim (D1/D2): non-empty and authoritative. Hint-equality is
+        # demanded only where the adapter declares it honors the hint — Claude Code does,
+        # so its stricter check still holds; a harness that self-assigns never could.
+        if not handle.session_id:
+            detail = "spawn returned an empty session id — never authoritative"
+            return cls(SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle)
+        if scratch.adapter.honors_session_hint() and handle.session_id != scratch.session_id:
             detail = f"expected the pre-assigned session id {scratch.session_id!r}, got {handle.session_id!r}"
             return cls(SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle)
         if not Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time):

@@ -155,6 +155,7 @@ def lease_select():  # type: ignore[no-untyped-def]
         leases.c.process_start_time,
         leases.c.session_id,
         leases.c.harness_id,
+        leases.c.pgid,
         leases.c.created_at,
         lease_context.c.graph_id,
         lease_context.c.node_id,
@@ -188,6 +189,7 @@ def row_to_lease(r) -> LeaseRecord:  # type: ignore[no-untyped-def]
         process_start_time=str(r.process_start_time) if r.process_start_time is not None else None,
         session_id=str(r.session_id) if r.session_id is not None else None,
         harness_id=str(r.harness_id) if r.harness_id is not None else None,
+        pgid=int(r.pgid) if r.pgid is not None else None,
     )
 
 

@@ -65,12 +65,61 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         spawned_at: datetime,
         session: SessionReference,
         harness_version: str | None = None,
+        pgid: int | None = None,
     ) -> None:
-        """Fill a lease's spawn-return facts: pid, process start time, session id.
+        """Fill a lease's spawn-return facts in one shot: pid, process start time, process
+        group, session id — for a caller whose identity is known at the SAME instant as its
+        process facts (a resume; a harness that self-identifies at launch). A fresh mint's
+        own two-phase spawn instead splits this across :meth:`record_provisional_spawn` and
+        :meth:`record_identified_spawn` (D1/D2), so a crash between launch and identity is
+        recoverable rather than indistinguishable from never having spawned at all.
+
+        ``pgid`` defaults to ``None`` — a write that does not know its launch's owned group
+        (every call site but the two-phase one) leaves recovery to fall back to a bare pid
+        kill for THIS generation, never a stale group from an earlier one.
 
         ``spawned_at`` additionally appends the lease's spawn generation, so a fact recorded
         by an earlier session of the same lease can be told from one recorded by the process
         running now (issue #13)."""
+        ...
+
+    def record_provisional_spawn(
+        self,
+        lease_id: str,
+        *,
+        pid: int,
+        process_start_time: str,
+        pgid: int | None,
+        spawned_at: datetime,
+        harness_id: str,
+    ) -> None:
+        """Phase one of a two-phase spawn (D1/D2): durable BEFORE identity is known — the
+        launched process's pid, start time, and owned group, plus a new ``lease_spawns``
+        generation row with no session id yet. The lease's own AUTHORITATIVE
+        ``session_id``/``harness_id`` are untouched here; :meth:`record_identified_spawn`
+        sets them once identity lands."""
+        ...
+
+    def record_identified_spawn(
+        self,
+        lease_id: str,
+        *,
+        session: SessionReference,
+        identified_at: datetime,
+        harness_version: str | None = None,
+    ) -> None:
+        """Phase two (D1/D2): fill the open provisional generation's authoritative session
+        id — the newest ``lease_spawns`` row for this lease with no ``session_id`` yet —
+        and the lease's own ``session_id``/``harness_id``. Also opens/carries-forward the
+        lease's transcript segment, mirroring :meth:`record_spawn`'s own segment handling."""
+        ...
+
+    def record_identity_failed(self, lease_id: str, *, at: datetime) -> None:
+        """A provisional generation's identity never arrived (D2): timeout, a malformed
+        reply, or the process exiting first. Marks the newest still-open ``lease_spawns``
+        row rather than leaving it ambiguously open forever; the lease's own ``session_id``
+        stays ``None``, so REAP's ordinary "unspawned" recovery reaps it exactly as it would
+        any lease that never got this far — this is a record of why, not a new state."""
         ...
 
 

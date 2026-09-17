@@ -29,6 +29,11 @@ class IProcessProbe(Protocol):
         """Best-effort SIGKILL — never raises if the process is already gone."""
         ...
 
+    def kill_group(self, pgid: int) -> None:
+        """Best-effort SIGKILL to an entire owned process group (D3) — the group a two-phase
+        spawn recorded, never one inferred from a bare pid. Never raises if already gone."""
+        ...
+
 
 class LinuxProcessProbe:
     """``/proc``-backed probe: field-22 ``starttime`` is the reuse-proof identity."""
@@ -47,6 +52,12 @@ class LinuxProcessProbe:
     def kill(self, pid: int) -> None:
         try:
             os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            return
+
+    def kill_group(self, pgid: int) -> None:
+        try:
+            os.killpg(pgid, signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
             return
 

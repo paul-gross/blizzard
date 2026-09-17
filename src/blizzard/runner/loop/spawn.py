@@ -18,7 +18,12 @@ from blizzard.runner.domain.leases import (
 )
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.repository import EnvBindingRecord
-from blizzard.runner.harness.adapter import HarnessSpawnError, IHarnessLifecycleAndVerdict, WorkerPreamble
+from blizzard.runner.harness.adapter import (
+    HarnessSpawnError,
+    IHarnessLifecycleAndVerdict,
+    WorkerIdentityError,
+    WorkerPreamble,
+)
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
@@ -32,7 +37,23 @@ _log = get_logger("blizzard.runner.loop")
 
 # The lease-mint -> spawn -> record window is the orphan-lease window REAP must absorb.
 _CP_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease minted; worker not spawned")
+# The two-phase spawn's own three windows (D1/D2), each bracketing a durable write the
+# generic build->deliver sweep scenario already reaches on every fresh spawn.
+_CP_AFTER_LAUNCH = crashpoint(
+    "spawn.after-launch.before-provisional-record", "worker process launched; provisional ownership not yet durable"
+)
+_CP_AFTER_PROVISIONAL = crashpoint(
+    "spawn.after-provisional-record.before-identity", "provisional ownership durable; identity not yet known"
+)
+_CP_AFTER_IDENTITY = crashpoint(
+    "spawn.after-identity.before-session-record", "identity known; authoritative session not yet durable"
+)
 _CP_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
+
+# Bounds phase two's wait for a launch's authoritative session id. Claude Code's own
+# `await_identity` is instant (it already knows its preassigned `--session-id`), so this
+# only matters to a future harness that must read a stream for it.
+_IDENTITY_AWAIT_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -141,7 +162,7 @@ class Spawner:
         # `harness_version` observation, never runs after the worker is already live and unrecorded.
         version = harness.observe_version()
         try:
-            handle = harness.spawn(
+            pending = harness.spawn(
                 envelope,
                 self._worker_preamble(lease, environments, rendered),
                 session_hint=str(uuid.uuid4()),
@@ -161,13 +182,44 @@ class Spawner:
                 stderr_tail=str(exc),
             )
             raise
-        spawned_session = SessionReference(owner, handle.session_id)
-        self.ctx.stores.liveness.record_spawn(
+        _CP_AFTER_LAUNCH.reached()  # the process exists; nothing about it is durable yet
+        # Phase one (D1/D2): durable BEFORE identity is awaited, so a crash anywhere past
+        # this point leaves a real process's ownership recoverable rather than invisible.
+        self.ctx.stores.liveness.record_provisional_spawn(
             lease.lease_id,
-            pid=handle.pid,
-            process_start_time=handle.process_start_time,
-            session=spawned_session,
+            pid=pending.pid,
+            process_start_time=pending.process_start_time,
+            pgid=pending.pgid,
             spawned_at=now,
+            harness_id=owner,
+        )
+        _CP_AFTER_PROVISIONAL.reached()  # ownership durable; identity not yet known
+        try:
+            handle = pending.await_identity(_IDENTITY_AWAIT_TIMEOUT_SECONDS)
+        except WorkerIdentityError as exc:
+            # A real process exists — kill the group this launch's own provisional record
+            # already named (D3) rather than assume pgid == pid, then close the generation
+            # as unidentified (D2) and re-raise the same launch-failure shape
+            # `HarnessSpawnError` takes: no attempt was ever recorded, so the chunk simply
+            # retries next tick, and REAP's ordinary "unspawned lease" sweep would reach
+            # (and re-kill, harmlessly) the same group were this raise ever missed.
+            if pending.pgid is not None:
+                self.ctx.process.kill_group(pending.pgid)
+            self.ctx.stores.liveness.record_identity_failed(lease.lease_id, at=self.ctx.clock.now())
+            OutboundFacts(self.ctx).command_failed(
+                chunk_id=chunk_id,
+                lease_id=lease.lease_id,
+                node_name=envelope.node.node_name,
+                command="await worker identity",
+                stderr_tail=str(exc),
+            )
+            raise HarnessSpawnError(str(exc)) from exc
+        _CP_AFTER_IDENTITY.reached()  # identity known; not yet the authoritative record
+        spawned_session = SessionReference(owner, handle.session_id)
+        self.ctx.stores.liveness.record_identified_spawn(
+            lease.lease_id,
+            session=spawned_session,
+            identified_at=self.ctx.clock.now(),
             harness_version=version,
         )
         if self.ctx.events is not None:

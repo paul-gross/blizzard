@@ -242,6 +242,9 @@ class _NeverAliveProcessProbe:
     def kill(self, pid: int) -> None:
         return None
 
+    def kill_group(self, pgid: int) -> None:
+        return None
+
 
 class _HangingAdapter:
     """A fake coding-harness adapter whose ``spawn`` never returns — the wedged-harness
@@ -264,6 +267,9 @@ class _HangingAdapter:
     ) -> WorkerHandle:
         threading.Event().wait()  # blocks forever
         raise AssertionError("unreachable")
+
+    def honors_session_hint(self) -> bool:
+        return True
 
     def resume_with_message(
         self,
@@ -408,6 +414,9 @@ class _FixedPidAdapter:
     ) -> WorkerHandle:
         return WorkerHandle(session_id=session_hint or "sid", pid=self.spawn_pid, process_start_time="spawn-t")
 
+    def honors_session_hint(self) -> bool:
+        return True
+
     def resume_with_message(
         self,
         workdir: str,
@@ -511,6 +520,9 @@ class _RecordingProcessProbe:
 
     def kill(self, pid: int) -> None:
         self.killed.append(pid)
+
+    def kill_group(self, pgid: int) -> None:
+        return None
 
 
 @pytest.mark.component

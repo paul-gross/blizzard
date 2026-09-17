@@ -19,6 +19,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
     IHarnessAdapter,
+    PendingWorkerHandle,
     WorkerHandle,
     WorkerPreamble,
 )
@@ -27,6 +28,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.loop.process_launch import IProcessLauncher, ProcessLauncher
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
@@ -138,6 +140,7 @@ class ClaudeCodeAdapter:
         effort_aliases: Sequence[tuple[str, str]] = (),
         transcript_source: IHarnessTranscriptSource | None = None,
         process: IProcessProbe,
+        launcher: IProcessLauncher | None = None,
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
@@ -161,6 +164,9 @@ class ClaudeCodeAdapter:
         # The pid-liveness seam (`bzh:pluggable-seams`); the Linux `/proc` reference binding
         # is the only production substitute, always injected (`bzh:dependency-injection`).
         self._process: IProcessProbe = process
+        # Every launch goes through the one runner-owned process-ownership seam (D4) —
+        # defaulted from `process` so an existing construction site need not change.
+        self._launcher: IProcessLauncher = launcher if launcher is not None else ProcessLauncher(process)
 
     def observe_version(self) -> str | None:
         """The configured executable's version, observed right now — bounded and
@@ -271,7 +277,7 @@ class ClaudeCodeAdapter:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> WorkerHandle:
+    ) -> PendingWorkerHandle:
         if not preamble.environments:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
         # A resume reuses the original session id in place — forking is opt-in and never
@@ -306,7 +312,7 @@ class ClaudeCodeAdapter:
         # go through `_stdout_target` for its cleanup guarantee, and an empty path is DEVNULL.
         with _stdout_target(preamble.stdout_path) as stdout_file, _stdout_target(preamble.stderr_path) as stderr_file:
             try:
-                proc = subprocess.Popen(
+                launched = self._launcher.launch(
                     cmd,
                     cwd=workdir,
                     env=env,
@@ -317,9 +323,18 @@ class ClaudeCodeAdapter:
                 _log.error("harness spawn failed", binary=self._binary, cwd=workdir, detail=str(exc))
                 raise HarnessSpawnError(f"failed to spawn {self._binary} in {workdir}: {exc}") from exc
 
-        start_time = self._process.start_time(proc.pid) or ""
-        _log.info("spawned worker", binary=self._binary, pid=proc.pid, session_id=session_id, cwd=workdir)
-        return WorkerHandle(session_id=session_id, pid=proc.pid, process_start_time=start_time)
+        _log.info("spawned worker", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=workdir)
+        # Already identified (D1): the runner minted `session_id` and handed it to the CLI
+        # via `--session-id`/`--resume` before launch, so phase two is instant here.
+        return WorkerHandle(
+            session_id=session_id,
+            pid=launched.pid,
+            process_start_time=launched.process_start_time,
+            pgid=launched.pgid,
+        )
+
+    def honors_session_hint(self) -> bool:
+        return True
 
     def judge(
         self,
@@ -359,13 +374,19 @@ class ClaudeCodeAdapter:
         # call waits on — the collect half reads it back once the process has exited.
         try:
             with open(output_path, "wb") as stdout_file:
-                proc = subprocess.Popen(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL)
+                launched = self._launcher.launch(
+                    cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL
+                )
         except OSError as exc:
             _log.error("elicitation launch failed", binary=self._binary, cwd=workdir, detail=str(exc))
             raise HarnessSpawnError(f"failed to launch {self._binary} in {workdir}: {exc}") from exc
-        start_time = self._process.start_time(proc.pid) or ""
-        _log.info("elicitation launched", binary=self._binary, pid=proc.pid, session_id=session_id, cwd=workdir)
-        return WorkerHandle(session_id=session_id, pid=proc.pid, process_start_time=start_time)
+        _log.info("elicitation launched", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=workdir)
+        return WorkerHandle(
+            session_id=session_id,
+            pid=launched.pid,
+            process_start_time=launched.process_start_time,
+            pgid=launched.pgid,
+        )
 
     def resume_with_message(
         self,
@@ -400,9 +421,11 @@ class ClaudeCodeAdapter:
             else AllowlistedEnv.of(self._env_passthrough).variables
         )
         # Injected per-lease file (epic #57), mirroring `spawn`'s `preamble.stdout_path`.
+        # `stdout_file`/``stderr`` unset (``None``) inherit the runner's own — unchanged
+        # from before this launched through the shared owner.
         with _stdout_target(stdout_path) as stdout_file:
-            proc = subprocess.Popen(cmd, cwd=workdir, env=env, stdout=stdout_file)
-        return proc.pid
+            launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None)
+        return launched.pid
 
     def resume_command(
         self,

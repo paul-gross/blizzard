@@ -741,11 +741,17 @@ class FakeHarness:
         # Mirrors the real in-place adapter contract (issue #115): a resume continues
         # under the SAME id given; a fresh spawn keeps the scripted-handle behavior.
         session_id = resume_from if resume_from is not None else self._handle.session_id
+        # A `WorkerHandle` IS a `PendingWorkerHandle` (D1) — already identified, since this
+        # fake, like every real binding today, knows its session id at "launch".
         return WorkerHandle(
             session_id=session_id,
             pid=self._handle.pid,
             process_start_time=self._handle.process_start_time,
+            pgid=self._handle.pid,
         )
+
+    def honors_session_hint(self) -> bool:
+        return True
 
     def judge(
         self,
@@ -929,6 +935,7 @@ class FakeProbe:
     def __init__(self, alive: set[tuple[int, str]] | None = None) -> None:
         self.alive = alive if alive is not None else set()
         self.killed: list[int] = []
+        self.killed_groups: list[int] = []
 
     def start_time(self, pid: int) -> str | None:
         for p, st in self.alive:
@@ -942,6 +949,9 @@ class FakeProbe:
     def kill(self, pid: int) -> None:
         self.killed.append(pid)
         self.alive = {(p, st) for (p, st) in self.alive if p != pid}
+
+    def kill_group(self, pgid: int) -> None:
+        self.killed_groups.append(pgid)
 
 
 class FakeWorktreeGit:
