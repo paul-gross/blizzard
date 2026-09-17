@@ -268,25 +268,29 @@ class ClaudeCodeAdapter:
             harness_shared.stdout_target(preamble.stderr_path) as stderr_file,
         ):
             try:
+                # F1: deferred — the caller's own `confirm_durable()` (right after ITS durable
+                # provisional record lands) is what disarms this launch's parent-death signal.
                 launched = self._launcher.launch(
                     cmd,
                     cwd=workdir,
                     env=env,
                     stdout=stdout_file if stdout_file is not None else subprocess.DEVNULL,
                     stderr=stderr_file if stderr_file is not None else subprocess.DEVNULL,
+                    defer_disarm=True,
                 )
             except OSError as exc:
                 _log.error("harness spawn failed", binary=self._binary, cwd=workdir, detail=str(exc))
                 raise HarnessSpawnError(f"failed to spawn {self._binary} in {workdir}: {exc}") from exc
 
         _log.info("spawned worker", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=workdir)
-        # Already identified (D1): the runner minted `session_id` and handed it to the CLI
-        # via `--session-id`/`--resume` before launch, so phase two is instant here.
+        # Already identified (D1) — phase two is instant. Left armed (F1): `Spawner.spawn`
+        # calls `confirm_durable()` right after its own durable provisional record lands.
         return WorkerHandle(
             session_id=session_id,
             pid=launched.pid,
             process_start_time=launched.process_start_time,
             pgid=launched.pgid,
+            confirm_durable=launched.confirm_durable,
         )
 
     def honors_session_hint(self) -> bool:
@@ -330,18 +334,23 @@ class ClaudeCodeAdapter:
         # call waits on — the collect half reads it back once the process has exited.
         try:
             with open(output_path, "wb") as stdout_file:
+                # F1: deferred — the caller's own `confirm_durable()` (right after ITS durable
+                # `record_elicitation_started`/`record_elicitation_relaunch` lands) disarms it.
                 launched = self._launcher.launch(
-                    cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL
+                    cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL, defer_disarm=True
                 )
         except OSError as exc:
             _log.error("elicitation launch failed", binary=self._binary, cwd=workdir, detail=str(exc))
             raise HarnessSpawnError(f"failed to launch {self._binary} in {workdir}: {exc}") from exc
         _log.info("elicitation launched", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=workdir)
+        # F1: left armed — `Judgement._elicit`/`_relaunch` call `confirm_durable()` right after
+        # THEIR OWN durable `record_elicitation_started`/`record_elicitation_relaunch` lands.
         return WorkerHandle(
             session_id=session_id,
             pid=launched.pid,
             process_start_time=launched.process_start_time,
             pgid=launched.pgid,
+            confirm_durable=launched.confirm_durable,
         )
 
     def resume_with_message(
@@ -376,8 +385,8 @@ class ClaudeCodeAdapter:
             if preamble is not None
             else AllowlistedEnv.of(self._env_passthrough).variables
         )
-        # Injected per-lease file (epic #57), mirroring `spawn`'s `preamble.stdout_path`;
-        # unset (``None``) inherits the runner's own, as before the shared owner.
+        # Injected per-lease file (epic #57); unset (``None``) inherits the runner's own.
+        # Not deferred (F1): a bare pid leaves nothing to disarm later off of.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None)
         return launched.pid

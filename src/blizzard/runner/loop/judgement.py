@@ -347,6 +347,8 @@ class Judgement:
             process_start_time=handle.process_start_time,
             pgid=handle.pgid,
         )
+        # F1: disarm only now this record is durable — `collect` can re-adopt it past here.
+        handle.confirm_durable()
 
     def _judged(self, output: str) -> None:
         """Continue from a collected reply — usage, verdict, the checks gate, the completion —

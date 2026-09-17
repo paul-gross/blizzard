@@ -337,6 +337,7 @@ def test_fresh_spawn_reads_the_minted_session_id_from_stdout(tmp_path: Path) -> 
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
+    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
     handle = pending.await_identity(5.0)
 
     assert handle.session_id == "ses_minted_abc"
@@ -354,9 +355,11 @@ def test_fresh_spawn_never_passes_the_hint_as_session_id(tmp_path: Path) -> None
     adapter = _adapter(binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
-    handle = adapter.spawn(
+    pending = adapter.spawn(
         envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint-never-honored"
-    ).await_identity(5.0)
+    )
+    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
+    handle = pending.await_identity(5.0)
 
     assert handle.session_id == "ses_self_assigned"
     assert handle.session_id != "hint-never-honored"
@@ -373,6 +376,7 @@ def test_fresh_spawn_raises_identity_error_on_malformed_first_record(tmp_path: P
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
+    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
 
     with pytest.raises(WorkerIdentityError):
         pending.await_identity(5.0)
@@ -388,6 +392,7 @@ def test_fresh_spawn_raises_identity_error_when_the_process_exits_first(tmp_path
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
+    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
 
     with pytest.raises(WorkerIdentityError):
         pending.await_identity(5.0)
@@ -462,6 +467,7 @@ def test_resume_spawn_never_performs_the_handshake(tmp_path: Path) -> None:
     pending = adapter.spawn(
         envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint=None, resume_from="ses_prior"
     )
+    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
 
     handle = pending.await_identity(0)  # already a `WorkerHandle` — trivial phase two
     assert handle.session_id == "ses_prior"
@@ -476,6 +482,7 @@ def test_judge_and_resume_with_message_launch_against_the_recorded_session(tmp_p
     adapter = _adapter(binary=binary, process=LinuxProcessProbe())
 
     judge_handle = adapter.judge(str(workdir), "ses_recorded", "assess", str(workdir / "judge-output.json"))
+    judge_handle.confirm_durable()  # F1: real component tests stand in for `Judgement._elicit`'s own call
     os.waitpid(judge_handle.pid, 0)
     output = Path(workdir / "judge-output.json").read_text()
     assert adapter.parse_verdict(output) == "pass"
@@ -494,9 +501,9 @@ def test_spawn_launches_through_the_process_launcher_with_its_own_group(tmp_path
     adapter = _adapter(binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
-    handle = adapter.spawn(
-        envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint"
-    ).await_identity(5.0)
+    pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
+    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
+    handle = pending.await_identity(5.0)
 
     assert handle.pgid is not None
     assert handle.pgid == handle.pid  # `start_new_session=True`'s own POSIX contract (D3)

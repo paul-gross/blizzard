@@ -711,6 +711,34 @@ def test_a_version_probe_that_comes_back_empty_still_spawns_and_records_no_versi
 
 
 @pytest.mark.unit
+def test_a_provisional_record_write_that_raises_kills_the_still_unconfirmed_launch(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    """F1: an ordinary exception (never an OS crash) does not disarm the deferred launch on
+    its own — `Spawner.spawn` must kill the group itself rather than leave it parked forever
+    with no durable record for REAP to ever find."""
+    store = _store(tmp_path)
+    probe = FakeProbe(alive={(100, "start-100")})
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=probe,
+    )
+
+    def _raise(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("durable write failed")
+
+    monkeypatch.setattr(store, "record_provisional_spawn", _raise)
+
+    with pytest.raises(RuntimeError, match="durable write failed"):
+        Spawner(ctx).spawn(
+            "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+        )
+
+    assert probe.killed_groups == [_HANDLE.pgid]
+
+
+@pytest.mark.unit
 def test_judgement_collection_checks_output_with_the_recorded_owner(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)

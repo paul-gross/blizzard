@@ -7,8 +7,8 @@ seam (blizzard#436). Adapters stay dumb (``bzh:deterministic-shell``): they neve
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
@@ -17,7 +17,7 @@ from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
 
 #: Sole-declared default bound on :meth:`PendingWorkerHandle.await_identity`; spawn and selftest both import it.
-DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS = 30.0
+DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS = 10.0
 
 
 class HarnessSpawnError(RuntimeError):
@@ -61,6 +61,7 @@ class WorkerHandle:
     pid: int
     process_start_time: str  # stable across pid reuse — REAP keys on (pid, start_time)
     pgid: int  # the owned process group (D3) — every launch gets one; never absent in memory
+    confirm_durable: Callable[[], None] = field(default=lambda: None, compare=False)  # F1's disarm signal; no-op default
 
     def await_identity(self, timeout: float) -> WorkerHandle:
         """Already identified at launch — this handle is its own phase two."""
@@ -87,6 +88,14 @@ class PendingWorkerHandle(Protocol):
 
         Raises :class:`WorkerIdentityError` on a timeout, a malformed reply, or the
         process exiting before identity arrived — never returns an empty session id."""
+        ...
+
+    def confirm_durable(self) -> None:
+        """F1's disarm signal: call once — and only once the caller's own durable record
+        naming this launch's pid/pgid has actually landed. Before that, the daemon's own
+        death (crash or graceful, indistinguishable to the OS) must still kill this launch
+        outright (the execution spec's narrow handshake window); after, neither should, so
+        the recorded generation can be re-adopted rather than orphaned. Idempotent."""
         ...
 
 

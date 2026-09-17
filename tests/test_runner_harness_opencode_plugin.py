@@ -138,9 +138,9 @@ def test_a_plugin_bearing_worker_config_does_not_change_the_adapters_parsed_turn
         adapter = OpenCodeAdapter(
             binary=binary, process=probe, launcher=ProcessLauncher(probe), worker_config_path=worker_config_path
         )
-        handle = adapter.spawn(
-            envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint"
-        ).await_identity(5.0)
+        pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
+        pending.confirm_durable()  # F1: stands in for `Spawner.spawn`'s own call
+        handle = pending.await_identity(5.0)
         os.waitpid(handle.pid, 0)
         output = stdout_path.read_text()
         return adapter.parse_verdict(output), adapter.parse_assessment(output), adapter.has_usable_output(output)

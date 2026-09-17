@@ -10,8 +10,8 @@ from __future__ import annotations
 import json
 import subprocess
 import time
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import (
@@ -67,6 +67,7 @@ class _PendingOpenCodeIdentity:
     process_start_time: str
     stdout_path: str
     process: IProcessProbe
+    confirm_durable: Callable[[], None] = field(default=lambda: None, compare=False)  # F1's disarm signal; no-op default
 
     def await_identity(self, timeout: float) -> WorkerHandle:
         deadline = time.monotonic() + timeout
@@ -248,8 +249,10 @@ class OpenCodeAdapter:
         env = self._spawn_env(envelope, preamble, resume_from or "")
         with harness_shared.stdout_target(preamble.stdout_path) as stdout_file:
             try:
+                # F1: deferred — the caller's own `confirm_durable()` (right after ITS durable
+                # provisional record lands) is what disarms this launch's parent-death signal.
                 launched = self._launcher.launch(
-                    cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL
+                    cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL, defer_disarm=True
                 )
             except OSError as exc:
                 _log.error("harness spawn failed", binary=self._binary, cwd=workdir, detail=str(exc))
@@ -258,13 +261,14 @@ class OpenCodeAdapter:
             "spawned worker", binary=self._binary, pid=launched.pid, session_id=resume_from or "(pending)", cwd=workdir
         )
         if resume_from:
-            # Resume never performs the handshake (execution spec): the stored session
-            # reference is already authoritative.
+            # Resume never performs the handshake (execution spec) — the stored session
+            # reference is already authoritative; `Spawner.spawn` still disarms it (F1).
             return WorkerHandle(
                 session_id=resume_from,
                 pid=launched.pid,
                 process_start_time=launched.process_start_time,
                 pgid=launched.pgid,
+                confirm_durable=launched.confirm_durable,
             )
         return _PendingOpenCodeIdentity(
             pid=launched.pid,
@@ -272,6 +276,7 @@ class OpenCodeAdapter:
             process_start_time=launched.process_start_time,
             stdout_path=preamble.stdout_path,
             process=self._process,
+            confirm_durable=launched.confirm_durable,
         )
 
     def honors_session_hint(self) -> bool:
@@ -306,18 +311,23 @@ class OpenCodeAdapter:
         )
         try:
             with harness_shared.stdout_target(output_path, mode="wb") as stdout_file:
+                # F1: deferred — the caller's own `confirm_durable()` (right after ITS durable
+                # `record_elicitation_started`/`record_elicitation_relaunch` lands) disarms it.
                 launched = self._launcher.launch(
-                    cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL
+                    cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL, defer_disarm=True
                 )
         except OSError as exc:
             _log.error("elicitation launch failed", binary=self._binary, cwd=workdir, detail=str(exc))
             raise HarnessSpawnError(f"failed to launch {self._binary} in {workdir}: {exc}") from exc
         _log.info("elicitation launched", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=workdir)
+        # F1: left armed — `Judgement._elicit`/`_relaunch` call `confirm_durable()` right after
+        # THEIR OWN durable `record_elicitation_started`/`record_elicitation_relaunch` lands.
         return WorkerHandle(
             session_id=session_id,
             pid=launched.pid,
             process_start_time=launched.process_start_time,
             pgid=launched.pgid,
+            confirm_durable=launched.confirm_durable,
         )
 
     def resume_with_message(
@@ -344,6 +354,8 @@ class OpenCodeAdapter:
             if preamble is not None
             else AllowlistedEnv.of(self._env_passthrough).variables
         )
+        # Not deferred (F1): a bare pid leaves nothing to disarm later off of, and the
+        # `record_spawn` gap right after this call is already accepted as un-armable.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None)
         return launched.pid

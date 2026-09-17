@@ -167,8 +167,8 @@ class Spawner:
                 compaction_window=lease.compaction_window,
             )
         except HarnessSpawnError as exc:
-            # Surface the launch-time failure (issue #125) then RE-RAISE: no worker started, so
-            # the attempt was never recorded and the chunk simply retries next tick.
+            # Surface the launch-time failure (issue #125) then RE-RAISE: nothing was ever
+            # launched, but the lease minted above is durable — REAP reaps it (a retry), below.
             OutboundFacts(self.ctx).command_failed(
                 chunk_id=chunk_id,
                 lease_id=lease.lease_id,
@@ -178,22 +178,32 @@ class Spawner:
             )
             raise
         _CP_AFTER_LAUNCH.reached()  # the process exists; nothing about it is durable yet
-        # Phase one (D1/D2): durable BEFORE identity is awaited, so a crash anywhere past
-        # this point leaves a real process's ownership recoverable rather than invisible.
-        self.ctx.stores.liveness.record_provisional_spawn(
-            lease.lease_id,
-            pid=pending.pid,
-            process_start_time=pending.process_start_time,
-            pgid=pending.pgid,
-            spawned_at=now,
-            harness_id=owner,
-        )
+        try:
+            # Phase one (D1/D2): durable BEFORE identity is awaited, so a crash anywhere past
+            # this point leaves a real process's ownership recoverable rather than invisible.
+            self.ctx.stores.liveness.record_provisional_spawn(
+                lease.lease_id,
+                pid=pending.pid,
+                process_start_time=pending.process_start_time,
+                pgid=pending.pgid,
+                spawned_at=now,
+                harness_id=owner,
+            )
+        except Exception:
+            # F1: unlike an OS crash, a plain raise here never disarms the trampoline on its
+            # own (`_SPAWN_EXECUTOR` outlives one bad tick) — kill it explicitly instead.
+            self.ctx.process.kill_group(pending.pgid)
+            raise
         _CP_AFTER_PROVISIONAL.reached()  # ownership durable; identity not yet known
+        # F1: disarmed only now — a crash before this line still kills the worker outright.
+        pending.confirm_durable()
+        # F8: still blocks the tick pass on one lease — unlike `judge()`'s already-identified,
+        # pollable-later wait, there is no durable record shape yet for this one; bound kept short instead.
         try:
             handle = pending.await_identity(DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS)
         except WorkerIdentityError as exc:
-            # A real process exists — kill the group this launch's record named (D3), close
-            # the generation unidentified (D2), and re-raise the same failure shape `HarnessSpawnError` takes.
+            # A real, durably-provisional process (D1/D2) — kill it and mark it unidentified;
+            # the lease stays OPEN until REAP's sweep closes it via `Attempt.fail` (a retry).
             self.ctx.process.kill_group(pending.pgid)
             self.ctx.stores.liveness.record_identity_failed(lease.lease_id, at=self.ctx.clock.now())
             OutboundFacts(self.ctx).command_failed(

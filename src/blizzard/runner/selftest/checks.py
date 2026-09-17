@@ -115,6 +115,7 @@ class Spawn:
             pending = scratch.adapter.spawn(
                 cls._envelope(), cls._preamble(scratch.workdir), session_hint=scratch.session_id
             )
+            pending.confirm_durable()  # F1: no durable record here to threaten — disarm now
             handle = pending.await_identity(DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS)
         except Exception as exc:  # the adapter is untrusted external-CLI surface
             return cls(SelfTestCheck(SPAWN_SESSION_ID, False, f"spawn raised: {exc}"), None)
@@ -181,6 +182,7 @@ class Judge(Check):
             handle = scratch.adapter.judge(scratch.workdir, scratch.session_id, _JUDGEMENT_PROMPT, output_path)
         except Exception as exc:
             return SelfTestCheck(VERDICT_ELICITATION, False, f"judge raised: {exc}")
+        handle.confirm_durable()  # F1: no durable record here to threaten — disarm now
         # The detached launch/collect shape (blizzard#443): the canary waits out the same
         # bounded poll `end_to_end_edit_commit` uses, then reads the reply back itself.
         if not Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time):

@@ -1,22 +1,25 @@
-"""The one runner-owned launch of a worker, judge, or resume child (D4).
-
-Mirrors ``AllowlistedEnv``'s "one place decides" shape for process *ownership*: every
-adapter's ``spawn``/``resume_with_message``/``judge`` launches its subprocess through
-:class:`ProcessLauncher`, never a bare ``subprocess.Popen``, so a child always gets its own
-process group and a parent-death signal (``bzh:deterministic-shell``)."""
+"""The one runner-owned launch of a worker, judge, or resume child (D4): every adapter's
+``spawn``/``resume_with_message``/``judge`` goes through :class:`ProcessLauncher`, never a bare
+``subprocess.Popen``, so a child always gets its own group and a parent-death signal
+(``bzh:deterministic-shell``). ``defer_disarm=True`` (F1) holds the real binary behind a
+trampoline until ``confirm_durable()`` disarms it."""
 
 from __future__ import annotations
 
 import ctypes
+import os
+import shutil
 import signal
 import subprocess
+import sys
+from collections.abc import Callable
 from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import IO, Protocol
 
 from blizzard.runner.loop.process import IProcessProbe
 
-# ``man 2 prctl`` — arms the child's own death signal.
+# ``man 2 prctl`` — arms the child's own death signal (the trampoline clears it with a literal 0).
 _PR_SET_PDEATHSIG = 1
 
 # Handle and symbol both resolved at import, never post-fork: the dynamic linker deadlocks forked children.
@@ -36,17 +39,30 @@ def _die_with_parent() -> None:
 # The one long-lived thread every launch forks on (D4): PDEATHSIG tracks the calling thread, not the daemon.
 _SPAWN_EXECUTOR: Executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
 
+# The interposed trampoline (F1, module docstring) — its own tiny `ctypes` call, in its own exec'd process.
+_TRAMPOLINE_SOURCE = """
+import ctypes, os, sys
+_libc = ctypes.CDLL(None, use_errno=True)
+control_fd = int(sys.argv[1])
+argv = sys.argv[2:]
+os.read(control_fd, 1)
+os.close(control_fd)
+_libc.prctl(1, 0, 0, 0, 0)
+os.execvp(argv[0], argv)
+"""
+
 
 @dataclass(frozen=True)
 class LaunchedProcess:
     """The OS facts known the instant a child exists (D1) — before any identity is known.
     ``pgid`` is recorded, not inferred at kill time (D3): ``start_new_session=True`` makes
-    the child a fresh session-and-group leader, so its pgid equals its own pid by POSIX
-    ``setsid()`` — read here, once, not re-derived later from an assumed-equal pid."""
+    the child a fresh session-and-group leader, so its pgid equals its own pid.
+    ``confirm_durable`` is F1's disarm signal — a no-op unless ``defer_disarm=True``."""
 
     pid: int
     pgid: int
     process_start_time: str
+    confirm_durable: Callable[[], None]
 
 
 class IProcessLauncher(Protocol):
@@ -61,12 +77,13 @@ class IProcessLauncher(Protocol):
         env: dict[str, str],
         stdout: IO[bytes] | int | None,
         stderr: IO[bytes] | int | None,
+        defer_disarm: bool = False,
     ) -> LaunchedProcess:
-        """Start ``argv`` under its own process group and a parent-death signal. ``cwd`` of
-        ``None`` inherits the launcher's cwd, matching bare ``subprocess.Popen``'s default;
-        same for ``stdout``/``stderr``, never silently redirected to ``DEVNULL``. Raises
-        ``OSError`` on a launch failure — each adapter translates it into its own
-        ``HarnessSpawnError``, never this harness-neutral seam."""
+        """Start ``argv`` under its own process group and a parent-death signal. ``cwd``/
+        ``stdout``/``stderr`` of ``None`` inherit bare ``subprocess.Popen``'s own defaults.
+        Raises ``OSError`` on a launch failure — each adapter translates it into its own
+        ``HarnessSpawnError``. ``defer_disarm=True`` (F1) holds the real binary's ``exec()``
+        behind a trampoline until the returned handle's ``confirm_durable()`` is called."""
         ...
 
 
@@ -88,10 +105,61 @@ class ProcessLauncher:
         env: dict[str, str],
         stdout: IO[bytes] | int | None,
         stderr: IO[bytes] | int | None,
+        defer_disarm: bool = False,
     ) -> LaunchedProcess:
+        if not defer_disarm:
+            return self._launch(argv, cwd=cwd, env=env, stdout=stdout, stderr=stderr)
+        # The deferred `exec()` runs inside the trampoline, so `Popen`'s own errpipe never
+        # sees a bad `argv[0]` — reproduce that one guarantee synchronously, up front.
+        _ensure_executable(argv[0], cwd=cwd, env=env)
+        # `pass_fds` inherits only the trampoline's own read end — `argv` never sees it.
+        read_fd, write_fd = os.pipe()
+        try:
+            proc = self._launch_process(
+                [sys.executable, "-c", _TRAMPOLINE_SOURCE, str(read_fd), *argv],
+                cwd=cwd,
+                env=env,
+                stdout=stdout,
+                stderr=stderr,
+                pass_fds=(read_fd,),
+            )
+        finally:
+            os.close(read_fd)  # the parent's own copy; the child kept its own across the fork
+        start_time = self._process.start_time(proc.pid) or ""
+        return LaunchedProcess(
+            pid=proc.pid, pgid=proc.pid, process_start_time=start_time, confirm_durable=_confirm_once(write_fd)
+        )
+
+    def _launch(
+        self,
+        argv: list[str],
+        *,
+        cwd: str | None,
+        env: dict[str, str],
+        stdout: IO[bytes] | int | None,
+        stderr: IO[bytes] | int | None,
+    ) -> LaunchedProcess:
+        """The plain, non-deferred launch: the real binary directly, armed for its whole life —
+        exactly today's pre-F1 behavior, and the right one for a caller with no durable-record
+        milestone of its own to defer a disarm to (``resume_with_message``, a selftest scratch
+        run that skips deferral itself)."""
+        proc = self._launch_process(argv, cwd=cwd, env=env, stdout=stdout, stderr=stderr)
+        start_time = self._process.start_time(proc.pid) or ""
+        return LaunchedProcess(pid=proc.pid, pgid=proc.pid, process_start_time=start_time, confirm_durable=lambda: None)
+
+    def _launch_process(
+        self,
+        argv: list[str],
+        *,
+        cwd: str | None,
+        env: dict[str, str],
+        stdout: IO[bytes] | int | None,
+        stderr: IO[bytes] | int | None,
+        pass_fds: tuple[int, ...] = (),
+    ) -> subprocess.Popen[bytes]:
         # fork()/exec() runs on `self._executor`'s worker thread, not the caller's (D4, see
         # `_SPAWN_EXECUTOR`); this call blocks for it, so the caller's own timing is unchanged.
-        proc = self._executor.submit(
+        return self._executor.submit(
             subprocess.Popen,  # argv is adapter-composed, never shell-interpreted
             argv,
             cwd=cwd,
@@ -100,9 +168,43 @@ class ProcessLauncher:
             stderr=stderr,
             start_new_session=True,
             preexec_fn=_die_with_parent,
+            pass_fds=pass_fds,
         ).result()
-        start_time = self._process.start_time(proc.pid) or ""
-        return LaunchedProcess(pid=proc.pid, pgid=proc.pid, process_start_time=start_time)
+
+
+def _ensure_executable(argv0: str, *, cwd: str | None, env: dict[str, str]) -> None:
+    """Raise :class:`FileNotFoundError` up front exactly where ``execvp(argv0, ...)`` would
+    later fail inside the trampoline: a path-shaped ``argv0`` (a ``/`` anywhere in it) resolves
+    relative to ``cwd`` and is checked directly, mirroring POSIX ``execvp``; a bare name is
+    searched on the child's own ``PATH``, never the launcher's ambient one."""
+    if os.sep in argv0:
+        candidate = argv0 if os.path.isabs(argv0) else os.path.join(cwd or os.getcwd(), argv0)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return
+    elif shutil.which(argv0, path=env.get("PATH")) is not None:
+        return
+    raise FileNotFoundError(2, "No such file or directory", argv0)
+
+
+def _confirm_once(write_fd: int) -> Callable[[], None]:
+    """One single-use disarm closure per launch (F1): writes the trampoline's go-byte, then
+    closes the write end — a second call is a harmless no-op rather than a write against a
+    possibly-reused fd number."""
+    sent = False
+
+    def confirm_durable() -> None:
+        nonlocal sent
+        if sent:
+            return
+        sent = True
+        try:
+            os.write(write_fd, b"1")
+        except OSError:
+            pass  # the trampoline (or its exec'd successor) is already gone — nothing to tell
+        finally:
+            os.close(write_fd)
+
+    return confirm_durable
 
 
 def _conforms_process_launcher(x: ProcessLauncher) -> IProcessLauncher:

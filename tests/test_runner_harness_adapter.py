@@ -297,6 +297,7 @@ def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
     adapter = _adapter(binary=str(dump_script))
 
     handle = adapter.judge(str(workdir), "sess-1", "assess", str(workdir / "judge-output.json"))
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -324,6 +325,7 @@ def test_judge_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path) 
     handle = adapter.judge(
         str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
     )
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -350,6 +352,7 @@ def test_judge_child_env_carries_the_elicitation_marker_when_given_a_preamble(tm
     handle = adapter.judge(
         str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
     )
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -582,6 +585,7 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path) -> None:
     assert handle.session_id == "sess-123"  # Claude honors the pre-assigned id
     assert handle.pid > 0
     assert handle.process_start_time  # stamped from /proc for pid-reuse-proof liveness
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)  # let the fire-and-forget child finish
     assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")  # ran in the acquired workdir
     assert "--permission-mode" not in (workdir / "argv.txt").read_text()  # omitted when unset
@@ -642,6 +646,7 @@ def test_a_hung_version_probe_reads_none_and_the_spawn_right_after_still_runs(
     assert adapter.observe_version() is None  # bounded — never waits out the hang
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert handle.pid > 0
@@ -664,6 +669,7 @@ def test_spawn_pins_a_configured_model(tmp_path: Path) -> None:
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert "--model claude-sonnet-5" in (workdir / "argv.txt").read_text()
@@ -685,6 +691,7 @@ def test_spawn_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
@@ -699,6 +706,7 @@ def test_judge_resume_output_parses_to_choice(tmp_path: Path) -> None:
     output_path = str(workdir / "judge-output.json")
 
     handle = adapter.judge(str(workdir), "sess-123", "Assess the build. Reply <Choice>name</Choice>.", output_path)
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     output = Path(output_path).read_text()
@@ -717,6 +725,7 @@ def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
     handle = adapter.judge(
         str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.", str(workdir / "judge-output.json")
     )
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
@@ -753,6 +762,7 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(tmp_path:
     resumed_prefix, _, resumed_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
     judge_handle = adapter.judge(str(workdir), "sess-123", "assess", str(workdir / "judge-output.json"), effort="high")
+    judge_handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(judge_handle.pid, 0)
     judge_prefix, _, judge_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
@@ -784,6 +794,7 @@ def test_spawn_runs_at_workspace_root_and_prepends_prefix(tmp_path: Path) -> Non
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     # Ran at the workspace root — the marker file the fake writes lands there, not the env dir.
@@ -808,6 +819,7 @@ def test_spawn_falls_back_to_env_workdir_without_a_workspace_root(tmp_path: Path
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     # No prefix and no workspace root: cwd is the env workdir, prompt is the envelope prompt alone.
@@ -1085,6 +1097,7 @@ def test_spawn_redirects_stdout_to_the_injected_stdout_path(tmp_path: Path) -> N
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert stdout_path.exists()
@@ -1109,6 +1122,7 @@ def test_spawn_without_a_stdout_path_still_discards_output(tmp_path: Path) -> No
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert list(workdir.glob("*.stdout")) == []
