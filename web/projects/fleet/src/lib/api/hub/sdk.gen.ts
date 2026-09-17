@@ -925,17 +925,11 @@ export const peekQueueApiFleetQueuePeekGet = <ThrowOnError extends boolean = fal
 /**
  * Peek Matched Queue
  *
- * The matched fleet peek (D7/D8/D11, blizzard#433 Phase 3) — at most one ready
- * entry, the first the calling principal can both work (its own declared
- * capabilities, against ``EligibilityCheck``) and claim (not dependency-blocked), with
- * ``request.policy`` applied to both dimensions together.
- *
- * Demands a resolvable principal in **every** auth mode, unlike the router's own
- * mode-gated dependency (``runner_auth_mode`` leaves that one inert under ``warn``) —
- * the same always-raising idiom ``get_lease_transcript_segments`` uses
- * (``_demand_lease_owner``'s docstring), since an upgraded-but-unenrolled runner would
- * otherwise read a permanently empty queue as an idle fleet rather than as a runner
- * that has not enrolled.
+ * The matched fleet peek — at most one ready entry the calling principal can both
+ * work (declared capabilities against ``EligibilityCheck``) and claim (not
+ * dependency-blocked), with ``request.policy`` applied to both. Demands a resolvable
+ * principal in every auth mode, so an unenrolled runner never reads a permanently
+ * empty queue as an idle fleet.
  */
 export const peekMatchedQueueApiFleetQueuePeekPost = <ThrowOnError extends boolean = false>(options: Options<PeekMatchedQueueApiFleetQueuePeekPostData, ThrowOnError>): RequestResult<PeekMatchedQueueApiFleetQueuePeekPostResponses, PeekMatchedQueueApiFleetQueuePeekPostErrors, ThrowOnError> => (options.client ?? client).post<PeekMatchedQueueApiFleetQueuePeekPostResponses, PeekMatchedQueueApiFleetQueuePeekPostErrors, ThrowOnError>({
     url: '/api/fleet/queue/peek',
