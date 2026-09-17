@@ -25,7 +25,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.preamble import (
@@ -2544,6 +2544,77 @@ def test_reap_orphan_requeues(tmp_path):  # type: ignore[no-untyped-def]
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.lease_id != "lease_1"  # a fresh lease replaced the orphan
     assert lease.pid == 202
+
+
+@pytest.mark.unit
+def test_a_real_identity_handshake_failure_kills_the_launch_and_leaves_a_durably_provisional_lease(
+    tmp_path,
+):  # type: ignore[no-untyped-def]
+    """`Spawner.spawn`'s `WorkerIdentityError` branch (D1/D2) — a real identity-handshake
+    failure kills the group and marks the provisional generation failed, while the lease
+    itself stays open (REAP's own sweep closes it as a retry)."""
+    store = _store(tmp_path)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", identity_failures=1)
+    probe = FakeProbe()
+    ctx = make_context(store, hub=FakeHub(), provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    with pytest.raises(HarnessSpawnError):
+        Spawner(ctx).spawn(
+            "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+        )
+
+    failing = harness.failing_identity_handles[0]
+    assert failing.confirm_durable_calls == 1  # F1: disarmed once the provisional record landed
+    assert probe.killed_groups == [_HANDLE.pgid]  # the still-running group was killed outright
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.pid == _HANDLE.pid and lease.session_id is None  # open, still provisional
+
+    with store._engine.connect() as conn:
+        row = conn.execute(
+            select(lease_spawns.c.session_id, lease_spawns.c.identity_failed_at).where(
+                lease_spawns.c.lease_id == lease.lease_id
+            )
+        ).one()
+    assert row.session_id is None
+    assert row.identity_failed_at is not None  # the provisional generation is durably closed unidentified
+
+
+@pytest.mark.unit
+def test_reap_closes_a_provisional_generation_left_by_an_identity_failure(tmp_path):  # type: ignore[no-untyped-def]
+    """REAP's own provisional-generation branch (D1/D2): a lease with a durable pid but no
+    identified session is neither `pid is None` (a plain orphan) nor a live, beating worker —
+    it is closed via `Attempt.fail`, consuming a retry, exactly as an orphan is."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", identity_failures=1)
+    probe = FakeProbe()
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    with pytest.raises(HarnessSpawnError):
+        Spawner(ctx).spawn(
+            "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+        )
+    provisional = store.active_lease_for_chunk("ch_1")
+    assert provisional is not None
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub.envelopes["ch_1"] = _build_envelope()  # requeue's own idempotent re-read
+
+    Reap(ctx).run()
+
+    # The prior generation stays durably closed-unidentified — REAP never leaves it ambiguous.
+    with store._engine.connect() as conn:
+        row = conn.execute(
+            select(lease_spawns.c.identity_failed_at).where(lease_spawns.c.lease_id == provisional.lease_id)
+        ).one()
+    assert row.identity_failed_at is not None
+
+    # The failed attempt consumed a retry: a fresh lease replaced it, this time identified
+    # (the fake's one scripted identity failure is spent).
+    new_lease = store.active_lease_for_chunk("ch_1")
+    assert new_lease is not None and new_lease.lease_id != provisional.lease_id
+    assert new_lease.session_id == _HANDLE.session_id
+    assert store.attempt_count("ch_1", "nd_build") == 2
 
 
 @pytest.mark.unit

@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import Connection, Engine, func, select
+from sqlalchemy import Connection, Engine, and_, func, select
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
@@ -114,10 +114,10 @@ class NoUnownedLiveLeaseProcess(QueryCheck):
 
 @dataclass(frozen=True)
 class ActiveLeaseProcessIsLive(QueryCheck):
-    """The ACTIVE-lease half of :class:`NoUnownedLiveLeaseProcess`'s claim (D1/D2), which
-    only inspects CLOSED leases, never an OS process. Liveness is probed only for a
-    still-PROVISIONAL generation — an identified one may exit asynchronously — and only
-    after a recovery pass. Two active leases sharing a live ``(pid, start_time)`` always count."""
+    """The ACTIVE-lease half of :class:`NoUnownedLiveLeaseProcess`'s claim (D1/D2) — CLOSED
+    leases only, never an OS process. Probed only for a still-PROVISIONAL generation, only
+    after a recovery pass, and skipped when ``identity_failed_at`` is already recorded (a
+    known, pending-reconciliation state, never a leak); two live-sharing leases always count."""
 
     process: IProcessProbe
 
@@ -126,12 +126,30 @@ class ActiveLeaseProcessIsLive(QueryCheck):
         active = runner.leases.c.lease_id.notin_(closed)
         violations: list[Violation] = []
         provisional_stmt = (
-            select(runner.leases.c.lease_id, runner.leases.c.pid, runner.leases.c.process_start_time)
+            select(
+                runner.leases.c.lease_id,
+                runner.leases.c.pid,
+                runner.leases.c.process_start_time,
+                runner.lease_spawns.c.identity_failed_at,
+            )
+            .select_from(
+                runner.leases.join(
+                    runner.lease_spawns,
+                    and_(
+                        runner.lease_spawns.c.lease_id == runner.leases.c.lease_id,
+                        runner.lease_spawns.c.session_id.is_(None),
+                    ),
+                    isouter=True,  # a hand-seeded `leases` row with no `lease_spawns` row at all
+                    # still reads as "not recorded failed" — never silently exempted (bzh:sql-portable).
+                )
+            )
             .where(active)
             .where(runner.leases.c.pid.is_not(None))
             .where(runner.leases.c.session_id.is_(None))
         )
         for row in self.conn.execute(provisional_stmt):
+            if row.identity_failed_at is not None:
+                continue  # known, pending-reconciliation state — REAP hasn't closed it yet
             pid = int(row.pid)
             start = str(row.process_start_time or "")
             if not self.process.is_alive(pid, start):

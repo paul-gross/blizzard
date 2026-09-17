@@ -29,7 +29,14 @@ from blizzard.runner.environments.provider import (
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.adapter import IHarnessAdapter, ResumeHandle, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.adapter import (
+    IHarnessAdapter,
+    PendingWorkerHandle,
+    ResumeHandle,
+    WorkerHandle,
+    WorkerIdentityError,
+    WorkerPreamble,
+)
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
@@ -638,6 +645,25 @@ class StaticTranscriptRepositoryResolver:
         return self._repository
 
 
+class FailingIdentityHandle:
+    """A genuine :class:`PendingWorkerHandle` (D1/D2) whose identity never arrives — every
+    other fake harness returns an already-identified :class:`WorkerHandle`, so this is the
+    one way a test drives ``Spawner.spawn``'s ``WorkerIdentityError`` branch. OS facts are
+    recorded, never inferred (D3); ``confirm_durable`` counts its own calls."""
+
+    def __init__(self, *, pid: int, process_start_time: str, pgid: int) -> None:
+        self.pid = pid
+        self.process_start_time = process_start_time
+        self.pgid = pgid
+        self.confirm_durable_calls = 0
+
+    def confirm_durable(self) -> None:
+        self.confirm_durable_calls += 1
+
+    def await_identity(self, timeout: float) -> WorkerHandle:
+        raise WorkerIdentityError("fake: identity never arrived")
+
+
 class FakeHarness:
     """A scriptable :class:`IHarnessAdapter`: canned spawn handle + verdict.
 
@@ -660,9 +686,14 @@ class FakeHarness:
         judge_process_start_time: str = "judge-start",
         judge_output: str = "<judged output>",
         judge_output_usable: bool = True,
+        identity_failures: int = 0,
     ) -> None:
         self._handle = handle
         self.verdict = verdict
+        # Scripted (D1/D2): the first N `spawn` calls return a `FailingIdentityHandle`
+        # instead of an already-identified one; 0 (default) never fails, unchanged from before.
+        self._identity_failures_remaining = identity_failures
+        self.failing_identity_handles: list[FailingIdentityHandle] = []
         # The detached elicitation's own (pid, start_time) (blizzard#443) — distinct from
         # `handle`'s worker pid by default, so a probe scripted around the worker's liveness
         # never accidentally also governs the elicitation's.
@@ -740,11 +771,18 @@ class FakeHarness:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> WorkerHandle:
+    ) -> PendingWorkerHandle:
         self.spawns.append((envelope, preamble))
         self.resume_froms.append(resume_from)
         self.spawn_model_effort.append((model, effort))
         self.spawn_compaction_windows.append(compaction_window)
+        if self._identity_failures_remaining > 0:
+            self._identity_failures_remaining -= 1
+            failing = FailingIdentityHandle(
+                pid=self._handle.pid, process_start_time=self._handle.process_start_time, pgid=self._handle.pid
+            )
+            self.failing_identity_handles.append(failing)
+            return failing
         # Mirrors the real in-place adapter contract (issue #115): a resume continues
         # under the SAME id given; a fresh spawn keeps the scripted-handle behavior.
         session_id = resume_from if resume_from is not None else self._handle.session_id
