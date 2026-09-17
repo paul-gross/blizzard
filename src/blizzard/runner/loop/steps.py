@@ -25,7 +25,6 @@ from blizzard.runner.loop.attempt import (
     REAPED,
     Attempt,
 )
-from blizzard.runner.loop.capability_snapshot import capability_snapshot
 from blizzard.runner.loop.claim import InterruptedClaims, ReadyQueue
 from blizzard.runner.loop.context import LoopContext, ResolvedSubscription
 from blizzard.runner.loop.dormant import DormantSession
@@ -343,7 +342,7 @@ class Pull(Step):
                 env_capacity=ctx.config.env_capacity,
                 url=ctx.config.public_url or None,
                 redirect_uris=ctx.config.redirect_uris,
-                capabilities=capability_snapshot(ctx.harnesses),
+                capabilities=ctx.capability_snapshot(),
             )
             paused = ctx.hub.fetch_runner_paused(ctx.config.runner_id)
         except HubClientError:
@@ -465,7 +464,9 @@ class Fill(Step):
             )
             return
         slots = ctx.config.max_agents - len(ctx.stores.lease_record.list_active_leases())
-        if capability_snapshot(ctx.harnesses):
+        # Whether this runner asserts capabilities at all is a registry-shape question —
+        # read from the registry, never by building a snapshot that probes every binary.
+        if ctx.harnesses.known_harnesses:
             # A capability-asserting runner peeks per attempt, not once per fill
             # (blizzard#433 D10) — D8's single-entry response leaves no cache to reuse.
             for _ in range(max(slots, 0)):

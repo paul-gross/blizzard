@@ -3458,3 +3458,22 @@ def test_pull_sends_a_deterministic_single_binding_capability_snapshot(tmp_path)
             ),
         )
     ]
+
+
+@pytest.mark.unit
+def test_one_tick_probes_each_bound_harnesss_version_once_for_every_snapshot_it_sends(tmp_path):  # type: ignore[no-untyped-def]
+    """Building a snapshot spawns each binding's binary for its version, and a tick sends
+    one with PULL's registration and again with every FILL claim attempt's peek — so the
+    snapshot is memoized per tick and the probe runs once, not once per outbound call."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = []  # nothing claimable — FILL still peeks, carrying capabilities
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=FakeProvider({}), harness=harness, probe=FakeProbe())
+
+    tick(ctx)
+
+    assert harness.version_probes == 1, "a tick re-probed the harness binary per outbound call"
+    # Both outbound calls still carry the snapshot — the memo hoists the probe, never the send.
+    assert hub.registered_capabilities, "PULL sent no capability snapshot"
+    assert hub.peek_queue_requests and hub.peek_queue_requests[-1].capabilities, "FILL peeked without capabilities"

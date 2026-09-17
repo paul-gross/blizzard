@@ -17,6 +17,7 @@ from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
+from blizzard.runner.loop.capability_snapshot import TickCapabilities, capability_snapshot
 from blizzard.runner.loop.checks import ICheckRunner
 from blizzard.runner.loop.chunk_status_cache import IChunkViews
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -29,6 +30,7 @@ from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import ISubscriptionSampler
+from blizzard.wire.runner import RunnerCapability
 
 #: The retry budget a node with no ``retries.max`` falls back to — a chosen constant:
 #: two execution attempts before escalation to needs-human.
@@ -165,6 +167,16 @@ class LoopContext:
     #: The shared subscription-sampling HTTP client's owner (blizzard#436, hub:95) — see
     #: :class:`ICloseableUsageHttpClient`.
     usage_http_client: ICloseableUsageHttpClient = field(default_factory=_NoUsageHttpClient)
+    #: This tick's capability memo (``tick()`` wires it); ``None`` rebuilds it per read.
+    capabilities: TickCapabilities | None = None
+
+    def capability_snapshot(self) -> tuple[RunnerCapability, ...]:
+        """This runner's capabilities as the registration push and the matched fleet peek
+        both carry them — served from this tick's memo when ``tick()`` wired one, since
+        building one probes every bound harness binary."""
+        if self.capabilities is not None:
+            return self.capabilities.get()
+        return capability_snapshot(self.harnesses)
 
     def adapter_for(self, session: SessionReference) -> IHarnessLifecycleAndVerdict:
         """Resolve an existing session's adapter from its recorded owner — may raise

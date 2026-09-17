@@ -752,6 +752,9 @@ class FakeHarness:
         # test can script "resolves nothing strictly, but still has an adapter default" for skip cases.
         self.resolved_model_strict: str | None = "fake-model"
         self.harness_version: str | None = None
+        # Every `observe_version` call, counted: the real probe spawns the harness binary, so
+        # a test can assert a tick hoists it rather than paying it per outbound call.
+        self.version_probes = 0
         # `resolvable_tier_ids`'s scripted reply (blizzard#433); default echoes a single
         # fake tier so a capability-snapshot test sees a non-empty list without opting in.
         self.tier_ids: tuple[str, ...] = ("fake-tier",)
@@ -898,6 +901,7 @@ class FakeHarness:
         return self.tier_ids
 
     def observe_version(self) -> str | None:
+        self.version_probes += 1
         return self.harness_version
 
     def parse_verdict(self, output: str) -> str | None:
