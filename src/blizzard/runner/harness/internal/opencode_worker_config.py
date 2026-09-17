@@ -1,9 +1,9 @@
 """The runner-owned OpenCode permission/plugin document (execution spec, D7).
 
 Written beside ``worker-settings.json`` in the runtime root, and supplied to a spawned worker
-through ``OPENCODE_CONFIG``/``OPENCODE_CONFIG_CONTENT`` ("configuration_isolation"). Phase 2
-writes only the permission half; the plugin's heartbeat/``shell.env`` jobs are phase 4's,
-extending :func:`render_worker_config`'s ``plugins`` rather than a second document."""
+through ``OPENCODE_CONFIG``/``OPENCODE_CONFIG_CONTENT`` ("configuration_isolation"). Renders
+both halves of the document: the permission denials (`question`) and the ``plugins`` naming
+the heartbeat/``shell.env`` plugin — one document, never two."""
 
 from __future__ import annotations
 
