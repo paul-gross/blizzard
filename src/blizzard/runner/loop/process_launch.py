@@ -19,9 +19,9 @@ from blizzard.runner.loop.process import IProcessProbe
 # ``man 2 prctl`` — arms the child's own death signal.
 _PR_SET_PDEATHSIG = 1
 
-# Resolved at import time, never post-fork: post-fork `dlopen` is a documented deadlock
-# hazard in a multithreaded process.
+# Handle and symbol both resolved at import, never post-fork: the dynamic linker deadlocks forked children.
 _LIBC = ctypes.CDLL(None, use_errno=True)
+_PRCTL = _LIBC.prctl
 
 
 def _die_with_parent() -> None:
@@ -30,12 +30,10 @@ def _die_with_parent() -> None:
     every child it owns. The "parent" ``prctl`` tracks is the OS *thread* that called it
     (this launcher, on :data:`_SPAWN_EXECUTOR`'s worker — see its docstring), unaffected
     by the child's later ``setsid()``."""
-    _LIBC.prctl(_PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
+    _PRCTL(_PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
 
 
-# The one thread every launch's fork()/exec() runs on (D4): `PR_SET_PDEATHSIG` tracks the
-# calling OS thread, not the daemon, so it must outlive the tick thread `PeriodicDriver.stop()`
-# tears down.
+# The one long-lived thread every launch forks on (D4): PDEATHSIG tracks the calling thread, not the daemon.
 _SPAWN_EXECUTOR: Executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
 
 
