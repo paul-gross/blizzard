@@ -1,10 +1,9 @@
-"""Production construction for every coding harness the runner ships (D9).
+"""The one neutral composition point over every coding harness the runner ships (D9).
 
-Claude Code's own construction stays here — this module is its one approved wiring site.
-OpenCode's construction lives behind its own factory (`opencode_registry.build_opencode_binding`),
-so neither adapter's concrete class escapes its approved wiring module
-(`tests/test_layering.py`); this function is still the one composition path every root
-(`app.py`, `loop/build.py`) takes to reach both."""
+Claude Code's own construction stays here — this module's one approved wiring site,
+symmetric with OpenCode's own factory (`opencode_registry.build_opencode_binding`), so
+neither adapter's concrete class escapes its approved module (`tests/test_layering.py`);
+every root (`app.py`, `loop/build.py`) reaches both only through this one function."""
 
 from __future__ import annotations
 

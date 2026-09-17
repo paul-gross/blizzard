@@ -80,7 +80,7 @@ from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.internal.claude_code_registry import build_production_harness_registry
+from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.loop.build import ResumeMarking

@@ -1,7 +1,7 @@
 """Production construction for the OpenCode coding harness (D9).
 
 The one factory allowed to construct :class:`OpenCodeAdapter` — every composition root takes
-the registry `claude_code_registry.build_production_harness_registry` builds instead, and
+the registry `harness_registry.build_production_harness_registry` builds instead, and
 `tests/test_layering.py` fails if the concrete class is named anywhere else."""
 
 from __future__ import annotations

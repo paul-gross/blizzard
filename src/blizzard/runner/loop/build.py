@@ -20,7 +20,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
-from blizzard.runner.harness.internal.claude_code_registry import build_production_harness_registry
+from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
 from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
