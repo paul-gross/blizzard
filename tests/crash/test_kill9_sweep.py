@@ -1431,7 +1431,7 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         # lease/epoch/session are the ones marked before the restart — the pid is the only rewrite.
         assert len(after) == 1, f"resume across a crash at {point} minted an extra lease (retry): {after}"
         assert (after[0][0], after[0][1], after[0][2]) == (lease_id, epoch, session_id)
-        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        assert _wait_for_cleared_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
@@ -1569,6 +1569,19 @@ def _wait_for_closure(runner_dir: Path, lease_id: str, *, timeout: float = 30.0)
     return reason
 
 
+def _wait_for_cleared_resume_intents(runner_dir: Path, *, timeout: float = 30.0) -> set[str]:
+    """Poll until no resume-intent is open, or the timeout elapses (return whatever was last seen).
+
+    Abandon, pause-park and preempt each write their resume-clear one statement *after* the
+    closure, so a read taken the instant that closure lands can still legitimately see it open."""
+    deadline = time.monotonic() + timeout
+    intents = _open_resume_intents(runner_dir)
+    while intents and time.monotonic() < deadline:
+        time.sleep(0.25)
+        intents = _open_resume_intents(runner_dir)
+    return intents
+
+
 @pytest.mark.parametrize("point", _ABANDON_SWEEP)
 def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` anywhere inside the abandon — before its release, or after it and before
@@ -1623,7 +1636,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
             f"the original lease closed {reason!r}, not 'released' — the abandon window was not "
             "recovered via RESUME (a REAP-retry here would consume a retry instead of releasing)"
         )
-        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        assert _wait_for_cleared_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
 
         # Re-claimable: the same (only) runner picks the now-ready chunk back up fresh and, this
         # time past the marker, runs it to completion rather than hanging again.
@@ -1709,7 +1722,7 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
         # The claim survived the crash: no closure at all, and emphatically not `released`.
         assert _closure_reason(runner_dir, lease_id) is None, "recovery closed the paused lease — pause became detach"
         assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "paused"
-        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        assert _wait_for_cleared_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
         _assert_invariants(runner_dir, hub_dir, when=f"after the pause-park recovered past {point}")
 
         # The operator resumes: the SAME session finishes the work it was paused mid-way through.
@@ -2460,7 +2473,7 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
             f"the restarted chunk's lease closed {reason!r}, not 'preempted' — recovery spent a "
             "retry on an attempt the operator superseded (issue #370's budget promise regressed?)"
         )
-        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        assert _wait_for_cleared_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
 
         # The claim was kept throughout: the same runner re-enters and finishes the work.
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"

@@ -5076,9 +5076,9 @@
   },
   "crash/test_kill9_sweep.py": {
    "comments": 245,
-   "docstrings": 154,
+   "docstrings": 158,
    "over_cap": 24,
-   "total": 2613
+   "total": 2626
   },
   "crash_points.py": {
    "comments": 1,
