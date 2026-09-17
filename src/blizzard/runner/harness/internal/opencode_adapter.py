@@ -18,6 +18,7 @@ from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
     IHarnessAdapter,
     PendingWorkerHandle,
+    ResumeHandle,
     WorkerHandle,
     WorkerIdentityError,
     WorkerPreamble,
@@ -341,7 +342,7 @@ class OpenCodeAdapter:
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
+    ) -> ResumeHandle:
         cmd = self._command.build(
             OpenCodeInvocationKind.NUDGE,
             prompt=message,
@@ -358,7 +359,9 @@ class OpenCodeAdapter:
         # `record_spawn` gap right after this call is already accepted as un-armable.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None)
-        return launched.pid
+        # `launched.pgid` is the launcher's own recorded group (D3) — carried to the
+        # caller rather than left for it to assume `pgid == pid`.
+        return ResumeHandle(pid=launched.pid, pgid=launched.pgid)
 
     def resume_command(
         self,

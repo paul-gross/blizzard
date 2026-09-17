@@ -25,6 +25,12 @@ class IProcessProbe(Protocol):
         """True iff a process with ``pid`` exists *and* its start time still matches."""
         ...
 
+    def group_alive(self, pgid: int) -> bool:
+        """True iff process group ``pgid`` still has at least one live member — a
+        signal-0 ``killpg`` probe, unlike :meth:`is_alive`'s single-pid, start-time-checked
+        one: a group can outlive its recorded leader when a descendant it spawned survives."""
+        ...
+
     def kill(self, pid: int) -> None:
         """Best-effort SIGKILL — never raises if the process is already gone."""
         ...
@@ -49,6 +55,15 @@ class LinuxProcessProbe:
         current = self.start_time(pid)
         return current is not None and current == process_start_time
 
+    def group_alive(self, pgid: int) -> bool:
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return False  # no process in this group at all
+        except PermissionError:
+            return True  # the group exists — signal 0 just couldn't reach it
+        return True
+
     def kill(self, pid: int) -> None:
         try:
             os.kill(pid, signal.SIGKILL)
@@ -60,6 +75,26 @@ class LinuxProcessProbe:
             os.killpg(pgid, signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
             return
+
+
+def kill_owned_process(
+    process: IProcessProbe, *, pid: int | None, process_start_time: str | None, pgid: int | None
+) -> None:
+    """Best-effort teardown of an owned worker process (D3): by recorded pgid when durable,
+    else by bare pid, gated on the LEADER'S liveness OR the GROUP'S — a dead leader whose
+    descendant still holds the group must still have that group killed. The one shared owner
+    of this liveness-checked, pgid-preferring kill: every owned-process teardown reaches it
+    here rather than reimplementing the check against a possibly-reused pid/pgid."""
+    if pid is None or process_start_time is None:
+        return
+    leader_alive = process.is_alive(pid, process_start_time)
+    group_still_alive = pgid is not None and process.group_alive(pgid)
+    if not leader_alive and not group_still_alive:
+        return  # already gone (or replaced by pid/pgid reuse) — nothing of ours to kill
+    if pgid is not None:
+        process.kill_group(pgid)
+    else:
+        process.kill(pid)
 
 
 def _conforms_process_probe(x: LinuxProcessProbe) -> IProcessProbe:

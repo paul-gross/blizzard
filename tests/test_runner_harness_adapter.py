@@ -372,8 +372,8 @@ def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_se
     workdir.mkdir()
     adapter = _adapter(binary=str(dump_script))
 
-    pid = adapter.resume_with_message(str(workdir), "sess-1", "deliver")
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(str(workdir), "sess-1", "deliver")
+    os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert "BZ_HUB_TOKEN" not in dumped
@@ -397,8 +397,8 @@ def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(tm
         lease_token="fresh-resume-token",
     )
 
-    pid = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
+    os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert dumped["BLIZZARD_LEASE_ID"] == "lease_42"
@@ -421,8 +421,8 @@ def test_resume_with_message_child_env_excludes_the_elicitation_marker(tmp_path:
         local_api_url="http://127.0.0.1:8431",
     )
 
-    pid = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
+    os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert "BLIZZARD_ELICITATION" not in dumped
@@ -741,8 +741,8 @@ def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path) -
     settings = tmp_path / "worker-settings.json"
     adapter = _adapter(binary=binary, settings_path=str(settings))
 
-    pid = adapter.resume_with_message(str(workdir), "sess-123", "continue where you left off")
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(str(workdir), "sess-123", "continue where you left off")
+    os.waitpid(resumed.pid, 0)
 
     assert f"--settings {settings}" in (workdir / "argv.txt").read_text()
 
@@ -757,8 +757,8 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(tmp_path:
     settings = tmp_path / "worker-settings.json"
     adapter = _adapter(binary=binary, settings_path=str(settings), permission_mode="bypassPermissions")
 
-    pid = adapter.resume_with_message(str(workdir), "sess-123", "continue", effort="high")
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(str(workdir), "sess-123", "continue", effort="high")
+    os.waitpid(resumed.pid, 0)
     resumed_prefix, _, resumed_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
     judge_handle = adapter.judge(str(workdir), "sess-123", "assess", str(workdir / "judge-output.json"), effort="high")
@@ -1136,8 +1136,10 @@ def test_resume_with_message_redirects_stdout_to_the_injected_path(tmp_path: Pat
     stdout_path = tmp_path / "lease-1-resume.stdout"
     adapter = _adapter(binary=binary)
 
-    pid = adapter.resume_with_message(str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path))
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(
+        str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
+    )
+    os.waitpid(resumed.pid, 0)
 
     assert stdout_path.exists()
     sample = adapter.parse_usage(stdout_path.read_text(), "resume")
@@ -1155,8 +1157,10 @@ def test_resume_with_message_passes_output_format_json_so_cost_is_real(tmp_path:
     stdout_path = tmp_path / "lease-1-resume-cost.stdout"
     adapter = _adapter(binary=binary)
 
-    pid = adapter.resume_with_message(str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path))
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(
+        str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
+    )
+    os.waitpid(resumed.pid, 0)
 
     sample = adapter.parse_usage(stdout_path.read_text(), "resume")
     assert sample is not None

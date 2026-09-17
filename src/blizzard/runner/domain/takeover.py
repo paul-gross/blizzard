@@ -22,7 +22,7 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle, WorkerPreamble
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry
-from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.loop.process import IProcessProbe, kill_owned_process
 from blizzard.wire.facts import LEASE_MINTED
 
 if TYPE_CHECKING:
@@ -299,15 +299,22 @@ class TakeoverService:
             )
             if self._events is not None:
                 self._events.publish_fact_changed(seq=seq, kind=LEASE_MINTED, chunk_id=chunk_id, lease_id=None)
-            if active.pid is not None:
-                self._process.kill(active.pid)  # the reap machinery's own best-effort kill
+            # The reap machinery's own best-effort kill: the shared, liveness-checked,
+            # pgid-preferring kill (D3) every owned-process teardown reaches through.
+            kill_owned_process(
+                self._process, pid=active.pid, process_start_time=active.process_start_time, pgid=active.pgid
+            )
             # A taken-over chunk's lease is skipped by every loop step from here on (Advance,
             # Reap alike), so an in-flight elicitation would otherwise leak forever uncollected
             # and unkilled (blizzard#443, D7) — killed here, the one path that closes it out.
             elicitation = self._stores.elicitations.in_flight_elicitation(active.lease_id, active.epoch)
             if elicitation is not None:
-                if elicitation.pid is not None:
-                    self._process.kill(elicitation.pid)
+                kill_owned_process(
+                    self._process,
+                    pid=elicitation.pid,
+                    process_start_time=elicitation.process_start_time,
+                    pgid=elicitation.pgid,
+                )
                 self._stores.elicitations.clear_elicitation(active.lease_id, active.epoch)
 
         # Read the reference lease's stamps (issue #144) rather than re-resolving, so the

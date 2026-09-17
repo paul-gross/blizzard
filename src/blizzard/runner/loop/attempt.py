@@ -18,6 +18,7 @@ from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHar
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
+from blizzard.runner.loop.process import kill_owned_process
 from blizzard.runner.loop.session import SkippedHarness
 from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.runner.loop.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
@@ -87,20 +88,14 @@ class Attempt:
     lease: LeaseRecord
 
     def _kill_process(self) -> None:
-        """Best-effort teardown of this lease's own worker process (D3): by its recorded
-        process group when durable and current for THIS pid, else by bare pid (a
-        pre-two-phase-spawn or resumed lease); a group kill also reaps descendants a bare
-        pid kill cannot reach. Re-checks liveness against ``(pid, process_start_time)``
-        first — the OS can recycle a dead pid's pgid, and an unchecked ``killpg`` would hit whoever now holds it."""
+        """Best-effort teardown of this lease's own worker process (D3) — the shared,
+        liveness-checked, pgid-preferring kill (:func:`kill_owned_process`) every owned-process
+        teardown in the runner loop reaches through, rather than each reimplementing its own
+        liveness check."""
         lease = self.lease
-        if lease.pid is None or lease.process_start_time is None:
-            return
-        if not self.ctx.process.is_alive(lease.pid, lease.process_start_time):
-            return  # already gone (or replaced by pid/pgid reuse) — nothing of ours to kill
-        if lease.pgid is not None:
-            self.ctx.process.kill_group(lease.pgid)
-        else:
-            self.ctx.process.kill(lease.pid)
+        kill_owned_process(
+            self.ctx.process, pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid
+        )
 
     def fail(self, *, reason: LeaseChangeCause, via: str) -> None:
         """Close a failed attempt, then requeue at the node or escalate per the budget.

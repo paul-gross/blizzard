@@ -195,6 +195,61 @@ def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path):  # ty
 
 
 @pytest.mark.unit
+def test_restart_resume_skips_the_kill_when_the_recorded_pid_was_reused(tmp_path):  # type: ignore[no-untyped-def]
+    """The same pid/pgid-reuse hazard `Attempt._kill_process` guards against: a LIVE pid
+    whose start time no longer matches the recorded one is not this lease's survivor any
+    more, and a bare, unchecked kill would hit whoever the OS gave that pid to instead."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _running_chunk()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.resume_pid = 4321
+    # pid 100 is alive, but under a DIFFERENT start time — the OS recycled it.
+    probe = FakeProbe(alive={(100, "some-other-processes-start-time"), (4321, "start-4321")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    Resume(ctx).run()
+
+    assert probe.killed == []
+    assert probe.killed_groups == []
+    # The resume still proceeds — the skipped kill is best-effort hygiene, not a gate.
+    assert harness.resumed != []
+
+
+@pytest.mark.unit
+def test_restart_resume_group_kills_the_survivor_when_a_pgid_is_recorded(tmp_path):  # type: ignore[no-untyped-def]
+    """A survivor with a durable recorded pgid (D3) is killed by GROUP, never by bare
+    pid — the same preference `Attempt._kill_process` applies, reached here through the
+    same shared, liveness-checked helper."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_spawn(  # this generation's own group is durable (D3)
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        pgid=100,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _running_chunk()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.resume_pid = 4321
+    probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    Resume(ctx).run()
+
+    assert probe.killed_groups == [100]
+    assert probe.killed == []  # the group kill covers it — no redundant bare-pid kill
+
+
+@pytest.mark.unit
 def test_resume_records_its_own_pgid_rather_than_clobbering_a_prior_one_with_null(tmp_path):  # type: ignore[no-untyped-def]
     """A prior generation's own recorded pgid must never be silently nulled by a resume that
     forgot its own — each generation's group-kill target is always the CURRENT one."""
@@ -222,6 +277,31 @@ def test_resume_records_its_own_pgid_rather_than_clobbering_a_prior_one_with_nul
     lease = store.active_lease("lease_1")
     assert lease is not None
     assert lease.pgid == 4321  # this generation's own group, never left None
+
+
+@pytest.mark.unit
+def test_resume_records_the_launchers_real_pgid_rather_than_inferring_it_from_the_pid(tmp_path):  # type: ignore[no-untyped-def]
+    """D3, the same "recorded, not inferred" contract a fresh spawn already keeps: a resumed
+    process's real group can differ from its own pid. A call site that still wrote
+    ``pgid=pid`` would record 4321 here instead of the launcher's actual 9999."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _running_chunk()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.resume_pid = 4321
+    harness.resume_pgid = 9999  # deliberately distinct from resume_pid
+    probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    Resume(ctx).run()
+
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+    assert lease.pid == 4321
+    assert lease.pgid == 9999  # the launcher's own real group, never re-derived from the pid
 
 
 @pytest.mark.unit

@@ -68,6 +68,16 @@ class WorkerHandle:
         return self
 
 
+@dataclass(frozen=True)
+class ResumeHandle:
+    """The OS facts a resume launch is authoritative on (D3): its pid and the REAL
+    process group the launcher recorded for it — never inferred as ``pid`` at the call
+    site, the same "recorded, not inferred" contract :class:`WorkerHandle` keeps."""
+
+    pid: int
+    pgid: int
+
+
 class PendingWorkerHandle(Protocol):
     """``spawn``'s own phase-one return (D1): the launched process's OS facts — pid, start
     time, and owned group — durable-worthy before any identity is known. A Protocol, not a
@@ -146,12 +156,12 @@ class IHarnessWorkerLifecycle(Protocol):
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
-        """Headless resume-with-message; returns the new pid. Kill first.
-
-        The fire-and-forget resume. ``stdout_path`` is the injected stdout capture; empty
-        inherits stdout. ``preamble``/``chunk_id`` re-supply the per-lease identity
-        ``--resume`` inherits none of. ``compaction_window`` reasserts like ``effort``."""
+    ) -> ResumeHandle:
+        """Headless resume-with-message; returns the new launch's pid and its REAL,
+        launcher-recorded process group (D3), never a caller-inferred ``pgid=pid``. Kill
+        first. ``stdout_path`` is the injected stdout capture; empty inherits stdout.
+        ``preamble``/``chunk_id`` re-supply the per-lease identity ``--resume`` inherits
+        none of. ``compaction_window`` reasserts like ``effort``."""
         ...
 
     def judge(

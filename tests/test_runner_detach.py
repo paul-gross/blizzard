@@ -426,6 +426,34 @@ def test_pull_group_kills_a_still_live_detached_worker(tmp_path):  # type: ignor
 
 
 @pytest.mark.unit
+def test_pull_group_kills_a_dead_leader_whose_descendant_still_holds_the_group(tmp_path):  # type: ignore[no-untyped-def]
+    """The leader pid itself already exited, but a descendant it spawned — still in the
+    same recorded process group — survives. A leader-only liveness check would skip the
+    kill entirely and leak that descendant forever; the group must still be killed."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_spawn(  # this generation's own group is durable (D3)
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        pgid=100,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    hub = FakeHub()
+    hub.not_found = {"ch_1"}
+    provider = FakeProvider({"e1": "/ws/e1"})
+    # The leader (pid 100) is gone, but its group still has a live member.
+    probe = FakeProbe(alive=set(), groups_alive={100})
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    Pull(ctx).run()
+
+    assert probe.killed_groups == [100]
+    assert probe.killed == []
+
+
+@pytest.mark.unit
 def test_pull_skips_the_kill_when_the_recorded_pid_was_reused_by_another_process(tmp_path):  # type: ignore[no-untyped-def]
     """The pid/pgid-reuse hazard F13 closes: a LIVE pid whose start time no longer matches
     the recorded one is not this lease's worker any more — the OS gave that pid to an

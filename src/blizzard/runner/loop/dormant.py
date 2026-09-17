@@ -17,6 +17,7 @@ from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
+from blizzard.runner.loop.process import kill_owned_process
 from blizzard.runner.loop.spawn import Spawner
 
 _log = get_logger("blizzard.runner.loop")
@@ -217,8 +218,11 @@ class DormantSession:
                 # closure — no other runner can resume this exact session to re-attach here.
                 return
         now = self.ctx.clock.now()
-        if lease.pid is not None:
-            self.ctx.process.kill(lease.pid)  # kill-first — never two processes on one session
+        # Kill-first — never two processes on one session — via the shared, liveness-checked
+        # kill (D3): a stale/reused pid is never blindly signaled.
+        kill_owned_process(
+            self.ctx.process, pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid
+        )
         _CP_RESUME_AFTER_KILL.reached()  # re-run kills the dead pid (no-op) then re-attaches
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings or lease.session is None or harness is None:
@@ -294,7 +298,7 @@ class DormantSession:
         # Observed BEFORE the resume, the same as a fresh spawn (spawn.py): a hung or
         # failing probe must never run after the worker is already live and unrecorded.
         version = harness.observe_version()
-        pid = harness.resume_with_message(
+        resumed = harness.resume_with_message(
             bindings[0].workdir,
             session.session_id,
             message,
@@ -310,10 +314,11 @@ class DormantSession:
         assert lease.session is not None
         self.ctx.stores.liveness.record_spawn(
             lease.lease_id,
-            pid=pid,
-            process_start_time=self.ctx.process.start_time(pid) or "",
-            # `ProcessLauncher` always starts a fresh group leader, so this pgid is its own pid (D3).
-            pgid=pid,
+            pid=resumed.pid,
+            process_start_time=self.ctx.process.start_time(resumed.pid) or "",
+            # The launcher's own recorded group (D3) — carried through, never inferred
+            # as `pgid=pid` at this call site.
+            pgid=resumed.pgid,
             session=lease.session,  # unchanged — same concrete session under the same lease
             spawned_at=stamped,
             harness_version=version,
@@ -326,4 +331,4 @@ class DormantSession:
                 lease.chunk_id,
                 cause="spawned",
             )
-        return pid, stamped
+        return resumed.pid, stamped

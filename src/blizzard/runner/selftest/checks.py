@@ -200,17 +200,19 @@ class Resume(Check):
         try:
             # Never the bare `""` default: it would inherit the daemon's own stdout.
             stdout_path = os.path.join(scratch.workdir, ".selftest-resume-stdout")
-            pid = scratch.adapter.resume_with_message(
+            resumed = scratch.adapter.resume_with_message(
                 scratch.workdir, scratch.session_id, _RESUME_MESSAGE, stdout_path=stdout_path
             )
         except Exception as exc:
             return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message raised: {exc}")
-        if pid <= 0:
-            return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({pid})")
+        if resumed.pid <= 0:
+            return SelfTestCheck(
+                AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({resumed.pid})"
+            )
         # Reaped here so no live process outlives the scratch dir it is cwd'd into
         # (tests/test_runner_selftest.py).
-        Worker(scratch.process, pid).reap()
-        return SelfTestCheck(AUTOMATED_RESUME, True, f"resumed session {scratch.session_id!r} as pid {pid}")
+        Worker(scratch.process, resumed.pid).reap()
+        return SelfTestCheck(AUTOMATED_RESUME, True, f"resumed session {scratch.session_id!r} as pid {resumed.pid}")
 
 
 class ResumeCommand(Check):

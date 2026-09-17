@@ -19,6 +19,7 @@ from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
     IHarnessAdapter,
     PendingWorkerHandle,
+    ResumeHandle,
     WorkerHandle,
     WorkerPreamble,
 )
@@ -364,7 +365,7 @@ class ClaudeCodeAdapter:
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
+    ) -> ResumeHandle:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
         # As on `judge`: no `--model` (sticky), `--effort`/`--autocompact` reasserted (not sticky).
         if effort:
@@ -389,7 +390,9 @@ class ClaudeCodeAdapter:
         # Not deferred (F1): a bare pid leaves nothing to disarm later off of.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None)
-        return launched.pid
+        # `launched.pgid` is the launcher's own recorded group (D3) — carried to the
+        # caller rather than left for it to assume `pgid == pid`.
+        return ResumeHandle(pid=launched.pid, pgid=launched.pgid)
 
     def resume_command(
         self,

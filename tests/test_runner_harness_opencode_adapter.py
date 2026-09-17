@@ -515,8 +515,10 @@ def test_judge_and_resume_with_message_launch_against_the_recorded_session(tmp_p
     output = Path(workdir / "judge-output.json").read_text()
     assert adapter.parse_verdict(output) == "pass"
 
-    pid = adapter.resume_with_message(str(workdir), "ses_recorded", "continue", stdout_path=str(workdir / "nudge.out"))
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(
+        str(workdir), "ses_recorded", "continue", stdout_path=str(workdir / "nudge.out")
+    )
+    os.waitpid(resumed.pid, 0)
     assert (workdir / "nudge.out").exists()
 
 

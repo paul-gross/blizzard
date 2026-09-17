@@ -29,7 +29,7 @@ from blizzard.runner.environments.provider import (
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.adapter import IHarnessAdapter, ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
@@ -698,6 +698,9 @@ class FakeHarness:
         self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
         self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
         self.resume_pid = 4321
+        # Defaults to `resume_pid` (D3), mirroring `judge_pgid`: an explicit assignment
+        # opts a test into a resume whose real group differs from its pid.
+        self.resume_pgid: int | None = None
         # The (model, effort) each invocation was handed (issue #144) — one entry per
         # call, for per-call-site assertions.
         self.spawn_model_effort: list[tuple[str | None, str | None]] = []
@@ -801,14 +804,15 @@ class FakeHarness:
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
+    ) -> ResumeHandle:
         self.resumed.append((workdir, session_id, message))
         self.resume_efforts.append(effort)
         self.resume_compaction_windows.append(compaction_window)
         # Captured separately so existing 3-tuple unpackers of `.resumed` keep working while
         # resume-identity assertions can read the preamble/chunk_id the caller supplied.
         self.resumed_identity.append((preamble, chunk_id))
-        return self.resume_pid
+        pgid = self.resume_pgid if self.resume_pgid is not None else self.resume_pid
+        return ResumeHandle(pid=self.resume_pid, pgid=pgid)
 
     def resume_command(
         self,
@@ -937,10 +941,14 @@ def _conforms_fake_subscription_sampler(x: FakeSubscriptionSampler) -> ISubscrip
 
 
 class FakeProbe:
-    """A scriptable :class:`IProcessProbe`: an explicit set of live (pid, start)."""
+    """A scriptable :class:`IProcessProbe`: an explicit set of live (pid, start), plus an
+    explicit set of process groups still holding a live member (``groups_alive``) — the
+    ``group_alive`` probe a dead-leader-with-live-descendants scenario scripts independently
+    of any single pid's own liveness."""
 
-    def __init__(self, alive: set[tuple[int, str]] | None = None) -> None:
+    def __init__(self, alive: set[tuple[int, str]] | None = None, groups_alive: set[int] | None = None) -> None:
         self.alive = alive if alive is not None else set()
+        self.groups_alive = groups_alive if groups_alive is not None else set()
         self.killed: list[int] = []
         self.killed_groups: list[int] = []
 
@@ -953,12 +961,16 @@ class FakeProbe:
     def is_alive(self, pid: int, process_start_time: str) -> bool:
         return (pid, process_start_time) in self.alive
 
+    def group_alive(self, pgid: int) -> bool:
+        return pgid in self.groups_alive
+
     def kill(self, pid: int) -> None:
         self.killed.append(pid)
         self.alive = {(p, st) for (p, st) in self.alive if p != pid}
 
     def kill_group(self, pgid: int) -> None:
         self.killed_groups.append(pgid)
+        self.groups_alive.discard(pgid)
 
 
 class FakeWorktreeGit:

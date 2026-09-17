@@ -15,7 +15,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.steps import Advance, Pull
@@ -67,8 +67,8 @@ class _AttachingOnResumeHarness(FakeHarness):
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
-        pid = super().resume_with_message(
+    ) -> ResumeHandle:
+        resumed = super().resume_with_message(
             workdir,
             session_id,
             message,
@@ -87,7 +87,7 @@ class _AttachingOnResumeHarness(FakeHarness):
             content=self._content,
             attached_at=self._clock.now(),
         )
-        return pid
+        return resumed
 
 
 class _DeclaringGitCommitOnResumeHarness(FakeHarness):
@@ -133,8 +133,8 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
-        pid = super().resume_with_message(
+    ) -> ResumeHandle:
+        resumed = super().resume_with_message(
             workdir,
             session_id,
             message,
@@ -155,7 +155,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
             commit=self._commit,
             declared_at=self._clock.now(),
         )
-        return pid
+        return resumed
 
 
 def _seed_exited_lease(store, *, lease_id: str, chunk_id: str, node_id: str, epoch: int) -> None:

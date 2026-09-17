@@ -25,7 +25,7 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
@@ -292,6 +292,9 @@ class _NeverAliveProcessProbe:
     def start_time(self, pid: int) -> str | None:
         return None
 
+    def group_alive(self, pgid: int) -> bool:
+        return False
+
     def kill(self, pid: int) -> None:
         return None
 
@@ -335,7 +338,7 @@ class _HangingAdapter:
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
+    ) -> ResumeHandle:
         raise AssertionError("unreachable — spawn never returns")
 
     def resume_command(
@@ -483,8 +486,8 @@ class _FixedPidAdapter:
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
-        return self.resume_pid
+    ) -> ResumeHandle:
+        return ResumeHandle(pid=self.resume_pid, pgid=self.resume_pid)
 
     def resume_command(
         self,
@@ -574,6 +577,9 @@ class _RecordingProcessProbe:
 
     def start_time(self, pid: int) -> str | None:
         return "t"
+
+    def group_alive(self, pgid: int) -> bool:
+        return False
 
     def kill(self, pid: int) -> None:
         self.killed.append(pid)
