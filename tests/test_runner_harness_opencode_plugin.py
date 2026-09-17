@@ -1,10 +1,8 @@
 """The runner-owned OpenCode plugin scaffold (execution spec, "Runner-owned plugin", D7 phase
-4) — content shape (unit) and its degrade-only effect on the adapter's own parsed turn outcome
-(component). The plugin's JS/TS *behavior* (that a raising callback never escapes its own
-``try``/``catch``) is proven structurally here rather than by running a JS engine: this repo's
-test toolchain (``mise.toml``) pins no node/bun, so the generated source's shape — exactly one
-``try``/``catch`` per hook body — is the checkable surface, mirroring how ``config.py``'s
-``blizzard-runner.toml`` scaffold is tested as generated text, not executed."""
+4) — content shape (unit) and its degrade-only effect on the adapter's parsed turn outcome
+(component). Its JS/TS *behavior* is proven structurally, not by running a JS engine (this
+repo's toolchain pins no node/bun): the generated source's shape — one ``try``/``catch`` per
+hook body — is the checkable surface, like ``config.py``'s scaffold is tested as text."""
 
 from __future__ import annotations
 
@@ -68,10 +66,9 @@ def test_render_plugin_source_forwards_exactly_the_lease_identity_and_session_id
 
 @pytest.mark.unit
 def test_render_plugin_source_wraps_every_hook_body_in_try_catch() -> None:
-    """Both jobs are degrade-only by construction: a thrown error inside either hook body is
-    caught before it can ever reach OpenCode's own dispatcher — the channel this pinned
-    version cannot prove live (``contracts/opencode/1.18.25/live_diagnostic.json``'s
-    ``root_hook: absent``) is never allowed to matter."""
+    """Both jobs are degrade-only: a thrown error inside either hook body is caught before
+    it can reach OpenCode's own dispatcher — the channel this pinned version cannot prove
+    live is never allowed to matter."""
     source = render_plugin_source()
     assert source.count("try {") == 2
     assert source.count("} catch {") == 2
@@ -120,10 +117,9 @@ def test_scaffolded_worker_config_carries_the_plugin_reference_and_nothing_else(
 
 @pytest.mark.component
 def test_a_plugin_bearing_worker_config_does_not_change_the_adapters_parsed_turn(tmp_path: Path) -> None:
-    """Nothing in the adapter's own code ever reads a hook's outcome (unit-test's own
-    invariant, above): a worker config that names the scaffolded plugin — even one this fake
-    binary never actually loads or executes as JS — must leave the parsed verdict,
-    assessment, and usability identical to a run with no worker config at all."""
+    """Nothing in the adapter's code ever reads a hook's outcome (unit-test invariant above):
+    a worker config naming the scaffolded plugin — even unloaded by this fake binary — must
+    leave the parsed verdict, assessment, and usability identical to no worker config."""
     binary = worker_binary(tmp_path, minted_session_id="ses_plugin_proof")
     workdir = tmp_path / "e1"
     workdir.mkdir()

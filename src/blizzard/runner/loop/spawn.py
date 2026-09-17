@@ -38,8 +38,7 @@ _log = get_logger("blizzard.runner.loop")
 
 # The lease-mint -> spawn -> record window is the orphan-lease window REAP must absorb.
 _CP_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease minted; worker not spawned")
-# The two-phase spawn's own three windows (D1/D2), each bracketing a durable write the
-# generic build->deliver sweep scenario already reaches on every fresh spawn.
+# The two-phase spawn's three windows (D1/D2), each bracketing a durable write.
 _CP_AFTER_LAUNCH = crashpoint(
     "spawn.after-launch.before-provisional-record", "worker process launched; provisional ownership not yet durable"
 )
@@ -193,15 +192,8 @@ class Spawner:
         try:
             handle = pending.await_identity(DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS)
         except WorkerIdentityError as exc:
-            # A real process exists — kill the group this launch's own provisional record
-            # already named (D3), then close the generation as unidentified (D2) and
-            # re-raise the same launch-failure shape `HarnessSpawnError` takes. The lease
-            # itself is already ACTIVE with a durable provisional generation at this point,
-            # so the chunk cannot simply re-spawn on the next tick: REAP's ordinary
-            # "unspawned lease" sweep is what closes this generation via `Attempt.fail`
-            # (idempotently re-doing the same `record_identity_failed` close were this raise
-            # ever missed), consuming one of the lease's retries, before the node can be
-            # re-entered at all.
+            # A real process exists — kill the group this launch's record named (D3), close
+            # the generation unidentified (D2), and re-raise the same failure shape `HarnessSpawnError` takes.
             self.ctx.process.kill_group(pending.pgid)
             self.ctx.stores.liveness.record_identity_failed(lease.lease_id, at=self.ctx.clock.now())
             OutboundFacts(self.ctx).command_failed(

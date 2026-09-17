@@ -421,15 +421,10 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
 
 def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int) -> RunnerConfig:
     """A migrated runner runtime pointed at the fixture workspace and the mock harness.
-
     ``host``/``port`` bind to a free port rather than the base config's default, which
-    can collide with this machine's live dogfood runner (issue #143, Phase 4;
-    see ``AGENTS.local.md``). Both mock harness binaries are always wired: ``harness_binary``
-    keeps meaning Claude Code exactly as it always has (harness selection is a per-node
-    declaration, not a config-level switch — ``[[session]] harnesses`` picks OpenCode, never
-    this function), and ``opencode_binary`` lets a scenario's graph opt a node into it by
-    naming ``opencode`` in ``session_harnesses`` — inert for every scenario that never does.
-    """
+    can collide with this machine's live dogfood runner (issue #143, Phase 4). Both mock
+    harness binaries are always wired: ``harness_binary`` keeps meaning Claude Code
+    (harness selection is per-node, never this function), ``opencode_binary`` lets a scenario opt in by naming ``opencode``."""
     base = init_runner_environment(runner_dir)  # scaffolds config + migrates the store
     return dataclasses.replace(
         base,

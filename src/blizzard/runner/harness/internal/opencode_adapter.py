@@ -1,15 +1,9 @@
 """The OpenCode adapter binding (``bzh:pluggable-seams``).
 
 Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the ``opencode``
-CLI. Reuses only the production event/record parsers (``opencode_shapes``) — the diagnostic
-PROCESS/scratch machinery the compatibility proof owns (``opencode_process.py`` and its
-siblings) is never called into here (execution spec, D5): every worker launches through
-Phase 1's :class:`~blizzard.runner.loop.process_launch.ProcessLauncher`, exactly as the Claude
-Code binding does.
-
-Output/usage parsing below implements the execution spec's "Output and usage" section: root
-assistant text concatenation with tool/child exclusion, explicit session-error surfacing, and
-step-usage dedup across a completed turn's own captured stdout."""
+CLI. Reuses only the production event/record parsers (``opencode_shapes``) — never the
+diagnostic PROCESS/scratch machinery the compatibility proof owns (D5): every worker launches
+through :class:`~blizzard.runner.loop.process_launch.ProcessLauncher`, as Claude Code does."""
 
 from __future__ import annotations
 
@@ -48,14 +42,10 @@ from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
 
-# The namespaced tier-alias prefix (issue #144, shared with Claude Code): an entry carrying
-# it is a *role*, resolved through the runner's own table; one without it is a native name.
+# The namespaced tier-alias prefix (issue #144, shared with Claude Code); unprefixed is a native name.
 _TIER_PREFIX = "blizzard:"
 
-# The well-known effort ordinal (issue #144); OpenCode's own `--variant` vocabulary is
-# provider-defined, so an entry outside it needs an explicit `[opencode.effort.aliases]`
-# rather than a built-in guess — the same "name the variant directly" contract the
-# execution spec's "Models, effort, permissions, and compaction" section describes.
+# The well-known effort ordinal (issue #144); outside it needs an explicit `[opencode.effort.aliases]`, never a guess.
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 
 # How often a fresh mint's pending handle re-reads the stdout capture while awaiting identity.
@@ -68,9 +58,8 @@ _MAX_IDENTITY_PREAMBLE_LINES = 20
 @dataclass(frozen=True)
 class _PendingOpenCodeIdentity:
     """Phase one's OpenCode-specific pending handle (D1): the launch is real, but identity
-    has not arrived yet — it is read from the worker's own stdout, the exact stream this
-    binding already parses for output and usage (execution spec, "Fresh-session handshake").
-    Never constructed for a resume, which already knows its session id and returns a plain
+    is read from the worker's own stdout (execution spec, "Fresh-session handshake"). Never
+    constructed for a resume, which already knows its session id and returns a plain
     :class:`WorkerHandle` instead, whose ``await_identity`` is its own trivial phase two."""
 
     pid: int
@@ -148,8 +137,7 @@ class OpenCodeAdapter:
         self._binary = binary
         self._command = OpenCodeCommand(binary)
         # Empty is a legitimate default (unlike Claude Code's pinned `DEFAULT_WORKER_MODEL`):
-        # OpenCode ships no built-in tier mapping, so an operator who configures none simply
-        # lets OpenCode resolve its own configured default rather than Blizzard inventing one.
+        # OpenCode ships no built-in tier mapping, so it resolves its own configured default.
         self._model = model
         self._model_aliases = dict(model_aliases)
         self._effort_aliases = dict(effort_aliases)
@@ -185,16 +173,13 @@ class OpenCodeAdapter:
         another harness's own tier vocabulary, skipped rather than handed to a CLI that
         would reject it."""
         if entry.startswith(_TIER_PREFIX):
-            # OpenCode ships no built-in tier mapping (unlike Claude Code's three
-            # defaults): an unmapped tier is a deliberately unavailable capability, which
-            # is what lets a multi-harness selection skip this binding instead of
-            # spawning under a model it cannot provide (harness-selection spec).
+            # OpenCode ships no built-in tier mapping (unlike Claude Code's three defaults):
+            # an unmapped tier lets a multi-harness selection skip this binding (harness-selection spec).
             return self._model_aliases.get(entry)
         if entry in self._model_aliases:
             return self._model_aliases[entry]
-        # A non-namespaced entry is accepted only when it is a valid `provider/model`
-        # OpenCode reference (execution spec) — never a bare native short name, since
-        # OpenCode has no fixed short-name vocabulary the way Claude Code does.
+        # A non-namespaced entry is accepted only as a valid `provider/model` OpenCode
+        # reference (execution spec) — OpenCode has no fixed short-name vocabulary.
         try:
             parse_model_reference(entry)
         except OpenCodeShapeError:
@@ -240,10 +225,7 @@ class OpenCodeAdapter:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
         if not preamble.stdout_path:
             # OpenCode self-mints its session id and announces it only on its own stdout
-            # (execution spec, "Fresh-session handshake"); with nowhere durable to read
-            # from, a fresh mint could never learn who it spawned. Claude Code has no such
-            # need — its stdout may legitimately discard to DEVNULL — so this requirement
-            # is OpenCode-specific, not a widened seam contract.
+            # (execution spec); with nowhere durable to read from it could never be learned.
             raise HarnessSpawnError("OpenCode spawn requires an injected stdout path to learn its session id")
         workdir = SpawnCwd(preamble.workspace_root, preamble.environments[0].workdir).path
         prompt = "\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part)
@@ -369,9 +351,7 @@ class OpenCodeAdapter:
         attended: bool = False,
     ) -> str:
         # `attended` names no distinct OpenCode composition (unlike Claude Code's
-        # `--permission-mode`): an interactive TUI session always asks live, so the
-        # paste string and the exec'd form are the same argv either way (execution spec,
-        # "Worker process" — no `--format json`, no `--auto`, for either).
+        # `--permission-mode`): the paste string and exec'd form share the same argv (execution spec).
         del attended
         argv = self._command.takeover_argv(session_id=session_id, model=model, variant=effort)
         return f"cd {workdir} && {' '.join(argv)}"
@@ -385,10 +365,8 @@ class OpenCodeAdapter:
             preamble, chunk_id, session_id, self._env_passthrough, elicitation=elicitation
         )
         if self._worker_config_path:
-            # The runner-owned permission/plugin document (D7) — supplied both as a path
-            # and as its own serialized content, exactly as the compatibility proof's
-            # `configuration_isolation` probe already established OpenCode honors
-            # (`docs/deployment/opencode-compatibility.md`).
+            # The runner-owned permission/plugin document (D7) — supplied both as a path and
+            # its serialized content, as the compatibility proof's `configuration_isolation` probe established.
             env["OPENCODE_CONFIG"] = self._worker_config_path
             try:
                 with open(self._worker_config_path, encoding="utf-8") as f:
@@ -405,10 +383,9 @@ class OpenCodeAdapter:
     @staticmethod
     def _parse_events(output: str) -> tuple[OpenCodeRunEvent, ...]:
         """Every event this invocation's own captured stdout carries, in emission order,
-        skipping any individual line that fails to parse rather than discarding the whole
-        capture over it — OpenCode has no transcript fallback to re-derive a lost verdict
-        from (unlike Claude Code's ``ResultEnvelope``), so this per-line skip is the whole
-        of its tolerance. Parses line by line rather than calling
+        skipping any line that fails to parse rather than discarding the whole capture over
+        it — OpenCode has no transcript fallback to re-derive a lost verdict from (unlike
+        Claude Code's ``ResultEnvelope``). Parses line by line, unlike
         :func:`~.opencode_shapes.parse_run_jsonl`, which raises on the first bad line."""
         events: list[OpenCodeRunEvent] = []
         for line in output.splitlines():
@@ -463,12 +440,9 @@ class OpenCodeAdapter:
     @staticmethod
     def _sum_tokens(parts: Iterable[OpenCodePart]) -> tuple[int, int, int, int]:
         """(input, output, cache-read, cache-write) summed across every distinct completed
-        step's tokens. A step-finish part's ``tokens`` sub-fields are all required by the
-        schema (never optional), so no field is ever defaulted to zero here — a genuinely
-        tokenless message (a ``user`` turn) simply never becomes a step-finish part in the
-        first place. OpenCode's own ``reasoning`` count folds into Blizzard's single
-        ``output_tokens`` column: the shared usage shape carries no separate column for it,
-        and a reasoning token is never simply dropped."""
+        step's tokens. A step-finish part's ``tokens`` sub-fields are all schema-required, so
+        no field is ever defaulted to zero here. OpenCode's own ``reasoning`` count folds
+        into Blizzard's single ``output_tokens`` column: no reasoning token is ever dropped."""
         input_tokens = output_tokens = cache_read_tokens = cache_create_tokens = 0
         for part in parts:
             tokens = part.tokens
@@ -483,11 +457,9 @@ class OpenCodeAdapter:
     @staticmethod
     def _known_cost(parts: Iterable[OpenCodePart]) -> float | None:
         """The summed dollar cost, or ``None`` when every step's cost reads as unknown.
-
-        A subscription-authenticated step reports its cost as a literal ``0`` rather than
-        omitting the field (execution spec), and a genuinely billed step never costs
-        exactly nothing — so a zero is treated as "not reported", never as "free", and
-        excluded from the sum. A nonzero figure survives verbatim, never estimated."""
+        A subscription-authenticated step reports cost as a literal ``0`` rather than
+        omitting the field (execution spec); since a billed step never costs exactly
+        nothing, a zero is treated as "not reported" rather than "free", and excluded."""
         known = [part.cost for part in parts if part.cost]
         if not known:
             return None
@@ -533,12 +505,11 @@ class OpenCodeAdapter:
 
     @staticmethod
     def _finish_parts_from_line(line: str) -> list[OpenCodePart]:
-        """One transcript line's completed-step parts, tolerating either shape a raw
-        OpenCode transcript can carry: a run event (the process's own stdout shape) or an
-        exported message (the session-export shape) — the same completed step can be
-        described by both, which is exactly what the caller's identity-keyed dedup
-        collapses back to one (execution spec). An unparseable or irrelevant line
-        contributes nothing; this is a best-effort transcript fallback, never a raise."""
+        """One transcript line's completed-step parts, tolerating either raw-OpenCode shape:
+        a run event (process stdout) or an exported message (session-export) — the same
+        completed step can be described by both, which the caller's identity-keyed dedup
+        collapses back to one (execution spec). Unparseable lines contribute nothing;
+        this is a best-effort fallback, never a raise."""
         stripped = line.strip()
         if not stripped:
             return []
@@ -574,9 +545,8 @@ class OpenCodeAdapter:
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
             cache_create_tokens=cache_create_tokens,
-            # A transcript carries no dollar figure (the shared seam contract,
-            # `IHarnessUsageAccounting.sum_transcript_usage`) — token counts stay
-            # authoritative regardless.
+            # A transcript carries no dollar figure (`IHarnessUsageAccounting.sum_transcript_usage`);
+            # token counts stay authoritative regardless.
             cost_usd=None,
         )
 

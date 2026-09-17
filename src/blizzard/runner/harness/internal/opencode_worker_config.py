@@ -1,10 +1,9 @@
 """The runner-owned OpenCode permission/plugin document (execution spec, D7).
 
-Written outside every project repository — beside ``worker-settings.json`` in the runtime
-root — and supplied to a spawned worker through ``OPENCODE_CONFIG``/``OPENCODE_CONFIG_CONTENT``
-(``docs/deployment/opencode-compatibility.md``, "configuration_isolation"). Phase 2 writes only
-the permission half; the plugin's own heartbeat and ``shell.env`` identity jobs are phase 4's,
-which extends :func:`render_worker_config`'s ``plugins`` rather than inventing a second document."""
+Written beside ``worker-settings.json`` in the runtime root, and supplied to a spawned worker
+through ``OPENCODE_CONFIG``/``OPENCODE_CONFIG_CONTENT`` ("configuration_isolation"). Phase 2
+writes only the permission half; the plugin's heartbeat/``shell.env`` jobs are phase 4's,
+extending :func:`render_worker_config`'s ``plugins`` rather than a second document."""
 
 from __future__ import annotations
 
@@ -13,10 +12,7 @@ from pathlib import Path
 
 from blizzard.runner.harness.internal.opencode_shapes import parse_worker_config
 
-# A headless worker has no one to answer OpenCode's native `question` tool, and
-# `blizzard runner ask` is its lease-authenticated replacement (execution spec, "Models,
-# effort, permissions, and compaction") — the runner-owned document denies it explicitly
-# rather than leaving an unattended prompt to hang forever.
+# A headless worker has no one to answer `question`; `blizzard runner ask` replaces it, so deny rather than hang.
 _UNATTENDED_DENIALS: dict[str, str] = {"question": "deny"}
 
 

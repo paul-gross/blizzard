@@ -667,9 +667,8 @@ class FakeHarness:
         # `handle`'s worker pid by default, so a probe scripted around the worker's liveness
         # never accidentally also governs the elicitation's.
         self._judge_pid = judge_pid
-        # Defaults to `judge_pid` (D3): a real launch's pgid always equals its own pid
-        # (`start_new_session=True`), the same invariant `spawn`'s own handle below mirrors —
-        # an explicit `judge_pgid=None` opts a test back into "unset", the un-armable-gap shape.
+        # Defaults to `judge_pid` (D3): a real launch's pgid always equals its own pid;
+        # an explicit `judge_pgid=None` opts a test back into the "unset" shape.
         self._judge_pgid = judge_pgid if judge_pgid is not None else judge_pid
         self._judge_process_start_time = judge_process_start_time
         # What `judge` writes to its `output_path` — content is irrelevant to this fake's

@@ -88,16 +88,10 @@ class Attempt:
 
     def _kill_process(self) -> None:
         """Best-effort teardown of this lease's own worker process (D3): by its recorded
-        process group when one is durable and current for THIS pid, else by bare pid — a
-        pre-two-phase-spawn lease, or a resumed one whose own launch never re-recorded a
-        group. The epoch fence is what actually makes a stray survivor harmless; this is
-        hygiene, not the guarantee, but a group kill also reaps a worker's own descendants
-        a bare pid kill cannot reach.
-
-        Re-checks liveness against the recorded ``(pid, process_start_time)`` first: enough
-        elapsed time can let the OS recycle a dead pid's pgid for an unrelated process
-        group, and a bare ``killpg`` with no such check would SIGKILL whatever now holds it
-        rather than this lease's own, long-gone worker."""
+        process group when durable and current for THIS pid, else by bare pid (a
+        pre-two-phase-spawn or resumed lease); a group kill also reaps descendants a bare
+        pid kill cannot reach. Re-checks liveness against ``(pid, process_start_time)``
+        first — the OS can recycle a dead pid's pgid, and an unchecked ``killpg`` would hit whoever now holds it."""
         lease = self.lease
         if lease.pid is None or lease.process_start_time is None:
             return

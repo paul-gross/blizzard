@@ -19,9 +19,7 @@ depends_on = None
 _LEASES = "leases"
 _SPAWNS = "lease_spawns"
 
-# All new columns stay nullable, so a plain `add_column` suffices (`bzh:sql-portable`) —
-# nothing here needs `batch_alter_table`'s table-copy recreate, which is only load-bearing
-# when narrowing an existing constraint.
+# All new columns stay nullable, so a plain `add_column` suffices (`bzh:sql-portable`).
 _LEASE_COLUMNS = (("pgid", sa.Integer()),)
 _SPAWN_COLUMNS = (
     ("pid", sa.Integer()),

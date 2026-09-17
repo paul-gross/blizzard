@@ -1,10 +1,9 @@
 """The coding-harness adapter seam.
 
 Four operations cover every headless-run + persisted-session + resume harness: ``spawn``,
-``resume_with_message``, ``resume_command``, and ``parse_verdict``. Usage translation and
-the transcript source ride alongside them. Provider subscription sampling is a separate,
-provider-selected seam (blizzard#436): see ``blizzard.runner.subscriptions.subscription_sampler``.
-Adapters stay dumb (``bzh:deterministic-shell``): they translate, they never decide."""
+``resume_with_message``, ``resume_command``, and ``parse_verdict``, plus usage translation
+and the transcript source. Provider subscription sampling is a separate, provider-selected
+seam (blizzard#436). Adapters stay dumb (``bzh:deterministic-shell``): they never decide."""
 
 from __future__ import annotations
 
@@ -18,14 +17,7 @@ from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
 
 
-#: The default bound on :meth:`PendingWorkerHandle.await_identity` — generous next to a
-#: real harness's spawn latency, since a wedged one is what this timeout is for. Claude
-#: Code's own ``await_identity`` is instant (it already knows its preassigned
-#: ``--session-id``); this only matters to a harness that must read a stream for it. The
-#: ONE place this bound is declared: the reconciliation loop's own spawn
-#: (``blizzard.runner.loop.spawn``) and the selftest canary's gate
-#: (``blizzard.runner.selftest.checks``) both import it rather than each declaring their
-#: own copy that tuning one could silently leave the other behind.
+#: Sole-declared default bound on :meth:`PendingWorkerHandle.await_identity`; spawn and selftest both import it.
 DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS = 30.0
 
 
@@ -37,21 +29,17 @@ class HarnessSpawnError(RuntimeError):
 
 
 class WorkerIdentityError(RuntimeError):
-    """``PendingWorkerHandle.await_identity`` could not confirm the launch's session id —
-    a timeout, a malformed reply, or the process exiting before identity arrived.
-
-    Distinct from :class:`HarnessSpawnError`: a real process already exists by the time
-    this can be raised, so its caller (:class:`~blizzard.runner.loop.spawn.Spawner`) must
-    kill the group it already durably recorded, never merely treat it as "nothing
-    started"."""
+    """``PendingWorkerHandle.await_identity`` could not confirm the launch's session id.
+    Distinct from :class:`HarnessSpawnError`: a real process already exists, so its
+    caller (:class:`~blizzard.runner.loop.spawn.Spawner`) must kill the group it
+    already durably recorded, never treat it as "nothing started"."""
 
 
 @dataclass(frozen=True)
 class WorkerPreamble:
-    """The runner's machine-local preamble prepended to the envelope (issue #17).
-
-    Machine-local execution truth — held environments, lease identity and token, the
-    local-API URL, the spawn cwd, injected capture paths. Never sent to the hub."""
+    """The runner's machine-local preamble prepended to the envelope (issue #17): held
+    environments, lease identity and token, the local-API URL, the spawn cwd, and
+    injected capture paths. Never sent to the hub."""
 
     environments: list[AcquiredEnvironment]
     lease_id: str
@@ -67,10 +55,8 @@ class WorkerPreamble:
 class WorkerHandle:
     """The facts a launch is authoritative on once identified (D1/D2) — this IS a
     :class:`PendingWorkerHandle` for any harness that already knows its session id at
-    launch (every binding today, Claude Code's preassigned ``--session-id`` included):
-    ``await_identity`` is trivially itself, never a real wait. A future harness whose
-    identity only arrives from its own stream (e.g. reading its stdout after launch)
-    returns a distinct pending type instead, one with no ``session_id`` until identified."""
+    launch (every binding today): ``await_identity`` is trivially itself. A harness
+    whose identity only arrives later returns a distinct pending type instead."""
 
     session_id: str  # harness-assigned where it self-assigns, else the honored hint
     pid: int
@@ -86,9 +72,7 @@ class PendingWorkerHandle(Protocol):
     """``spawn``'s own phase-one return (D1): the launched process's OS facts — pid, start
     time, and owned group — durable-worthy before any identity is known. A Protocol, not a
     dataclass, since ``await_identity`` may block or read a stream rather than merely
-    return data already in hand. Every member is a read-only property, never a plain
-    mutable attribute — the only shape a frozen dataclass like :class:`WorkerHandle` can
-    structurally satisfy."""
+    return data already in hand."""
 
     @property
     def pid(self) -> int: ...
@@ -124,21 +108,17 @@ class IHarnessWorkerLifecycle(Protocol):
         compaction_window: str | None = None,
     ) -> PendingWorkerHandle:
         """Start a headless worker; return its pending handle (D1) — pid, start time, and
-        process group, immediately, before identity is confirmed.
-
-        ``model``/``effort``/``compaction_window`` (issue #144, blizzard#343) arrive already
-        resolved; ``model`` applies at **mint only**, the other two on **every** invocation.
-        ``resume_from`` (#115) continues a session; the handle's eventual ``await_identity``
-        result is authoritative."""
+        process group, before identity is confirmed. ``model``/``effort``/
+        ``compaction_window`` (issue #144, blizzard#343) arrive already resolved; ``model``
+        applies at **mint only**, the other two on **every** invocation. ``resume_from``
+        (#115) continues a session; ``await_identity``'s result is authoritative."""
         ...
 
     def honors_session_hint(self) -> bool:
         """True iff a fresh spawn's identified session id always equals ``session_hint``.
-
-        Claude Code declares ``True`` (it launches with a preassigned ``--session-id``); a
-        harness that self-assigns its own id declares ``False`` — the selftest's spawn gate
-        (``blizzard.runner.selftest.checks.Spawn``) only demands hint-equality where this is
-        ``True``, never as a harness-neutral requirement."""
+        Claude Code declares ``True`` (preassigned ``--session-id``); a self-assigning
+        harness declares ``False`` — the selftest's spawn gate
+        (``blizzard.runner.selftest.checks.Spawn``) only demands hint-equality where ``True``."""
         ...
 
     def observe_version(self) -> str | None:

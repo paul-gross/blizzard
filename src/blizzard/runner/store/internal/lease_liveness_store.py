@@ -60,10 +60,8 @@ def _open_transcript_segment(
 ) -> None:
     """Open this generation's transcript segment, carrying a resumed session's cursor
     forward and finalizing its predecessor — shared by :meth:`~LeaseLivenessStore.record_spawn`
-    (identity known at write time) and :meth:`~LeaseLivenessStore.record_identified_spawn`
-    (identity known only now, at phase two). Every start path reaching either one is a
-    segment boundary (issue #246, D1) — stamped here, not at the call sites, so a fourth
-    write can't miss it."""
+    and :meth:`~LeaseLivenessStore.record_identified_spawn`. Every start path is a segment
+    boundary (issue #246, D1), stamped here so a future write can't miss it."""
     context_row = conn.execute(
         select(leases.c.chunk_id, leases.c.epoch, lease_context.c.node_id)
         .select_from(leases.join(lease_context, leases.c.lease_id == lease_context.c.lease_id))
@@ -182,10 +180,8 @@ class LeaseLivenessStore:
                     process_start_time=process_start_time,
                     session_id=session.session_id,
                     harness_id=session.harness_id,
-                    # `pgid` is written unconditionally, defaulting `None` (D3): a caller
-                    # that doesn't know this launch's group must not leave a PRIOR
-                    # generation's now-stale one standing, which would target a dead
-                    # process's group rather than honestly reading as "unknown".
+                    # `pgid` defaults `None` (D3): an unknowing caller must not leave a
+                    # PRIOR generation's stale group standing rather than reading "unknown".
                     pgid=pgid,
                 )
             )

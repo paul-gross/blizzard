@@ -65,11 +65,9 @@ def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
 
 
 def test_an_active_lease_with_no_live_process_at_its_recorded_pid_is_a_violation(tmp_path: Path) -> None:
-    """review F17: the checker must actually probe process liveness for an ACTIVE lease's
-    still-provisional generation, not just inspect record consistency for a closed one —
-    a live-looking record whose process is actually gone is exactly the state a real
-    crash-recovery gap would leave. No ``session_id`` is ever recorded here (provisional:
-    identity not yet known), and the check only runs when asked for post-recovery."""
+    """The checker must probe process liveness for an ACTIVE lease's still-provisional
+    generation, not just closed-lease record consistency — a live-looking record whose
+    process is gone is exactly a crash-recovery gap. Runs only post-recovery."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(
@@ -113,9 +111,8 @@ def test_an_active_lease_with_a_genuinely_live_process_is_not_a_violation(tmp_pa
 
 def test_two_active_leases_claiming_the_same_live_process_is_a_violation(tmp_path: Path) -> None:
     """An ambiguous owner: two distinct active leases (different chunks, so this never
-    trips the one-live-lease-per-chunk check instead) both recording the exact same
-    (pid, start_time) — at most one of those durable records can be honest, regardless of
-    either lease's provisional status."""
+    trips the one-live-lease-per-chunk check) recording the exact same (pid, start_time)
+    — at most one durable record can be honest, regardless of provisional status."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         for lease_id, chunk_id in (("lease_a", "ch_1"), ("lease_b", "ch_2")):

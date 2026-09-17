@@ -1,14 +1,8 @@
-"""The runner-owned process launcher (``ProcessLauncher``, D4) — process-group ownership
-and the parent-death signal's thread scoping.
-
-``PR_SET_PDEATHSIG`` (``man 2 prctl``) tracks the death of the SPECIFIC OS thread that
-called it, not the process it belongs to. A launcher that forks directly from a
-request-scoped or tick-scoped thread would SIGKILL every already-launched, healthy
-worker the instant that ONE thread exits — even while the daemon process carries on —
-silently defeating the orphan-reattach recovery a graceful ``driver.stop()`` promises
-(``docs/deployment/recovery.md``). ``ProcessLauncher`` proxies the actual fork/exec
-through its own long-lived executor for exactly this reason; these tests hold it to that.
-"""
+"""The runner-owned process launcher (``ProcessLauncher``, D4): process-group ownership
+and the parent-death signal's thread scoping. ``PR_SET_PDEATHSIG`` tracks the death of the
+SPECIFIC OS thread that called it, not the process — a launcher forking directly from a
+tick-scoped thread would SIGKILL every worker the instant that thread exits, even
+mid-``driver.stop()``; ``ProcessLauncher`` proxies fork/exec through its own executor to avoid this."""
 
 from __future__ import annotations
 
@@ -44,15 +38,9 @@ def test_launched_process_gets_its_own_process_group() -> None:
 
 @pytest.mark.unit
 def test_stopping_the_launching_thread_does_not_kill_an_already_launched_child() -> None:
-    """The regression this cluster's review found missing: join the SPECIFIC thread/executor
-    that issued the launch — simulating a graceful ``driver.stop()`` of the reconciliation
-    loop's own tick thread — while the test process (standing in for the daemon process)
-    keeps right on running, and assert the child is still alive afterward.
-
-    Under the pre-fix code (``preexec_fn`` calling ``prctl`` directly on whatever thread
-    called ``Popen``), shutting down this single-worker executor reproduced exactly the
-    thread-death `driver.stop()` triggers in production, and the child was SIGKILLed the
-    moment the executor's worker thread exited — well before the daemon process itself did."""
+    """Join the launching executor (simulating ``driver.stop()`` of the tick thread) while
+    the test process (standing in for the daemon) keeps running; a bare ``preexec_fn`` on
+    the calling thread would have SIGKILLed the child right there instead."""
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="test-spawner")
     launcher = ProcessLauncher(LinuxProcessProbe(), executor=executor)
     launched = launcher.launch(["sleep", "5"], cwd=None, env=dict(os.environ), stdout=None, stderr=None)

@@ -24,8 +24,7 @@ CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
 # The runner-owned worker hook file `init` scaffolds, delivering the heartbeat hook.
 WORKER_SETTINGS_FILENAME = "worker-settings.json"
-# The runner-owned OpenCode permission/plugin document `init` scaffolds (D7) — phase 2
-# writes only its permission half; phase 4 extends the same document with the plugin.
+# The runner-owned OpenCode permission/plugin document `init` scaffolds (D7).
 OPENCODE_WORKER_CONFIG_FILENAME = "opencode-worker-config.json"
 # The local API's unix socket, under the state dir beside the store; filesystem
 # permissions are its access control.
@@ -481,21 +480,13 @@ class RunnerConfig:
     #: Effort alias mappings (issue #144) onto the `low|medium|high|max` ordinal; the
     #: well-known four need no entry.
     effort_aliases: tuple[tuple[str, str], ...] = ()
-    #: OpenCode's own binary path (D6) — genuinely independent of `harness_binary`, which
-    #: keeps meaning Claude Code's binary exactly as it always has; no deployed
-    #: `blizzard-runner.toml` needs an edit to keep working.
+    #: OpenCode's own binary path (D6), independent of `harness_binary` (still Claude Code's).
     opencode_binary: str = DEFAULT_OPENCODE_BINARY
-    #: OpenCode's own tier -> `provider/model` mapping (D6). Unlike Claude Code's three
-    #: built-in tiers, OpenCode ships no built-in mapping at all: an unmapped tier makes
-    #: `resolve_model_strict` return `None`, which is what lets a multi-harness selection
-    #: skip this binding instead of spawning it under a model it cannot provide
-    #: (harness-selection spec).
+    #: OpenCode's tier -> `provider/model` mapping (D6); unmapped tiers skip this binding rather than spawn unprovisioned.
     opencode_model_aliases: tuple[tuple[str, str], ...] = ()
-    #: OpenCode's own effort -> `--variant` mapping (D6); the well-known ordinal still
-    #: passes through unmapped, exactly as Claude Code's effort aliasing does.
+    #: OpenCode's effort -> `--variant` mapping (D6); unmapped values pass through unchanged.
     opencode_effort_aliases: tuple[tuple[str, str], ...] = ()
-    #: The runner-owned OpenCode permission/plugin document's path (D7) — `init` scaffolds
-    #: it beside `worker_settings_path`; `None` when this runtime predates the binding.
+    #: The runner-owned OpenCode permission/plugin document's path (D7); `None` predates the binding.
     opencode_worker_config_path: str | None = None
     #: The reverse-proxy trust set (issue #130) — addresses or CIDRs whose
     #: `X-Forwarded-Proto` is honored; empty ignores the header from every peer.
@@ -922,12 +913,8 @@ class RunnerConfig:
             opencode_binary=opencode.word("binary") or DEFAULT_OPENCODE_BINARY,
             opencode_model_aliases=Table.of(opencode.body.get("models")).pairs("aliases"),
             opencode_effort_aliases=Table.of(opencode.body.get("effort")).pairs("aliases"),
-            # An upgraded runner's `blizzard-runner.toml` predates the `[opencode]` table
-            # (phase 2) and carries no `worker_config_path` — falling back to `None` there
-            # would spawn OpenCode with no runner-owned permission/plugin document at all
-            # (D7), silently handing it over to its own default config discovery. The same
-            # default `Runtime.init` scaffolds for a fresh runtime keeps an upgraded one
-            # identically covered, with nothing to hand-edit.
+            # A pre-`[opencode]` config carries no `worker_config_path`; default to the
+            # same path a fresh `Runtime.init` scaffolds rather than `None` (D7).
             opencode_worker_config_path=(
                 opencode.word("worker_config_path") or str(root / OPENCODE_WORKER_CONFIG_FILENAME)
             ),

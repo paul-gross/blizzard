@@ -115,11 +115,7 @@ _CI_SUBSET = (
     "pull.after-flush",
     "fill.after-bind.before-claim",
     "spawn.after-lease-mint.before-spawn",
-    # The two-phase spawn's own three windows (D1/D2): each brackets a durable write the
-    # provisional-ownership/orphan-reattach story rests on (`bzh:crash-point-registry`),
-    # narrower than the family's lone-representative rule above would otherwise carve
-    # out — all three are recovery-critical enough to earn their own CI coverage rather
-    # than riding only on the full sweep.
+    # The two-phase spawn's three windows (D1/D2): recovery-critical enough to earn their own CI coverage.
     "spawn.after-launch.before-provisional-record",
     "spawn.after-provisional-record.before-identity",
     "spawn.after-identity.before-session-record",
@@ -232,14 +228,10 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str) -> None:
-    """``when`` doubles as the recovery-checkpoint signal every call site already narrates:
-    one starting "immediately after" is the raw, un-reconciled snapshot the instant a kill
-    lands — ``ActiveLeaseProcessIsLive`` (D3) does not hold there by construction, since a
-    worker dying the instant its own daemon does is that crash's correct immediate
-    aftermath, not a violation (`Invariants.run`'s own docstring). Every other phrasing
-    here ("after convergence...", "after runner-daemon recovery", "after graceful
-    restart-resume", ...) is a checkpoint reached only once REAP/RESUME had their normal
-    chance to reconcile it, so that check is asked for there."""
+    """``when`` doubles as the recovery-checkpoint signal every call site narrates: one
+    starting "immediately after" is the raw, un-reconciled snapshot the instant a kill
+    lands — ``ActiveLeaseProcessIsLive`` (D3) does not hold there by construction. Every
+    other phrasing is a checkpoint reached only once REAP/RESUME reconciled it, so that check is asked for there."""
     runner_db = RunnerConfig.load(runner_dir).db_url
     hub_db = HubConfig.load(hub_dir).db_url
     after_recovery = not when.startswith("immediately after")

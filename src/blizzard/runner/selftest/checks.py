@@ -119,8 +119,7 @@ class Spawn:
         except Exception as exc:  # the adapter is untrusted external-CLI surface
             return cls(SelfTestCheck(SPAWN_SESSION_ID, False, f"spawn raised: {exc}"), None)
         # The harness-neutral claim (D1/D2): non-empty and authoritative. Hint-equality is
-        # demanded only where the adapter declares it honors the hint — Claude Code does,
-        # so its stricter check still holds; a harness that self-assigns never could.
+        # demanded only where the adapter declares it honors the hint (Claude Code does).
         if not handle.session_id:
             detail = "spawn returned an empty session id — never authoritative"
             return cls(SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle)

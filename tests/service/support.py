@@ -182,13 +182,7 @@ BUILD_SCRIPT = (
 )
 JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
-# The OpenCode-safe build node: identical to `BUILD_SCRIPT`, except every `subprocess.run`
-# call captures its own output instead of inheriting the mock's stdout. The real OpenCode CLI
-# never lets a tool's raw output land directly on `opencode run --format json`'s own stdout —
-# every tool result is reported as a structured event — and `mock-opencode`'s adapter reads
-# its very first stdout line as the fresh-session identity (execution spec, "Fresh-session
-# handshake"), so a script that lets `git commit`'s own banner print ahead of it (harmless
-# for Claude Code's own end-of-run envelope parse) would corrupt that first line here.
+# The OpenCode-safe build node: like `BUILD_SCRIPT`, but every `subprocess.run` captures its own output — mock-opencode reads the first stdout line as the fresh-session identity.
 OPENCODE_BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -284,27 +278,19 @@ def mock_hub_chunk_spec(work_ref: str) -> dict:
     }
 
 
-#: The pool name ``build`` and ``review`` share (issue #144) — a second node declaring the
-#: SAME ``session_name`` resumes the first node's already-minted session rather than minting
-#: its own, which is exactly the cross-node-resume shape :func:`mock_hub_opencode_chunk_spec`
-#: exists to exercise.
+#: The pool name ``build``/``review`` share (issue #144) — declaring the SAME ``session_name`` resumes the first node's minted session, the cross-node-resume shape this exercises.
 OPENCODE_SESSION_POOL = "opencode-pool"
 
-#: ``review``'s base turn: a no-op, mirroring ``tests/e2e/test_acceptance_loop.py``'s own
-#: scripted review node — the verdict comes from the judgement resume, not the base turn.
+#: ``review``'s base turn: a no-op; the verdict comes from the judgement resume, not this.
 OPENCODE_REVIEW_SCRIPT = "pass\n"
 OPENCODE_REVIEW_JUDGEMENT = "verdict('pass', 'resumed the same OpenCode session; review complete')\n"
 
 
 def mock_hub_opencode_chunk_spec(work_ref: str) -> dict:
     """A scripted build -> review -> done chunk run entirely under OpenCode (D9/D10).
-
-    ``build`` and ``review`` are two distinct node-steps sharing one ``session_name`` pool:
-    ``build`` mints the pool's head fresh (a genuine OpenCode fresh-session handshake) and
-    resumes it once more for its own judgement; ``review`` then resumes that SAME session a
-    third and fourth time (its base turn, then its judgement) — the cross-node resume the
-    execution spec's OpenCode binding must serve exactly as Claude Code's own session pools
-    already do."""
+    ``build`` and ``review`` share one ``session_name`` pool: ``build`` mints the pool's
+    head fresh and resumes it for its own judgement; ``review`` then resumes that SAME
+    session twice more — the cross-node resume the execution spec's OpenCode binding must serve."""
     return {
         "graph_id": "gr_service_opencode",
         "entry": "build",

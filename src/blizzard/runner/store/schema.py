@@ -126,15 +126,13 @@ lease_spawns = Table(
     # generation records the executable/version that actually started it.
     Column("harness_id", String, nullable=True),
     Column("harness_version", String, nullable=True),
-    # Phase one (D1/D2): this generation's launch-time process facts, durable before its
-    # identity is known — `None` for a generation recorded the single-shot way
-    # (`record_spawn`, which already knows its identity at write time).
+    # Phase one (D1/D2): launch-time process facts, durable before identity is known;
+    # `None` for a generation recorded the single-shot way (`record_spawn`).
     Column("pid", Integer, nullable=True),
     Column("process_start_time", String, nullable=True),
     Column("pgid", Integer, nullable=True),
-    # Phase two (D1/D2): set together once this generation's identity is confirmed —
-    # `bzh:facts-not-status`'s closing-fact shape, not a status column. A generation with
-    # `pid` set and both of these `NULL` is durably provisional.
+    # Phase two (D1/D2): set together once identity is confirmed (`bzh:facts-not-status`'s
+    # closing-fact shape). A generation with `pid` set and both `NULL` is durably provisional.
     Column("session_id", String, nullable=True),
     Column("identified_at", UtcDateTime, nullable=True),
     # The other way a provisional generation closes: identity never arrived.

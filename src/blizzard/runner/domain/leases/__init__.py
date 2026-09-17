@@ -128,9 +128,7 @@ class LeaseRecord:
     process_start_time: str | None = None
     session_id: str | None = None
     harness_id: str | None = None
-    # The owned process group (D3) — recorded at the same write as `pid`, never inferred
-    # from it; `None` until a two-phase spawn's phase one lands, or for a lease whose only
-    # `record_spawn` never supplied one (a resume, or a pre-migration row).
+    # The owned process group (D3), recorded alongside `pid`, never inferred from it.
     pgid: int | None = None
 
     @property

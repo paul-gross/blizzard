@@ -360,8 +360,7 @@ def test_only_the_composition_roots_import_the_runner_composition_module() -> No
     )
 
 
-# Each gated concrete adapter class may be imported only by its one approved factory
-# module (D9) — every composition root takes the registry that factory builds instead.
+# Each gated concrete adapter class may be imported only by its one approved factory module (D9).
 _GATED_COMPOSITIONS: dict[str, Path] = {
     "ClaudeCodeAdapter": _RUNNER_DIR / "harness" / "internal" / "harness_registry.py",
     "OpenCodeAdapter": _RUNNER_DIR / "harness" / "internal" / "opencode_registry.py",

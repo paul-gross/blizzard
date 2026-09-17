@@ -90,15 +90,9 @@ class OneLiveLeasePerChunk(QueryCheck):
 
 class NoUnownedLiveLeaseProcess(QueryCheck):
     """Once a lease closes, no generation it launched is left ambiguously provisional
-    (D1/D2) — a pid recorded with neither an identified session nor a recorded identity
-    failure. A still-OPEN lease legitimately sits provisional between a two-phase spawn's
-    own phase one and phase two (or while REAP has not yet reached it), so this checks
-    only CLOSED leases: REAP's ordinary sweep always resolves a provisional generation one
-    way or the other (killing its owned group first) before ``Attempt.fail`` can close the
-    lease over it, so a closed lease with a still-ambiguous generation means an orphaned
-    launch's group was never torn down and recorded — the two-phase spawn's own
-    correctness claim, and the invariant `bzh:crash-point-registry`'s three new spawn
-    windows owe the checker."""
+    (D1/D2) — a pid with neither an identified session nor a recorded identity failure.
+    Only CLOSED leases are checked: REAP always resolves a provisional generation, killing
+    its group, before ``Attempt.fail`` closes the lease, so an ambiguous closed one means an orphaned launch's group leaked."""
 
     def run(self) -> list[Violation]:
         closed = select(runner.lease_closures.c.lease_id)
@@ -120,24 +114,10 @@ class NoUnownedLiveLeaseProcess(QueryCheck):
 
 @dataclass(frozen=True)
 class ActiveLeaseProcessIsLive(QueryCheck):
-    """The ACTIVE-lease half of :class:`NoUnownedLiveLeaseProcess`'s own claim (D1/D2):
-    that one only inspects CLOSED leases' record consistency and never actually probes an
-    OS process at all — the plan's own stated claim, "no active lease has an unowned live
-    process after recovery", is checked nowhere until this one.
-
-    Liveness is probed only for a still-PROVISIONAL generation (a recorded pid with no
-    identified ``session_id`` yet) — never for an already-identified one: an identified
-    worker legitimately exits on its own well before the next ADVANCE pass notices
-    (exit-is-done is an ordinary, asynchronous gap, not a fault), so asserting liveness
-    there would false-positive on every healthy runner between ticks. A provisional
-    generation has no such gap in ordinary operation: :meth:`Spawner.spawn` either
-    identifies or kills-and-fails it synchronously, in the same call that recorded it, so
-    one still standing with a dead process implies REAP has not yet reaped it — sound only
-    once a recovery pass had its chance to (``RunnerInvariants.run``'s own
-    ``after_recovery`` docstring). Ambiguous ownership — two active leases naming the
-    exact same live ``(pid, start_time)`` — is checked across every active lease
-    regardless of provisional status: two REAL, distinct OS process launches sharing an
-    identical (pid, start_time) is not a coincidence ordinary operation can produce."""
+    """The ACTIVE-lease half of :class:`NoUnownedLiveLeaseProcess`'s claim (D1/D2), which
+    only inspects CLOSED leases, never an OS process. Liveness is probed only for a
+    still-PROVISIONAL generation — an identified one may exit asynchronously — sound only
+    after a recovery pass. Ambiguous ownership (two active leases sharing a live ``(pid, start_time)``) is checked regardless."""
 
     process: IProcessProbe
 
@@ -799,26 +779,18 @@ class LiveRouteHasToken(FactsCheck):
 @dataclass(frozen=True)
 class RunnerInvariants:
     """The runner store's durable invariants (leases, bindings, outbound buffer).
-
-    ``process`` defaults to the real ``/proc`` probe (production); a crash-sweep or unit
-    test may inject a fake one instead — this is the only check below that ever touches a
-    live OS process rather than the store alone."""
+    ``process`` defaults to the real ``/proc`` probe; a crash-sweep or unit test may inject
+    a fake one — this is the only check below that touches a live OS process."""
 
     engine: Engine
     process: IProcessProbe = field(default_factory=LinuxProcessProbe)
 
     def run(self, *, after_recovery: bool = False) -> list[Violation]:
         """``after_recovery=True`` additionally runs :class:`ActiveLeaseProcessIsLive` (D3).
-
-        That check is only sound once a recovery pass has had its normal chance to run: a
-        worker dying the instant its own daemon does is the CORRECT immediate aftermath of
-        a crash (the same parent-death signal ``ProcessLauncher`` arms kills it right along
-        with the daemon process that forked it), not a violation — asserting it
-        unconditionally would false-positive on every crash scenario's own
-        immediately-after-kill snapshot, before REAP/RESUME ever got a tick to reconcile
-        it. A caller checking a live, running system, or a post-convergence snapshot,
-        passes ``after_recovery=True``; a caller checking the instant after a raw kill -9
-        leaves it ``False``."""
+        That check is sound only once a recovery pass has had its chance: a worker dying
+        the instant its daemon does is the CORRECT immediate aftermath of a crash, not a
+        violation, before REAP/RESUME ever reconciles it. A live-system or post-convergence
+        caller passes ``True``; right after a raw kill -9 leaves it ``False``."""
         violations: list[Violation] = []
         with self.engine.connect() as conn:
             checks: tuple[QueryCheck, ...] = (

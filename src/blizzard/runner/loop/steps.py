@@ -167,13 +167,8 @@ class Reap(Step):
                 continue
             if lease.pid is None or lease.session_id is None:
                 if lease.pid is not None:
-                    # A durably-provisional generation (D1/D2): a real process was
-                    # launched but its identity never landed durably. Mark the generation
-                    # closed-unidentified before failing the attempt — `Attempt.fail`'s
-                    # own kill already tears down the group this launch's record named
-                    # (D3); REAP's ordinary "unspawned" path is this window's only
-                    # recovery, so it must close the book on the generation too, not
-                    # leave it ambiguously open forever (`bzh:invariant-checker`).
+                    # A durably-provisional generation (D1/D2): close it unidentified before
+                    # failing the attempt, so REAP doesn't leave the generation ambiguously open.
                     ctx.stores.liveness.record_identity_failed(lease.lease_id, at=now)
                 _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
                 Attempt(ctx, lease).fail(reason=REAPED, via="reap")

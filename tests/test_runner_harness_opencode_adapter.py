@@ -608,18 +608,16 @@ def test_parse_usage_matches_the_expected_shape_for_every_fixture(name: str, pay
 
 @pytest.mark.unit
 def test_verdict_body_never_carries_tool_output_or_child_session_text() -> None:
-    # `child_session`'s own tool call and its child's conversation are the corpus's
-    # sharpest exclusion cases: a "task" tool whose output text and whose separately
-    # exported child conversation must never leak into the root turn's verdict body.
+    # `child_session`'s tool call and its child's conversation must never leak into the
+    # root turn's verdict body — the corpus's sharpest exclusion case.
     payload = _fixture("child_session")
     output = _jsonl(payload["events"])
     adapter = _adapter()
 
     assert adapter.parse_verdict(output) is None
     assert adapter.parse_assessment(output) == ""
-    # The child's own conversational reply ("The relevant files are present.") lives only
-    # in `child_export`, a wholly separate document this adapter never reads for
-    # verdict/assessment parsing — asserted structurally below, fixture by fixture.
+    # The child's own reply lives only in `child_export`, a document this adapter never
+    # reads for verdict/assessment parsing — asserted structurally below.
 
     for fixture_name, fixture_payload in _fixtures():
         fixture_output = _jsonl(fixture_payload["events"])
@@ -666,9 +664,8 @@ def test_parse_events_skips_one_malformed_trailing_line_and_keeps_the_rest() -> 
 
 @pytest.mark.unit
 def test_sum_transcript_usage_dedups_a_step_described_by_both_event_and_exported_message() -> None:
-    # `child_session` is the corpus fixture that specifically exercises this: the root's
-    # one completed step ("prt_child_finish") is described both by the process's own
-    # stdout event and by the exported message carrying the same part.
+    # `child_session` exercises this: the root's one completed step ("prt_child_finish")
+    # is described both by the process's stdout event and the exported message.
     payload = _fixture("child_session")
     event_lines = [json.dumps(event) for event in payload["events"]]
     message_lines = [json.dumps(message) for message in payload["export"]["messages"]]

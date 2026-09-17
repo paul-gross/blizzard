@@ -68,19 +68,10 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         pgid: int | None = None,
     ) -> None:
         """Fill a lease's spawn-return facts in one shot: pid, process start time, process
-        group, session id — for a caller whose identity is known at the SAME instant as its
-        process facts (a resume; a harness that self-identifies at launch). A fresh mint's
-        own two-phase spawn instead splits this across :meth:`record_provisional_spawn` and
-        :meth:`record_identified_spawn` (D1/D2), so a crash between launch and identity is
-        recoverable rather than indistinguishable from never having spawned at all.
-
-        ``pgid`` defaults to ``None`` — a write that does not know its launch's owned group
-        (every call site but the two-phase one) leaves recovery to fall back to a bare pid
-        kill for THIS generation, never a stale group from an earlier one.
-
-        ``spawned_at`` additionally appends the lease's spawn generation, so a fact recorded
-        by an earlier session of the same lease can be told from one recorded by the process
-        running now (issue #13)."""
+        group, session id — for identity known at spawn time (a fresh mint instead splits
+        this across :meth:`record_provisional_spawn`/:meth:`record_identified_spawn`, D1/D2).
+        ``pgid`` defaults to ``None`` when the launch's owned group is unknown. ``spawned_at``
+        appends the lease's spawn generation, distinguishing this fact from a stale one (issue #13)."""
         ...
 
     def record_provisional_spawn(

@@ -376,9 +376,8 @@ class ClaudeCodeAdapter:
             if preamble is not None
             else AllowlistedEnv.of(self._env_passthrough).variables
         )
-        # Injected per-lease file (epic #57), mirroring `spawn`'s `preamble.stdout_path`.
-        # `stdout_file`/``stderr`` unset (``None``) inherit the runner's own — unchanged
-        # from before this launched through the shared owner.
+        # Injected per-lease file (epic #57), mirroring `spawn`'s `preamble.stdout_path`;
+        # unset (``None``) inherits the runner's own, as before the shared owner.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None)
         return launched.pid
