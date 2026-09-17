@@ -7,6 +7,7 @@ the component tests launch a real fake ``opencode`` binary through Phase 1's
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -19,11 +20,31 @@ from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerIdentityErr
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter, _PendingOpenCodeIdentity
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
+from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERSION
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, SkippedHarness
 from tests.runner_fakes import FakeProbe, make_envelope
 from tests.support_opencode_binary import worker_binary
+
+_CORPUS_DIR = Path(__file__).resolve().parents[1] / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
+
+
+def _manifest() -> dict[str, Any]:
+    return json.loads((_CORPUS_DIR / "manifest.json").read_text())
+
+
+def _fixtures() -> list[tuple[str, dict[str, Any]]]:
+    manifest = _manifest()
+    return [(entry["name"], json.loads((_CORPUS_DIR / entry["path"]).read_text())) for entry in manifest["fixtures"]]
+
+
+def _fixture(name: str) -> dict[str, Any]:
+    return dict(_fixtures())[name]
+
+
+def _jsonl(events: list[dict[str, Any]]) -> str:
+    return "\n".join(json.dumps(event) for event in events)
 
 
 def _adapter(**kwargs: Any) -> OpenCodeAdapter:
@@ -452,3 +473,162 @@ def test_spawn_with_resume_from_omits_model_and_carries_session(
     assert "--model" not in cmd
     assert cmd[cmd.index("--session") + 1] == "ses_prior"
     assert handle.await_identity(0).session_id == "ses_prior"
+
+
+# --------------------------------------------------------------------------- #
+# Output and usage (execution spec, "Output and usage") — driven off the full pinned corpus.
+
+_EXPECTED_VERDICT_AND_ASSESSMENT: dict[str, tuple[str | None, str]] = {
+    "success": ("pass", ""),
+    "provider_error": (None, "ProviderError: provider request failed (status 503)"),
+    "permission_denial": (None, ""),
+    "interrupted_tool": (None, ""),
+    "compaction": ("pass", ""),
+    "child_session": (None, ""),
+    "live_success": ("pass", "<Choice>pass</Choice>"),
+}
+
+_EXPECTED_USABLE: dict[str, bool] = {
+    "success": True,
+    "provider_error": False,
+    "permission_denial": True,
+    "interrupted_tool": False,
+    "compaction": True,
+    "child_session": True,
+    "live_success": True,
+}
+
+# (input, output — reasoning folded in, cache_read, cache_create, cost_usd)
+_EXPECTED_USAGE: dict[str, tuple[int, int, int, int, float | None]] = {
+    "success": (120, 45 + 18, 30, 15, 0.0123),
+    "provider_error": None,  # type: ignore[dict-item]  # no completed step at all
+    "permission_denial": (40, 8, 0, 0, None),  # cost 0 reads as unknown, never free
+    "interrupted_tool": None,  # type: ignore[dict-item]
+    "compaction": (200, 25 + 10, 90, 5, None),
+    "child_session": (80, 20 + 4, 10, 2, None),
+    "live_success": (120 + 30, (45 + 18) + (8 + 0), 30 + 20, 15 + 0, None),  # two completed steps, one turn
+}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name,payload", _fixtures(), ids=lambda item: item if isinstance(item, str) else "fixture")
+def test_verdict_and_assessment_match_the_expected_shape_for_every_fixture(name: str, payload: dict[str, Any]) -> None:
+    output = _jsonl(payload["events"])
+    adapter = _adapter()
+
+    expected_verdict, expected_assessment = _EXPECTED_VERDICT_AND_ASSESSMENT[name]
+    assert adapter.parse_verdict(output) == expected_verdict
+    assert adapter.parse_assessment(output) == expected_assessment
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name,payload", _fixtures(), ids=lambda item: item if isinstance(item, str) else "fixture")
+def test_has_usable_output_matches_the_expected_shape_for_every_fixture(name: str, payload: dict[str, Any]) -> None:
+    output = _jsonl(payload["events"])
+    assert _adapter().has_usable_output(output) is _EXPECTED_USABLE[name]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name,payload", _fixtures(), ids=lambda item: item if isinstance(item, str) else "fixture")
+def test_parse_usage_matches_the_expected_shape_for_every_fixture(name: str, payload: dict[str, Any]) -> None:
+    output = _jsonl(payload["events"])
+    sample = _adapter().parse_usage(output, "spawn")
+
+    expected = _EXPECTED_USAGE[name]
+    if expected is None:
+        assert sample is None
+        return
+    input_tokens, output_tokens, cache_read_tokens, cache_create_tokens, cost_usd = expected
+    assert sample is not None
+    assert (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens) == (
+        input_tokens,
+        output_tokens,
+        cache_read_tokens,
+        cache_create_tokens,
+    )
+    assert sample.cost_usd == cost_usd
+
+
+@pytest.mark.unit
+def test_verdict_body_never_carries_tool_output_or_child_session_text() -> None:
+    # `child_session`'s own tool call and its child's conversation are the corpus's
+    # sharpest exclusion cases: a "task" tool whose output text and whose separately
+    # exported child conversation must never leak into the root turn's verdict body.
+    payload = _fixture("child_session")
+    output = _jsonl(payload["events"])
+    adapter = _adapter()
+
+    assert adapter.parse_verdict(output) is None
+    assert adapter.parse_assessment(output) == ""
+    # The child's own conversational reply ("The relevant files are present.") lives only
+    # in `child_export`, a wholly separate document this adapter never reads for
+    # verdict/assessment parsing — asserted structurally below, fixture by fixture.
+
+    for fixture_name, fixture_payload in _fixtures():
+        fixture_output = _jsonl(fixture_payload["events"])
+        for event in fixture_payload["events"]:
+            part = event.get("part") or {}
+            tool_output = (part.get("state") or {}).get("output")
+            if tool_output:
+                verdict = adapter.parse_verdict(fixture_output) or ""
+                assessment = adapter.parse_assessment(fixture_output)
+                assert tool_output not in verdict, fixture_name
+                assert tool_output not in assessment, fixture_name
+
+
+@pytest.mark.unit
+def test_parse_usage_and_has_usable_output_tolerate_malformed_capture() -> None:
+    adapter = _adapter()
+    assert adapter.parse_verdict("not json at all") is None
+    assert adapter.parse_assessment("not json at all") == ""
+    assert adapter.has_usable_output("not json at all") is False
+    assert adapter.parse_usage("not json at all", "spawn") is None
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_dedups_a_step_described_by_both_event_and_exported_message() -> None:
+    # `child_session` is the corpus fixture that specifically exercises this: the root's
+    # one completed step ("prt_child_finish") is described both by the process's own
+    # stdout event and by the exported message carrying the same part.
+    payload = _fixture("child_session")
+    event_lines = [json.dumps(event) for event in payload["events"]]
+    message_lines = [json.dumps(message) for message in payload["export"]["messages"]]
+    adapter = _adapter()
+
+    events_only = adapter.sum_transcript_usage(event_lines, "spawn")
+    mixed = adapter.sum_transcript_usage(event_lines + message_lines, "spawn")
+
+    expected = (80, 20 + 4, 10, 2)
+    assert (events_only.input_tokens, events_only.output_tokens, events_only.cache_read_tokens, events_only.cache_create_tokens) == expected
+    assert (mixed.input_tokens, mixed.output_tokens, mixed.cache_read_tokens, mixed.cache_create_tokens) == expected
+    # A transcript never carries a dollar figure, regardless of what the events themselves reported.
+    assert mixed.cost_usd is None
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_skips_tokenless_user_messages_without_raising() -> None:
+    payload = _fixture("success")
+    lines = [json.dumps(message) for message in payload["export"]["messages"]]  # includes the user message
+
+    sample = _adapter().sum_transcript_usage(lines, "spawn")
+
+    assert (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens) == (
+        120,
+        45 + 18,
+        30,
+        15,
+    )
+    assert sample.cost_usd is None
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_ignores_unparseable_lines() -> None:
+    sample = _adapter().sum_transcript_usage(["", "not json", "{}", '{"type": "future_event", "sessionID": "x"}'], "spawn")
+
+    assert (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens) == (
+        0,
+        0,
+        0,
+        0,
+    )
+    assert sample.cost_usd is None

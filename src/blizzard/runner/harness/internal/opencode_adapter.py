@@ -7,16 +7,16 @@ siblings) is never called into here (execution spec, D5): every worker launches 
 Phase 1's :class:`~blizzard.runner.loop.process_launch.ProcessLauncher`, exactly as the Claude
 Code binding does.
 
-Output/usage parsing below is a **temporary minimal stub** — phase 3 of the OpenCode adapter
-epic replaces it with the real root-assistant-text concatenation, tool/child exclusion, and
-step-usage dedup the execution spec's "Output and usage" section requires."""
+Output/usage parsing below implements the execution spec's "Output and usage" section: root
+assistant text concatenation with tool/child exclusion, explicit session-error surfacing, and
+step-usage dedup across a completed turn's own captured stdout."""
 
 from __future__ import annotations
 
 import json
 import subprocess
 import time
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
@@ -31,6 +31,8 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.internal.opencode_shapes import (
+    OpenCodeMessage,
+    OpenCodePart,
     OpenCodeRunEvent,
     OpenCodeShapeError,
     parse_model_reference,
@@ -423,27 +425,97 @@ class OpenCodeAdapter:
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
         return self.identity_env(preamble, envelope.chunk_id, session_id)
 
-    # --- output/usage: TEMPORARY MINIMAL STUB (phase 3 replaces) ------------
+    # --- output/usage (execution spec, "Output and usage") ------------------
 
-    def _joined_text(self, output: str) -> str:
-        """STUB (phase 3 replaces): concatenates every parsed ``text`` part's text in
-        emission order, with no root-vs-child-session exclusion and no ordering by
-        completed step — the execution spec's "Output and usage" section owns the real
-        contract. Malformed JSONL falls back to the raw string so ``parse_verdict``'s own
-        substring scan still has something to search."""
+    @staticmethod
+    def _parse_events(output: str) -> tuple[OpenCodeRunEvent, ...]:
+        """Every event this invocation's own captured stdout carries, in emission order.
+
+        Malformed JSONL parses to no events rather than raising: a process killed mid-write
+        can leave a truncated or non-JSON capture, and that reads as "nothing usable" here
+        — the same tolerance :class:`~.claude_code_adapter.ResultEnvelope` gives a killed
+        Claude Code worker's partial stdout, just with nothing to reverse-scan for."""
         try:
-            events = parse_run_jsonl(output)
+            return parse_run_jsonl(output)
         except OpenCodeShapeError:
-            return output
+            return ()
+
+    @staticmethod
+    def _root_session_id(events: Sequence[OpenCodeRunEvent]) -> str | None:
+        return events[0].session_id if events else None
+
+    @classmethod
+    def _root_text(cls, events: Sequence[OpenCodeRunEvent]) -> str:
+        """Completed root assistant text, concatenated in emission order. Every record
+        ``opencode run --format json`` emits already carries the root session id
+        (execution spec, "Fresh-session handshake"), so the session check below is a
+        defensive belt, not the mechanism doing the excluding: tool output and reasoning
+        are excluded structurally, by never being a ``text`` part in the first place."""
+        root = cls._root_session_id(events)
         texts = [
             event.part.text
             for event in events
-            if event.type == "text" and event.part is not None and event.part.text
+            if event.type == "text"
+            and event.part is not None
+            and event.part.text
+            and event.part.session_id == root
         ]
-        return "\n".join(texts) if texts else output
+        return "\n".join(texts)
+
+    @staticmethod
+    def _session_error(events: Sequence[OpenCodeRunEvent]) -> str | None:
+        """The first explicit session error, formatted for a human reader (execution spec:
+        "surfaces explicit session errors"), or ``None`` when the turn carried none."""
+        for event in events:
+            if event.type == "error" and event.error is not None:
+                detail = f" (status {event.error.status_code})" if event.error.status_code is not None else ""
+                return f"{event.error.name}: {event.error.message}{detail}"
+        return None
+
+    @classmethod
+    def _root_step_finishes(cls, events: Sequence[OpenCodeRunEvent]) -> list[OpenCodePart]:
+        root = cls._root_session_id(events)
+        return [
+            event.part
+            for event in events
+            if event.type == "step_finish" and event.part is not None and event.session_id == root
+        ]
+
+    @staticmethod
+    def _sum_tokens(parts: Iterable[OpenCodePart]) -> tuple[int, int, int, int]:
+        """(input, output, cache-read, cache-write) summed across every distinct completed
+        step's tokens. A step-finish part's ``tokens`` sub-fields are all required by the
+        schema (never optional), so no field is ever defaulted to zero here — a genuinely
+        tokenless message (a ``user`` turn) simply never becomes a step-finish part in the
+        first place. OpenCode's own ``reasoning`` count folds into Blizzard's single
+        ``output_tokens`` column: the shared usage shape carries no separate column for it,
+        and a reasoning token is never simply dropped."""
+        input_tokens = output_tokens = cache_read_tokens = cache_create_tokens = 0
+        for part in parts:
+            tokens = part.tokens
+            if tokens is None:
+                continue
+            input_tokens += tokens.input_tokens
+            output_tokens += tokens.output_tokens + tokens.reasoning_tokens
+            cache_read_tokens += tokens.cache_read_tokens
+            cache_create_tokens += tokens.cache_write_tokens
+        return input_tokens, output_tokens, cache_read_tokens, cache_create_tokens
+
+    @staticmethod
+    def _known_cost(parts: Iterable[OpenCodePart]) -> float | None:
+        """The summed dollar cost, or ``None`` when every step's cost reads as unknown.
+
+        A subscription-authenticated step reports its cost as a literal ``0`` rather than
+        omitting the field (execution spec), and a genuinely billed step never costs
+        exactly nothing — so a zero is treated as "not reported", never as "free", and
+        excluded from the sum. A nonzero figure survives verbatim, never estimated."""
+        known = [part.cost for part in parts if part.cost]
+        if not known:
+            return None
+        return sum(known)
 
     def parse_verdict(self, output: str) -> str | None:
-        text = self._joined_text(output)
+        text = self._root_text(self._parse_events(output))
         start = text.find(_CHOICE_OPEN)
         if start == -1:
             return None
@@ -454,42 +526,31 @@ class OpenCodeAdapter:
         return name or None
 
     def has_usable_output(self, output: str) -> bool:
-        """STUB (phase 3 replaces): any parsed ``step_finish`` event, rather than the real
-        result-envelope-equivalent completeness check."""
-        try:
-            events = parse_run_jsonl(output)
-        except OpenCodeShapeError:
-            return False
-        return any(event.type == "step_finish" for event in events)
+        """True once the root turn produced at least one completed model step — the
+        OpenCode-native equivalent of Claude Code's result envelope. A process killed
+        before its first ``step_finish`` (an OOM, a ``kill -9``) reads as "lost", exactly
+        like a truncated envelope, independent of whether a verdict was ever named."""
+        return bool(self._root_step_finishes(self._parse_events(output)))
 
     def parse_assessment(self, output: str) -> str:
-        text = self._joined_text(output)
+        events = self._parse_events(output)
+        text = self._root_text(events)
         close = text.find(_CHOICE_CLOSE)
-        if close == -1:
-            return ""
-        return text[close + len(_CHOICE_CLOSE) :].strip()
+        if close != -1:
+            return text[close + len(_CHOICE_CLOSE) :].strip()
+        # No choice was ever made — an explicit session error is the one thing worth
+        # surfacing in its place; anything else is legitimately empty.
+        return self._session_error(events) or ""
 
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
-        """STUB (phase 3 replaces): sums every parsed ``step-finish`` part's tokens/cost with
-        no dedup against an exported message describing the same step, and no
-        subscription-zero-cost-is-unknown treatment — both required by the execution spec's
-        "Output and usage" section."""
-        try:
-            events = parse_run_jsonl(output)
-        except OpenCodeShapeError:
+        finishes = self._root_step_finishes(self._parse_events(output))
+        # Deduplicated by part identity: the same completed step is never counted twice
+        # even were it to appear more than once on this one capture.
+        by_id = {part.id: part for part in finishes if part.tokens is not None}
+        if not by_id:
             return None
-        finishes = [
-            event.part
-            for event in events
-            if event.type == "step_finish" and event.part is not None and event.part.tokens is not None
-        ]
-        if not finishes:
-            return None
-        input_tokens = sum(part.tokens.input_tokens for part in finishes if part.tokens is not None)
-        output_tokens = sum(part.tokens.output_tokens for part in finishes if part.tokens is not None)
-        cache_read_tokens = sum(part.tokens.cache_read_tokens for part in finishes if part.tokens is not None)
-        cache_create_tokens = sum(part.tokens.cache_write_tokens for part in finishes if part.tokens is not None)
-        cost = sum(part.cost or 0.0 for part in finishes)
+        parts = list(by_id.values())
+        input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(parts)
         return UsageSample(
             kind=kind,
             model=model or self._model or "opencode",
@@ -497,23 +558,55 @@ class OpenCodeAdapter:
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
             cache_create_tokens=cache_create_tokens,
-            cost_usd=cost or None,
+            cost_usd=self._known_cost(parts),
         )
 
+    @staticmethod
+    def _finish_parts_from_line(line: str) -> list[OpenCodePart]:
+        """One transcript line's completed-step parts, tolerating either shape a raw
+        OpenCode transcript can carry: a run event (the process's own stdout shape) or an
+        exported message (the session-export shape) — the same completed step can be
+        described by both, which is exactly what the caller's identity-keyed dedup
+        collapses back to one (execution spec). An unparseable or irrelevant line
+        contributes nothing; this is a best-effort transcript fallback, never a raise."""
+        stripped = line.strip()
+        if not stripped:
+            return []
+        try:
+            decoded = json.loads(stripped)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(decoded, dict):
+            return []
+        try:
+            event = parse_run_event(decoded)
+        except OpenCodeShapeError:
+            pass
+        else:
+            return [event.part] if event.type == "step_finish" and event.part is not None else []
+        try:
+            message = OpenCodeMessage.parse(decoded)
+        except OpenCodeShapeError:
+            return []
+        return [part for part in message.parts if part.type == "step-finish"]
+
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
-        """STUB (phase 3 replaces): re-runs :meth:`parse_usage` over the joined lines rather
-        than the real transcript-cursor-identity dedup the execution spec's transcript
-        parsing owns."""
-        sample = self.parse_usage("\n".join(lines), kind, model=model)
-        if sample is not None:
-            return sample
+        by_id: dict[str, OpenCodePart] = {}
+        for line in lines:
+            for part in self._finish_parts_from_line(line):
+                if part.tokens is not None:
+                    by_id[part.id] = part
+        input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(by_id.values())
         return UsageSample(
             kind=kind,
             model=model or self._model or "opencode",
-            input_tokens=0,
-            output_tokens=0,
-            cache_read_tokens=0,
-            cache_create_tokens=0,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_create_tokens=cache_create_tokens,
+            # A transcript carries no dollar figure (the shared seam contract,
+            # `IHarnessUsageAccounting.sum_transcript_usage`) — token counts stay
+            # authoritative regardless.
             cost_usd=None,
         )
 
