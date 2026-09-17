@@ -36,6 +36,11 @@ directions — a runner shipping a kind an older hub does not know 422s the whol
 opaquely, and a stored segment carrying an out-of-vocabulary kind raises on read instead of round-tripping. Adding a
 value to the `TurnKind` vocabulary is therefore breaking against the skew window, not additive.
 
+The capability-matched fleet peek sits on the additive side of that same window from two directions at once:
+`POST /api/fleet/queue/peek` is a wholly new route beside the unchanged `GET`, so a previous-minor runner simply never
+calls it and keeps reading the unfiltered order; and a registration's `capabilities` field defaults empty like every
+other optional field on that model, so a previous-minor runner parses and registers exactly as it always has.
+
 ## What a tag publishes
 
 Every image below is `ghcr.io/paul-gross/blizzard-hub`.

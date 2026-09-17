@@ -36,8 +36,8 @@ client obeying the variable does not mean the daemon does.
 
 The enrollment sequence, the auth rollout modes, and where the token lives are owned by
 [`docs/deployment/runner-auth.md`](./deployment/runner-auth.md); the remote case changes only how each step reaches the
-hub. Enrollment presumes registration — the runner must have been started once so it registers at the hub, per that
-owner, or the enroll call 404s.
+hub. Enrollment presumes registration — the runner must have been started once so it registers at the hub, asserting the
+harnesses and tiers it can execute alongside its identity, per that owner, or the enroll call 404s.
 
 Enroll from any operator machine:
 
