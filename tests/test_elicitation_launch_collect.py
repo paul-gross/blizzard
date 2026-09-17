@@ -202,6 +202,7 @@ def test_a_judge_launch_records_its_own_process_group_and_is_group_killed(tmp_pa
     Advance(ctx).run()  # launch
     elicitation = store.in_flight_elicitation("lease_1", 1)
     assert elicitation is not None and elicitation.pgid == 200
+    probe.alive = {(elicitation.pid, elicitation.process_start_time)}  # the judge is still running
     lease = store.active_lease("lease_1")
     assert lease is not None
 

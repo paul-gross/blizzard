@@ -14,7 +14,10 @@ import time
 import pytest
 
 from blizzard.foundation.process import ProcStat
-from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop.process import LinuxProcessProbe, kill_owned_process
+from tests.runner_fakes import FakeProbe
+
+_START = "start-token"
 
 
 @pytest.mark.unit
@@ -56,6 +59,54 @@ def test_exited_but_unreaped_worker_reads_dead() -> None:
     assert ProcStat.of(proc.pid).zombie, "child did not become a zombie"
     assert not probe.is_alive(proc.pid, start)
     proc.wait()  # reap it so the test process leaves no zombie behind
+
+
+# `kill_owned_process` — the one shared, liveness-checked, pgid-preferring teardown every
+# owned-process kill site (attempt, dormant, takeover) routes through (D3).
+
+
+@pytest.mark.unit
+def test_an_owned_kill_prefers_the_recorded_group_over_a_bare_pid() -> None:
+    probe = FakeProbe(alive={(4242, _START)}, groups_alive={4242})
+    kill_owned_process(probe, pid=4242, process_start_time=_START, pgid=4242)
+    assert probe.killed_groups == [4242]
+    assert probe.killed == []
+
+
+@pytest.mark.unit
+def test_an_owned_kill_with_no_recorded_group_falls_back_to_the_bare_pid() -> None:
+    probe = FakeProbe(alive={(4242, _START)})
+    kill_owned_process(probe, pid=4242, process_start_time=_START, pgid=None)
+    assert probe.killed == [4242]
+    assert probe.killed_groups == []
+
+
+@pytest.mark.unit
+def test_an_owned_kill_still_reaps_the_group_when_only_a_descendant_survives() -> None:
+    """The post-crash shape durable group ownership exists for: the recorded leader is
+    gone, but a descendant still holds the group, so the `killpg` must still fire."""
+    probe = FakeProbe(alive=set(), groups_alive={4242})
+    kill_owned_process(probe, pid=4242, process_start_time=_START, pgid=4242)
+    assert probe.killed_groups == [4242]
+
+
+@pytest.mark.unit
+def test_an_owned_kill_signals_nothing_when_leader_and_group_are_both_gone() -> None:
+    """The pid/pgid-reuse guard: neither the recorded leader nor its group is ours any
+    more, so an unrelated process the OS has since given this pid is never signalled."""
+    probe = FakeProbe(alive=set(), groups_alive=set())
+    kill_owned_process(probe, pid=4242, process_start_time=_START, pgid=4242)
+    assert probe.killed == []
+    assert probe.killed_groups == []
+
+
+@pytest.mark.unit
+def test_an_owned_kill_with_no_recorded_pid_or_start_time_is_a_no_op() -> None:
+    probe = FakeProbe(alive={(4242, _START)}, groups_alive={4242})
+    kill_owned_process(probe, pid=None, process_start_time=_START, pgid=4242)
+    kill_owned_process(probe, pid=4242, process_start_time=None, pgid=4242)
+    assert probe.killed == []
+    assert probe.killed_groups == []
 
 
 def _await_start_time(probe: LinuxProcessProbe, pid: int) -> str:

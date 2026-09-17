@@ -512,12 +512,14 @@ class Attempt:
         elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
         if elicitation is None:
             return
-        # Group-kill by preference (D3), mirroring `_kill_process` above: an elicitation's
-        # own recorded group reaches its descendants too, a bare pid kill cannot.
-        if elicitation.pgid is not None:
-            self.ctx.process.kill_group(elicitation.pgid)
-        elif elicitation.pid is not None:
-            self.ctx.process.kill(elicitation.pid)  # best-effort hygiene, mirroring the worker kill above
+        # The shared, liveness-checked, pgid-preferring kill (D3) `_kill_process` above and
+        # takeover's own elicitation teardown both reach through — never a bare pid signal.
+        kill_owned_process(
+            self.ctx.process,
+            pid=elicitation.pid,
+            process_start_time=elicitation.process_start_time,
+            pgid=elicitation.pgid,
+        )
         self.ctx.stores.elicitations.clear_elicitation(lease.lease_id, lease.epoch)
         self.ctx.elicitation_files.cleanup(lease.lease_id, lease.epoch, through_attempt=elicitation.relaunch_count)
 
