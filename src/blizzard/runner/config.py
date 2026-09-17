@@ -922,5 +922,13 @@ class RunnerConfig:
             opencode_binary=opencode.word("binary") or DEFAULT_OPENCODE_BINARY,
             opencode_model_aliases=Table.of(opencode.body.get("models")).pairs("aliases"),
             opencode_effort_aliases=Table.of(opencode.body.get("effort")).pairs("aliases"),
-            opencode_worker_config_path=opencode.word("worker_config_path"),
+            # An upgraded runner's `blizzard-runner.toml` predates the `[opencode]` table
+            # (phase 2) and carries no `worker_config_path` — falling back to `None` there
+            # would spawn OpenCode with no runner-owned permission/plugin document at all
+            # (D7), silently handing it over to its own default config discovery. The same
+            # default `Runtime.init` scaffolds for a fresh runtime keeps an upgraded one
+            # identically covered, with nothing to hand-edit.
+            opencode_worker_config_path=(
+                opencode.word("worker_config_path") or str(root / OPENCODE_WORKER_CONFIG_FILENAME)
+            ),
         )

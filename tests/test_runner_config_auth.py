@@ -228,3 +228,17 @@ def test_opencode_worker_config_path_round_trips(tmp_path: Path) -> None:
     reloaded = _round_trip(tmp_path, config)
 
     assert reloaded.opencode_worker_config_path == str(tmp_path / "opencode-worker-config.json")
+
+
+def test_an_upgraded_runner_with_no_opencode_table_still_resolves_a_worker_config_path(tmp_path: Path) -> None:
+    """A pre-``[opencode]`` ``blizzard-runner.toml`` carries no ``worker_config_path``
+    at all — loading it must still resolve the same default a fresh ``init`` would (D7),
+    never ``None``, so nothing falls back to OpenCode's own on-disk discovery."""
+    tmp_path.mkdir(exist_ok=True)
+    (tmp_path / "blizzard-runner.toml").write_text(f'db_url = "sqlite:///{tmp_path}/r.db"\n')
+
+    loaded = RunnerConfig.load(tmp_path)
+    fresh = RunnerConfig.scaffold(tmp_path)
+
+    assert loaded.opencode_worker_config_path is not None
+    assert loaded.opencode_worker_config_path == fresh.opencode_worker_config_path
