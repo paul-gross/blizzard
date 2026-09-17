@@ -18,13 +18,7 @@ from blizzard.runner.config import (
     ConfigError,
     RunnerConfig,
 )
-from blizzard.runner.harness.internal.opencode_plugin import (
-    PLUGIN_DIRNAME,
-    PLUGIN_FILENAME,
-    plugin_reference,
-    write_plugin,
-)
-from blizzard.runner.harness.internal.opencode_worker_config import write_worker_config
+from blizzard.runner.harness.opencode_scaffold import scaffold_opencode_worker_config
 from blizzard.runner.harness.worker_settings import WorkerSettings
 from blizzard.runner.store import MIGRATIONS_DIR, STORE_NAME
 
@@ -76,12 +70,10 @@ class Runtime:
             # Written idempotently: the content is versioned with the runner, so re-running
             # `init` refreshes it to head.
             (root / WORKER_SETTINGS_FILENAME).write_text(WorkerSettings.of().json)
-            # The runner-owned OpenCode plugin (D7, phase 4) — scaffolded beside the
-            # permission document below, and never inside a project repository, before that
-            # document's own `plugin` entry can name it.
-            plugin_path = root / PLUGIN_DIRNAME / PLUGIN_FILENAME
-            write_plugin(plugin_path)
-            write_worker_config(root / OPENCODE_WORKER_CONFIG_FILENAME, plugins=(plugin_reference(plugin_path),))
+            # The runner-owned OpenCode plugin and permission document (D7, phase 4) —
+            # never inside a project repository. `harness/`'s own public surface, not
+            # `harness/internal/` directly (this is not a composition root).
+            scaffold_opencode_worker_config(root, root / OPENCODE_WORKER_CONFIG_FILENAME)
         except OSError as exc:
             raise ConfigError(f"cannot write the runner runtime at {root}: {exc}") from exc
 

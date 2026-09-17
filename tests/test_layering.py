@@ -397,6 +397,17 @@ def test_transcript_service_imports_no_internal_module() -> None:
     assert not violations, f"transcripts/service.py must not import an internal/ module: {violations}"
 
 
+_RUNTIME_FILE = _RUNNER_DIR / "runtime.py"
+
+
+def test_runtime_imports_no_harness_internal_module() -> None:
+    """``Runtime.init`` is not one of the seven composition roots, so it takes
+    ``harness/opencode_scaffold.py``, the harness package's own public surface, rather
+    than reaching into ``harness/internal/`` directly."""
+    violations = [m for m in sorted(_imported_modules(_RUNTIME_FILE)) if ".internal." in m]
+    assert not violations, f"runtime.py must not import a harness/internal/ module: {violations}"
+
+
 _HUB_CLI_SESSION_STORE_FILE = _HUB_DIR / "cli" / "sessions" / "internal" / "session_file.py"
 
 
