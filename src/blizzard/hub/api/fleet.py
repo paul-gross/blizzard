@@ -221,17 +221,11 @@ def peek_matched_queue(
     services: Annotated[HubServices, Depends(get_services)],
     principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
 ) -> QueuePeekResponse:
-    """The matched fleet peek (D7/D8/D11, blizzard#433 Phase 3) — at most one ready
-    entry, the first the calling principal can both work (its own declared
-    capabilities, against ``EligibilityCheck``) and claim (not dependency-blocked), with
-    ``request.policy`` applied to both dimensions together.
-
-    Demands a resolvable principal in **every** auth mode, unlike the router's own
-    mode-gated dependency (``runner_auth_mode`` leaves that one inert under ``warn``) —
-    the same always-raising idiom ``get_lease_transcript_segments`` uses
-    (``_demand_lease_owner``'s docstring), since an upgraded-but-unenrolled runner would
-    otherwise read a permanently empty queue as an idle fleet rather than as a runner
-    that has not enrolled."""
+    """The matched fleet peek — at most one ready entry the calling principal can both
+    work (declared capabilities against ``EligibilityCheck``) and claim (not
+    dependency-blocked), with ``request.policy`` applied to both. Demands a resolvable
+    principal in every auth mode, so an unenrolled runner never reads a permanently
+    empty queue as an idle fleet."""
     if principal is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no resolvable runner token")
     statuses = services.chunks.facts.load_all_statuses()

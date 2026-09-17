@@ -179,12 +179,10 @@ def _domain_capabilities(capabilities: Sequence[WireRunnerCapability]) -> tuple[
 
 @dataclass(frozen=True)
 class MatchedPeek:
-    """The matched fleet peek (blizzard#433 Phase 3, D7/D8/D11) — at most one ready
-    entry, the first the calling runner can both work (``EligibilityCheck``) and claim
-    (the existing blocked-dependency marking), resolved through the same plural bulk
-    reads ``bzh:bulk-reconstitution`` names (``load_facts_for``, the new
-    ``IReadManyGraphs.get_many``) so the statement count stays flat as the ready order
-    grows."""
+    """The matched fleet peek — at most one ready entry the calling runner can both work
+    (``EligibilityCheck``) and claim (existing blocked-dependency marking), resolved via
+    the same plural bulk reads ``bzh:bulk-reconstitution`` names, so the statement count
+    stays flat as the ready order grows."""
 
     entry: MatchedEntry | None
 

@@ -52,10 +52,9 @@ def test_peek_queue_posts_the_request_body() -> None:
 
 @pytest.mark.unit
 def test_peek_queue_falls_back_to_the_legacy_get_on_a_401() -> None:
-    """D7/D12's resolution (blizzard#433 Phase 3): the matched verb's own always-raising
-    demand for a principal — or an unenrolled runner carrying no token at all — reads as
-    a ``401``, and this one call internally serves it off the legacy, unfiltered verb
-    instead. ``IHubClient`` callers see one uniform call either way."""
+    """A ``401`` (no resolvable principal, or an unenrolled runner with no token) falls
+    back to the legacy, unfiltered verb internally — ``IHubClient`` callers see one
+    uniform call either way."""
     calls: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -351,9 +350,8 @@ def test_register_runner_posts_registration() -> None:
         return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
 
     _client(handler).register_runner("r1", "ws1", env_capacity=4)
-    # env_capacity (issue #69) rides the registration body.
-    # url/redirect_uris (issue #95) and capabilities (blizzard#433) default to
-    # null/empty when the caller omits them.
+    # env_capacity (issue #69) rides the body; url/redirect_uris (issue #95) and
+    # capabilities default to null/empty when the caller omits them.
     assert seen == {
         "runner_id": "r1",
         "workspace_id": "ws1",

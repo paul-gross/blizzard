@@ -1010,10 +1010,9 @@ def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path):  # type: i
 
 @pytest.mark.unit
 def test_fill_incompatible_denial_releases_and_keeps_filling(tmp_path):  # type: ignore[no-untyped-def]
-    """blizzard#433 D9/D10: the runner's stored capabilities no longer cover the chunk —
-    not a race loss and not a dependency block, so FILL releases the binding, mints no
-    lease, and keeps trying its remaining slots exactly as the terminal and dependency
-    denials do."""
+    """The runner's stored capabilities no longer cover the chunk — not a race loss or a
+    dependency block, so FILL releases the binding, mints no lease, and keeps filling its
+    remaining slots, as the terminal/dependency denials do."""
     from blizzard.runner.loop.hub import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimIncompatibleDenial
 
@@ -1319,10 +1318,9 @@ def test_fill_peeks_once_per_claim_attempt_on_the_matched_path(tmp_path):  # typ
 
 @pytest.mark.unit
 def test_fill_peeks_with_this_runners_own_capability_snapshot_and_queue_strict_policy(tmp_path):  # type: ignore[no-untyped-def]
-    """blizzard#433 Phase 3: the matched peek's own request carries the same capability
-    snapshot the registration push does (``capability_snapshot``), and translates
-    ``queue_strict`` into the wire policy string — ``True`` -> ``"hold"``, the default
-    ``False`` -> ``"pass-over"``."""
+    """The matched peek's request carries the same capability snapshot the registration
+    push does (``capability_snapshot``), translating ``queue_strict`` into the wire
+    policy: ``True`` -> ``"hold"``, ``False`` -> ``"pass-over"``."""
     store = _store(tmp_path)
     hub = FakeHub()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")

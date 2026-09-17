@@ -1,11 +1,9 @@
-"""``POST /api/fleet/queue/peek`` — the matched fleet peek (component tier, blizzard#433
-Phase 3, D7/D8/D11).
+"""``POST /api/fleet/queue/peek`` — the matched fleet peek (component tier).
 
 At most one ready entry, the first the calling principal can both work (capability
-eligibility) and claim (not dependency-blocked), with the request's own hold-or-pass-over
-policy applied to both dimensions together. The legacy ``GET`` alongside it is untouched —
-covered by ``tests/test_fleet_auth.py`` and ``tests/test_queue_bulk_reads.py`` already —
-so this file only proves the new verb's own behavior."""
+eligibility) and claim (not dependency-blocked), with the request's hold-or-pass-over
+policy applied to both. The legacy ``GET`` is untouched (covered by
+``tests/test_fleet_auth.py``), so this file only proves the new verb."""
 
 from __future__ import annotations
 
@@ -37,9 +35,7 @@ def _ingest(hub, ref: str, *, default_harnesses: list[str] | None = None, promot
     return chunk_id
 
 
-#: A capability set an "eligible" chunk (no declared harness preference) accepts, since
-#: the default graph's `triage` node declares no session harnesses of its own — an empty
-#: `EffectiveSession.harnesses` is satisfied only by a *default* capability.
+#: A capability set that satisfies any chunk with no declared harness preference (a default binding).
 _DEFAULT_CAPABILITY = [{"harness_id": "claude", "default": True}]
 
 
@@ -123,9 +119,8 @@ def test_an_unrecognized_policy_value_round_trips_as_pass_over(tmp_path: Path) -
 def test_the_blocked_dimension_takes_the_same_policy_as_the_capability_one(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     token = _token(hub)
-    # `dependent` is minted (and so ordered) first, so it is the ready head; declaring it
-    # against a prerequisite that never completes leaves it marked blocked without
-    # changing its status or position.
+    # `dependent` is minted first, so it is the ready head; declaring it against a
+    # never-completing prerequisite marks it blocked without changing status/position.
     dependent = _ingest(hub, "1")
     prerequisite = _ingest(hub, "2")
     declared = hub.client.post(f"/api/chunks/{dependent}/dependencies", json={"prerequisite_chunk_id": prerequisite})

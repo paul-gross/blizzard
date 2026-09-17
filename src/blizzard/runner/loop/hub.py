@@ -88,11 +88,9 @@ class IHubClient(IChunkStatusReader, Protocol):
 
     def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
         """The FILL read — at most one matched entry while this runner holds a token
-        (``POST /api/fleet/queue/peek``, D7/D8, blizzard#433 Phase 3); the reference
-        binding falls back to the legacy, unfiltered ``GET /api/fleet/queue/peek`` on a
-        ``401`` (an unenrolled runner, or the matched verb's own always-raising demand
-        for a principal), so every caller here sees one uniform call regardless of
-        which verb actually served it."""
+        (``POST /api/fleet/queue/peek``); the reference binding falls back to the legacy,
+        unfiltered ``GET`` on a ``401``, so every caller here sees one uniform call
+        regardless of which verb actually served it."""
         ...
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
@@ -147,13 +145,10 @@ class IHubClient(IChunkStatusReader, Protocol):
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
     ) -> None:
-        """``POST /api/fleet/runners`` — register into the fleet registry.
-
-        Idempotent upsert, and the runner-level liveness heartbeat. Called before the
-        paused read so the runner is registered by the time it reads its state back.
-        Every optional field is an unconditional overwrite on each (re-)registration,
-        ``capabilities`` (blizzard#433) included: an empty tuple clears a previously
-        reported snapshot rather than leaving it standing."""
+        """``POST /api/fleet/runners`` — register into the fleet registry. Idempotent
+        upsert, and the runner-level liveness heartbeat, called before the paused read so
+        the runner is registered by the time it reads its state back. Every optional
+        field, ``capabilities`` included, is unconditionally overwritten each call."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

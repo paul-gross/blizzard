@@ -94,17 +94,11 @@ def select_matched_entry(
     blocked: Mapping[str, list[str]],
     policy: QueueMatchPolicy,
 ) -> MatchedEntry | None:
-    """The matched fleet peek's own selection (D7/D8): the first entry in ``chunks``'s
-    own order the caller can both work (capability-eligible) and claim (not
-    dependency-blocked) — moved hub-side for this path so a runner passing over an entry
-    locally and re-peeking is not simply handed it again, the way the runner-loop's own
-    ``ReadyQueue._next`` (``claim.py``) reaches ahead over a **cached** peek today.
-
-    Under :attr:`QueueMatchPolicy.HOLD`, only the head is examined: an unusable head
-    yields ``None`` rather than reaching past it. Under
-    :attr:`QueueMatchPolicy.PASS_OVER` (the default), the whole order is scanned for the
-    first usable entry. Neither branch mutates or reorders ``chunks`` — a skipped entry
-    keeps its position, and nothing about the skip is recorded or returned."""
+    """The matched peek's own selection: the first entry in ``chunks``'s order the caller
+    can both work (capability-eligible) and claim (not dependency-blocked). Moved hub-side
+    so a runner passing over an entry locally and re-peeking isn't handed it again. Under
+    :attr:`QueueMatchPolicy.HOLD` only the head is examined; :attr:`PASS_OVER` scans the
+    whole order."""
     for position, chunk in enumerate(chunks):
         graph = graphs.get(chunk.graph_id)
         if graph is None:  # pragma: no cover - a pinned graph always resolves

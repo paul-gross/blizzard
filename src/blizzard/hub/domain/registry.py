@@ -62,9 +62,7 @@ class RunnerRegistration:
     #: Every declared subscription's newest reported sample, raw, one per slug (issue #218) —
     #: staleness is applied per slug at derive time, not here.
     subscription_usage: tuple[SubscriptionUsageRecord, ...] = ()
-    #: The runner's reported capability snapshot (blizzard#433) — every harness/tier it can
-    #: execute right now. Overwritten whole on each re-registration, empty for a runner that
-    #: has never reported one.
+    #: The runner's reported capability snapshot — every harness/tier it can execute right now.
     capabilities: tuple[RunnerCapability, ...] = ()
 
     def usage_record(self, slug: str) -> SubscriptionUsageRecord | None:
@@ -274,10 +272,9 @@ class FleetService:
     ) -> bool:
         """Register (or refresh) a runner; returns True on a first registration.
 
-        ``env_capacity`` (issue #69), ``public_url``/``redirect_uris`` (issue #95), and
-        ``capabilities`` (blizzard#433) are the runner's own reported facts, unconditionally
-        overwritten on every (re-)registration so a change converges; ``None``/empty from a
-        client that predates a field stores as null/empty."""
+        ``env_capacity``, ``public_url``/``redirect_uris``, and ``capabilities`` are the
+        runner's own reported facts, unconditionally overwritten on every (re-)registration;
+        absent values store as null/empty."""
         created = self._registry.upsert_registration(
             runner_id,
             workspace_id=workspace_id,

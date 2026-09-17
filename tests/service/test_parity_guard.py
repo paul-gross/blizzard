@@ -120,6 +120,10 @@ def test_mock_hub_openapi_serves_every_ihubclient_endpoint() -> None:
 _EXPECTED_DRIVE_VERBS: dict[str, str] = {
     "register": "IHubClient.register_runner — POST /api/fleet/runners",
     "peek": "IHubClient.peek_queue — GET /api/fleet/queue/peek",
+    "peek-matched": (
+        "IHubClient.peek_queue — POST /api/fleet/queue/peek (blizzard#433 Phase 3) — the "
+        "capability-matched verb, falling back to the legacy GET on a 401"
+    ),
     "claim": "IHubClient.claim_route — POST /api/fleet/routes (+ the lease-minted fact's /events push)",
     "claim-next": (
         "IHubClient.peek_queue + IHubClient.claim_route (blizzard#459) — peek, select, and "

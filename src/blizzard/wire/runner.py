@@ -36,9 +36,7 @@ class RunnerRegistrationRequest(BaseModel):
     #: The allowed redirect URIs a browser may be bounced to for this runner (issue #95)
     #: — exact-match only (the open-redirect guard). Empty registers none.
     redirect_uris: list[str] = []
-    #: The runner's capability snapshot (blizzard#433) — every harness/tier it can
-    #: execute right now. Previous-minor-compatible: a caller omitting it parses
-    #: unchanged. Re-registration overwrites it whole.
+    #: The runner's capability snapshot — every harness/tier it can execute right now.
     capabilities: list[RunnerCapability] = []
 
 

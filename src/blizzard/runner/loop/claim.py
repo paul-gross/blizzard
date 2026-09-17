@@ -39,14 +39,9 @@ _CP_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds the rou
 @dataclass
 class ReadyQueue:
     """The hub's ready queue, as the source FILL takes work from — peek the head, acquire its
-    environments all-or-nothing, bind them locally, then race for the route.
-
-    ``_entries`` is one peek's own local snapshot: on the legacy (non-capability-asserting)
-    path, ``Fill.run()`` peeks ONCE via :meth:`peeked` for the whole run, then selects from
-    and drops in place by each ``claim_one()`` it makes (blizzard#459). A capability-
-    asserting runner instead peeks fresh before every ``claim_one()`` (blizzard#433 D10):
-    the matched verb's single-entry response (D8) leaves no cached order to select from,
-    so each instance here holds at most one entry either way."""
+    environments all-or-nothing, bind them locally, then race for the route. ``_entries`` is
+    one peek's own snapshot, holding at most one entry when a capability-asserting runner
+    peeks fresh before every ``claim_one()`` (``tests/test_runner_loop.py``'s pinning)."""
 
     ctx: LoopContext
     _entries: list[QueuePeekEntry] = field(default_factory=list)
@@ -55,9 +50,8 @@ class ReadyQueue:
     def peeked(cls, ctx: LoopContext) -> ReadyQueue:
         request = QueuePeekRequest(
             capabilities=list(capability_snapshot(ctx.harnesses)),
-            # The same knob `_next` reach-ahead already honors locally — sent per call
-            # (D8, blizzard#433 Phase 3) rather than read hub-side, so the matched verb
-            # applies the identical hold-or-pass-over policy to both dimensions.
+            # The same knob `_next` reach-ahead already honors locally, sent per call
+            # rather than read hub-side, so both dimensions get the identical policy.
             policy="hold" if ctx.config.queue_strict else "pass-over",
         )
         try:
