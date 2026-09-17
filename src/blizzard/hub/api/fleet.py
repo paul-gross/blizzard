@@ -31,9 +31,16 @@ from blizzard.hub.api.ingest_broadcast import IngestBroadcast
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.hub_node import PollPolicy
-from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedDependency, ClaimDeniedPaused, ClaimDeniedTerminal
+from blizzard.hub.domain.claim import (
+    ClaimConflict,
+    ClaimDeniedDependency,
+    ClaimDeniedIncompatible,
+    ClaimDeniedPaused,
+    ClaimDeniedTerminal,
+)
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import FollowLatest, Graph, Mint
+from blizzard.hub.domain.registry import RunnerCapability
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -59,11 +66,12 @@ from blizzard.wire.finding import FindingView
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.garden_proposal import GardenProposalView
 from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekResponse
+from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
 from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
     RouteClaimDependencyDenial,
+    RouteClaimIncompatibleDenial,
     RouteClaimPausedDenial,
     RouteClaimResponse,
     RouteClaimTerminalDenial,
@@ -200,9 +208,28 @@ class MigrationTargets:
 @router.get("/queue/peek", response_model=QueuePeekResponse)
 def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
     """The runner's FILL read — the whole ready-queue order, unlike the now-paginated
-    ``GET /api/queue``: a filling runner needs every ready chunk in one read."""
+    ``GET /api/queue``: a filling runner needs every ready chunk in one read. Kept as-is
+    for a previous-minor caller (D7, blizzard#433 Phase 3); ``POST /queue/peek`` below is
+    the matched counterpart."""
     statuses = services.chunks.facts.load_all_statuses()
     return queue_api.ReadyQueue.of(services, statuses).view
+
+
+@router.post("/queue/peek", response_model=QueuePeekResponse)
+def peek_matched_queue(
+    request: QueuePeekRequest,
+    services: Annotated[HubServices, Depends(get_services)],
+    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+) -> QueuePeekResponse:
+    """The matched fleet peek — at most one ready entry the calling principal can both
+    work (declared capabilities against ``EligibilityCheck``) and claim (not
+    dependency-blocked), with ``request.policy`` applied to both. Demands a resolvable
+    principal in every auth mode, so an unenrolled runner never reads a permanently
+    empty queue as an idle fleet."""
+    if principal is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no resolvable runner token")
+    statuses = services.chunks.facts.load_all_statuses()
+    return queue_api.MatchedPeek.of(services, statuses, request).view
 
 
 @router.get("/system-artifacts", response_model=list[SystemArtifactView])
@@ -454,8 +481,9 @@ def claim_route(
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> object:
     """Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,
-    already terminal ({done, stopped}, issue #118), or standing on an unmet prerequisite
-    (blizzard#458), else the first node envelope."""
+    already terminal ({done, stopped}, issue #118), standing on an unmet prerequisite
+    (blizzard#458), or incompatible with the runner's stored capabilities (blizzard#433
+    D9), else the first node envelope."""
     fleet.assert_owns(claim.runner_id)
     chunk = services.chunks.record.get(claim.chunk_id)
     if chunk is None:
@@ -483,6 +511,11 @@ def claim_route(
             chunk_id=claim.chunk_id, prerequisite_chunk_id=exc.prerequisite_chunk_id
         )
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=dependency_denial.model_dump())
+    except ClaimDeniedIncompatible as exc:
+        incompatible_denial = RouteClaimIncompatibleDenial(
+            chunk_id=claim.chunk_id, incompatible_runner_id=exc.runner_id
+        )
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=incompatible_denial.model_dump())
     except ClaimConflict as exc:
         conflict = RouteClaimConflict(chunk_id=claim.chunk_id, held_by_runner_id=exc.held_by_runner_id)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
@@ -706,14 +739,20 @@ def register_runner(
     """Register a runner — runner id + workspace binding; idempotent upsert.
 
     Runner-auth is checked at the router level (issue #86a); issue #95's optional
-    ``url``/``redirect_uris`` extension rides the same authenticated write."""
+    ``url``/``redirect_uris`` extension, and blizzard#433's ``capabilities`` snapshot,
+    ride the same authenticated write."""
     fleet.assert_owns(request.runner_id)
+    capabilities = tuple(
+        RunnerCapability(harness_id=c.harness_id, version=c.version, tiers=tuple(c.tiers), default=c.default)
+        for c in request.capabilities
+    )
     first = services.fleet.register(
         request.runner_id,
         request.workspace_id,
         env_capacity=request.env_capacity,
         public_url=request.url,
         redirect_uris=tuple(request.redirect_uris),
+        capabilities=capabilities,
     )
     services.events.publish_runner_changed(request.runner_id, kind="registered")
     return RunnerRegistrationResponse(runner_id=request.runner_id, first_registration=first)

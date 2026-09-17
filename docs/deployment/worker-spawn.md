@@ -81,6 +81,10 @@ entries; the table names a deployment's own vocabulary or reaches a native tier 
 Code's xhigh. Nothing substitutes downward when a tier is unmapped — aliases are roles, not a scale — so every
 degradation is authored.
 
+The resolved tier vocabulary — the built-ins and whatever `[models.aliases]` overrides or adds — is also what the
+runner advertises to the hub on registration, one binding per harness it can dispatch to: the hub never interprets a
+tier id, but it does hold this runner's own list of them to match a chunk's requirements against later.
+
 A model preference list resolves left to right: the first entry the runner can resolve wins, an unresolvable entry (an
 unmapped alias, another harness's name) is skipped rather than failing the spawn. For a single acceptable harness — the
 declared `harnesses:`/chunk `default_harnesses` set naming exactly one, or naming none at all — a fully unresolvable

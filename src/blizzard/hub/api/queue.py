@@ -7,7 +7,7 @@ queue-shaping domain (``bzh:controller-read-only``). Backlog routes require
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -25,7 +25,16 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.dependencies import derive_blocked_prerequisites
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
-from blizzard.hub.domain.queue import ChunkNotGroupable, FoldWouldCloseCycle, QueueList, QueuePage
+from blizzard.hub.domain.queue import (
+    ChunkNotGroupable,
+    FoldWouldCloseCycle,
+    MatchedEntry,
+    QueueList,
+    QueueMatchPolicy,
+    QueuePage,
+    select_matched_entry,
+)
+from blizzard.hub.domain.registry import RunnerCapability
 from blizzard.hub.domain.work import Chunk
 from blizzard.wire.chunk import WorkRefModel
 from blizzard.wire.queue import (
@@ -38,10 +47,12 @@ from blizzard.wire.queue import (
     ChunkGroupResponse,
     QueuePageView,
     QueuePeekEntry,
+    QueuePeekRequest,
     QueuePeekResponse,
     QueuePositionRequest,
     QueueReplaceRequest,
 )
+from blizzard.wire.runner import RunnerCapability as WireRunnerCapability
 
 router = APIRouter(prefix="/api", tags=["queue"], dependencies=[Depends(reject_runner_principal)])
 
@@ -152,6 +163,63 @@ class ReadyQueue:
                     blocked=blocked_view(self.markings.get(chunk.chunk_id)),
                 )
                 for position, chunk in enumerate(self.chunks)
+            ]
+        )
+
+
+def _domain_capabilities(capabilities: Sequence[WireRunnerCapability]) -> tuple[RunnerCapability, ...]:
+    """The wire->domain conversion :func:`~blizzard.hub.api.fleet.register_runner`
+    already applies to a runner's registration snapshot — the matched peek's own request
+    (D7) carries the same shape, so it is converted the same way."""
+    return tuple(
+        RunnerCapability(harness_id=c.harness_id, version=c.version, tiers=tuple(c.tiers), default=c.default)
+        for c in capabilities
+    )
+
+
+@dataclass(frozen=True)
+class MatchedPeek:
+    """The matched fleet peek — at most one ready entry the calling runner can both work
+    (``EligibilityCheck``) and claim (existing blocked-dependency marking), resolved via
+    the same plural bulk reads ``bzh:bulk-reconstitution`` names, so the statement count
+    stays flat as the ready order grows."""
+
+    entry: MatchedEntry | None
+
+    @classmethod
+    def of(cls, services: HubServices, statuses: Mapping[str, ChunkStatus], request: QueuePeekRequest) -> MatchedPeek:
+        chunks = services.queue.ordered_ready(statuses=statuses)
+        markings = _blocked_markings(services, statuses)
+        chunk_ids = [chunk.chunk_id for chunk in chunks]
+        facts = services.chunks.facts.load_facts_for(chunk_ids)
+        graph_ids = sorted({chunk.graph_id for chunk in chunks})
+        graphs = services.graphs.get_many(graph_ids)
+        entry = select_matched_entry(
+            chunks,
+            graphs=graphs,
+            facts=facts,
+            capabilities=_domain_capabilities(request.capabilities),
+            blocked=markings,
+            policy=QueueMatchPolicy.of(request.policy),
+        )
+        return cls(entry)
+
+    @property
+    def view(self) -> QueuePeekResponse:
+        if self.entry is None:
+            return QueuePeekResponse(entries=[])
+        chunk = self.entry.chunk
+        return QueuePeekResponse(
+            entries=[
+                QueuePeekEntry(
+                    chunk_id=chunk.chunk_id,
+                    graph_id=chunk.graph_id,
+                    position=self.entry.position,
+                    work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
+                    # A matched entry is, by construction, never blocked (D8 applies the
+                    # policy to that dimension too before one is ever selected).
+                    blocked=None,
+                )
             ]
         )
 

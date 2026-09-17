@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.registry import RunnerCapability
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from tests.support import hub_store_connections
@@ -53,3 +54,48 @@ def test_touch_last_seen_round_trips_a_later_instant(tmp_path: Path) -> None:
     assert registration is not None
     assert registration.registered_at == _NOW  # unchanged
     assert registration.last_seen_at == later
+
+
+def test_registration_round_trips_its_capability_snapshot(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    capabilities = (
+        RunnerCapability(harness_id="claude_code", version="1.2.3", tiers=("blizzard:frontier",), default=True),
+    )
+
+    store.upsert_registration("r1", workspace_id="ws1", env_capacity=None, capabilities=capabilities, at=_NOW)
+
+    registration = store.get_runner("r1")
+    assert registration is not None
+    assert registration.capabilities == capabilities
+
+
+def test_registration_without_capabilities_leaves_it_empty(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.upsert_registration("r1", workspace_id="ws1", env_capacity=None, at=_NOW)
+
+    registration = store.get_runner("r1")
+    assert registration is not None
+    assert registration.capabilities == ()
+
+
+def test_reregistration_replaces_the_capability_snapshot_whole(tmp_path: Path) -> None:
+    # A dropped binding/tier leaves no trace, and omitting the field on re-registration
+    # clears whatever was there before (blizzard#433) — a synchronous overwrite, not a merge.
+    store = _store(tmp_path)
+    store.upsert_registration(
+        "r1",
+        workspace_id="ws1",
+        env_capacity=None,
+        capabilities=(
+            RunnerCapability(
+                harness_id="claude_code", version="1.0.0", tiers=("blizzard:frontier", "blizzard:basic"), default=True
+            ),
+        ),
+        at=_NOW,
+    )
+
+    store.upsert_registration("r1", workspace_id="ws1", env_capacity=None, at=_NOW)
+
+    registration = store.get_runner("r1")
+    assert registration is not None
+    assert registration.capabilities == ()

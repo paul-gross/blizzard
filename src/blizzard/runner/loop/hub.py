@@ -16,16 +16,18 @@ from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekResponse
+from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
 from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
     RouteClaimDependencyDenial,
+    RouteClaimIncompatibleDenial,
     RouteClaimPausedDenial,
     RouteClaimResponse,
     RouteClaimTerminalDenial,
     RouteTokenRekeyResponse,
 )
+from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
 
 
@@ -50,14 +52,15 @@ class ChunkNotFoundError(HubClientError):
 class RouteClaimOutcome:
     """The result of a route claim: exactly one of ``claimed`` / ``conflict`` /
     ``denied_paused`` (#44) / ``denied_terminal`` (#118) / ``denied_dependency``
-    (blizzard#458) set. A conflict is a race this claim lost; every denial means the hub
-    refused it before any race."""
+    (blizzard#458) / ``denied_incompatible`` (blizzard#433 D9) set. A conflict is a race
+    this claim lost; every denial means the hub refused it before any race."""
 
     claimed: RouteClaimResponse | None = None
     conflict: RouteClaimConflict | None = None
     denied_paused: RouteClaimPausedDenial | None = None
     denied_terminal: RouteClaimTerminalDenial | None = None
     denied_dependency: RouteClaimDependencyDenial | None = None
+    denied_incompatible: RouteClaimIncompatibleDenial | None = None
 
     @property
     def won(self) -> bool:
@@ -83,8 +86,11 @@ class IChunkStatusReader(Protocol):
 class IHubClient(IChunkStatusReader, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
-    def peek_queue(self) -> QueuePeekResponse:
-        """``GET /api/fleet/queue/peek`` — the hub-ordered ready queue."""
+    def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
+        """The FILL read — at most one matched entry while this runner holds a token
+        (``POST /api/fleet/queue/peek``); the reference binding falls back to the legacy,
+        unfiltered ``GET`` on a ``401``, so every caller here sees one uniform call
+        regardless of which verb actually served it."""
         ...
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
@@ -137,12 +143,12 @@ class IHubClient(IChunkStatusReader, Protocol):
         env_capacity: int | None = None,
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
+        capabilities: tuple[RunnerCapability, ...] = (),
     ) -> None:
-        """``POST /api/fleet/runners`` — register into the fleet registry.
-
-        Idempotent upsert, and the runner-level liveness heartbeat. Called before the
-        paused read so the runner is registered by the time it reads its state back.
-        Every optional field is an unconditional overwrite on each (re-)registration."""
+        """``POST /api/fleet/runners`` — register into the fleet registry. Idempotent
+        upsert, and the runner-level liveness heartbeat, called before the paused read so
+        the runner is registered by the time it reads its state back. Every optional
+        field, ``capabilities`` included, is unconditionally overwritten each call."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

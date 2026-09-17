@@ -3510,6 +3510,25 @@ export type QueuePeekEntry = {
 };
 
 /**
+ * QueuePeekRequest
+ *
+ * The matched fleet peek's own request body — ``POST /api/fleet/queue/peek``. Carries
+ * the calling runner's capability snapshot and queue policy; never a ``runner_id``,
+ * since the matched verb answers for the authenticated principal alone. ``policy="hold"``
+ * stops at an unusable head; any other value, including an unrecognized one, is pass-over.
+ */
+export type QueuePeekRequest = {
+    /**
+     * Capabilities
+     */
+    capabilities?: Array<RunnerCapability>;
+    /**
+     * Policy
+     */
+    policy?: string;
+};
+
+/**
  * QueuePeekResponse
  *
  * The ready queue's whole order, unpaginated — a write verb's caller needs it in
@@ -4122,6 +4141,32 @@ export type RunRowView = {
 };
 
 /**
+ * RunnerCapability
+ *
+ * One harness binding this runner can execute (blizzard#433) — the id, its observed
+ * version (``None`` when the binding exposes none), the tier ids it can resolve, and
+ * whether it is this runner's default binding.
+ */
+export type RunnerCapability = {
+    /**
+     * Default
+     */
+    default?: boolean;
+    /**
+     * Harness Id
+     */
+    harness_id: string;
+    /**
+     * Tiers
+     */
+    tiers?: Array<string>;
+    /**
+     * Version
+     */
+    version?: string | null;
+};
+
+/**
  * RunnerEnrollmentResponse
  *
  * A freshly minted (or rotated) bearer token — issue #86a.
@@ -4245,6 +4290,10 @@ export type RunnerPauseRequest = {
  * client reports none, never a guessed total. Re-registration overwrites it.
  */
 export type RunnerRegistrationRequest = {
+    /**
+     * Capabilities
+     */
+    capabilities?: Array<RunnerCapability>;
     /**
      * Env Capacity
      */
@@ -8164,6 +8213,31 @@ export type PeekQueueApiFleetQueuePeekGetResponses = {
 };
 
 export type PeekQueueApiFleetQueuePeekGetResponse = PeekQueueApiFleetQueuePeekGetResponses[keyof PeekQueueApiFleetQueuePeekGetResponses];
+
+export type PeekMatchedQueueApiFleetQueuePeekPostData = {
+    body: QueuePeekRequest;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/queue/peek';
+};
+
+export type PeekMatchedQueueApiFleetQueuePeekPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PeekMatchedQueueApiFleetQueuePeekPostError = PeekMatchedQueueApiFleetQueuePeekPostErrors[keyof PeekMatchedQueueApiFleetQueuePeekPostErrors];
+
+export type PeekMatchedQueueApiFleetQueuePeekPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: QueuePeekResponse;
+};
+
+export type PeekMatchedQueueApiFleetQueuePeekPostResponse = PeekMatchedQueueApiFleetQueuePeekPostResponses[keyof PeekMatchedQueueApiFleetQueuePeekPostResponses];
 
 export type ClaimRouteApiFleetRoutesPostData = {
     body: RouteClaim;

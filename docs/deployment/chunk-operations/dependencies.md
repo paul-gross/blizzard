@@ -65,16 +65,28 @@ to say, §The neighborhood.
 ## What a standing edge does to claiming
 
 A standing, unsatisfied dependency denies a claim on its dependent outright: `POST /api/fleet/routes` answers `409` with
-the marking's own body shape — `chunk_id` and `prerequisite_chunk_id`, distinct from the conflict and terminal `409`s a
-claim can otherwise answer with — re-derived fresh under the claim lock rather than trusted from an earlier read, so a
-peek-then-claim race can never slip a blocked chunk through.
+the marking's own body shape — `chunk_id` and `prerequisite_chunk_id`, distinct from the conflict, terminal, and
+incompatibility `409`s a claim can otherwise answer with — re-derived fresh under the claim lock rather than trusted
+from an earlier read, so a peek-then-claim race can never slip a blocked chunk through. A runner whose registered
+capabilities can no longer run every statically reachable node from the chunk's current position is denied the same
+way, with its own `409` naming `chunk_id` and `incompatible_runner_id` in place of the marking's
+`prerequisite_chunk_id` — re-derived fresh under the same lock, for the same reason: a capability change landing
+between a runner's peek and its claim is denied rather than raced. A registration carrying no capabilities at all is
+never checked against this denial, so a runner that has never asserted any never meets it.
 
-A runner's own FILL step does not have to run into that denial to make progress: `GET /api/fleet/queue/peek` already
-carries the marking on every entry it returns, and a runner reaches past a marked head for the first unmarked entry in
-the peeked list by default, rather than spending a claim attempt it already knows will be refused. An operator who sets
-`[queue] strict = true` in that runner's config opts out of reaching ahead — a marked head yields no entry and FILL
-idles for the tick rather than trying a later one. Either way the claim-time denial above still stands as the structural
-guarantee: reach-ahead is an efficiency over the peek, never a replacement for it.
+A runner's own FILL step does not have to run into that denial to make progress. The legacy `GET /api/fleet/queue/peek`
+carries the marking on every entry it returns, and a runner filling from that unfiltered order reaches past a marked
+head for the first unmarked entry in the peeked list by default, rather than spending a claim attempt it already knows
+will be refused. A runner peeking matched to its own capability snapshot (`POST /api/fleet/queue/peek`) gets at most
+one entry back instead, with that same hold-or-pass-over choice already applied hub-side to the blocked marking and to
+capability eligibility together — there is no local list left to scan, so the runner's own reach-ahead plays no part on
+that path.
+
+`[queue] strict = true` in a runner's config is the hold half of that choice on either verb: set, a runner filling from
+the legacy order lets a marked head yield no entry and idles the tick rather than trying a later one, and a runner
+peeking matched gets the same outcome because the hub itself stops at the first unusable entry rather than scanning
+past it. Left at its default, both verbs pass over instead. Either way the claim-time denial above still stands as the
+structural guarantee: reach-ahead — local or hub-side — is an efficiency over the peek, never a replacement for it.
 
 ## On the board
 

@@ -6,6 +6,8 @@ the idempotent envelope re-read, the chunk poll, and a transport failure surfaci
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -13,7 +15,9 @@ from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.internal import http_hub as http_hub_module
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.wire.completion import CompletionSubmission
+from blizzard.wire.queue import QueuePeekRequest
 from blizzard.wire.route import RouteClaim
+from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
@@ -28,7 +32,40 @@ def test_peek_queue_parses_entries() -> None:
         assert request.url.path == "/api/fleet/queue/peek"
         return httpx.Response(200, json={"entries": [{"chunk_id": "ch_1", "graph_id": "gr_1", "position": 0}]})
 
-    peek = _client(handler).peek_queue()
+    peek = _client(handler).peek_queue(QueuePeekRequest())
+    assert [e.chunk_id for e in peek.entries] == ["ch_1"]
+
+
+@pytest.mark.unit
+def test_peek_queue_posts_the_request_body() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"entries": []})
+
+    request = QueuePeekRequest(capabilities=[RunnerCapability(harness_id="claude", default=True)], policy="hold")
+    _client(handler).peek_queue(request)
+    assert seen["body"] == request.model_dump(mode="json")
+
+
+@pytest.mark.unit
+def test_peek_queue_falls_back_to_the_legacy_get_on_a_401() -> None:
+    """A ``401`` (no resolvable principal, or an unenrolled runner with no token) falls
+    back to the legacy, unfiltered verb internally — ``IHubClient`` callers see one
+    uniform call either way."""
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.method)
+        if request.method == "POST":
+            return httpx.Response(401, json={"detail": "no resolvable runner token"})
+        assert request.url.path == "/api/fleet/queue/peek"
+        return httpx.Response(200, json={"entries": [{"chunk_id": "ch_1", "graph_id": "gr_1", "position": 0}]})
+
+    peek = _client(handler).peek_queue(QueuePeekRequest())
+    assert calls == ["POST", "GET"]
     assert [e.chunk_id for e in peek.entries] == ["ch_1"]
 
 
@@ -119,6 +156,32 @@ def test_claim_route_409_with_a_prerequisite_chunk_id_field_is_a_dependency_deni
     assert outcome.conflict is None
     assert outcome.denied_terminal is None
     assert outcome.denied_dependency is not None and outcome.denied_dependency.prerequisite_chunk_id == "ch_0"
+
+
+@pytest.mark.unit
+def test_claim_route_409_with_an_incompatible_runner_id_field_is_an_incompatibility_denial_not_a_conflict() -> None:
+    """The fourth 409 shape (blizzard#433 D9), told apart from the other three by its
+    own ``incompatible_runner_id`` field rather than ``status``, ``prerequisite_chunk_id``,
+    or ``held_by_runner_id``."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            409,
+            json={
+                "chunk_id": "ch_1",
+                "incompatible_runner_id": "r1",
+                "detail": "runner capabilities no longer satisfy the chunk's reachable lineage",
+            },
+        )
+
+    outcome = _client(handler).claim_route(
+        RouteClaim(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
+    )
+    assert not outcome.won
+    assert outcome.conflict is None
+    assert outcome.denied_terminal is None
+    assert outcome.denied_dependency is None
+    assert outcome.denied_incompatible is not None and outcome.denied_incompatible.incompatible_runner_id == "r1"
 
 
 @pytest.mark.unit
@@ -218,7 +281,7 @@ def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None
         ],
     )
     client.push_transcripts(batch)
-    client.peek_queue()  # a plain route, to prove it still rides the client's own default
+    client.peek_queue(QueuePeekRequest())  # a plain route, to prove it still rides the client's own default
 
     assert seen_timeouts[0] == 5.0  # the transcript route's own short override
     assert seen_timeouts[1] == 30.0  # every other route: unaffected, still the shared default
@@ -287,9 +350,16 @@ def test_register_runner_posts_registration() -> None:
         return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
 
     _client(handler).register_runner("r1", "ws1", env_capacity=4)
-    # env_capacity (issue #69) rides the registration body.
-    # url/redirect_uris (issue #95) default to null/empty when the caller omits them.
-    assert seen == {"runner_id": "r1", "workspace_id": "ws1", "env_capacity": 4, "url": None, "redirect_uris": []}
+    # env_capacity (issue #69) rides the body; url/redirect_uris (issue #95) and
+    # capabilities default to null/empty when the caller omits them.
+    assert seen == {
+        "runner_id": "r1",
+        "workspace_id": "ws1",
+        "env_capacity": 4,
+        "url": None,
+        "redirect_uris": [],
+        "capabilities": [],
+    }
 
 
 @pytest.mark.unit
@@ -304,7 +374,14 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
         return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
 
     _client(handler).register_runner("r1", "ws1")
-    assert seen == {"runner_id": "r1", "workspace_id": "ws1", "env_capacity": None, "url": None, "redirect_uris": []}
+    assert seen == {
+        "runner_id": "r1",
+        "workspace_id": "ws1",
+        "env_capacity": None,
+        "url": None,
+        "redirect_uris": [],
+        "capabilities": [],
+    }
 
 
 @pytest.mark.unit
@@ -350,7 +427,7 @@ def test_transport_failure_raises_hub_client_error() -> None:
         return httpx.Response(500, text="boom")
 
     with pytest.raises(HubClientError):
-        _client(handler).peek_queue()
+        _client(handler).peek_queue(QueuePeekRequest())
 
 
 @pytest.mark.unit

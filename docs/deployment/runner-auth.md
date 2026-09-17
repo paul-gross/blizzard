@@ -14,16 +14,18 @@ missing, invalid, or mismatched token is logged and the call proceeds; under `en
 401/403 and `route_token_mode` rejects the write as a semantic failure — a fresh or upgraded hub keeps working
 unauthenticated until an operator deliberately tightens them.
 
-One route ignores `runner_auth_mode`: a runner reading back its own shipped transcript segments
+Two routes ignore `runner_auth_mode`: a runner reading back its own shipped transcript segments
 (`GET /api/fleet/chunks/{chunk_id}/transcript-segments`) is gated by that route's own always-raising ownership check,
-refusing an unresolved or wrong-runner token even under `warn`.
+refusing an unresolved or wrong-runner token even under `warn`; the capability-matched fleet peek
+(`POST /api/fleet/queue/peek`) refuses the same way, demanding a resolvable principal in every mode rather than
+answering an unenrolled runner a permanently empty queue it could mistake for an idle fleet.
 
 ## Enrollment
 
-Enrollment requires prior registration: a runner registers itself with the hub on its own pull, and
-`blizzard hub runner enroll <runner_id>` 404s on an unknown id — a deliberate act on a runner the fleet knows, not
-trust-on-first-use. `enroll` mints the runner's bearer token — or rotates it when run again — and prints the plaintext
-exactly once; there is no read-back, only rotation.
+Enrollment requires prior registration: a runner registers itself with the hub on its own pull, reporting the
+harnesses and tiers it can execute alongside its identity, and `blizzard hub runner enroll <runner_id>` 404s on an
+unknown id — a deliberate act on a runner the fleet knows, not trust-on-first-use. `enroll` mints the runner's bearer
+token — or rotates it when run again — and prints the plaintext exactly once; there is no read-back, only rotation.
 
 `blizzard-runner.toml`'s `token_env` (default `BZ_HUB_TOKEN`) names the environment variable carrying the enrolled
 token, never the secret itself; the secret goes in the runner's env file (the systemd unit's `EnvironmentFile`), read

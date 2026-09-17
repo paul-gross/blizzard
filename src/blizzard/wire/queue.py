@@ -1,15 +1,16 @@
 """The ready-queue peek and the backlog's own reordering surface.
 
-``GET /api/queue`` (and the runner's fleet-side ``GET /api/fleet/queue/peek``) returns
-the hub-ordered ready queue, read-only. ``GET /api/backlog`` is its ``not_ready``-list
-counterpart, ranked independently (``bzh:ranking-is-per-list``); their wire models are
-kept separate rather than shared. Order derives from appended facts."""
+``GET /api/queue`` (and the runner's ``GET /api/fleet/queue/peek``) returns the hub-ordered
+ready queue, read-only; ``GET /api/backlog`` is its independently-ranked ``not_ready``
+counterpart. ``POST /api/fleet/queue/peek`` is a second verb on the same path — the
+matched peek, one entry for the calling principal, sharing the ``GET``'s response model."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel
 
 from blizzard.wire.chunk import BlockedView, WorkRefModel
+from blizzard.wire.runner import RunnerCapability
 
 
 class QueuePeekEntry(BaseModel):
@@ -28,6 +29,16 @@ class QueuePeekResponse(BaseModel):
     full to confirm against, not one page (blizzard#526 D3)."""
 
     entries: list[QueuePeekEntry] = []
+
+
+class QueuePeekRequest(BaseModel):
+    """The matched fleet peek's own request body — ``POST /api/fleet/queue/peek``. Carries
+    the calling runner's capability snapshot and queue policy; never a ``runner_id``,
+    since the matched verb answers for the authenticated principal alone. ``policy="hold"``
+    stops at an unusable head; any other value, including an unrecognized one, is pass-over."""
+
+    capabilities: list[RunnerCapability] = []
+    policy: str = "pass-over"
 
 
 class QueuePageView(BaseModel):

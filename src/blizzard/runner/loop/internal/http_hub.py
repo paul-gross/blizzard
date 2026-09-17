@@ -20,17 +20,18 @@ from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekResponse
+from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
 from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
     RouteClaimDependencyDenial,
+    RouteClaimIncompatibleDenial,
     RouteClaimPausedDenial,
     RouteClaimResponse,
     RouteClaimTerminalDenial,
     RouteTokenRekeyResponse,
 )
-from blizzard.wire.runner import RunnerRegistrationRequest, RunnerView
+from blizzard.wire.runner import RunnerCapability, RunnerRegistrationRequest, RunnerView
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
 
 _log = get_logger("blizzard.runner.hub")
@@ -53,8 +54,17 @@ class HttpHubClient:
     def __init__(self, client: httpx.Client) -> None:
         self._client = client
 
-    def peek_queue(self) -> QueuePeekResponse:
-        resp = self._get(f"{_FLEET_API}/queue/peek")
+    def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
+        path = f"{_FLEET_API}/queue/peek"
+        try:
+            resp = self._client.post(path, json=request.model_dump(mode="json"))
+        except httpx.HTTPError as exc:
+            raise self._wrap(exc, f"POST {path}") from exc
+        if resp.status_code == httpx.codes.UNAUTHORIZED:
+            # No token, or the matched verb's own always-raising demand for a principal
+            # (D7) — the legacy verb serves this caller in every auth mode instead.
+            return QueuePeekResponse.model_validate(self._get(path).json())
+        self._raise_for_status(resp, f"POST {path}")
         return QueuePeekResponse.model_validate(resp.json())
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
@@ -64,13 +74,14 @@ class HttpHubClient:
             raise self._wrap(exc, "POST /fleet/routes") from exc
         if resp.status_code == httpx.codes.CONFLICT:
             body = resp.json()
-            # Three distinct 409 shapes share the status code: a race loss
-            # (`held_by_runner_id`), a terminal denial (`status`, issue #118), and a
-            # dependency denial (`prerequisite_chunk_id`, blizzard#458) — told apart by body.
+            # Four distinct 409 shapes share the status code — race loss, terminal,
+            # dependency, and incompatibility denials — told apart by which field is in body.
             if "status" in body:
                 return RouteClaimOutcome(denied_terminal=RouteClaimTerminalDenial.model_validate(body))
             if "prerequisite_chunk_id" in body:
                 return RouteClaimOutcome(denied_dependency=RouteClaimDependencyDenial.model_validate(body))
+            if "incompatible_runner_id" in body:
+                return RouteClaimOutcome(denied_incompatible=RouteClaimIncompatibleDenial.model_validate(body))
             return RouteClaimOutcome(conflict=RouteClaimConflict.model_validate(body))
         if resp.status_code == httpx.codes.FORBIDDEN:
             return RouteClaimOutcome(denied_paused=RouteClaimPausedDenial.model_validate(resp.json()))
@@ -130,6 +141,7 @@ class HttpHubClient:
         env_capacity: int | None = None,
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
+        capabilities: tuple[RunnerCapability, ...] = (),
     ) -> None:
         self._post(
             f"{_FLEET_API}/runners",
@@ -139,6 +151,7 @@ class HttpHubClient:
                 env_capacity=env_capacity,
                 url=url,
                 redirect_uris=list(redirect_uris),
+                capabilities=list(capabilities),
             ).model_dump(mode="json"),
         )
 

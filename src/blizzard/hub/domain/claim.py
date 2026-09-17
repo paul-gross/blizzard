@@ -20,6 +20,7 @@ from blizzard.hub.domain.chunks.dependencies import IReadChunkDependenciesReposi
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.eligibility import EligibilityCheck
 from blizzard.hub.domain.envelope import Envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
@@ -81,6 +82,18 @@ class ClaimDeniedDependency(Exception):
         super().__init__(f"chunk {chunk_id} depends on unmet prerequisite {prerequisite_chunk_id}")
         self.chunk_id = chunk_id
         self.prerequisite_chunk_id = prerequisite_chunk_id
+
+
+class ClaimDeniedIncompatible(Exception):
+    """The claiming runner's stored capabilities can no longer run every statically
+    reachable runner-owned lineage from the chunk's current node — refused outright,
+    mirroring :class:`ClaimDeniedDependency`'s shape (blizzard#433 D9). A registration
+    reporting no capabilities never reaches this check (see ``_claim_locked``)."""
+
+    def __init__(self, *, chunk_id: str, runner_id: str) -> None:
+        super().__init__(f"runner {runner_id}'s capabilities no longer satisfy chunk {chunk_id}")
+        self.chunk_id = chunk_id
+        self.runner_id = runner_id
 
 
 @dataclass(frozen=True)
@@ -185,6 +198,21 @@ class ClaimService:
         if unmet is not None:
             raise ClaimDeniedDependency(chunk_id=chunk.chunk_id, prerequisite_chunk_id=unmet)
 
+        # Hoisted ahead of the mint (below) so the same resolved node serves both the
+        # incompatibility check and the envelope, rather than resolving it twice.
+        node_id = (facts.current_node_id() if facts is not None else None) or graph.entry_node_id
+        node = graph.node_by_id(node_id)
+        if node is None:  # pragma: no cover - a pinned graph always resolves its own node
+            raise ClaimConflict(held_by_runner_id=runner_id)
+
+        # Re-fetched fresh under the lock (blizzard#433 D9), never the pre-lock read the
+        # paused guard used: a capability change landing after this runner's peek must not race the claim.
+        registration = self._registry.get_runner(runner_id)
+        if registration is not None and registration.capabilities:
+            eligible = EligibilityCheck(chunk, graph, node, registration.capabilities).eligible
+            if not eligible:
+                raise ClaimDeniedIncompatible(chunk_id=chunk.chunk_id, runner_id=runner_id)
+
         # The claim carries the current epoch (0 before the first lease report) and mints
         # no lease of its own; the fence consumes the runner's reported epoch, not this.
         epoch = facts.latest_epoch() or 0 if facts is not None else 0
@@ -203,10 +231,6 @@ class ClaimService:
         route_id = self._route.record_route(route, token_hash=TokenHash(route_token).hex, at=now)
         _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE.reached()
 
-        node_id = (facts.current_node_id() if facts is not None else None) or graph.entry_node_id
-        node = graph.node_by_id(node_id)
-        if node is None:  # pragma: no cover - a pinned graph always resolves its own node
-            raise ClaimConflict(held_by_runner_id=runner_id)
         envelope = Envelope(
             chunk=chunk,
             graph=graph,

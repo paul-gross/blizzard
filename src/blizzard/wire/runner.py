@@ -10,6 +10,17 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
+class RunnerCapability(BaseModel):
+    """One harness binding this runner can execute (blizzard#433) — the id, its observed
+    version (``None`` when the binding exposes none), the tier ids it can resolve, and
+    whether it is this runner's default binding."""
+
+    harness_id: str
+    version: str | None = None
+    tiers: list[str] = []
+    default: bool = False
+
+
 class RunnerRegistrationRequest(BaseModel):
     """Register a runner into the fleet — runner id + workspace binding.
 
@@ -25,6 +36,8 @@ class RunnerRegistrationRequest(BaseModel):
     #: The allowed redirect URIs a browser may be bounced to for this runner (issue #95)
     #: — exact-match only (the open-redirect guard). Empty registers none.
     redirect_uris: list[str] = []
+    #: The runner's capability snapshot — every harness/tier it can execute right now.
+    capabilities: list[RunnerCapability] = []
 
 
 class RunnerRegistrationResponse(BaseModel):

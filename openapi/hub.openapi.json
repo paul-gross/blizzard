@@ -5480,6 +5480,26 @@
         "title": "QueuePeekEntry",
         "type": "object"
       },
+      "QueuePeekRequest": {
+        "description": "The matched fleet peek's own request body \u2014 ``POST /api/fleet/queue/peek``. Carries\nthe calling runner's capability snapshot and queue policy; never a ``runner_id``,\nsince the matched verb answers for the authenticated principal alone. ``policy=\"hold\"``\nstops at an unusable head; any other value, including an unrecognized one, is pass-over.",
+        "properties": {
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerCapability"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "policy": {
+            "default": "pass-over",
+            "title": "Policy",
+            "type": "string"
+          }
+        },
+        "title": "QueuePeekRequest",
+        "type": "object"
+      },
       "QueuePeekResponse": {
         "description": "The ready queue's whole order, unpaginated \u2014 a write verb's caller needs it in\nfull to confirm against, not one page (blizzard#526 D3).",
         "properties": {
@@ -6399,6 +6419,44 @@
         "title": "RunRowView",
         "type": "object"
       },
+      "RunnerCapability": {
+        "description": "One harness binding this runner can execute (blizzard#433) \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding.",
+        "properties": {
+          "default": {
+            "default": false,
+            "title": "Default",
+            "type": "boolean"
+          },
+          "harness_id": {
+            "title": "Harness Id",
+            "type": "string"
+          },
+          "tiers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tiers",
+            "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "harness_id"
+        ],
+        "title": "RunnerCapability",
+        "type": "object"
+      },
       "RunnerEnrollmentResponse": {
         "description": "A freshly minted (or rotated) bearer token \u2014 issue #86a.\n\n``token`` is the plaintext, visible only here \u2014 only its sha256 hash is kept. A\nre-enroll rotates: the old token stops resolving the moment this response lands.",
         "properties": {
@@ -6538,6 +6596,14 @@
       "RunnerRegistrationRequest": {
         "description": "Register a runner into the fleet \u2014 runner id + workspace binding.\n\n``env_capacity`` is the runner's configured environment-pool size; ``None`` when the\nclient reports none, never a guessed total. Re-registration overwrites it.",
         "properties": {
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerCapability"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
           "env_capacity": {
             "anyOf": [
               {
@@ -13606,7 +13672,7 @@
     },
     "/api/fleet/queue/peek": {
       "get": {
-        "description": "The runner's FILL read \u2014 the whole ready-queue order, unlike the now-paginated\n``GET /api/queue``: a filling runner needs every ready chunk in one read.",
+        "description": "The runner's FILL read \u2014 the whole ready-queue order, unlike the now-paginated\n``GET /api/queue``: a filling runner needs every ready chunk in one read. Kept as-is\nfor a previous-minor caller (D7, blizzard#433 Phase 3); ``POST /queue/peek`` below is\nthe matched counterpart.",
         "operationId": "peek_queue_api_fleet_queue_peek_get",
         "responses": {
           "200": {
@@ -13624,11 +13690,51 @@
         "tags": [
           "fleet"
         ]
+      },
+      "post": {
+        "description": "The matched fleet peek \u2014 at most one ready entry the calling principal can both\nwork (declared capabilities against ``EligibilityCheck``) and claim (not\ndependency-blocked), with ``request.policy`` applied to both. Demands a resolvable\nprincipal in every auth mode, so an unenrolled runner never reads a permanently\nempty queue as an idle fleet.",
+        "operationId": "peek_matched_queue_api_fleet_queue_peek_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueuePeekRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuePeekResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Peek Matched Queue",
+        "tags": [
+          "fleet"
+        ]
       }
     },
     "/api/fleet/routes": {
       "post": {
-        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,\nalready terminal ({done, stopped}, issue #118), or standing on an unmet prerequisite\n(blizzard#458), else the first node envelope.",
+        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,\nalready terminal ({done, stopped}, issue #118), standing on an unmet prerequisite\n(blizzard#458), or incompatible with the runner's stored capabilities (blizzard#433\nD9), else the first node envelope.",
         "operationId": "claim_route_api_fleet_routes_post",
         "requestBody": {
           "content": {
@@ -13670,7 +13776,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level (issue #86a); issue #95's optional\n``url``/``redirect_uris`` extension rides the same authenticated write.",
+        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level (issue #86a); issue #95's optional\n``url``/``redirect_uris`` extension, and blizzard#433's ``capabilities`` snapshot,\nride the same authenticated write.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {

@@ -13,12 +13,13 @@ from blizzard.runner.environments.provider import (
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.loop.capability_snapshot import capability_snapshot
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.wire.envelope import NodeEnvelope
-from blizzard.wire.queue import QueuePeekEntry
+from blizzard.wire.queue import QueuePeekEntry, QueuePeekRequest
 from blizzard.wire.route import RouteClaim
 
 _log = get_logger("blizzard.runner.loop")
@@ -38,19 +39,23 @@ _CP_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds the rou
 @dataclass
 class ReadyQueue:
     """The hub's ready queue, as the source FILL takes work from — peek the head, acquire its
-    environments all-or-nothing, bind them locally, then race for the route.
-
-    ``_entries`` is this one ``Fill.run()`` call's own local peeked snapshot (blizzard#459):
-    peeked ONCE via :meth:`peeked`, then selected from and dropped in place by each
-    ``claim_one()`` this run makes, rather than re-peeking the hub per attempt."""
+    environments all-or-nothing, bind them locally, then race for the route. ``_entries`` is
+    one peek's own snapshot, holding at most one entry when a capability-asserting runner
+    peeks fresh before every ``claim_one()`` (``tests/test_runner_loop.py``'s pinning)."""
 
     ctx: LoopContext
     _entries: list[QueuePeekEntry] = field(default_factory=list)
 
     @classmethod
     def peeked(cls, ctx: LoopContext) -> ReadyQueue:
+        request = QueuePeekRequest(
+            capabilities=list(capability_snapshot(ctx.harnesses)),
+            # The same knob `_next` reach-ahead already honors locally, sent per call
+            # rather than read hub-side, so both dimensions get the identical policy.
+            policy="hold" if ctx.config.queue_strict else "pass-over",
+        )
         try:
-            peeked = ctx.hub.peek_queue()
+            peeked = ctx.hub.peek_queue(request)
         except HubClientError:
             return cls(ctx, _entries=[])
         return cls(ctx, _entries=list(peeked.entries))
@@ -109,6 +114,11 @@ class ReadyQueue:
             )
             self.ctx.env_release.release_binding(chunk_id, acquired)
             return not strict_dependency_hold
+        if outcome.denied_incompatible is not None:
+            # Not a race loss or a dependency block (blizzard#433 D9) — nothing to hold at.
+            _log.info("route claim denied — runner incompatible with chunk", chunk_id=chunk_id)
+            self.ctx.env_release.release_binding(chunk_id, acquired)
+            return True
         if outcome.conflict is not None or outcome.claimed is None:
             _log.info("route claim lost the race", chunk_id=chunk_id)
             self.ctx.env_release.release_binding(chunk_id, acquired)  # someone else won — undo our binding

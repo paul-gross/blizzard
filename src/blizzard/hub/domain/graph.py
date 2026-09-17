@@ -700,7 +700,21 @@ class FollowLatest:
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
 
 
-class IReadGraphRepository(Protocol):
+class IReadManyGraphs(Protocol):
+    """The plural reifying read :class:`IReadGraphRepository` composes rather than declares
+    directly — it already sits at ``bzh:seam-size-ceiling``'s twelve methods, so a new
+    consumer (the matched peek's bulk graph walk) re-types to just this capability,
+    mirroring :class:`~blizzard.runner.loop.hub.IChunkStatusReader`'s precedent."""
+
+    def get_many(self, graph_ids: Sequence[str]) -> dict[str, Graph]:
+        """``{graph_id: Graph}`` for every requested id that exists, each reified in full
+        (nodes, edges, sessions, artifacts) — :meth:`IReadGraphRepository.get`'s batched
+        sibling. An id that doesn't exist is silently dropped, the same as ``get``
+        returning ``None`` for it."""
+        ...
+
+
+class IReadGraphRepository(IReadManyGraphs, Protocol):
     """Read-only graph access. Controllers at the edges depend on this variant."""
 
     def get(self, graph_id: str) -> Graph | None: ...

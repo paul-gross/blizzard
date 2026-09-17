@@ -1251,6 +1251,32 @@ def test_resolve_model_strict_is_none_when_nothing_resolves() -> None:
     assert adapter.resolve_model_strict(["gpt-5.3-codex", "blizzard:experimental"]) is None
 
 
+# --------------------------------------------------------------------------- #
+# `resolvable_tier_ids` (blizzard#433): the capability snapshot's own tier enumeration.
+
+
+@pytest.mark.unit
+def test_resolvable_tier_ids_names_every_built_in_tier_with_no_config_at_all() -> None:
+    adapter = _adapter(binary="claude")
+    assert set(adapter.resolvable_tier_ids()) == {"blizzard:frontier", "blizzard:advanced", "blizzard:basic"}
+
+
+@pytest.mark.unit
+def test_resolvable_tier_ids_merges_an_operator_alias_overriding_a_built_in_once() -> None:
+    # The operator's own table overrides the built-in entry by key — the overridden id
+    # still appears exactly once, never twice with two different native names.
+    adapter = _adapter(binary="claude", model_aliases=(("blizzard:basic", "haiku"),))
+    tiers = adapter.resolvable_tier_ids()
+    assert tiers.count("blizzard:basic") == 1
+    assert set(tiers) == {"blizzard:frontier", "blizzard:advanced", "blizzard:basic"}
+
+
+@pytest.mark.unit
+def test_resolvable_tier_ids_includes_an_operator_alias_outside_the_built_ins() -> None:
+    adapter = _adapter(binary="claude", model_aliases=(("blizzard:experimental", "opus"),))
+    assert "blizzard:experimental" in adapter.resolvable_tier_ids()
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize("value", ["low", "medium", "high", "max"])
 def test_resolve_effort_passes_the_well_known_ordinal_through(value: str) -> None:

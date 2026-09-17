@@ -57,6 +57,7 @@ from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
 from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.queue import QueuePeekEntry
+from blizzard.wire.runner import RunnerCapability
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -1008,6 +1009,33 @@ def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path):  # type: i
 
 
 @pytest.mark.unit
+def test_fill_incompatible_denial_releases_and_keeps_filling(tmp_path):  # type: ignore[no-untyped-def]
+    """The runner's stored capabilities no longer cover the chunk — not a race loss or a
+    dependency block, so FILL releases the binding, mints no lease, and keeps filling its
+    remaining slots, as the terminal/dependency denials do."""
+    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.wire.route import RouteClaimIncompatibleDenial
+
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = RouteClaimOutcome(
+        denied_incompatible=RouteClaimIncompatibleDenial(chunk_id="ch_1", incompatible_runner_id="r1")
+    )
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
+
+    Fill(ctx).run()
+
+    assert len(hub.claims) == 1  # the claim was actually attempted
+    assert provider.released == ["e1"]  # released the acquired-but-unclaimed env
+    assert store.held_environment_ids() == []
+    assert store.list_active_leases() == []
+    assert harness.spawns == []
+
+
+@pytest.mark.unit
 def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(tmp_path):  # type: ignore[no-untyped-def]
     """review F3: a dependency block discovered only at claim time — not reflected in the
     peeked snapshot's own ``blocked`` field, unlike ``test_fill_strict_holds_at_a_marked_head``'s
@@ -1218,20 +1246,53 @@ def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path
 
 
 @pytest.mark.unit
-def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills(tmp_path):  # type: ignore[no-untyped-def]
-    """Phase 3 hoist (blizzard#459): one ``Fill.run()`` call peeks the hub ONCE, filling every
-    open slot it can off that one snapshot — not one fresh peek per ``claim_one()`` attempt."""
+def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills_on_the_legacy_path(tmp_path):  # type: ignore[no-untyped-def]
+    """Phase 3 hoist (blizzard#459), preserved for the legacy (non-capability-asserting)
+    path only (blizzard#433 D10): one ``Fill.run()`` peeks the hub ONCE, filling every open
+    slot off that one cached snapshot — the reverse of the matched path's own discipline."""
+    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.wire.route import RouteClaimConflict
+
     store = _store(tmp_path)
     hub = FakeHub()
-    env = _build_envelope()
     hub.queue = [
         QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0),
         QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=1),
     ]
-    # `claim_route`'s scripted outcome is the same object for every call, but `claim_one`
-    # only ever reads `entry.chunk_id` (the peeked entry) and `outcome.claimed.envelope`/
-    # `.route_token` off it — never `outcome.claimed.chunk_id` — so one scripted outcome
-    # correctly claims each distinct peeked chunk.
+    # Both claims lose the race — spawning is never reached, which is what lets this test
+    # assert `capabilities=[]` cleanly (no adapter needs to resolve through `ctx.harnesses`).
+    hub.claim_outcome = RouteClaimOutcome(conflict=RouteClaimConflict(chunk_id="ch_1", held_by_runner_id="r2"))
+    provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=2),
+    )
+    ctx = replace(ctx, harnesses=HarnessRegistry({}))  # no capabilities asserted — the legacy path
+
+    Fill(ctx).run()
+
+    assert hub.peek_queue_calls == 1  # one hub peek for the whole fill, not one per claim
+    assert [c.harness_id for c in hub.peek_queue_requests[0].capabilities] == []
+    assert len(hub.claims) == 2  # both slots still attempted off the one peeked snapshot
+
+
+@pytest.mark.unit
+def test_fill_peeks_once_per_claim_attempt_on_the_matched_path(tmp_path):  # type: ignore[no-untyped-def]
+    """blizzard#433 D10: a capability-asserting runner peeks fresh before every
+    ``claim_one()`` attempt, since D8's single-entry response leaves no cache behind —
+    each successive peek here advances past the chunk the previous attempt claimed."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    env = _build_envelope()
+    hub.queue_responses = [
+        [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)],
+        [QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=0)],
+    ]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -1246,12 +1307,61 @@ def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills(tmp_path)
 
     Fill(ctx).run()
 
-    assert hub.peek_queue_calls == 1  # one hub peek for the whole fill, not one per claim
-    assert len(hub.claims) == 2  # both slots still filled off the one peeked snapshot
+    assert hub.peek_queue_calls == 2  # one fresh peek per claim attempt, not one for the fill
+    assert [c.harness_id for c in hub.peek_queue_requests[0].capabilities] == ["claude_code"]
+    assert len(hub.claims) == 2  # both slots still filled, each off its own peek
     assert len(harness.spawns) == 2
     assert store.active_lease_for_chunk("ch_1") is not None
     assert store.active_lease_for_chunk("ch_2") is not None
     assert set(store.held_environment_ids()) == {"e1", "e2"}
+
+
+@pytest.mark.unit
+def test_fill_peeks_with_this_runners_own_capability_snapshot_and_queue_strict_policy(tmp_path):  # type: ignore[no-untyped-def]
+    """The matched peek's request carries the same capability snapshot the registration
+    push does (``capability_snapshot``), translating ``queue_strict`` into the wire
+    policy: ``True`` -> ``"hold"``, ``False`` -> ``"pass-over"``."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.harness_version = "1.2.3"
+    harness.tier_ids = ("blizzard:frontier",)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", queue_strict=True),
+    )
+
+    Fill(ctx).run()
+
+    assert len(hub.peek_queue_requests) == 1
+    request = hub.peek_queue_requests[0]
+    assert request.policy == "hold"
+    assert [c.harness_id for c in request.capabilities] == ["claude_code"]
+    assert request.capabilities[0].default is True
+    assert request.capabilities[0].version == "1.2.3"
+    assert request.capabilities[0].tiers == ["blizzard:frontier"]
+
+
+@pytest.mark.unit
+def test_fill_peeks_pass_over_by_default(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1"),
+    )
+
+    Fill(ctx).run()
+
+    assert hub.peek_queue_requests[0].policy == "pass-over"
 
 
 # ADVANCE — exited worker (buffer) + PULL flush (deliver)
@@ -3205,3 +3315,34 @@ def test_pull_registers_every_declared_redirect_uri(tmp_path):  # type: ignore[n
 
     assert hub.registered_redirect_uris == [uris]
     assert hub.registered_urls == ["http://127.0.0.1:8431"]
+
+
+@pytest.mark.unit
+def test_pull_sends_a_deterministic_single_binding_capability_snapshot(tmp_path):  # type: ignore[no-untyped-def]
+    # A registry holding one available binding (today's only shape) always names it the
+    # default (blizzard#433) — no separate runner config key decides this.
+    store = _store(tmp_path)
+    hub = FakeHub()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.harness_version = "1.2.3"
+    harness.tier_ids = ("blizzard:frontier", "blizzard:advanced", "blizzard:basic")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+    )
+
+    Pull(ctx).run()
+
+    assert hub.registered_capabilities == [
+        (
+            RunnerCapability(
+                harness_id="claude_code",
+                version="1.2.3",
+                tiers=["blizzard:frontier", "blizzard:advanced", "blizzard:basic"],
+                default=True,
+            ),
+        )
+    ]
