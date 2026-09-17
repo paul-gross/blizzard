@@ -415,6 +415,34 @@ def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
+def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_identity(tmp_path: Path) -> None:
+    """F7: a worker that flushed its identity record then exited fast is a SUCCESS — the
+    valid record is checked before liveness, not after, so this must not raise even though
+    the process is already dead by the time ``await_identity`` looks."""
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    stdout_path = tmp_path / "lease-1.stdout"
+    stdout_path.write_bytes(
+        json.dumps(
+            {
+                "type": "step_start",
+                "sessionID": "ses_flushed",
+                "part": {"id": "prt_start", "sessionID": "ses_flushed", "messageID": "msg_1", "type": "step-start"},
+            }
+        ).encode()
+        + b"\n"
+    )
+    adapter = _adapter(binary="opencode", process=FakeProbe(alive=set()))  # already gone
+    pending = _PendingOpenCodeIdentity(
+        pid=4242, pgid=4242, process_start_time="start-token", stdout_path=str(stdout_path), process=adapter._process
+    )
+
+    handle = pending.await_identity(0.1)
+
+    assert handle.session_id == "ses_flushed"
+
+
+@pytest.mark.component
 def test_first_event_tolerates_leading_non_json_lines(tmp_path: Path) -> None:
     """Identity arrives on the worker's own SHARED stdout — an earlier writer (a tool
     banner, a stray line) may put non-JSON ahead of the real first record. Byte zero need
