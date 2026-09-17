@@ -139,6 +139,8 @@ class Spawn:
             environments=[AcquiredEnvironment(environment_id="selftest", workdir=workdir)],
             lease_id="selftest",
             local_api_url="",
+            # Never the bare `""` default: OpenCode's spawn needs a real path to learn its session id from.
+            stdout_path=os.path.join(workdir, ".selftest-spawn-stdout"),
         )
 
     @staticmethod
@@ -195,7 +197,11 @@ class Resume(Check):
     def run(self) -> SelfTestCheck:
         scratch = self.scratch
         try:
-            pid = scratch.adapter.resume_with_message(scratch.workdir, scratch.session_id, _RESUME_MESSAGE)
+            # Never the bare `""` default: it would inherit the daemon's own stdout.
+            stdout_path = os.path.join(scratch.workdir, ".selftest-resume-stdout")
+            pid = scratch.adapter.resume_with_message(
+                scratch.workdir, scratch.session_id, _RESUME_MESSAGE, stdout_path=stdout_path
+            )
         except Exception as exc:
             return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message raised: {exc}")
         if pid <= 0:

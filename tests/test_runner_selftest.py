@@ -26,8 +26,9 @@ from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
@@ -86,6 +87,56 @@ def _fake_binary(tmp_path: Path, source: str = _FAKE_HARNESS) -> str:
     tmp_path.mkdir(parents=True, exist_ok=True)
     script = tmp_path / "fake-claude"
     script.write_text(source)
+    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
+    return str(script)
+
+
+# A fake OpenCode CLI: the same trivial edit+commit on a fresh run, a parseable verdict on a resumed one.
+_FAKE_OPENCODE_HARNESS = """#!/usr/bin/env python3
+import json
+import subprocess
+import sys
+
+args = sys.argv[1:]
+if args == ["--version"]:
+    print("opencode 1.18.25")
+    raise SystemExit(0)
+
+session = args[args.index("--session") + 1] if "--session" in args else None
+sid = session or "ses_selftest"
+
+if session is None:
+    with open("SELFTEST.txt", "w") as fh:
+        fh.write("ok\\n")
+    subprocess.run(["git", "add", "SELFTEST.txt"], check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=worker@blizzard.local", "-c", "user.name=fake worker",
+         "commit", "-q", "-m", "selftest: trivial edit"],
+        check=True,
+    )
+    text = "Done."
+else:
+    text = "Assessed. <Choice>pass</Choice>"
+
+events = [
+    {"type": "step_start", "sessionID": sid,
+     "part": {"id": "prt_start", "sessionID": sid, "messageID": "msg_1", "type": "step-start"}},
+    {"type": "text", "sessionID": sid,
+     "part": {"id": "prt_text", "sessionID": sid, "messageID": "msg_1", "type": "text", "text": text}},
+    {"type": "step_finish", "sessionID": sid,
+     "part": {"id": "prt_finish", "sessionID": sid, "messageID": "msg_1", "type": "step-finish",
+              "reason": "stop", "cost": 0.0,
+              "tokens": {"input": 1, "output": 1, "reasoning": 0, "cache": {"read": 0, "write": 0}}}},
+]
+for event in events:
+    print(json.dumps(event), flush=True)
+"""
+
+
+def _fake_opencode_binary(tmp_path: Path) -> str:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    script = tmp_path / "fake-opencode"
+    script.write_text(_FAKE_OPENCODE_HARNESS)
     script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
     return str(script)
 
@@ -623,3 +674,27 @@ def test_cli_selftest_rejects_an_unknown_harness(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert "codex" in result.output
     assert "claude_code" in result.output
+
+
+@pytest.mark.component
+def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path) -> None:
+    """Proven against the REAL, production-composed two-harness registry, never
+    hand-written fakes: both `claude_code` and `opencode` must pass every check, including
+    OpenCode's own stdout-injection requirement on spawn and resume."""
+    config = RunnerConfig(
+        root=tmp_path / "runner",
+        db_url="sqlite://",
+        harness_binary=_fake_binary(tmp_path / "claude-bin"),
+        opencode_binary=_fake_opencode_binary(tmp_path / "opencode-bin"),
+    )
+    harnesses = build_production_harness_registry(config)
+    client = TestClient(create_app(config, harnesses=harnesses))
+
+    for harness_id in (CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID):
+        start = client.post("/api/selftests", json={"harness": harness_id})
+        assert start.status_code == 201, start.text
+
+        run = _poll_until_done(client, start.json()["id"])
+
+        assert run["status"] == "passed", (harness_id, run)
+        assert all(c["passed"] for c in run["checks"]), (harness_id, run["checks"])
