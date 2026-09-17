@@ -24,6 +24,9 @@ CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
 # The runner-owned worker hook file `init` scaffolds, delivering the heartbeat hook.
 WORKER_SETTINGS_FILENAME = "worker-settings.json"
+# The runner-owned OpenCode permission/plugin document `init` scaffolds (D7) — phase 2
+# writes only its permission half; phase 4 extends the same document with the plugin.
+OPENCODE_WORKER_CONFIG_FILENAME = "opencode-worker-config.json"
 # The local API's unix socket, under the state dir beside the store; filesystem
 # permissions are its access control.
 SOCKET_FILENAME = "runner.sock"
@@ -60,6 +63,8 @@ DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
 DEFAULT_RUNNER_ID = "runner-local"
 DEFAULT_WORKSPACE_ID = "workspace-local"
 DEFAULT_HARNESS_BINARY = "claude"
+# OpenCode's own binary path (D6) — independent of `harness_binary`'s Claude Code meaning.
+DEFAULT_OPENCODE_BINARY = "opencode"
 # A headless worker has no one to approve tool use, so it needs a non-interactive mode;
 # a config may set this empty to omit the flag.
 DEFAULT_HARNESS_PERMISSION_MODE = "bypassPermissions"
@@ -476,6 +481,22 @@ class RunnerConfig:
     #: Effort alias mappings (issue #144) onto the `low|medium|high|max` ordinal; the
     #: well-known four need no entry.
     effort_aliases: tuple[tuple[str, str], ...] = ()
+    #: OpenCode's own binary path (D6) — genuinely independent of `harness_binary`, which
+    #: keeps meaning Claude Code's binary exactly as it always has; no deployed
+    #: `blizzard-runner.toml` needs an edit to keep working.
+    opencode_binary: str = DEFAULT_OPENCODE_BINARY
+    #: OpenCode's own tier -> `provider/model` mapping (D6). Unlike Claude Code's three
+    #: built-in tiers, OpenCode ships no built-in mapping at all: an unmapped tier makes
+    #: `resolve_model_strict` return `None`, which is what lets a multi-harness selection
+    #: skip this binding instead of spawning it under a model it cannot provide
+    #: (harness-selection spec).
+    opencode_model_aliases: tuple[tuple[str, str], ...] = ()
+    #: OpenCode's own effort -> `--variant` mapping (D6); the well-known ordinal still
+    #: passes through unmapped, exactly as Claude Code's effort aliasing does.
+    opencode_effort_aliases: tuple[tuple[str, str], ...] = ()
+    #: The runner-owned OpenCode permission/plugin document's path (D7) — `init` scaffolds
+    #: it beside `worker_settings_path`; `None` when this runtime predates the binding.
+    opencode_worker_config_path: str | None = None
     #: The reverse-proxy trust set (issue #130) — addresses or CIDRs whose
     #: `X-Forwarded-Proto` is honored; empty ignores the header from every peer.
     trusted_proxies: tuple[str, ...] = ()
@@ -637,6 +658,7 @@ class RunnerConfig:
             # The worker hook file `init` writes alongside the config; the adapter
             # delivers it as `--settings` so a spawned worker heartbeats.
             worker_settings_path=str(root / WORKER_SETTINGS_FILENAME),
+            opencode_worker_config_path=str(root / OPENCODE_WORKER_CONFIG_FILENAME),
             # Empty on a fresh scaffold; seeded from the environment so `init` can inject
             # a default without hand-editing (issue #17).
             workspace_prompt=os.environ.get(ENV_WORKSPACE_PROMPT, ""),
@@ -815,6 +837,18 @@ class RunnerConfig:
             + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.model_aliases)
             + "\n[effort.aliases]\n"
             + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.effort_aliases)
+            + "\n# The OpenCode binding's own configuration (D6) — fully independent of the flat\n"
+            + "# Claude Code fields above, which keep their existing meaning unchanged. OpenCode\n"
+            + "# ships no built-in tier mapping, so an unmapped tier makes this binding unable to\n"
+            + "# satisfy a session demanding it; a multi-harness selection skips it rather than\n"
+            + "# spawn it under a model it cannot provide.\n"
+            + "[opencode]\n"
+            + f'binary = "{self.opencode_binary}"\n'
+            + f"worker_config_path = {json.dumps(self.opencode_worker_config_path or '')}\n"
+            + "\n[opencode.models.aliases]\n"
+            + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.opencode_model_aliases)
+            + "\n[opencode.effort.aliases]\n"
+            + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.opencode_effort_aliases)
         )
 
     @classmethod
@@ -836,6 +870,7 @@ class RunnerConfig:
         # `resolved_subscriptions()` is where declarations-win-over-the-legacy-table
         # (blizzard#436) actually happens, from this config's own resolved fields.
         subscriptions = SubscriptionDeclaration.declared(raw.get("subscription", []))
+        opencode = Table.of(raw.get("opencode"))
         return cls(
             root=root,
             db_url=str(raw["db_url"]),
@@ -884,4 +919,8 @@ class RunnerConfig:
             model_aliases=Table.of(raw.get("models")).pairs("aliases"),
             effort_aliases=Table.of(raw.get("effort")).pairs("aliases"),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
+            opencode_binary=opencode.word("binary") or DEFAULT_OPENCODE_BINARY,
+            opencode_model_aliases=Table.of(opencode.body.get("models")).pairs("aliases"),
+            opencode_effort_aliases=Table.of(opencode.body.get("effort")).pairs("aliases"),
+            opencode_worker_config_path=opencode.word("worker_config_path"),
         )

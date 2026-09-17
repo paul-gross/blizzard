@@ -11,7 +11,14 @@ from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
-from blizzard.runner.config import CONFIG_FILENAME, WORKER_SETTINGS_FILENAME, ConfigError, RunnerConfig
+from blizzard.runner.config import (
+    CONFIG_FILENAME,
+    OPENCODE_WORKER_CONFIG_FILENAME,
+    WORKER_SETTINGS_FILENAME,
+    ConfigError,
+    RunnerConfig,
+)
+from blizzard.runner.harness.internal.opencode_worker_config import write_worker_config
 from blizzard.runner.harness.worker_settings import WorkerSettings
 from blizzard.runner.store import MIGRATIONS_DIR, STORE_NAME
 
@@ -63,6 +70,9 @@ class Runtime:
             # Written idempotently: the content is versioned with the runner, so re-running
             # `init` refreshes it to head.
             (root / WORKER_SETTINGS_FILENAME).write_text(WorkerSettings.of().json)
+            # The runner-owned OpenCode permission/plugin document (D7) — scaffolded the
+            # same idempotent way, permission-only until phase 4 adds the plugin.
+            write_worker_config(root / OPENCODE_WORKER_CONFIG_FILENAME)
         except OSError as exc:
             raise ConfigError(f"cannot write the runner runtime at {root}: {exc}") from exc
 

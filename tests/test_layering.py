@@ -360,12 +360,16 @@ def test_only_the_composition_roots_import_the_runner_composition_module() -> No
     )
 
 
-_GATED_COMPOSITION_NAMES = ("ClaudeCodeAdapter",)
-_CLAUDE_CODE_FACTORY = _RUNNER_DIR / "harness" / "internal" / "claude_code_registry.py"
+# Each gated concrete adapter class may be imported only by its one approved factory
+# module (D9) — every composition root takes the registry that factory builds instead.
+_GATED_COMPOSITIONS: dict[str, Path] = {
+    "ClaudeCodeAdapter": _RUNNER_DIR / "harness" / "internal" / "claude_code_registry.py",
+    "OpenCodeAdapter": _RUNNER_DIR / "harness" / "internal" / "opencode_registry.py",
+}
 
 
-def test_claude_code_adapter_stays_in_its_wiring_module() -> None:
-    """L: the harness adapter is named only by the one factory that constructs it —
+def test_gated_harness_adapters_stay_in_their_wiring_module() -> None:
+    """L: each harness adapter is named only by the one factory that constructs it —
     every composition root takes the registry it builds instead."""
     violations: list[str] = []
     for path in sorted(_SRC_DIR.rglob("*.py")):
@@ -373,12 +377,13 @@ def test_claude_code_adapter_stays_in_its_wiring_module() -> None:
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom):
                 continue
-            hit = set(_GATED_COMPOSITION_NAMES) & {alias.name for alias in node.names}
-            if path == _CLAUDE_CODE_FACTORY:
-                hit -= {"ClaudeCodeAdapter"}
-            if hit:
-                violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
-    assert not violations, f"L — ClaudeCodeAdapter escaped its approved wiring module: {violations}"
+            names = {alias.name for alias in node.names}
+            for adapter_name, factory in _GATED_COMPOSITIONS.items():
+                if path == factory:
+                    continue
+                if adapter_name in names:
+                    violations.append(f"{path.relative_to(_REPO_ROOT)} imports {adapter_name!r}")
+    assert not violations, f"L — a gated harness adapter escaped its approved wiring module: {violations}"
 
 
 _TRANSCRIPT_SERVICE_FILE = _RUNNER_DIR / "transcripts" / "service.py"

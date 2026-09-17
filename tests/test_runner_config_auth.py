@@ -189,3 +189,42 @@ def test_a_scaffold_declaring_no_aliases_reads_back_empty(tmp_path: Path) -> Non
 
     assert reloaded.model_aliases == ()
     assert reloaded.effort_aliases == ()
+
+
+# --- OpenCode's own per-harness configuration (D6) ---------------------------
+
+
+def test_opencode_binary_and_aliases_round_trip(tmp_path: Path) -> None:
+    """OpenCode's own binary path and tier/effort tables are independent of the flat
+    Claude Code fields above — `runner init` scaffolds both, `load` reads both back."""
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url="sqlite://",
+        opencode_binary="/usr/local/bin/opencode",
+        opencode_model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),),
+        opencode_effort_aliases=(("high", "xhigh"),),
+    )
+
+    reloaded = _round_trip(tmp_path, config)
+
+    assert reloaded.opencode_binary == "/usr/local/bin/opencode"
+    assert reloaded.opencode_model_aliases == (("blizzard:frontier", "openai/gpt-5.6-luna"),)
+    assert reloaded.opencode_effort_aliases == (("high", "xhigh"),)
+
+
+def test_a_scaffold_declaring_no_opencode_config_reads_back_the_default_binary(tmp_path: Path) -> None:
+    reloaded = _round_trip(tmp_path, RunnerConfig(root=tmp_path, db_url="sqlite://"))
+
+    assert reloaded.opencode_binary == "opencode"
+    assert reloaded.opencode_model_aliases == ()
+    assert reloaded.opencode_effort_aliases == ()
+
+
+def test_opencode_worker_config_path_round_trips(tmp_path: Path) -> None:
+    config = RunnerConfig(
+        root=tmp_path, db_url="sqlite://", opencode_worker_config_path=str(tmp_path / "opencode-worker-config.json")
+    )
+
+    reloaded = _round_trip(tmp_path, config)
+
+    assert reloaded.opencode_worker_config_path == str(tmp_path / "opencode-worker-config.json")
