@@ -13,10 +13,11 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 
 
 def build_opencode_binding(config: RunnerConfig) -> HarnessBinding:
-    """Build the OpenCode adapter once for one composition graph.
-
-    No transcript source yet: OpenCode transcript reading is a later phase's own capability,
-    and a harness with none binds a null source so no caller needs a null check."""
+    """Build the OpenCode adapter once for one composition graph. Leaves
+    ``HarnessBinding.transcript_source`` genuinely unset: OpenCode has no transcript
+    reading yet, so :meth:`HarnessRegistry.transcript_source` raises
+    ``UnavailableHarnessError`` for it — every caller already guards that as the one true
+    "no fallback" signal, distinct from the adapter's own always-non-``None`` accessor."""
     adapter = OpenCodeAdapter(
         binary=config.opencode_binary,
         env_passthrough=config.worker_env_passthrough,

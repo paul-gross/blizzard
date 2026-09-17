@@ -11,9 +11,11 @@ runner-wide switch, so a deployment that never names `opencode` anywhere never s
 resolves against this runner's own bindings: **unknown** means the session was recorded under a harness id this runner
 build doesn't ship at all — the remedy is to run a runner version that binds that id, on the runner holding the chunk,
 never to substitute another harness. **unavailable** means the id is bound but this runner can't supply the specific
-capability being asked of it — resuming or judging versus reading its transcript — a gap the production harness
-registry doesn't leave open today, so it can't occur in practice. Either shows up as an `owner-unresolvable` event,
-which [observability.md](./observability.md) owns reading and resolving.
+capability being asked of it — resuming or judging versus reading its transcript. `claude_code` binds every capability
+the registry knows to ask for, so this never fires for it; `opencode` binds no transcript source at all (a later
+phase's own capability), so asking for one genuinely raises this today — the loop's own usage-recording and
+session-rotation call sites already treat it as their ordinary "no fallback transcript" outcome, never a crash. Either
+shows up as an `owner-unresolvable` event, which [observability.md](./observability.md) owns reading and resolving.
 
 OpenCode's own plugin channel — a soft heartbeat nudge after every tool call, and forwarding the lease's identity into
 tool subprocesses through `shell.env` — is classified `degraded` on the pinned OpenCode version: the compatibility
