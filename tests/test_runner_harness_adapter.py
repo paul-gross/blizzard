@@ -31,9 +31,8 @@ _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Lo
 
 
 def _adapter(**kwargs: Any) -> ClaudeCodeAdapter:
-    """A :class:`ClaudeCodeAdapter` construction helper defaulting ``process`` to a fresh
-    :class:`FakeProbe` and ``launcher`` to a real :class:`ProcessLauncher` over it — most of
-    this file's cases don't care which probe or launcher it gets."""
+    """A :class:`ClaudeCodeAdapter` helper defaulting ``process`` to a fresh :class:`FakeProbe`
+    and ``launcher`` to a real one over it — most cases here don't care which they get."""
     process = kwargs.setdefault("process", FakeProbe())
     kwargs.setdefault("launcher", ProcessLauncher(process))
     return ClaudeCodeAdapter(**kwargs)

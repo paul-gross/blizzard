@@ -145,9 +145,7 @@ class ClaudeCodeAdapter:
         # The pid-liveness seam (`bzh:pluggable-seams`); the Linux `/proc` reference binding
         # is the only production substitute, always injected (`bzh:dependency-injection`).
         self._process: IProcessProbe = process
-        # Every launch goes through the one runner-owned process-ownership seam (D4) —
-        # injected, never self-constructed (`bzh:dependency-injection`): production shares
-        # ONE `ProcessLauncher` across both harness bindings, per the same runner-side owner.
+        # Injected, never self-constructed (`bzh:dependency-injection`): ONE launcher, both bindings (D4).
         self._launcher: IProcessLauncher = launcher
 
     def observe_version(self) -> str | None:

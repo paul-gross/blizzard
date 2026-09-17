@@ -67,12 +67,9 @@ def test_export_app_has_an_empty_hermetic_harness_registry() -> None:
 
 @pytest.mark.unit
 def test_production_registry_shares_one_process_launcher_across_both_bindings(tmp_path: Path) -> None:
-    """D4: process-group and parent-death ownership is a runner concern both bindings
-    inherit from ONE runner-side owner, not a `ProcessLauncher` each adapter builds for
-    itself — an identity check, since two merely-equal instances would still mean two
-    independent owners at runtime."""
+    """D4: both bindings inherit ONE runner-side launcher — an identity check, not equality."""
     registry = build_production_harness_registry(RunnerConfig(root=tmp_path, db_url="sqlite://"))
 
-    claude_launcher = registry.adapter(CLAUDE_CODE_HARNESS_ID)._launcher  # type: ignore[attr-defined]
-    opencode_launcher = registry.adapter(OPENCODE_HARNESS_ID)._launcher  # type: ignore[attr-defined]
+    claude_launcher = vars(registry.adapter(CLAUDE_CODE_HARNESS_ID))["_launcher"]
+    opencode_launcher = vars(registry.adapter(OPENCODE_HARNESS_ID))["_launcher"]
     assert claude_launcher is opencode_launcher

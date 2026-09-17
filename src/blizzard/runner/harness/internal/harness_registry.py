@@ -22,10 +22,7 @@ from blizzard.runner.loop.process_launch import ProcessLauncher
 
 
 def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
-    """Build every configured coding-harness binding once for one composition graph. One
-    ``LinuxProcessProbe``/``ProcessLauncher`` pair is built here and shared across every
-    binding (D4): process-group and parent-death ownership is a runner concern both
-    bindings inherit from this one owner, never a launcher either adapter builds itself."""
+    """Build every configured harness binding once for one graph, over one shared probe/launcher pair (D4)."""
     projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
     transcript_source = ClaudeCodeTranscriptSource(
         projects_root, TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))

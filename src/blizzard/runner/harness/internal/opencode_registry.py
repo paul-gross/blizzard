@@ -16,12 +16,11 @@ from blizzard.runner.loop.process_launch import IProcessLauncher
 def build_opencode_binding(
     config: RunnerConfig, *, process: IProcessProbe, launcher: IProcessLauncher
 ) -> HarnessBinding:
-    """Build the OpenCode adapter once for one composition graph, sharing the one
-    runner-owned ``process``/``launcher`` pair the Claude Code binding also receives (D4).
-    Leaves ``HarnessBinding.transcript_source`` genuinely unset: OpenCode has no transcript
-    reading yet, so :meth:`HarnessRegistry.transcript_source` raises
-    ``UnavailableHarnessError`` for it — every caller already guards that as the one true
-    "no fallback" signal, distinct from the adapter's own always-non-``None`` accessor."""
+    """Build the OpenCode adapter once for one composition graph, over the one runner-owned
+    ``process``/``launcher`` pair the Claude Code binding also receives (D4). Leaves
+    ``HarnessBinding.transcript_source`` unset: OpenCode has no transcript reading yet, so
+    :meth:`HarnessRegistry.transcript_source` raises ``UnavailableHarnessError`` — the one
+    true "no fallback" signal, distinct from the adapter's own always-non-``None`` accessor."""
     adapter = OpenCodeAdapter(
         binary=config.opencode_binary,
         env_passthrough=config.worker_env_passthrough,

@@ -92,8 +92,7 @@ class NoUnownedLiveLeaseProcess(QueryCheck):
     """Once a lease closes, no generation it launched is left ambiguously provisional
     (D1/D2) — a pid with neither an identified session nor a recorded identity failure.
     Only CLOSED leases are checked: REAP always resolves a provisional generation, killing
-    its group, before ``Attempt.fail`` closes the lease, so an ambiguous closed one means
-    an orphaned launch's group leaked."""
+    its group, before ``Attempt.fail`` closes the lease, so an ambiguous one means a leak."""
 
     def run(self) -> list[Violation]:
         closed = select(runner.lease_closures.c.lease_id)
@@ -117,9 +116,8 @@ class NoUnownedLiveLeaseProcess(QueryCheck):
 class ActiveLeaseProcessIsLive(QueryCheck):
     """The ACTIVE-lease half of :class:`NoUnownedLiveLeaseProcess`'s claim (D1/D2), which
     only inspects CLOSED leases, never an OS process. Liveness is probed only for a
-    still-PROVISIONAL generation — an identified one may exit asynchronously — sound only
-    after a recovery pass. Ambiguous ownership (two active leases sharing a live
-    ``(pid, start_time)``) is checked regardless."""
+    still-PROVISIONAL generation — an identified one may exit asynchronously — and only
+    after a recovery pass. Two active leases sharing a live ``(pid, start_time)`` always count."""
 
     process: IProcessProbe
 

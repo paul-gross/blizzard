@@ -149,8 +149,7 @@ class OpenCodeAdapter:
         self._worker_config_path = worker_config_path
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
         self._process: IProcessProbe = process
-        # Injected, never self-constructed (`bzh:dependency-injection`): production shares
-        # ONE `ProcessLauncher` across both harness bindings (D4), as Claude Code does.
+        # Injected, never self-constructed (`bzh:dependency-injection`): ONE launcher, both bindings (D4).
         self._launcher: IProcessLauncher = launcher
 
     def observe_version(self) -> str | None:
