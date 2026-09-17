@@ -22,6 +22,7 @@ from blizzard.hub.store import schema as hub
 from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, RunnerInvariants
+from tests.runner_fakes import FakeProbe
 
 pytestmark = pytest.mark.component
 
@@ -61,6 +62,77 @@ def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
             )
         )
     assert RunnerInvariants(engine).run() == []
+
+
+def test_an_active_lease_with_no_live_process_at_its_recorded_pid_is_a_violation(tmp_path: Path) -> None:
+    """review F17: the checker must actually probe process liveness for an ACTIVE lease's
+    still-provisional generation, not just inspect record consistency for a closed one —
+    a live-looking record whose process is actually gone is exactly the state a real
+    crash-recovery gap would leave. No ``session_id`` is ever recorded here (provisional:
+    identity not yet known), and the check only runs when asked for post-recovery."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.leases).values(
+                lease_id="lease_a",
+                chunk_id="ch_1",
+                epoch=1,
+                runner_id="r",
+                created_at=_NOW,
+                pid=99999,
+                process_start_time="start-99999",
+            )
+        )
+    # The default probe is the real `/proc` one — pid 99999 is not this test process, so it
+    # reads dead without needing to fake anything.
+    slugs = {v.invariant for v in RunnerInvariants(engine).run(after_recovery=True)}
+    assert "runner:active-lease-process-is-live" in slugs
+    # Not asserted at all before a recovery pass has had its chance to run (the same crash
+    # window that leaves it provisional in the first place is not itself a violation).
+    assert RunnerInvariants(engine).run(after_recovery=False) == []
+
+
+def test_an_active_lease_with_a_genuinely_live_process_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.leases).values(
+                lease_id="lease_a",
+                chunk_id="ch_1",
+                epoch=1,
+                runner_id="r",
+                created_at=_NOW,
+                pid=4242,
+                process_start_time="start-4242",
+            )
+        )
+    probe = FakeProbe(alive={(4242, "start-4242")})
+    slugs = {v.invariant for v in RunnerInvariants(engine, process=probe).run(after_recovery=True)}
+    assert "runner:active-lease-process-is-live" not in slugs
+
+
+def test_two_active_leases_claiming_the_same_live_process_is_a_violation(tmp_path: Path) -> None:
+    """An ambiguous owner: two distinct active leases (different chunks, so this never
+    trips the one-live-lease-per-chunk check instead) both recording the exact same
+    (pid, start_time) — at most one of those durable records can be honest, regardless of
+    either lease's provisional status."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        for lease_id, chunk_id in (("lease_a", "ch_1"), ("lease_b", "ch_2")):
+            conn.execute(
+                insert(runner.leases).values(
+                    lease_id=lease_id,
+                    chunk_id=chunk_id,
+                    epoch=1,
+                    runner_id="r",
+                    created_at=_NOW,
+                    pid=555,
+                    process_start_time="start-555",
+                )
+            )
+    probe = FakeProbe(alive={(555, "start-555")})
+    slugs = {v.invariant for v in RunnerInvariants(engine, process=probe).run(after_recovery=True)}
+    assert "runner:active-lease-process-is-live" in slugs
 
 
 def test_env_bound_to_two_chunks_is_a_violation(tmp_path: Path) -> None:

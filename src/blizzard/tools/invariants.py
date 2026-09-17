@@ -26,6 +26,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
+from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
 from blizzard.runner.store import schema as runner
 
 
@@ -115,6 +116,74 @@ class NoUnownedLiveLeaseProcess(QueryCheck):
             )
             for row in self.conn.execute(stmt)
         ]
+
+
+@dataclass(frozen=True)
+class ActiveLeaseProcessIsLive(QueryCheck):
+    """The ACTIVE-lease half of :class:`NoUnownedLiveLeaseProcess`'s own claim (D1/D2):
+    that one only inspects CLOSED leases' record consistency and never actually probes an
+    OS process at all — the plan's own stated claim, "no active lease has an unowned live
+    process after recovery", is checked nowhere until this one.
+
+    Liveness is probed only for a still-PROVISIONAL generation (a recorded pid with no
+    identified ``session_id`` yet) — never for an already-identified one: an identified
+    worker legitimately exits on its own well before the next ADVANCE pass notices
+    (exit-is-done is an ordinary, asynchronous gap, not a fault), so asserting liveness
+    there would false-positive on every healthy runner between ticks. A provisional
+    generation has no such gap in ordinary operation: :meth:`Spawner.spawn` either
+    identifies or kills-and-fails it synchronously, in the same call that recorded it, so
+    one still standing with a dead process implies REAP has not yet reaped it — sound only
+    once a recovery pass had its chance to (``RunnerInvariants.run``'s own
+    ``after_recovery`` docstring). Ambiguous ownership — two active leases naming the
+    exact same live ``(pid, start_time)`` — is checked across every active lease
+    regardless of provisional status: two REAL, distinct OS process launches sharing an
+    identical (pid, start_time) is not a coincidence ordinary operation can produce."""
+
+    process: IProcessProbe
+
+    def run(self) -> list[Violation]:
+        closed = select(runner.lease_closures.c.lease_id)
+        active = runner.leases.c.lease_id.notin_(closed)
+        violations: list[Violation] = []
+        provisional_stmt = (
+            select(runner.leases.c.lease_id, runner.leases.c.pid, runner.leases.c.process_start_time)
+            .where(active)
+            .where(runner.leases.c.pid.is_not(None))
+            .where(runner.leases.c.session_id.is_(None))
+        )
+        for row in self.conn.execute(provisional_stmt):
+            pid = int(row.pid)
+            start = str(row.process_start_time or "")
+            if not self.process.is_alive(pid, start):
+                violations.append(
+                    Violation(
+                        "runner:active-lease-process-is-live",
+                        f"active lease {row.lease_id} has a provisional generation recorded at pid "
+                        f"{pid}, but no live process exists there",
+                    )
+                )
+        owner_stmt = (
+            select(runner.leases.c.lease_id, runner.leases.c.pid, runner.leases.c.process_start_time)
+            .where(active)
+            .where(runner.leases.c.pid.is_not(None))
+        )
+        owner_of: dict[tuple[int, str], str] = {}
+        for row in self.conn.execute(owner_stmt):
+            pid = int(row.pid)
+            start = str(row.process_start_time or "")
+            key = (pid, start)
+            prior_owner = owner_of.get(key)
+            if prior_owner is not None:
+                violations.append(
+                    Violation(
+                        "runner:active-lease-process-is-live",
+                        f"active leases {prior_owner} and {row.lease_id} both claim the same live "
+                        f"process (pid={pid}) — an unowned/ambiguous live process",
+                    )
+                )
+            else:
+                owner_of[key] = row.lease_id
+        return violations
 
 
 class UniqueEnvBinding(QueryCheck):
@@ -729,11 +798,27 @@ class LiveRouteHasToken(FactsCheck):
 
 @dataclass(frozen=True)
 class RunnerInvariants:
-    """The runner store's durable invariants (leases, bindings, outbound buffer)."""
+    """The runner store's durable invariants (leases, bindings, outbound buffer).
+
+    ``process`` defaults to the real ``/proc`` probe (production); a crash-sweep or unit
+    test may inject a fake one instead — this is the only check below that ever touches a
+    live OS process rather than the store alone."""
 
     engine: Engine
+    process: IProcessProbe = field(default_factory=LinuxProcessProbe)
 
-    def run(self) -> list[Violation]:
+    def run(self, *, after_recovery: bool = False) -> list[Violation]:
+        """``after_recovery=True`` additionally runs :class:`ActiveLeaseProcessIsLive` (D3).
+
+        That check is only sound once a recovery pass has had its normal chance to run: a
+        worker dying the instant its own daemon does is the CORRECT immediate aftermath of
+        a crash (the same parent-death signal ``ProcessLauncher`` arms kills it right along
+        with the daemon process that forked it), not a violation — asserting it
+        unconditionally would false-positive on every crash scenario's own
+        immediately-after-kill snapshot, before REAP/RESUME ever got a tick to reconcile
+        it. A caller checking a live, running system, or a post-convergence snapshot,
+        passes ``after_recovery=True``; a caller checking the instant after a raw kill -9
+        leaves it ``False``."""
         violations: list[Violation] = []
         with self.engine.connect() as conn:
             checks: tuple[QueryCheck, ...] = (
@@ -750,6 +835,8 @@ class RunnerInvariants:
             )
             for check in checks:
                 violations.extend(check.run())
+            if after_recovery:
+                violations.extend(ActiveLeaseProcessIsLive(conn, self.process).run())
             # NOT checked, deliberately: "a pause-parked lease has no closure" (issue #46) — it is
             # false on a legal history; pinned by tests/test_pin_foundation.py.
         return violations
@@ -924,10 +1011,14 @@ class Invariants:
     runner_db_url: str | None = None
     hub_db_url: str | None = None
 
-    def run(self) -> list[Violation]:
+    def run(self, *, after_recovery: bool = False) -> list[Violation]:
+        """``after_recovery`` rides straight through to :meth:`RunnerInvariants.run` —
+        see its own docstring for why that one check needs it."""
         violations: list[Violation] = []
         if self.runner_db_url is not None:
-            violations.extend(RunnerInvariants(create_engine_from_url(self.runner_db_url)).run())
+            violations.extend(
+                RunnerInvariants(create_engine_from_url(self.runner_db_url)).run(after_recovery=after_recovery)
+            )
         if self.hub_db_url is not None:
             violations.extend(HubInvariants(create_engine_from_url(self.hub_db_url)).run())
         return violations
