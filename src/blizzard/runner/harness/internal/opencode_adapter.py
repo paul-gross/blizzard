@@ -37,7 +37,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.loop.process_launch import IProcessLauncher, ProcessLauncher
+from blizzard.runner.loop.process_launch import IProcessLauncher
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
@@ -132,7 +132,7 @@ class OpenCodeAdapter:
         worker_config_path: str | None = None,
         transcript_source: IHarnessTranscriptSource | None = None,
         process: IProcessProbe,
-        launcher: IProcessLauncher | None = None,
+        launcher: IProcessLauncher,
     ) -> None:
         self._binary = binary
         self._command = OpenCodeCommand(binary)
@@ -149,7 +149,9 @@ class OpenCodeAdapter:
         self._worker_config_path = worker_config_path
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
         self._process: IProcessProbe = process
-        self._launcher: IProcessLauncher = launcher if launcher is not None else ProcessLauncher(process)
+        # Injected, never self-constructed (`bzh:dependency-injection`): production shares
+        # ONE `ProcessLauncher` across both harness bindings (D4), as Claude Code does.
+        self._launcher: IProcessLauncher = launcher
 
     def observe_version(self) -> str | None:
         """Shared verbatim with Claude Code (``harness_shared.observe_version``); only

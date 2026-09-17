@@ -22,6 +22,7 @@ from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop.process_launch import ProcessLauncher
 from blizzard.wire.envelope import NodeEnvelope
 from tests.conftest import _WORKER_IDENTITY_ENV
 from tests.runner_fakes import FakeProbe, make_envelope
@@ -31,8 +32,10 @@ _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Lo
 
 def _adapter(**kwargs: Any) -> ClaudeCodeAdapter:
     """A :class:`ClaudeCodeAdapter` construction helper defaulting ``process`` to a fresh
-    :class:`FakeProbe` — most of this file's cases don't care which probe it gets."""
-    kwargs.setdefault("process", FakeProbe())
+    :class:`FakeProbe` and ``launcher`` to a real :class:`ProcessLauncher` over it — most of
+    this file's cases don't care which probe or launcher it gets."""
+    process = kwargs.setdefault("process", FakeProbe())
+    kwargs.setdefault("launcher", ProcessLauncher(process))
     return ClaudeCodeAdapter(**kwargs)
 
 
@@ -210,7 +213,7 @@ def test_spawn_stamps_process_start_time_from_the_injected_probe(monkeypatch: py
     # nothing — proving the stamp came from the injected probe, not a fallback to `/proc`.
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
     probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-start-time-token")})
-    adapter = ClaudeCodeAdapter(binary="claude", process=probe)
+    adapter = ClaudeCodeAdapter(binary="claude", process=probe, launcher=ProcessLauncher(probe))
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
@@ -230,7 +233,7 @@ def test_judge_stamps_process_start_time_from_the_injected_probe(
 ) -> None:
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
     probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-judge-start-time")})
-    adapter = ClaudeCodeAdapter(binary="claude", process=probe)
+    adapter = ClaudeCodeAdapter(binary="claude", process=probe, launcher=ProcessLauncher(probe))
     workdir = tmp_path / "e1"
     workdir.mkdir()
 

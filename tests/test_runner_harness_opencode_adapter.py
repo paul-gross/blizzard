@@ -27,6 +27,7 @@ from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, O
 from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERSION
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop.process_launch import ProcessLauncher
 from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, SkippedHarness
 from tests.runner_fakes import FakeProbe, make_envelope
 from tests.support_opencode_binary import worker_binary
@@ -52,7 +53,8 @@ def _jsonl(events: list[dict[str, Any]]) -> str:
 
 
 def _adapter(**kwargs: Any) -> OpenCodeAdapter:
-    kwargs.setdefault("process", FakeProbe())
+    process = kwargs.setdefault("process", FakeProbe())
+    kwargs.setdefault("launcher", ProcessLauncher(process))
     return OpenCodeAdapter(**kwargs)
 
 

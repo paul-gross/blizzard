@@ -28,7 +28,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.loop.process_launch import IProcessLauncher, ProcessLauncher
+from blizzard.runner.loop.process_launch import IProcessLauncher
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
@@ -121,7 +121,7 @@ class ClaudeCodeAdapter:
         effort_aliases: Sequence[tuple[str, str]] = (),
         transcript_source: IHarnessTranscriptSource | None = None,
         process: IProcessProbe,
-        launcher: IProcessLauncher | None = None,
+        launcher: IProcessLauncher,
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
@@ -146,8 +146,9 @@ class ClaudeCodeAdapter:
         # is the only production substitute, always injected (`bzh:dependency-injection`).
         self._process: IProcessProbe = process
         # Every launch goes through the one runner-owned process-ownership seam (D4) —
-        # defaulted from `process` so an existing construction site need not change.
-        self._launcher: IProcessLauncher = launcher if launcher is not None else ProcessLauncher(process)
+        # injected, never self-constructed (`bzh:dependency-injection`): production shares
+        # ONE `ProcessLauncher` across both harness bindings, per the same runner-side owner.
+        self._launcher: IProcessLauncher = launcher
 
     def observe_version(self) -> str | None:
         """The configured executable's version, observed right now — bounded and

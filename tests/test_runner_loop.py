@@ -42,6 +42,7 @@ from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.judgement import Judgement
+from blizzard.runner.loop.process_launch import ProcessLauncher
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, SessionResolver, SkippedHarness
 from blizzard.runner.loop.spawn import Spawner
@@ -453,7 +454,7 @@ def test_harness_selection_single_member_selects_regardless_of_model_resolvabili
     """The single-member exception: with nothing else to select, the model check never
     runs at all, and `resolve_model`'s own left-to-right-then-adapter-default fallback is
     left to compute the stamp exactly as it does today."""
-    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", process=FakeProbe())
+    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", process=FakeProbe(), launcher=ProcessLauncher(FakeProbe()))
     registry = HarnessRegistry({"h1": HarnessBinding(adapter=adapter, transcript_source=NullTranscriptSource())})
     envelope = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=_CHOICES, session_harnesses=["h1"], session_model=["gpt-5.3-codex"]
@@ -467,7 +468,7 @@ def test_harness_selection_single_member_selects_regardless_of_model_resolvabili
 
 @pytest.mark.unit
 def test_harness_selection_native_name_in_a_two_member_set_does_not_match_the_other_harness():  # type: ignore[no-untyped-def]
-    claude = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", process=FakeProbe())
+    claude = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", process=FakeProbe(), launcher=ProcessLauncher(FakeProbe()))
     foreign = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     foreign.resolved_model_strict = None  # "sonnet" means nothing to a harness that isn't claude_code
     registry = HarnessRegistry(

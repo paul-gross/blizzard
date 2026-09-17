@@ -9,12 +9,16 @@ from __future__ import annotations
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.registry import HarnessBinding
-from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.loop.process_launch import IProcessLauncher
 
 
-def build_opencode_binding(config: RunnerConfig) -> HarnessBinding:
-    """Build the OpenCode adapter once for one composition graph. Leaves
-    ``HarnessBinding.transcript_source`` genuinely unset: OpenCode has no transcript
+def build_opencode_binding(
+    config: RunnerConfig, *, process: IProcessProbe, launcher: IProcessLauncher
+) -> HarnessBinding:
+    """Build the OpenCode adapter once for one composition graph, sharing the one
+    runner-owned ``process``/``launcher`` pair the Claude Code binding also receives (D4).
+    Leaves ``HarnessBinding.transcript_source`` genuinely unset: OpenCode has no transcript
     reading yet, so :meth:`HarnessRegistry.transcript_source` raises
     ``UnavailableHarnessError`` for it — every caller already guards that as the one true
     "no fallback" signal, distinct from the adapter's own always-non-``None`` accessor."""
@@ -24,7 +28,8 @@ def build_opencode_binding(config: RunnerConfig) -> HarnessBinding:
         model_aliases=config.opencode_model_aliases,
         effort_aliases=config.opencode_effort_aliases,
         worker_config_path=config.opencode_worker_config_path,
-        process=LinuxProcessProbe(),
+        process=process,
+        launcher=launcher,
     )
     return HarnessBinding(adapter=adapter)
 

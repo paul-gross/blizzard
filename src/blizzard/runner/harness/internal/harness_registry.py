@@ -18,14 +18,20 @@ from blizzard.runner.harness.internal.opencode_registry import build_opencode_bi
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop.process_launch import ProcessLauncher
 
 
 def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
-    """Build every configured coding-harness binding once for one composition graph."""
+    """Build every configured coding-harness binding once for one composition graph. One
+    ``LinuxProcessProbe``/``ProcessLauncher`` pair is built here and shared across every
+    binding (D4): process-group and parent-death ownership is a runner concern both
+    bindings inherit from this one owner, never a launcher either adapter builds itself."""
     projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
     transcript_source = ClaudeCodeTranscriptSource(
         projects_root, TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
     )
+    process = LinuxProcessProbe()
+    launcher = ProcessLauncher(process)
     adapter = ClaudeCodeAdapter(
         binary=config.harness_binary,
         settings_path=config.worker_settings_path,
@@ -34,11 +40,12 @@ def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
         model_aliases=config.model_aliases,
         effort_aliases=config.effort_aliases,
         transcript_source=transcript_source,
-        process=LinuxProcessProbe(),
+        process=process,
+        launcher=launcher,
     )
     return HarnessRegistry(
         {
             CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=transcript_source),
-            OPENCODE_HARNESS_ID: build_opencode_binding(config),
+            OPENCODE_HARNESS_ID: build_opencode_binding(config, process=process, launcher=launcher),
         }
     )

@@ -28,6 +28,7 @@ from blizzard.runner.harness.internal.opencode_shapes import parse_worker_config
 from blizzard.runner.harness.internal.opencode_worker_config import render_worker_config, write_worker_config
 from blizzard.runner.harness.worker_settings import HEARTBEAT_HOOK_COMMAND
 from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop.process_launch import ProcessLauncher
 from tests.runner_fakes import make_envelope
 from tests.support_opencode_binary import worker_binary
 
@@ -133,7 +134,10 @@ def test_a_plugin_bearing_worker_config_does_not_change_the_adapters_parsed_turn
 
     def _run(*, worker_config_path: str | None, label: str) -> tuple[str | None, str, bool]:
         stdout_path = tmp_path / f"lease-{label}.stdout"
-        adapter = OpenCodeAdapter(binary=binary, process=LinuxProcessProbe(), worker_config_path=worker_config_path)
+        probe = LinuxProcessProbe()
+        adapter = OpenCodeAdapter(
+            binary=binary, process=probe, launcher=ProcessLauncher(probe), worker_config_path=worker_config_path
+        )
         handle = adapter.spawn(
             envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint"
         ).await_identity(5.0)

@@ -34,6 +34,7 @@ from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTra
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop.process_launch import ProcessLauncher
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.scratch_git import ScratchRepo
@@ -147,7 +148,8 @@ def _fake_opencode_binary(tmp_path: Path) -> str:
 
 def _app_with_harness(tmp_path: Path, binary: str) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    adapter = ClaudeCodeAdapter(binary=binary, process=LinuxProcessProbe())
+    probe = LinuxProcessProbe()
+    adapter = ClaudeCodeAdapter(binary=binary, process=probe, launcher=ProcessLauncher(probe))
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     return TestClient(create_app(config, harnesses=harnesses))
 

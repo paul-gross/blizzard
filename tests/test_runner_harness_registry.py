@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from blizzard.runner.app import create_app_for_export
+from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
 from blizzard.runner.harness.registry import (
     HarnessBinding,
     HarnessRegistry,
@@ -57,3 +61,16 @@ def test_export_app_has_an_empty_hermetic_harness_registry() -> None:
     app = create_app_for_export()
 
     assert app.state.harnesses.known_harnesses == ()
+
+
+@pytest.mark.unit
+def test_production_registry_shares_one_process_launcher_across_both_bindings(tmp_path: Path) -> None:
+    """D4: process-group and parent-death ownership is a runner concern both bindings
+    inherit from ONE runner-side owner, not a `ProcessLauncher` each adapter builds for
+    itself — an identity check, since two merely-equal instances would still mean two
+    independent owners at runtime."""
+    registry = build_production_harness_registry(RunnerConfig(root=tmp_path, db_url="sqlite://"))
+
+    claude_launcher = registry.adapter(CLAUDE_CODE_HARNESS_ID)._launcher  # type: ignore[attr-defined]
+    opencode_launcher = registry.adapter(OPENCODE_HARNESS_ID)._launcher  # type: ignore[attr-defined]
+    assert claude_launcher is opencode_launcher
