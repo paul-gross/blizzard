@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import Connection, Engine, and_, func, select
+from sqlalchemy import Connection, Engine, func, select
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
@@ -114,10 +114,10 @@ class NoUnownedLiveLeaseProcess(QueryCheck):
 
 @dataclass(frozen=True)
 class ActiveLeaseProcessIsLive(QueryCheck):
-    """The ACTIVE-lease half of :class:`NoUnownedLiveLeaseProcess`'s claim (D1/D2) — CLOSED
-    leases only, never an OS process. Probed only for a still-PROVISIONAL generation, only
-    after a recovery pass, and skipped when ``identity_failed_at`` is already recorded (a
-    known, pending-reconciliation state, never a leak); two live-sharing leases always count."""
+    """:class:`NoUnownedLiveLeaseProcess`'s ACTIVE-lease counterpart (D1/D2): an OPEN
+    lease's still-provisional generation, probed against a real OS process — a recorded
+    pid with nothing running there is the crash-recovery gap RESUME exists to close. Also
+    flags two ACTIVE leases recording the same (pid, start_time), liveness unprobed."""
 
     process: IProcessProbe
 
@@ -125,6 +125,15 @@ class ActiveLeaseProcessIsLive(QueryCheck):
         closed = select(runner.lease_closures.c.lease_id)
         active = runner.leases.c.lease_id.notin_(closed)
         violations: list[Violation] = []
+        # Bounded to the newest open generation per lease (MAX/GROUP BY, `bzh:sql-portable`),
+        # mirroring `lease_liveness_store._open_provisional_spawn_id`'s own predicate.
+        newest_open_provisional = (
+            select(runner.lease_spawns.c.lease_id, func.max(runner.lease_spawns.c.id).label("spawn_id"))
+            .where(runner.lease_spawns.c.session_id.is_(None))
+            .where(runner.lease_spawns.c.pid.is_not(None))
+            .group_by(runner.lease_spawns.c.lease_id)
+            .subquery()
+        )
         provisional_stmt = (
             select(
                 runner.leases.c.lease_id,
@@ -134,13 +143,14 @@ class ActiveLeaseProcessIsLive(QueryCheck):
             )
             .select_from(
                 runner.leases.join(
-                    runner.lease_spawns,
-                    and_(
-                        runner.lease_spawns.c.lease_id == runner.leases.c.lease_id,
-                        runner.lease_spawns.c.session_id.is_(None),
-                    ),
+                    newest_open_provisional,
+                    newest_open_provisional.c.lease_id == runner.leases.c.lease_id,
                     isouter=True,  # a hand-seeded `leases` row with no `lease_spawns` row at all
                     # still reads as "not recorded failed" — never silently exempted (bzh:sql-portable).
+                ).join(
+                    runner.lease_spawns,
+                    runner.lease_spawns.c.id == newest_open_provisional.c.spawn_id,
+                    isouter=True,
                 )
             )
             .where(active)
@@ -172,11 +182,12 @@ class ActiveLeaseProcessIsLive(QueryCheck):
             key = (pid, start)
             prior_owner = owner_of.get(key)
             if prior_owner is not None:
+                # Liveness is never probed here — the shared record itself is the violation.
                 violations.append(
                     Violation(
                         "runner:active-lease-process-is-live",
-                        f"active leases {prior_owner} and {row.lease_id} both claim the same live "
-                        f"process (pid={pid}) — an unowned/ambiguous live process",
+                        f"active leases {prior_owner} and {row.lease_id} both record the same "
+                        f"process (pid={pid}) as their own — an unowned/ambiguous claim",
                     )
                 )
             else:

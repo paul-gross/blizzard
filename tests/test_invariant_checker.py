@@ -217,6 +217,37 @@ def test_an_active_lease_with_a_genuinely_leaked_provisional_generation_is_still
     assert "runner:active-lease-process-is-live" in slugs
 
 
+def test_an_active_lease_with_two_unidentified_generations_reports_exactly_once(tmp_path: Path) -> None:
+    """The provisional join is bounded to the newest open generation per lease — a lease
+    with two unidentified ``lease_spawns`` rows at once must still report once, not fan
+    out into one violation per matching row."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.leases).values(
+                lease_id="lease_a",
+                chunk_id="ch_1",
+                epoch=1,
+                runner_id="r",
+                created_at=_NOW,
+                pid=99999,
+                process_start_time="start-99999",
+            )
+        )
+        for pid in (11111, 99999):  # two open (unidentified) generations on the same lease
+            conn.execute(
+                insert(runner.lease_spawns).values(
+                    lease_id="lease_a", spawned_at=_NOW, pid=pid, process_start_time=f"start-{pid}", pgid=pid
+                )
+            )
+    violations = [
+        v
+        for v in RunnerInvariants(engine).run(after_recovery=True)
+        if v.invariant == "runner:active-lease-process-is-live"
+    ]
+    assert len(violations) == 1
+
+
 def test_two_active_leases_claiming_the_same_live_process_is_a_violation(tmp_path: Path) -> None:
     """An ambiguous owner: two distinct active leases (different chunks, so this never
     trips the one-live-lease-per-chunk check) recording the exact same (pid, start_time)

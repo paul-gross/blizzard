@@ -11,15 +11,19 @@ import shutil
 import socket
 import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from sqlalchemy import insert
 
 from blizzard.cli.main import blizzard
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT
 from blizzard.runner.cli.transcript import _daemon_holding
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.store import schema as runner_schema
 
 pytestmark = pytest.mark.unit
 
@@ -177,6 +181,33 @@ def test_dev_check_invariants_refuses_a_hub_db_url_copied_from_elsewhere(tmp_pat
 
     allowed = runner.invoke(blizzard, ["dev", "check-invariants", "--hub-dir", str(copy_dir), "--allow-external-db"])
     assert allowed.exit_code == 0, allowed.output
+
+
+def test_dev_check_invariants_asks_for_active_lease_process_is_live(tmp_path: Path) -> None:
+    """A live operator is never mid-crash-recovery-window — the check must run with
+    ``after_recovery=True``, or a genuinely leaked provisional generation goes unreported."""
+    root = tmp_path / "runner"
+    runner = CliRunner()
+    assert runner.invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+
+    engine = create_engine_from_url(RunnerConfig.load(root).db_url)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner_schema.leases).values(
+                lease_id="lease_a",
+                chunk_id="ch_1",
+                epoch=1,
+                runner_id="r",
+                created_at=datetime(2026, 7, 14, tzinfo=UTC),
+                pid=999999,  # not a real, live pid
+                process_start_time="start-999999",
+            )
+        )
+
+    result = runner.invoke(blizzard, ["dev", "check-invariants", "--runner-dir", str(root)])
+
+    assert result.exit_code != 0, result.output
+    assert "active-lease-process-is-live" in result.output
 
 
 def test_runner_init(tmp_path: Path) -> None:
