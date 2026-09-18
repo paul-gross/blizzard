@@ -72,7 +72,8 @@ class Runtime:
             (root / WORKER_SETTINGS_FILENAME).write_text(WorkerSettings.of().json)
             # The runner-owned OpenCode plugin and permission document (D7), never inside a
             # project repository; through `harness/`'s public surface, not `internal/` directly.
-            scaffold_opencode_worker_config(root, root / OPENCODE_WORKER_CONFIG_FILENAME)
+            worker_config_path = config.opencode_worker_config_path or str(root / OPENCODE_WORKER_CONFIG_FILENAME)
+            scaffold_opencode_worker_config(root, Path(worker_config_path))
         except OSError as exc:
             raise ConfigError(f"cannot write the runner runtime at {root}: {exc}") from exc
 
