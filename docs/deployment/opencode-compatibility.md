@@ -57,6 +57,25 @@ blizzard runner opencode compatibility \
 Replace the binary path, model, or variant when proving a different explicit input. The executable is never selected
 from `PATH` implicitly; the command receives the path supplied by `--binary`.
 
+## Offline rehearsal
+
+Exercise this diagnostic's own process, allowlist, disposable-git, parser, report, and evidence machinery with no
+provider quota spent, using a CLI-surface artifact the mock fleet emits in place of a live OpenCode binary. This
+rehearses the procedure on this page and the diagnostic's machinery; it is not a live pass against real OpenCode and a
+real provider — only the invocation above against the real binary establishes that.
+
+1. From a provisioned `blizzard-mock` checkout, emit an artifact: `uv run mock-opencode emit --out <path>` — `uv run`
+   resolves the console script through that checkout's own venv, so it works whether or not `mock-opencode` is on
+   `PATH`.
+2. Run the invocation above unchanged, with `--binary` pointed at the emitted path. `--live-provider` is still
+   required — it is a policy opt-in, not a network switch, and the emitted artifact never reaches a real provider
+   regardless.
+
+A default rehearsal run reports `compatibility: degraded`, not `supported`: the emitted artifact has no root hook and
+no child session for the diagnostic to observe, and those two probes' absence is exactly what degrades a report rather
+than blocks it. Treat a rehearsal's `degraded`, `admissible: true` result as proof the diagnostic runs cleanly end to
+end, never as evidence about real OpenCode or a real provider.
+
 ## Read the result
 
 The command prints the observed version, one line for every required probe, and a final line in this shape:
