@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, booleanAttribute, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Directive, booleanAttribute, contentChild, input } from '@angular/core';
 import { CdkMenuItem, CdkMenuItemRadio } from '@angular/cdk/menu';
 
 /*
@@ -11,6 +11,22 @@ import { CdkMenuItem, CdkMenuItemRadio } from '@angular/cdk/menu';
  * directive is where the query looks, and the component still gets to own the
  * token styling through `:host` — which a plain directive could not carry.
  */
+
+/**
+ * Marks the element a consumer projects into {@link KitMenuItem}'s subtitle
+ * slot — the `fleetKitMenuItemSubtitle` attribute is both the projection
+ * selector and this directive's own, the same marker-directive shape
+ * {@link KitPanelHeader} (`kit-panel.ts`) already establishes for a slot. It
+ * carries no behavior. A projection slot, not a string input: `KitMenuItem`'s
+ * own template has no CDK content query of its own to collide with (the
+ * `hostDirectives`-based `CdkMenuItem` wiring above governs `CdkMenu`'s query
+ * for *items*, not what an item itself projects), and a slot keeps an
+ * interpolated runner/node name in the caller's own view rather than forcing
+ * it through an input. Import it alongside `KitMenuItem` wherever a
+ * `fleetKitMenuItemSubtitle` element is projected.
+ */
+@Directive({ selector: '[fleetKitMenuItemSubtitle]' })
+export class KitMenuItemSubtitle {}
 
 /**
  * One menu item — the action row inside a {@link KitMenuPanel}. `(triggered)`
@@ -55,6 +71,12 @@ export class KitMenuItem {
   /** Whether this item opens a submenu — draws the trailing chevron. The
    * submenu itself is wired by binding `[cdkMenuTriggerFor]` on this element. */
   readonly submenu = input(false, { transform: booleanAttribute });
+
+  /** Whether a consumer projected a {@link KitMenuItemSubtitle}-marked element on
+   * this render — observed, not declared, the same `contentChild` shape
+   * {@link KitPanelHeader}'s own slot-occupancy query uses (`kit-panel.ts`), so an
+   * item with nothing projected stacks no empty subtitle line. */
+  protected readonly subtitleContent = contentChild(KitMenuItemSubtitle);
 }
 
 /**

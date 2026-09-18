@@ -128,6 +128,20 @@ async function confirmAction(fixture: ReturnType<typeof TestBed.createComponent<
   await fixture.whenStable();
 }
 
+/** Detach, Complete, and Delete live in the header's `⋯` overflow menu, whose panel
+ * the CDK renders into an overlay attached to `document.body`, not the fixture's own
+ * element (`kit-menu.spec.ts`'s own convention) — opens the trigger first, then clicks
+ * the named item there. The confirm dialog that follows stays in the header's own
+ * template (outside the menu's `<ng-template>`), so {@link confirmAction} still queries
+ * the fixture. */
+async function clickMenuAction(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>, testid: string): Promise<void> {
+  const el = fixture.nativeElement as HTMLElement;
+  el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
+  await fixture.whenStable();
+  document.body.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)?.click();
+  await fixture.whenStable();
+}
+
 describe('ChunkDetail container', () => {
   let stub: RequestClientStub;
   // Mutated per-test to drive the detach mutation's response (200/404/409); the stub
@@ -279,9 +293,8 @@ describe('ChunkDetail container', () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+    await clickMenuAction(fixture, 'detach-chunk');
     await confirmAction(fixture);
     await settle(fixture);
 
@@ -295,7 +308,7 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+    await clickMenuAction(fixture, 'detach-chunk');
     await confirmAction(fixture);
     await settle(fixture);
 
@@ -310,7 +323,7 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
     let el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+    await clickMenuAction(fixture, 'detach-chunk');
     await confirmAction(fixture);
     await settle(fixture);
     expect(el.querySelector('[data-testid="action-error"]')).not.toBeNull();
@@ -327,9 +340,8 @@ describe('ChunkDetail container', () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+    await clickMenuAction(fixture, 'complete-chunk');
     await confirmAction(fixture);
     await settle(fixture);
 
@@ -343,7 +355,7 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+    await clickMenuAction(fixture, 'complete-chunk');
     await confirmAction(fixture);
     await settle(fixture);
 
@@ -357,9 +369,8 @@ describe('ChunkDetail container', () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_deletable');
     await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await clickMenuAction(fixture, 'delete-chunk');
     await confirmAction(fixture);
     await settle(fixture);
 
@@ -372,9 +383,8 @@ describe('ChunkDetail container', () => {
     let dismissed = false;
     fixture.componentInstance.dismiss.subscribe(() => (dismissed = true));
     await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await clickMenuAction(fixture, 'delete-chunk');
     await confirmAction(fixture);
     await settle(fixture);
 
@@ -391,7 +401,7 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    await clickMenuAction(fixture, 'delete-chunk');
     await confirmAction(fixture);
     await settle(fixture);
 

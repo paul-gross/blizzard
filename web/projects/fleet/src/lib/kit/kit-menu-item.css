@@ -20,8 +20,30 @@
   opacity: 0.4;
   cursor: default;
 }
-.label {
+/* Wraps the label and its optional subtitle so they stack as their own column
+   within the item's flex row, beside the chevron — the projected subtitle
+   itself keeps the *consumer's* encapsulation attribute (`kit-fact-list.ts`'s
+   own note on the same projection limitation), so this rule reaches it only
+   by owning the wrapper and letting `color`/`font-size` inherit down into
+   whatever the consumer projects, rather than selecting the projected element
+   directly. */
+.body {
+  display: flex;
+  flex-direction: column;
   flex: 1;
+  min-width: 0;
+}
+.label {
+  display: block;
+}
+/* A dimmer, smaller line beneath the label — the same secondary-text pairing
+   `kit-fact-list.css`'s own `.kv dt` uses for a label beside its value, applied
+   here to a subtitle beneath one. Rendered only while the item actually has one
+   projected (`subtitleContent()`), so an item with no subtitle stacks nothing. */
+.subtitle {
+  display: block;
+  color: var(--label);
+  font-size: var(--fs-xs);
 }
 .chevron {
   color: var(--label);

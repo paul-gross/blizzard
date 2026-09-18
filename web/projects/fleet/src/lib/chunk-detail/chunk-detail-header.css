@@ -1,12 +1,6 @@
 :host {
   display: contents;
 }
-.tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
 .d-head {
   display: flex;
   align-items: center;
@@ -125,7 +119,6 @@ a.edge-ref:focus-visible {
   font-size: var(--fs-xs);
   white-space: nowrap;
 }
-.d-route,
 .d-actions {
   display: flex;
   flex-wrap: wrap;
@@ -133,20 +126,37 @@ a.edge-ref:focus-visible {
   gap: 6px;
   min-width: 0;
 }
-/* `fleet-kit-text-input` owns its own chrome (`bzh:frontend-kit-floor`) — this only
-   sizes the host within the `.d-actions` flex row, the way `.answer-input` sizes the
-   same component in `chunk-awaiting-human.css`. */
-.dep-input {
-  flex: 0 0 12ch;
-  min-width: 0;
-}
-.d-route .rn {
+/* The non-interactive "Claimed by <runner>" fact (issue #42) — plain text, no
+   "Route" label, replacing the old tag + runner id + inline Detach button now
+   that Detach lives in the ⋯ menu. */
+.claimed {
   color: var(--cyan);
   font-size: var(--fs-xs);
-  max-width: 12ch;
+  max-width: 20ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* The ⋯ menu panel's own divider between Detach and Complete/Delete — a hairline,
+   not a new kit divider component, the same `--line` token `.d-head`'s own border
+   uses. */
+.menu-divider {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 4px 0;
+}
+/* Danger styling for Complete/Delete — `KitMenuItem` carries no danger variant of
+   its own (`kit-menu-item.css`), so this caller applies the same `--red` token
+   `KitButton`'s own `.act.danger` rule uses (`kit-button.css`), scoped to this
+   header's own template. The `:hover`/`:focus` pair outranks `KitMenuItem`'s own
+   `:host(:hover)` cyan (equal specificity, one more class) so the danger tint holds
+   under a pointer too. */
+.danger {
+  color: var(--red);
+}
+.danger:hover,
+.danger:focus {
+  color: var(--red);
 }
 .close {
   background: transparent;

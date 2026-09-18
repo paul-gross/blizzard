@@ -4,7 +4,11 @@ import { RouterLink } from '@angular/router';
 import type { ChunkDetail, ChunkStatus, PauseView, WorkRefView, RouteView } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { KitButton } from '../kit/kit-button';
-import { KitConfirmDialog } from '../kit/kit-confirm-dialog';
+import { KitConfirmDialog, type KitConfirmDialogPrompt } from '../kit/kit-confirm-dialog';
+import { KitMenu, KitMenuPanel } from '../kit/kit-menu';
+import { KitMenuItem, KitMenuItemSubtitle } from '../kit/kit-menu-item';
+import { KitTooltip } from '../kit/kit-tooltip';
+import { completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from './chunk-action-copy';
 
 /** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
  * here so the dock never offers a Pause the server would answer with a 409 (issue #46).
@@ -59,7 +63,7 @@ const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
 @Component({
   selector: 'fleet-chunk-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitConfirmDialog, RouterLink],
+  imports: [KitButton, KitConfirmDialog, KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel, KitTooltip, RouterLink],
   templateUrl: './chunk-detail-header.html',
   styleUrl: './chunk-detail-header.css',
 })
@@ -97,13 +101,16 @@ export class ChunkDetailHeader {
   /** Emitted with the chunk id when the operator confirms Delete (D8, issue #364). */
   readonly delete = output<string>();
 
-  protected readonly pendingConfirm = signal<{
-    readonly heading: string;
-    readonly message: string;
-    readonly confirmLabel: string;
-    readonly variant: 'primary' | 'danger';
-    readonly run: () => void;
-  } | null>(null);
+  protected readonly pendingConfirm = signal<(KitConfirmDialogPrompt & { readonly run: () => void }) | null>(null);
+
+  /** The action-copy table (`bzh:claim-vocabulary`, `chunk-action-copy.ts`) — bound
+   * onto the protected instance so the template can call each function directly
+   * rather than this class re-declaring a per-action copy computed for every one. */
+  protected readonly pauseCopy = pauseCopy;
+  protected readonly resumeCopy = resumeCopy;
+  protected readonly detachCopy = detachCopy;
+  protected readonly completeCopy = completeCopy;
+  protected readonly deleteCopy = deleteCopy;
 
   /** The chunk's work refs, for the header — each linked out to its source's web
    * address when the configured binding rendered one (a null `web_url` degrades to
@@ -127,6 +134,13 @@ export class ChunkDetailHeader {
   /** The chunk's live route, if any — Detach shows only while this is non-null
    * (issue #42): a chunk with no live route has nothing to release. */
   protected readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
+
+  /** The node the chunk currently sits at, for display and for `detachCopy`'s own
+   * `<node>` slot — the same fallback chain the `.nd` chip already reads
+   * (`current_node_name`, then `current_node_id`, then an em dash). */
+  protected readonly currentNodeName = computed<string>(
+    () => this.detail().current_node_name ?? this.detail().current_node_id ?? '—',
+  );
 
   /** Whether Complete has anything left to do (issue #294) — mirrors the hub
    * `CompleteService`'s no-op on an already-`done` chunk, so the dock withholds a
@@ -153,78 +167,96 @@ export class ChunkDetailHeader {
     (this.detail().neighborhood?.dependents ?? []).filter((n) => !n.satisfied).map((n) => n.chunk_id),
   );
 
+  /** Whether Delete is withheld (D6) — {@link deletable}'s own status gate, plus
+   * {@link blocking}: Delete is only ever offered at `not_ready`/`ready`, never
+   * `done`, so every entry `blocking()` already filters to is provably still
+   * unsatisfied — no fresh read of `neighborhood.dependents` is needed here. */
+  protected readonly deleteDisabled = computed<boolean>(() => !this.deletable() || this.blocking().length > 0);
+
+  /** Delete's menu subtitle — names the dependents still holding it back when
+   * {@link blocking} is non-empty, falling back to `deleteCopy()`'s own subtitle
+   * otherwise (D6). */
+  protected readonly deleteSubtitle = computed<string>(() => {
+    const blockers = this.blocking();
+    return blockers.length > 0
+      ? `Blocked: ${blockers.map((id) => this.shortId(id)).join(', ')} depend on this`
+      : (deleteCopy().subtitle ?? '');
+  });
+
   /** A neighbor's compact ref — every surface that names an entity compactly resolves
    * through {@link compactRef} (`compact-ref.ts`). */
   protected shortId(chunkId: string): string {
     return compactRef(chunkId);
   }
 
-  /** Open a confirmation before emitting `detach` for the container's mutation to fire. */
+  /** Open a confirmation before emitting `detach` for the container's mutation to fire.
+   * The confirm copy is `detachCopy`'s own `text` (`bzh:claim-vocabulary`). */
   protected onDetach(): void {
-    if (!this.route()) return;
+    const route = this.route();
+    if (!route) return;
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Detach chunk ${chunkId}`,
-      message: `Detach chunk ${chunkId} from its runner? This releases the runner; ` +
-        `the chunk keeps its current status (this is not requeue).`,
+      message: detachCopy(route.runner_id, this.currentNodeName()).text,
       confirmLabel: 'Detach',
       variant: 'primary',
       run: () => this.detach.emit(chunkId),
     });
   }
 
-  /** Open a confirmation before emitting `pauseChunk` for the container's mutation to fire (issue #46). */
+  /** Open a confirmation before emitting `pauseChunk` for the container's mutation to
+   * fire (issue #46). The confirm copy is `pauseCopy`'s own `text` (`bzh:claim-vocabulary`). */
   protected onPause(): void {
     if (this.pause() || !this.pausable()) return;
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Pause chunk ${chunkId}`,
-      message: `Pause chunk ${chunkId}? This kills its active worker but keeps the ` +
-        `claim (this is not detach); resume it later to pick the work back up.`,
+      message: pauseCopy(this.route()?.runner_id ?? null).text,
       confirmLabel: 'Pause',
       variant: 'primary',
       run: () => this.pauseChunk.emit(chunkId),
     });
   }
 
-  /** Open a confirmation before emitting `resumeChunk` for the container's mutation to fire (issue #46).
-   * Guarded on the pause **fact**, never on `status`. */
+  /** Open a confirmation before emitting `resumeChunk` for the container's mutation to
+   * fire (issue #46). Guarded on the pause **fact**, never on `status`. The confirm
+   * copy is `resumeCopy`'s own `text` (`bzh:claim-vocabulary`). */
   protected onResume(): void {
     if (!this.pause()) return;
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Resume chunk ${chunkId}`,
-      message: `Resume chunk ${chunkId}? Its runner picks the work back up from ` +
-        `where the pause stopped it.`,
+      message: resumeCopy(this.route()?.runner_id ?? null).text,
       confirmLabel: 'Resume',
       variant: 'primary',
       run: () => this.resumeChunk.emit(chunkId),
     });
   }
 
-  /** Open a confirmation before emitting `complete` for the container's mutation to fire (issue #294).
-   * Unlike Detach/Pause/Resume, this is a one-way door: there is no un-complete verb,
-   * and the confirmation says so. */
+  /** Open a confirmation before emitting `complete` for the container's mutation to fire
+   * (issue #294). Unlike Detach/Pause/Resume, this is a one-way door — `completeCopy`'s
+   * own `text` (`bzh:claim-vocabulary`) says so. */
   protected onComplete(): void {
     if (!this.completable()) return;
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Complete chunk ${chunkId}`,
-      message: `Complete chunk ${chunkId}? This marks it done by hand; there is no ` + `un-complete verb.`,
+      message: completeCopy().text,
       confirmLabel: 'Complete',
       variant: 'danger',
       run: () => this.complete.emit(chunkId),
     });
   }
 
-  /** Open a confirmation before emitting `delete` for the container's mutation to fire (D8, issue
-   * #364). Withdraws the chunk's hub item(s); there is no undo. */
+  /** Open a confirmation before emitting `delete` for the container's mutation to fire
+   * (D8, issue #364). `deleteCopy`'s own `text` (`bzh:claim-vocabulary`) says there is
+   * no undo. */
   protected onDelete(): void {
-    if (!this.deletable()) return;
+    if (this.deleteDisabled()) return;
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Delete chunk ${chunkId}`,
-      message: `Delete chunk ${chunkId}? This withdraws its hub item(s); there is no undo.`,
+      message: deleteCopy().text,
       confirmLabel: 'Delete',
       variant: 'danger',
       run: () => this.delete.emit(chunkId),

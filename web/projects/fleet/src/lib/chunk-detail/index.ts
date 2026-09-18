@@ -1,5 +1,7 @@
 export type { AnswerQuestionEvent, ResolveDecisionEvent } from './chunk-detail-panel';
 export { ChunkDetail } from './chunk-detail';
+export { pauseCopy, resumeCopy, detachCopy, completeCopy, deleteCopy } from './chunk-action-copy';
+export type { ChunkActionCopy } from './chunk-action-copy';
 // The dock's presentational siblings a second shell re-stacks — the hub's chunk
 // detail page composes exactly these, in one column instead of three. Which siblings
 // belong here is `bzh:frontend-disjoint-diffs`.

@@ -8,6 +8,7 @@
       [statusTone]="status()?.tone"
       [nodeName]="l.node_name"
       [epoch]="l.epoch"
+      [runnerName]="runnerName()"
       [pause]="pause()"
       [pausable]="pausable()"
       (dismiss)="dismiss.emit()"

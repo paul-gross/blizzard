@@ -30,22 +30,6 @@ const ROUTED_DETAIL: ChunkDetail = {
   route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
 };
 
-const ESCALATED_ROUTED_DETAIL: ChunkDetail = {
-  chunk_id: 'ch_01esc00000000000000000000000',
-  graph_id: 'gr_1',
-  status: 'needs_human',
-  current_node_id: 'nd_build',
-  latest_epoch: 3,
-  work_refs: [],
-  history: [],
-  artifacts: [],
-  escalation: {
-    epoch: 3,
-    takeover_command: 'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
-  },
-  route: { runner_id: 'rn_02', workspace_id: 'ws_01', environment_ids: [] },
-};
-
 /** A chunk carrying an open pause fact, whatever its derived status reads. */
 function pausedDetail(status: ChunkDetail['status'], extra: Partial<ChunkDetail> = {}): ChunkDetail {
   return {
@@ -117,95 +101,38 @@ describe('ChunkDetailHeader', () => {
     expect(closed).toBe(true);
   });
 
-  // --- Detach (issue #42) ---------------------------------------------
+  // --- The "Claimed by" chip (issue #42) --------------------------------
 
-  it('shows no Detach action for a chunk with no live route', async () => {
+  it('shows no claimed-by chip for a chunk with no live route', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
     fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="detach-chunk"]')).toBeNull();
     expect(el.querySelector('[data-testid="route-info"]')).toBeNull();
   });
 
-  it('shows the routed runner and a Detach action for a chunk with a live route', async () => {
+  it('shows the routed runner in a plain "Claimed by" chip, no "Route" label', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="route-runner"]')?.textContent).toContain('rn_01');
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')).not.toBeNull();
+    const chip = el.querySelector('[data-testid="route-info"]');
+    expect(chip?.textContent?.trim()).toBe('Claimed by rn_01');
   });
 
-  it('withholds Detach and Pause without chunk:control, even with a live route', async () => {
+  it('withholds Pause without chunk:control, even with a live route', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="route-runner"]')?.textContent).toContain('rn_01');
-    expect(el.querySelector('[data-testid="detach-chunk"]')).toBeNull();
+    expect(el.querySelector('[data-testid="route-info"]')?.textContent).toContain('rn_01');
     expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
-  });
-
-  it('emits detach with the chunk id once the operator confirms', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted: string | undefined;
-    fixture.componentInstance.detach.subscribe((chunkId) => (emitted = chunkId));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
-
-    expect(emitted).toBe('ch_01routed000000000000000000');
-  });
-
-  it('emits nothing when the operator declines the detach confirm', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted = false;
-    fixture.componentInstance.detach.subscribe(() => (emitted = true));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
-
-    expect(emitted).toBe(false);
-  });
-
-  it('still shows a Detach action for a needs_human chunk that still carries a live route (not requeue)', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ESCALATED_ROUTED_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="detach-chunk"]')).not.toBeNull();
-  });
-
-  it('does not promise the ready queue in the confirm copy for a needs_human chunk', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ESCALATED_ROUTED_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
-
-    await fixture.whenStable();
-    const message = el.querySelector('[data-testid="confirm-dialog"]')?.textContent ?? '';
-    expect(message).not.toContain('ready queue');
+    expect(el.querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
   });
 
   // --- Pause / Resume (issue #46) -------------------------------------------
@@ -339,93 +266,6 @@ describe('ChunkDetailHeader', () => {
     expect(message).toContain('claim');
   });
 
-  // --- Complete (issue #294) -------------------------------------------
-
-  it('shows a Complete action for a running chunk with chunk:control', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')).not.toBeNull();
-  });
-
-  it('shows Complete for a stopped chunk — unlike Stop, Complete has no un-complete verb', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'stopped' });
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')).not.toBeNull();
-  });
-
-  it('shows no Complete action for an already-done chunk', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'done' });
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="complete-chunk"]')).toBeNull();
-  });
-
-  it('withholds Complete without chunk:control', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="complete-chunk"]')).toBeNull();
-  });
-
-  it('emits complete with the chunk id once the operator confirms', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted: string | undefined;
-    fixture.componentInstance.complete.subscribe((chunkId) => (emitted = chunkId));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
-
-    expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
-  });
-
-  it('emits nothing when the operator declines the complete confirm', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted = false;
-    fixture.componentInstance.complete.subscribe(() => (emitted = true));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
-
-    expect(emitted).toBe(false);
-  });
-
-  it('warns there is no un-complete verb in the complete confirm copy', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
-
-    await fixture.whenStable();
-    const message = el.querySelector('[data-testid="confirm-dialog"]')?.textContent ?? '';
-    expect(message).toContain('no un-complete verb');
-  });
-
   it('names no edge on the identity line for a chunk carrying none', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
@@ -492,95 +332,5 @@ describe('ChunkDetailHeader', () => {
     // One pointer, the status, one edge — two gaps between the three, so two dots.
     expect(el.querySelectorAll('[data-testid="detail-pointer"]')).toHaveLength(1);
     expect(el.querySelectorAll('.d-sub .sep')).toHaveLength(2);
-  });
-
-  // --- Delete (D8, issue #364) -------------------------------------------
-
-  it('shows Delete for an unacquired chunk (not_ready, ready) with chunk:control', async () => {
-    for (const status of ['not_ready', 'ready'] as const) {
-      const fixture = TestBed.createComponent(ChunkDetailHeader);
-      fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status });
-      fixture.componentRef.setInput('canControl', true);
-      await fixture.whenStable();
-      const el = fixture.nativeElement as HTMLElement;
-
-      expect(el.querySelector('[data-testid="delete-chunk"]'), status).not.toBeNull();
-    }
-  });
-
-  it('shows no Delete for an acquired or terminal status, even with chunk:control', async () => {
-    for (const status of [
-      'running',
-      'delivering',
-      'waiting_on_human',
-      'needs_human',
-      'paused',
-      'stopped',
-      'done',
-    ] as const) {
-      const fixture = TestBed.createComponent(ChunkDetailHeader);
-      fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status });
-      fixture.componentRef.setInput('canControl', true);
-      await fixture.whenStable();
-      const el = fixture.nativeElement as HTMLElement;
-
-      expect(el.querySelector('[data-testid="delete-chunk"]'), status).toBeNull();
-    }
-  });
-
-  it('withholds Delete without chunk:control on an otherwise-eligible chunk', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready' });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="delete-chunk"]')).toBeNull();
-  });
-
-  it('emits delete with the chunk id once the operator confirms', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'ready' });
-    fixture.componentRef.setInput('canControl', true);
-    let emitted: string | undefined;
-    fixture.componentInstance.delete.subscribe((chunkId) => (emitted = chunkId));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
-
-    expect(emitted).toBe(ISSUE_DETAIL.chunk_id);
-  });
-
-  it('emits nothing when the operator declines the delete confirm', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready' });
-    fixture.componentRef.setInput('canControl', true);
-    let emitted = false;
-    fixture.componentInstance.delete.subscribe(() => (emitted = true));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
-
-    expect(emitted).toBe(false);
-  });
-
-  it('withdraws the hub item(s) with no undo, in the delete confirm copy', async () => {
-    const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'not_ready' });
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
-
-    await fixture.whenStable();
-    const message = el.querySelector('[data-testid="confirm-dialog"]')?.textContent ?? '';
-    expect(message).toContain('withdraws its hub item(s)');
-    expect(message).toContain('no undo');
   });
 });

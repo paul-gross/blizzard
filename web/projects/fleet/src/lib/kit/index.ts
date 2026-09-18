@@ -6,7 +6,7 @@
 export { KitAccordionSection } from './kit-accordion-section';
 export { KitCountBadge } from './kit-count-badge';
 export { KitDialog } from './kit-dialog';
-export { KitConfirmDialog } from './kit-confirm-dialog';
+export { KitConfirmDialog, type KitConfirmDialogPrompt } from './kit-confirm-dialog';
 export { KitFactList, type KitFact } from './kit-fact-list';
 export { KitPanel, KitPanelHeader } from './kit-panel';
 export { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';
@@ -19,7 +19,7 @@ export { KitChip, KitChips, type KitChipOption } from './kit-chips';
 export { KitMarkdown } from './kit-markdown';
 export { KitMasterDetail } from './kit-master-detail';
 export { KitMenu, KitMenuPanel } from './kit-menu';
-export { KitMenuItem, KitMenuItemRadio } from './kit-menu-item';
+export { KitMenuItem, KitMenuItemRadio, KitMenuItemSubtitle } from './kit-menu-item';
 export { KitOption } from './kit-option';
 export { KitPaceBar } from './kit-pace-bar';
 export { KitProseBlock } from './kit-prose-block';
