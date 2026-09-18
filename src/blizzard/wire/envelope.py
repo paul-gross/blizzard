@@ -15,6 +15,9 @@ from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 
+# The authored-tier prefix (issue #144) — unprefixed is a harness-native name, never guessed.
+TIER_PREFIX = "blizzard:"
+
 
 class EnvelopeArtifact(BaseModel):
     """One artifact carried into a node-step, resolved latest-by-epoch."""

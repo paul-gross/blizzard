@@ -25,10 +25,11 @@ from blizzard.runner.harness.adapter import (
     WorkerIdentityError,
     WorkerPreamble,
 )
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.loop.capability_snapshot import default_harness_id
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.session import ResumedSession, SkippedHarness
@@ -136,7 +137,9 @@ class Spawner:
                 return
             owner = selection.harness_id
         else:
-            owner = CLAUDE_CODE_HARNESS_ID
+            # Same registry-order default `capability_snapshot` advertises (blizzard#433);
+            # `None` (a no-bindings registry, D10) resolves below like any unresolvable owner.
+            owner = default_harness_id(self.ctx.harnesses) or ""
         # Resolve before minting: an owner this runner cannot serve must block its resume,
         # not leave a lease another harness could later adopt. Logged, not raised, so this blocks only this spawn.
         harness = self._resolve_harness(owner, via=via)
@@ -191,7 +194,7 @@ class Spawner:
             )
         except Exception:
             # F1: unlike an OS crash, a plain raise here never disarms the trampoline on its
-            # own (`_SPAWN_EXECUTOR` outlives one bad tick) — kill it explicitly instead.
+            # own — kill it explicitly instead.
             self.ctx.process.kill_group(pending.pgid)
             raise
         _CP_AFTER_PROVISIONAL.reached()  # ownership durable; identity not yet known

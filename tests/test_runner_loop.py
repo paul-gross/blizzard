@@ -37,12 +37,12 @@ from blizzard.runner.harness.preamble import (
     PreambleFingerprint,
     resume_cross_node,
 )
+from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.judgement import Judgement
-from blizzard.runner.loop.process_launch import ProcessLauncher
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, SessionResolver, SkippedHarness
 from blizzard.runner.loop.spawn import Spawner
@@ -471,6 +471,28 @@ def test_harness_selection_single_member_selects_regardless_of_model_resolvabili
 
 
 @pytest.mark.unit
+def test_harness_selection_single_member_with_an_authored_tier_it_cannot_map_is_skipped():  # type: ignore[no-untyped-def]
+    """An authored tier is never a "maybe this wasn't meant for me" preference like a bare
+    native name — a single acceptable harness that cannot resolve it must still be skipped,
+    never fall back to its own ambient default (worker-spawn.md)."""
+    h1 = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
+    h1.resolved_model_strict = None
+    registry = HarnessRegistry({"h1": HarnessBinding(adapter=h1, transcript_source=h1.transcript_source())})
+    envelope = make_envelope(
+        "ch_1",
+        "build",
+        node_id="nd_build",
+        choices=_CHOICES,
+        session_harnesses=["h1"],
+        session_model=["blizzard:frontier"],
+    )
+
+    selection = HarnessSelector(harnesses=registry).select(envelope.node)
+
+    assert selection == HarnessSelection(harness_id=None, skipped=(SkippedHarness("h1", "no-authored-tier"),))
+
+
+@pytest.mark.unit
 def test_harness_selection_native_name_in_a_two_member_set_does_not_match_the_other_harness():  # type: ignore[no-untyped-def]
     claude = ClaudeCodeAdapter(
         binary="claude", model="claude-opus-5", process=FakeProbe(), launcher=ProcessLauncher(FakeProbe())
@@ -516,6 +538,41 @@ def test_fresh_mint_with_no_acceptable_set_mints_under_the_runner_default(tmp_pa
     assert default.spawns != []
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.harness_id == CLAUDE_CODE_HARNESS_ID
+
+
+@pytest.mark.unit
+def test_fresh_mint_with_no_acceptable_set_tracks_registry_order_not_a_hardcoded_id(tmp_path):  # type: ignore[no-untyped-def]
+    """The no-``session_harnesses`` fallback must agree with ``capability_snapshot``'s own
+    default (blizzard#433): a registry with a non-Claude-Code binding first spawns under
+    that binding, never a hardcoded ``claude_code``."""
+    store = _store(tmp_path)
+    first = FakeHarness(
+        handle=WorkerHandle(session_id="first-a", pid=300, process_start_time="first-start", pgid=300), verdict="pass"
+    )
+    default = FakeHarness(handle=_HANDLE, verdict="pass")
+    registry = HarnessRegistry(
+        {
+            "first": HarnessBinding(adapter=first, transcript_source=first.transcript_source()),
+            CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+        }
+    )
+    ctx = make_context(
+        store, hub=FakeHub(), provider=FakeProvider({"e1": "/ws/e1"}), harness=default, probe=FakeProbe()
+    )
+    ctx = replace(
+        ctx,
+        harnesses=registry,
+        sessions=SessionResolver(leases=store, harnesses=registry, transcripts_wired=True),
+    )
+
+    Spawner(ctx).spawn(
+        "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+    )
+
+    assert first.spawns != []
+    assert default.spawns == []
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.harness_id == "first"
 
 
 @pytest.mark.unit

@@ -249,6 +249,13 @@ _GATE_SCENARIOS = [
         True,
     ),
     (
+        "a-one-member-set-with-an-authored-tier-still-gates",
+        ["h1"],
+        ["blizzard:frontier"],
+        [_capability("h1", tiers=())],  # the sole binding advertises no tiers at all
+        False,
+    ),
+    (
         "an-empty-model-preference-gates-nothing",
         ["h1", "h2"],
         [],

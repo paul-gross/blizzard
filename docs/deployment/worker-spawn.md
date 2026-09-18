@@ -103,7 +103,11 @@ tier id, but it does hold this runner's own list of them to match a chunk's requ
 A model preference list resolves left to right: the first entry the runner can resolve wins, an unresolvable entry (an
 unmapped alias, another harness's name) is skipped rather than failing the spawn. For a single acceptable harness — the
 declared `harnesses:`/chunk `default_harnesses` set naming exactly one, or naming none at all — a fully unresolvable
-list falls back to the runner's default model with a logged note naming what it skipped, exactly as today.
+list falls back to the runner's default model with a logged note naming what it skipped, exactly as today — but only
+when nothing in that list is an authored (`blizzard:`-namespaced) tier. A single harness that cannot map an authored
+tier in the list is skipped instead: such an entry was deliberately authored for *some* harness in the tier vocabulary,
+never a "maybe this wasn't meant for me" native name, so silently substituting the runner's ambient default would spawn
+under a capability nobody asked for.
 
 A session's model is applied at mint and on no resume after, resting on the harness restoring a resumed session's own
 model — a harness configuration that defeats that restore runs the lineage on the wrong model with every test tier still

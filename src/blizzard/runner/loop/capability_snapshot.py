@@ -12,21 +12,29 @@ from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.wire.runner import RunnerCapability
 
 
+def default_harness_id(harnesses: IHarnessRegistry) -> str | None:
+    """The runner's own default harness (blizzard#433) — the registry's own binding order
+    decides which one that is, with no separate config key. ``None`` only for the legacy
+    no-bindings registry some tests construct. The one place this is decided; both
+    ``capability_snapshot`` and ``spawn.py``'s no-``session_harnesses`` fallback defer here."""
+    known = harnesses.known_harnesses
+    return known[0] if known else None
+
+
 def capability_snapshot(harnesses: IHarnessRegistry) -> tuple[RunnerCapability, ...]:
     """One entry per known harness binding, each carrying the tier ids its adapter can
-    resolve and its observed version (``None`` when the binding exposes none). The FIRST
-    entry is marked ``default``: the runner's existing default harness, with no separate
-    config key of its own — so with several bindings known (Claude Code and OpenCode both
-    are), it is the registry's own binding order that decides which one that is."""
+    resolve and its observed version (``None`` when the binding exposes none). The entry
+    matching :func:`default_harness_id` is marked ``default``."""
+    default_id = default_harness_id(harnesses)
     snapshot: list[RunnerCapability] = []
-    for index, harness_id in enumerate(harnesses.known_harnesses):
+    for harness_id in harnesses.known_harnesses:
         adapter = harnesses.adapter(harness_id)
         snapshot.append(
             RunnerCapability(
                 harness_id=harness_id,
                 version=adapter.observe_version(),
                 tiers=list(adapter.resolvable_tier_ids()),
-                default=index == 0,
+                default=harness_id == default_id,
             )
         )
     return tuple(snapshot)
