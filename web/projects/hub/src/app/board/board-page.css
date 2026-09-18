@@ -42,3 +42,19 @@
   min-height: 0;
   min-width: 0;
 }
+/* A promote or reorder failure reads between the board and the dock, next to the
+   controls that fired it — the same slot and style `ChunkDetailPanel`'s own action
+   notice uses for its detach/pause/resume/complete failures. */
+.notice {
+  flex: none;
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--red-dim);
+  border-left-width: 2px;
+  background: var(--overlay-20);
+  color: var(--red);
+  font-size: var(--fs-xs);
+}
+.action-notice {
+  margin: 6px 0;
+}

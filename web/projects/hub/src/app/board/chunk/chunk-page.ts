@@ -243,6 +243,14 @@ export class ChunkPage {
   /** Whether the current identity may resolve an open gate decision (`gate:resolve`). */
   protected readonly canResolve = computed(() => hasPermission(this.meQuery.data(), 'gate:resolve'));
 
+  /** Whether the resolve-decision mutation is in flight, threaded to the General tab's
+   * choice chips so a double tap cannot resolve the gate twice. */
+  protected readonly resolvePending = computed(() => this.resolveMutation.isPending());
+
+  /** Whether the answer-question mutation is in flight, threaded to the General tab's
+   * option chips and Answer button so a double tap cannot submit the same answer twice. */
+  protected readonly answerPending = computed(() => this.answerMutation.isPending());
+
   /** Whether the current identity may read a chunk's stored transcript segments
    * (`transcript:read`, blizzard#248 D9) — the Transcripts tab's own *option* is
    * hidden from the strip without it. A deep link still reaches

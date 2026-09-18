@@ -1,1 +1,8 @@
-<fleet-runner-view [rows]="rows()" [state]="state()" [canPause]="canPause()" (togglePause)="toggle($event)" />
+<fleet-runner-view
+  [rows]="rows()"
+  [state]="state()"
+  [canPause]="canPause()"
+  [pendingRunnerIds]="pendingRunnerIds()"
+  [actionError]="actionError()"
+  (togglePause)="toggle($event)"
+/>

@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { editScopeApiScopesSlugPatch } from '../api/hub';
+import { editScopeMutationKey } from '../mutation-keys';
 import { hubScopesKey } from '../query-keys';
 
 /** Change a scope's stored description in place — never touches its slug. */
@@ -19,6 +20,7 @@ export interface ScopeEditVars {
 export function injectEditScopeMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: editScopeMutationKey,
     mutationFn: async (vars: ScopeEditVars): Promise<void> => {
       const { error } = await editScopeApiScopesSlugPatch({
         path: { slug: vars.slug },
@@ -27,8 +29,6 @@ export function injectEditScopeMutation() {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: hubScopesKey });
-    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: hubScopesKey }),
   }));
 }

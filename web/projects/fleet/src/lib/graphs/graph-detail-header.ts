@@ -38,6 +38,19 @@ export class GraphDetailHeader {
    * #93) — gates the retire/re-enable control. */
   readonly canEdit = input(false);
 
+  /** Whether the retire/enable mutation is in flight — disables both Retire and
+   * Enable, since only one is ever shown for the graph's current lifecycle state and
+   * there is only ever one lifecycle mutation in flight for one graph at a time. */
+  readonly lifecyclePending = input(false);
+
+  /** The lifecycle badge's rendered value — the container's own applied result
+   * (`bzh:frontend-pending-override`, `graph-detail.ts`'s `renderedRetired`): the
+   * `retired` flag a currently pending retire/enable predicts, already merged with
+   * the real {@link retired} where nothing overrides it. Which of Retire/Enable
+   * renders stays keyed off the real {@link retired} so an in-flight mutation's own
+   * predicted outcome cannot flip which control the next click would fire. */
+  readonly renderedRetired = input.required<boolean>();
+
   /** Emitted with the graph id once the operator confirms Retire. */
   readonly retire = output<string>();
 

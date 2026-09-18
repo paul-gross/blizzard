@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation, injectQuery } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
+import { localPauseMutationKey } from './mutation-keys';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './polling';
 import { runnerDashboardKey } from './query-keys';
 
@@ -41,6 +42,17 @@ export function injectRunnerDashboardQuery() {
   }));
 }
 
+/** `injectLocalPauseMutation`'s own variables — `runnerId` is carried alongside the
+ * PATCH's real payload (`paused`) purely so {@link LocalPauseControl} can scope its
+ * pending-override read through {@link injectPendingMutationVariables} the same way
+ * every other override site does (`bzh:frontend-pending-override`), even though the
+ * PATCH itself is always this runner pausing itself and never takes a runner id on
+ * the wire (mirrors `chunk-pause.mutations.ts`'s `ChunkPauseVars`). */
+export interface LocalPauseVars {
+  readonly runnerId: string;
+  readonly paused: boolean;
+}
+
 /**
  * `PATCH /api/runner` (issue #133) — the local pause brake's only mutation
  * surface in the web UI, through the generated runner client
@@ -52,25 +64,29 @@ export function injectRunnerDashboardQuery() {
  * runner pausing *itself* (`bzh:frontend-selector-prefix` / issue #83's
  * collision class).
  *
- * On success, `onSuccess` **returns** the invalidation, not fires it
- * fire-and-forget: `injectMutation`'s `isPending()` only clears once the
- * returned promise settles, so the toggle stays disabled through the
- * re-read that follows the PATCH rather than re-enabling the instant the
- * PATCH itself resolves — closing the stale-read window where a fast second
- * click would compute its flip off the pre-PATCH `local` value and send the
- * opposite of what the operator just asked for. Invalidates
- * {@link runnerDashboardKey} — the panel now reads pause state off the
- * dashboard read, so invalidating the old per-endpoint key would be a
+ * `onSettled` **returns** the invalidation, not fires it fire-and-forget:
+ * `injectMutation`'s `isPending()` only clears once the returned promise settles, so
+ * the toggle stays disabled through the re-read that follows the PATCH rather than
+ * re-enabling the instant the PATCH itself resolves — closing the stale-read window
+ * where a fast second click would compute its flip off the pre-PATCH `local` value
+ * and send the opposite of what the operator just asked for. `onSettled` rather than
+ * `onSuccess` so pending survives a failed invalidation attempt too, not just a
+ * successful one. Invalidates {@link runnerDashboardKey} — the panel now reads pause
+ * state off the dashboard read, so invalidating the old per-endpoint key would be a
  * silent no-op and reopen that same stale-toggle race.
  */
 export function injectLocalPauseMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
-    mutationFn: async (paused: boolean): Promise<runnerApi.RunnerControlView> => {
-      const { data, error } = await runnerApi.patchRunnerApiRunnerPatch({ body: { paused }, throwOnError: false });
+    mutationKey: localPauseMutationKey,
+    mutationFn: async (vars: LocalPauseVars): Promise<runnerApi.RunnerControlView> => {
+      const { data, error } = await runnerApi.patchRunnerApiRunnerPatch({
+        body: { paused: vars.paused },
+        throwOnError: false,
+      });
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: runnerDashboardKey }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: runnerDashboardKey }),
   }));
 }

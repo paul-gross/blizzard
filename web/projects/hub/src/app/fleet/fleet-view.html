@@ -5,6 +5,9 @@
   [count]="rows().length || null"
   countTestid="mobile-fleet-count"
 >
+  @if (actionError(); as err) {
+    <p class="notice action-notice" data-testid="mobile-fleet-action-error" role="alert">{{ err }}</p>
+  }
   <fleet-kit-async-state
     [state]="state()"
     placement="inline"
@@ -137,9 +140,10 @@
                  control that would only 403. -->
             @if (canPause()) {
               <fleet-kit-button
-                data-testid="mobile-fleet-runner-toggle"
+                testid="mobile-fleet-runner-toggle"
                 [ariaLabel]="(row.hub_paused ? 'Resume ' : 'Pause ') + row.runner_id + ' at the hub'"
                 [title]="toggleHint(row)"
+                [disabled]="isPausePending(row)"
                 (click)="togglePause.emit(row)"
               >
                 {{ row.hub_paused ? 'Resume' : 'Pause' }}

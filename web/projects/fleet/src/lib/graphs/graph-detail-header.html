@@ -2,17 +2,20 @@
 <span
   class="lifecycle"
   data-testid="graph-detail-lifecycle-badge"
-  [class.retired]="retired()"
-  [class.enabled]="!retired()"
-  >{{ retired() ? 'retired' : 'enabled' }}</span
+  [class.retired]="renderedRetired()"
+  [class.enabled]="!renderedRetired()"
+  >{{ renderedRetired() ? 'retired' : 'enabled' }}</span
 >
 <!-- Retire/re-enable are graph authoring — gated on graph:edit (admin-tier,
-     issue #93): a contributor sees the lifecycle text but not the control. -->
+     issue #93): a contributor sees the lifecycle text but not the control. The
+     control shown stays keyed off the real `retired()`, not the pending
+     override, so a pending mutation's own predicted outcome never flips which
+     verb the next click would fire. -->
 @if (canEdit()) {
   @if (retired()) {
-    <fleet-kit-button testid="graph-detail-enable" (click)="onEnable()">Re-enable</fleet-kit-button>
+    <fleet-kit-button testid="graph-detail-enable" [disabled]="lifecyclePending()" (click)="onEnable()">Re-enable</fleet-kit-button>
   } @else {
-    <fleet-kit-button testid="graph-detail-retire" variant="danger" (click)="onRetire()">Retire</fleet-kit-button>
+    <fleet-kit-button testid="graph-detail-retire" variant="danger" [disabled]="lifecyclePending()" (click)="onRetire()">Retire</fleet-kit-button>
   }
 }
 

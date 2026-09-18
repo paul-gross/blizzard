@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { ChunkDetail } from '../api/hub';
+import type { ChunkDetail, ChunkStatus } from '../api/hub';
 import { ChunkArtifacts } from './chunk-artifacts';
 import {
   type AnswerQuestionEvent,
@@ -99,6 +99,33 @@ export class ChunkDetailPanel {
   /** Whether the current identity may resolve an open gate decision (`gate:resolve` —
    * issue #210), forwarded to {@link ChunkAwaitingHuman}. */
   readonly canResolve = input(false);
+
+  /** Whether the pause/resume mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
+  readonly pausePending = input(false);
+
+  /** Whether the detach mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
+  readonly detachPending = input(false);
+
+  /** Whether the complete mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
+  readonly completePending = input(false);
+
+  /** Whether the delete mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
+  readonly deletePending = input(false);
+
+  /** Whether the resolve-decision mutation is in flight, forwarded to
+   * {@link ChunkAwaitingHuman}. */
+  readonly resolvePending = input(false);
+
+  /** Whether the answer-question mutation is in flight, forwarded to
+   * {@link ChunkAwaitingHuman}. */
+  readonly answerPending = input(false);
+
+  /** The chunk's status as the status chip renders it — the container's own
+   * already-applied result (`bzh:frontend-pending-override`), forwarded straight to
+   * {@link ChunkDetailHeader.renderedStatus} with no merge of its own: this panel is
+   * presentational, so it forwards the container's resolved value rather than
+   * reconciling an override against `detail().status` itself. */
+  readonly renderedStatus = input.required<ChunkStatus>();
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();

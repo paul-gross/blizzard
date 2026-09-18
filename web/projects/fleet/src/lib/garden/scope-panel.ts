@@ -20,7 +20,17 @@ export interface RelatedRoutineVm {
 export interface ScopePanelVm {
   readonly slug: string;
   readonly description: string;
+  /** The scope's real, unoverridden lifecycle flag — which control renders
+   * (Retire/Re-enable) stays keyed off this, never off {@link renderedRetired}
+   * (`graph-detail-header.ts`'s own `retired`/`renderedRetired` split), so a
+   * pending lifecycle mutation's own predicted outcome can never flip which verb the
+   * next click would fire. */
   readonly retired: boolean;
+  /** The lifecycle badge's rendered value — the container's own applied result
+   * (`bzh:frontend-pending-override`): the `retired` flag a currently pending
+   * Retire/Enable predicts, already merged with the real {@link retired} where
+   * nothing overrides it (`graph-detail-header.ts`'s own `renderedRetired`). */
+  readonly renderedRetired: boolean;
   /** Every routine linked to this scope, each marked whether it defaults here (D4)
    * — `null` while the relation read is still pending. */
   readonly relatedRoutines: readonly RelatedRoutineVm[] | null;
@@ -53,6 +63,13 @@ export class FleetScopePanel {
 
   /** Set on a failed edit/retire/enable; rendered beside the controls that raise it. */
   readonly actionError = input<string | null>(null);
+
+  /** Whether the edit-description mutation is in flight — disables the Set button. */
+  readonly editPending = input(false);
+
+  /** Whether the retire/enable mutation is in flight — disables both Re-enable and
+   * Retire, since only one is ever shown for this scope's current lifecycle state. */
+  readonly lifecyclePending = input(false);
 
   readonly editDescription = output<ScopeDescriptionEditEvent>();
   readonly retire = output<string>();

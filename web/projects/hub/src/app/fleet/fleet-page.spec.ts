@@ -1,8 +1,9 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { vi } from 'vitest';
 import { hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { FleetPage } from './fleet-page';
 
@@ -113,5 +114,72 @@ describe('FleetPage (mobile Fleet screen)', () => {
 
     expect(el.querySelectorAll('[data-testid="mobile-fleet-runner"]')).toHaveLength(2);
     expect(el.querySelectorAll('[data-testid="mobile-fleet-runner-toggle"]')).toHaveLength(0);
+  });
+
+  /*
+   * The mobile toggle held to the same standard as `RunnerPanel` (desktop): the
+   * control that triggered a pause/resume mutation disables for the duration, a
+   * sibling row's own toggle stays clickable, and a rejection renders inline
+   * rather than being swallowed (`bzh:frontend-pending-override`).
+   */
+  describe('pause/resume per-row pending scope', () => {
+    const toggle = (el: HTMLElement, id: string): HTMLButtonElement | null =>
+      el.querySelector<HTMLButtonElement>(`[data-runner="${id}"] [data-testid="mobile-fleet-runner-toggle"]`);
+
+    it("disables only the tapped row's toggle while its mutation is pending, re-enabling once it settles", async () => {
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+        if (method === 'GET' && path === '/api/runners') return RUNNERS;
+        if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
+        if (path === '/api/runners/rn_online/pause') return RUNNERS.runners[0];
+        return {};
+      });
+      const fixture = await render();
+      const el = fixture.nativeElement as HTMLElement;
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+
+      toggle(el, 'rn_online')?.click();
+      // Held open by the `invalidateQueries` spy above — a bare macrotask tick +
+      // a manual `detectChanges()` stands in for `settle()`'s own `whenStable()`,
+      // which would hang on it (same idiom `runner-panel.spec.ts` uses).
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      fixture.detectChanges();
+
+      // The tapped row disables…
+      expect(toggle(el, 'rn_online')?.disabled).toBe(true);
+      // …but a sibling row's own toggle stays clickable — the two fire the same
+      // `pauseMutation` instance with different variables.
+      expect(toggle(el, 'rn_paused')?.disabled).toBe(false);
+
+      resolveInvalidate();
+      await settle(fixture);
+
+      expect(toggle(el, 'rn_online')?.disabled).toBe(false);
+    });
+
+    it("reports a pause failure through the page's visible error slot, without disabling a sibling row", async () => {
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+        if (method === 'GET' && path === '/api/runners') return RUNNERS;
+        if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
+        if (path === '/api/runners/rn_online/pause') return stubError(409, { detail: 'runner already paused' });
+        return {};
+      });
+      const fixture = await render();
+      const el = fixture.nativeElement as HTMLElement;
+
+      toggle(el, 'rn_online')?.click();
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="mobile-fleet-action-error"]')?.textContent).toBe(
+        'runner already paused',
+      );
+      // The failure never disables a sibling row that never fired the mutation.
+      expect(toggle(el, 'rn_paused')?.disabled).toBe(false);
+    });
   });
 });

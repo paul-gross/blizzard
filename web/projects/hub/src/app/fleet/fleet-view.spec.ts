@@ -219,6 +219,46 @@ describe('FleetView (mobile Fleet screen)', () => {
     expect(el.querySelector('[data-testid="mobile-fleet-runner-toggle"]')).toBeNull();
   });
 
+  // --- Pending disable + inline error (`bzh:frontend-pending-override`) ----------
+
+  it("disables a row's own toggle while its runner id is in pendingRunnerIds, re-enabling once cleared", async () => {
+    const fixture = TestBed.createComponent(FleetView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [row('rn_online'), row('rn_paused', { hub_paused: true })]);
+    fixture.componentRef.setInput('canPause', true);
+    fixture.componentRef.setInput('pendingRunnerIds', ['rn_online']);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const toggle = (id: string) =>
+      el.querySelector<HTMLButtonElement>(`[data-runner="${id}"] [data-testid="mobile-fleet-runner-toggle"]`);
+
+    // The row named in pendingRunnerIds disables…
+    expect(toggle('rn_online')?.disabled).toBe(true);
+    // …but a sibling row not in the list stays clickable.
+    expect(toggle('rn_paused')?.disabled).toBe(false);
+
+    fixture.componentRef.setInput('pendingRunnerIds', []);
+    await fixture.whenStable();
+
+    expect(toggle('rn_online')?.disabled).toBe(false);
+  });
+
+  it('renders actionError as a visible inline notice, and nothing when null', async () => {
+    const fixture = TestBed.createComponent(FleetView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [row('rn_online')]);
+    fixture.componentRef.setInput('actionError', 'Pause failed.');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="mobile-fleet-action-error"]')?.textContent).toBe('Pause failed.');
+
+    fixture.componentRef.setInput('actionError', null);
+    await fixture.whenStable();
+
+    expect(el.querySelector('[data-testid="mobile-fleet-action-error"]')).toBeNull();
+  });
+
   describe('the rendered seen label (bzh:utc-instants)', () => {
     const REF = Date.parse('2026-07-16T12:00:00.000Z');
 

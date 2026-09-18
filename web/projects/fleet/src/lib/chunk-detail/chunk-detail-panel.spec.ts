@@ -66,6 +66,7 @@ describe('ChunkDetailPanel', () => {
   it('renders all three columns and their sibling components, mounted at once (AC3)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -92,6 +93,7 @@ describe('ChunkDetailPanel', () => {
   it('renders "Node history" exactly once (issue #205)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -101,6 +103,7 @@ describe('ChunkDetailPanel', () => {
   it('orders the work-item column work item, asks/decisions, issues (issue #205)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status);
     fixture.componentRef.setInput('canAnswer', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -115,6 +118,7 @@ describe('ChunkDetailPanel', () => {
   it('links the chunk longname to its dedicated page (issue #205)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -131,6 +135,7 @@ describe('ChunkDetailPanel', () => {
     };
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     fixture.componentRef.setInput('workItems', workItems);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -141,6 +146,7 @@ describe('ChunkDetailPanel', () => {
   it('surfaces the awaiting-human gate for a parked chunk', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -150,6 +156,7 @@ describe('ChunkDetailPanel', () => {
   it('emits dismiss when the close button is activated, through the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     let closed = false;
     fixture.componentInstance.dismiss.subscribe(() => (closed = true));
     await fixture.whenStable();
@@ -162,6 +169,7 @@ describe('ChunkDetailPanel', () => {
   it('emits detach with the chunk id once the operator confirms, through the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     let emitted: string | undefined;
     fixture.componentInstance.detach.subscribe((chunkId) => (emitted = chunkId));
@@ -180,6 +188,7 @@ describe('ChunkDetailPanel', () => {
   it('emits complete with the chunk id once the operator confirms, through the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     let emitted: string | undefined;
     fixture.componentInstance.complete.subscribe((chunkId) => (emitted = chunkId));
@@ -198,6 +207,7 @@ describe('ChunkDetailPanel', () => {
   it('emits delete with the chunk id once the operator confirms, through the header', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'not_ready', route: null });
+    fixture.componentRef.setInput('renderedStatus', 'not_ready');
     fixture.componentRef.setInput('canControl', true);
     let emitted: string | undefined;
     fixture.componentInstance.delete.subscribe((chunkId) => (emitted = chunkId));
@@ -213,6 +223,16 @@ describe('ChunkDetailPanel', () => {
     expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
   });
 
+  it('forwards renderedStatus down to the header, over the real status', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', 'paused');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('paused');
+  });
+
   it('emits editGraph from the facts column', async () => {
     // `current_node_id: null` is what makes the fixture coherent: a chunk only moves
     // once claimed, so a `not_ready` one stands on no node — and the edit row is gated
@@ -220,6 +240,7 @@ describe('ChunkDetailPanel', () => {
     const notReady: ChunkDetail = { ...ROUTED_DETAIL, status: 'not_ready', route: null, current_node_id: null };
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', notReady);
+    fixture.componentRef.setInput('renderedStatus', notReady.status);
     fixture.componentRef.setInput('canControl', true);
     let emitted: { chunkId: string; graphId: string } | undefined;
     fixture.componentInstance.editGraph.subscribe((event) => (emitted = event));
@@ -236,6 +257,7 @@ describe('ChunkDetailPanel', () => {
   it('emits answerQuestion from the awaiting-human column', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status);
     fixture.componentRef.setInput('canAnswer', true);
     let emitted: { questionId: string; answer: string; chunkId: string } | undefined;
     fixture.componentInstance.answerQuestion.subscribe((event) => (emitted = event));
@@ -260,6 +282,7 @@ describe('ChunkDetailPanel', () => {
   it('surfaces a detach error passed down from the container instead of swallowing it', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('actionError', 'chunk ch_01routed000000000000000000 has no live route');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -270,6 +293,7 @@ describe('ChunkDetailPanel', () => {
   it('surfaces a pause error passed down from the container in the shared notice', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('actionError', 'chunk ch_01routed000000000000000000 is not pausable (done)');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -280,6 +304,7 @@ describe('ChunkDetailPanel', () => {
   it('surfaces a complete error passed down from the container in the shared notice', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('actionError', 'unknown chunk ch_01routed000000000000000000');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -290,6 +315,7 @@ describe('ChunkDetailPanel', () => {
   it('surfaces a graph/model edit error passed down from the container in the shared notice', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'not_ready', route: null });
+    fixture.componentRef.setInput('renderedStatus', 'not_ready');
     fixture.componentRef.setInput('actionError', 'chunk ch_01ready000000000000000000000 has already left not_ready');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;

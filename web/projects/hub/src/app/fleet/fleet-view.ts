@@ -42,6 +42,25 @@ export class FleetView {
    * without `runner:pause` (admin-tier). */
   readonly canPause = input(false);
 
+  /** The runner ids whose hub pause/resume mutation the container's shared
+   * `pauseMutation` is currently in flight for — a plain id list rather than a
+   * field folded onto {@link RunnerRow} itself, mirroring `RunnerPanelView`'s own
+   * `pendingRunnerIds`. Scoping the toggle's `disabled` state to this list is what
+   * keeps a sibling row's button enabled while only the row that was tapped
+   * disables — the one `pauseMutation` instance fires once per row, so its bare
+   * `isPending()` would freeze every row alike. */
+  readonly pendingRunnerIds = input<readonly string[]>([]);
+
+  /** The page's last pause/resume failure, or `null` — rendered as a visible inline
+   * notice near the registry (issue #42's "report, don't swallow"). */
+  readonly actionError = input<string | null>(null);
+
+  /** Whether `row`'s own hub pause/resume mutation is in flight — the per-row
+   * membership check against {@link pendingRunnerIds}. */
+  protected isPausePending(row: RunnerRow): boolean {
+    return this.pendingRunnerIds().includes(row.runner_id);
+  }
+
   /** Emitted with the row to flip the **hub** brake on — the container reads
    * `hub_paused` off it to decide pause vs. resume. */
   readonly togglePause = output<RunnerRow>();

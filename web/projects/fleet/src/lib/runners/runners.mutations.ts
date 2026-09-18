@@ -6,6 +6,7 @@ import {
   pauseRunnerApiRunnersRunnerIdPausePost,
   resumeRunnerApiRunnersRunnerIdResumePost,
 } from '../api/hub';
+import { runnerPauseMutationKey } from '../mutation-keys';
 import { hubRunnersKey } from '../query-keys';
 
 /** Toggle a runner's operator brake: pause stops new leases, resume clears it. */
@@ -23,6 +24,7 @@ export interface RunnerPauseVars {
 export function injectRunnerPauseMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: runnerPauseMutationKey,
     mutationFn: async (vars: RunnerPauseVars): Promise<RunnerView> => {
       const call = vars.paused ? pauseRunnerApiRunnersRunnerIdPausePost : resumeRunnerApiRunnersRunnerIdResumePost;
       const { data, error } = await call({
@@ -33,8 +35,6 @@ export function injectRunnerPauseMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: hubRunnersKey });
-    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: hubRunnersKey }),
   }));
 }

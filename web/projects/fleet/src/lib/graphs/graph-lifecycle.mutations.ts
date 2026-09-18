@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { enableGraphApiGraphsGraphIdEnablePost, retireGraphApiGraphsGraphIdRetirePost } from '../api/hub';
+import { graphLifecycleMutationKey } from '../mutation-keys';
 import { hubGraphKey, hubGraphsKey } from '../query-keys';
 
 /** Retire or re-enable a graph's reversible lifecycle brake (issue #101): a retired
@@ -22,6 +23,7 @@ export interface GraphLifecycleVars {
 export function injectGraphLifecycleMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: graphLifecycleMutationKey,
     mutationFn: async (vars: GraphLifecycleVars): Promise<void> => {
       const call = vars.retired ? retireGraphApiGraphsGraphIdRetirePost : enableGraphApiGraphsGraphIdEnablePost;
       const { error } = await call({
@@ -31,9 +33,10 @@ export function injectGraphLifecycleMutation() {
       });
       if (error) throw error;
     },
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: hubGraphsKey });
-      void queryClient.invalidateQueries({ queryKey: hubGraphKey(vars.graphId) });
-    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubGraphsKey }),
+        queryClient.invalidateQueries({ queryKey: hubGraphKey(vars.graphId) }),
+      ]),
   }));
 }

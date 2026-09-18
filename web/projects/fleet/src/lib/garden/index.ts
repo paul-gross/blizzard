@@ -21,6 +21,7 @@ export {
   injectPassGardenProposalMutation,
   injectAcceptGardenProposalMutation,
 } from './garden-proposal.mutations';
+export type { GardenProposalPassVars, GardenProposalAcceptVars } from './garden-proposal.mutations';
 export { injectHubGardenProposalsQuery, isGardenProposalWaiting } from './garden-proposals.query';
 export { injectHubRunsQuery, injectHubRunDeltaQuery } from './garden-runs.query';
 export { FleetProposalList } from './proposal-list';
@@ -59,6 +60,7 @@ export { FleetRunList } from './run-list';
 export type { RunListCountsVm, RunListRowVm } from './run-list';
 export { injectEditScopeMutation } from './scope-edit.mutations';
 export { injectScopeLifecycleMutation } from './scope-lifecycle.mutations';
+export type { ScopeLifecycleVars } from './scope-lifecycle.mutations';
 export { FleetScopeList } from './scope-list';
 export type { ScopeRowVm, ScopeDescriptionEditEvent } from './scope-list';
 export { FleetScopePanel } from './scope-panel';

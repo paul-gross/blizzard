@@ -42,6 +42,7 @@ export * from './lib/sse';
 export * from './lib/health';
 export * from './lib/fleet-spend';
 export * from './lib/chunks';
+export * from './lib/mutation-pending';
 export * from './lib/transcripts';
 export * from './lib/url-selection';
 export * from './lib/viewport';
@@ -63,6 +64,23 @@ export {
   type TranscriptPlane,
 } from './lib/query-keys';
 export * from './lib/query-state';
+export { errorMessage } from './lib/error-message';
+export {
+  promoteChunkMutationKey,
+  repositionQueueMutationKey,
+  repositionBacklogMutationKey,
+  runnerPauseMutationKey,
+  chunkDeleteMutationKey,
+  resolveFindingsMutationKey,
+  confirmGoneFindingsMutationKey,
+  wontFixFindingsMutationKey,
+  notAFindingFindingsMutationKey,
+  supersedeFindingsMutationKey,
+  reopenFindingsMutationKey,
+  acceptGardenProposalMutationKey,
+  passGardenProposalMutationKey,
+  scopeLifecycleMutationKey,
+} from './lib/mutation-keys';
 
 export * as hubApi from './lib/api/hub';
 export * as runnerApi from './lib/api/runner';

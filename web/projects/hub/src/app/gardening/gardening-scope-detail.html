@@ -3,6 +3,8 @@
   [state]="scopePanelState()"
   [canEdit]="canEditScopes()"
   [actionError]="scopeActionError()"
+  [editPending]="editPending()"
+  [lifecyclePending]="lifecyclePending()"
   (editDescription)="onEditScopeDescription($event)"
   (retire)="onRetireScope($event)"
   (enable)="onEnableScope($event)"

@@ -1,15 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
-import type { GraphNodeView, GraphSessionView } from '../api/hub';
+import type { GraphNodeView, GraphSessionView, GraphView } from '../api/hub';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { errorMessage } from '../error-message';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel, KitPanelHeader } from '../kit/kit-panel';
+import { graphLifecycleMutationKey } from '../mutation-keys';
+import { injectPendingMutationVariables } from '../mutation-pending';
 import { asyncState } from '../query-state';
 import { GraphDetailHeader } from './graph-detail-header';
 import { GraphDetailLifecycle } from './graph-detail-lifecycle';
 import { GraphDiagramView } from './graph-diagram-view';
-import { injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
+import { type GraphLifecycleVars, injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
 import { GraphNodeTable } from './graph-node-table';
 import { GraphSessionTable } from './graph-session-table';
 import { injectHubGraphQuery } from './graphs.query';
@@ -66,6 +68,14 @@ export class GraphDetail {
   private readonly lifecycleMutation = injectGraphLifecycleMutation();
   private readonly meQuery = injectMeQuery();
 
+  /** Every graph id a retire/enable mutation is currently pending for, and its own
+   * variables — read through the shared helper (`bzh:frontend-pending-override`)
+   * rather than this mutation's own `.variables()` alone, so {@link overrideRetired}
+   * can scope to *this* graph. This detail persists across a same-route graph nav
+   * (only `graphId` changes), so an unscoped read would keep predicting the
+   * previous graph's outcome for the newly selected one until the mutation settles. */
+  private readonly pendingGraphLifecycles = injectPendingMutationVariables<GraphLifecycleVars>(graphLifecycleMutationKey);
+
   protected readonly graph = computed(() => this.graphQuery.data());
 
   /** This detail's async state — a single-resource read never reaches `'empty'`
@@ -81,6 +91,43 @@ export class GraphDetail {
   /** Set on a failed retire/enable (issue #42's report-don't-swallow pattern);
    * cleared at the start of the next attempt. */
   protected readonly actionError = signal<string | null>(null);
+
+  /** Whether the retire/enable mutation is in flight for this graph — read straight
+   * off the mutation's own `.isPending()` and threaded to {@link GraphDetailHeader}'s
+   * Retire/Enable buttons. Only one of the two is ever the currently-valid action for
+   * a graph's lifecycle state, so disabling both while either is in flight is correct
+   * — there is only ever one lifecycle mutation in flight for one graph at a time. */
+  protected readonly lifecyclePending = computed(() => this.lifecycleMutation.isPending());
+
+  /**
+   * The graph's `retired` flag as it will read once a currently pending retire/enable
+   * settles for *this* graph, or `null` while nothing overrides it
+   * (`bzh:frontend-pending-override`). `enabled`/`retired` is a plain two-valued fact,
+   * set directly by whichever of the two verbs fires — not a value derived from some
+   * other precedence ladder (`blizzard-context:/domain/graphs/identity.md`'s
+   * "Operational surfaces": "gates resolution as a migration target", nothing else
+   * feeds it) — so both directions are total, unlike chunk detail's Resume/Detach.
+   *
+   * Scoped to {@link graphId} through {@link pendingGraphLifecycles} even though this
+   * detail shows one graph at a time and owns one `lifecycleMutation` instance: the
+   * component instance persists across a same-route nav to a different graph, so an
+   * unscoped read of the mutation's own `.variables()` would still predict the
+   * previous graph's outcome for the newly selected one. Purely computed off the
+   * mutation's own pending variables, never a cache write, so a rejected retire/enable
+   * reverts to the real `graph().retired` for free the instant it settles.
+   */
+  protected readonly overrideRetired = computed<boolean | null>(() => {
+    const graphId = this.graphId();
+    return this.pendingGraphLifecycles().find((vars) => vars.graphId === graphId)?.retired ?? null;
+  });
+
+  /** The lifecycle badge's rendered value — {@link overrideRetired} while it names
+   * one for the given graph, else the real `graph.retired` (`bzh:frontend-pending-
+   * override`'s container-applies-overrides rule: {@link GraphDetailHeader} receives
+   * only this already-merged result, never the raw override to reconcile itself). */
+  protected renderedRetired(graph: GraphView): boolean {
+    return this.overrideRetired() ?? !!graph.retired;
+  }
 
   protected readonly nodes = computed<readonly GraphNodeView[]>(() => this.graph()?.nodes ?? []);
 

@@ -10,6 +10,14 @@ import {
   wontFixFindingsApiFindingsWontFixPost,
   type FindingView,
 } from '../api/hub';
+import {
+  confirmGoneFindingsMutationKey,
+  notAFindingFindingsMutationKey,
+  reopenFindingsMutationKey,
+  resolveFindingsMutationKey,
+  supersedeFindingsMutationKey,
+  wontFixFindingsMutationKey,
+} from '../mutation-keys';
 import { hubFindingPrefixKey, hubFindingsBucketPrefixKey, hubFindingsKey } from '../query-keys';
 
 /** `POST /api/findings/{verb}` — the shared vars shape every human-driven exit and
@@ -42,10 +50,12 @@ export interface FindingSupersedeVars extends FindingExitVars {
  * them — triaging a finding from its own pane is the commonest way to change one,
  * and leaving that key alone would leave the pane you acted in showing the state you
  * just left behind. */
-function invalidateFindingCaches(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries({ queryKey: hubFindingsBucketPrefixKey });
-  void queryClient.invalidateQueries({ queryKey: hubFindingsKey([]) });
-  void queryClient.invalidateQueries({ queryKey: hubFindingPrefixKey });
+function invalidateFindingCaches(queryClient: QueryClient): Promise<unknown> {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: hubFindingsBucketPrefixKey }),
+    queryClient.invalidateQueries({ queryKey: hubFindingsKey([]) }),
+    queryClient.invalidateQueries({ queryKey: hubFindingPrefixKey }),
+  ]);
 }
 
 /**
@@ -57,6 +67,7 @@ function invalidateFindingCaches(queryClient: QueryClient): void {
 export function injectResolveFindingsMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: resolveFindingsMutationKey,
     mutationFn: async (vars: FindingExitVars): Promise<FindingView[]> => {
       const { data, error } = await resolveFindingsApiFindingsResolvePost({
         body: { finding_ids: [...vars.findingIds], note: vars.note },
@@ -65,7 +76,7 @@ export function injectResolveFindingsMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => invalidateFindingCaches(queryClient),
+    onSettled: () => invalidateFindingCaches(queryClient),
   }));
 }
 
@@ -77,6 +88,7 @@ export function injectResolveFindingsMutation() {
 export function injectConfirmGoneFindingsMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: confirmGoneFindingsMutationKey,
     mutationFn: async (vars: FindingExitVars): Promise<FindingView[]> => {
       const { data, error } = await confirmGoneFindingsApiFindingsConfirmGonePost({
         body: { finding_ids: [...vars.findingIds], note: vars.note },
@@ -85,7 +97,7 @@ export function injectConfirmGoneFindingsMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => invalidateFindingCaches(queryClient),
+    onSettled: () => invalidateFindingCaches(queryClient),
   }));
 }
 
@@ -98,6 +110,7 @@ export function injectConfirmGoneFindingsMutation() {
 export function injectWontFixFindingsMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: wontFixFindingsMutationKey,
     mutationFn: async (vars: FindingExitVars): Promise<FindingView[]> => {
       const { data, error } = await wontFixFindingsApiFindingsWontFixPost({
         body: { finding_ids: [...vars.findingIds], note: vars.note },
@@ -106,7 +119,7 @@ export function injectWontFixFindingsMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => invalidateFindingCaches(queryClient),
+    onSettled: () => invalidateFindingCaches(queryClient),
   }));
 }
 
@@ -118,6 +131,7 @@ export function injectWontFixFindingsMutation() {
 export function injectNotAFindingFindingsMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: notAFindingFindingsMutationKey,
     mutationFn: async (vars: FindingExitVars): Promise<FindingView[]> => {
       const { data, error } = await notAFindingFindingsApiFindingsNotAFindingPost({
         body: { finding_ids: [...vars.findingIds], note: vars.note },
@@ -126,7 +140,7 @@ export function injectNotAFindingFindingsMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => invalidateFindingCaches(queryClient),
+    onSettled: () => invalidateFindingCaches(queryClient),
   }));
 }
 
@@ -140,6 +154,7 @@ export function injectNotAFindingFindingsMutation() {
 export function injectSupersedeFindingsMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: supersedeFindingsMutationKey,
     mutationFn: async (vars: FindingSupersedeVars): Promise<FindingView[]> => {
       const { data, error } = await supersedeFindingsApiFindingsSupersedePost({
         body: { finding_ids: [...vars.findingIds], note: vars.note, superseded_by: vars.supersededBy },
@@ -148,7 +163,7 @@ export function injectSupersedeFindingsMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => invalidateFindingCaches(queryClient),
+    onSettled: () => invalidateFindingCaches(queryClient),
   }));
 }
 
@@ -160,6 +175,7 @@ export function injectSupersedeFindingsMutation() {
 export function injectReopenFindingsMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: reopenFindingsMutationKey,
     mutationFn: async (vars: FindingExitVars): Promise<FindingView[]> => {
       const { data, error } = await reopenFindingsApiFindingsReopenPost({
         body: { finding_ids: [...vars.findingIds], note: vars.note },
@@ -168,6 +184,6 @@ export function injectReopenFindingsMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => invalidateFindingCaches(queryClient),
+    onSettled: () => invalidateFindingCaches(queryClient),
   }));
 }

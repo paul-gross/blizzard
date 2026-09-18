@@ -2,17 +2,20 @@
   <div class="col col-center">
     <fleet-board-shell
       class="board"
-      [chunks]="chunks()"
-      [readyOrder]="readyOrder()"
-      [backlogOrder]="backlogOrder()"
+      [chunks]="boardChunks()"
+      [readyOrder]="readyLaneOrder()"
+      [backlogOrder]="backlogLaneOrder()"
       [state]="boardState()"
       [selectedChunkId]="selected()"
       [canControl]="canControl()"
       [canReorder]="canReorder()"
       (selectChunk)="select($event)"
-      (promote)="promoteChunk.mutate({ chunkId: $event })"
+      (promote)="onPromote($event)"
       (reposition)="reposition($event)"
     />
+    @if (actionError(); as err) {
+      <p class="notice action-notice" data-testid="board-action-error" role="alert">{{ err }}</p>
+    }
     <fleet-chunk-detail
       class="dock"
       [chunkId]="selected()"

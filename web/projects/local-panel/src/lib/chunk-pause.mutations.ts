@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
+import { chunkPauseMutationKey } from './mutation-keys';
 import { runnerChunkDetailKey, runnerLeasesKey } from './query-keys';
 
 /** Toggle a chunk's operator pause brake from the machine panel (issue #185): pausing
@@ -24,6 +25,7 @@ export interface ChunkPauseVars {
 export function injectChunkPauseMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: chunkPauseMutationKey,
     mutationFn: async (vars: ChunkPauseVars): Promise<void> => {
       const call = vars.paused
         ? runnerApi.pauseChunkApiChunksChunkIdPausePost
@@ -31,9 +33,10 @@ export function injectChunkPauseMutation() {
       const { error } = await call({ path: { chunk_id: vars.chunkId }, throwOnError: false });
       if (error) throw error;
     },
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: runnerChunkDetailKey(vars.chunkId) });
-      void queryClient.invalidateQueries({ queryKey: runnerLeasesKey });
-    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: runnerChunkDetailKey(vars.chunkId) }),
+        queryClient.invalidateQueries({ queryKey: runnerLeasesKey }),
+      ]),
   }));
 }

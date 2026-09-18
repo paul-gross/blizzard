@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EnvironmentInjector, provideZonelessChangeDetection, runInInjectionContext } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type MeResponse, ViewportService } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { hubClient, injectAcceptGardenProposalMutation, injectPassGardenProposalMutation, type MeResponse, ViewportService } from 'fleet';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { vi } from 'vitest';
 
 import { GardeningProposalsPage } from './gardening-proposals-page';
 
@@ -127,8 +128,11 @@ describe('GardeningProposalsPage', () => {
     me: MeResponse = VIEWER_ME_RESPONSE,
     url = '/gardening/proposals',
     mobile = false,
+    routeOverride?: (method: string, path: string) => unknown,
   ) {
     stub = stubRequestClient(hubClient, (method, path) => {
+      const overridden = routeOverride?.(method, path);
+      if (overridden !== undefined) return overridden;
       if (method === 'GET' && path === '/api/garden-proposals') return { proposals, next_cursor: null };
       if (method === 'GET' && path === '/api/me') return me;
       if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
@@ -338,5 +342,98 @@ describe('GardeningProposalsPage', () => {
     expect(router.url).toBe('/gardening/proposals/gp_4?routine=architecture');
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_4"]')?.classList).toContain('selected');
+  });
+
+  describe('a proposal with a pending Pass/Accept drops from the waiting docket (Part B)', () => {
+    /** `gardening-proposal-pass-dialog.ts`/`gardening-proposal-accept-dialog.ts` own
+     * and fire these mutations, not this page — a `mutationKey`-scoped read is
+     * exactly what lets the docket see another component's in-flight mutation
+     * without owning it, so this fires it from the same root injector rather than
+     * through `GardeningProposalsPage` itself (`board-page.spec.ts`'s own
+     * `fireDeleteFrom` shape). */
+    function firePassFrom(proposalId: string): { resolve: () => void } {
+      const injector = TestBed.inject(EnvironmentInjector);
+      const mutation = runInInjectionContext(injector, () => injectPassGardenProposalMutation());
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+      mutation.mutate({ proposalId, reason: 'not worth it yet' });
+      return { resolve: resolveInvalidate };
+    }
+
+    it('drops the row from the default waiting docket while Pass is pending, and restores it once it settles', async () => {
+      const { fixture, el } = await render();
+      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
+
+      const { resolve } = firePassFrom('gp_1');
+      await new Promise((r) => setTimeout(r, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
+
+      resolve();
+      await settle(fixture);
+      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
+    });
+
+    it('restores the row when the pass is rejected', async () => {
+      const { fixture, el } = await render(
+        [WAITING_A, WAITING_B, PASSED],
+        VIEWER_ME_RESPONSE,
+        '/gardening/proposals',
+        false,
+        (method, path) =>
+          method === 'POST' && path === '/api/garden-proposals/gp_1/pass'
+            ? stubError(409, { detail: 'garden proposal gp_1 already carries a closure' })
+            : undefined,
+      );
+      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
+
+      const injector = TestBed.inject(EnvironmentInjector);
+      const mutation = runInInjectionContext(injector, () => injectPassGardenProposalMutation());
+      mutation.mutate({ proposalId: 'gp_1', reason: 'not worth it yet' });
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
+    });
+
+    it('drops the row while Accept is pending too — both closing verbs are total over "waiting"', async () => {
+      const { fixture, el } = await render();
+      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_2"]')).toBeTruthy();
+
+      const injector = TestBed.inject(EnvironmentInjector);
+      const mutation = runInInjectionContext(injector, () => injectAcceptGardenProposalMutation());
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+      mutation.mutate({ proposalId: 'gp_2', mintWorkItem: true });
+      await new Promise((r) => setTimeout(r, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_2"]')).toBeNull();
+
+      resolveInvalidate();
+      await settle(fixture);
+      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_2"]')).toBeTruthy();
+    });
+
+    it("does not drop the row under 'All', where a closed proposal is meant to stay reachable", async () => {
+      const { fixture, el } = await render(
+        [WAITING_A, WAITING_B, PASSED],
+        VIEWER_ME_RESPONSE,
+        '/gardening/proposals?show=all',
+      );
+      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
+
+      firePassFrom('gp_1');
+      await new Promise((r) => setTimeout(r, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
+    });
   });
 });

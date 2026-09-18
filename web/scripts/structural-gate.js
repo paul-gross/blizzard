@@ -18,6 +18,14 @@
  * `.html` outside the kit hand-rolling `KitFactList`'s own `<dl class="kv">` grid.
  * A site that should not convert is named in `KIT_FLOOR_EXEMPT_SITES` with its reason.
  *
+ * Also two mutation-hook shape sweeps, over every `.ts` file that calls `injectMutation(`:
+ * an invalidation whose result is discarded via `void` rather than returned (so
+ * `injectMutation`'s own settle machinery never awaits it), named in
+ * `INVALIDATE_RETURNED_EXEMPT_FILES` when a genuine fire-and-forget is needed; and a direct
+ * cache write (`setQueryData`, or an `onMutate` doing a snapshot/rollback) rather than
+ * driving the cache through invalidation, named in `NO_CACHE_WRITE_EXEMPT_FILES` when
+ * `onMutate` is used for a non-cache side effect instead.
+ *
  * Finally, a repository-wide census keeps retired board Top/group controls out of
  * `projects/`, while leaving the generated grouping API available to other clients.
  *
@@ -308,11 +316,331 @@ function isInsideKit(relPath) {
   return relPath.startsWith(KIT_DIR_SEGMENT);
 }
 
+/** Whether `source` defines a mutation hook at all — both new sweeps below are scoped to
+ * this file shape, the same signal-pairing `assertInvalidateReturnedDetectorWorks` and
+ * `assertNoCacheWriteDetectorWorks` prove: neither pattern alone is forbidden, only inside
+ * a file that also calls `injectMutation(`. */
+function definesMutationHook(source) {
+  return source.includes('injectMutation(');
+}
+
+/** The 1-based line number of `index` within `source`. */
+function lineAt(source, index) {
+  return source.slice(0, index).split('\n').length;
+}
+
+// A mutation hook's own invalidation, called with its result discarded, never lets
+// `injectMutation`'s settle machinery await it — the mutation resolves before the query it
+// just changed lands its refetch, so a caller that awaits `mutate()` and then reads the query
+// sees stale data. The fixed form returns the promise (or folds it into a `Promise.all([...])`)
+// instead. Scoped to files that define a mutation hook (`injectMutation(`) — the same call
+// appears deliberately fire-and-forget elsewhere (`live-invalidation-spine.ts`'s SSE-driven
+// bulk invalidation), which is not this rule's concern and carries no `injectMutation(` to trip
+// the pairing.
+//
+// Two discard shapes, not one: an explicit `void` (the common style here, unambiguous
+// wherever it sits — a concise arrow body `() => void queryClient.invalidateQueries()` is
+// exactly as discarded when the call is a property value ending in `,` as when it is a
+// statement ending in `;`) and a bare statement with no `void` at all, which only drops the
+// promise when nothing else consumes it. Both matched under any client binding name, not
+// just the literal `queryClient` every hook in this codebase happens to use today.
+const VOID_INVALIDATE_QUERIES = /\bvoid\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\.invalidateQueries\s*\(/g;
+const INVALIDATE_QUERIES_CALL = /([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\.invalidateQueries\s*\(/g;
+
+/** The index just past the paren matching the `(` at `openIndex`, or `-1` if unbalanced. */
+function matchingParenEnd(source, openIndex) {
+  let depth = 0;
+  for (let i = openIndex; i < source.length; i += 1) {
+    if (source[i] === '(') depth += 1;
+    else if (source[i] === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** The nearest non-whitespace character at or after `index`, or `''` past the end. */
+function nextNonSpace(source, index) {
+  let i = index;
+  while (i < source.length && /\s/.test(source[i])) i += 1;
+  return source[i] ?? '';
+}
+
+/** Whether the un-`void`d `.invalidateQueries(` call starting at `callStart` sits at a bare
+ * statement boundary — preceded (skipping whitespace) by `{`, `}`, `;`, `=>`, or the start of
+ * the file, rather than by `return`, `await`, `=`, `(`, `[`, or `,`, each of which means the
+ * call's result is still consumed somewhere upstream (a `return`, an `await`, an assignment,
+ * or an argument/array element — one call among several inside `Promise.all([...])`, this
+ * codebase's own multi-key invalidation idiom, is exactly this last case: each element is
+ * followed by `,`, never a statement-terminating `;`). Also requires the call's closing paren
+ * to be followed by that `;` — the same statement-boundary reasoning at the other end. */
+function isBareDiscardedStatement(source, callStart, parenClose) {
+  if (nextNonSpace(source, parenClose + 1) !== ';') return false;
+  let k = callStart - 1;
+  while (k >= 0 && /\s/.test(source[k])) k -= 1;
+  if (k < 0) return true;
+  const precedingWord = /(\w+)$/.exec(source.slice(0, k + 1))?.[1];
+  if (precedingWord === 'return' || precedingWord === 'await') return false;
+  if (source[k] === '=' || source[k] === '(' || source[k] === '[' || source[k] === ',') return false;
+  if (source[k] === '{' || source[k] === '}' || source[k] === ';') return true;
+  return source.slice(Math.max(0, k - 1), k + 1) === '=>';
+}
+
+/** A site that should keep discarding the invalidation promise — a reasoned exemption per
+ * entry, the `REAL_TIMER_EXEMPT_FILES` idiom. Empty for now: every mutation hook found this
+ * way is expected to return or await its invalidation instead. */
+const INVALIDATE_RETURNED_EXEMPT_FILES = [];
+
+/** The lines of `source` (a mutation-hook file) discarding an invalidation — `void`d or bare,
+ * under any client binding name. */
+function discardedInvalidationLines(source) {
+  if (!definesMutationHook(source)) return [];
+  const lines = [];
+
+  VOID_INVALIDATE_QUERIES.lastIndex = 0;
+  let match;
+  while ((match = VOID_INVALIDATE_QUERIES.exec(source)) !== null) lines.push(lineAt(source, match.index));
+
+  INVALIDATE_QUERIES_CALL.lastIndex = 0;
+  while ((match = INVALIDATE_QUERIES_CALL.exec(source)) !== null) {
+    const parenOpen = match.index + match[0].length - 1;
+    const parenClose = matchingParenEnd(source, parenOpen);
+    if (parenClose === -1) continue;
+    if (isBareDiscardedStatement(source, match.index, parenClose)) lines.push(lineAt(source, match.index));
+  }
+
+  return lines;
+}
+
+/**
+ * Prove the discarded-invalidation detector can still fail, before trusting it over the
+ * tree — the same reasoning `assertRealTimerDetectorWorks` follows. Each must-catch fixture
+ * carries both signals (`injectMutation(` plus the discarded `void` call); the must-pass
+ * fixtures each drop exactly one signal — the returned form drops the `void`, the unrelated
+ * helper drops `injectMutation(` — confirming the sweep needs both together, not either alone.
+ */
+function assertInvalidateReturnedDetectorWorks() {
+  const mustCatch = [
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: () => {
+          void queryClient.invalidateQueries({ queryKey: x });
+        },
+      }));
+    }`,
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSettled: () =>   void   queryClient.invalidateQueries(),
+      }));
+    }`, // ragged whitespace, and the plain-call form
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: x });
+        },
+      }));
+    }`, // bare statement, no `void` at all
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: () => {
+          void client.invalidateQueries({ queryKey: x });
+        },
+      }));
+    }`, // a differently-named client binding, `void`d
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: () => {
+          this.queryClient.invalidateQueries({ queryKey: x });
+        },
+      }));
+    }`, // a differently-named (member-access) client binding, bare
+  ];
+  for (const source of mustCatch) {
+    if (discardedInvalidationLines(source).length === 0) {
+      throw new Error(`discarded-invalidation detector missed:\n${source}`);
+    }
+  }
+
+  const mustPass = [
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: () => {
+          return queryClient.invalidateQueries({ queryKey: x });
+        },
+      }));
+    }`, // returned, not discarded
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: async () => {
+          await queryClient.invalidateQueries({ queryKey: x });
+        },
+      }));
+    }`, // awaited, not discarded
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSettled: (_data, _error, vars) =>
+          Promise.all([
+            queryClient.invalidateQueries({ queryKey: a }),
+            queryClient.invalidateQueries({ queryKey: b(vars) }),
+          ]),
+      }));
+    }`, // this codebase's own multi-key idiom — each call is an array element (`,`), not a
+        // statement (`;`), even though neither is individually returned or awaited
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: () => {
+          const pending = queryClient.invalidateQueries({ queryKey: x });
+          return pending;
+        },
+      }));
+    }`, // assigned, not discarded
+    `export function someUnrelatedHelper() {
+      void queryClient.invalidateQueries({ queryKey: x });
+    }`, // no injectMutation( at all — not a mutation-hook file
+    `export function someUnrelatedHelper() {
+      queryClient.invalidateQueries({ queryKey: x });
+    }`, // same, for the bare (non-`void`) form
+  ];
+  for (const source of mustPass) {
+    if (discardedInvalidationLines(source).length > 0) {
+      throw new Error(`discarded-invalidation detector false-positived on:\n${source}`);
+    }
+  }
+}
+
+// `setQueryData` writes the cache directly — a predictable outcome renders from a pending
+// mutation's own variables instead (`fleet/src/lib/mutation-pending/`), never a guess written
+// into the cache, so this is forbidden everywhere in production code, not just inside the
+// hook that owns the mutation: a *consumer* of a mutation hook (a container calling
+// `.mutate(vars, { onMutate: ... })`, say) can write the cache just as easily as the hook
+// itself, and forbidding it only inside a file that literally contains `injectMutation(` would
+// leave every consumer free to do it instead. Spec files are exempt — a spec legitimately
+// stubs/spies on `queryClient.setQueryData` as test setup (e.g. `sse/fleet-live.spec.ts`),
+// which writes no real cache.
+const SET_QUERY_DATA = /\.setQueryData\s*\(/g;
+
+// `onMutate` is where a hook typically snapshots the cache before an optimistic write, but it's
+// not always this shape (a hook may use it for a non-cache side effect, like toggling a local UI
+// signal) — a static sweep cannot reliably tell the two apart, so this half stays scoped to a
+// file that defines a mutation hook (`injectMutation(`), where the ambiguity actually arises;
+// a real non-cache use is named in `NO_CACHE_WRITE_EXEMPT_FILES` instead, mirroring the other
+// sweeps' exemption-list idiom.
+const ON_MUTATE = /\bonMutate\s*:/g;
+
+/**
+ * A site that should keep `onMutate` — a reasoned exemption per entry, the
+ * `REAL_TIMER_EXEMPT_FILES` idiom:
+ *
+ * - `local-panel/src/lib/auth.query.ts`'s `injectRunnerLogoutMutation` uses `onMutate`
+ *   only to flip a local in-flight signal (`logoutInFlightSignal.set(true)`) — no
+ *   `setQueryData`, no snapshot/rollback of query data, so it's not the cache-write
+ *   pattern this sweep forbids.
+ */
+const NO_CACHE_WRITE_EXEMPT_FILES = [path.join('local-panel', 'src', 'lib', 'auth.query.ts')];
+
+/** The lines of `source` (any non-spec `.ts` file at `rel`) writing the cache, honoring
+ * `NO_CACHE_WRITE_EXEMPT_FILES`. `setQueryData` is checked everywhere a mutation hook is
+ * consumed, not only where one is defined; `onMutate` stays scoped to a defining file. */
+function cacheWriteLines(source, rel) {
+  if (rel.endsWith('.spec.ts') || NO_CACHE_WRITE_EXEMPT_FILES.includes(rel)) return [];
+  const lines = [];
+
+  SET_QUERY_DATA.lastIndex = 0;
+  let match;
+  while ((match = SET_QUERY_DATA.exec(source)) !== null) lines.push(lineAt(source, match.index));
+
+  if (definesMutationHook(source)) {
+    ON_MUTATE.lastIndex = 0;
+    while ((match = ON_MUTATE.exec(source)) !== null) lines.push(lineAt(source, match.index));
+  }
+
+  return lines;
+}
+
+/**
+ * Prove the cache-write detector can still fail, before trusting it over the tree — the
+ * same reasoning `assertRealTimerDetectorWorks` follows. The exempted-file must-pass case
+ * uses `NO_CACHE_WRITE_EXEMPT_FILES`'s own real entry, so a stale exemption (the file
+ * changing shape without the list catching up) fails loudly here rather than silently.
+ */
+function assertNoCacheWriteDetectorWorks() {
+  const mustCatch = [
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: () => queryClient.setQueryData(key, data),
+      }));
+    }`, // setQueryData inside the hook itself
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onMutate: async (vars) => {
+          const previous = queryClient.getQueryData(key);
+          queryClient.setQueryData(key, vars);
+          return { previous };
+        },
+      }));
+    }`, // onMutate snapshot/rollback inside the hook itself
+    `export class SomeContainer {
+      private readonly thingMutation = injectThingMutation();
+      protected act(): void {
+        this.thingMutation.mutate(vars, {
+          onSuccess: () => this.queryClient.setQueryData(key, data),
+        });
+      }
+    }`, // setQueryData from a *consumer* of a hook, not the hook's own file
+  ];
+  for (const source of mustCatch) {
+    if (cacheWriteLines(source, 'unexempted-fixture.ts').length === 0) {
+      throw new Error(`cache-write detector missed:\n${source}`);
+    }
+  }
+
+  const mustPass = [
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSettled: () => queryClient.invalidateQueries({ queryKey: x }),
+      }));
+    }`, // neither pattern
+    `export function someUnrelatedHelper() {
+      const onMutate = true;
+    }`, // no setQueryData, and `onMutate` isn't the mutation-option shape (no colon-keyed use, and no injectMutation( besides)
+  ];
+  for (const source of mustPass) {
+    if (cacheWriteLines(source, 'unexempted-fixture.ts').length > 0) {
+      throw new Error(`cache-write detector false-positived on:\n${source}`);
+    }
+  }
+
+  // A spec legitimately stubs/spies on `setQueryData` as test setup — exempt by filename,
+  // regardless of the `NO_CACHE_WRITE_EXEMPT_FILES` list.
+  const specFixture = `it('does something', () => {
+    vi.spyOn(queryClient, 'setQueryData');
+  });`;
+  if (cacheWriteLines(specFixture, path.join('fleet', 'src', 'lib', 'sse', 'fleet-live.spec.ts')).length > 0) {
+    throw new Error(`cache-write detector false-positived on a .spec.ts file:\n${specFixture}`);
+  }
+
+  for (const exemptRel of NO_CACHE_WRITE_EXEMPT_FILES) {
+    const exemptSource = fs.readFileSync(path.join(PROJECTS_DIR, exemptRel), 'utf8');
+    if (cacheWriteLines(exemptSource, 'not-the-exempted-path.ts').length === 0) {
+      // Proves the exemption is doing real work: without it, this file's own source would
+      // still trip the detector (still a mutation hook, still carries the pattern) — a
+      // vacuous exemption (nothing left to suppress) would go unnoticed otherwise.
+      throw new Error(`cache-write exemption is stale: \`${exemptRel}\` no longer carries the pattern it was exempted for`);
+    }
+    if (cacheWriteLines(exemptSource, exemptRel).length > 0) {
+      throw new Error(`cache-write exemption did not suppress \`${exemptRel}\``);
+    }
+  }
+}
+
 function main() {
   assertRealTimerDetectorWorks();
   assertKitFloorDetectorWorks();
   assertBoardControlDetectorWorks();
   assertDockControlDetectorWorks();
+  assertInvalidateReturnedDetectorWorks();
+  assertNoCacheWriteDetectorWorks();
 
   const specFiles = walk(PROJECTS_DIR, ['.ts']);
 
@@ -338,6 +666,20 @@ function main() {
   const boardControlViolations = [];
   /** @type {{ file: string, symbol: string }[]} */
   const dockControlViolations = [];
+  /** @type {{ file: string, line: number }[]} */
+  const invalidateDiscardedViolations = [];
+  /** @type {{ file: string, line: number }[]} */
+  const cacheWriteViolations = [];
+
+  for (const file of walk(PROJECTS_DIR, ['.ts'])) {
+    const rel = path.relative(PROJECTS_DIR, file);
+    const source = fs.readFileSync(file, 'utf8');
+
+    if (!INVALIDATE_RETURNED_EXEMPT_FILES.includes(rel)) {
+      for (const line of discardedInvalidationLines(source)) invalidateDiscardedViolations.push({ file: rel, line });
+    }
+    for (const line of cacheWriteLines(source, rel)) cacheWriteViolations.push({ file: rel, line });
+  }
 
   for (const file of walk(PROJECTS_DIR, ['.css'])) {
     const rel = path.relative(PROJECTS_DIR, file);
@@ -373,7 +715,9 @@ function main() {
     realTimerViolations.length > 0 ||
     kitFloorViolations.length > 0 ||
     boardControlViolations.length > 0 ||
-    dockControlViolations.length > 0
+    dockControlViolations.length > 0 ||
+    invalidateDiscardedViolations.length > 0 ||
+    cacheWriteViolations.length > 0
   ) {
     if (realTimerViolations.length > 0) {
       console.error('structural-gate: real timers in merge-gating specs:\n');
@@ -408,6 +752,24 @@ function main() {
           'the affordance here.',
       );
     }
+    if (invalidateDiscardedViolations.length > 0) {
+      console.error('structural-gate: discarded invalidation in mutation hooks:\n');
+      for (const v of invalidateDiscardedViolations) console.error(`  ${v.file}:${v.line}`);
+      console.error(
+        '\nReturn the invalidation (or fold it into a Promise.all([...])) so injectMutation\'s own settle machinery ' +
+          "awaits it, instead of discarding it with `void`; a hook that genuinely must fire-and-forget its " +
+          'invalidation goes in INVALIDATE_RETURNED_EXEMPT_FILES with a one-line reason.',
+      );
+    }
+    if (cacheWriteViolations.length > 0) {
+      console.error('structural-gate: cache writes in mutation hooks:\n');
+      for (const v of cacheWriteViolations) console.error(`  ${v.file}:${v.line}`);
+      console.error(
+        '\nA mutation hook drives its query cache through invalidation, not a direct `setQueryData` or an ' +
+          '`onMutate` snapshot/rollback; an `onMutate` that only touches a non-cache local side effect goes in ' +
+          'NO_CACHE_WRITE_EXEMPT_FILES with a one-line reason.',
+      );
+    }
     process.exitCode = 1;
     return;
   }
@@ -416,6 +778,8 @@ function main() {
   console.log('structural-gate: kit floor clean.');
   console.log('structural-gate: retired board-control census clean.');
   console.log('structural-gate: retired dock-control census clean.');
+  console.log('structural-gate: mutation-hook invalidation sweep clean.');
+  console.log('structural-gate: mutation-hook cache-write sweep clean.');
 }
 
 main();

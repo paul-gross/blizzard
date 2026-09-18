@@ -1,10 +1,18 @@
 import { computed, type Signal } from '@angular/core';
 import {
+  confirmGoneFindingsMutationKey,
   FINDING_STATES,
   injectHubFindingsBucketQuery,
   injectHubRoutinesQuery,
   injectHubScopesQuery,
+  injectPendingMutationVariables,
+  notAFindingFindingsMutationKey,
+  reopenFindingsMutationKey,
+  resolveFindingsMutationKey,
+  supersedeFindingsMutationKey,
+  wontFixFindingsMutationKey,
   type AsyncStateQuery,
+  type FindingExitVars,
   type FindingView,
   type KitChipOption,
   type RoutineView,
@@ -133,6 +141,57 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
   const classFilter = computed<string | null>(() => url.read('class'));
   const stateFilter = computed<string | null>(() => url.read('state'));
 
+  /** Every finding id any of the six human-driven triage verbs is currently pending
+   * for (`bzh:frontend-pending-override`), paired with that verb's own known
+   * resulting state — the exit five (`resolve`, `confirm-gone`, `wont-fix`,
+   * `not-a-finding`, `supersede`) and `reopen`. Each fires the bulk
+   * `FindingExitVars.findingIds` shape (`FindingSupersedeVars` too, which only adds a
+   * field this read never touches), read by `mutationKey` alone
+   * (`injectPendingMutationVariables`) rather than by owning any of the six mutations
+   * here — the triage dialog that actually fires them (`gardening-finding-triage-
+   * dialog.ts`) is a sibling surface this list never mounts.
+   *
+   * `derive_liveness` (`src/blizzard/hub/domain/findings.py`) folds a finding's facts
+   * newest-wins, and every one of these six verbs' own fact `kind` is exactly its
+   * resulting `state` (`reopened` folds to `"live"`, same as `add`/`observed`) — so
+   * each verb's resulting state is fixed and known ahead of the call settling, the
+   * same guarantee `chunk-detail.ts`'s `overrideStatus` documents for Pause/Complete.
+   *
+   * That does **not** make hiding the row while pending total on its own: the triage
+   * surface (`finding-panel.ts`) renders every exit verb regardless of the finding's
+   * *current* state, so an operator can re-dispatch a verb whose resulting state
+   * equals the state it's already in — e.g. clicking Resolve again on an
+   * already-`resolved` row while the active filter is `resolved`. That call never
+   * moves the finding out of the filtered set, so hiding it would be a bare guess,
+   * not a prediction — the plan's own totality rule (`bzh:frontend-pending-
+   * override`) says fall back to no override there instead. The override is total
+   * only relative to the currently active {@link stateFilter}: a finding is safely
+   * hideable while pending exactly when the verb in flight for it resolves to some
+   * state *other than* the one currently filtered on. {@link filteredBucket} below
+   * computes that set itself, since it alone knows the active filter. */
+  const resolvePending = injectPendingMutationVariables<FindingExitVars>(resolveFindingsMutationKey);
+  const confirmGonePending = injectPendingMutationVariables<FindingExitVars>(confirmGoneFindingsMutationKey);
+  const wontFixPending = injectPendingMutationVariables<FindingExitVars>(wontFixFindingsMutationKey);
+  const notAFindingPending = injectPendingMutationVariables<FindingExitVars>(notAFindingFindingsMutationKey);
+  const supersedePending = injectPendingMutationVariables<FindingExitVars>(supersedeFindingsMutationKey);
+  const reopenPending = injectPendingMutationVariables<FindingExitVars>(reopenFindingsMutationKey);
+
+  /** Each pending list above paired with the fixed state its own verb resolves to
+   * (the doc comment above). Read together, rather than flattened into one bare id
+   * set, so {@link filteredBucket} can compare each pending call's *own* resulting
+   * state against the active {@link stateFilter} instead of assuming every pending
+   * call is headed away from it. */
+  const pendingByResultingState = computed<readonly { readonly findingIds: readonly string[]; readonly resultingState: string }[]>(
+    () => [
+      { findingIds: resolvePending().flatMap((v) => v.findingIds), resultingState: 'resolved' },
+      { findingIds: confirmGonePending().flatMap((v) => v.findingIds), resultingState: 'gone-confirmed' },
+      { findingIds: wontFixPending().flatMap((v) => v.findingIds), resultingState: 'wont-fix' },
+      { findingIds: notAFindingPending().flatMap((v) => v.findingIds), resultingState: 'not-a-finding' },
+      { findingIds: supersedePending().flatMap((v) => v.findingIds), resultingState: 'superseded' },
+      { findingIds: reopenPending().flatMap((v) => v.findingIds), resultingState: 'live' },
+    ],
+  );
+
   const classChips = computed<readonly KitChipOption[]>(() => {
     const classes = Array.from(new Set(bucketRows().map((f) => f.class))).sort((a, b) => a.localeCompare(b));
     return [
@@ -158,10 +217,35 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
     url.patch({ state: value === ALL_STATES ? null : value });
   }
 
+  /** Narrowed by class and state (D3, client-side) and now also by the pending-and-
+   * hideable set below (`bzh:frontend-pending-override`) — but only inside the
+   * `st !== null` branch: a concrete state chip is the only filter a pending triage
+   * call could falsify, since "All states" already renders every finding regardless
+   * of which state it reads. No cache write backs this — a rejected call reverts the
+   * dropped row for free the instant its mutation's own `isPending()` clears.
+   *
+   * The hideable set is computed here, relative to `st`, rather than read off a flat
+   * `pendingFindingIds` signal: an id is only safely hideable when the verb pending
+   * for it resolves to a state *other than* `st` ({@link pendingByResultingState}'s
+   * own doc comment) — a same-state re-dispatch (Resolve again on an already-
+   * `resolved` row while filtered to `resolved`) never actually leaves the filtered
+   * set, so it must stay visible throughout. */
   const filteredBucket = computed<readonly FindingView[]>(() => {
     const cls = classFilter();
     const st = stateFilter();
-    return bucketRows().filter((f) => (cls === null || f.class === cls) && (st === null || f.state === st));
+    const hideable =
+      st === null
+        ? new Set<string>()
+        : new Set(
+            pendingByResultingState()
+              .filter((entry) => entry.resultingState !== st)
+              .flatMap((entry) => entry.findingIds),
+          );
+    return bucketRows().filter((f) => {
+      if (cls !== null && f.class !== cls) return false;
+      if (st === null) return true;
+      return f.state === st && !hideable.has(f.finding_id);
+    });
   });
 
   return {

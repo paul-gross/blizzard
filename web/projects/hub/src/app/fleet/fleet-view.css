@@ -9,6 +9,17 @@
   font-variant-numeric: tabular-nums;
   padding: 6px;
 }
+/* A pause/resume failure reads above the registry list, in the same slot and
+   style `RunnerPanel`'s own action notice uses for its pause/resume failures. */
+.notice {
+  margin: 0 0 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--red-dim);
+  border-left-width: 2px;
+  background: var(--overlay-20);
+  color: var(--red);
+  font-size: var(--fs-xs);
+}
 .runners {
   list-style: none;
   margin: 0;

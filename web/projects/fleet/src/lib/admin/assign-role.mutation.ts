@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { type UserView, assignRoleApiUsersUserIdRolePost } from '../api/hub';
+import { assignRoleMutationKey } from '../mutation-keys';
 import { hubUsersKey } from '../query-keys';
 
 /** `POST /api/users/{id}/role`'s own variables — the target user and the role it is
@@ -23,6 +24,7 @@ export interface AssignRoleVars {
 export function injectAssignRoleMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: assignRoleMutationKey,
     mutationFn: async (vars: AssignRoleVars): Promise<UserView> => {
       const { data, error } = await assignRoleApiUsersUserIdRolePost({
         path: { user_id: vars.userId },
@@ -32,8 +34,6 @@ export function injectAssignRoleMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: hubUsersKey });
-    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: hubUsersKey }),
   }));
 }

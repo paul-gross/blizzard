@@ -34,7 +34,7 @@
       @if (pointers().length) {
         <span class="sep" aria-hidden="true">·</span>
       }
-      <span class="st" data-testid="detail-status">{{ detail().status }}</span>
+      <span class="st" data-testid="detail-status">{{ renderedStatus() }}</span>
       <!-- Every unmet prerequisite, then every chunk this one still holds up — the
            whole edge set the line can name, not one representative of it. Plain text
            like the pointers beside them: the dependency lists in the column below own
@@ -72,6 +72,7 @@
             testid="resume-chunk"
             [ariaLabel]="'Resume chunk ' + detail().chunk_id"
             [fleetTooltip]="resumeCopy(route()?.runner_id ?? null).text"
+            [disabled]="pausePending()"
             (click)="onResume()"
           >
             Resume
@@ -81,6 +82,7 @@
             testid="pause-chunk"
             [ariaLabel]="'Pause chunk ' + detail().chunk_id"
             [fleetTooltip]="pauseCopy(route()?.runner_id ?? null).text"
+            [disabled]="pausePending()"
             (click)="onPause()"
           >
             Pause
@@ -111,7 +113,12 @@
   <fleet-kit-menu-panel testid="chunk-actions-panel">
     @if (route(); as r) {
       @let detach = detachCopy(r.runner_id, currentNodeName());
-      <fleet-kit-menu-item testid="detach-chunk" [fleetTooltip]="detach.text" (triggered)="onDetach()">
+      <fleet-kit-menu-item
+        testid="detach-chunk"
+        [disabled]="detachPending()"
+        [fleetTooltip]="detach.text"
+        (triggered)="onDetach()"
+      >
         <span fleetKitMenuItemSubtitle>{{ detach.subtitle }}</span>
         {{ detach.label }}
       </fleet-kit-menu-item>
@@ -121,7 +128,7 @@
     <fleet-kit-menu-item
       class="danger"
       testid="complete-chunk"
-      [disabled]="!completable()"
+      [disabled]="!completable() || completePending()"
       [fleetTooltip]="complete.text"
       (triggered)="onComplete()"
     >
@@ -132,7 +139,7 @@
     <fleet-kit-menu-item
       class="danger"
       testid="delete-chunk"
-      [disabled]="deleteDisabled()"
+      [disabled]="deleteDisabled() || deletePending()"
       [fleetTooltip]="del.text"
       (triggered)="onDelete()"
     >

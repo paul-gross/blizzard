@@ -11,6 +11,8 @@
       [graphId]="g.graph_id"
       [retired]="!!g.retired"
       [canEdit]="canEdit()"
+      [lifecyclePending]="lifecyclePending()"
+      [renderedRetired]="renderedRetired(g)"
       (retire)="onRetire($event)"
       (enable)="onEnable($event)"
     />

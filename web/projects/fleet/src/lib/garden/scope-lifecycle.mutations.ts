@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { enableScopeApiScopesSlugEnablePost, retireScopeApiScopesSlugRetirePost } from '../api/hub';
+import { scopeLifecycleMutationKey } from '../mutation-keys';
 import { hubScopesKey } from '../query-keys';
 
 /** Retire or re-enable a scope's reversible brake: a retired scope is
@@ -21,6 +22,7 @@ export interface ScopeLifecycleVars {
 export function injectScopeLifecycleMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: scopeLifecycleMutationKey,
     mutationFn: async (vars: ScopeLifecycleVars): Promise<void> => {
       const call = vars.retired ? retireScopeApiScopesSlugRetirePost : enableScopeApiScopesSlugEnablePost;
       const { error } = await call({
@@ -30,8 +32,6 @@ export function injectScopeLifecycleMutation() {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: hubScopesKey });
-    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: hubScopesKey }),
   }));
 }

@@ -11,10 +11,14 @@
       [runnerName]="runnerName()"
       [pause]="pause()"
       [pausable]="pausable()"
+      [pending]="pausePending()"
       (dismiss)="dismiss.emit()"
-      (pauseChunk)="pauseMutation.mutate({ chunkId: $event, paused: true })"
-      (resumeChunk)="pauseMutation.mutate({ chunkId: $event, paused: false })"
+      (pauseChunk)="onPause($event)"
+      (resumeChunk)="onResume($event)"
     />
+  }
+  @if (newestLease() && actionError(); as err) {
+    <p class="notice action-notice" data-testid="action-error" role="alert">{{ err }}</p>
   }
   <local-machine-detail-view
     [lease]="newestLease()"

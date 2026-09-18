@@ -8,6 +8,7 @@ import {
   resolveDecisionApiDecisionsDecisionIdResolutionsPost,
 } from '../api/hub';
 import { errorMessage } from '../error-message';
+import { answerQuestionMutationKey, resolveDecisionMutationKey } from '../mutation-keys';
 import { hubChunkKey, hubChunksKey } from '../query-keys';
 
 /** Answer a chunk's open question — the board's counterpart of `blizzard hub answer`. */
@@ -74,6 +75,7 @@ export function readAnswerFailure(error: unknown): AnswerFailure {
 export function injectAnswerQuestionMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: answerQuestionMutationKey,
     mutationFn: async (vars: AnswerVars): Promise<AnswerResult> => {
       const { data, error } = await answerQuestionApiQuestionsQuestionIdAnswersPost({
         path: { question_id: vars.questionId },
@@ -83,10 +85,11 @@ export function injectAnswerQuestionMutation() {
       if (error) throw error;
       return data!;
     },
-    onSettled: (_data, _error, vars) => {
-      void queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) });
-      void queryClient.invalidateQueries({ queryKey: hubChunksKey });
-    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) }),
+        queryClient.invalidateQueries({ queryKey: hubChunksKey }),
+      ]),
   }));
 }
 
@@ -110,6 +113,7 @@ export interface ResolveVars {
 export function injectResolveDecisionMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: resolveDecisionMutationKey,
     mutationFn: async (vars: ResolveVars): Promise<DecisionResolutionResponse> => {
       const { data, error } = await resolveDecisionApiDecisionsDecisionIdResolutionsPost({
         path: { decision_id: vars.decisionId },
@@ -119,9 +123,10 @@ export function injectResolveDecisionMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) });
-      void queryClient.invalidateQueries({ queryKey: hubChunksKey });
-    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) }),
+        queryClient.invalidateQueries({ queryKey: hubChunksKey }),
+      ]),
   }));
 }

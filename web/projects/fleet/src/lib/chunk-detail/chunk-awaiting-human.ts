@@ -68,6 +68,14 @@ export class ChunkAwaitingHuman {
    * `false`. */
   readonly canResolve = input(false);
 
+  /** Whether the resolve-decision mutation is in flight — disables the choice chips so
+   * a double click cannot resolve the gate twice. */
+  readonly resolvePending = input(false);
+
+  /** Whether the answer-question mutation is in flight — disables the option chips and
+   * the Answer button so a double click cannot submit the same question twice. */
+  readonly answerPending = input(false);
+
   /** Emitted when the operator answers an open question (MVP criterion 7). */
   readonly answerQuestion = output<AnswerQuestionEvent>();
 

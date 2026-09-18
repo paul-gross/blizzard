@@ -1,13 +1,14 @@
 import { Location } from '@angular/common';
 import { provideLocationMocks } from '@angular/common/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { EnvironmentInjector, provideZonelessChangeDetection, runInInjectionContext } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Router, provideRouter, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { BoardShell, compactRef, hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { BoardShell, compactRef, hubClient, injectDeleteChunkMutation } from 'fleet';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { vi } from 'vitest';
 
 import { BoardPage } from './board-page';
 
@@ -286,6 +287,229 @@ describe('BoardPage', () => {
       expect(el.querySelectorAll(`[data-chunk="${BACKLOG}"]`)).toHaveLength(1);
       // No error surfaces anywhere on the board from the withheld read.
       expect(el.querySelector('[data-testid="board-error"]')).toBeNull();
+    });
+  });
+
+  /*
+   * Part A conformance: one `promoteChunk` mutation instance fires once per
+   * promoted card, so a pending mutation's effect must scope to the card whose own
+   * mutation is in flight — a sibling card's Promote button must stay clickable.
+   *
+   * The clicked card no longer just disables its own Promote button in place: Phase 2's
+   * READY-lane override (`bzh:frontend-pending-override`, below) moves the whole card into
+   * READY while its promote is pending, and a card in READY never carries a Promote button
+   * at all — a not_ready and a ready card can never both be true of the same card at once, since
+   * both are derived off the same pending list.
+   */
+  describe('Promote per-card pending scope (Part A)', () => {
+    /** The Promote button on a backlog card, or `undefined` if the card carries none. */
+    const promoteButton = (el: HTMLElement, chunkId: string): HTMLButtonElement | null | undefined =>
+      card(el, chunkId).querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]');
+
+    it("moves only the clicked card into READY while its mutation is pending, restoring it to BACKLOG once settled", async () => {
+      const { el, harness } = await open();
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+
+      promoteButton(el, BACKLOG)?.click();
+      // Held open by the `invalidateQueries` spy above — `settle()`'s own
+      // `whenStable()` would hang on it, so a bare macrotask tick + a manual
+      // `detectChanges()` stands in, the same idiom `status.query.spec.ts` uses
+      // for the same reason.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+
+      // The clicked card moved into READY — it carries no Promote button there…
+      expect(card(el, BACKLOG).closest('[data-col]')?.getAttribute('data-col')).toBe('ready');
+      // …but the sibling backlog card stays put, its own Promote still clickable — the two
+      // fire the same `promoteChunk` mutation instance with different variables.
+      expect(card(el, BACKLOG_NEXT).closest('[data-col]')?.getAttribute('data-col')).toBe('notready');
+      expect(promoteButton(el, BACKLOG_NEXT)?.disabled).toBe(false);
+
+      resolveInvalidate();
+      await settle(harness.fixture);
+
+      // Settled with the fixture's data unchanged (a static stub, no real promote):
+      // the override is gone and the card renders its last real state again.
+      expect(card(el, BACKLOG).closest('[data-col]')?.getAttribute('data-col')).toBe('notready');
+      expect(promoteButton(el, BACKLOG)?.disabled).toBe(false);
+    });
+
+    it("reports a promote failure through the board's visible error slot", async () => {
+      stub.restore();
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'POST' && path === `/api/chunks/${BACKLOG}/promote`) {
+          return stubError(409, { detail: 'chunk already ready' });
+        }
+        return hubRoutes()(method, path);
+      });
+      const { el, harness } = await open();
+
+      promoteButton(el, BACKLOG)?.click();
+      await settle(harness.fixture);
+
+      expect(el.querySelector('[data-testid="board-action-error"]')?.textContent).toBe('chunk already ready');
+      // Promote's own failure never disables a card that never fired it.
+      expect(promoteButton(el, BACKLOG_NEXT)?.disabled).toBe(false);
+    });
+  });
+
+  /*
+   * Phase 2's board-half pending overrides (`bzh:frontend-pending-override`): a control whose
+   * resulting change is predictable renders it immediately, computed off the in-flight
+   * mutation's own variables — never a cache write — so a rejection reverts to the last real
+   * server state for free the instant `isPending()` flips false.
+   */
+  describe('Promote renders the pending card in the READY lane', () => {
+    /** The chunk ids rendered in a lane, top to bottom. */
+    const laneIds = (el: HTMLElement, column: string): string[] =>
+      [...el.querySelectorAll(`[data-col="${column}"] [data-testid="chunk-id"]`)].map((n) => n.textContent?.trim());
+
+    /**
+     * The hub always assigns a freshly-promoted chunk a **tail** position
+     * (`promote.py::tail_position` — it appends after every currently-ready chunk,
+     * never the head), so the pending override must not predict a top-of-lane rank:
+     * it lands at the *bottom* of READY, behind the real queue order, via
+     * `BoardShell`'s own "unranked id" fallback — the same fallback a promote that
+     * has landed server-side but whose queue read hasn't caught up yet relies on.
+     */
+    it('renders the promoted card at the bottom of READY, behind the real queue order, while its promote is pending', async () => {
+      const { el, harness } = await open();
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+
+      card(el, BACKLOG).querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+
+      expect(laneIds(el, 'ready')).toEqual([compactRef(READY), compactRef(READY_NEXT), compactRef(BACKLOG)]);
+      expect(laneIds(el, 'notready')).toEqual([compactRef(BACKLOG_NEXT)]);
+
+      resolveInvalidate();
+      await settle(harness.fixture);
+    });
+
+    it('reverts the card to BACKLOG when the promote is rejected', async () => {
+      stub.restore();
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'POST' && path === `/api/chunks/${BACKLOG}/promote`) {
+          return stubError(409, { detail: 'chunk already ready' });
+        }
+        return hubRoutes()(method, path);
+      });
+      const { el, harness } = await open();
+
+      card(el, BACKLOG).querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.click();
+      await settle(harness.fixture);
+
+      expect(card(el, BACKLOG).closest('[data-col]')?.getAttribute('data-col')).toBe('notready');
+      expect(laneIds(el, 'notready')).toEqual([compactRef(BACKLOG), compactRef(BACKLOG_NEXT)]);
+      expect(el.querySelector('[data-testid="board-action-error"]')?.textContent).toBe('chunk already ready');
+    });
+  });
+
+  describe('a chunk with a pending delete is hidden from the board (Part B)', () => {
+    /** `ChunkDetail`'s dock owns and fires the delete mutation, not `BoardPage` — a
+     * `mutationKey`-scoped read is exactly what lets this list surface see another
+     * component's in-flight mutation without owning it, so this fires it from the same
+     * root injector rather than through `BoardPage` itself. */
+    function fireDeleteFrom(harness: RouterTestingHarness, chunkId: string): { resolve: () => void } {
+      const injector = TestBed.inject(EnvironmentInjector);
+      const mutation = runInInjectionContext(injector, () => injectDeleteChunkMutation());
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+      mutation.mutate({ chunkId });
+      return { resolve: resolveInvalidate };
+    }
+
+    it('drops the row while its delete is pending, and restores it once the delete settles', async () => {
+      const { el, harness } = await open();
+      expect(card(el, BACKLOG)).toBeTruthy();
+
+      const { resolve } = fireDeleteFrom(harness, BACKLOG);
+      await new Promise((r) => setTimeout(r, 0));
+      harness.fixture.detectChanges();
+
+      expect(() => card(el, BACKLOG)).toThrow();
+
+      resolve();
+      await settle(harness.fixture);
+      expect(card(el, BACKLOG)).toBeTruthy();
+    });
+
+    it('restores the row when the delete is rejected', async () => {
+      stub.restore();
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'DELETE' && path === `/api/chunks/${BACKLOG}`) {
+          return stubError(409, { detail: 'chunk has dependents' });
+        }
+        return hubRoutes()(method, path);
+      });
+      const { el, harness } = await open();
+
+      const injector = TestBed.inject(EnvironmentInjector);
+      const mutation = runInInjectionContext(injector, () => injectDeleteChunkMutation());
+      mutation.mutate({ chunkId: BACKLOG });
+      await settle(harness.fixture);
+
+      expect(card(el, BACKLOG)).toBeTruthy();
+    });
+  });
+
+  describe('drag reorder renders the requested position while pending', () => {
+    /** The chunk ids rendered in a lane, top to bottom. */
+    const laneIds = (el: HTMLElement, column: string): string[] =>
+      [...el.querySelectorAll(`[data-col="${column}"] [data-testid="chunk-id"]`)].map((n) => n.textContent?.trim());
+
+    it('renders the READY lane in its requested order while the reposition is pending, reverting once it settles', async () => {
+      const { el, harness } = await open();
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+
+      const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+      shell.reposition.emit({ chunkId: READY_NEXT, afterChunkId: null, list: 'ready' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+
+      // READY_NEXT requested the very top, ahead of the real queue order (READY first).
+      expect(laneIds(el, 'ready')).toEqual([compactRef(READY_NEXT), compactRef(READY)]);
+
+      resolveInvalidate();
+      await settle(harness.fixture);
+
+      // Settled with the fixture's queue read unchanged (a static stub, no real reorder):
+      // the override is gone and the lane renders its last real order again.
+      expect(laneIds(el, 'ready')).toEqual([compactRef(READY), compactRef(READY_NEXT)]);
+    });
+
+    it('reverts the BACKLOG lane to its prior order when the reposition is rejected', async () => {
+      stub.restore();
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'POST' && path === '/api/backlog/position') {
+          return stubError(409, { detail: 'stale anchor' });
+        }
+        return hubRoutes()(method, path);
+      });
+      const { el, harness } = await open();
+
+      const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+      shell.reposition.emit({ chunkId: BACKLOG_NEXT, afterChunkId: null, list: 'notready' });
+      await settle(harness.fixture);
+
+      expect(laneIds(el, 'notready')).toEqual([compactRef(BACKLOG), compactRef(BACKLOG_NEXT)]);
+      expect(el.querySelector('[data-testid="board-action-error"]')?.textContent).toBe('stale anchor');
     });
   });
 

@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { completeChunkApiChunksChunkIdCompletePost } from '../api/hub';
+import { chunkCompleteMutationKey } from '../mutation-keys';
 import { hubChunkKey, hubChunksKey, hubQueueKey } from '../query-keys';
 
 /** Manually complete a chunk — the board's counterpart of `blizzard hub chunk done`
@@ -24,6 +25,7 @@ export interface CompleteVars {
 export function injectCompleteChunkMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: chunkCompleteMutationKey,
     mutationFn: async (vars: CompleteVars): Promise<void> => {
       const { error } = await completeChunkApiChunksChunkIdCompletePost({
         path: { chunk_id: vars.chunkId },
@@ -32,10 +34,11 @@ export function injectCompleteChunkMutation() {
       });
       if (error) throw error;
     },
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: hubChunksKey });
-      void queryClient.invalidateQueries({ queryKey: hubQueueKey });
-      void queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) });
-    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubChunksKey }),
+        queryClient.invalidateQueries({ queryKey: hubQueueKey }),
+        queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) }),
+      ]),
   }));
 }

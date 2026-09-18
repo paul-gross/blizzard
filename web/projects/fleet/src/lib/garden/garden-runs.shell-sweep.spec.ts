@@ -206,6 +206,7 @@ const PANEL_SCOPE: ScopePanelVm = {
   slug: 'blizzard',
   description: 'the hub, runner, CLI and board — a long description that must wrap inside its own column',
   retired: false,
+  renderedRetired: false,
   relatedRoutines: [
     { name: 'nightly', isDefault: true },
     { name: 'weekly', isDefault: false },

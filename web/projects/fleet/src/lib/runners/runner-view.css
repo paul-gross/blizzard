@@ -13,6 +13,21 @@
   margin: 0;
   padding: 0;
 }
+/* A pause/resume failure reads above the registry list, in the same slot and
+   style `ChunkDetailPanel`'s own action notice uses for its pause/resume/detach
+   failures. */
+.notice {
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--red-dim);
+  border-left-width: 2px;
+  background: var(--overlay-20);
+  color: var(--red);
+  font-size: var(--fs-xs);
+}
+.action-notice {
+  margin: 0 0 6px;
+}
 .runner {
   display: flex;
   flex-direction: column;

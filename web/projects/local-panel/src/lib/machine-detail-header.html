@@ -27,6 +27,7 @@
         testid="resume-chunk"
         [ariaLabel]="'Resume chunk ' + chunkId()"
         [fleetTooltip]="resumeCopy(runnerName()).text"
+        [disabled]="pending()"
         (click)="onResume()"
       >
         Resume
@@ -36,6 +37,7 @@
         testid="pause-chunk"
         [ariaLabel]="'Pause chunk ' + chunkId()"
         [fleetTooltip]="pauseCopy(runnerName()).text"
+        [disabled]="pending()"
         (click)="onPause()"
       >
         Pause

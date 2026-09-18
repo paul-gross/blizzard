@@ -36,6 +36,8 @@
           [canControl]="canControl()"
           [canAnswer]="canAnswer()"
           [canResolve]="canResolve()"
+          [resolvePending]="resolvePending()"
+          [answerPending]="answerPending()"
           [graphLinkBase]="['/graphs']"
           [showNodeHistory]="!mobile()"
           (answerQuestion)="onAnswer($event)"

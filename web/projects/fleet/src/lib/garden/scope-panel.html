@@ -9,8 +9,8 @@
     <section class="sp" data-testid="gardening-scope-panel">
       <header class="sp-head">
         <h3>{{ panel.slug }}</h3>
-        <span class="sp-state" [class.sp-state--retired]="panel.retired" data-testid="gardening-scope-panel-state">
-          {{ panel.retired ? 'retired' : 'enabled' }}
+        <span class="sp-state" [class.sp-state--retired]="panel.renderedRetired" data-testid="gardening-scope-panel-state">
+          {{ panel.renderedRetired ? 'retired' : 'enabled' }}
         </span>
       </header>
 
@@ -26,6 +26,7 @@
           />
           <fleet-kit-button
             testid="gardening-scope-panel-description-submit"
+            [disabled]="editPending()"
             (click)="submitDescription(descInput.value)"
           >
             Set
@@ -35,14 +36,29 @@
         <p class="sp-description">{{ panel.description || '—' }}</p>
       }
 
+      <!-- The control shown stays keyed off the real `panel.retired`, not
+           `panel.renderedRetired` — a pending Retire/Enable's own predicted outcome
+           must never flip which verb the next click would fire
+           (`graph-detail-header.html`'s own control-choice comment). -->
       @if (canEdit()) {
         <div class="sp-actions">
           @if (panel.retired) {
-            <fleet-kit-button size="cta" testid="gardening-scope-panel-enable" (click)="onEnable()">
+            <fleet-kit-button
+              size="cta"
+              testid="gardening-scope-panel-enable"
+              [disabled]="lifecyclePending()"
+              (click)="onEnable()"
+            >
               Re-enable
             </fleet-kit-button>
           } @else {
-            <fleet-kit-button variant="danger" size="cta" testid="gardening-scope-panel-retire" (click)="onRetire()">
+            <fleet-kit-button
+              variant="danger"
+              size="cta"
+              testid="gardening-scope-panel-retire"
+              [disabled]="lifecyclePending()"
+              (click)="onRetire()"
+            >
               Retire
             </fleet-kit-button>
           }

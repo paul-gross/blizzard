@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { vi } from 'vitest';
 
 import type { ChunkDetail as ChunkDetailModel } from '../api/hub';
 import { settle } from '../testing/settle';
@@ -158,6 +159,8 @@ describe('ChunkDetail container', () => {
   let editPatchResponse: unknown = {};
   // The same, for the answer verb (issue #165) — 201 winner vs. 409 loser.
   let answerResponse: unknown = {};
+  // The same, for the resolve-decision verb — defaults to a canned success body below.
+  let resolveResponse: unknown | null = null;
   // Whether the chunk read for `ch_ask` has been answered yet, so a test can make the
   // post-answer re-read return the settled row the way the live hub would.
   let askAnswered = false;
@@ -169,6 +172,7 @@ describe('ChunkDetail container', () => {
     deleteResponse = {};
     editPatchResponse = {};
     answerResponse = {};
+    resolveResponse = null;
     askAnswered = false;
     // The generated client's transport is stubbed so we can assert the exact call the button fires.
     stub = stubRequestClient(hubClient, (method, path) => {
@@ -202,7 +206,9 @@ describe('ChunkDetail container', () => {
         };
       }
       if (path === '/api/decisions/de_42/resolutions') {
-        return { decision_id: 'de_42', choice: 'approve', resolved_at: 'x', resolved_by: 'operator' };
+        return (
+          resolveResponse ?? { decision_id: 'de_42', choice: 'approve', resolved_at: 'x', resolved_by: 'operator' }
+        );
       }
       if (method === 'POST' && path === '/api/chunks/ch_routed/detach') return detachResponse;
       if (method === 'POST' && path === '/api/chunks/ch_routed/complete') return completeResponse;
@@ -273,6 +279,20 @@ describe('ChunkDetail container', () => {
     const calls = stub.forRoute('/api/decisions/de_42/resolutions', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toMatchObject({ choice: 'approve', struck: ['wip_01'] });
+  });
+
+  it('surfaces a resolve-decision failure rather than swallowing it', async () => {
+    resolveResponse = stubError(409, { detail: 'decision de_42 already resolved' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/decisions/de_42/resolutions', 'POST')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already resolved');
   });
 
   it('fetches the chunk’s work items through the generated client and renders them in the work-item column (issue #24)', async () => {
@@ -558,6 +578,155 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('not pausable');
+  });
+
+  // --- Pending status override (`bzh:frontend-pending-override`) -------------
+  //
+  // Complete and Pause are the two controls whose outcome is predictable from the
+  // mutation's own variables (`domain/work/statuses.md`'s precedence, confirmed against
+  // `src/blizzard/hub/domain/work.py`/`pause.py`/`detach.py`/`delete.py`) — Resume and
+  // Detach are not, so they render no override at all, only Part A's disabled-and-pending.
+  //
+  // Every "held pending" assertion below spies on `queryClient.invalidateQueries` and
+  // returns a promise it controls rather than letting the stub's fetch settle on its
+  // own — a mutation stays `isPending()` true only until its own invalidations resolve
+  // (`bzh:frontend-mutation-settles-on-refresh`), so holding that promise open is what
+  // keeps the window a real assertion can land in, the same idiom
+  // `runner-panel.spec.ts`'s own pending-scope spec uses.
+
+  it('renders the paused override while pending on a chunk below the human-gated states, reverting to the real status on rejection', async () => {
+    pauseResponse = stubError(409, { detail: 'chunk ch_routed is not pausable (delivering)' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await confirmAction(fixture);
+    // Held open by the `invalidateQueries` spy above — `settle()`'s own `whenStable()`
+    // would hang on it, so a bare macrotask tick + a manual `detectChanges()` stands in
+    // (`runner-panel.spec.ts`'s own idiom for the same reason).
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('paused');
+
+    resolveInvalidate();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('running');
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('not pausable');
+  });
+
+  it('renders no status override while Pause is pending on a chunk already waiting_on_human/needs_human — the human-gated status wins', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await confirmAction(fixture);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    // Part A alone: disabled and pending, no rendered status change.
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('waiting_on_human');
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(true);
+
+    resolveInvalidate();
+    await settle(fixture);
+  });
+
+  it('renders the done override while Complete is pending, reverting to the real status on rejection', async () => {
+    completeResponse = stubError(404, { detail: 'unknown chunk ch_routed' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    await clickMenuAction(fixture, 'complete-chunk');
+    await confirmAction(fixture);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('done');
+
+    resolveInvalidate();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('running');
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown chunk');
+  });
+
+  it('renders no status override while Resume is pending — the pause overlay hides what status it would revert to', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_paused');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.click();
+    await confirmAction(fixture);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    // Part A alone: disabled and pending, no rendered status change.
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('waiting_on_human');
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.disabled).toBe(true);
+
+    resolveInvalidate();
+    await settle(fixture);
+  });
+
+  it('renders no status override while Detach is pending — the outcome depends on facts detach never touches', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    await clickMenuAction(fixture, 'detach-chunk');
+    await confirmAction(fixture);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    // No rendered status change while detach is pending…
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('running');
+    // …only Part A's existing disabled state, reopening the menu the CDK closed on
+    // trigger (`kit-menu-item.ts`) to read it back off the item itself. A bare
+    // macrotask tick + `detectChanges()` stands in for `whenStable()` here, the same
+    // idiom the pending window above already leans on — the held `invalidateQueries`
+    // promise leaves the fixture never truly stable.
+    el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+    expect(document.body.querySelector('[data-testid="detach-chunk"]')?.getAttribute('aria-disabled')).toBe('true');
+
+    resolveInvalidate();
+    await settle(fixture);
   });
 
   // --- Graph edit (issue #27; the model edit beside it retired with `Chunk.model`,

@@ -32,6 +32,8 @@
       [detail]="detail()"
       [canAnswer]="canAnswer()"
       [canResolve]="canResolve()"
+      [resolvePending]="resolvePending()"
+      [answerPending]="answerPending()"
       (answerQuestion)="answerQuestion.emit($event)"
       (resolveDecision)="resolveDecision.emit($event)"
     />

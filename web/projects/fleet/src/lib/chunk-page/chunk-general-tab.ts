@@ -66,6 +66,14 @@ export class ChunkGeneralTab {
    * issue #210), forwarded to {@link ChunkAwaitingHuman}. */
   readonly canResolve = input(false);
 
+  /** Whether the resolve-decision mutation is in flight, forwarded to
+   * {@link ChunkAwaitingHuman}. */
+  readonly resolvePending = input(false);
+
+  /** Whether the answer-question mutation is in flight, forwarded to
+   * {@link ChunkAwaitingHuman}. */
+  readonly answerPending = input(false);
+
   /** The graphs view's own path segments, forwarded to {@link ChunkFacts} and
    * {@link ChunkTimeline} — `null` (the default, the runner's rendering) withholds
    * the link; the hub passes `['/graphs']`, the only app with that route. */

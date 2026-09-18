@@ -12,6 +12,7 @@
                   type="button"
                   class="chip"
                   data-testid="question-option"
+                  [disabled]="answerPending()"
                   (click)="submitAnswer(q.question_id, opt)"
                 >
                   {{ opt }}
@@ -31,6 +32,7 @@
             <fleet-kit-button
               variant="primary"
               testid="answer-submit"
+              [disabled]="answerPending()"
               (click)="submitAnswer(q.question_id, answerDraft(q.question_id))"
             >
               Answer
@@ -53,6 +55,7 @@
                 class="chip primary"
                 data-testid="decision-choice"
                 [title]="c.description"
+                [disabled]="resolvePending()"
                 (click)="resolve(d.decision_id, c.name)"
               >
                 {{ c.name }}

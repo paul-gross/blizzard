@@ -58,7 +58,12 @@ const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
  *
  * Presentational only: it holds the detail input and emits `dismiss`,
  * `detach`, `pauseChunk`, `resumeChunk`, `complete`, and `delete`; the
- * mutations those events drive live in the container.
+ * mutations those events drive live in the container. The status chip renders
+ * {@link renderedStatus} rather than `detail().status` directly, so a pending Pause or
+ * Complete can show its predicted outcome before the server confirms it
+ * (`bzh:frontend-pending-override`) — the merge itself is the container's
+ * (`chunk-detail.ts`'s `overrideStatus`/`renderedStatus`), which names which of the
+ * four controls that covers and why the other two do not qualify.
  */
 @Component({
   selector: 'fleet-chunk-detail-header',
@@ -71,6 +76,15 @@ export class ChunkDetailHeader {
   /** The chunk aggregate to render (identity, status, current node, pause, route). */
   readonly detail = input.required<ChunkDetail>();
 
+  /** The chunk's status as the header's own status chip renders it — the container's
+   * already-applied result (`bzh:frontend-pending-override`, `chunk-detail.ts`'s
+   * `overrideStatus`/`renderedStatus`): a currently pending Pause/Complete's predicted
+   * outcome where one overrides, else the real `detail().status`. Never consulted by
+   * {@link pausable}/{@link completable}/{@link deletable}: those gate what the *next*
+   * click is admissible to fire against the server-read status, which an in-flight
+   * mutation's own predicted outcome must not perturb. */
+  readonly renderedStatus = input.required<ChunkStatus>();
+
   /** Whether the current identity may operate Pause/Resume/Detach (`chunk:control` —
    * issue #210). Withholds every one of those controls when `false` so a `guest`
    * never sees a write it cannot make; `null`/pending resolves to `false` (hidden
@@ -82,6 +96,21 @@ export class ChunkDetailHeader {
    * `fleet` hardcoding a hub route (`ChunkArtifacts`'s own `linkBase` follows the
    * same convention). */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
+
+  /** Whether the pause/resume mutation is in flight — disables whichever of
+   * Pause/Resume is currently shown so a double click cannot fire it twice. */
+  readonly pausePending = input(false);
+
+  /** Whether the detach mutation is in flight — disables the Detach menu item. */
+  readonly detachPending = input(false);
+
+  /** Whether the complete mutation is in flight — combined with {@link completable}
+   * to disable the Complete menu item. */
+  readonly completePending = input(false);
+
+  /** Whether the delete mutation is in flight — combined with {@link deleteDisabled}
+   * to disable the Delete menu item. */
+  readonly deletePending = input(false);
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();

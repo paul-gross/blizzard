@@ -5,6 +5,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { hubClient, type MeResponse } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
+import { vi } from 'vitest';
 
 import { GardeningScopeDetail } from './gardening-scope-detail';
 
@@ -156,6 +157,86 @@ describe('GardeningScopeDetail', () => {
     await settle(fixture);
 
     expect(stub.forRoute('/api/scopes/blizzard/retire', 'POST')).toHaveLength(1);
+  });
+
+  it('renders the retired override while Retire is pending, reverting to the real state on rejection', async () => {
+    const fixture = await render({
+      me: OPERATOR_ME_RESPONSE,
+      params: { scopeSlug: 'blizzard' },
+      routeOverride: (method, path) =>
+        method === 'POST' && path === '/api/scopes/blizzard/retire'
+          ? stubError(404, { detail: 'unknown scope blizzard' })
+          : undefined,
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    // Held open by the `invalidateQueries` spy above — a bare macrotask tick + a
+    // manual `detectChanges()` stands in for `settle()`, `chunk-detail.spec.ts`'s
+    // own idiom for the same reason (`settle()`'s `whenStable()` would hang on it).
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector('[data-testid="gardening-scope-panel-state"]')?.textContent?.trim()).toBe('retired');
+    // The control choice stays keyed off the real, unoverridden `retired` — the
+    // scope is still enabled until the mutation settles, so Retire (not Re-enable)
+    // is what the next click must fire, never the badge's predicted value.
+    expect(el.querySelector('[data-testid="gardening-scope-panel-retire"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-scope-panel-enable"]')).toBeNull();
+
+    resolveInvalidate();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="gardening-scope-panel-state"]')?.textContent?.trim()).toBe('enabled');
+    expect(el.querySelector('[data-testid="gardening-scope-panel-error"]')?.textContent).toContain(
+      'unknown scope blizzard',
+    );
+  });
+
+  it('renders the enabled override while Enable is pending, reverting to the real state on rejection', async () => {
+    const fixture = await render({
+      scopes: [{ ...SCOPE, retired: true }],
+      me: OPERATOR_ME_RESPONSE,
+      params: { scopeSlug: 'blizzard' },
+      routeOverride: (method, path) =>
+        method === 'POST' && path === '/api/scopes/blizzard/enable'
+          ? stubError(404, { detail: 'unknown scope blizzard' })
+          : undefined,
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-enable"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector('[data-testid="gardening-scope-panel-state"]')?.textContent?.trim()).toBe('enabled');
+    // The control choice stays keyed off the real, unoverridden `retired` — the
+    // scope is still retired until the mutation settles, so Re-enable (not Retire)
+    // is what the next click must fire, never the badge's predicted value.
+    expect(el.querySelector('[data-testid="gardening-scope-panel-enable"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-scope-panel-retire"]')).toBeNull();
+
+    resolveInvalidate();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="gardening-scope-panel-state"]')?.textContent?.trim()).toBe('retired');
+    expect(el.querySelector('[data-testid="gardening-scope-panel-error"]')?.textContent).toContain(
+      'unknown scope blizzard',
+    );
   });
 
   it('reports a failed edit through the panel action-error line rather than swallowing it', async () => {
