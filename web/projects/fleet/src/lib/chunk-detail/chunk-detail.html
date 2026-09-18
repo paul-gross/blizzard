@@ -19,7 +19,6 @@
         [canResolve]="canResolve()"
         [graphLinkBase]="graphLinkBase()"
         (dismiss)="dismiss.emit()"
-        (selectChunk)="selectChunk.emit($event)"
         (answerQuestion)="onAnswer($event)"
         (resolveDecision)="onResolve($event)"
         (detach)="onDetach($event)"
@@ -27,8 +26,6 @@
         (resumeChunk)="onResume($event)"
         (complete)="onComplete($event)"
         (delete)="onDelete($event)"
-        (declareDependency)="onDeclareDependency($event)"
-        (releaseDependency)="onReleaseDependency($event)"
         (editGraph)="onEditGraph($event)"
       />
     }

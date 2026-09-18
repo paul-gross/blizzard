@@ -93,33 +93,6 @@
             Complete
           </fleet-kit-button>
         }
-        <!-- Declare/release (issue #461): one free-text field serves both, prefilled
-             from the marking when one stands (D5) — the board has no read that lists
-             a chunk's standing edges for a picker to offer instead. -->
-        <fleet-kit-text-input
-          class="dep-input"
-          testid="dependency-prerequisite-input"
-          [ariaLabel]="'Prerequisite chunk id for ' + detail().chunk_id"
-          [value]="prerequisiteInput()"
-          (valueChange)="prerequisiteInput.set($event)"
-          placeholder="prerequisite chunk id"
-        />
-        @if (declarable()) {
-          <fleet-kit-button
-            testid="declare-dependency"
-            [ariaLabel]="'Declare a dependency for chunk ' + detail().chunk_id"
-            (click)="onDeclareDependency()"
-          >
-            Declare
-          </fleet-kit-button>
-        }
-        <fleet-kit-button
-          testid="release-dependency"
-          [ariaLabel]="'Release a dependency for chunk ' + detail().chunk_id"
-          (click)="onReleaseDependency()"
-        >
-          Release
-        </fleet-kit-button>
         @if (deletable()) {
           <fleet-kit-button
             variant="danger"

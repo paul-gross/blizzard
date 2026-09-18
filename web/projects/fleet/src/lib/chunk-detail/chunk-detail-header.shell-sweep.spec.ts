@@ -10,12 +10,11 @@ import { ChunkDetailHeader } from './chunk-detail-header';
  * The dock header's action row at narrow widths (issue #461 round 3 F4) — a real
  * layout claim jsdom cannot make: it never actually lays out `.d-meta`/`.d-actions`'s
  * flex row, so `web:unit-test` cannot see a control pushed past the dock's own edge.
- * This mounts the header with every control live at once — a routed, pausable,
- * blocked chunk with a long runner identity — the worst case the row can carry
- * (Pause, Complete, Delete, the prerequisite field, Declare, Release, plus the
- * route/Detach group and the close button), and sweeps that nothing overflows the
- * dock's own right edge, at 800px (wider than any real dock share) and at 390/320px
- * (`bzh:narrow-viewport-tier-rule`).
+ * This mounts the header with every control live at once — a routed, pausable
+ * chunk with a long runner identity — the worst case the row can carry (Pause,
+ * Complete, Delete, plus the route/Detach group and the close button), and sweeps
+ * that nothing overflows the dock's own right edge, at 800px (wider than any real
+ * dock share) and at 390/320px (`bzh:narrow-viewport-tier-rule`).
  *
  * The selector list below is asserted against an exact count, not merely non-empty:
  * a hard-coded list that silently misses a newly added control is a sweep that stays
@@ -34,7 +33,6 @@ const DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000' },
   route: { runner_id: 'a-long-runner-identity-that-wraps-under-a-narrow-column', workspace_id: 'ws_01', environment_ids: ['env_01'] },
 };
 
@@ -48,9 +46,6 @@ const SWEPT = [
   'pause-chunk',
   'complete-chunk',
   'delete-chunk',
-  'dependency-prerequisite-input',
-  'declare-dependency',
-  'release-dependency',
   'detach-chunk',
   'detail-close',
 ] as const;
