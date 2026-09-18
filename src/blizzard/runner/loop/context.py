@@ -17,7 +17,7 @@ from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.runner.loop.capability_snapshot import TickCapabilities, capability_snapshot
+from blizzard.runner.loop.capability_snapshot import HarnessVersionCache, TickCapabilities, capability_snapshot
 from blizzard.runner.loop.checks import ICheckRunner
 from blizzard.runner.loop.chunk_status_cache import IChunkViews
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -169,6 +169,8 @@ class LoopContext:
     usage_http_client: ICloseableUsageHttpClient = field(default_factory=_NoUsageHttpClient)
     #: This tick's capability memo (``tick()`` wires it); ``None`` rebuilds it per read.
     capabilities: TickCapabilities | None = None
+    #: The loop's own cross-tick harness-version cache — unlike ``capabilities`` above, never rebound per tick.
+    harness_versions: HarnessVersionCache | None = None
 
     def capability_snapshot(self) -> tuple[RunnerCapability, ...]:
         """This runner's capabilities as the registration push and the matched fleet peek
@@ -176,7 +178,7 @@ class LoopContext:
         building one probes every bound harness binary."""
         if self.capabilities is not None:
             return self.capabilities.get()
-        return capability_snapshot(self.harnesses)
+        return capability_snapshot(self.harnesses, self.harness_versions)
 
     def adapter_for(self, session: SessionReference) -> IHarnessLifecycleAndVerdict:
         """Resolve an existing session's adapter from its recorded owner — may raise

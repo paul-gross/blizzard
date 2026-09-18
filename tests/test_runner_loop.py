@@ -41,6 +41,7 @@ from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.loop.attempt import Attempt
+from blizzard.runner.loop.capability_snapshot import HARNESS_VERSION_REFRESH_SECONDS, HarnessVersionCache
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.produces import ProducesReconciler
@@ -3534,3 +3535,32 @@ def test_one_tick_probes_each_bound_harnesss_version_once_for_every_snapshot_it_
     # Both outbound calls still carry the snapshot — the memo hoists the probe, never the send.
     assert hub.registered_capabilities, "PULL sent no capability snapshot"
     assert hub.peek_queue_requests and hub.peek_queue_requests[-1].capabilities, "FILL peeked without capabilities"
+
+
+@pytest.mark.unit
+def test_harness_version_is_cached_across_ticks_and_refreshed_once_stale(tmp_path):  # type: ignore[no-untyped-def]
+    """`TickCapabilities` alone rebuilds every tick; the composition-root `HarnessVersionCache`
+    is the actual cross-tick bound, proven here as a staleness policy, not an unlimited cache."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = []  # nothing claimable — FILL still peeks, carrying capabilities
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    clock = FixedClock(datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC))
+    versions = HarnessVersionCache(clock=clock)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=clock,
+        harness_versions=versions,
+    )
+
+    tick(ctx)
+    tick(ctx)
+    assert harness.version_probes == 1, "two ticks inside the refresh window re-probed the binary"
+
+    clock.advance(timedelta(seconds=HARNESS_VERSION_REFRESH_SECONDS + 1))
+    tick(ctx)
+    assert harness.version_probes == 2, "a tick past the refresh window never re-probed the now-stale version"

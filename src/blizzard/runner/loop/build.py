@@ -21,6 +21,7 @@ from blizzard.runner.environments.internal.winter_provider import WinterWorkspac
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
+from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
 from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -204,6 +205,8 @@ class LoopWiring:
             transcripts_wired=True,
             events=self.events,
             harnesses=harnesses,
+            # Built once here (D4), long-lived across every tick `PeriodicDriver._run` drives on this context.
+            harness_versions=HarnessVersionCache(clock=_clock),
         )
 
     def tick_once(self) -> None:

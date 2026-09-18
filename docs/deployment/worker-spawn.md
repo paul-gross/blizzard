@@ -5,9 +5,14 @@
 Every session is recorded and read under a harness id. A runner build binds two: `claude_code`, built once at startup
 from `[worker]`'s `harness_binary` (and its sibling knobs below) in `blizzard-runner.toml`, and `opencode`, built from
 its own `[opencode]` table ("OpenCode configuration" below) — each the same binary every spawn, judge, and resume
-child for that harness runs. Binding both costs nothing at rest: which one a fresh mint actually spawns under is a
-per-`sessions:` entry declaration (`harnesses:`/`default_harnesses`, "Acceptable harness set" below), never a
-runner-wide switch, so a deployment that never names `opencode` anywhere never spawns it. A recorded session's owner
+child for that harness runs. Which one a fresh mint actually spawns under is a per-`sessions:` entry declaration
+(`harnesses:`/`default_harnesses`, "Acceptable harness set" below), never a runner-wide switch, so a deployment that
+never names `opencode` anywhere never spawns it under that binding. Binding a harness does carry one small, bounded
+cost regardless of whether anything ever spawns under it: each bound binary's version is probed and cached for the
+fleet-registration push and the claim peek, refreshed at most once every ten minutes (long enough that an idle runner
+pays it a few times an hour, not every ~30s tick; short enough that an in-place binary upgrade is noticed well within
+an operator's own deploy window) — never once per tick, and never for a binary that isn't on `PATH` at all. A recorded
+session's owner
 resolves against this runner's own bindings: **unknown** means the session was recorded under a harness id this runner
 build doesn't ship at all — the remedy is to run a runner version that binds that id, on the runner holding the chunk,
 never to substitute another harness. **unavailable** means the id is bound but this runner can't supply the specific

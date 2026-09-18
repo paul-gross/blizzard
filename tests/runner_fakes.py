@@ -41,6 +41,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.chunk_status_cache import IChunkViews, ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
@@ -1079,6 +1080,7 @@ def make_context(
     events: EventBroker | None = None,
     subscriptions: tuple[ResolvedSubscription, ...] = (),
     chunk_views: IChunkViews | None = None,
+    harness_versions: HarnessVersionCache | None = None,
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes.
 
@@ -1144,6 +1146,7 @@ def make_context(
         transcripts_wired=_transcripts_wired,
         events=events,
         harnesses=_harnesses,
+        harness_versions=harness_versions,
     )
 
 
