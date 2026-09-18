@@ -7,6 +7,7 @@ trampoline until ``confirm_durable()`` disarms it."""
 from __future__ import annotations
 
 import ctypes
+import errno
 import os
 import shutil
 import signal
@@ -31,12 +32,12 @@ def _die_with_parent() -> None:
     """``preexec_fn``: runs in the forked child, after ``fork()`` and before ``exec()``.
     Arms ``PR_SET_PDEATHSIG`` so a launcher crash — not a graceful exit — still reaps
     every child it owns. The "parent" ``prctl`` tracks is the OS *thread* that called it
-    (this launcher, on :data:`_SPAWN_EXECUTOR`'s worker — see its docstring), unaffected
+    (this launcher, on its ``executor``'s worker — see :class:`ProcessLauncher`), unaffected
     by the child's later ``setsid()``."""
     _PRCTL(_PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
 
 
-# The one long-lived thread every launch forks on (D4): PDEATHSIG tracks the calling thread, not the daemon.
+# A no-DI-friction test default (`bzh:dependency-injection`) — the composition root injects its own.
 _SPAWN_EXECUTOR: Executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
 
 # The interposed trampoline (F1, module docstring) — its own tiny `ctypes` call, in its own exec'd process.
@@ -45,8 +46,13 @@ import ctypes, os, sys
 _libc = ctypes.CDLL(None, use_errno=True)
 control_fd = int(sys.argv[1])
 argv = sys.argv[2:]
-os.read(control_fd, 1)
+# os.read returns b"" on EOF rather than raising, so it is checked explicitly: only a
+# real confirm byte disarms and execs; EOF (the launcher died before confirming) exits
+# here, still armed, rather than racing PR_SET_PDEATHSIG's own SIGKILL to decide it.
+confirmed = os.read(control_fd, 1) == b"1"
 os.close(control_fd)
+if not confirmed:
+    os._exit(1)
 _libc.prctl(1, 0, 0, 0, 0)
 os.execvp(argv[0], argv)
 """
@@ -89,9 +95,9 @@ class IProcessLauncher(Protocol):
 
 class ProcessLauncher:
     """The one production :class:`IProcessLauncher` — every adapter launches through this.
-    ``executor`` defaults to the module's long-lived :data:`_SPAWN_EXECUTOR`; a test may
-    inject its own single-worker executor to shut it down in isolation, without touching
-    the shared production singleton."""
+    ``executor`` defaults to :data:`_SPAWN_EXECUTOR` for a test that doesn't care to wire
+    one; the composition root (D9) always injects its own instead, so both bindings share
+    ONE executor without depending on this module-level default."""
 
     def __init__(self, process: IProcessProbe, *, executor: Executor | None = None) -> None:
         self._process = process
@@ -141,8 +147,9 @@ class ProcessLauncher:
     ) -> LaunchedProcess:
         """The plain, non-deferred launch: the real binary directly, armed for its whole life —
         exactly today's pre-F1 behavior, and the right one for a caller with no durable-record
-        milestone of its own to defer a disarm to (``resume_with_message``, a selftest scratch
-        run that skips deferral itself)."""
+        milestone of its own to defer a disarm to. Every adapter launch defers now (spawn,
+        judge, and resume all have one to defer to — D1/D4); this stays the base case for
+        whatever narrower caller genuinely has none."""
         proc = self._launch_process(argv, cwd=cwd, env=env, stdout=stdout, stderr=stderr)
         start_time = self._process.start_time(proc.pid) or ""
         return LaunchedProcess(pid=proc.pid, pgid=proc.pid, process_start_time=start_time, confirm_durable=lambda: None)
@@ -173,17 +180,20 @@ class ProcessLauncher:
 
 
 def _ensure_executable(argv0: str, *, cwd: str | None, env: dict[str, str]) -> None:
-    """Raise :class:`FileNotFoundError` up front exactly where ``execvp(argv0, ...)`` would
-    later fail inside the trampoline: a path-shaped ``argv0`` (a ``/`` anywhere in it) resolves
-    relative to ``cwd`` and is checked directly, mirroring POSIX ``execvp``; a bare name is
-    searched on the child's own ``PATH``, never the launcher's ambient one."""
+    """Raise exactly where ``execvp(argv0, ...)`` would later fail inside the trampoline:
+    a path-shaped ``argv0`` resolves relative to ``cwd``; a bare name searches the child's
+    own ``PATH``, never the launcher's ambient one. Missing raises :class:`FileNotFoundError`
+    (``ENOENT``); existing-but-not-executable raises :class:`PermissionError` (``EACCES``)
+    instead, matching real ``execvp``."""
     if os.sep in argv0:
         candidate = argv0 if os.path.isabs(argv0) else os.path.join(cwd or os.getcwd(), argv0)
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return
+        if os.path.isfile(candidate):
+            if os.access(candidate, os.X_OK):
+                return
+            raise PermissionError(errno.EACCES, "Permission denied", argv0)
     elif shutil.which(argv0, path=env.get("PATH")) is not None:
         return
-    raise FileNotFoundError(2, "No such file or directory", argv0)
+    raise FileNotFoundError(errno.ENOENT, "No such file or directory", argv0)
 
 
 def _confirm_once(write_fd: int) -> Callable[[], None]:

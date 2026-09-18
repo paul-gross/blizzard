@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
+from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.loop.process_launch import IProcessLauncher
 
 
 def build_opencode_binding(

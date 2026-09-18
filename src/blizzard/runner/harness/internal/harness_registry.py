@@ -7,6 +7,7 @@ every root (`app.py`, `loop/build.py`) reaches both only through this one functi
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
@@ -15,10 +16,10 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HA
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.internal.opencode_registry import build_opencode_binding
+from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.loop.process import LinuxProcessProbe
-from blizzard.runner.loop.process_launch import ProcessLauncher
 
 
 def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
@@ -28,7 +29,10 @@ def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
         projects_root, TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
     )
     process = LinuxProcessProbe()
-    launcher = ProcessLauncher(process)
+    # Built and injected here (`bzh:dependency-injection`), not `ProcessLauncher`'s own
+    # module-level default — this composition root is the one place that belongs (D4).
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
+    launcher = ProcessLauncher(process, executor=executor)
     adapter = ClaudeCodeAdapter(
         binary=config.harness_binary,
         settings_path=config.worker_settings_path,

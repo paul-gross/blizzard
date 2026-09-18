@@ -10,11 +10,11 @@ from __future__ import annotations
 import pytest
 
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.transcript import (
     NullTranscriptSource,
     TranscriptPosition,
 )
-from blizzard.runner.loop.process_launch import ProcessLauncher
 from tests.runner_fakes import FakeProbe
 
 

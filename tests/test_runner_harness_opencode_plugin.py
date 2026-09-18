@@ -26,9 +26,9 @@ from blizzard.runner.harness.internal.opencode_plugin import (
 )
 from blizzard.runner.harness.internal.opencode_shapes import parse_worker_config
 from blizzard.runner.harness.internal.opencode_worker_config import render_worker_config, write_worker_config
+from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.worker_settings import HEARTBEAT_HOOK_COMMAND
 from blizzard.runner.loop.process import LinuxProcessProbe
-from blizzard.runner.loop.process_launch import ProcessLauncher
 from tests.runner_fakes import make_envelope
 from tests.support_opencode_binary import worker_binary
 

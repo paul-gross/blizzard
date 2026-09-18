@@ -18,8 +18,8 @@ from typing import Any
 
 import pytest
 
+from blizzard.runner.harness.process_launch import LaunchedProcess, ProcessLauncher, _ensure_executable
 from blizzard.runner.loop.process import LinuxProcessProbe
-from blizzard.runner.loop.process_launch import LaunchedProcess, ProcessLauncher
 
 
 def _is_alive(pid: int) -> bool:
@@ -82,7 +82,7 @@ _GRANDCHILD_LAUNCH_SCRIPT = """
 import sys
 sys.path.insert(0, {src!r})
 from blizzard.runner.loop.process import LinuxProcessProbe
-from blizzard.runner.loop.process_launch import ProcessLauncher
+from blizzard.runner.harness.process_launch import ProcessLauncher
 import os, time
 
 launcher = ProcessLauncher(LinuxProcessProbe())
@@ -141,6 +141,50 @@ def test_an_unconfirmed_deferred_launch_is_killed_when_the_launching_process_exi
         _reap(pid)
 
 
+def _write_fd_of(launched: LaunchedProcess) -> int:
+    """The private ``write_fd`` a launch's ``confirm_durable`` closure holds — reached by
+    introspection so the EOF path below can be proven with nothing standing in for a real
+    confirm byte, rather than adding a test-only accessor to production code."""
+    closure = launched.confirm_durable.__closure__
+    assert closure is not None  # a deferred launch's confirm_durable always closes over write_fd
+    freevars = dict(zip(launched.confirm_durable.__code__.co_freevars, (c.cell_contents for c in closure), strict=True))
+    return int(freevars["write_fd"])
+
+
+@pytest.mark.unit
+def test_control_pipe_eof_with_no_confirm_byte_kills_the_trampoline_instead_of_exec(tmp_path: Any) -> None:
+    """F2: `os.read` returns `b""`, not an exception, on EOF — the trampoline must tell that
+    apart from a real confirm byte. This test's own process never exits, so the only signal
+    reaching the trampoline is the pipe closing in-process, isolated from the PDEATHSIG race."""
+    sentinel = tmp_path / "ran"
+    launcher = ProcessLauncher(LinuxProcessProbe())
+    launched = launcher.launch(
+        [sys.executable, "-c", f"import time; open({str(sentinel)!r}, 'w').close(); time.sleep(30)"],
+        cwd=None,
+        env=dict(os.environ),
+        stdout=None,
+        stderr=None,
+        defer_disarm=True,
+    )
+    try:
+        os.close(_write_fd_of(launched))
+        # This test, not a throwaway grandchild, forked the trampoline directly — it must
+        # reap it itself, or an un-reaped zombie still reads as "alive" to `os.kill(pid, 0)`.
+        deadline = time.monotonic() + 2.0
+        exited = False
+        while time.monotonic() < deadline:
+            reaped_pid, _status = os.waitpid(launched.pid, os.WNOHANG)
+            if reaped_pid == launched.pid:
+                exited = True
+                break
+            time.sleep(0.05)
+        assert exited, "the trampoline outlived a control-pipe EOF with no confirm byte"
+        assert not sentinel.exists(), "the real binary ran despite no confirm byte ever being sent"
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(launched.pgid, signal.SIGKILL)
+
+
 @pytest.mark.unit
 def test_a_worker_outlives_the_short_lived_thread_that_requested_its_launch() -> None:
     """The production scenario: the tick thread requests a launch, then exits on a graceful
@@ -163,3 +207,26 @@ def test_a_worker_outlives_the_short_lived_thread_that_requested_its_launch() ->
 def _reap(pid: int) -> None:
     with contextlib.suppress(ChildProcessError):
         os.waitpid(pid, 0)
+
+
+# --------------------------------------------------------------------------- #
+# `_ensure_executable`: a missing path is `ENOENT`; existing-but-not-executable is `EACCES`.
+
+
+@pytest.mark.unit
+def test_ensure_executable_missing_path_raises_file_not_found(tmp_path: Any) -> None:
+    missing = str(tmp_path / "does-not-exist")
+    with pytest.raises(FileNotFoundError):
+        _ensure_executable(missing, cwd=None, env={})
+
+
+@pytest.mark.unit
+def test_ensure_executable_existing_but_not_executable_raises_permission_error(tmp_path: Any) -> None:
+    """Real ``execvp`` reports ``EACCES`` for an existing-but-not-executable file, not
+    ``ENOENT`` — distinct from a genuinely missing path (above)."""
+    not_executable = tmp_path / "not-executable"
+    not_executable.write_text("#!/bin/sh\necho hi\n")
+    not_executable.chmod(0o644)
+
+    with pytest.raises(PermissionError):
+        _ensure_executable(str(not_executable), cwd=None, env={})

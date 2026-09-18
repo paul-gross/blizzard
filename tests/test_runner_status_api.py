@@ -21,8 +21,8 @@ from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.loop.process_launch import ProcessLauncher
 from tests.runner_fakes import FakeHarness, FakeProbe, make_read_stores, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
