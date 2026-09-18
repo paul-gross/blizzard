@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -18,11 +19,11 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import WorkerPreamble
+from blizzard.runner.harness.adapter import ResumeHandle, WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.loop.process import LinuxProcessProbe
-from blizzard.runner.loop.process_launch import ProcessLauncher
 from blizzard.wire.envelope import NodeEnvelope
 from tests.conftest import _WORKER_IDENTITY_ENV
 from tests.runner_fakes import FakeProbe, make_envelope
@@ -122,6 +123,8 @@ def test_observe_version_times_out_to_none_rather_than_raising(monkeypatch: pyte
     def _hung(*args, **kwargs):  # type: ignore[no-untyped-def]
         raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout", 0))
 
+    # On PATH per `which` — the timeout is subprocess.run's own, not a missing-binary skip.
+    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
     monkeypatch.setattr(subprocess, "run", _hung)
 
     with capture_logs() as logs:
@@ -131,14 +134,38 @@ def test_observe_version_times_out_to_none_rather_than_raising(monkeypatch: pyte
 
 @pytest.mark.unit
 def test_observe_version_missing_binary_reads_none_rather_than_raising(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A binary that resolves on ``PATH`` but fails at exec time (a race, a permission
+    problem) still reads ``None`` and logs — distinct from never being on ``PATH`` at all
+    (below), which skips the subprocess attempt entirely."""
+
     def _missing(*args, **kwargs):  # type: ignore[no-untyped-def]
         raise OSError("no such file or directory: 'claude'")
 
+    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
     monkeypatch.setattr(subprocess, "run", _missing)
 
     with capture_logs() as logs:
         assert _adapter(binary="claude").observe_version() is None
     assert any(entry["event"] == "harness version probe failed" for entry in logs)
+
+
+@pytest.mark.unit
+def test_observe_version_absent_from_path_skips_the_subprocess_and_does_not_warn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host that never installed this binding's binary (a runner configured with only
+    one of several known harnesses) is an expected shape, not a failure — no subprocess
+    attempt, and nothing louder than ``debug`` (blizzard#433)."""
+    monkeypatch.setattr(shutil, "which", lambda binary: None)
+
+    def _unexpected(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("subprocess.run must not be attempted for a binary absent from PATH")
+
+    monkeypatch.setattr(subprocess, "run", _unexpected)
+
+    with capture_logs() as logs:
+        assert _adapter(binary="claude").observe_version() is None
+    assert not any(entry["log_level"] == "warning" for entry in logs)
 
 
 # --------------------------------------------------------------------------- #
@@ -240,6 +267,24 @@ def test_judge_stamps_process_start_time_from_the_injected_probe(
 
     assert handle.pid == _FakeSpawnedProcess.pid
     assert handle.process_start_time == "fake-judge-start-time"
+
+
+@pytest.mark.unit
+def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F4: a resume gets the same D1/D4 ownership a fresh spawn or judge gets — the
+    launcher's own recorded start time (D3), and a real disarm signal, not
+    `ResumeHandle`'s bare no-op default."""
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
+    probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-resume-start-time")})
+    adapter = ClaudeCodeAdapter(binary="claude", process=probe, launcher=ProcessLauncher(probe))
+
+    resumed = adapter.resume_with_message("/ws", "sess-123", "continue")
+
+    assert resumed.pid == _FakeSpawnedProcess.pid
+    assert resumed.process_start_time == "fake-resume-start-time"
+    assert resumed.confirm_durable is not ResumeHandle.__dataclass_fields__["confirm_durable"].default
 
 
 # --------------------------------------------------------------------------- #
@@ -373,6 +418,7 @@ def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_se
     adapter = _adapter(binary=str(dump_script))
 
     resumed = adapter.resume_with_message(str(workdir), "sess-1", "deliver")
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -398,6 +444,7 @@ def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(tm
     )
 
     resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -422,6 +469,7 @@ def test_resume_with_message_child_env_excludes_the_elicitation_marker(tmp_path:
     )
 
     resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -742,6 +790,7 @@ def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path) -
     adapter = _adapter(binary=binary, settings_path=str(settings))
 
     resumed = adapter.resume_with_message(str(workdir), "sess-123", "continue where you left off")
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     assert f"--settings {settings}" in (workdir / "argv.txt").read_text()
@@ -758,6 +807,7 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(tmp_path:
     adapter = _adapter(binary=binary, settings_path=str(settings), permission_mode="bypassPermissions")
 
     resumed = adapter.resume_with_message(str(workdir), "sess-123", "continue", effort="high")
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
     resumed_prefix, _, resumed_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
@@ -1139,6 +1189,7 @@ def test_resume_with_message_redirects_stdout_to_the_injected_path(tmp_path: Pat
     resumed = adapter.resume_with_message(
         str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
     )
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     assert stdout_path.exists()
@@ -1160,6 +1211,7 @@ def test_resume_with_message_passes_output_format_json_so_cost_is_real(tmp_path:
     resumed = adapter.resume_with_message(
         str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
     )
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     sample = adapter.parse_usage(stdout_path.read_text(), "resume")

@@ -366,7 +366,7 @@ def test_restart_resume_suppressed_then_advance_does_not_judge_or_spawn(tmp_path
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", resume_process_start_time="start-4321")
     harness.resume_pid = 4321
     # The restart-stranded worker (pid 100) is dead; pid 4321 reads alive once resumed,
     # so the post-unpause pass finds a running worker, not another exit to judge.

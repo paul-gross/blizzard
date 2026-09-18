@@ -74,10 +74,15 @@ class WorkerHandle:
 class ResumeHandle:
     """The OS facts a resume launch is authoritative on (D3): its pid and the REAL
     process group the launcher recorded for it — never inferred as ``pid`` at the call
-    site, the same "recorded, not inferred" contract :class:`WorkerHandle` keeps."""
+    site. Mirrors :class:`WorkerHandle`'s shape exactly: a resume launches deferred (D4)
+    just like a fresh spawn or a judge, so it carries the same disarm signal and start time."""
 
     pid: int
     pgid: int
+    process_start_time: str  # stable across pid reuse — `_wake` records it straight through
+    confirm_durable: Callable[[], None] = field(
+        default=lambda: None, compare=False
+    )  # F1's disarm signal; no-op default
 
 
 class PendingWorkerHandle(Protocol):

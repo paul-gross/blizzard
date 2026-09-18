@@ -195,6 +195,59 @@ def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path):  # ty
 
 
 @pytest.mark.unit
+def test_restart_resume_records_the_launchers_own_start_time_without_reprobing(tmp_path):  # type: ignore[no-untyped-def]
+    """F4/F14: `_wake` carries the resumed launch's own recorded `process_start_time`
+    straight through into `record_spawn` — never re-probing `/proc` a second time, which
+    would race a pid-reuse window opening between the launch and this call."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _running_chunk()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", resume_process_start_time="start-4321")
+    harness.resume_pid = 4321
+    probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    Resume(ctx).run()
+
+    assert probe.start_time_calls == []  # never re-probed — the launcher's own stamp is used
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.process_start_time == "start-4321"
+    assert harness.resume_confirm_durable_calls == 1  # disarmed once the record landed
+
+
+@pytest.mark.unit
+def test_a_record_spawn_write_that_raises_kills_the_still_unconfirmed_resume(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    """F4's mirror of F1/F3 for a resume launch: a plain exception writing the durable
+    `record_spawn` row must not leave the trampoline parked forever with nothing durable
+    for REAP/ADVANCE to re-adopt — `_wake` kills the group itself, never disarming."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _running_chunk()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.resume_pid = 4321
+    harness.resume_pgid = 4321
+    probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    def _raise(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("durable write failed")
+
+    monkeypatch.setattr(store, "record_spawn", _raise)
+
+    with pytest.raises(RuntimeError, match="durable write failed"):
+        Resume(ctx).run()
+
+    assert probe.killed_groups == [4321]
+    assert harness.resume_confirm_durable_calls == 0  # never disarmed — no durable record ever landed
+
+
+@pytest.mark.unit
 def test_restart_resume_skips_the_kill_when_the_recorded_pid_was_reused(tmp_path):  # type: ignore[no-untyped-def]
     """The same pid/pgid-reuse hazard `Attempt._kill_process` guards against: a LIVE pid
     whose start time no longer matches the recorded one is not this lease's survivor any
@@ -312,7 +365,7 @@ def test_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore[no-un
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", resume_process_start_time="start-4321")
     harness.resume_pid = 4321
     # The survivor is still alive at tick start (kill-first exercises it); the resumed pid is live.
     probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})

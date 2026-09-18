@@ -359,7 +359,7 @@ def test_crash_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", resume_process_start_time="start-4321")
     harness.resume_pid = 4321
     probe = FakeProbe(alive={(4321, "start-4321")})
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)

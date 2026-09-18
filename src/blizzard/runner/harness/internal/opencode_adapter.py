@@ -3,7 +3,7 @@
 Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the ``opencode``
 CLI. Reuses only the production event/record parsers (``opencode_shapes``) — never the
 diagnostic PROCESS/scratch machinery the compatibility proof owns (D5): every worker launches
-through :class:`~blizzard.runner.loop.process_launch.ProcessLauncher`, as Claude Code does."""
+through :class:`~blizzard.runner.harness.process_launch.ProcessLauncher`, as Claude Code does."""
 
 from __future__ import annotations
 
@@ -34,17 +34,14 @@ from blizzard.runner.harness.internal.opencode_shapes import (
     parse_model_reference,
     parse_run_event,
 )
+from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.loop.process_launch import IProcessLauncher
-from blizzard.wire.envelope import NodeEnvelope
+from blizzard.wire.envelope import TIER_PREFIX, NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
-
-# The namespaced tier-alias prefix (issue #144, shared with Claude Code); unprefixed is a native name.
-_TIER_PREFIX = "blizzard:"
 
 # The well-known effort ordinal (issue #144); outside it needs an explicit `[opencode.effort.aliases]`, never a guess.
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
@@ -177,7 +174,7 @@ class OpenCodeAdapter:
         adapter cannot resolve it — including a syntactically-valid pair belonging to
         another harness's own tier vocabulary, skipped rather than handed to a CLI that
         would reject it."""
-        if entry.startswith(_TIER_PREFIX):
+        if entry.startswith(TIER_PREFIX):
             # OpenCode ships no built-in tier mapping (unlike Claude Code's three defaults):
             # an unmapped tier lets a multi-harness selection skip this binding (harness-selection spec).
             return self._model_aliases.get(entry)
@@ -250,12 +247,22 @@ class OpenCodeAdapter:
             auto=True,
         )
         env = self._spawn_env(envelope, preamble, resume_from or "")
-        with harness_shared.stdout_target(preamble.stdout_path) as stdout_file:
+        # Both go through `harness_shared.stdout_target`, empty meaning DEVNULL — the same
+        # idiom Claude Code's `spawn` honors `preamble.stderr_path` with.
+        with (
+            harness_shared.stdout_target(preamble.stdout_path) as stdout_file,
+            harness_shared.stdout_target(preamble.stderr_path) as stderr_file,
+        ):
             try:
                 # F1: deferred — the caller's own `confirm_durable()` (right after ITS durable
                 # provisional record lands) is what disarms this launch's parent-death signal.
                 launched = self._launcher.launch(
-                    cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL, defer_disarm=True
+                    cmd,
+                    cwd=workdir,
+                    env=env,
+                    stdout=stdout_file,
+                    stderr=stderr_file if stderr_file is not None else subprocess.DEVNULL,
+                    defer_disarm=True,
                 )
             except OSError as exc:
                 _log.error("harness spawn failed", binary=self._binary, cwd=workdir, detail=str(exc))
@@ -357,13 +364,20 @@ class OpenCodeAdapter:
             if preamble is not None
             else AllowlistedEnv.of(self._env_passthrough).variables
         )
-        # Not deferred (F1): a bare pid leaves nothing to disarm later off of, and the
-        # `record_spawn` gap right after this call is already accepted as un-armable.
+        # Deferred (F1, D4): a resume gets the same ownership spawn/judge get — `dormant.py::_wake`
+        # calls `confirm_durable()` right after its own durable `record_spawn` lands.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
-            launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None)
+            launched = self._launcher.launch(
+                cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None, defer_disarm=True
+            )
         # `launched.pgid` is the launcher's own recorded group (D3) — carried to the
         # caller rather than left for it to assume `pgid == pid`.
-        return ResumeHandle(pid=launched.pid, pgid=launched.pgid)
+        return ResumeHandle(
+            pid=launched.pid,
+            pgid=launched.pgid,
+            process_start_time=launched.process_start_time,
+            confirm_durable=launched.confirm_durable,
+        )
 
     def resume_command(
         self,

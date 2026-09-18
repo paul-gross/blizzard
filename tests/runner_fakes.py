@@ -687,6 +687,7 @@ class FakeHarness:
         judge_output: str = "<judged output>",
         judge_output_usable: bool = True,
         identity_failures: int = 0,
+        resume_process_start_time: str = "resume-start",
     ) -> None:
         self._handle = handle
         self.verdict = verdict
@@ -732,6 +733,10 @@ class FakeHarness:
         # Defaults to `resume_pid` (D3), mirroring `judge_pgid`: an explicit assignment
         # opts a test into a resume whose real group differs from its pid.
         self.resume_pgid: int | None = None
+        # F1/F4: a resume launches deferred like a fresh spawn or judge — mirrors
+        # `FailingIdentityHandle`'s own `confirm_durable`-counting shape.
+        self.resume_process_start_time = resume_process_start_time
+        self.resume_confirm_durable_calls = 0
         # The (model, effort) each invocation was handed (issue #144) — one entry per
         # call, for per-call-site assertions.
         self.spawn_model_effort: list[tuple[str | None, str | None]] = []
@@ -853,7 +858,15 @@ class FakeHarness:
         # resume-identity assertions can read the preamble/chunk_id the caller supplied.
         self.resumed_identity.append((preamble, chunk_id))
         pgid = self.resume_pgid if self.resume_pgid is not None else self.resume_pid
-        return ResumeHandle(pid=self.resume_pid, pgid=pgid)
+        return ResumeHandle(
+            pid=self.resume_pid,
+            pgid=pgid,
+            process_start_time=self.resume_process_start_time,
+            confirm_durable=self._resume_confirm_durable,
+        )
+
+    def _resume_confirm_durable(self) -> None:
+        self.resume_confirm_durable_calls += 1
 
     def resume_command(
         self,
@@ -993,8 +1006,12 @@ class FakeProbe:
         self.groups_alive = groups_alive if groups_alive is not None else set()
         self.killed: list[int] = []
         self.killed_groups: list[int] = []
+        # F14: every call, counted — a test proving a caller never re-probes a launcher's
+        # own already-recorded start time (e.g. `dormant.py::_wake`) reads this directly.
+        self.start_time_calls: list[int] = []
 
     def start_time(self, pid: int) -> str | None:
+        self.start_time_calls.append(pid)
         for p, st in self.alive:
             if p == pid:
                 return st

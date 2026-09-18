@@ -29,12 +29,12 @@ from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPr
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
+from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.loop.process import LinuxProcessProbe
-from blizzard.runner.loop.process_launch import ProcessLauncher
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.scratch_git import ScratchRepo
@@ -487,7 +487,7 @@ class _FixedPidAdapter:
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
-        return ResumeHandle(pid=self.resume_pid, pgid=self.resume_pid)
+        return ResumeHandle(pid=self.resume_pid, pgid=self.resume_pid, process_start_time="resume-t")
 
     def resume_command(
         self,

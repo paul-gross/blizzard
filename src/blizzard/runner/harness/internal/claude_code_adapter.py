@@ -25,22 +25,18 @@ from blizzard.runner.harness.adapter import (
 )
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal import harness_shared
+from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.loop.process_launch import IProcessLauncher
-from blizzard.wire.envelope import NodeEnvelope
+from blizzard.wire.envelope import TIER_PREFIX, NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
 
 # The model a worker runs on when nothing expressed a preference, pinned so a spawn never
 # inherits the operator's ambient default.
 DEFAULT_WORKER_MODEL = "claude-opus-5"
-
-# The namespaced tier-alias prefix (issue #144): an entry carrying it is a *role*, resolved
-# through the table below; one without it is a harness-native name.
-_TIER_PREFIX = "blizzard:"
 
 # Built-in tier mappings, so a zero-config runner resolves the standard tiers; overridden
 # entry-by-entry by the runner's own table. Unordered roles, not a scale.
@@ -173,7 +169,7 @@ class ClaudeCodeAdapter:
 
     def _resolve_one_model(self, entry: str) -> str | None:
         """One preference entry to a native name, or ``None`` if this adapter cannot."""
-        if entry.startswith(_TIER_PREFIX):
+        if entry.startswith(TIER_PREFIX):
             # Runner config first, adapter built-ins second — an operator's table
             # overrides the shipped tier defaults rather than merging with them.
             return self._model_aliases.get(entry) or _BUILTIN_TIERS.get(entry)
@@ -387,12 +383,19 @@ class ClaudeCodeAdapter:
             else AllowlistedEnv.of(self._env_passthrough).variables
         )
         # Injected per-lease file (epic #57); unset (``None``) inherits the runner's own.
-        # Not deferred (F1): a bare pid leaves nothing to disarm later off of.
+        # Deferred (F1, D4) like spawn/judge — `dormant.py::_wake` confirms after `record_spawn` lands.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
-            launched = self._launcher.launch(cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None)
+            launched = self._launcher.launch(
+                cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None, defer_disarm=True
+            )
         # `launched.pgid` is the launcher's own recorded group (D3) — carried to the
         # caller rather than left for it to assume `pgid == pid`.
-        return ResumeHandle(pid=launched.pid, pgid=launched.pgid)
+        return ResumeHandle(
+            pid=launched.pid,
+            pgid=launched.pgid,
+            process_start_time=launched.process_start_time,
+            confirm_durable=launched.confirm_durable,
+        )
 
     def resume_command(
         self,

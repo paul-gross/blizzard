@@ -205,6 +205,7 @@ class Resume(Check):
             )
         except Exception as exc:
             return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message raised: {exc}")
+        resumed.confirm_durable()  # F1: no durable record here to threaten — disarm now
         if resumed.pid <= 0:
             return SelfTestCheck(
                 AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({resumed.pid})"

@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerIdentityError, WorkerPreamble
+from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle, WorkerIdentityError, WorkerPreamble
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.opencode_adapter import (
     _MAX_IDENTITY_PREAMBLE_LINES,
@@ -24,9 +24,9 @@ from blizzard.runner.harness.internal.opencode_adapter import (
 )
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.process import LinuxProcessProbe
-from blizzard.runner.loop.process_launch import ProcessLauncher
 from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, SkippedHarness
 from tests.runner_fakes import FakeProbe, make_envelope
 from tests.support_opencode_binary import worker_binary
@@ -57,12 +57,13 @@ def _adapter(**kwargs: Any) -> OpenCodeAdapter:
     return OpenCodeAdapter(**kwargs)
 
 
-def _preamble(workdir: str, *, stdout_path: str = "") -> WorkerPreamble:
+def _preamble(workdir: str, *, stdout_path: str = "", stderr_path: str = "") -> WorkerPreamble:
     return WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir=workdir)],
         lease_id="lease_1",
         local_api_url="http://127.0.0.1:8431",
         stdout_path=stdout_path,
+        stderr_path=stderr_path,
     )
 
 
@@ -367,6 +368,31 @@ def test_fresh_spawn_never_passes_the_hint_as_session_id(tmp_path: Path) -> None
 
 
 @pytest.mark.component
+def test_fresh_spawn_writes_stderr_to_the_injected_path(tmp_path: Path) -> None:
+    """``spawn`` honors ``preamble.stderr_path`` the same way Claude Code's binding does —
+    every OpenCode failure event otherwise reports an empty stderr tail even though the
+    runner already allocated the file (blizzard#433)."""
+    binary = worker_binary(tmp_path, minted_session_id="ses_minted_abc", stderr_message="diagnostic-sentinel")
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    stdout_path = tmp_path / "lease-1.stdout"
+    stderr_path = tmp_path / "lease-1.stderr"
+    adapter = _adapter(binary=binary, process=LinuxProcessProbe())
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+
+    pending = adapter.spawn(
+        envelope,
+        _preamble(str(workdir), stdout_path=str(stdout_path), stderr_path=str(stderr_path)),
+        session_hint="hint",
+    )
+    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
+    handle = pending.await_identity(5.0)
+    os.waitpid(handle.pid, 0)
+
+    assert "diagnostic-sentinel" in stderr_path.read_text()
+
+
+@pytest.mark.component
 def test_fresh_spawn_raises_identity_error_on_malformed_first_record(tmp_path: Path) -> None:
     binary = worker_binary(tmp_path, malformed_first_line=True)
     workdir = tmp_path / "e1"
@@ -518,6 +544,7 @@ def test_judge_and_resume_with_message_launch_against_the_recorded_session(tmp_p
     resumed = adapter.resume_with_message(
         str(workdir), "ses_recorded", "continue", stdout_path=str(workdir / "nudge.out")
     )
+    resumed.confirm_durable()  # F1: real component tests stand in for `dormant.py::_wake`'s own call
     os.waitpid(resumed.pid, 0)
     assert (workdir / "nudge.out").exists()
 
@@ -601,6 +628,25 @@ def test_spawn_with_resume_from_omits_model_and_carries_session(
     assert "--model" not in cmd
     assert cmd[cmd.index("--session") + 1] == "ses_prior"
     assert handle.await_identity(0).session_id == "ses_prior"
+
+
+@pytest.mark.unit
+def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F4: a resume gets the same D1/D4 ownership a fresh spawn or judge gets — the
+    launcher's own recorded start time (D3), and a real disarm signal, not
+    `ResumeHandle`'s bare no-op default."""
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    probe = FakeProbe(alive={(9_999_999, "fake-resume-start-time")})
+    adapter = OpenCodeAdapter(binary="opencode", process=probe, launcher=ProcessLauncher(probe))
+
+    resumed = adapter.resume_with_message("/ws", "ses_recorded", "continue")
+
+    assert resumed.pid == 9_999_999
+    assert resumed.process_start_time == "fake-resume-start-time"
+    assert resumed.confirm_durable is not ResumeHandle.__dataclass_fields__["confirm_durable"].default
 
 
 # --------------------------------------------------------------------------- #
