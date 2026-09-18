@@ -132,6 +132,10 @@
  *   - projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts — the
  *     shared confirmation dialog: its Cancel and confirm controls render together
  *     in the dialog footer and the real focus trap keeps keyboard focus inside the prompt.
+ *   - projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts — the tooltip
+ *     trigger directive: a real pointer hover and a real keyboard Tab focus both
+ *     open its overlay panel, and `aria-describedby` resolves to that panel's
+ *     actual id in the rendered DOM.
  *   - projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts —
  *     the gardening run dialog's own three fields (blizzard#399 D6), at the
  *     phone and desktop widths the dialog is reachable at: the scope field's
@@ -239,6 +243,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposals-page.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },
