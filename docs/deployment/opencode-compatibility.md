@@ -41,21 +41,6 @@ Every option below is required; the command has no defaults for this proof:
 The live-provider option is a deliberate spending boundary. Do not add it until the provider call is authorized;
 omitting it is a command error, not an offline mode.
 
-## Offline rehearsal
-
-Exercise this diagnostic's own process, allowlist, disposable-git, parser, report, and evidence machinery with no
-provider quota spent, using a CLI-surface artifact the mock fleet emits in place of a live OpenCode binary. This
-rehearses the procedure on this page and the diagnostic's machinery; it is not a live pass against real OpenCode and a
-real provider — only the invocation below against the real binary establishes that.
-
-1. From a provisioned `blizzard-mock` checkout, emit an artifact: `mock-opencode emit --out <path>`.
-2. Run the invocation below unchanged, with `--binary` pointed at the emitted path. `--live-provider` is still
-   required — it is a policy opt-in, not a network switch, and the emitted artifact never reaches a real provider
-   regardless.
-
-A rehearsal run reports `compatibility: supported` the same way a live pass does; treat it as proof the diagnostic runs
-cleanly end to end, never as evidence about real OpenCode or a real provider.
-
 For the `openai/gpt-5.6-luna` model and `max` variant, an invocation is:
 
 ```bash
@@ -71,6 +56,21 @@ blizzard runner opencode compatibility \
 
 Replace the binary path, model, or variant when proving a different explicit input. The executable is never selected
 from `PATH` implicitly; the command receives the path supplied by `--binary`.
+
+## Offline rehearsal
+
+Exercise this diagnostic's own process, allowlist, disposable-git, parser, report, and evidence machinery with no
+provider quota spent, using a CLI-surface artifact the mock fleet emits in place of a live OpenCode binary. This
+rehearses the procedure on this page and the diagnostic's machinery; it is not a live pass against real OpenCode and a
+real provider — only the invocation above against the real binary establishes that.
+
+1. From a provisioned `blizzard-mock` checkout, emit an artifact: `mock-opencode emit --out <path>`.
+2. Run the invocation above unchanged, with `--binary` pointed at the emitted path. `--live-provider` is still
+   required — it is a policy opt-in, not a network switch, and the emitted artifact never reaches a real provider
+   regardless.
+
+A rehearsal run reports `compatibility: supported` the same way a live pass does; treat it as proof the diagnostic runs
+cleanly end to end, never as evidence about real OpenCode or a real provider.
 
 ## Read the result
 
