@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { deleteChunkApiChunksChunkIdDelete } from '../api/hub';
+import { chunkDeleteMutationKey } from '../mutation-keys';
 import { hubBacklogKey, hubChunkKey, hubChunksKey, hubQueueKey } from '../query-keys';
 
 /** Delete an unacquired chunk (issue #364) — the board's counterpart of
@@ -29,6 +30,7 @@ export interface DeleteVars {
 export function injectDeleteChunkMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: chunkDeleteMutationKey,
     mutationFn: async (vars: DeleteVars): Promise<void> => {
       const { error } = await deleteChunkApiChunksChunkIdDelete({
         path: { chunk_id: vars.chunkId },
@@ -37,11 +39,12 @@ export function injectDeleteChunkMutation() {
       });
       if (error) throw error;
     },
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: hubChunksKey });
-      void queryClient.invalidateQueries({ queryKey: hubQueueKey });
-      void queryClient.invalidateQueries({ queryKey: hubBacklogKey });
-      void queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) });
-    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubChunksKey }),
+        queryClient.invalidateQueries({ queryKey: hubQueueKey }),
+        queryClient.invalidateQueries({ queryKey: hubBacklogKey }),
+        queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) }),
+      ]),
   }));
 }

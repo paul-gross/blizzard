@@ -158,6 +158,8 @@ describe('ChunkDetail container', () => {
   let editPatchResponse: unknown = {};
   // The same, for the answer verb (issue #165) — 201 winner vs. 409 loser.
   let answerResponse: unknown = {};
+  // The same, for the resolve-decision verb — defaults to a canned success body below.
+  let resolveResponse: unknown | null = null;
   // Whether the chunk read for `ch_ask` has been answered yet, so a test can make the
   // post-answer re-read return the settled row the way the live hub would.
   let askAnswered = false;
@@ -169,6 +171,7 @@ describe('ChunkDetail container', () => {
     deleteResponse = {};
     editPatchResponse = {};
     answerResponse = {};
+    resolveResponse = null;
     askAnswered = false;
     // The generated client's transport is stubbed so we can assert the exact call the button fires.
     stub = stubRequestClient(hubClient, (method, path) => {
@@ -202,7 +205,9 @@ describe('ChunkDetail container', () => {
         };
       }
       if (path === '/api/decisions/de_42/resolutions') {
-        return { decision_id: 'de_42', choice: 'approve', resolved_at: 'x', resolved_by: 'operator' };
+        return (
+          resolveResponse ?? { decision_id: 'de_42', choice: 'approve', resolved_at: 'x', resolved_by: 'operator' }
+        );
       }
       if (method === 'POST' && path === '/api/chunks/ch_routed/detach') return detachResponse;
       if (method === 'POST' && path === '/api/chunks/ch_routed/complete') return completeResponse;
@@ -273,6 +278,20 @@ describe('ChunkDetail container', () => {
     const calls = stub.forRoute('/api/decisions/de_42/resolutions', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toMatchObject({ choice: 'approve', struck: ['wip_01'] });
+  });
+
+  it('surfaces a resolve-decision failure rather than swallowing it', async () => {
+    resolveResponse = stubError(409, { detail: 'decision de_42 already resolved' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/decisions/de_42/resolutions', 'POST')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already resolved');
   });
 
   it('fetches the chunk’s work items through the generated client and renders them in the work-item column (issue #24)', async () => {

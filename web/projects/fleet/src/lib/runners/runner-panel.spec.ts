@@ -7,7 +7,7 @@ import { settle } from '../testing/settle';
 import { client as hubClient } from '../api/hub/client.gen';
 import { toneColor } from '../kit/kit-badge';
 import { OPERATOR_ME_RESPONSE } from '../testing/auth-fixtures';
-import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
+import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import { RunnerPanel } from './runner-panel';
 
 /** A `contributor`'s `/api/me` — every day-to-day operating permission, but not the
@@ -271,6 +271,67 @@ describe('RunnerPanel', () => {
     expect(el.querySelectorAll('[data-testid="runner"]')).toHaveLength(5);
     expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-hub-paused"]')).not.toBeNull();
     expect(el.querySelectorAll('[data-testid="runner-toggle"]')).toHaveLength(0);
+  });
+
+  /*
+   * Part A conformance: one `pauseMutation` instance fires once per toggled row, so
+   * "disabled while pending" must scope to the row whose own mutation is in flight —
+   * a sibling row's toggle must stay clickable.
+   */
+  describe('pause/resume per-row pending scope (Part A)', () => {
+    const toggle = (el: HTMLElement, id: string): HTMLButtonElement | null =>
+      el.querySelector<HTMLButtonElement>(`[data-runner="${id}"] [data-testid="runner-toggle"]`);
+
+    it("disables only the clicked row's toggle while its mutation is pending, re-enabling once it settles", async () => {
+      const fixture = TestBed.createComponent(RunnerPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+
+      toggle(el, 'rn_online')?.click();
+      // Held open by the `invalidateQueries` spy above — `settle()`'s own
+      // `whenStable()` would hang on it, so a bare macrotask tick + a manual
+      // `detectChanges()` stands in, the same idiom `status.query.spec.ts` uses
+      // for the same reason.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      fixture.detectChanges();
+
+      // The clicked row disables…
+      expect(toggle(el, 'rn_online')?.disabled).toBe(true);
+      // …but a sibling row's own toggle stays clickable — the two fire the same
+      // `pauseMutation` instance with different variables.
+      expect(toggle(el, 'rn_paused')?.disabled).toBe(false);
+
+      resolveInvalidate();
+      await settle(fixture);
+
+      expect(toggle(el, 'rn_online')?.disabled).toBe(false);
+    });
+
+    it("reports a pause failure through the panel's visible error slot", async () => {
+      stub.restore();
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+        if (method === 'GET' && path === '/api/runners') return RUNNERS;
+        if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
+        if (path === '/api/runners/rn_online/pause') return stubError(409, { detail: 'runner already paused' });
+        return {};
+      });
+      const fixture = TestBed.createComponent(RunnerPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      toggle(el, 'rn_online')?.click();
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="runner-action-error"]')?.textContent).toBe('runner already paused');
+      // The failure never disables a sibling row that never fired the mutation.
+      expect(toggle(el, 'rn_paused')?.disabled).toBe(false);
+    });
   });
 });
 

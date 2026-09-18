@@ -26,6 +26,7 @@
           />
           <fleet-kit-button
             testid="gardening-scope-panel-description-submit"
+            [disabled]="editPending()"
             (click)="submitDescription(descInput.value)"
           >
             Set
@@ -38,11 +39,22 @@
       @if (canEdit()) {
         <div class="sp-actions">
           @if (panel.retired) {
-            <fleet-kit-button size="cta" testid="gardening-scope-panel-enable" (click)="onEnable()">
+            <fleet-kit-button
+              size="cta"
+              testid="gardening-scope-panel-enable"
+              [disabled]="lifecyclePending()"
+              (click)="onEnable()"
+            >
               Re-enable
             </fleet-kit-button>
           } @else {
-            <fleet-kit-button variant="danger" size="cta" testid="gardening-scope-panel-retire" (click)="onRetire()">
+            <fleet-kit-button
+              variant="danger"
+              size="cta"
+              testid="gardening-scope-panel-retire"
+              [disabled]="lifecyclePending()"
+              (click)="onRetire()"
+            >
               Retire
             </fleet-kit-button>
           }

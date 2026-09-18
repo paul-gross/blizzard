@@ -19,6 +19,7 @@ const CARD: BoardCard = {
   blockedOn: null,
   blockedCount: 0,
   blockedOnStatus: null,
+  promotePending: false,
 };
 
 const READY: Lane = { key: 'ready', label: 'READY', headerLabel: 'Ready' };

@@ -82,6 +82,13 @@ export class GraphDetail {
    * cleared at the start of the next attempt. */
   protected readonly actionError = signal<string | null>(null);
 
+  /** Whether the retire/enable mutation is in flight for this graph — read straight
+   * off the mutation's own `.isPending()` and threaded to {@link GraphDetailHeader}'s
+   * Retire/Enable buttons. Only one of the two is ever the currently-valid action for
+   * a graph's lifecycle state, so disabling both while either is in flight is correct
+   * — there is only ever one lifecycle mutation in flight for one graph at a time. */
+  protected readonly lifecyclePending = computed(() => this.lifecycleMutation.isPending());
+
   protected readonly nodes = computed<readonly GraphNodeView[]>(() => this.graph()?.nodes ?? []);
 
   /** The graph's declared sessions (issue #144) — empty for every graph minted before

@@ -10,9 +10,9 @@
      issue #93): a contributor sees the lifecycle text but not the control. -->
 @if (canEdit()) {
   @if (retired()) {
-    <fleet-kit-button testid="graph-detail-enable" (click)="onEnable()">Re-enable</fleet-kit-button>
+    <fleet-kit-button testid="graph-detail-enable" [disabled]="lifecyclePending()" (click)="onEnable()">Re-enable</fleet-kit-button>
   } @else {
-    <fleet-kit-button testid="graph-detail-retire" variant="danger" (click)="onRetire()">Retire</fleet-kit-button>
+    <fleet-kit-button testid="graph-detail-retire" variant="danger" [disabled]="lifecyclePending()" (click)="onRetire()">Retire</fleet-kit-button>
   }
 }
 

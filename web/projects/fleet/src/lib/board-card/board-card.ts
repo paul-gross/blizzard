@@ -42,6 +42,13 @@ export interface BoardCard {
    * board's own chunk list). Read off the board's existing chunk list, not the wire:
    * `BlockedView` names the prerequisite but not its status. */
   readonly blockedOnStatus: ChunkStatus | null;
+  /** Whether *this* card's own Promote mutation is in flight — folded in by
+   * {@link BoardShell} from the container's shared `promoteChunk` mutation, scoped to
+   * this card's chunk id (`injectPendingMutationVariables`). One `promoteChunk` instance
+   * fires for every not-ready card, so disabling off the mutation's bare `isPending()`
+   * would freeze every other card's Promote button too; this is the per-card fold that
+   * keeps a sibling card's control enabled while only the one it was clicked on disables. */
+  readonly promotePending: boolean;
 }
 
 /**

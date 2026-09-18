@@ -16,6 +16,8 @@ describe('FleetScopePanel', () => {
     state?: 'loading' | 'error' | 'empty' | 'ready';
     canEdit?: boolean;
     actionError?: string | null;
+    editPending?: boolean;
+    lifecyclePending?: boolean;
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetScopePanel],
@@ -26,6 +28,8 @@ describe('FleetScopePanel', () => {
     fixture.componentRef.setInput('state', inputs.state ?? 'ready');
     fixture.componentRef.setInput('canEdit', inputs.canEdit ?? false);
     fixture.componentRef.setInput('actionError', inputs.actionError ?? null);
+    fixture.componentRef.setInput('editPending', inputs.editPending ?? false);
+    fixture.componentRef.setInput('lifecyclePending', inputs.lifecyclePending ?? false);
     await fixture.whenStable();
     return fixture;
   }
@@ -76,6 +80,46 @@ describe('FleetScopePanel', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.click();
 
     expect(emitted).toEqual({ slug: 'blizzard', description: 'updated description' });
+  });
+
+  it('disables Set while the edit mutation is pending, re-enabling once it settles', async () => {
+    const fixture = await mount({ canEdit: true, editPending: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.disabled).toBe(
+      true,
+    );
+
+    fixture.componentRef.setInput('editPending', false);
+    await fixture.whenStable();
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.disabled).toBe(
+      false,
+    );
+  });
+
+  it('disables Retire while the lifecycle mutation is pending, re-enabling once it settles', async () => {
+    const fixture = await mount({ canEdit: true, lifecyclePending: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-retire"]')?.disabled).toBe(true);
+
+    fixture.componentRef.setInput('lifecyclePending', false);
+    await fixture.whenStable();
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-retire"]')?.disabled).toBe(false);
+  });
+
+  it('disables Re-enable while the lifecycle mutation is pending, re-enabling once it settles', async () => {
+    const fixture = await mount({ vm: { ...VM, retired: true }, canEdit: true, lifecyclePending: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-enable"]')?.disabled).toBe(true);
+
+    fixture.componentRef.setInput('lifecyclePending', false);
+    await fixture.whenStable();
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-enable"]')?.disabled).toBe(false);
   });
 
   it('emits retire with the slug once the operator confirms', async () => {

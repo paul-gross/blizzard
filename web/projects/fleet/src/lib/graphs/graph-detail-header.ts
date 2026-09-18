@@ -38,6 +38,11 @@ export class GraphDetailHeader {
    * #93) — gates the retire/re-enable control. */
   readonly canEdit = input(false);
 
+  /** Whether the retire/enable mutation is in flight — disables both Retire and
+   * Enable, since only one is ever shown for the graph's current lifecycle state and
+   * there is only ever one lifecycle mutation in flight for one graph at a time. */
+  readonly lifecyclePending = input(false);
+
   /** Emitted with the graph id once the operator confirms Retire. */
   readonly retire = output<string>();
 

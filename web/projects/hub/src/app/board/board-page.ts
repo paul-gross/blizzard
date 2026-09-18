@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import {
   BoardShell,
   type BoardReposition,
@@ -7,6 +7,7 @@ import {
   QuestionsPanel,
   RunnerPanel,
   asyncState,
+  errorMessage,
   hasPermission,
   injectChunkUrlSelection,
   type KitAsyncStateValue,
@@ -14,9 +15,13 @@ import {
   injectHubChunksQuery,
   injectHubQueueQuery,
   injectMeQuery,
+  injectPendingMutationVariables,
   injectPromoteChunkMutation,
   injectRepositionBacklogMutation,
   injectRepositionQueueMutation,
+  isPendingFor,
+  promoteChunkMutationKey,
+  type PromoteVars,
 } from 'fleet';
 
 /**
@@ -90,6 +95,31 @@ export class BoardPage {
   /** Promote a backlog chunk to ready from its board card. */
   protected readonly promoteChunk = injectPromoteChunkMutation();
 
+  /** Every chunk id the shared `promoteChunk` mutation is currently in flight for —
+   * one mutation instance fires once per promoted card, so this is scoped by
+   * `mutationKey` + variables rather than the mutation's bare `isPending()`, which
+   * would read `true` for every not-ready card while any one of them is promoting. */
+  private readonly pendingPromotes = injectPendingMutationVariables<PromoteVars>(promoteChunkMutationKey);
+
+  /** Whether `chunkId`'s own Promote mutation is in flight — the per-card
+   * predicate {@link pendingPromoteChunkIds} below is derived from. */
+  protected readonly isPromotePending = (chunkId: string): boolean =>
+    isPendingFor(this.pendingPromotes(), (vars) => vars.chunkId === chunkId);
+
+  /** {@link pendingPromotes}, as the bare chunk ids {@link BoardShell} folds into
+   * each card's own `promotePending` — the per-card disable that keeps a sibling
+   * card's Promote button enabled while only the one clicked disables. Plain data
+   * rather than {@link isPromotePending} itself threaded down, since every input
+   * in this tree is a value, never a callback. */
+  protected readonly pendingPromoteChunkIds = computed<readonly string[]>(() =>
+    this.pendingPromotes().map((vars) => vars.chunkId),
+  );
+
+  /** The board's last operator-action failure — a promote or a reorder — or `null`.
+   * Reset at the start of every new attempt (issue #42's "report, don't swallow",
+   * the same convention `ChunkDetail`'s own `actionError` follows). */
+  protected readonly actionError = signal<string | null>(null);
+
   /** The live fleet chunk list; empty until the first read resolves. */
   protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);
 
@@ -122,8 +152,21 @@ export class BoardPage {
   /** A READY or BACKLOG card dropped somewhere new — placed after the anchor it
    * landed on (`null` = the very top), routed to the matching list's mutation. */
   protected reposition(move: BoardReposition): void {
+    this.actionError.set(null);
     const mutation = move.list === 'notready' ? this.repositionBacklog : this.repositionQueue;
-    mutation.mutate({ chunkId: move.chunkId, afterChunkId: move.afterChunkId });
+    mutation.mutate(
+      { chunkId: move.chunkId, afterChunkId: move.afterChunkId },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Reorder failed.')) },
+    );
+  }
+
+  /** Promote a backlog chunk — the board card's own Promote button. */
+  protected onPromote(chunkId: string): void {
+    this.actionError.set(null);
+    this.promoteChunk.mutate(
+      { chunkId },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Promote failed.')) },
+    );
   }
 
   /**

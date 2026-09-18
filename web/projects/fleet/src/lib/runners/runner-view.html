@@ -5,6 +5,9 @@
   [count]="rows().length || null"
   countTestid="runners-count"
 >
+  @if (actionError(); as err) {
+    <p class="notice action-notice" data-testid="runner-action-error" role="alert">{{ err }}</p>
+  }
   <fleet-kit-async-state
     [state]="state()"
     placement="inline"
@@ -130,6 +133,7 @@
                   data-testid="runner-toggle"
                   [attr.aria-label]="(row.hub_paused ? 'Resume ' : 'Pause ') + row.runner_id + ' at the hub'"
                   [title]="toggleHint(row)"
+                  [disabled]="isPausePending(row)"
                   (click)="togglePause.emit(row)"
                 >
                   {{ row.hub_paused ? 'Resume' : 'Pause' }}

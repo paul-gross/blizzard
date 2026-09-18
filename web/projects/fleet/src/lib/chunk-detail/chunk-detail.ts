@@ -94,6 +94,30 @@ export class ChunkDetail {
   /** Whether the current identity may resolve an open gate decision (`gate:resolve`). */
   protected readonly canResolve = computed(() => hasPermission(this.meQuery.data(), 'gate:resolve'));
 
+  /** Whether the pause/resume mutation is in flight for this chunk — read straight off
+   * the mutation's own `.isPending()` and threaded to the header's Pause/Resume button,
+   * so a double click cannot fire the request twice while the first still settles. This
+   * dock shows exactly one chunk at a time, so there is no sibling row to distinguish
+   * pending mutations by variables — unlike the board's per-card filtering, a plain
+   * `.isPending()` read is the whole answer here. */
+  protected readonly pausePending = computed(() => this.pauseMutation.isPending());
+
+  /** Whether the detach mutation is in flight for this chunk, threaded to the header's
+   * Detach menu item. */
+  protected readonly detachPending = computed(() => this.detachMutation.isPending());
+
+  /** Whether the complete mutation is in flight for this chunk, threaded to the header's
+   * Complete menu item (combined there with {@link ChunkDetailHeader.completable}). */
+  protected readonly completePending = computed(() => this.completeMutation.isPending());
+
+  /** Whether the delete mutation is in flight for this chunk, threaded to the header's
+   * Delete menu item (combined there with {@link ChunkDetailHeader.deleteDisabled}). */
+  protected readonly deletePending = computed(() => this.deleteMutation.isPending());
+
+  /** Whether the resolve-decision mutation is in flight for this chunk, threaded to the
+   * awaiting-human gate's choice chips. */
+  protected readonly resolvePending = computed(() => this.resolveMutation.isPending());
+
   /** The open chunk's last operator-action failure, or `null`. Reset on every new
    * attempt and whenever a different chunk opens (issue #42). Shared by every action
    * in the dock — detach, pause, resume (issue #46), complete (issue #294). */
@@ -168,12 +192,16 @@ export class ChunkDetail {
   }
 
   protected onResolve(event: ResolveDecisionEvent): void {
-    this.resolveMutation.mutate({
-      decisionId: event.decisionId,
-      choice: event.choice,
-      chunkId: event.chunkId,
-      struck: event.struck,
-    });
+    this.beginAction();
+    this.resolveMutation.mutate(
+      {
+        decisionId: event.decisionId,
+        choice: event.choice,
+        chunkId: event.chunkId,
+        struck: event.struck,
+      },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Resolve failed.')) },
+    );
   }
 
   protected onDetach(chunkId: string): void {

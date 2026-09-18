@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { patchChunkApiChunksChunkIdPatch } from '../api/hub';
+import { chunkSetGraphMutationKey } from '../mutation-keys';
 import { hubChunkKey, hubChunksKey } from '../query-keys';
 
 /** Repin a not-ready chunk's workflow graph (issue #27) — the target graph's id. */
@@ -29,6 +30,7 @@ export interface ChunkGraphEditVars {
 export function injectSetChunkGraphMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: chunkSetGraphMutationKey,
     mutationFn: async (vars: ChunkGraphEditVars): Promise<void> => {
       const { error } = await patchChunkApiChunksChunkIdPatch({
         path: { chunk_id: vars.chunkId },
@@ -37,9 +39,10 @@ export function injectSetChunkGraphMutation() {
       });
       if (error) throw error;
     },
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: hubChunksKey });
-      void queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) });
-    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubChunksKey }),
+        queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) }),
+      ]),
   }));
 }

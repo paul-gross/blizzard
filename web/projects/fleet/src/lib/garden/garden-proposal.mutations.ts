@@ -7,6 +7,7 @@ import {
   type GardenProposalAcceptResponse,
   type GardenProposalView,
 } from '../api/hub';
+import { acceptGardenProposalMutationKey, passGardenProposalMutationKey } from '../mutation-keys';
 import { hubGardenProposalKey, hubGardenProposalsKey } from '../query-keys';
 
 /** `POST /api/garden-proposals/{proposal_id}/pass` with `{ reason }` —
@@ -26,6 +27,7 @@ export interface GardenProposalPassVars {
 export function injectPassGardenProposalMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: passGardenProposalMutationKey,
     mutationFn: async (vars: GardenProposalPassVars): Promise<GardenProposalView> => {
       const { data, error } = await passGardenProposalApiGardenProposalsProposalIdPassPost({
         path: { proposal_id: vars.proposalId },
@@ -35,10 +37,11 @@ export function injectPassGardenProposalMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: hubGardenProposalsKey });
-      void queryClient.invalidateQueries({ queryKey: hubGardenProposalKey(vars.proposalId) });
-    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubGardenProposalsKey }),
+        queryClient.invalidateQueries({ queryKey: hubGardenProposalKey(vars.proposalId) }),
+      ]),
   }));
 }
 
@@ -62,6 +65,7 @@ export interface GardenProposalAcceptVars {
 export function injectAcceptGardenProposalMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: acceptGardenProposalMutationKey,
     mutationFn: async (vars: GardenProposalAcceptVars): Promise<GardenProposalAcceptResponse> => {
       const { data, error } = await acceptGardenProposalApiGardenProposalsProposalIdAcceptPost({
         path: { proposal_id: vars.proposalId },
@@ -75,9 +79,10 @@ export function injectAcceptGardenProposalMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: hubGardenProposalsKey });
-      void queryClient.invalidateQueries({ queryKey: hubGardenProposalKey(vars.proposalId) });
-    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubGardenProposalsKey }),
+        queryClient.invalidateQueries({ queryKey: hubGardenProposalKey(vars.proposalId) }),
+      ]),
   }));
 }

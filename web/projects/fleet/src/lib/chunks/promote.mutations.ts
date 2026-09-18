@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { promoteChunkApiChunksChunkIdPromotePost } from '../api/hub';
+import { promoteChunkMutationKey } from '../mutation-keys';
 import { hubBacklogKey, hubChunkKey, hubChunksKey, hubQueueKey } from '../query-keys';
 
 /** Promote a not-ready chunk to ready — the board's counterpart of `blizzard hub promote`. */
@@ -19,6 +20,7 @@ export interface PromoteVars {
 export function injectPromoteChunkMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: promoteChunkMutationKey,
     mutationFn: async (vars: PromoteVars): Promise<void> => {
       const { error } = await promoteChunkApiChunksChunkIdPromotePost({
         path: { chunk_id: vars.chunkId },
@@ -26,11 +28,12 @@ export function injectPromoteChunkMutation() {
       });
       if (error) throw error;
     },
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: hubChunksKey });
-      void queryClient.invalidateQueries({ queryKey: hubQueueKey });
-      void queryClient.invalidateQueries({ queryKey: hubBacklogKey });
-      void queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) });
-    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubChunksKey }),
+        queryClient.invalidateQueries({ queryKey: hubQueueKey }),
+        queryClient.invalidateQueries({ queryKey: hubBacklogKey }),
+        queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) }),
+      ]),
   }));
 }

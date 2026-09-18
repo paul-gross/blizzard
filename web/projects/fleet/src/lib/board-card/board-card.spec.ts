@@ -17,6 +17,7 @@ const BASE: BoardCard = {
   blockedOn: null,
   blockedCount: 0,
   blockedOnStatus: null,
+  promotePending: false,
 };
 
 async function render(card: BoardCard) {
@@ -188,5 +189,33 @@ describe('BoardCardComponent blocked marking (issue #461)', () => {
 
     expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('running');
     expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('build');
+  });
+});
+
+describe('BoardCardComponent Promote pending state (Part A — per-card mutation scope)', () => {
+  /** Renders a not-ready, control-permitted card — the one status/permission
+   * combination that renders the Promote button at all. */
+  async function renderNotReady(promotePending: boolean): Promise<HTMLElement> {
+    await TestBed.configureTestingModule({
+      imports: [BoardCardComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(BoardCardComponent);
+    fixture.componentRef.setInput('card', { ...BASE, status: 'not_ready', promotePending });
+    fixture.componentRef.setInput('canControl', true);
+    await fixture.whenStable();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it("disables Promote off the card's own promotePending, a plain input this component injects nothing to compute", async () => {
+    const el = await renderNotReady(true);
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.disabled).toBe(true);
+  });
+
+  it('leaves Promote enabled when the card carries no pending promote', async () => {
+    const el = await renderNotReady(false);
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.disabled).toBe(false);
   });
 });

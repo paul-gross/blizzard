@@ -117,6 +117,17 @@ export class GardeningScopeDetail {
   /** Set on a failed edit/retire/enable; cleared at the start of the next attempt. */
   protected readonly scopeActionError = signal<string | null>(null);
 
+  /** Whether the edit-description mutation is in flight for this scope, threaded to
+   * {@link FleetScopePanel}'s Set button (`graph-detail.ts`'s own `.isPending()`
+   * shape, transliterated to scopes). */
+  protected readonly editPending = computed(() => this.editScopeMutation.isPending());
+
+  /** Whether the retire/enable mutation is in flight for this scope, threaded to
+   * {@link FleetScopePanel}'s Re-enable/Retire buttons — only one of the two is ever
+   * shown for the scope's current lifecycle state, so disabling both while either is
+   * in flight is correct. */
+  protected readonly lifecyclePending = computed(() => this.scopeLifecycleMutation.isPending());
+
   protected onEditScopeDescription(event: ScopeDescriptionEditEvent): void {
     this.scopeActionError.set(null);
     this.editScopeMutation.mutate(event, {

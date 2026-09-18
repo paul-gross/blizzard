@@ -41,6 +41,26 @@ export class RunnerPanelView {
    * holds every permission, so the brake renders exactly as before. */
   readonly canPause = input(false);
 
+  /** The runner ids whose hub pause/resume mutation the container's shared
+   * `pauseMutation` is currently in flight for (`injectPendingMutationVariables`) — a
+   * plain id list rather than a field folded onto {@link RunnerRow} itself, since that
+   * type is `injectRunnerRows()`'s own shared fold and reused by the mobile Fleet
+   * view, which carries no pause-pending concept of its own. Scoping the toggle's
+   * `disabled` state to this list is what keeps a sibling row's button enabled while
+   * only the row that was clicked disables — the one `pauseMutation` instance fires
+   * once per row, so its bare `isPending()` would freeze every row alike. */
+  readonly pendingRunnerIds = input<readonly string[]>([]);
+
+  /** The panel's last pause/resume failure, or `null` — rendered as a visible inline
+   * notice near the registry (issue #42's "report, don't swallow"). */
+  readonly actionError = input<string | null>(null);
+
+  /** Whether `row`'s own hub pause/resume mutation is in flight — the per-row
+   * membership check against {@link pendingRunnerIds}. */
+  protected isPausePending(row: RunnerRow): boolean {
+    return this.pendingRunnerIds().includes(row.runner_id);
+  }
+
   /** A claim's badge tone, read straight off `chunk-lanes.ts`'s `STATUS_TONE` — the
    * single owner of the status→tone fold the board card colors from too (issue #156).
    * No local table: a claim's color and its card's can never drift apart. */

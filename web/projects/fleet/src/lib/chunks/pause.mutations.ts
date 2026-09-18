@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { pauseChunkApiChunksChunkIdPausePost, resumeChunkApiChunksChunkIdResumePost } from '../api/hub';
+import { chunkPauseMutationKey } from '../mutation-keys';
 import { hubChunkKey, hubChunksKey, hubQueueKey } from '../query-keys';
 
 /** Toggle a chunk's operator pause brake (issue #46): pausing holds the claim, kills
@@ -24,6 +25,7 @@ export interface ChunkPauseVars {
 export function injectChunkPauseMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: chunkPauseMutationKey,
     mutationFn: async (vars: ChunkPauseVars): Promise<void> => {
       const call = vars.paused ? pauseChunkApiChunksChunkIdPausePost : resumeChunkApiChunksChunkIdResumePost;
       const { error } = await call({
@@ -33,10 +35,11 @@ export function injectChunkPauseMutation() {
       });
       if (error) throw error;
     },
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: hubChunksKey });
-      void queryClient.invalidateQueries({ queryKey: hubQueueKey });
-      void queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) });
-    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubChunksKey }),
+        queryClient.invalidateQueries({ queryKey: hubQueueKey }),
+        queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) }),
+      ]),
   }));
 }

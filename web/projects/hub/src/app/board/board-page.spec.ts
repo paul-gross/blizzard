@@ -7,7 +7,8 @@ import { Router, provideRouter, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { BoardShell, compactRef, hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { vi } from 'vitest';
 
 import { BoardPage } from './board-page';
 
@@ -286,6 +287,63 @@ describe('BoardPage', () => {
       expect(el.querySelectorAll(`[data-chunk="${BACKLOG}"]`)).toHaveLength(1);
       // No error surfaces anywhere on the board from the withheld read.
       expect(el.querySelector('[data-testid="board-error"]')).toBeNull();
+    });
+  });
+
+  /*
+   * Part A conformance: one `promoteChunk` mutation instance fires once per
+   * promoted card, so "disabled while pending" must scope to the card whose own
+   * mutation is in flight — a sibling card's Promote button must stay clickable.
+   */
+  describe('Promote per-card pending scope (Part A)', () => {
+    /** The Promote button on a backlog card, or `undefined` if the card carries none. */
+    const promoteButton = (el: HTMLElement, chunkId: string): HTMLButtonElement | null | undefined =>
+      card(el, chunkId).querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]');
+
+    it("disables only the clicked card's Promote button while its mutation is pending, re-enabling once it settles", async () => {
+      const { el, harness } = await open();
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+
+      promoteButton(el, BACKLOG)?.click();
+      // Held open by the `invalidateQueries` spy above — `settle()`'s own
+      // `whenStable()` would hang on it, so a bare macrotask tick + a manual
+      // `detectChanges()` stands in, the same idiom `status.query.spec.ts` uses
+      // for the same reason.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+
+      // The clicked card disables…
+      expect(promoteButton(el, BACKLOG)?.disabled).toBe(true);
+      // …but the sibling backlog card's own Promote stays clickable — the two
+      // fire the same `promoteChunk` mutation instance with different variables.
+      expect(promoteButton(el, BACKLOG_NEXT)?.disabled).toBe(false);
+
+      resolveInvalidate();
+      await settle(harness.fixture);
+
+      expect(promoteButton(el, BACKLOG)?.disabled).toBe(false);
+    });
+
+    it("reports a promote failure through the board's visible error slot", async () => {
+      stub.restore();
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'POST' && path === `/api/chunks/${BACKLOG}/promote`) {
+          return stubError(409, { detail: 'chunk already ready' });
+        }
+        return hubRoutes()(method, path);
+      });
+      const { el, harness } = await open();
+
+      promoteButton(el, BACKLOG)?.click();
+      await settle(harness.fixture);
+
+      expect(el.querySelector('[data-testid="board-action-error"]')?.textContent).toBe('chunk already ready');
+      // Promote's own failure never disables a card that never fired it.
+      expect(promoteButton(el, BACKLOG_NEXT)?.disabled).toBe(false);
     });
   });
 

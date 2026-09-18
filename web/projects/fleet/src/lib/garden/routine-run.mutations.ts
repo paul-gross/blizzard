@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { type RoutineRunResponse, runRoutineApiRoutinesRoutineIdRunPost } from '../api/hub';
+import { runRoutineMutationKey } from '../mutation-keys';
 import { hubRoutinesKey } from '../query-keys';
 
 /** Kick off a routine run — the gardening run dialog's own submission. The
@@ -26,6 +27,7 @@ export interface RoutineRunVars {
 export function injectRunRoutineMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: runRoutineMutationKey,
     mutationFn: async (vars: RoutineRunVars): Promise<RoutineRunResponse> => {
       const { data, error } = await runRoutineApiRoutinesRoutineIdRunPost({
         path: { routine_id: vars.routineId },
@@ -35,8 +37,6 @@ export function injectRunRoutineMutation() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: hubRoutinesKey });
-    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: hubRoutinesKey }),
   }));
 }

@@ -53,6 +53,7 @@
                 class="chip primary"
                 data-testid="decision-choice"
                 [title]="c.description"
+                [disabled]="resolvePending()"
                 (click)="resolve(d.decision_id, c.name)"
               >
                 {{ c.name }}

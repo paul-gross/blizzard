@@ -307,6 +307,26 @@ describe('ChunkAwaitingHuman', () => {
     expect(emitted?.struck).toEqual(['wip_01']);
   });
 
+  it('disables the gate choice chips while the resolve mutation is pending, re-enabling once it settles', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);
+    fixture.componentRef.setInput('canResolve', true);
+    fixture.componentRef.setInput('resolvePending', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    for (const button of el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')) {
+      expect(button.disabled).toBe(true);
+    }
+
+    fixture.componentRef.setInput('resolvePending', false);
+    await fixture.whenStable();
+
+    for (const button of el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')) {
+      expect(button.disabled).toBe(false);
+    }
+  });
+
   it('keeps an answered question visible with its trail instead of dropping it (issue #165)', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', ANSWERED_UNDELIVERED_DETAIL);

@@ -238,6 +238,59 @@ describe('RunnerPanelView', () => {
     expect(el.querySelector('[data-testid="runner-toggle"]')).toBeNull();
   });
 
+  describe('pause/resume pending state (Part A — per-row mutation scope)', () => {
+    it("disables only the pending row's own toggle, off pendingRunnerIds — a sibling stays enabled", async () => {
+      const fixture = TestBed.createComponent(RunnerPanelView);
+      fixture.componentRef.setInput('state', 'ready');
+      fixture.componentRef.setInput('rows', [row('rn_a'), row('rn_b')]);
+      fixture.componentRef.setInput('canPause', true);
+      fixture.componentRef.setInput('pendingRunnerIds', ['rn_a']);
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector<HTMLButtonElement>('[data-runner="rn_a"] [data-testid="runner-toggle"]')?.disabled).toBe(
+        true,
+      );
+      expect(el.querySelector<HTMLButtonElement>('[data-runner="rn_b"] [data-testid="runner-toggle"]')?.disabled).toBe(
+        false,
+      );
+    });
+
+    it('leaves every toggle enabled when pendingRunnerIds is empty', async () => {
+      const fixture = TestBed.createComponent(RunnerPanelView);
+      fixture.componentRef.setInput('state', 'ready');
+      fixture.componentRef.setInput('rows', [row('rn_a')]);
+      fixture.componentRef.setInput('canPause', true);
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector<HTMLButtonElement>('[data-testid="runner-toggle"]')?.disabled).toBe(false);
+    });
+  });
+
+  describe('actionError (Part A — visible failure slot)', () => {
+    it('renders a carried actionError near the registry', async () => {
+      const fixture = TestBed.createComponent(RunnerPanelView);
+      fixture.componentRef.setInput('state', 'ready');
+      fixture.componentRef.setInput('rows', []);
+      fixture.componentRef.setInput('actionError', 'Pause failed.');
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="runner-action-error"]')?.textContent).toBe('Pause failed.');
+    });
+
+    it('renders nothing when actionError is null', async () => {
+      const fixture = TestBed.createComponent(RunnerPanelView);
+      fixture.componentRef.setInput('state', 'ready');
+      fixture.componentRef.setInput('rows', []);
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="runner-action-error"]')).toBeNull();
+    });
+  });
+
   describe('seenLabel (bzh:utc-instants)', () => {
     const REF = Date.parse('2026-07-16T12:00:00.000Z');
 

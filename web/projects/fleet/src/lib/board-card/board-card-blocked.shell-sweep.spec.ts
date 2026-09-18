@@ -35,6 +35,7 @@ const BASE: BoardCard = {
   blockedOn: null,
   blockedCount: 0,
   blockedOnStatus: null,
+  promotePending: false,
 };
 
 // 800 (wider than any real board column) and 390/320 (the phone pair

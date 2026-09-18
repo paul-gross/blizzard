@@ -235,6 +235,38 @@ describe('ChunkDetailHeader', () => {
     expect(emitted).toBe(false);
   });
 
+  it('disables Pause while the pause mutation is pending, re-enabling once it settles', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('pausePending', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(true);
+
+    fixture.componentRef.setInput('pausePending', false);
+    await fixture.whenStable();
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(false);
+  });
+
+  it('disables Resume while the pause mutation is pending, re-enabling once it settles', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', pausedDetail('paused'));
+    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('pausePending', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.disabled).toBe(true);
+
+    fixture.componentRef.setInput('pausePending', false);
+    await fixture.whenStable();
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.disabled).toBe(false);
+  });
+
   it('emits nothing when the operator declines the resume confirm', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', pausedDetail('paused'));

@@ -54,6 +54,13 @@ export class FleetScopePanel {
   /** Set on a failed edit/retire/enable; rendered beside the controls that raise it. */
   readonly actionError = input<string | null>(null);
 
+  /** Whether the edit-description mutation is in flight — disables the Set button. */
+  readonly editPending = input(false);
+
+  /** Whether the retire/enable mutation is in flight — disables both Re-enable and
+   * Retire, since only one is ever shown for this scope's current lifecycle state. */
+  readonly lifecyclePending = input(false);
+
   readonly editDescription = output<ScopeDescriptionEditEvent>();
   readonly retire = output<string>();
   readonly enable = output<string>();

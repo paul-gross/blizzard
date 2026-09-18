@@ -151,6 +151,25 @@ describe('BoardShell', () => {
     expect(promoted).toBe('ch_01notready00000000000000000');
   });
 
+  it("disables only the pending card's own Promote button, off pendingPromoteChunkIds — a sibling stays enabled (Part A)", async () => {
+    const chunks: ChunkSummary[] = [
+      { chunk_id: 'ch_01notready1a000000000000000', graph_id: 'gr_1', status: 'not_ready', current_node_id: 'nd_build', work_refs: [] },
+      { chunk_id: 'ch_01notready2b000000000000000', graph_id: 'gr_1', status: 'not_ready', current_node_id: 'nd_build', work_refs: [] },
+    ];
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('pendingPromoteChunkIds', ['ch_01notready1a000000000000000']);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const pendingCard = el.querySelector('[data-chunk="ch_01notready1a000000000000000"]');
+    const siblingCard = el.querySelector('[data-chunk="ch_01notready2b000000000000000"]');
+    expect(pendingCard?.querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.disabled).toBe(true);
+    expect(siblingCard?.querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.disabled).toBe(false);
+  });
+
   it('withholds Promote without chunk:control', async () => {
     const chunks: ChunkSummary[] = [
       { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', current_node_id: 'nd_build', work_refs: [] },

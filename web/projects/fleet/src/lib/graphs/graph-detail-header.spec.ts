@@ -4,7 +4,12 @@ import { TestBed } from '@angular/core/testing';
 import { GraphDetailHeader } from './graph-detail-header';
 
 describe('GraphDetailHeader', () => {
-  async function mount(inputs: { graphId?: string; retired?: boolean; canEdit?: boolean }) {
+  async function mount(inputs: {
+    graphId?: string;
+    retired?: boolean;
+    canEdit?: boolean;
+    lifecyclePending?: boolean;
+  }) {
     await TestBed.configureTestingModule({
       imports: [GraphDetailHeader],
       providers: [provideZonelessChangeDetection()],
@@ -13,6 +18,7 @@ describe('GraphDetailHeader', () => {
     fixture.componentRef.setInput('graphId', inputs.graphId ?? 'gr_build_v2');
     fixture.componentRef.setInput('retired', inputs.retired ?? false);
     fixture.componentRef.setInput('canEdit', inputs.canEdit ?? true);
+    fixture.componentRef.setInput('lifecyclePending', inputs.lifecyclePending ?? false);
     await fixture.whenStable();
     return fixture;
   }
@@ -52,6 +58,30 @@ describe('GraphDetailHeader', () => {
 
     expect(el.querySelector('[data-testid="graph-detail-retire"]')).toBeNull();
     expect(el.querySelector('[data-testid="graph-detail-enable"]')).toBeNull();
+  });
+
+  it('disables Retire while the lifecycle mutation is pending, re-enabling once it settles', async () => {
+    const fixture = await mount({ retired: false, lifecyclePending: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.disabled).toBe(true);
+
+    fixture.componentRef.setInput('lifecyclePending', false);
+    await fixture.whenStable();
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.disabled).toBe(false);
+  });
+
+  it('disables Enable while the lifecycle mutation is pending, re-enabling once it settles', async () => {
+    const fixture = await mount({ retired: true, lifecyclePending: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-enable"]')?.disabled).toBe(true);
+
+    fixture.componentRef.setInput('lifecyclePending', false);
+    await fixture.whenStable();
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-enable"]')?.disabled).toBe(false);
   });
 
   it('emits retire with the graph id once the operator confirms', async () => {

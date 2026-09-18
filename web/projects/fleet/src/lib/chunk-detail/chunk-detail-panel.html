@@ -2,6 +2,10 @@
   <fleet-chunk-detail-header
     [detail]="detail()"
     [canControl]="canControl()"
+    [pausePending]="pausePending()"
+    [detachPending]="detachPending()"
+    [completePending]="completePending()"
+    [deletePending]="deletePending()"
     (dismiss)="dismiss.emit()"
     (detach)="detach.emit($event)"
     (pauseChunk)="pauseChunk.emit($event)"
@@ -33,6 +37,7 @@
         [detail]="detail()"
         [canAnswer]="canAnswer()"
         [canResolve]="canResolve()"
+        [resolvePending]="resolvePending()"
         (answerQuestion)="answerQuestion.emit($event)"
         (resolveDecision)="resolveDecision.emit($event)"
       />

@@ -100,6 +100,22 @@ export class ChunkDetailPanel {
    * issue #210), forwarded to {@link ChunkAwaitingHuman}. */
   readonly canResolve = input(false);
 
+  /** Whether the pause/resume mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
+  readonly pausePending = input(false);
+
+  /** Whether the detach mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
+  readonly detachPending = input(false);
+
+  /** Whether the complete mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
+  readonly completePending = input(false);
+
+  /** Whether the delete mutation is in flight, forwarded to {@link ChunkDetailHeader}. */
+  readonly deletePending = input(false);
+
+  /** Whether the resolve-decision mutation is in flight, forwarded to
+   * {@link ChunkAwaitingHuman}. */
+  readonly resolvePending = input(false);
+
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 

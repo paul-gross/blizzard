@@ -139,6 +139,23 @@ describe('ChunkDetailHeader overflow menu', () => {
     expect(emitted).toBe(false);
   });
 
+  it('disables Detach while the detach mutation is pending, re-enabling once it settles', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('detachPending', true);
+    const el = fixture.nativeElement as HTMLElement;
+    await fixture.whenStable();
+    await openMenu(fixture, el);
+
+    expect(inOverlay('[data-testid="detach-chunk"]')?.getAttribute('aria-disabled')).toBe('true');
+
+    fixture.componentRef.setInput('detachPending', false);
+    await fixture.whenStable();
+
+    expect(inOverlay('[data-testid="detach-chunk"]')?.getAttribute('aria-disabled')).not.toBe('true');
+  });
+
   it('still shows a Detach item for a needs_human chunk that still carries a live route (not requeue)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ESCALATED_ROUTED_DETAIL);
@@ -198,6 +215,23 @@ describe('ChunkDetailHeader overflow menu', () => {
     await openMenu(fixture, el);
 
     expect(inOverlay('[data-testid="complete-chunk"]')?.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('disables Complete while the complete mutation is pending, re-enabling once it settles', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('completePending', true);
+    const el = fixture.nativeElement as HTMLElement;
+    await fixture.whenStable();
+    await openMenu(fixture, el);
+
+    expect(inOverlay('[data-testid="complete-chunk"]')?.getAttribute('aria-disabled')).toBe('true');
+
+    fixture.componentRef.setInput('completePending', false);
+    await fixture.whenStable();
+
+    expect(inOverlay('[data-testid="complete-chunk"]')?.getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it('emits complete with the chunk id once the operator confirms', async () => {
@@ -283,6 +317,23 @@ describe('ChunkDetailHeader overflow menu', () => {
 
       expect(inOverlay('[data-testid="delete-chunk"]')?.getAttribute('aria-disabled'), status).toBe('true');
     }
+  });
+
+  it('disables Delete while the delete mutation is pending, re-enabling once it settles', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'ready' });
+    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('deletePending', true);
+    const el = fixture.nativeElement as HTMLElement;
+    await fixture.whenStable();
+    await openMenu(fixture, el);
+
+    expect(inOverlay('[data-testid="delete-chunk"]')?.getAttribute('aria-disabled')).toBe('true');
+
+    fixture.componentRef.setInput('deletePending', false);
+    await fixture.whenStable();
+
+    expect(inOverlay('[data-testid="delete-chunk"]')?.getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it('emits delete with the chunk id once the operator confirms', async () => {

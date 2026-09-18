@@ -73,6 +73,7 @@
         class="card-promote"
         data-testid="promote-chunk"
         [attr.aria-label]="'Promote chunk ' + card().shortId + ' to ready'"
+        [disabled]="card().promotePending"
         (click)="promote.emit(card().chunkId)"
       >
         PROMOTE

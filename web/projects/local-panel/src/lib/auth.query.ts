@@ -2,6 +2,7 @@ import { inject, signal } from '@angular/core';
 import { injectMutation, injectQuery, QueryClient } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
+import { runnerLogoutMutationKey } from './mutation-keys';
 import { runnerSessionKey } from './query-keys';
 
 const logoutInFlightSignal = signal(false);
@@ -70,14 +71,15 @@ export function signedInUsername(session: runnerApi.RunnerAuthSessionView | unde
 export function injectRunnerLogoutMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: runnerLogoutMutationKey,
     mutationFn: async (): Promise<void> => {
       const { error } = await runnerApi.logoutApiAuthLogoutPost({ throwOnError: false });
       if (error) throw error;
     },
     onMutate: () => logoutInFlightSignal.set(true),
-    onSettled: () => logoutInFlightSignal.set(false),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: runnerSessionKey });
+    onSettled: () => {
+      logoutInFlightSignal.set(false);
+      return queryClient.invalidateQueries({ queryKey: runnerSessionKey });
     },
   }));
 }

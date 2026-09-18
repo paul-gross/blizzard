@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { logoutApiAuthLogoutPost } from '../api/hub';
+import { logoutMutationKey } from '../mutation-keys';
 import { hubMeKey } from '../query-keys';
 
 /**
@@ -16,12 +17,11 @@ import { hubMeKey } from '../query-keys';
 export function injectLogoutMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: logoutMutationKey,
     mutationFn: async (): Promise<void> => {
       const { error } = await logoutApiAuthLogoutPost({ throwOnError: false });
       if (error) throw error;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: hubMeKey });
-    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: hubMeKey }),
   }));
 }

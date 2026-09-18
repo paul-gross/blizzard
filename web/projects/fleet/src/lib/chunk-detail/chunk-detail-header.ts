@@ -83,6 +83,21 @@ export class ChunkDetailHeader {
    * same convention). */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
+  /** Whether the pause/resume mutation is in flight — disables whichever of
+   * Pause/Resume is currently shown so a double click cannot fire it twice. */
+  readonly pausePending = input(false);
+
+  /** Whether the detach mutation is in flight — disables the Detach menu item. */
+  readonly detachPending = input(false);
+
+  /** Whether the complete mutation is in flight — combined with {@link completable}
+   * to disable the Complete menu item. */
+  readonly completePending = input(false);
+
+  /** Whether the delete mutation is in flight — combined with {@link deleteDisabled}
+   * to disable the Delete menu item. */
+  readonly deletePending = input(false);
+
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 

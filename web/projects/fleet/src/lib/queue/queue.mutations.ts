@@ -7,6 +7,7 @@ import {
   repositionBacklogApiBacklogPositionPost,
   repositionQueueApiQueuePositionPost,
 } from '../api/hub';
+import { repositionBacklogMutationKey, repositionQueueMutationKey } from '../mutation-keys';
 import { hubBacklogKey, hubChunksKey, hubQueueKey } from '../query-keys';
 
 /** Move a chunk to sit immediately after `afterChunkId` — `null` is the very top
@@ -32,6 +33,7 @@ export interface RepositionVars {
 export function injectRepositionQueueMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: repositionQueueMutationKey,
     mutationFn: async (vars: RepositionVars): Promise<QueuePeekResponse> => {
       const { data, error } = await repositionQueueApiQueuePositionPost({
         body: { chunk_id: vars.chunkId, after_chunk_id: vars.afterChunkId },
@@ -40,10 +42,11 @@ export function injectRepositionQueueMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: hubQueueKey });
-      void queryClient.invalidateQueries({ queryKey: hubChunksKey });
-    },
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubQueueKey }),
+        queryClient.invalidateQueries({ queryKey: hubChunksKey }),
+      ]),
   }));
 }
 
@@ -59,6 +62,7 @@ export function injectRepositionQueueMutation() {
 export function injectRepositionBacklogMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: repositionBacklogMutationKey,
     mutationFn: async (vars: RepositionVars): Promise<BacklogPeekResponse> => {
       const { data, error } = await repositionBacklogApiBacklogPositionPost({
         body: { chunk_id: vars.chunkId, after_chunk_id: vars.afterChunkId },
@@ -67,9 +71,10 @@ export function injectRepositionBacklogMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: hubBacklogKey });
-      void queryClient.invalidateQueries({ queryKey: hubChunksKey });
-    },
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubBacklogKey }),
+        queryClient.invalidateQueries({ queryKey: hubChunksKey }),
+      ]),
   }));
 }
