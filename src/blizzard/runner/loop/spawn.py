@@ -39,6 +39,10 @@ _log = get_logger("blizzard.runner.loop")
 
 # The lease-mint -> spawn -> record window is the orphan-lease window REAP must absorb.
 _CP_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease minted; worker not spawned")
+# The transcript invocation boundary (blizzard#437 D6): a genuinely new pre-launch write.
+_CP_AFTER_BOUNDARY = crashpoint(
+    "spawn.after-boundary-record.before-spawn", "spawn invocation boundary durable; worker not yet launched"
+)
 # The two-phase spawn's three windows (D1/D2), each bracketing a durable write.
 _CP_AFTER_LAUNCH = crashpoint(
     "spawn.after-launch.before-provisional-record", "worker process launched; provisional ownership not yet durable"
@@ -156,6 +160,19 @@ class Spawner:
             node_name=envelope.node.node_name,
             resume=resumed,
         )
+        # The invocation boundary (blizzard#437 D6/D11), durable BEFORE launch — a fresh
+        # session opens on the beginning sentinel; no `tail_position` read is possible yet.
+        self.ctx.stores.invocation_boundaries.record_boundary_open(
+            lease_id=lease.lease_id,
+            chunk_id=chunk_id,
+            node_id=envelope.node.node_id,
+            epoch=lease.epoch,
+            generation=self.generation(lease.lease_id),
+            kind="spawn",
+            start_position=None,
+            opened_at=now,
+        )
+        _CP_AFTER_BOUNDARY.reached()
         # Observed before the spawn: a hang or raise here costs only this generation's
         # `harness_version` observation, never runs after the worker is already live and unrecorded.
         version = harness.observe_version()

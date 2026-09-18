@@ -443,6 +443,29 @@ def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Pat
     assert _has_table()
 
 
+def test_invocation_boundaries_table_survives_migration_roundtrip(tmp_path: Path) -> None:
+    """The transcript invocation-boundary ledger (blizzard#437 D6/D11) — downgrades to this
+    revision's own parent by id, so the drop half is asserted rather than inferred from a
+    revision marker, which a ``downgrade()`` that dropped nothing would satisfy just as well."""
+    config = runner_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = runner_runtime.migration_runner(config)
+
+    def _has_table() -> bool:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return "invocation_boundaries" in sa.inspect(engine).get_table_names()
+        finally:
+            engine.dispose()
+
+    assert _has_table()
+
+    runner.downgrade("20260917_1200_elicitation_process_group")
+    assert not _has_table()
+
+    runner.upgrade("head")
+    assert _has_table()
+
+
 def test_external_usage_samples_slug_backfills_the_legacy_anthropic_slug(tmp_path: Path) -> None:
     """``external_usage_samples.slug`` (blizzard#436 phase 2) backfills a pre-existing row
     to the legacy Anthropic slug, and downgrading past it drops the column again."""

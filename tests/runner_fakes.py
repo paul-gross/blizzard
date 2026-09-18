@@ -64,6 +64,7 @@ from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
 from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
 from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
 from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
@@ -128,12 +129,13 @@ class SqlAlchemyRunnerStore(
     CheckStore,
     GraphArtifactStore,
     ElicitationStore,
+    InvocationBoundaryStore,
 ):
     """The flat, every-concept-at-once runner store — test support only (D3, blizzard#410):
     production composes the extracted concept adapters individually via
     :func:`~blizzard.runner.composition.build_stores`, never this class. Kept here because a
     test fixture wants one object standing in for every concept at once, structurally
-    satisfying every one of the seventeen concept Protocols by inheritance."""
+    satisfying every one of the eighteen concept Protocols by inheritance."""
 
     def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
         store = RunnerStoreConnections(engine, errors)
@@ -157,6 +159,7 @@ class SqlAlchemyRunnerStore(
         CheckStore.__init__(self, store)
         GraphArtifactStore.__init__(self, store)
         ElicitationStore.__init__(self, store)
+        InvocationBoundaryStore.__init__(self, store)
         self._engine = engine
         self._errors = errors
 
@@ -236,6 +239,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         checks=store,
         graph_artifacts=store,
         elicitations=store,
+        invocation_boundaries=store,
     )
 
 

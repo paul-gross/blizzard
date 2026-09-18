@@ -15,6 +15,7 @@ from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import FAILED, Attempt
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
@@ -157,11 +158,43 @@ class Judgement:
             self.ctx.stores.checks.record_nudge_fired(
                 lease_id=lease.lease_id, epoch=lease.epoch, at=self.ctx.clock.now()
             )
+            # The nudge's own boundary (D5/D6), riding `record_nudge_fired`'s own
+            # pre-resume transaction — no new window, so no new crash point brackets it.
+            if lease.session is not None:
+                self.ctx.stores.invocation_boundaries.record_boundary_open(
+                    lease_id=lease.lease_id,
+                    chunk_id=lease.chunk_id,
+                    node_id=lease.node_id,
+                    epoch=lease.epoch,
+                    generation=Spawner(self.ctx).generation(lease.lease_id),
+                    kind="nudge",
+                    start_position=self._current_tail_position(lease.session),
+                    opened_at=self.ctx.clock.now(),
+                )
             _CP_NUDGE_AFTER_FIRED_FACT.reached()
             DormantSession(self.ctx, lease).resume_on_unmet_produces(produces.nudge_message(missing), self.bindings)
             return
 
         self._launch()
+
+    def _current_tail_position(self, session: SessionReference) -> str | None:
+        """This session's transcript tail, right now, as a boundary's ``start_position``
+        (blizzard#437 D6) — ``None`` (the beginning sentinel) when the source cannot be
+        resolved or the transcript cannot be read, the conservative fallback shared with
+        :meth:`DormantSession._current_tail_position`: recovery reads more than strictly
+        needed rather than less, and dedups by message id (D7)."""
+        spawn_cwd = SpawnCwd(self.ctx.config.workspace_root, self.bindings[0].workdir if self.bindings else None).path
+        try:
+            source = self.ctx.transcript_source_for(session)
+        except (UnknownHarnessError, UnavailableHarnessError) as exc:
+            _log.info(
+                "invocation boundary tail read blocked by unavailable harness transcript source",
+                harness_id=session.harness_id,
+                detail=str(exc),
+            )
+            return None
+        position = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
+        return position.token if position is not None else None
 
     def collect(self, elicitation: ElicitationRecord) -> None:
         """Poll this lease's in-flight elicitation; once its process has exited, read its
@@ -308,6 +341,19 @@ class Judgement:
         self.ctx.stores.elicitations.record_elicitation_launch(
             lease.lease_id, lease.epoch, output_path=output_path, at=self.ctx.clock.now()
         )
+        # The judgement's own boundary (D6), riding `record_elicitation_launch`'s own
+        # pre-launch write. Keyed by the CURRENT generation — a judgement mints no new one.
+        if lease.session is not None:
+            self.ctx.stores.invocation_boundaries.record_boundary_open(
+                lease_id=lease.lease_id,
+                chunk_id=lease.chunk_id,
+                node_id=lease.node_id,
+                epoch=lease.epoch,
+                generation=self.ctx.stores.liveness.lease_generation(lease.lease_id),
+                kind="judge",
+                start_position=self._current_tail_position(lease.session),
+                opened_at=self.ctx.clock.now(),
+            )
         _CP_ELICIT_AFTER_RECORD.reached()
         self._elicit(output_path)
         _CP_ELICIT_AFTER_LAUNCH.reached()

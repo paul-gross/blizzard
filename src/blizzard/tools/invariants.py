@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import Connection, Engine, func, select
+from sqlalchemy import Connection, Engine, and_, func, select
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
@@ -361,6 +361,29 @@ class UsageAttributedOnce(QueryCheck):
                     )
                 )
         return violations
+
+
+class InvocationBoundaryClosedWhenLeaseClosed(QueryCheck):
+    """Every invocation boundary a closed lease ever opened is itself closed (blizzard#437
+    D11, ``bzh:open-facts-declare-closure``) — no lease_id may own a still-open boundary
+    once its own closure fact is durable; `Attempt.close` is the one funnel every closure
+    path shares, so a hub-terminal chunk closes its boundaries the same as any other."""
+
+    def run(self) -> list[Violation]:
+        closed_leases = {row[0] for row in self.conn.execute(select(runner.lease_closures.c.lease_id))}
+        stmt = select(runner.invocation_boundaries.c.lease_id, runner.invocation_boundaries.c.kind).where(
+            and_(
+                runner.invocation_boundaries.c.lease_id.in_(closed_leases),
+                runner.invocation_boundaries.c.closed_at.is_(None),
+            )
+        )
+        return [
+            Violation(
+                "runner:invocation-boundary-closed-when-lease-closed",
+                f"lease {row.lease_id} is closed but its {row.kind} invocation boundary is still open",
+            )
+            for row in self.conn.execute(stmt)
+        ]
 
 
 class NudgeAtMostOnce(QueryCheck):
@@ -833,6 +856,7 @@ class RunnerInvariants:
                 UsageAttributedOnce(conn),
                 NudgeAtMostOnce(conn),
                 ChecksRecordedWhenMarked(conn),
+                InvocationBoundaryClosedWhenLeaseClosed(conn),
             )
             for check in checks:
                 violations.extend(check.run())

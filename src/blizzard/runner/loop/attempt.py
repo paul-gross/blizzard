@@ -470,6 +470,11 @@ class Attempt:
         transcript segment(s) before ``record_closure`` finalizes them (issue #246).
         ``closure_reason`` overrides what is recorded, never the published cause."""
         self._pump_lease_before_close()
+        # Every open invocation boundary closes here too (blizzard#437 D11), BEFORE
+        # `record_closure` — a crash between the two just retries this idempotent path.
+        self.ctx.stores.invocation_boundaries.close_boundaries_for_lease(
+            self.lease.lease_id, reason=closure_reason if closure_reason is not None else reason, at=at
+        )
         event_seq = self.ctx.stores.lease_record.record_closure(
             lease_id=self.lease.lease_id,
             chunk_id=self.lease.chunk_id,
