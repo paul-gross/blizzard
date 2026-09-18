@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import pathlib
 import signal
 import subprocess
 import sys
@@ -23,11 +24,15 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 
 
 def _is_alive(pid: int) -> bool:
+    """A SIGKILLed process lingers as an unreaped zombie that ``os.kill(pid, 0)`` still
+    reports alive — so a killed worker would read as a surviving one here. Read ``/proc``
+    state instead, the same way :class:`LinuxProcessProbe` does, so every assertion below
+    is sensitive to the kill it is written to catch."""
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
+        raw = pathlib.Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
         return False
-    return True
+    return raw[raw.rindex(")") + 2 :].split()[0] != "Z"
 
 
 def _launch(launcher: ProcessLauncher) -> LaunchedProcess:
