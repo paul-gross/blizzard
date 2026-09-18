@@ -312,6 +312,73 @@ describe('RunnerPanel', () => {
       expect(toggle(el, 'rn_online')?.disabled).toBe(false);
     });
 
+    // --- Pending hub_paused override (`bzh:frontend-pending-override`) -------------
+    //
+    // The hub brake is a plain fact this exact mutation sets directly
+    // (`domain/execution/pause.md`'s "each cleared only where it was set") — the
+    // mutation's own variables already name the requested value, so the override is
+    // total and needs no guessing.
+
+    it("renders the requested hub_paused while pausing rn_online is pending — a sibling row's own paused state is unaffected", async () => {
+      const fixture = TestBed.createComponent(RunnerPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+
+      toggle(el, 'rn_online')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      fixture.detectChanges();
+
+      // The clicked row renders paused ahead of the server confirming it…
+      expect(el.querySelector('[data-runner="rn_online"] [data-testid="runner-hub-paused"]')).not.toBeNull();
+      expect(toggle(el, 'rn_online')?.textContent?.trim()).toBe('Resume');
+      // …while a sibling row's own real hub_paused (already true, and not the one
+      // clicked) is untouched.
+      expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-hub-paused"]')).not.toBeNull();
+      expect(toggle(el, 'rn_paused')?.textContent?.trim()).toBe('Resume');
+
+      resolveInvalidate();
+      await settle(fixture);
+    });
+
+    it('reverts the hub_paused override to the real value on a rejected pause', async () => {
+      stub.restore();
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+        if (method === 'GET' && path === '/api/runners') return RUNNERS;
+        if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
+        if (path === '/api/runners/rn_online/pause') return stubError(409, { detail: 'runner already paused' });
+        return {};
+      });
+      const fixture = TestBed.createComponent(RunnerPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+
+      toggle(el, 'rn_online')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-runner="rn_online"] [data-testid="runner-hub-paused"]')).not.toBeNull();
+
+      resolveInvalidate();
+      await settle(fixture);
+
+      // Never a cache write, so the rejection needs nothing special to revert — the
+      // moment `isPending()` clears, the row falls back to the real (still-false)
+      // `hub_paused` on its own.
+      expect(el.querySelector('[data-runner="rn_online"] [data-testid="runner-hub-paused"]')).toBeNull();
+      expect(toggle(el, 'rn_online')?.textContent?.trim()).toBe('Pause');
+    });
+
     it("reports a pause failure through the panel's visible error slot", async () => {
       stub.restore();
       stub = stubRequestClient(hubClient, (method, path) => {

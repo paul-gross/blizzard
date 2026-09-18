@@ -11,11 +11,14 @@ import {
   injectHubScopeRoutinesQuery,
   injectHubScopesQuery,
   injectMeQuery,
+  injectPendingMutationVariables,
   injectScopeLifecycleMutation,
+  scopeLifecycleMutationKey,
   type KitAsyncStateValue,
   type RelatedRoutineVm,
   type RoutineView,
   type ScopeDescriptionEditEvent,
+  type ScopeLifecycleVars,
   type ScopePanelVm,
   type ScopeView,
 } from 'fleet';
@@ -59,6 +62,17 @@ export class GardeningScopeDetail {
   private readonly editScopeMutation = injectEditScopeMutation();
   private readonly scopeLifecycleMutation = injectScopeLifecycleMutation();
 
+  /** Every scope slug a Retire/Enable mutation is currently pending for, and its own
+   * variables (`bzh:frontend-pending-override`) — read through the shared helper
+   * rather than `scopeLifecycleMutation.isPending()` alone, since {@link
+   * overrideRetired} below needs the fired *direction* (`retired: true` vs.
+   * `false`), not just pending-ness (`chunk-detail.ts`'s own `pendingChunkPauses`
+   * shape). This pane shows exactly one scope at a time, so there is no sibling row
+   * to distinguish pending mutations by variables the way a list surface would —
+   * {@link lifecyclePending} below still reads the mutation's bare `isPending()` for
+   * that reason, `chunk-detail.ts`'s own `pausePending` shape. */
+  private readonly pendingScopeLifecycle = injectPendingMutationVariables<ScopeLifecycleVars>(scopeLifecycleMutationKey);
+
   private readonly routines = computed<readonly RoutineView[]>(() => this.routinesQuery.data() ?? []);
   private readonly scopes = computed<readonly ScopeView[]>(() => this.scopesQuery.data() ?? []);
 
@@ -96,6 +110,27 @@ export class GardeningScopeDetail {
     });
   });
 
+  /**
+   * The selected scope's `retired` flag as it will read once a currently pending
+   * Retire/Enable settles (`bzh:frontend-pending-override`) — `null` while nothing
+   * overrides `scope.retired`, computed purely off {@link pendingScopeLifecycle}'s
+   * own variables, never a cache read or write.
+   *
+   * **Total in both directions.** A scope's lifecycle carries exactly the two states
+   * `domain/routines-and-scopes.md`'s "The retired brake" section names — `retired`
+   * and enabled — with no third state or precedence rule complicating either
+   * transition (unlike `chunk-detail.ts`'s Pause, which a human-gated status can
+   * outrank): `retire` and `enable` are each reachable from the other unconditionally,
+   * so the fired direction is always the resulting one, the same strong case
+   * `graph-lifecycle.mutations.ts`'s own `retired` boolean rides.
+   */
+  protected readonly overrideRetired = computed<boolean | null>(() => {
+    const scope = this.selectedScope();
+    if (scope === null) return null;
+    const pending = this.pendingScopeLifecycle().find((vars) => vars.slug === scope.slug);
+    return pending ? pending.retired : null;
+  });
+
   /** The selected scope's panel view model. */
   protected readonly scopePanelVm = computed<ScopePanelVm | null>(() => {
     const scope = this.selectedScope();
@@ -103,7 +138,7 @@ export class GardeningScopeDetail {
     return {
       slug: scope.slug,
       description: scope.description,
-      retired: scope.retired ?? false,
+      retired: this.overrideRetired() ?? (scope.retired ?? false),
       relatedRoutines: this.relatedRoutines(),
     };
   });

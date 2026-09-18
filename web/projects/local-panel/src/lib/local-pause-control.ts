@@ -52,8 +52,24 @@ export class LocalPauseControl {
   private readonly pauseMutation = injectLocalPauseMutation();
 
   /** This runner's own brake — "I won't try". `false` before the first read
-   * resolves or on a malformed body, matching {@link LocalInfo}'s guard. */
-  protected readonly localPaused = computed<boolean>(() => this.dashboardQuery.data()?.runner?.pause?.local ?? false);
+   * resolves or on a malformed body, matching {@link LocalInfo}'s guard.
+   *
+   * While {@link pauseMutation} is pending, renders the *requested* value instead
+   * (`bzh:frontend-pending-override`), read straight off `pauseMutation.variables()`
+   * — the plain `boolean` this component's own single mutation was last called with,
+   * a signal `injectMutation` exposes directly, no `injectPendingMutationVariables`/
+   * `mutationKey` scoping needed since there is only one mutation instance and no
+   * sibling control sharing it. Total: this control's own PATCH sets `pause.local`
+   * directly and touches nothing else that could outrank it. Purely computed off the
+   * mutation's own variables, never a cache write, so a rejected flip reverts to the
+   * real `pause.local` for free the instant `isPending()` clears. */
+  protected readonly localPaused = computed<boolean>(() => {
+    if (this.pauseMutation.isPending()) {
+      const requested = this.pauseMutation.variables();
+      if (requested !== undefined) return requested;
+    }
+    return this.dashboardQuery.data()?.runner?.pause?.local ?? false;
+  });
 
   /** The hub's brake, as last mirrored by PULL — untouched by this control. */
   protected readonly hubPaused = computed<boolean>(() => this.dashboardQuery.data()?.runner?.pause?.hub ?? false);

@@ -9,6 +9,7 @@ describe('GraphDetailHeader', () => {
     retired?: boolean;
     canEdit?: boolean;
     lifecyclePending?: boolean;
+    overrideRetired?: boolean | null;
   }) {
     await TestBed.configureTestingModule({
       imports: [GraphDetailHeader],
@@ -19,6 +20,7 @@ describe('GraphDetailHeader', () => {
     fixture.componentRef.setInput('retired', inputs.retired ?? false);
     fixture.componentRef.setInput('canEdit', inputs.canEdit ?? true);
     fixture.componentRef.setInput('lifecyclePending', inputs.lifecyclePending ?? false);
+    fixture.componentRef.setInput('overrideRetired', inputs.overrideRetired ?? null);
     await fixture.whenStable();
     return fixture;
   }
@@ -121,5 +123,29 @@ describe('GraphDetailHeader', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
     expect(emitted).toBe('gr_build_v2');
+  });
+
+  // --- Pending lifecycle override (`bzh:frontend-pending-override`) ----------------
+
+  it('renders the retired badge while overrideRetired names true, even though the real retired is false', async () => {
+    const fixture = await mount({ retired: false, overrideRetired: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('retired');
+  });
+
+  it('renders the enabled badge while overrideRetired names false, even though the real retired is true', async () => {
+    const fixture = await mount({ retired: true, overrideRetired: false });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('enabled');
+  });
+
+  it('keeps the control keyed off the real retired, not the override — a pending retire still shows Retire, not Enable', async () => {
+    const fixture = await mount({ retired: false, overrideRetired: true, lifecyclePending: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-detail-retire"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="graph-detail-enable"]')).toBeNull();
   });
 });

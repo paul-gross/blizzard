@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { vi } from 'vitest';
 
 import { LocalPauseControl } from './local-pause-control';
 
@@ -133,6 +134,63 @@ describe('LocalPauseControl', () => {
     // still reads "Pause": the local brake never actually moved.
     expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-toggle"]')?.disabled).toBe(false);
     expect(el.querySelector('[data-testid="pause-toggle"]')?.textContent?.trim()).toBe('Pause');
+  });
+
+  // --- Pending local-pause override (`bzh:frontend-pending-override`) --------------
+  //
+  // The mutation's own `paused` variable *is* the target `pause.local` value it PATCHes
+  // — a plain fact this control's own PATCH sets directly — so the override is total.
+  // Every "held pending" assertion below spies on `queryClient.invalidateQueries` and
+  // returns a promise it controls, the same idiom `status.query.spec.ts`'s own pending
+  // assertion uses, since `onSettled` keeps `isPending()` true until the invalidation
+  // itself resolves.
+
+  it('renders the requested Resume label while a pause is pending, reverting to Pause on rejection', async () => {
+    const { fixture, stub: s } = await render({ local: false, hub: false }, stubError(409, { detail: 'already paused' }));
+    stub = s;
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-toggle"]')?.click();
+    // Held open by the `invalidateQueries` spy above — `settle()`'s own `whenStable()`
+    // would hang on it, so a bare macrotask tick + a manual `detectChanges()` stands in.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector('[data-testid="pause-toggle"]')?.textContent?.trim()).toBe('Resume');
+
+    resolveInvalidate();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="pause-toggle"]')?.textContent?.trim()).toBe('Pause');
+    expect(el.querySelector('[data-testid="pause-error"]')?.textContent).toContain('already paused');
+  });
+
+  it('renders the requested Pause label while a resume is pending, reverting to Resume on rejection', async () => {
+    const { fixture, stub: s } = await render({ local: true, hub: false }, stubError(409, { detail: 'already running' }));
+    stub = s;
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-toggle"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector('[data-testid="pause-toggle"]')?.textContent?.trim()).toBe('Pause');
+
+    resolveInvalidate();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="pause-toggle"]')?.textContent?.trim()).toBe('Resume');
+    expect(el.querySelector('[data-testid="pause-error"]')?.textContent).toContain('already running');
   });
 
   it('clears a stale pause error on the next toggle attempt', async () => {

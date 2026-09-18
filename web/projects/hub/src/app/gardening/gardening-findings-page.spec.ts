@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EnvironmentInjector, provideZonelessChangeDetection, runInInjectionContext } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, ViewportService } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { hubClient, injectReopenFindingsMutation, injectResolveFindingsMutation, ViewportService } from 'fleet';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { vi } from 'vitest';
 
 import { GardeningFindingsPage } from './gardening-findings-page';
 
@@ -441,6 +442,91 @@ describe('GardeningFindingsPage', () => {
       // premature clear.
       await settle(fixture);
       expect(router.url).toBe('/gardening/findings/fnd_10?routine=weekly&scope=web');
+    });
+  });
+
+  describe('a finding with a pending triage mutation drops from a state-filtered list (Part B)', () => {
+    /** `gardening-finding-triage-dialog.ts` owns and fires the six triage mutations,
+     * not this page — a `mutationKey`-scoped read is exactly what lets this list see
+     * another component's in-flight mutation without owning it, so this fires it from
+     * the same root injector rather than through `GardeningFindingsPage` itself
+     * (`board-page.spec.ts`'s own `fireDeleteFrom` shape). */
+    function fireResolveFrom(findingIds: readonly string[]): { resolve: () => void } {
+      const injector = TestBed.inject(EnvironmentInjector);
+      const mutation = runInInjectionContext(injector, () => injectResolveFindingsMutation());
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+      mutation.mutate({ findingIds: [...findingIds], note: 'landed elsewhere' });
+      return { resolve: resolveInvalidate };
+    }
+
+    it("drops the row from the 'live' filter while Resolve is pending, and restores it once the resolve settles", async () => {
+      const { fixture, el } = await mount({ url: '/gardening/findings?state=live', routeOverride: withBucket });
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+
+      const { resolve } = fireResolveFrom(['fnd_10']);
+      await new Promise((r) => setTimeout(r, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeNull();
+
+      resolve();
+      await settle(fixture);
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+    });
+
+    it("restores the row when the resolve is rejected", async () => {
+      const { fixture, el } = await mount({
+        url: '/gardening/findings?state=live',
+        routeOverride: (method, path) => {
+          if (method === 'POST' && path === '/api/findings/resolve') return stubError(422, { detail: 'blank note' });
+          return withBucket(method, path);
+        },
+      });
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+
+      const injector = TestBed.inject(EnvironmentInjector);
+      const mutation = runInInjectionContext(injector, () => injectResolveFindingsMutation());
+      mutation.mutate({ findingIds: ['fnd_10'], note: 'landed elsewhere' });
+      await settle(fixture);
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+    });
+
+    it("does not drop the row under 'All states', where nothing is being predicted away from", async () => {
+      const { fixture, el } = await mount({ routeOverride: withBucket });
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+
+      fireResolveFrom(['fnd_10']);
+      await new Promise((r) => setTimeout(r, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
+    });
+
+    it("drops the row from the 'resolved' filter while Reopen is pending — every one of the six verbs is total over the currently-filtered state, not just the exit five", async () => {
+      const { fixture, el } = await mount({ url: '/gardening/findings?state=resolved', routeOverride: withBucket });
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeTruthy();
+
+      const injector = TestBed.inject(EnvironmentInjector);
+      const mutation = runInInjectionContext(injector, () => injectReopenFindingsMutation());
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+      mutation.mutate({ findingIds: ['fnd_12'], note: 'reproduces again' });
+      await new Promise((r) => setTimeout(r, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeNull();
+
+      resolveInvalidate();
+      await settle(fixture);
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeTruthy();
     });
   });
 });

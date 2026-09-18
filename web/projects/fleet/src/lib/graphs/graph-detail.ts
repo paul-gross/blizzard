@@ -89,6 +89,28 @@ export class GraphDetail {
    * — there is only ever one lifecycle mutation in flight for one graph at a time. */
   protected readonly lifecyclePending = computed(() => this.lifecycleMutation.isPending());
 
+  /**
+   * The graph's `retired` flag as it will read once a currently pending retire/enable
+   * settles, or `null` while nothing overrides it (`bzh:frontend-pending-override`).
+   * `enabled`/`retired` is a plain two-valued fact, set directly by whichever of the
+   * two verbs fires — not a value derived from some other precedence ladder
+   * (`blizzard-context:/domain/graphs/identity.md`'s "Operational surfaces": "gates
+   * resolution as a migration target", nothing else feeds it) — so both directions are
+   * total, unlike chunk detail's Resume/Detach.
+   *
+   * This detail shows exactly one graph at a time and owns one `lifecycleMutation`
+   * instance, so there is no sibling to scope by (unlike the board's per-card
+   * filtering) — `.variables()`, the signal `injectMutation` exposes straight off the
+   * mutation's own last-called arguments, already names which of Retire/Enable is in
+   * flight and what `retired` it requested, with no need for a second local signal or
+   * `injectPendingMutationVariables`/`mutationKey` filtering. Purely computed off the
+   * mutation's own pending variables, never a cache write, so a rejected retire/enable
+   * reverts to the real `graph().retired` for free the instant `isPending()` clears.
+   */
+  protected readonly overrideRetired = computed<boolean | null>(() =>
+    this.lifecycleMutation.isPending() ? this.lifecycleMutation.variables()?.retired ?? null : null,
+  );
+
   protected readonly nodes = computed<readonly GraphNodeView[]>(() => this.graph()?.nodes ?? []);
 
   /** The graph's declared sessions (issue #144) — empty for every graph minted before

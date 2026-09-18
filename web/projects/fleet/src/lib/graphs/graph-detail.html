@@ -12,6 +12,7 @@
       [retired]="!!g.retired"
       [canEdit]="canEdit()"
       [lifecyclePending]="lifecyclePending()"
+      [overrideRetired]="overrideRetired()"
       (retire)="onRetire($event)"
       (enable)="onEnable($event)"
     />

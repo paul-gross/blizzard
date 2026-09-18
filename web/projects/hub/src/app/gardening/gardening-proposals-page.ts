@@ -1,12 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import {
+  acceptGardenProposalMutationKey,
   asyncState,
   FleetProposalList,
+  type GardenProposalAcceptVars,
+  type GardenProposalPassVars,
   injectHubGardenProposalsQuery,
+  injectPendingMutationVariables,
   isGardenProposalWaiting,
   KitBackBar,
   KitChips,
+  passGardenProposalMutationKey,
   type GardenProposalView,
   type KitAsyncStateValue,
   type KitChipOption,
@@ -85,6 +90,25 @@ export class GardeningProposalsPage {
 
   private readonly waitingOnly = computed<boolean>(() => this.url.read('show') !== SHOW_ALL);
 
+  /** Every proposal id a Pass or Accept mutation is currently pending for
+   * (`bzh:frontend-pending-override`) — read by `mutationKey` alone, not by owning
+   * either mutation here: `gardening-proposal-pass-dialog.ts`/`gardening-proposal-
+   * accept-dialog.ts` fire them from the detail child this list mounts beside, never
+   * from this container. Both are the domain's own two closing verbs
+   * (`domain/findings-and-proposals.md` "Closing a proposal: pass or accept") and
+   * closure is terminal — {@link isGardenProposalWaiting} reads `false` the instant
+   * either lands, whichever closure kind it records, so this needs only the pending
+   * id, never which of the two is in flight or what it mints. */
+  private readonly pendingProposalPasses = injectPendingMutationVariables<GardenProposalPassVars>(
+    passGardenProposalMutationKey,
+  );
+  private readonly pendingProposalAccepts = injectPendingMutationVariables<GardenProposalAcceptVars>(
+    acceptGardenProposalMutationKey,
+  );
+  private readonly pendingProposalClosures = computed<ReadonlySet<string>>(
+    () => new Set([...this.pendingProposalPasses(), ...this.pendingProposalAccepts()].map((v) => v.proposalId)),
+  );
+
   /** `null` means every class — the docket's own "All classes" chip drops the param
    * rather than naming a magic class string, so a real class can never collide. */
   private readonly classFilter = computed<string | null>(() => this.url.read('class'));
@@ -154,14 +178,20 @@ export class GardeningProposalsPage {
   }
 
   /** The filtered set every other view model derives from (AC: a passed proposal
-   * leaves the waiting set and stays reachable under `all`). */
+   * leaves the waiting set and stays reachable under `all`). Under `waitingOnly`, a
+   * proposal with a pending Pass/Accept ({@link pendingProposalClosures}) drops out
+   * too (`bzh:frontend-pending-override`) — purely computed off the mutations' own
+   * variables, never a cache write, so a rejected call reverts the row for free the
+   * instant its `isPending()` clears. Only matters in this branch: under `all` the
+   * proposal stays visible regardless of its closure, pending or not. */
   private readonly filteredProposals = computed<readonly GardenProposalView[]>(() => {
     const waitingOnly = this.waitingOnly();
     const cls = this.classFilter();
     const routine = this.routineFilter();
+    const closing = this.pendingProposalClosures();
     return this.proposals().filter(
       (p) =>
-        (!waitingOnly || isGardenProposalWaiting(p)) &&
+        (!waitingOnly || (isGardenProposalWaiting(p) && !closing.has(p.proposal_id))) &&
         (cls === null || p.class === cls) &&
         (routine === null || p.routine_name === routine),
     );

@@ -70,6 +70,15 @@ export {
   repositionQueueMutationKey,
   repositionBacklogMutationKey,
   chunkDeleteMutationKey,
+  resolveFindingsMutationKey,
+  confirmGoneFindingsMutationKey,
+  wontFixFindingsMutationKey,
+  notAFindingFindingsMutationKey,
+  supersedeFindingsMutationKey,
+  reopenFindingsMutationKey,
+  acceptGardenProposalMutationKey,
+  passGardenProposalMutationKey,
+  scopeLifecycleMutationKey,
 } from './lib/mutation-keys';
 
 export * as hubApi from './lib/api/hub';

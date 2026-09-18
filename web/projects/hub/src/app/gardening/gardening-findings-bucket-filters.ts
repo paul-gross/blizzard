@@ -1,10 +1,18 @@
 import { computed, type Signal } from '@angular/core';
 import {
+  confirmGoneFindingsMutationKey,
   FINDING_STATES,
   injectHubFindingsBucketQuery,
   injectHubRoutinesQuery,
   injectHubScopesQuery,
+  injectPendingMutationVariables,
+  notAFindingFindingsMutationKey,
+  reopenFindingsMutationKey,
+  resolveFindingsMutationKey,
+  supersedeFindingsMutationKey,
+  wontFixFindingsMutationKey,
   type AsyncStateQuery,
+  type FindingExitVars,
   type FindingView,
   type KitChipOption,
   type RoutineView,
@@ -133,6 +141,44 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
   const classFilter = computed<string | null>(() => url.read('class'));
   const stateFilter = computed<string | null>(() => url.read('state'));
 
+  /** Every finding id any of the six human-driven triage verbs is currently pending
+   * for (`bzh:frontend-pending-override`) — the exit five (`resolve`, `confirm-gone`,
+   * `wont-fix`, `not-a-finding`, `supersede`) and `reopen`. Each fires the bulk
+   * `FindingExitVars.findingIds` shape (`FindingSupersedeVars` too, which only adds a
+   * field this read never touches), read by `mutationKey` alone
+   * (`injectPendingMutationVariables`) rather than by owning any of the six mutations
+   * here — the triage dialog that actually fires them (`gardening-finding-triage-
+   * dialog.ts`) is a sibling surface this list never mounts.
+   *
+   * `derive_liveness` (`src/blizzard/hub/domain/findings.py`) folds a finding's facts
+   * newest-wins, and every one of these six verbs' own fact `kind` is exactly its
+   * resulting `state` (`reopened` folds to `"live"`, same as `add`/`observed`) — so
+   * each is total over the finding's current state, the same guarantee
+   * `chunk-detail.ts`'s `overrideStatus` documents for Pause/Complete. The triage
+   * surface only ever dispatches a verb the finding's *current* state still permits
+   * (it does not offer `resolve` on an already-`resolved` row), so a finding named
+   * here is guaranteed to read some state other than whatever the active
+   * {@link stateFilter} names once the call settles — which is the only thing
+   * {@link filteredBucket} below predicts. It never has to know *which* state a
+   * pending call resolves to, just that it stops being the one currently filtered on. */
+  const resolvePending = injectPendingMutationVariables<FindingExitVars>(resolveFindingsMutationKey);
+  const confirmGonePending = injectPendingMutationVariables<FindingExitVars>(confirmGoneFindingsMutationKey);
+  const wontFixPending = injectPendingMutationVariables<FindingExitVars>(wontFixFindingsMutationKey);
+  const notAFindingPending = injectPendingMutationVariables<FindingExitVars>(notAFindingFindingsMutationKey);
+  const supersedePending = injectPendingMutationVariables<FindingExitVars>(supersedeFindingsMutationKey);
+  const reopenPending = injectPendingMutationVariables<FindingExitVars>(reopenFindingsMutationKey);
+  const pendingFindingIds = computed<ReadonlySet<string>>(() => {
+    const lists = [
+      resolvePending(),
+      confirmGonePending(),
+      wontFixPending(),
+      notAFindingPending(),
+      supersedePending(),
+      reopenPending(),
+    ];
+    return new Set(lists.flatMap((vars) => vars.flatMap((v) => v.findingIds)));
+  });
+
   const classChips = computed<readonly KitChipOption[]>(() => {
     const classes = Array.from(new Set(bucketRows().map((f) => f.class))).sort((a, b) => a.localeCompare(b));
     return [
@@ -158,10 +204,21 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
     url.patch({ state: value === ALL_STATES ? null : value });
   }
 
+  /** Narrowed by class and state (D3, client-side) and now also by
+   * {@link pendingFindingIds} (`bzh:frontend-pending-override`) — but only inside the
+   * `st !== null` branch: a concrete state chip is the only filter a pending triage
+   * call could falsify, since "All states" already renders every finding regardless
+   * of which state it reads. No cache write backs this — a rejected call reverts the
+   * dropped row for free the instant its mutation's own `isPending()` clears. */
   const filteredBucket = computed<readonly FindingView[]>(() => {
     const cls = classFilter();
     const st = stateFilter();
-    return bucketRows().filter((f) => (cls === null || f.class === cls) && (st === null || f.state === st));
+    const pending = pendingFindingIds();
+    return bucketRows().filter((f) => {
+      if (cls !== null && f.class !== cls) return false;
+      if (st === null) return true;
+      return f.state === st && !pending.has(f.finding_id);
+    });
   });
 
   return {
