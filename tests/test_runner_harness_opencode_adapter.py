@@ -435,6 +435,31 @@ def test_fresh_spawn_raises_identity_error_when_the_process_exits_first(tmp_path
 
 
 @pytest.mark.component
+def test_fresh_spawn_identity_error_carries_the_workers_own_stderr(tmp_path: Path) -> None:
+    """A dead-before-identity worker's real cause lives only in its own stderr capture —
+    surfaced on the raised error, since it is otherwise lost the moment the lease is marked
+    identity-failed and the group is killed."""
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    stdout_path = tmp_path / "lease-1.stdout"
+    stdout_path.write_bytes(b"")
+    stderr_path = tmp_path / "lease-1.stderr"
+    stderr_path.write_text("Traceback (most recent call last):\nRuntimeError: mock-opencode blew up\n")
+    adapter = _adapter(binary="opencode", process=FakeProbe(alive=set()))  # already gone
+    pending = _PendingOpenCodeIdentity(
+        pid=4242,
+        pgid=4242,
+        process_start_time="start-token",
+        stdout_path=str(stdout_path),
+        stderr_path=str(stderr_path),
+        process=adapter._process,
+    )
+
+    with pytest.raises(WorkerIdentityError, match="mock-opencode blew up"):
+        pending.await_identity(0.1)
+
+
+@pytest.mark.component
 def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path) -> None:
     """A live process that has written nothing yet is a plain timeout, not a crash."""
     workdir = tmp_path / "e1"
@@ -443,7 +468,12 @@ def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path) -> None:
     stdout_path.write_bytes(b"")
     adapter = _adapter(binary="opencode", process=FakeProbe(alive={(4242, "start-token")}))
     pending = _PendingOpenCodeIdentity(
-        pid=4242, pgid=4242, process_start_time="start-token", stdout_path=str(stdout_path), process=adapter._process
+        pid=4242,
+        pgid=4242,
+        process_start_time="start-token",
+        stdout_path=str(stdout_path),
+        stderr_path="",
+        process=adapter._process,
     )
 
     with pytest.raises(WorkerIdentityError):
@@ -470,7 +500,12 @@ def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_ide
     )
     adapter = _adapter(binary="opencode", process=FakeProbe(alive=set()))  # already gone
     pending = _PendingOpenCodeIdentity(
-        pid=4242, pgid=4242, process_start_time="start-token", stdout_path=str(stdout_path), process=adapter._process
+        pid=4242,
+        pgid=4242,
+        process_start_time="start-token",
+        stdout_path=str(stdout_path),
+        stderr_path="",
+        process=adapter._process,
     )
 
     handle = pending.await_identity(0.1)
@@ -494,7 +529,12 @@ def test_first_event_tolerates_leading_non_json_lines(tmp_path: Path) -> None:
     stdout_path.write_text(f"A tool banner opencode never asked for\nnot json either\n{identity_line}\n")
     adapter = _adapter(binary="opencode", process=FakeProbe(alive={(4242, "start-token")}))
     pending = _PendingOpenCodeIdentity(
-        pid=4242, pgid=4242, process_start_time="start-token", stdout_path=str(stdout_path), process=adapter._process
+        pid=4242,
+        pgid=4242,
+        process_start_time="start-token",
+        stdout_path=str(stdout_path),
+        stderr_path="",
+        process=adapter._process,
     )
 
     handle = pending.await_identity(1.0)
@@ -511,7 +551,12 @@ def test_first_event_raises_once_the_leading_noise_bound_is_exceeded(tmp_path: P
     stdout_path.write_text("not json\n" * (_MAX_IDENTITY_PREAMBLE_LINES + 1))
     adapter = _adapter(binary="opencode", process=FakeProbe(alive={(4242, "start-token")}))
     pending = _PendingOpenCodeIdentity(
-        pid=4242, pgid=4242, process_start_time="start-token", stdout_path=str(stdout_path), process=adapter._process
+        pid=4242,
+        pgid=4242,
+        process_start_time="start-token",
+        stdout_path=str(stdout_path),
+        stderr_path="",
+        process=adapter._process,
     )
 
     with pytest.raises(WorkerIdentityError):

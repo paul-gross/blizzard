@@ -52,6 +52,10 @@ _IDENTITY_POLL_INTERVAL_SECONDS = 0.05
 # Leading non-identity lines the handshake tolerates before giving up as a spawn failure.
 _MAX_IDENTITY_PREAMBLE_LINES = 20
 
+# Bound on the diagnostic stderr tail a failed handshake's error carries — enough to see a
+# traceback's exception line, not so much a captured secret or a wall of noise rides along.
+_STDERR_TAIL_BYTES = 2000
+
 
 @dataclass(frozen=True)
 class _PendingOpenCodeIdentity:
@@ -64,6 +68,7 @@ class _PendingOpenCodeIdentity:
     pgid: int  # every launch gets one (D3) — see `ProcessLauncher.launch`
     process_start_time: str
     stdout_path: str
+    stderr_path: str
     process: IProcessProbe
     confirm_durable: Callable[[], None] = field(
         default=lambda: None, compare=False
@@ -83,10 +88,23 @@ class _PendingOpenCodeIdentity:
                     pgid=self.pgid,
                 )
             if not self.process.is_alive(self.pid, self.process_start_time):
-                raise WorkerIdentityError("the OpenCode worker exited before its first record")
+                raise WorkerIdentityError(f"the OpenCode worker exited before its first record{self._stderr_tail()}")
             if time.monotonic() >= deadline:
-                raise WorkerIdentityError(f"no identity within {timeout}s")
+                raise WorkerIdentityError(f"no identity within {timeout}s{self._stderr_tail()}")
             time.sleep(_IDENTITY_POLL_INTERVAL_SECONDS)
+
+    def _stderr_tail(self) -> str:
+        """The worker's own diagnosis of its death, appended to an identity failure — the
+        only place that death's real cause survives; nothing else reads ``stderr_path``."""
+        try:
+            with open(self.stderr_path, "rb") as f:
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - _STDERR_TAIL_BYTES))
+                tail = f.read().decode("utf-8", errors="replace").strip()
+        except OSError:
+            return ""
+        return f" — stderr: {tail}" if tail else ""
 
     def _first_event(self) -> OpenCodeRunEvent | None:
         """The first line, among those captured so far, that parses as a complete OpenCode
@@ -285,6 +303,7 @@ class OpenCodeAdapter:
             pgid=launched.pgid,
             process_start_time=launched.process_start_time,
             stdout_path=preamble.stdout_path,
+            stderr_path=preamble.stderr_path,
             process=self._process,
             confirm_durable=launched.confirm_durable,
         )
