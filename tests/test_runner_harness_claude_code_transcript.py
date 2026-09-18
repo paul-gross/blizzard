@@ -19,7 +19,7 @@ from structlog.testing import capture_logs
 from blizzard.runner.harness.internal import claude_code_transcript as source_module
 from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
-from blizzard.runner.harness.transcript import TranscriptErrorFactory
+from blizzard.runner.harness.transcript import TranscriptErrorFactory, TranscriptPosition
 from tests import transcript_fixtures as fx
 
 
@@ -833,6 +833,63 @@ def test_read_raw_lines_hit_returns_the_files_lines(tmp_path: Path) -> None:
 def test_read_raw_lines_miss_is_empty(tmp_path: Path) -> None:
     source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
     assert source.read_raw_lines("no-such-session", spawn_cwd=None) == []
+
+
+@pytest.mark.unit
+def test_read_raw_lines_default_range_is_start_of_file_to_tail(tmp_path: Path) -> None:
+    """``start=None, end=None`` preserves the pre-range whole-session read exactly (blizzard#437
+    Phase 1) — the shape the envelope-less usage fallback has always called."""
+    _write_main(tmp_path, [fx.user_env("hello"), fx.user_env("world")])
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    lines = source.read_raw_lines("sess-1", spawn_cwd="/home/user/workspace")
+    assert len(lines) == 2
+
+
+@pytest.mark.unit
+def test_read_raw_lines_scoped_to_a_position_range_reads_only_the_delta(tmp_path: Path) -> None:
+    _write_main(tmp_path, [fx.user_env("first")])
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+    start = source.tail_position("sess-1", spawn_cwd="/home/user/workspace")
+    assert start is not None
+
+    path = tmp_path / "-home-user-workspace" / "sess-1.jsonl"
+    with path.open("a") as f:
+        f.write(fx.user_env("second") + "\n")
+    end = source.tail_position("sess-1", spawn_cwd="/home/user/workspace")
+    assert end is not None
+
+    lines = source.read_raw_lines("sess-1", spawn_cwd="/home/user/workspace", start=start, end=end)
+    assert len(lines) == 1
+    assert "second" in lines[0]
+
+
+@pytest.mark.unit
+def test_read_raw_lines_empty_range_is_empty(tmp_path: Path) -> None:
+    _write_main(tmp_path, [fx.user_env("hello")])
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+    tail = source.tail_position("sess-1", spawn_cwd="/home/user/workspace")
+    assert tail is not None
+
+    assert source.read_raw_lines("sess-1", spawn_cwd="/home/user/workspace", start=tail, end=tail) == []
+
+
+@pytest.mark.unit
+def test_read_raw_lines_start_past_eof_clamps_to_the_start_of_file(tmp_path: Path) -> None:
+    """A stale or corrupt ``start`` — same tolerant clamp ``turns_since`` gives ``since`` — never
+    inflates a delta negative or raises out of a bad seek."""
+    _write_main(tmp_path, [fx.user_env("hello")])
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+    stale_start = TranscriptPosition(token=json.dumps({"main": 10_000, "sidecars": {}}))
+
+    lines = source.read_raw_lines("sess-1", spawn_cwd="/home/user/workspace", start=stale_start)
+    assert len(lines) == 1
+
+
+@pytest.mark.unit
+def test_tail_position_of_a_missing_transcript_is_none(tmp_path: Path) -> None:
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+    assert source.tail_position("no-such-session", spawn_cwd=None) is None
 
 
 @pytest.mark.unit

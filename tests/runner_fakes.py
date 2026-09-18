@@ -566,23 +566,27 @@ class FakeProvider:
 
 
 class FakeTranscriptSource:
-    """A scriptable :class:`IHarnessTranscriptSource`: canned batches, raw lines, sizes, and
-    context sizes by session id (blizzard#245). An unscripted session reads as ``not_found``
-    for turns and as *unmeasurable* for both bounds, so a test only names what it cares about.
-    """
+    """A scriptable :class:`IHarnessTranscriptSource`: canned batches, raw lines, tail positions,
+    sizes, and context sizes by session id (blizzard#245). An unscripted session reads as
+    ``not_found`` for turns and as *unmeasurable* for both bounds, so a test only names what it
+    cares about. ``read_raw_lines`` ignores ``start``/``end`` — a test scripting a range-scoped
+    read scripts ``lines_by_session`` with the exact lines it wants that call to return."""
 
     def __init__(
         self,
         batches_by_session: dict[str, TranscriptBatch] | None = None,
         lines_by_session: dict[str, list[str]] | None = None,
+        tail_positions_by_session: dict[str, TranscriptPosition] | None = None,
         sizes_by_session: dict[str, int] | None = None,
         context_tokens_by_session: dict[str, int] | None = None,
     ) -> None:
         self._batches = batches_by_session or {}
         self._lines = lines_by_session or {}
+        self._tail_positions = tail_positions_by_session or {}
         self._sizes = sizes_by_session or {}
         self._context_tokens = context_tokens_by_session or {}
         self.turns_since_calls: list[tuple[str, str | None, TranscriptPosition | None]] = []
+        self.read_raw_lines_calls: list[tuple[str, TranscriptPosition | None, TranscriptPosition | None]] = []
         self.size_bytes_calls: list[str] = []
         self.context_tokens_calls: list[str] = []
 
@@ -606,8 +610,19 @@ class FakeTranscriptSource:
             harness_version=None,
         )
 
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
+        self.read_raw_lines_calls.append((session_id, start, end))
         return list(self._lines.get(session_id, []))
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        return self._tail_positions.get(session_id)
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         self.size_bytes_calls.append(session_id)

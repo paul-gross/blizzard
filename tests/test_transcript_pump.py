@@ -1082,8 +1082,18 @@ class _RaisingTranscriptSource:
     def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  # type: ignore[no-untyped-def]
         raise RuntimeError("transcript source unavailable (scripted)")
 
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
         return []
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        return None
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None
@@ -1175,8 +1185,18 @@ class _PartiallyRaisingTranscriptSource:
             raise RuntimeError("transcript source unavailable (scripted)")
         return self._batch
 
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
         return []
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        return None
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None
@@ -1476,8 +1496,18 @@ class _SequencedTranscriptSource:
             )
         return self._batches.pop(0)
 
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
         return []
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        return None
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None
@@ -1545,8 +1575,18 @@ class _ClockAdvancingAfterNCallsSource:
             self.clock.advance(self.jump)
         return batch
 
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
-        return self.inner.read_raw_lines(session_id, spawn_cwd=spawn_cwd)
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
+        return self.inner.read_raw_lines(session_id, spawn_cwd=spawn_cwd, start=start, end=end)
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        return self.inner.tail_position(session_id, spawn_cwd=spawn_cwd)
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return self.inner.size_bytes(session_id, spawn_cwd=spawn_cwd)
@@ -1635,8 +1675,18 @@ class _AdvanceClockAfterSessionSource:
             )
         return batch
 
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
         return []
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        return None
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None

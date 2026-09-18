@@ -619,8 +619,18 @@ class _RaisingTranscriptSource:
     def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  # type: ignore[no-untyped-def]
         raise RuntimeError("transcript source unavailable (scripted)")
 
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
         return []
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        return None
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None

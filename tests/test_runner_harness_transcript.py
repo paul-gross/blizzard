@@ -44,6 +44,13 @@ def test_null_transcript_source_turns_since_matches_absent_but_healthy_shape() -
 @pytest.mark.unit
 def test_null_transcript_source_read_raw_lines_is_empty() -> None:
     assert NullTranscriptSource().read_raw_lines("sid-1", spawn_cwd=None) == []
+    position = TranscriptPosition(token="anything")
+    assert NullTranscriptSource().read_raw_lines("sid-1", spawn_cwd=None, start=position, end=position) == []
+
+
+@pytest.mark.unit
+def test_null_transcript_source_tail_position_is_none() -> None:
+    assert NullTranscriptSource().tail_position("sid-1", spawn_cwd=None) is None
 
 
 @pytest.mark.unit
