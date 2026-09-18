@@ -129,7 +129,13 @@ class UsageRecorder:
                 detail=str(exc),
             )
             return None
-        end = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
+        # A same-generation judge's own durable start (`Judgement._launch`) caps this read —
+        # its own later turns must never bleed into the worker's own fallback sum.
+        judge_boundary = self.invocation_boundaries.boundary(lease.lease_id, generation, "judge")
+        if judge_boundary is not None and judge_boundary.start_position is not None:
+            end = TranscriptPosition(judge_boundary.start_position)
+        else:
+            end = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
         start = TranscriptPosition(boundary.start_position) if boundary.start_position is not None else None
         lines = source.read_raw_lines(session.session_id, spawn_cwd=spawn_cwd, start=start, end=end)
         if not lines:
