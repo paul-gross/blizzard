@@ -37,6 +37,7 @@ def upgrade() -> None:
         sa.Column("closed_at", UtcDateTime(), nullable=True),
         sa.Column("closed_reason", sa.String(), nullable=True),
     )
+    op.create_index("ix_invocation_boundaries_lease_id", _TABLE, ["lease_id"])
 
 
 def downgrade() -> None:

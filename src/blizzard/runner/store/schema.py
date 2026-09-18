@@ -503,6 +503,7 @@ invocation_boundaries = Table(
     Column("closed_at", UtcDateTime, nullable=True),
     Column("closed_reason", String, nullable=True),
 )
+Index("ix_invocation_boundaries_lease_id", invocation_boundaries.c.lease_id)
 
 # --- SSO federation jti replay cache (issue #95, decision D4) ----------------
 # The `jti` primary key alone is the single-use guarantee, enforced by the store.

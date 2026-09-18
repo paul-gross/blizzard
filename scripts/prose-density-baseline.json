@@ -3945,10 +3945,10 @@
    "total": 155
   },
   "blizzard/runner/harness/internal/opencode_export.py": {
-   "comments": 4,
+   "comments": 6,
    "docstrings": 13,
    "over_cap": 0,
-   "total": 65
+   "total": 71
   },
   "blizzard/runner/harness/internal/opencode_facts.py": {
    "comments": 1,
@@ -4782,7 +4782,7 @@
    "comments": 0,
    "docstrings": 5,
    "over_cap": 0,
-   "total": 45
+   "total": 46
   },
   "blizzard/runner/store/migrations/versions/__init__.py": {
    "comments": 0,
@@ -4794,7 +4794,7 @@
    "comments": 190,
    "docstrings": 5,
    "over_cap": 4,
-   "total": 675
+   "total": 676
   },
   "blizzard/runner/stores.py": {
    "comments": 0,
@@ -5564,7 +5564,7 @@
    "comments": 43,
    "docstrings": 31,
    "over_cap": 0,
-   "total": 1833
+   "total": 1850
   },
   "store_scan_allowlist.py": {
    "comments": 23,
@@ -6960,9 +6960,9 @@
   },
   "test_invariant_checker.py": {
    "comments": 30,
-   "docstrings": 130,
+   "docstrings": 131,
    "over_cap": 0,
-   "total": 1475
+   "total": 1477
   },
   "test_invocation_boundaries.py": {
    "comments": 11,
@@ -7655,10 +7655,10 @@
    "total": 610
   },
   "test_runner_harness_opencode_export.py": {
-   "comments": 1,
-   "docstrings": 4,
+   "comments": 5,
+   "docstrings": 6,
    "over_cap": 0,
-   "total": 64
+   "total": 84
   },
   "test_runner_harness_opencode_plugin.py": {
    "comments": 5,

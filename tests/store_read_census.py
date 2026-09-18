@@ -96,6 +96,7 @@ from blizzard.runner.domain.checks import CheckResultRecord, IReadCheckRepositor
 from blizzard.runner.domain.elicitation import IReadElicitationRepository
 from blizzard.runner.domain.escalations import IReadEscalationRepository
 from blizzard.runner.domain.git_commit_declaration import IReadGitCommitDeclarationRepository
+from blizzard.runner.domain.invocation_boundaries import IReadInvocationBoundaryRepository
 from blizzard.runner.domain.leases import (
     IReadLeaseLivenessRepository,
     IReadLeaseRecordRepository,
@@ -259,6 +260,16 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         spawned_at=_t(8),
     )
     stores.liveness.record_heartbeat(lease_id=lease_2, beat_at=_t(9))
+    stores.invocation_boundaries.record_boundary_open(
+        lease_id=lease_2,
+        chunk_id=chunk_1,
+        node_id=node_a,
+        epoch=2,
+        generation=2,
+        kind="resume",
+        start_position=None,
+        opened_at=_t(9),
+    )
     stores.usage.record_usage(
         lease_id=lease_2,
         chunk_id=chunk_1,
@@ -671,6 +682,12 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadElicitationRepository, "in_flight_elicitation_lease_ids"): lambda w: (
         w.read.elicitations.in_flight_elicitation_lease_ids()
+    ),
+    (IReadInvocationBoundaryRepository, "boundary"): lambda w: w.read.invocation_boundaries.boundary(
+        w.lease_2, 2, "resume"
+    ),
+    (IReadInvocationBoundaryRepository, "open_boundaries_for_lease"): lambda w: (
+        w.read.invocation_boundaries.open_boundaries_for_lease(w.lease_2)
     ),
 }
 

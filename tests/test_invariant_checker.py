@@ -635,25 +635,27 @@ def test_an_open_leases_open_invocation_boundary_is_not_a_violation(tmp_path: Pa
 
 
 def test_a_single_worker_starting_boundary_per_generation_is_not_a_violation(tmp_path: Path) -> None:
-    """One ``spawn`` boundary at generation 1 is the ordinary, exclusive shape
-    ``UsageRecorder._worker_boundary``'s try-each-kind lookup depends on (blizzard#437 Phase 4)."""
+    """A ``spawn`` boundary at generation 1 and a ``resume`` boundary at generation 2 are each
+    the sole worker-starting boundary of their own generation — the exclusivity invariant is
+    scoped per generation, not per lease (blizzard#437 Phase 4)."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(
             insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
         )
-        conn.execute(
-            insert(runner.invocation_boundaries).values(
-                lease_id="lease_a",
-                chunk_id="ch_1",
-                node_id="nd",
-                epoch=1,
-                generation=1,
-                kind="spawn",
-                start_position=None,
-                opened_at=_NOW,
+        for generation, kind in ((1, "spawn"), (2, "resume")):
+            conn.execute(
+                insert(runner.invocation_boundaries).values(
+                    lease_id="lease_a",
+                    chunk_id="ch_1",
+                    node_id="nd",
+                    epoch=1,
+                    generation=generation,
+                    kind=kind,
+                    start_position=None,
+                    opened_at=_NOW,
+                )
             )
-        )
     assert RunnerInvariants(engine).run() == []
 
 
