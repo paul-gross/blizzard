@@ -21,21 +21,15 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.loop.process import LinuxProcessProbe
 
-# One executor for the whole process, not one per registry build (F1): a deferred-disarm
-# child's `PR_SET_PDEATHSIG` parent is the specific OS thread that forked it, not this
-# process — a callable-once composition root (the `tick` CLI, and every `LoopWiring.of`
-# call the steppable-loop tests make, `bzh:steppable-loop`) drops its `HarnessRegistry`,
-# and with it a per-call executor, the instant the call returns. That races the trampoline:
-# if its worker thread exits before the newly-forked trampoline is even scheduled, the
-# kernel delivers the death signal before the child ever reads its confirm byte, so it is
-# killed unexecuted — never reaching the real binary. Module-level and built once, this
-# executor's thread outlives every individual registry build, so a confirmed child is
-# never raced by its own launcher's teardown.
 _LAUNCH_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
 
 
 def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
-    """Build every configured harness binding once for one graph, over one shared probe/launcher pair (D4)."""
+    """Build every configured harness binding once for one graph, over one shared probe/
+    launcher pair (D4) — the launcher's `_LAUNCH_EXECUTOR` is module-level and shared
+    across every call, never rebuilt per call: a deferred-disarm child's `PR_SET_PDEATHSIG`
+    parent is the thread that forked it, so a throwaway executor's teardown can kill a
+    just-launched, not-yet-scheduled child before it ever reads its confirm byte (F1)."""
     projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
     transcript_source = ClaudeCodeTranscriptSource(
         projects_root, TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
@@ -43,7 +37,6 @@ def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
     process = LinuxProcessProbe()
     # Built and injected here (`bzh:dependency-injection`), not `ProcessLauncher`'s own
     # module-level default — this composition root is the one place that belongs (D4).
-    # Shared across every call (see `_LAUNCH_EXECUTOR`), not rebuilt per call.
     launcher = ProcessLauncher(process, executor=_LAUNCH_EXECUTOR)
     adapter = ClaudeCodeAdapter(
         binary=config.harness_binary,

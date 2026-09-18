@@ -1,12 +1,8 @@
-"""A minimal fake ``opencode`` CLI for the adapter's own unit/component tests.
-
-Not the compatibility diagnostic's own proof scaffolding (moved to
-``tests/service/test_opencode_compatibility_service.py``,
-``bzh:external-cli-fake-is-service-tier``, and driven off a real
-``mock-opencode emit`` artifact instead) — this is a narrower, adapter-only
-stand-in for a plain ``opencode run --format json`` invocation, used solely by
-``tests/test_runner_harness_opencode_adapter.py``.
-"""
+"""A minimal fake ``opencode`` CLI for ``tests/test_runner_harness_opencode_adapter.py``'s
+own unit/component tests — distinct from the compatibility diagnostic's own proof
+scaffolding (``tests/service/test_opencode_compatibility_service.py``,
+``bzh:external-cli-fake-is-service-tier``, driven off a real ``mock-opencode emit``
+artifact instead)."""
 
 from __future__ import annotations
 

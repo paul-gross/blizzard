@@ -52,8 +52,7 @@ _IDENTITY_POLL_INTERVAL_SECONDS = 0.05
 # Leading non-identity lines the handshake tolerates before giving up as a spawn failure.
 _MAX_IDENTITY_PREAMBLE_LINES = 20
 
-# Bound on the diagnostic stderr tail a failed handshake's error carries — enough to see a
-# traceback's exception line, not so much a captured secret or a wall of noise rides along.
+# Bound on the diagnostic stderr tail a failed handshake's error carries (enough for one traceback line).
 _STDERR_TAIL_BYTES = 2000
 
 
