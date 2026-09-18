@@ -23,11 +23,21 @@
   </div>
   <div class="d-actions">
     @if (pause()) {
-      <fleet-kit-button testid="resume-chunk" [ariaLabel]="'Resume chunk ' + chunkId()" (click)="onResume()">
+      <fleet-kit-button
+        testid="resume-chunk"
+        [ariaLabel]="'Resume chunk ' + chunkId()"
+        [fleetTooltip]="resumeCopy(runnerName()).text"
+        (click)="onResume()"
+      >
         Resume
       </fleet-kit-button>
     } @else if (pausable()) {
-      <fleet-kit-button testid="pause-chunk" [ariaLabel]="'Pause chunk ' + chunkId()" (click)="onPause()">
+      <fleet-kit-button
+        testid="pause-chunk"
+        [ariaLabel]="'Pause chunk ' + chunkId()"
+        [fleetTooltip]="pauseCopy(runnerName()).text"
+        (click)="onPause()"
+      >
         Pause
       </fleet-kit-button>
     }

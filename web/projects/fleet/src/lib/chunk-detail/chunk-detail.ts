@@ -5,7 +5,6 @@ import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkWorkItemsQuery } from '../chunks/chunk-work-items.query';
 import { injectCompleteChunkMutation } from '../chunks/complete.mutations';
 import { injectDeleteChunkMutation } from '../chunks/delete.mutations';
-import { injectDeclareDependencyMutation, injectReleaseDependencyMutation } from '../chunks/dependency.mutations';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
 import {
@@ -21,7 +20,6 @@ import { deriveWorkItemsState, type WorkItemsState } from './work-items-state';
 import {
   type AnswerQuestionEvent,
   ChunkDetailPanel,
-  type DependencyEvent,
   type EditGraphEvent,
   type ResolveDecisionEvent,
 } from './chunk-detail-panel';
@@ -73,11 +71,6 @@ export class ChunkDetail {
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
-  /** Emitted with a chunk id when the blocked marking's dock-select button is clicked
-   * (issue #461) — forwarded up unchanged from {@link ChunkDetailPanel}, so a host
-   * composing this container selects the prerequisite into the same dock. */
-  readonly selectChunk = output<string>();
-
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
   private readonly workItemsQuery = injectHubChunkWorkItemsQuery(() => this.chunkId());
   private readonly answerMutation = injectAnswerQuestionMutation();
@@ -87,8 +80,6 @@ export class ChunkDetail {
   private readonly completeMutation = injectCompleteChunkMutation();
   private readonly deleteMutation = injectDeleteChunkMutation();
   private readonly editGraphMutation = injectSetChunkGraphMutation();
-  private readonly declareDependencyMutation = injectDeclareDependencyMutation();
-  private readonly releaseDependencyMutation = injectReleaseDependencyMutation();
   private readonly meQuery = injectMeQuery();
 
   /** Whether the current identity may pause/resume/detach or set the chunk's graph
@@ -243,19 +234,5 @@ export class ChunkDetail {
       { chunkId: event.chunkId, graphId: event.graphId },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Set graph failed.')) },
     );
-  }
-
-  protected onDeclareDependency(event: DependencyEvent): void {
-    this.beginAction();
-    this.declareDependencyMutation.mutate(event, {
-      onError: (error) => this.actionError.set(errorMessage(error, 'Declare dependency failed.')),
-    });
-  }
-
-  protected onReleaseDependency(event: DependencyEvent): void {
-    this.beginAction();
-    this.releaseDependencyMutation.mutate(event, {
-      onError: (error) => this.actionError.set(errorMessage(error, 'Release dependency failed.')),
-    });
   }
 }

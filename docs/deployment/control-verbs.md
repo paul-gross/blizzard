@@ -141,7 +141,7 @@ un-stop and no un-complete, so a chunk reading `done` by either path stays there
 ## Delete
 
 `chunk delete <chunk_id>` (`blizzard hub chunk delete <chunk_id> [--by] [--yes]`), the board's confirmed Delete control
-in the chunk dock's header — beside Complete, where the declare and release controls also sit — on any `not_ready` or
+in the chunk dock's header's `⋯` overflow menu — beside Complete — on any `not_ready` or
 `ready` chunk, or `DELETE /api/chunks/{chunk_id}` (gated by `CHUNK_CONTROL` like every control verb here) — deletes a chunk gated on the same unacquired predicate `chunk group` requires of every
 chunk it folds away: `not_ready` or unclaimed `ready`.
 

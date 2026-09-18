@@ -1,11 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, ChunkStatus, PauseView, WorkRefView, RouteView } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { KitButton } from '../kit/kit-button';
-import { KitConfirmDialog } from '../kit/kit-confirm-dialog';
-import { KitTextInput } from '../kit/kit-text-input';
+import { KitConfirmDialog, type KitConfirmDialogPrompt } from '../kit/kit-confirm-dialog';
+import { KitMenu, KitMenuPanel } from '../kit/kit-menu';
+import { KitMenuItem, KitMenuItemSubtitle } from '../kit/kit-menu-item';
+import { KitTooltip } from '../kit/kit-tooltip';
+import { completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from './chunk-action-copy';
 
 /** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
  * here so the dock never offers a Pause the server would answer with a 409 (issue #46).
@@ -29,22 +32,6 @@ const NOT_COMPLETABLE = new Set<ChunkStatus>(['done']);
  * Detach guards. Owned right beside the control it gates, the same shape as
  * {@link NOT_PAUSABLE}/{@link NOT_COMPLETABLE} above. */
 const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
-
-/** Statuses the hub's dependency service admits a declare against
- * (`PRE_CLAIM_STATUSES`, `dependencies.py`), mirrored here so the dock never offers a
- * Declare the server would answer with a 409 (issue #461) — the same reason
- * {@link pausable}/{@link completable} exist. Release carries no such check on the hub
- * side (any standing edge may be released regardless of the dependent's status), so it
- * stays gated on {@link canControl} alone. */
-const DECLARABLE = new Set<ChunkStatus>(['not_ready', 'ready']);
-
-/** A declare or release, addressed by the ordered pair the hub itself takes (issue
- * #461) — the dock's only source for either, so both `declareDependency` and
- * `releaseDependency` share this one shape rather than two near-identical ones. */
-export interface DependencyEvent {
-  readonly chunkId: string;
-  readonly prerequisiteChunkId: string;
-}
 
 /**
  * The chunk detail dock's header (issue #79) — the chunk's identity in the
@@ -70,14 +57,13 @@ export interface DependencyEvent {
  * control that invasive.
  *
  * Presentational only: it holds the detail input and emits `dismiss`,
- * `detach`, `pauseChunk`, `resumeChunk`, `complete`, `delete`,
- * `declareDependency`, and `releaseDependency`; the mutations those events
- * drive live in the container.
+ * `detach`, `pauseChunk`, `resumeChunk`, `complete`, and `delete`; the
+ * mutations those events drive live in the container.
  */
 @Component({
   selector: 'fleet-chunk-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitConfirmDialog, KitTextInput, RouterLink],
+  imports: [KitButton, KitConfirmDialog, KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel, KitTooltip, RouterLink],
   templateUrl: './chunk-detail-header.html',
   styleUrl: './chunk-detail-header.css',
 })
@@ -115,26 +101,16 @@ export class ChunkDetailHeader {
   /** Emitted with the chunk id when the operator confirms Delete (D8, issue #364). */
   readonly delete = output<string>();
 
-  /** Emitted with the prerequisite's chunk id when the blocked marking's dock-select
-   * button is clicked (issue #461) — the same one-hop move a board card click already
-   * makes, not a navigation. */
-  readonly selectChunk = output<string>();
+  protected readonly pendingConfirm = signal<(KitConfirmDialogPrompt & { readonly run: () => void }) | null>(null);
 
-  /** Emitted when the operator confirms a dependency declaration on
-   * {@link prerequisiteInput} (issue #461). */
-  readonly declareDependency = output<DependencyEvent>();
-
-  /** Emitted when the operator confirms releasing the standing dependency on
-   * {@link prerequisiteInput} (issue #461). */
-  readonly releaseDependency = output<DependencyEvent>();
-
-  protected readonly pendingConfirm = signal<{
-    readonly heading: string;
-    readonly message: string;
-    readonly confirmLabel: string;
-    readonly variant: 'primary' | 'danger';
-    readonly run: () => void;
-  } | null>(null);
+  /** The action-copy table (`bzh:claim-vocabulary`, `chunk-action-copy.ts`) — bound
+   * onto the protected instance so the template can call each function directly
+   * rather than this class re-declaring a per-action copy computed for every one. */
+  protected readonly pauseCopy = pauseCopy;
+  protected readonly resumeCopy = resumeCopy;
+  protected readonly detachCopy = detachCopy;
+  protected readonly completeCopy = completeCopy;
+  protected readonly deleteCopy = deleteCopy;
 
   /** The chunk's work refs, for the header — each linked out to its source's web
    * address when the configured binding rendered one (a null `web_url` degrades to
@@ -159,6 +135,13 @@ export class ChunkDetailHeader {
    * (issue #42): a chunk with no live route has nothing to release. */
   protected readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
 
+  /** The node the chunk currently sits at, for display and for `detachCopy`'s own
+   * `<node>` slot — the same fallback chain the `.nd` chip already reads
+   * (`current_node_name`, then `current_node_id`, then an em dash). */
+  protected readonly currentNodeName = computed<string>(
+    () => this.detail().current_node_name ?? this.detail().current_node_id ?? '—',
+  );
+
   /** Whether Complete has anything left to do (issue #294) — mirrors the hub
    * `CompleteService`'s no-op on an already-`done` chunk, so the dock withholds a
    * click that would write nothing. Every other status is completable, independent of
@@ -169,11 +152,6 @@ export class ChunkDetailHeader {
    * issue #364) — a chunk with an acquiring runner has no live route to release,
    * so Delete never offers a click the hub would refuse. */
   protected readonly deletable = computed<boolean>(() => UNACQUIRED_STATUSES.has(this.detail().status));
-
-  /** The unmet prerequisite's chunk id, from `ChunkDetail.blocked` (issue #461) — null
-   * when the chunk carries no marking. Still the declare/release field's prefill; the
-   * header line itself names {@link blockedBy}'s whole set rather than this one. */
-  protected readonly blockedOn = computed<string | null>(() => this.detail().blocked?.prerequisite_chunk_id ?? null);
 
   /** Every prerequisite this chunk still waits on — `neighborhood.prerequisites` minus
    * the satisfied ones, which by definition block nothing. Unlike `blocked`, which names
@@ -189,141 +167,99 @@ export class ChunkDetailHeader {
     (this.detail().neighborhood?.dependents ?? []).filter((n) => !n.satisfied).map((n) => n.chunk_id),
   );
 
+  /** Whether Delete is withheld (D6) — {@link deletable}'s own status gate, plus
+   * {@link blocking}: Delete is only ever offered at `not_ready`/`ready`, never
+   * `done`, so every entry `blocking()` already filters to is provably still
+   * unsatisfied — no fresh read of `neighborhood.dependents` is needed here. */
+  protected readonly deleteDisabled = computed<boolean>(() => !this.deletable() || this.blocking().length > 0);
+
+  /** Delete's menu subtitle — names the dependents still holding it back when
+   * {@link blocking} is non-empty, falling back to `deleteCopy()`'s own subtitle
+   * otherwise (D6). */
+  protected readonly deleteSubtitle = computed<string>(() => {
+    const blockers = this.blocking();
+    return blockers.length > 0
+      ? `Blocked: ${blockers.map((id) => this.shortId(id)).join(', ')} depend on this`
+      : (deleteCopy().subtitle ?? '');
+  });
+
   /** A neighbor's compact ref — every surface that names an entity compactly resolves
    * through {@link compactRef} (`compact-ref.ts`). */
   protected shortId(chunkId: string): string {
     return compactRef(chunkId);
   }
 
-  /** Whether Declare has anything the hub would accept (issue #461) — mirrors the hub
-   * dependency service's own `PRE_CLAIM_STATUSES` check so the dock never offers a
-   * click the server would answer with a 409, exactly as {@link pausable} does for
-   * Pause. Release carries no such gate (see {@link DECLARABLE}). */
-  protected readonly declarable = computed<boolean>(() => DECLARABLE.has(this.detail().status));
-
-  /** The declare/release field's free-text value (D5, issue #461) — one field serves
-   * both controls, since the board has no read that lists a chunk's standing edges for
-   * a picker to offer. Prefilled from {@link blockedOn} when a marking stands; editable
-   * from there, since Release may need to name an edge past the pre-claim window (no
-   * marking) and Declare always names a chunk the marking never carries. */
-  protected readonly prerequisiteInput = signal('');
-
-  /** Which chunk is open, deduped by `computed`'s default equality — unlike reading
-   * `detail()` directly, this does not change (and so does not re-run the prefill
-   * effect below) on a same-chunk refetch, only on an actual chunk switch. A poll or
-   * SSE-triggered refresh of the open chunk must never wipe an in-progress edit. */
-  private readonly openChunkId = computed(() => this.detail().chunk_id);
-
-  constructor() {
-    effect(() => {
-      this.openChunkId();
-      // `blockedOn` is read `untracked`: the prefill is keyed on the chunk switch
-      // alone, so a same-chunk change to the marking (the prerequisite completing, or
-      // another operator declaring/releasing) must not re-run this and overwrite an
-      // in-progress edit (issue #461 round 3 F1).
-      this.prerequisiteInput.set(untracked(this.blockedOn) ?? '');
-    });
-  }
-
-  /** Open a confirmation before emitting `detach` for the container's mutation to fire. */
+  /** Open a confirmation before emitting `detach` for the container's mutation to fire.
+   * The confirm copy is `detachCopy`'s own `text` (`bzh:claim-vocabulary`). */
   protected onDetach(): void {
-    if (!this.route()) return;
+    const route = this.route();
+    if (!route) return;
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Detach chunk ${chunkId}`,
-      message: `Detach chunk ${chunkId} from its runner? This releases the runner; ` +
-        `the chunk keeps its current status (this is not requeue).`,
+      message: detachCopy(route.runner_id, this.currentNodeName()).text,
       confirmLabel: 'Detach',
       variant: 'primary',
       run: () => this.detach.emit(chunkId),
     });
   }
 
-  /** Open a confirmation before emitting `pauseChunk` for the container's mutation to fire (issue #46). */
+  /** Open a confirmation before emitting `pauseChunk` for the container's mutation to
+   * fire (issue #46). The confirm copy is `pauseCopy`'s own `text` (`bzh:claim-vocabulary`). */
   protected onPause(): void {
     if (this.pause() || !this.pausable()) return;
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Pause chunk ${chunkId}`,
-      message: `Pause chunk ${chunkId}? This kills its active worker but keeps the ` +
-        `claim (this is not detach); resume it later to pick the work back up.`,
+      message: pauseCopy(this.route()?.runner_id ?? null).text,
       confirmLabel: 'Pause',
       variant: 'primary',
       run: () => this.pauseChunk.emit(chunkId),
     });
   }
 
-  /** Open a confirmation before emitting `resumeChunk` for the container's mutation to fire (issue #46).
-   * Guarded on the pause **fact**, never on `status`. */
+  /** Open a confirmation before emitting `resumeChunk` for the container's mutation to
+   * fire (issue #46). Guarded on the pause **fact**, never on `status`. The confirm
+   * copy is `resumeCopy`'s own `text` (`bzh:claim-vocabulary`). */
   protected onResume(): void {
     if (!this.pause()) return;
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Resume chunk ${chunkId}`,
-      message: `Resume chunk ${chunkId}? Its runner picks the work back up from ` +
-        `where the pause stopped it.`,
+      message: resumeCopy(this.route()?.runner_id ?? null).text,
       confirmLabel: 'Resume',
       variant: 'primary',
       run: () => this.resumeChunk.emit(chunkId),
     });
   }
 
-  /** Open a confirmation before emitting `complete` for the container's mutation to fire (issue #294).
-   * Unlike Detach/Pause/Resume, this is a one-way door: there is no un-complete verb,
-   * and the confirmation says so. */
+  /** Open a confirmation before emitting `complete` for the container's mutation to fire
+   * (issue #294). Unlike Detach/Pause/Resume, this is a one-way door — `completeCopy`'s
+   * own `text` (`bzh:claim-vocabulary`) says so. */
   protected onComplete(): void {
     if (!this.completable()) return;
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Complete chunk ${chunkId}`,
-      message: `Complete chunk ${chunkId}? This marks it done by hand; there is no ` + `un-complete verb.`,
+      message: completeCopy().text,
       confirmLabel: 'Complete',
       variant: 'danger',
       run: () => this.complete.emit(chunkId),
     });
   }
 
-  /** Open a confirmation before emitting `delete` for the container's mutation to fire (D8, issue
-   * #364). Withdraws the chunk's hub item(s); there is no undo. */
+  /** Open a confirmation before emitting `delete` for the container's mutation to fire
+   * (D8, issue #364). `deleteCopy`'s own `text` (`bzh:claim-vocabulary`) says there is
+   * no undo. */
   protected onDelete(): void {
-    if (!this.deletable()) return;
+    if (this.deleteDisabled()) return;
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Delete chunk ${chunkId}`,
-      message: `Delete chunk ${chunkId}? This withdraws its hub item(s); there is no undo.`,
+      message: deleteCopy().text,
       confirmLabel: 'Delete',
       variant: 'danger',
       run: () => this.delete.emit(chunkId),
-    });
-  }
-
-  /** Open a confirmation before emitting `declareDependency` for the container's mutation to fire (issue
-   * #461). A blank field emits nothing — the hub has no chunk id to resolve. */
-  protected onDeclareDependency(): void {
-    const prerequisiteChunkId = this.prerequisiteInput().trim();
-    if (!prerequisiteChunkId) return;
-    const chunkId = this.detail().chunk_id;
-    this.pendingConfirm.set({
-      heading: `Declare dependency for ${chunkId}`,
-      message: `Declare that chunk ${chunkId} depends on ${prerequisiteChunkId}?`,
-      confirmLabel: 'Declare',
-      variant: 'primary',
-      run: () => this.declareDependency.emit({ chunkId, prerequisiteChunkId }),
-    });
-  }
-
-  /** Open a confirmation before emitting `releaseDependency` for the container's mutation to fire (issue
-   * #461). */
-  protected onReleaseDependency(): void {
-    const prerequisiteChunkId = this.prerequisiteInput().trim();
-    if (!prerequisiteChunkId) return;
-    const chunkId = this.detail().chunk_id;
-    this.pendingConfirm.set({
-      heading: `Release dependency for ${chunkId}`,
-      message: `Release chunk ${chunkId}'s dependency on ${prerequisiteChunkId}?`,
-      confirmLabel: 'Release',
-      variant: 'primary',
-      run: () => this.releaseDependency.emit({ chunkId, prerequisiteChunkId }),
     });
   }
 

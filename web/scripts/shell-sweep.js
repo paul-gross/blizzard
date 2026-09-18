@@ -132,6 +132,10 @@
  *   - projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts — the
  *     shared confirmation dialog: its Cancel and confirm controls render together
  *     in the dialog footer and the real focus trap keeps keyboard focus inside the prompt.
+ *   - projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts — the tooltip
+ *     trigger directive: a real pointer hover and a real keyboard Tab focus both
+ *     open its overlay panel, and `aria-describedby` resolves to that panel's
+ *     actual id in the rendered DOM.
  *   - projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts —
  *     the gardening run dialog's own three fields (blizzard#399 D6), at the
  *     phone and desktop widths the dialog is reachable at: the scope field's
@@ -184,10 +188,15 @@
  *     READY and BACKLOG whole-card drag cue: its decorative token-coloured dots
  *     resolve as a two-wide grid only when reordering is armed.
  *   - projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts — the
- *     dock header's action row with every control live at once (Pause, Complete,
- *     Delete, the prerequisite field, Declare, Release, the route/Detach group,
- *     close): none of them overflows the header's own edge, at 800px and at
- *     390/320px.
+ *     dock header's action row with every in-flow control live at once (Pause, the
+ *     `⋯` overflow trigger, close): none of them overflows the header's own edge, at
+ *     800px and at 390/320px. A second case per width opens the trigger's menu and
+ *     sweeps its own panel items (Detach, Complete, Delete) on-viewport.
+ *   - projects/local-panel/src/lib/machine-detail-header.shell-sweep.spec.ts — the
+ *     machine detail dock's own header: a real pointer hover on Pause/Resume opens
+ *     the wired `KitTooltip` naming the claiming runner, and the header's two
+ *     clusters never overflow with a long chunk id and runner name live at once, at
+ *     390/320px (the mobile shell) and at a `LocalPanelLayout` desktop width.
  *   - projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts —
  *     the two structured artifact readings (`FindingDelta`, `FindingSurvey`) inside a
  *     height-capped page: each genuinely bounds itself at the cap and scrolls its own
@@ -239,6 +248,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposals-page.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },
@@ -250,6 +260,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-shell/board-column.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts' },
+  { project: 'local-panel', spec: 'projects/local-panel/src/lib/machine-detail-header.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-explorer-list.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-session-table.shell-sweep.spec.ts' },

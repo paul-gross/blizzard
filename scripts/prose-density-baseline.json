@@ -5171,10 +5171,10 @@
    "total": 299
   },
   "e2e/test_board_browser_e2e.py": {
-   "comments": 74,
+   "comments": 76,
    "docstrings": 30,
    "over_cap": 2,
-   "total": 523
+   "total": 527
   },
   "e2e/test_board_cost_live_e2e.py": {
    "comments": 15,

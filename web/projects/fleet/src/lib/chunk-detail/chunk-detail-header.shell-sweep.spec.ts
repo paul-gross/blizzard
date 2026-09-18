@@ -10,12 +10,14 @@ import { ChunkDetailHeader } from './chunk-detail-header';
  * The dock header's action row at narrow widths (issue #461 round 3 F4) — a real
  * layout claim jsdom cannot make: it never actually lays out `.d-meta`/`.d-actions`'s
  * flex row, so `web:unit-test` cannot see a control pushed past the dock's own edge.
- * This mounts the header with every control live at once — a routed, pausable,
- * blocked chunk with a long runner identity — the worst case the row can carry
- * (Pause, Complete, Delete, the prerequisite field, Declare, Release, plus the
- * route/Detach group and the close button), and sweeps that nothing overflows the
- * dock's own right edge, at 800px (wider than any real dock share) and at 390/320px
- * (`bzh:narrow-viewport-tier-rule`).
+ * This mounts the header with every in-flow control live at once — a routed,
+ * pausable chunk with a long runner identity — the worst case the row can carry
+ * (Pause and the `⋯` overflow trigger, plus the close button; Detach, Complete, and
+ * Delete moved into the trigger's own menu panel), and sweeps that nothing overflows
+ * the dock's own right edge, at 800px (wider than any real dock share) and at
+ * 390/320px (`bzh:narrow-viewport-tier-rule`). A second case opens the menu and
+ * sweeps its own panel items at the same widths — a real CDK overlay, not the
+ * `.d-actions` flex row, so it needs its own layout claim.
  *
  * The selector list below is asserted against an exact count, not merely non-empty:
  * a hard-coded list that silently misses a newly added control is a sweep that stays
@@ -34,28 +36,20 @@ const DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000' },
   route: { runner_id: 'a-long-runner-identity-that-wraps-under-a-narrow-column', workspace_id: 'ws_01', environment_ids: ['env_01'] },
 };
 
 const WIDTHS = [800, 390, 320];
 
-/** Every control the fixture above makes live at once. `status: 'ready'` with
- * `canControl: true` is exactly `deletable()`, so Delete renders here and is the
- * widest trailing item in `.d-actions` — the one this row's `margin-left: auto`
- * anchoring is most likely to push past the edge. */
-const SWEPT = [
-  'pause-chunk',
-  'complete-chunk',
-  'delete-chunk',
-  'dependency-prerequisite-input',
-  'declare-dependency',
-  'release-dependency',
-  'detach-chunk',
-  'detail-close',
-] as const;
+/** Every in-flow control the fixture above makes live at once — Detach, Complete,
+ * and Delete no longer render inline; they live in the `⋯` trigger's own menu. */
+const SWEPT = ['pause-chunk', 'chunk-actions-menu', 'detail-close'] as const;
 
-async function renderHeader(width: number): Promise<HTMLElement> {
+/** The menu panel's own items, once opened — a routed, pausable, deletable chunk
+ * (D6's `blocking` gate open) makes all three live at once. */
+const MENU_ITEMS = ['detach-chunk', 'complete-chunk', 'delete-chunk'] as const;
+
+async function renderHeader(width: number): Promise<{ root: HTMLElement; fixture: ReturnType<typeof TestBed.createComponent<ChunkDetailHeader>> }> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [ChunkDetailHeader],
@@ -68,13 +62,13 @@ async function renderHeader(width: number): Promise<HTMLElement> {
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
   await page.viewport(width, 400);
-  return root;
+  return { root, fixture };
 }
 
 describe('chunk detail header action row shell sweep (web:shell-sweep, issue #461)', () => {
   for (const width of WIDTHS) {
     it(`keeps every dock control within the header's own edge at width ${width}`, async () => {
-      const root = await renderHeader(width);
+      const { root } = await renderHeader(width);
       try {
         // The host is `display: contents` (no box of its own) — `.d-head` is the
         // actual header element every control's edge is measured against.
@@ -93,6 +87,35 @@ describe('chunk detail header action row shell sweep (web:shell-sweep, issue #46
             rect.right,
             `width ${width}: ${control.dataset['testid']}'s right edge (${rect.right}) overflows the header's own (${headerRect.right})`,
           ).toBeLessThanOrEqual(headerRect.right + 0.5);
+        }
+      } finally {
+        root.remove();
+      }
+    });
+
+    it(`keeps the opened ⋯ menu's own items on-viewport at width ${width}`, async () => {
+      const { root, fixture } = await renderHeader(width);
+      try {
+        root.querySelector<HTMLElement>('[data-testid="chunk-actions-menu"]')?.click();
+        await fixture.whenStable();
+
+        // The CDK renders the panel into an overlay attached to `document.body`,
+        // not inside the fixture's own element (`kit-menu.spec.ts`'s own convention).
+        const items = document.body.querySelectorAll<HTMLElement>(MENU_ITEMS.map((t) => `[data-testid="${t}"]`).join(', '));
+        expect(
+          items.length,
+          `width ${width}: fixture defect — expected every item in MENU_ITEMS to render, got ` +
+            Array.from(items)
+              .map((c) => c.dataset['testid'])
+              .join(', '),
+        ).toBe(MENU_ITEMS.length);
+        for (const item of Array.from(items)) {
+          const rect = item.getBoundingClientRect();
+          expect(
+            rect.right,
+            `width ${width}: menu item ${item.dataset['testid']}'s right edge (${rect.right}) overflows the viewport (${width})`,
+          ).toBeLessThanOrEqual(width + 0.5);
+          expect(rect.left, `width ${width}: menu item ${item.dataset['testid']} renders off-screen to the left`).toBeGreaterThanOrEqual(-0.5);
         }
       } finally {
         root.remove();

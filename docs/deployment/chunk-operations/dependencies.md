@@ -96,7 +96,5 @@ Clicking it selects the named prerequisite into the dock on the board and in the
 which has no dock to select into, it links there instead. `blizzard-context:/domain/work/statuses.md` owns what the
 marking means and which chunks can carry one.
 
-The dock header carries the declare and release controls beside Complete, gated the same way (`CHUNK_CONTROL`). One
-free-text field serves both — the neighborhood read above exists, but nothing wires it to a picker for this field —
-prefilled with the marked prerequisite when one stands. Every refusal above renders in the dock's action notice, naming
-the chunk id or ids the way the API itself does, rather than a generic failure.
+The board carries no declare or release control — an operator reaches those two verbs only through
+`blizzard hub chunk depend`/`release-dependency` or the API routes above, never the dock.

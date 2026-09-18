@@ -61,15 +61,17 @@
     @if (pause(); as p) {
       <span class="pb" data-testid="chunk-pause-by">Paused by {{ p.by }}</span>
     }
-    <!-- Pause/Resume sits beside Detach: the two are the halves of one choice —
-         detach gives the claim away, pause keeps it. Unlike Detach it does not hang
-         off the route, so it renders whether or not a route is live (issue #46). -->
+    <!-- Pause/Resume is the header's one primary button — the halves of one choice
+         (pause keeps the claim, detach gives it away, now inside the ⋯ menu below).
+         Unlike Detach it does not hang off the route, so it renders whether or not a
+         route is live (issue #46). -->
     <div class="d-actions">
       @if (canControl()) {
         @if (pause()) {
           <fleet-kit-button
             testid="resume-chunk"
             [ariaLabel]="'Resume chunk ' + detail().chunk_id"
+            [fleetTooltip]="resumeCopy(route()?.runner_id ?? null).text"
             (click)="onResume()"
           >
             Resume
@@ -78,87 +80,67 @@
           <fleet-kit-button
             testid="pause-chunk"
             [ariaLabel]="'Pause chunk ' + detail().chunk_id"
+            [fleetTooltip]="pauseCopy(route()?.runner_id ?? null).text"
             (click)="onPause()"
           >
             Pause
           </fleet-kit-button>
         }
-        @if (completable()) {
-          <fleet-kit-button
-            variant="danger"
-            testid="complete-chunk"
-            [ariaLabel]="'Complete chunk ' + detail().chunk_id"
-            (click)="onComplete()"
-          >
-            Complete
-          </fleet-kit-button>
-        }
-        <!-- Declare/release (issue #461): one free-text field serves both, prefilled
-             from the marking when one stands (D5) — the board has no read that lists
-             a chunk's standing edges for a picker to offer instead. -->
-        <fleet-kit-text-input
-          class="dep-input"
-          testid="dependency-prerequisite-input"
-          [ariaLabel]="'Prerequisite chunk id for ' + detail().chunk_id"
-          [value]="prerequisiteInput()"
-          (valueChange)="prerequisiteInput.set($event)"
-          placeholder="prerequisite chunk id"
-        />
-        @if (declarable()) {
-          <fleet-kit-button
-            testid="declare-dependency"
-            [ariaLabel]="'Declare a dependency for chunk ' + detail().chunk_id"
-            (click)="onDeclareDependency()"
-          >
-            Declare
-          </fleet-kit-button>
-        }
-        <fleet-kit-button
-          testid="release-dependency"
-          [ariaLabel]="'Release a dependency for chunk ' + detail().chunk_id"
-          (click)="onReleaseDependency()"
-        >
-          Release
-        </fleet-kit-button>
-        @if (deletable()) {
-          <fleet-kit-button
-            variant="danger"
-            testid="delete-chunk"
-            [ariaLabel]="'Delete chunk ' + detail().chunk_id"
-            (click)="onDelete()"
-          >
-            Delete
-          </fleet-kit-button>
-        }
+        <!-- Detach/Complete/Delete live in the overflow menu (`#actionsMenu` below) —
+             the header keeps only Pause/Resume as an in-flow button. -->
+        <fleet-kit-menu testid="chunk-actions-menu" ariaLabel="Chunk actions" [menu]="actionsMenu" />
       }
     </div>
-    <!-- The route rides in the header beside Detach, not down in the facts, because
-         it is the button's object: it names what is about to be released (issue #42).
-         The work-item column states the same runner as a plain fact. -->
+    <!-- A non-interactive fact, not a button's object anymore — Detach moved into
+         the ⋯ menu, which names its own runner in its own label/copy (issue #42). -->
     @if (route(); as r) {
-      <div class="d-route" data-testid="route-info">
-        <span class="tag">Route</span>
-        <span class="rn" data-testid="route-runner" [attr.title]="r.runner_id">{{ r.runner_id }}</span>
-        @if (canControl()) {
-          <fleet-kit-button
-            variant="danger"
-            testid="detach-chunk"
-            [ariaLabel]="'Detach chunk ' + detail().chunk_id + ' from its runner'"
-            (click)="onDetach()"
-          >
-            Detach
-          </fleet-kit-button>
-        }
-      </div>
+      <span class="claimed" data-testid="route-info" [attr.title]="r.runner_id">Claimed by {{ r.runner_id }}</span>
     }
-    <span class="nd" data-testid="detail-node" [attr.title]="detail().current_node_id">{{
-      detail().current_node_name ?? detail().current_node_id ?? '—'
-    }}</span>
+    <span class="nd" data-testid="detail-node" [attr.title]="detail().current_node_id">{{ currentNodeName() }}</span>
     <button type="button" class="close" data-testid="detail-close" aria-label="Close" (click)="dismiss.emit()">
       ✕
     </button>
   </div>
 </header>
+
+<!-- The ⋯ overflow menu's own panel (Detach, then a divider, then Complete/Delete) —
+     `KitMenu` needs the panel as a `TemplateRef` in this view, since `CdkMenu`'s
+     content query cannot cross the `<ng-content>` projection boundary
+     (`kit-menu.ts`'s own doc comment on that constraint). -->
+<ng-template #actionsMenu>
+  <fleet-kit-menu-panel testid="chunk-actions-panel">
+    @if (route(); as r) {
+      @let detach = detachCopy(r.runner_id, currentNodeName());
+      <fleet-kit-menu-item testid="detach-chunk" [fleetTooltip]="detach.text" (triggered)="onDetach()">
+        <span fleetKitMenuItemSubtitle>{{ detach.subtitle }}</span>
+        {{ detach.label }}
+      </fleet-kit-menu-item>
+      <hr class="menu-divider" />
+    }
+    @let complete = completeCopy();
+    <fleet-kit-menu-item
+      class="danger"
+      testid="complete-chunk"
+      [disabled]="!completable()"
+      [fleetTooltip]="complete.text"
+      (triggered)="onComplete()"
+    >
+      <span fleetKitMenuItemSubtitle>{{ complete.subtitle }}</span>
+      {{ complete.label }}
+    </fleet-kit-menu-item>
+    @let del = deleteCopy();
+    <fleet-kit-menu-item
+      class="danger"
+      testid="delete-chunk"
+      [disabled]="deleteDisabled()"
+      [fleetTooltip]="del.text"
+      (triggered)="onDelete()"
+    >
+      <span fleetKitMenuItemSubtitle>{{ deleteSubtitle() }}</span>
+      {{ del.label }}
+    </fleet-kit-menu-item>
+  </fleet-kit-menu-panel>
+</ng-template>
 
 @if (pendingConfirm(); as confirm) {
   <fleet-kit-confirm-dialog

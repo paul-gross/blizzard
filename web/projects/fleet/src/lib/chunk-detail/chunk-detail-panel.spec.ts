@@ -168,7 +168,9 @@ describe('ChunkDetailPanel', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
+    await fixture.whenStable();
+    document.body.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
@@ -184,7 +186,9 @@ describe('ChunkDetailPanel', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
+    await fixture.whenStable();
+    document.body.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
@@ -200,7 +204,9 @@ describe('ChunkDetailPanel', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
+    await fixture.whenStable();
+    document.body.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 

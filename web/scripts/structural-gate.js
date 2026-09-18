@@ -263,6 +263,45 @@ function assertBoardControlDetectorWorks() {
   }
 }
 
+// The chunk detail dock's retired dependency-management UI — a free-text prerequisite
+// field plus Declare/Release, which duplicated the hub API/CLI surface without adding
+// anything the dock's own operator actions needed. The generated hub client and the hub
+// CLI keep declaring/releasing a standing edge; this census names only the retired
+// frontend affordance around them, not that supported surface.
+const RETIRED_DOCK_CONTROL_SYMBOLS = [
+  'dependency-prerequisite-input',
+  'declare-dependency',
+  'release-dependency',
+  'DependencyEvent',
+  'declareDependency',
+  'releaseDependency',
+  'DependencyVars',
+  'injectDeclareDependencyMutation',
+  'injectReleaseDependencyMutation',
+];
+const RETIRED_DOCK_CONTROL = new RegExp(`\\b(${RETIRED_DOCK_CONTROL_SYMBOLS.join('|')})\\b`, 'g');
+
+/** The retired dock-control symbols `source` still carries. */
+function retiredDockControls(source) {
+  RETIRED_DOCK_CONTROL.lastIndex = 0;
+  return [...source.matchAll(RETIRED_DOCK_CONTROL)].map((match) => match[1]);
+}
+
+/** Prove the dock-control census catches every retired shape before using it on
+ * `projects/` (`bzh:case-pins-its-own-name`). */
+function assertDockControlDetectorWorks() {
+  for (const symbol of RETIRED_DOCK_CONTROL_SYMBOLS) {
+    if (!retiredDockControls(`const value = '${symbol}';`).includes(symbol)) {
+      throw new Error(`dock-control census missed \`${symbol}\``);
+    }
+  }
+  for (const source of ['declareDependencyApiChunksChunkIdDependenciesPost', 'declared', 'dependency-list']) {
+    if (retiredDockControls(source).length > 0) {
+      throw new Error(`dock-control census false-positived on \`${source}\``);
+    }
+  }
+}
+
 /** Whether `relPath` (relative to `PROJECTS_DIR`) sits inside `fleet/lib/kit/` — the
  * kit's own sources are exempt from its own floor. */
 function isInsideKit(relPath) {
@@ -273,6 +312,7 @@ function main() {
   assertRealTimerDetectorWorks();
   assertKitFloorDetectorWorks();
   assertBoardControlDetectorWorks();
+  assertDockControlDetectorWorks();
 
   const specFiles = walk(PROJECTS_DIR, ['.ts']);
 
@@ -296,6 +336,8 @@ function main() {
   const kitFloorViolations = [];
   /** @type {{ file: string, symbol: string }[]} */
   const boardControlViolations = [];
+  /** @type {{ file: string, symbol: string }[]} */
+  const dockControlViolations = [];
 
   for (const file of walk(PROJECTS_DIR, ['.css'])) {
     const rel = path.relative(PROJECTS_DIR, file);
@@ -318,12 +360,21 @@ function main() {
 
   for (const file of walk(PROJECTS_DIR, ['.ts', '.html', '.css'])) {
     const rel = path.relative(PROJECTS_DIR, file);
-    for (const symbol of retiredBoardControls(fs.readFileSync(file, 'utf8'))) {
+    const source = fs.readFileSync(file, 'utf8');
+    for (const symbol of retiredBoardControls(source)) {
       boardControlViolations.push({ file: rel, symbol });
+    }
+    for (const symbol of retiredDockControls(source)) {
+      dockControlViolations.push({ file: rel, symbol });
     }
   }
 
-  if (realTimerViolations.length > 0 || kitFloorViolations.length > 0 || boardControlViolations.length > 0) {
+  if (
+    realTimerViolations.length > 0 ||
+    kitFloorViolations.length > 0 ||
+    boardControlViolations.length > 0 ||
+    dockControlViolations.length > 0
+  ) {
     if (realTimerViolations.length > 0) {
       console.error('structural-gate: real timers in merge-gating specs:\n');
       for (const v of realTimerViolations) console.error(`  ${v.file}: ${v.timer}(…, ${v.delay})`);
@@ -348,6 +399,15 @@ function main() {
         '\nKeep grouping at its supported API and CLI surfaces; board cards reorder through their whole-card drag only.',
       );
     }
+    if (dockControlViolations.length > 0) {
+      console.error('structural-gate: retired dock dependency-management controls under projects:\n');
+      for (const v of dockControlViolations) console.error(`  ${v.file}: ${v.symbol}`);
+      console.error(
+        '\nThe dock dropped its own prerequisite field and Declare/Release buttons; reach for `chunk depend` and ' +
+          '`chunk release-dependency` on the hub CLI, or the hub API those commands wrap, rather than rebuilding ' +
+          'the affordance here.',
+      );
+    }
     process.exitCode = 1;
     return;
   }
@@ -355,6 +415,7 @@ function main() {
   console.log('structural-gate: real-timer sweep clean.');
   console.log('structural-gate: kit floor clean.');
   console.log('structural-gate: retired board-control census clean.');
+  console.log('structural-gate: retired dock-control census clean.');
 }
 
 main();

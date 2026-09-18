@@ -475,6 +475,10 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 a_card.click()
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
                 expect(page.get_by_test_id("detail-id")).to_have_text(chunk_a)
+                # The dock is open here, so this is the one spot in the scenario where these
+                # testids would actually render if the retired dependency UI ever came back.
+                for retired_control in ("dependency-prerequisite-input", "declare-dependency", "release-dependency"):
+                    expect(page.get_by_test_id(retired_control)).to_have_count(0)
                 page.get_by_test_id("pause-chunk").click()
                 page.get_by_test_id("confirm-dialog-confirm").click()
 

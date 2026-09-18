@@ -1,0 +1,15 @@
+:host {
+  display: block;
+  max-width: 240px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 1px solid var(--bezel);
+  box-shadow: 0 8px 20px var(--overlay-40);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  /* The panel never receives the pointer — leaving it wouldn't dismiss the
+     tooltip, it would just stop the trigger's own mouseleave from firing. */
+  pointer-events: none;
+}

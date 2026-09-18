@@ -1,4 +1,9 @@
-<span class="label"><ng-content /></span>
+<span class="body">
+  <span class="label"><ng-content /></span>
+  @if (subtitleContent()) {
+    <span class="subtitle"><ng-content select="[fleetKitMenuItemSubtitle]" /></span>
+  }
+</span>
 @if (submenu()) {
   <span class="chevron" aria-hidden="true">›</span>
 }
