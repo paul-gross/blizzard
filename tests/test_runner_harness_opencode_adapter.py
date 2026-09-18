@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,15 @@ def _fixture(name: str) -> dict[str, Any]:
 
 def _jsonl(events: list[dict[str, Any]]) -> str:
     return "\n".join(json.dumps(event) for event in events)
+
+
+@pytest.fixture(autouse=True)
+def _opencode_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mirrors ``test_runner_harness_adapter.py``'s fixture of the same shape: a unit
+    test's fake spawn must not depend on whether ``opencode`` is really installed on this
+    machine's ``PATH`` — `_ensure_executable`'s `shutil.which` lookup (F1) runs before the
+    faked ``subprocess.Popen`` ever sees the call."""
+    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
 
 
 def _adapter(**kwargs: Any) -> OpenCodeAdapter:

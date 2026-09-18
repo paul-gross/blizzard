@@ -31,6 +31,15 @@ from tests.runner_fakes import FakeProbe, make_envelope
 _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
 
 
+@pytest.fixture(autouse=True)
+def _claude_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A unit test's fake spawn must not depend on whether ``claude`` is really installed
+    on this machine's ``PATH`` — `_ensure_executable`'s `shutil.which` lookup (F1) runs
+    before the faked ``subprocess.Popen`` ever sees the call. Tests proving the
+    absent-from-``PATH`` behavior override this within their own body."""
+    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
+
+
 def _adapter(**kwargs: Any) -> ClaudeCodeAdapter:
     """A :class:`ClaudeCodeAdapter` helper defaulting ``process`` to a fresh :class:`FakeProbe`
     and ``launcher`` to a real one over it — most cases here don't care which they get."""
