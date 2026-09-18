@@ -1,28 +1,8 @@
-"""Service-tier proof for the hermetic OpenCode compatibility diagnostic
-(``bzh:external-cli-fake-is-service-tier``).
+"""Service-tier proof for the OpenCode compatibility diagnostic against a real ``mock-opencode emit``
+artifact, spawned and exercised as an out-of-process binary (``bzh:external-cli-fake-is-service-tier``).
 
-Every case below used to live in ``tests/test_runner_harness_opencode_diagnostic.py`` (component
-tier) and drive a hand-rolled, string-replaced temp-file script as the fake OpenCode binary. That
-script exercised a genuine out-of-process subprocess the way a real harness integration would spawn
-the genuine tool — argv, exit codes, stdio framing, and process lifetime all real — which is exactly
-what `bzh:external-cli-fake-is-service-tier` says belongs at ``blizzard:service-test`` instead of
-`blizzard:component-test`. What changed is *how* the fake binary is produced: it is now a real
-``mock-opencode emit`` artifact from the sibling ``blizzard-mock`` worktree
-(``blizzard_mock.harness.opencode_surface``), baked with the same named levers the old temp-file
-fake toggled via string replacement. What did not change is any assertion, parametrization, or
-docstring below — this is a move plus one substitution, not a rewrite.
-
-Every emitted artifact is written under that test's own ``tmp_path`` — unique per test, safe under
+Every emitted artifact is written under its own test's ``tmp_path`` — unique per test, safe under
 ``-n auto``.
-
-Wall-clock note (measured on this machine, a real ``mise run service-test`` —
-``BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`` — run, both timed end to end): the
-pre-existing ``tests/service/`` suite alone (106 cases, no this file) ran in ~95s; with this file's
-39 cases added (145 total, each of which shells out to a real ``mock-opencode emit`` plus one or
-more real subprocess invocations of the emitted artifact), the full service tier still ran in ~94s —
-``-n auto`` absorbs the added load rather than adding to the wall clock. There is no declared
-``timeout-minutes`` ceiling on the service-tier CI job today to compare against; this note states a
-plain one instead: stays well under 5 minutes on this 20-core machine.
 """
 
 from __future__ import annotations
@@ -187,8 +167,9 @@ def _fake_binary(
 ) -> str:
     """Emit a real ``mock-opencode`` artifact, baked with the named levers — the service-tier
     replacement for the old temp-file ``fake_binary``. Every keyword here maps 1:1 onto a
-    ``blizzard_mock.harness.opencode_surface.levers.Lever`` member name; the mapping below is
-    exhaustive against that 26-member roster, not best-effort."""
+    ``blizzard_mock.harness.opencode_surface.levers.Lever`` member name; kept in step by hand
+    (`bzh:opencode-lever-roster-extends-both-sides`), since this repo cannot import ``blizzard_mock``
+    to check mechanically."""
     lever_flags = {
         "PERMISSION_REQUEST_ONLY": permission_request_only,
         "PERMISSION_PROSE_ONLY": permission_prose_only,
@@ -217,6 +198,7 @@ def _fake_binary(
         "READ_AUTH": read_auth,
         "COMPACTION_NO_CHANGE": compaction_no_change,
     }
+    assert len(lever_flags) == 26, "roster size drifted from blizzard-mock's Lever enum — update both sides"
     tmp_path.mkdir(parents=True, exist_ok=True)
     out = tmp_path / "fake-opencode"
     argv = [str(mock_opencode), "emit", "--out", str(out), "--version", version]

@@ -15,6 +15,7 @@ import contextlib
 import os
 import queue
 import subprocess
+import tempfile
 import threading
 import time
 from collections.abc import Iterator
@@ -109,21 +110,21 @@ def require_stub_idp() -> Path:
 
 
 def require_opencode_cli_surface(bin_dir: Path) -> Path:
-    """``bin_dir``'s ``mock-opencode`` binary, with the ``emit`` verb live, or skip.
-
-    ``mock-opencode`` itself predates ``emit`` — Phase 2 of ``bzh:external-cli-fake-is-service-tier``
-    added the verb to an already-shipping binary — so this skips on the verb's own absence, not the
-    binary's: an older-provisioned sibling ``blizzard-mock`` worktree might carry ``mock-opencode``
-    from before ``emit`` existed."""
+    """``bin_dir``'s ``mock-opencode`` binary, with the ``emit`` verb live, or skip — an
+    older-provisioned sibling ``blizzard-mock`` worktree may carry ``mock-opencode`` without it.
+    Probed with a real ``--out`` emit rather than ``emit --help``: argparse's own ``--help``
+    handling exits 0 either way, so only an actual emitted artifact tells the two apart."""
     mock_opencode = bin_dir / "mock-opencode"
     if not mock_opencode.is_file():
         pytest.skip("no provisioned sibling blizzard-mock worktree with mock-opencode (run `winter provision <env>`)")
-    probe = subprocess.run([str(mock_opencode), "emit", "--help"], capture_output=True, text=True)
-    if probe.returncode != 0:
-        pytest.skip(
-            "the provisioned sibling blizzard-mock's mock-opencode predates the emit verb "
-            "(run `winter provision <env>` again)"
-        )
+    with tempfile.TemporaryDirectory() as probe_dir:
+        probe_out = Path(probe_dir) / "probe-opencode"
+        probe = subprocess.run([str(mock_opencode), "emit", "--out", str(probe_out)], capture_output=True, text=True)
+        if probe.returncode != 0 or not probe_out.is_file():
+            pytest.skip(
+                "the provisioned sibling blizzard-mock's mock-opencode predates the emit verb "
+                "(run `winter provision <env>` again)"
+            )
     return mock_opencode
 
 

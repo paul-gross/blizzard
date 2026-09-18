@@ -295,10 +295,10 @@
    "total": 99
   },
   "blizzard_mock/harness/facades/opencode.py": {
-   "comments": 2,
+   "comments": 3,
    "docstrings": 17,
    "over_cap": 0,
-   "total": 123
+   "total": 133
   },
   "blizzard_mock/harness/helpers.py": {
    "comments": 0,
@@ -350,27 +350,27 @@
   },
   "blizzard_mock/harness/opencode_surface/domain/attach.py": {
    "comments": 0,
-   "docstrings": 8,
+   "docstrings": 10,
    "over_cap": 0,
-   "total": 25
+   "total": 31
   },
   "blizzard_mock/harness/opencode_surface/domain/configuration.py": {
    "comments": 1,
-   "docstrings": 8,
+   "docstrings": 9,
    "over_cap": 0,
-   "total": 65
+   "total": 61
   },
   "blizzard_mock/harness/opencode_surface/domain/export.py": {
    "comments": 1,
-   "docstrings": 2,
+   "docstrings": 11,
    "over_cap": 0,
-   "total": 138
+   "total": 161
   },
   "blizzard_mock/harness/opencode_surface/domain/permission.py": {
-   "comments": 0,
+   "comments": 3,
    "docstrings": 4,
    "over_cap": 0,
-   "total": 79
+   "total": 82
   },
   "blizzard_mock/harness/opencode_surface/domain/process_control.py": {
    "comments": 0,
@@ -379,10 +379,10 @@
    "total": 19
   },
   "blizzard_mock/harness/opencode_surface/domain/run.py": {
-   "comments": 1,
-   "docstrings": 8,
+   "comments": 2,
+   "docstrings": 10,
    "over_cap": 0,
-   "total": 86
+   "total": 104
   },
   "blizzard_mock/harness/opencode_surface/domain/security.py": {
    "comments": 0,
@@ -392,9 +392,9 @@
   },
   "blizzard_mock/harness/opencode_surface/domain/serve.py": {
    "comments": 0,
-   "docstrings": 8,
+   "docstrings": 13,
    "over_cap": 0,
-   "total": 42
+   "total": 61
   },
   "blizzard_mock/harness/opencode_surface/domain/state.py": {
    "comments": 0,
@@ -410,9 +410,9 @@
   },
   "blizzard_mock/harness/opencode_surface/emit.py": {
    "comments": 3,
-   "docstrings": 11,
+   "docstrings": 14,
    "over_cap": 0,
-   "total": 71
+   "total": 86
   },
   "blizzard_mock/harness/opencode_surface/internal/__init__.py": {
    "comments": 0,
@@ -421,10 +421,10 @@
    "total": 5
   },
   "blizzard_mock/harness/opencode_surface/internal/attach_client.py": {
-   "comments": 0,
+   "comments": 1,
    "docstrings": 2,
    "over_cap": 0,
-   "total": 55
+   "total": 62
   },
   "blizzard_mock/harness/opencode_surface/internal/auth.py": {
    "comments": 0,
@@ -457,10 +457,10 @@
    "total": 84
   },
   "blizzard_mock/harness/opencode_surface/internal/paths.py": {
-   "comments": 1,
+   "comments": 0,
    "docstrings": 4,
    "over_cap": 0,
-   "total": 19
+   "total": 18
   },
   "blizzard_mock/harness/opencode_surface/internal/security.py": {
    "comments": 0,
@@ -470,15 +470,15 @@
   },
   "blizzard_mock/harness/opencode_surface/internal/state_store.py": {
    "comments": 0,
-   "docstrings": 3,
+   "docstrings": 4,
    "over_cap": 0,
-   "total": 20
+   "total": 26
   },
   "blizzard_mock/harness/opencode_surface/levers.py": {
-   "comments": 1,
-   "docstrings": 12,
+   "comments": 26,
+   "docstrings": 14,
    "over_cap": 0,
-   "total": 92
+   "total": 119
   },
   "blizzard_mock/harness/session.py": {
    "comments": 2,
@@ -5292,9 +5292,9 @@
   },
   "service/support.py": {
    "comments": 8,
-   "docstrings": 52,
-   "over_cap": 3,
-   "total": 413
+   "docstrings": 50,
+   "over_cap": 2,
+   "total": 416
   },
   "service/test_analytics_events_service.py": {
    "comments": 3,
@@ -5376,9 +5376,9 @@
   },
   "service/test_opencode_compatibility_service.py": {
    "comments": 17,
-   "docstrings": 32,
-   "over_cap": 1,
-   "total": 960
+   "docstrings": 13,
+   "over_cap": 0,
+   "total": 942
   },
   "service/test_parity_guard.py": {
    "comments": 8,
