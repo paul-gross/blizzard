@@ -32,10 +32,11 @@ leases = Table(
     Column("chunk_id", String, nullable=False),  # the chunk this lease attempt is for
     Column("epoch", Integer, nullable=False),  # incrementing fence, reported to the hub
     Column("runner_id", String, nullable=False),
-    Column("pid", Integer, nullable=True),  # filled at spawn-return
+    Column("pid", Integer, nullable=True),  # filled at spawn-return (phase one of a two-phase spawn)
     Column("process_start_time", String, nullable=True),  # stable across pid reuse; REAP keys on it
-    Column("session_id", String, nullable=True),  # harness-assigned, recorded at spawn-return
+    Column("session_id", String, nullable=True),  # harness-assigned, recorded once identified (phase two)
     Column("harness_id", String, nullable=True),  # owner of session_id; together they identify a concrete session
+    Column("pgid", Integer, nullable=True),  # the current generation's owned process group (D3)
     Column("created_at", UtcDateTime, nullable=False),
 )
 
@@ -125,6 +126,17 @@ lease_spawns = Table(
     # generation records the executable/version that actually started it.
     Column("harness_id", String, nullable=True),
     Column("harness_version", String, nullable=True),
+    # Phase one (D1/D2): launch-time process facts, durable before identity is known;
+    # `None` for a generation recorded the single-shot way (`record_spawn`).
+    Column("pid", Integer, nullable=True),
+    Column("process_start_time", String, nullable=True),
+    Column("pgid", Integer, nullable=True),
+    # Phase two (D1/D2): set together once identity is confirmed (`bzh:facts-not-status`'s
+    # closing-fact shape). A generation with `pid` set and both `NULL` is durably provisional.
+    Column("session_id", String, nullable=True),
+    Column("identified_at", UtcDateTime, nullable=True),
+    # The other way a provisional generation closes: identity never arrived.
+    Column("identity_failed_at", UtcDateTime, nullable=True),
 )
 
 # --- Lease closures (closed iff a closure fact exists — facts-not-status) -----
@@ -467,6 +479,7 @@ in_flight_elicitations = Table(
     Column("epoch", Integer, nullable=False),
     Column("pid", Integer, nullable=True),
     Column("process_start_time", String, nullable=True),
+    Column("pgid", Integer, nullable=True),  # this launch's owned process group (D3)
     Column("output_path", String, nullable=False),
     Column("first_launched_at", UtcDateTime, nullable=False),
     Column("relaunch_count", Integer, nullable=False),

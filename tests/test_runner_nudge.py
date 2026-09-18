@@ -15,7 +15,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
-from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.steps import Advance, Pull
@@ -67,8 +67,8 @@ class _AttachingOnResumeHarness(FakeHarness):
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
-        pid = super().resume_with_message(
+    ) -> ResumeHandle:
+        resumed = super().resume_with_message(
             workdir,
             session_id,
             message,
@@ -87,7 +87,7 @@ class _AttachingOnResumeHarness(FakeHarness):
             content=self._content,
             attached_at=self._clock.now(),
         )
-        return pid
+        return resumed
 
 
 class _DeclaringGitCommitOnResumeHarness(FakeHarness):
@@ -133,8 +133,8 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
-        pid = super().resume_with_message(
+    ) -> ResumeHandle:
+        resumed = super().resume_with_message(
             workdir,
             session_id,
             message,
@@ -155,7 +155,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
             commit=self._commit,
             declared_at=self._clock.now(),
         )
-        return pid
+        return resumed
 
 
 def _seed_exited_lease(store, *, lease_id: str, chunk_id: str, node_id: str, epoch: int) -> None:
@@ -197,7 +197,7 @@ def test_unmet_produces_exit_resumes_instead_of_being_judged(tmp_path: Path) -> 
     )
     check_runner = FakeCheckRunner()
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"),
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
         # The observed shape: the model ended its turn with no verdict ever elicited.
         verdict=None,
         assessment="",
@@ -260,7 +260,7 @@ def test_unmet_produces_resume_picks_up_the_attach_on_the_next_exit(tmp_path: Pa
         epoch=1,
         name="review-findings",
         content="attached after the resume",
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"),
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
         verdict="fail",
         assessment="the shared assessment",
     )
@@ -317,7 +317,7 @@ def test_unmet_produces_resume_picks_up_a_git_commit_declared_on_the_next_exit(t
         environment_id="e1",
         branch="feature/worker-declared",
         commit="deadbeef",
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"),
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
         verdict="fail",
         assessment="the shared assessment",
     )
@@ -369,7 +369,7 @@ def test_second_premature_exit_under_the_same_lease_and_epoch_falls_through_to_j
     )
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"),
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
         verdict="fail",
         assessment="the shared assessment",
     )
@@ -415,7 +415,7 @@ def test_resume_fact_already_set_skips_a_second_resume_attempt(tmp_path: Path) -
     )
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"),
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
         verdict="fail",
         assessment="the shared assessment",
     )
@@ -466,7 +466,7 @@ def test_fully_attached_node_does_not_resume(tmp_path: Path) -> None:
     )
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"),
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
         verdict="pass",
         assessment="the shared assessment",
     )

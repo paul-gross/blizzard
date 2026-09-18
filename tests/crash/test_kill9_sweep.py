@@ -115,6 +115,10 @@ _CI_SUBSET = (
     "pull.after-flush",
     "fill.after-bind.before-claim",
     "spawn.after-lease-mint.before-spawn",
+    # The two-phase spawn's three windows (D1/D2): recovery-critical enough to earn their own CI coverage.
+    "spawn.after-launch.before-provisional-record",
+    "spawn.after-provisional-record.before-identity",
+    "spawn.after-identity.before-session-record",
     "advance.after-buffer.before-flush",
     "flush.after-submit.before-ack",
     # `claim.*` (issue #84b) is a boundary family within `_GENERIC_POINTS`; a family's lone
@@ -223,10 +227,15 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
 
 
-def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str) -> None:
+def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str, after_recovery: bool) -> None:
+    """``when`` is prose only, for the assertion message — ``after_recovery`` is each call
+    site's own explicit signal, never inferred from it. The raw, un-reconciled snapshot the
+    instant a kill lands passes ``False``: ``ActiveLeaseProcessIsLive`` (D3) does not hold
+    there by construction. A checkpoint reached only once REAP/RESUME reconciled it passes
+    ``True``, so that check is asked for there."""
     runner_db = RunnerConfig.load(runner_dir).db_url
     hub_db = HubConfig.load(hub_dir).db_url
-    violations = Invariants(runner_db_url=runner_db, hub_db_url=hub_db).run()
+    violations = Invariants(runner_db_url=runner_db, hub_db_url=hub_db).run(after_recovery=after_recovery)
     assert not violations, f"invariant violations {when}:\n" + "\n".join(str(v) for v in violations)
 
 
@@ -278,7 +287,7 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
         assert code == -9, f"armed daemon at {point} exited {code}, not SIGKILL (-9); point never reached?"
 
         # Invariant checker green right after the crash — the durable facts are consistent.
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
         # Restart the killed daemon unarmed (startup = REAP first, for the runner) and
         # let it converge.
@@ -291,7 +300,7 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
 
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
 
         # Exactly-once delivery: the file is reachable from bare main exactly once.
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
@@ -346,7 +355,7 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         # The runner claims, the worker migrates, and the hub self-SIGKILLs in the window.
         code = wait_death(hub_proc)
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
         # The migration is durable even though the MIGRATED response never returned.
         hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
@@ -363,7 +372,7 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
 
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
 
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         assert detail["graph_id"] == target_graph_id, "the chunk was not re-pinned to the target graph"
@@ -435,7 +444,9 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
         # intent, and the hub self-SIGKILLs in the window.
         code = wait_death(hub_proc)
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after intended-migration kill at {point}")
+        _assert_invariants(
+            runner_dir, hub_dir, when=f"immediately after intended-migration kill at {point}", after_recovery=False
+        )
 
         # The intent must be cleared in the SAME transaction as the migration fact — a
         # crash that recorded one but not the other would re-fire the migration on recovery.
@@ -457,7 +468,9 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
 
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
-        _assert_invariants(runner_dir, hub_dir, when=f"after intended-migration convergence past {point}")
+        _assert_invariants(
+            runner_dir, hub_dir, when=f"after intended-migration convergence past {point}", after_recovery=True
+        )
 
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         assert detail["graph_id"] == target_graph_id, "the chunk was not re-pinned to the intent's target graph"
@@ -517,7 +530,9 @@ def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv,
         # The runner claims, the worker migrates onto the hub node, and the hub self-SIGKILLs.
         code = wait_death(hub_proc)
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after hub-landing kill at {point}")
+        _assert_invariants(
+            runner_dir, hub_dir, when=f"immediately after hub-landing kill at {point}", after_recovery=False
+        )
 
         # The migration is durable even though the response never returned — and it landed on
         # the hub-executed node, so the chunk derives `delivering`, never `ready`.
@@ -538,7 +553,7 @@ def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv,
             f"hub-landing migration did not converge to done after kill at {point} (last {status!r}) — "
             "a `delivering` timeout here means the retained-route chunk wedged with nothing driving it"
         )
-        _assert_invariants(runner_dir, hub_dir, when=f"after hub-landing convergence past {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"after hub-landing convergence past {point}", after_recovery=True)
 
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         assert detail["graph_id"] == target_graph_id, "the chunk was not re-pinned to the target graph"
@@ -841,14 +856,14 @@ def test_kill9_at_nudge_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
         code = wait_death(runner_proc)
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
 
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
         runner_proc = start_runner(runner_dir, crash_point=None)
 
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
 
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
 
         # Exactly-once delivery, as every scenario asserts.
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
@@ -899,14 +914,14 @@ def test_kill9_at_checks_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         code = wait_death(runner_proc)
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
 
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
         runner_proc = start_runner(runner_dir, crash_point=None)
 
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
 
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
 
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
@@ -1010,12 +1025,14 @@ def test_kill9_runner_daemon_after_session_end(crash_env: CrashEnv, tmp_path: Pa
         runner_proc.kill()
         runner_proc.wait(timeout=10)
 
-        _assert_invariants(runner_dir, hub_dir, when="after external kill -9 following the worker's session-end")
+        _assert_invariants(
+            runner_dir, hub_dir, when="after external kill -9 following the worker's session-end", after_recovery=True
+        )
 
         runner_proc = start_runner(runner_dir, crash_point=None)
         assert runner_proc.pid != pid_before
         assert wait_status(hub, chunk_id, {"done"}) == "done", "chunk did not converge after runner kill -9"
-        _assert_invariants(runner_dir, hub_dir, when="after runner-daemon recovery")
+        _assert_invariants(runner_dir, hub_dir, when="after runner-daemon recovery", after_recovery=True)
 
         after = _leases_for_chunk(runner_dir, chunk_id)
         assert len(after) == 1, f"exit-is-done recovery minted an extra lease (a retry, not a direct judge): {after}"
@@ -1077,12 +1094,12 @@ def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_pat
 
         assert _session_ends(runner_dir) == set(), "the orphan recorded a session-end against a dead runner"
         assert not _git_commit_declared(runner_dir, lease_id), "the orphan's declare succeeded against a dead runner"
-        _assert_invariants(runner_dir, hub_dir, when="after kill -9 in the pre-declaration window")
+        _assert_invariants(runner_dir, hub_dir, when="after kill -9 in the pre-declaration window", after_recovery=True)
 
         runner_proc = start_runner(runner_dir, crash_point=None)
         status = wait_status(hub, chunk_id, {"done", "needs_human"})
         assert status in {"done", "needs_human"}, f"chunk did not converge after runner kill -9: {status}"
-        _assert_invariants(runner_dir, hub_dir, when="after runner-daemon recovery")
+        _assert_invariants(runner_dir, hub_dir, when="after runner-daemon recovery", after_recovery=True)
 
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
@@ -1304,7 +1321,7 @@ def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_pat
         # The intent was consumed by RESUME.
         assert _open_resume_intents(runner_dir) == set()
 
-        _assert_invariants(runner_dir, hub_dir, when="after graceful restart-resume")
+        _assert_invariants(runner_dir, hub_dir, when="after graceful restart-resume", after_recovery=True)
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
@@ -1361,7 +1378,9 @@ def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: P
 
         assert _open_resume_intents(runner_dir) == set(), "an ungraceful kill must leave no graceful marker"
         assert _session_ends(runner_dir) == set(), "a worker killed mid-work must record no session-end"
-        _assert_invariants(runner_dir, hub_dir, when="after ungraceful kill -9 of the runner mid-build")
+        _assert_invariants(
+            runner_dir, hub_dir, when="after ungraceful kill -9 of the runner mid-build", after_recovery=True
+        )
 
         # Restart: `host` runs startup crash-recovery (marks the killed-mid-work lease), then the
         # first tick's RESUME re-attaches the same session in place.
@@ -1377,7 +1396,7 @@ def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: P
         assert pid_after != pid_before, "the resumed process pid was not rewritten"
         assert _open_resume_intents(runner_dir) == set(), "the crash resume-intent was not cleared after recovery"
 
-        _assert_invariants(runner_dir, hub_dir, when="after ungraceful crash restart-resume")
+        _assert_invariants(runner_dir, hub_dir, when="after ungraceful crash restart-resume", after_recovery=True)
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
@@ -1420,7 +1439,7 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         runner_proc = start_runner(runner_dir, crash_point=point)
         code = wait_death(runner_proc)
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
         # Restart UNARMED: RESUME recovers and the chunk converges — exactly once, still one lease.
         runner_proc = start_runner(runner_dir, crash_point=None)
@@ -1431,8 +1450,8 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         # lease/epoch/session are the ones marked before the restart — the pid is the only rewrite.
         assert len(after) == 1, f"resume across a crash at {point} minted an extra lease (retry): {after}"
         assert (after[0][0], after[0][1], after[0][2]) == (lease_id, epoch, session_id)
-        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        assert _wait_for_cleared_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
@@ -1569,6 +1588,19 @@ def _wait_for_closure(runner_dir: Path, lease_id: str, *, timeout: float = 30.0)
     return reason
 
 
+def _wait_for_cleared_resume_intents(runner_dir: Path, *, timeout: float = 30.0) -> set[str]:
+    """Poll until no resume-intent is open, or the timeout elapses (return whatever was last seen).
+
+    Abandon, pause-park and preempt each write their resume-clear one statement *after* the
+    closure, so a read taken the instant that closure lands can still legitimately see it open."""
+    deadline = time.monotonic() + timeout
+    intents = _open_resume_intents(runner_dir)
+    while intents and time.monotonic() < deadline:
+        time.sleep(0.25)
+        intents = _open_resume_intents(runner_dir)
+    return intents
+
+
 @pytest.mark.parametrize("point", _ABANDON_SWEEP)
 def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` anywhere inside the abandon — before its release, or after it and before
@@ -1610,7 +1642,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         # at `point` — before the environments are released, or after them and before the closure.
         code = wait_death(runner_proc)
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
         # The kill (not the mock harness's own SessionEnd hook) is what ended the worker — a
         # SIGKILL is uncatchable, so no session-end fact was recorded for it.
         assert _session_ends(runner_dir) == set(), "a SIGKILL'd worker must record no session-end"
@@ -1623,7 +1655,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
             f"the original lease closed {reason!r}, not 'released' — the abandon window was not "
             "recovered via RESUME (a REAP-retry here would consume a retry instead of releasing)"
         )
-        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        assert _wait_for_cleared_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
 
         # Re-claimable: the same (only) runner picks the now-ready chunk back up fresh and, this
         # time past the marker, runs it to completion rather than hanging again.
@@ -1635,7 +1667,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         fresh_lease_id = next(lid for lid in lease_ids_after if lid != lease_id_before)
         assert _closure_reason(runner_dir, fresh_lease_id) == "transitioned", "the fresh re-claim did not land cleanly"
 
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
@@ -1693,7 +1725,7 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
         # The armed runner's next PULL kills the hung worker and self-SIGKILLs before the park.
         code = wait_death(runner_proc)
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
         assert _open_pause_parks(runner_dir) == set(), "the park was durable — the crash point fired too late"
         assert _session_ends(runner_dir) == set(), "a SIGKILL'd worker must record no session-end"
 
@@ -1709,8 +1741,10 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
         # The claim survived the crash: no closure at all, and emphatically not `released`.
         assert _closure_reason(runner_dir, lease_id) is None, "recovery closed the paused lease — pause became detach"
         assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "paused"
-        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
-        _assert_invariants(runner_dir, hub_dir, when=f"after the pause-park recovered past {point}")
+        assert _wait_for_cleared_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        _assert_invariants(
+            runner_dir, hub_dir, when=f"after the pause-park recovered past {point}", after_recovery=True
+        )
 
         # The operator resumes: the SAME session finishes the work it was paused mid-way through.
         resumed = hub.post(f"/api/chunks/{chunk_id}/resume", json={"by": "crash-sweep"})
@@ -1722,7 +1756,7 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
         # the chunk a process, not an attempt (a retry would have minted a second lease).
         assert len(after) == 1, f"the pause/resume cycle minted an extra lease (retry, not resume): {after}"
         assert (after[0][0], after[0][1], after[0][2]) == (lease_id, epoch, session_id)
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
@@ -1848,7 +1882,7 @@ def test_kill9_at_hub_command_node_crash_point(crash_env: CrashEnv, tmp_path: Pa
         # merge node's run: list — after land ran, at either the pre-marker or post-marker edge.
         code = wait_death(hub_proc)
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
         # Restart the hub UNARMED: the runner re-flushes the build completion, whose idempotent
         # replay re-enters the hub-node branch and resumes the interrupted run to completion.
@@ -1856,7 +1890,7 @@ def test_kill9_at_hub_command_node_crash_point(crash_env: CrashEnv, tmp_path: Pa
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
 
         # The serialization slot is released — no leaked live slot after the crash-and-resume
         # (the ``hub:one-live-exec-slot`` invariant, asserted directly off the store).
@@ -2007,7 +2041,7 @@ def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Pa
         # release not yet run.
         code = wait_death(hub_proc)
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
         # Restart the hub UNARMED: pending-ness is derived from the durable poll fact, so
         # the chunk just resumes polling and lands.
@@ -2015,7 +2049,7 @@ def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Pa
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
 
         # The serialization slot is released — no leaked live slot after the crash-and-resume
         # (the ``hub:one-live-exec-slot`` invariant, asserted directly off the store).
@@ -2217,7 +2251,7 @@ def test_kill9_between_default_graph_repo_pushes(crash_env: CrashEnv, tmp_path: 
         assert wait_death(hub_proc) == -9
 
         # Invariant checker green right after the crash — one marker durable, one repo unlanded.
-        _assert_invariants(runner_dir, hub_dir, when="immediately after mid-script kill -9")
+        _assert_invariants(runner_dir, hub_dir, when="immediately after mid-script kill -9", after_recovery=False)
 
         # Restart the hub UNARMED (no pause env): the runner re-flushes the build completion,
         # land_default re-runs, skips the marked repo, and pushes only the unmarked one.
@@ -2227,7 +2261,7 @@ def test_kill9_between_default_graph_repo_pushes(crash_env: CrashEnv, tmp_path: 
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"}, timeout=120.0)
         assert status == "done", f"chunk did not converge to done after the mid-script kill (last {status!r})"
-        _assert_invariants(runner_dir, hub_dir, when="after convergence past the mid-script kill")
+        _assert_invariants(runner_dir, hub_dir, when="after convergence past the mid-script kill", after_recovery=True)
 
         # Both markers are now durable, and no live exec slot leaked.
         assert _merged_markers(hub, chunk_id) == sorted([f"merged/{REPO_NAME}", f"merged/{_WEB_REPO_NAME}"])
@@ -2313,7 +2347,9 @@ def test_kill9_between_ff_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Path)
         assert wait_death(hub_proc) == -9
 
         # Invariant checker green right after the crash — one marker durable, one repo unlanded.
-        _assert_invariants(runner_dir, hub_dir, when="immediately after mid-script kill -9 (land_ff)")
+        _assert_invariants(
+            runner_dir, hub_dir, when="immediately after mid-script kill -9 (land_ff)", after_recovery=False
+        )
 
         # Restart the hub UNARMED (no pause env): the runner re-flushes the build completion,
         # land_ff re-runs, skips the marked repo, and fast-forwards only the unmarked one.
@@ -2323,7 +2359,9 @@ def test_kill9_between_ff_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Path)
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"}, timeout=120.0)
         assert status == "done", f"chunk did not converge to done after the mid-script kill (last {status!r})"
-        _assert_invariants(runner_dir, hub_dir, when="after convergence past the mid-script kill (land_ff)")
+        _assert_invariants(
+            runner_dir, hub_dir, when="after convergence past the mid-script kill (land_ff)", after_recovery=True
+        )
 
         # Both markers are now durable, and no live exec slot leaked.
         assert _merged_markers(hub, chunk_id) == sorted([f"merged/{REPO_NAME}", f"merged/{_WEB_REPO_NAME}"])
@@ -2448,7 +2486,7 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         # The armed runner's next PULL kills the hung worker and self-SIGKILLs before the closure.
         code = wait_death(runner_proc)
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
         assert _closure_reason(runner_dir, lease_id) is None, "the closure was durable — the point fired too late"
         assert _session_ends(runner_dir) == set(), "a SIGKILL'd worker must record no session-end"
 
@@ -2460,7 +2498,7 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
             f"the restarted chunk's lease closed {reason!r}, not 'preempted' — recovery spent a "
             "retry on an attempt the operator superseded (issue #370's budget promise regressed?)"
         )
-        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        assert _wait_for_cleared_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
 
         # The claim was kept throughout: the same runner re-enters and finishes the work.
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
@@ -2468,7 +2506,7 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         reasons = sorted(filter(None, (_closure_reason(runner_dir, row[0]) for row in after)))
         assert reasons == ["preempted", "transitioned"], f"unexpected closure set after the restart: {reasons}"
 
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
@@ -2579,7 +2617,7 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
         # `wait_death` timeout equals that interval exactly, racing its own upper bound.
         code = wait_death(hub_proc, timeout=CLOSE_DRAIN_INTERVAL_SECONDS + 60.0)
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
         # Restart the hub UNARMED; the runner's replayed hub-advance poll resumes the
         # interrupted run, and the always-on drain sweep retires the surviving intent.
@@ -2588,7 +2626,7 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
 
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
 
         item = _wait_item_delivered(hub, ref, timeout=60.0)
         assert item is not None and item.get("closure") == "delivered", (

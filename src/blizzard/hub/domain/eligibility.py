@@ -15,6 +15,7 @@ from blizzard.hub.domain.envelope import EffectiveSession
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph, Node
 from blizzard.hub.domain.registry import RunnerCapability
 from blizzard.hub.domain.work import Chunk
+from blizzard.wire.envelope import TIER_PREFIX
 
 
 @dataclass(frozen=True)
@@ -59,11 +60,15 @@ class EligibilityCheck:
     def _lineage_satisfied(self, node: Node) -> bool:
         """Whether some reported capability could serve ``node``'s effective session,
         mirroring :class:`~blizzard.runner.loop.session.HarnessSelector`'s gate against a
-        static snapshot rather than a live adapter."""
+        static snapshot rather than a live adapter — including its carve-out: a single
+        acceptable harness skips the model check only when nothing in ``session.model`` is
+        an authored (``blizzard:``-namespaced) tier, never a guessed native name."""
         session = EffectiveSession.of(self.chunk, self.graph, node)
         if not session.harnesses:
             return any(capability.default for capability in self.capabilities)
-        strict = len(session.harnesses) > 1 and bool(session.model)
+        strict = bool(session.model) and (
+            len(session.harnesses) > 1 or any(tier.startswith(TIER_PREFIX) for tier in session.model)
+        )
         for harness_id in session.harnesses:
             capability = next((c for c in self.capabilities if c.harness_id == harness_id), None)
             if capability is None:

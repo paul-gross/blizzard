@@ -182,6 +182,30 @@ BUILD_SCRIPT = (
 )
 JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
+# The OpenCode-safe build node: like `BUILD_SCRIPT`, but every `subprocess.run` captures its own output — mock-opencode reads the first stdout line as the fresh-session identity.
+OPENCODE_BUILD_SCRIPT = (
+    "import subprocess, pathlib\n"
+    f"repo = {REPO_NAME!r}\n"
+    '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
+    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'
+    'subprocess.run(["git", "-C", repo, "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",'
+    ' "commit", "-m", "feat: land a change from the mock harness"], check=True, capture_output=True)\n'
+    "_branch = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    "_commit = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True, capture_output=True)\n'
+    "subprocess.run(\n"
+    '    ["blizzard", "runner", "artifact", "commit",\n'
+    '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+    "    check=True, capture_output=True,\n"
+    ")\n"
+)
+
 
 def transcript_segment_turn(index: int, kind: str, text: str) -> dict:
     """One ``TurnSegmentView`` as the wire carries it, at its defaults."""
@@ -248,6 +272,50 @@ def mock_hub_chunk_spec(work_ref: str) -> dict:
                         "conflict": {"description": "A repo did not merge cleanly.", "to": "build"},
                     },
                 },
+            },
+        },
+        "work_refs": [{"source": "mock", "ref": work_ref}],
+    }
+
+
+#: The pool name ``build``/``review`` share (issue #144) — declaring the SAME ``session_name`` resumes the first node's minted session, the cross-node-resume shape this exercises.
+OPENCODE_SESSION_POOL = "opencode-pool"
+
+#: ``review``'s base turn: a no-op; the verdict comes from the judgement resume, not this.
+OPENCODE_REVIEW_SCRIPT = "pass\n"
+OPENCODE_REVIEW_JUDGEMENT = "verdict('pass', 'resumed the same OpenCode session; review complete')\n"
+
+
+def mock_hub_opencode_chunk_spec(work_ref: str) -> dict:
+    """A scripted build -> review -> done chunk run entirely under OpenCode (D9/D10).
+    ``build`` and ``review`` share one ``session_name`` pool: ``build`` mints the pool's
+    head fresh and resumes it for its own judgement; ``review`` then resumes that SAME
+    session twice more — the cross-node resume the execution spec's OpenCode binding must serve."""
+    return {
+        "graph_id": "gr_service_opencode",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "session": "resume",
+                "session_name": OPENCODE_SESSION_POOL,
+                "session_harnesses": ["opencode"],
+                "judged_by": "worker",
+                "prompt": OPENCODE_BUILD_SCRIPT,
+                "judgement_prompt": JUDGEMENT_SCRIPT,
+                "choices": [{"name": "pass", "description": "committed and green", "to": "review"}],
+                "retries_max": 1,
+            },
+            "review": {
+                "executor": "runner",
+                "session": "resume",
+                "session_name": OPENCODE_SESSION_POOL,
+                "session_harnesses": ["opencode"],
+                "judged_by": "worker",
+                "prompt": OPENCODE_REVIEW_SCRIPT,
+                "judgement_prompt": OPENCODE_REVIEW_JUDGEMENT,
+                "choices": [{"name": "pass", "description": "cold-eyes review: ready to land", "to": "done"}],
+                "retries_max": 1,
             },
         },
         "work_refs": [{"source": "mock", "ref": work_ref}],

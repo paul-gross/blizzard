@@ -18,11 +18,18 @@ from blizzard.runner.domain.leases import (
 )
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.repository import EnvBindingRecord
-from blizzard.runner.harness.adapter import HarnessSpawnError, IHarnessLifecycleAndVerdict, WorkerPreamble
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.adapter import (
+    DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
+    HarnessSpawnError,
+    IHarnessLifecycleAndVerdict,
+    WorkerIdentityError,
+    WorkerPreamble,
+)
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.loop.capability_snapshot import default_harness_id
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.session import ResumedSession, SkippedHarness
@@ -32,6 +39,16 @@ _log = get_logger("blizzard.runner.loop")
 
 # The lease-mint -> spawn -> record window is the orphan-lease window REAP must absorb.
 _CP_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease minted; worker not spawned")
+# The two-phase spawn's three windows (D1/D2), each bracketing a durable write.
+_CP_AFTER_LAUNCH = crashpoint(
+    "spawn.after-launch.before-provisional-record", "worker process launched; provisional ownership not yet durable"
+)
+_CP_AFTER_PROVISIONAL = crashpoint(
+    "spawn.after-provisional-record.before-identity", "provisional ownership durable; identity not yet known"
+)
+_CP_AFTER_IDENTITY = crashpoint(
+    "spawn.after-identity.before-session-record", "identity known; authoritative session not yet durable"
+)
 _CP_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
 
 
@@ -120,7 +137,9 @@ class Spawner:
                 return
             owner = selection.harness_id
         else:
-            owner = CLAUDE_CODE_HARNESS_ID
+            # Same registry-order default `capability_snapshot` advertises (blizzard#433);
+            # `None` (a no-bindings registry, D10) resolves below like any unresolvable owner.
+            owner = default_harness_id(self.ctx.harnesses) or ""
         # Resolve before minting: an owner this runner cannot serve must block its resume,
         # not leave a lease another harness could later adopt. Logged, not raised, so this blocks only this spawn.
         harness = self._resolve_harness(owner, via=via)
@@ -141,7 +160,7 @@ class Spawner:
         # `harness_version` observation, never runs after the worker is already live and unrecorded.
         version = harness.observe_version()
         try:
-            handle = harness.spawn(
+            pending = harness.spawn(
                 envelope,
                 self._worker_preamble(lease, environments, rendered),
                 session_hint=str(uuid.uuid4()),
@@ -151,8 +170,8 @@ class Spawner:
                 compaction_window=lease.compaction_window,
             )
         except HarnessSpawnError as exc:
-            # Surface the launch-time failure (issue #125) then RE-RAISE: no worker started, so
-            # the attempt was never recorded and the chunk simply retries next tick.
+            # Surface the launch-time failure (issue #125) then RE-RAISE: nothing was ever
+            # launched, but the lease minted above is durable — REAP reaps it (a retry), below.
             OutboundFacts(self.ctx).command_failed(
                 chunk_id=chunk_id,
                 lease_id=lease.lease_id,
@@ -161,13 +180,49 @@ class Spawner:
                 stderr_tail=str(exc),
             )
             raise
+        _CP_AFTER_LAUNCH.reached()  # the process exists; nothing about it is durable yet
+        try:
+            # Phase one (D1/D2): durable BEFORE identity is awaited, so a crash anywhere past
+            # this point leaves a real process's ownership recoverable rather than invisible.
+            self.ctx.stores.liveness.record_provisional_spawn(
+                lease.lease_id,
+                pid=pending.pid,
+                process_start_time=pending.process_start_time,
+                pgid=pending.pgid,
+                spawned_at=now,
+                harness_id=owner,
+            )
+        except Exception:
+            # F1: unlike an OS crash, a plain raise here never disarms the trampoline on its
+            # own — kill it explicitly instead.
+            self.ctx.process.kill_group(pending.pgid)
+            raise
+        _CP_AFTER_PROVISIONAL.reached()  # ownership durable; identity not yet known
+        # F1: disarmed only now — a crash before this line still kills the worker outright.
+        pending.confirm_durable()
+        # F8: still blocks the tick pass on one lease — unlike `judge()`'s already-identified,
+        # pollable-later wait, there is no durable record shape yet for this one; bound kept short instead.
+        try:
+            handle = pending.await_identity(DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS)
+        except WorkerIdentityError as exc:
+            # A real, durably-provisional process (D1/D2) — kill it and mark it unidentified;
+            # the lease stays OPEN until REAP's sweep closes it via `Attempt.fail` (a retry).
+            self.ctx.process.kill_group(pending.pgid)
+            self.ctx.stores.liveness.record_identity_failed(lease.lease_id, at=self.ctx.clock.now())
+            OutboundFacts(self.ctx).command_failed(
+                chunk_id=chunk_id,
+                lease_id=lease.lease_id,
+                node_name=envelope.node.node_name,
+                command="await worker identity",
+                stderr_tail=str(exc),
+            )
+            raise HarnessSpawnError(str(exc)) from exc
+        _CP_AFTER_IDENTITY.reached()  # identity known; not yet the authoritative record
         spawned_session = SessionReference(owner, handle.session_id)
-        self.ctx.stores.liveness.record_spawn(
+        self.ctx.stores.liveness.record_identified_spawn(
             lease.lease_id,
-            pid=handle.pid,
-            process_start_time=handle.process_start_time,
             session=spawned_session,
-            spawned_at=now,
+            identified_at=self.ctx.clock.now(),
             harness_version=version,
         )
         if self.ctx.events is not None:

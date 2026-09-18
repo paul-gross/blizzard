@@ -340,9 +340,21 @@ class Judgement:
             model=lease.resolved_model,
             compaction_window=lease.resolved_compaction_window,
         )
-        self.ctx.stores.elicitations.record_elicitation_started(
-            lease.lease_id, lease.epoch, pid=handle.pid, process_start_time=handle.process_start_time
-        )
+        try:
+            self.ctx.stores.elicitations.record_elicitation_started(
+                lease.lease_id,
+                lease.epoch,
+                pid=handle.pid,
+                process_start_time=handle.process_start_time,
+                pgid=handle.pgid,
+            )
+        except Exception:
+            # F1: a plain raise here never disarms the trampoline on its own — kill it
+            # explicitly instead (`Spawner.spawn`'s own guard around its own durable write).
+            self.ctx.process.kill_group(handle.pgid)
+            raise
+        # F1: disarm only now this record is durable — `collect` can re-adopt it past here.
+        handle.confirm_durable()
 
     def _judged(self, output: str) -> None:
         """Continue from a collected reply — usage, verdict, the checks gate, the completion —

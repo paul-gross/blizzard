@@ -114,7 +114,7 @@ def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, un
     hub.questions["qn_1"] = _answered_question()
     hub.chunks["ch_done"] = _done_chunk("ch_done")
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     provider = FakeProvider({"e1": "/ws/e1", "e_done": "/ws/e_done"})
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), clock=FixedClock(_NOW))
@@ -173,7 +173,7 @@ def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, u
     )
     hub.chunks["ch_done"] = _done_chunk("ch_done")
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     provider = FakeProvider({"e1": "/ws/e1", "e_done": "/ws/e_done"})
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), clock=FixedClock(_NOW))
@@ -231,7 +231,9 @@ def test_resume_on_unmet_produces_blocked_by_unresolvable_owner_escalates_in_pla
     )
     hub.chunks["ch_done"] = _done_chunk("ch_done")
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict=None, assessment=""
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100),
+        verdict=None,
+        assessment="",
     )
     probe = FakeProbe(alive=set())  # the worker already exited
     provider = FakeProvider({"e1": "/ws/e1", "e_done": "/ws/e_done"})
@@ -311,7 +313,7 @@ def test_park_on_ask_skips_only_the_usage_record_when_owner_unresolvable(tmp_pat
     hub = FakeHub()
     hub.chunks["ch_done"] = _done_chunk("ch_done")
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     probe = FakeProbe(alive=set())  # the worker already exited — ask-and-exit
     provider = FakeProvider({"e1": "/ws/e1", "e_done": "/ws/e_done"})

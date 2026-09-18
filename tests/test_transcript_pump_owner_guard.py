@@ -105,7 +105,7 @@ def test_pump_skips_only_the_segment_with_an_unresolvable_owner(tmp_path, unavai
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     source = FakeTranscriptSource(batches_by_session={"sess-ok": _batch("sess-ok")})
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-ok", pid=1, process_start_time="1"),
+        handle=WorkerHandle(session_id="sess-ok", pid=1, process_start_time="1", pgid=1),
         verdict=None,
         transcript_source=source,
     )

@@ -49,7 +49,7 @@ _COMPLETION_PAYLOAD = json.dumps(
 
 def _ctx(hub: FakeHub, *, store=None):  # type: ignore[no-untyped-def]
     store = store if store is not None else make_store("sqlite://")
-    harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"), verdict=None)
+    harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1), verdict=None)
     return make_context(
         store,
         hub=hub,

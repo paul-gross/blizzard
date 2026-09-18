@@ -42,7 +42,7 @@ pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 9, 13, 12, 0, 0, tzinfo=UTC)
 _ALIVE = (100, "start-100")  # (pid, start_time) for a running worker
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 

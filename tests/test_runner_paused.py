@@ -51,7 +51,7 @@ from tests.runner_fakes import (
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
@@ -366,7 +366,7 @@ def test_restart_resume_suppressed_then_advance_does_not_judge_or_spawn(tmp_path
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", resume_process_start_time="start-4321")
     harness.resume_pid = 4321
     # The restart-stranded worker (pid 100) is dead; pid 4321 reads alive once resumed,
     # so the post-unpause pass finds a running worker, not another exit to judge.
@@ -477,7 +477,7 @@ def test_apply_response_next_spawn_suppressed_then_adopted_at_unpause(tmp_path):
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
@@ -544,7 +544,7 @@ def test_hub_paused_only_requeue_still_spawns(tmp_path):  # type: ignore[no-unty
     hub.paused = True
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=201, process_start_time="start-201"), verdict=None
+        handle=WorkerHandle(session_id="sess-b", pid=201, process_start_time="start-201", pgid=201), verdict=None
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
     Pull(ctx).run()  # mirror the hub brake on; the local brake stays untouched
@@ -617,7 +617,7 @@ def test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause(tmp_path
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=202, process_start_time="start-202"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-b", pid=202, process_start_time="start-202", pgid=202), verdict="pass"
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
     _pause_locally(store, ctx, paused=True)
@@ -649,7 +649,7 @@ def test_hub_paused_only_reap_still_requeues(tmp_path):  # type: ignore[no-untyp
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=202, process_start_time="start-202"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-b", pid=202, process_start_time="start-202", pgid=202), verdict="pass"
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
     store.set_hub_paused("r1", paused=True, at=_NOW)  # mirrors what PULL would mirror
@@ -671,7 +671,7 @@ def test_reap_orphan_at_exhausted_retries_defers_escalation_while_locally_paused
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-b", pid=202, process_start_time="start-202"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-b", pid=202, process_start_time="start-202", pgid=202), verdict="pass"
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
     _pause_locally(store, ctx, paused=True)
@@ -701,7 +701,7 @@ def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_pa
     # Two verdict-less exits requeue in place, leaving attempt 3 with the retry budget
     # exhausted: REAP reaping it next would ordinarily escalate.
     for i in range(1, 3):
-        handle = WorkerHandle(session_id=f"sess-{i}", pid=300 + i, process_start_time=f"start-{i}")
+        handle = WorkerHandle(session_id=f"sess-{i}", pid=300 + i, process_start_time=f"start-{i}", pgid=300 + i)
         harness = FakeHarness(handle=handle, verdict=None)
         ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
         if i == 1:

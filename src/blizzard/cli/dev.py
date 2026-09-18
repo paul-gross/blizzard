@@ -48,7 +48,9 @@ def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None, allow_exte
         raise click.ClickException(str(exc)) from exc
     hub_db = hub_config.db_url if hub_config is not None else None
 
-    violations = Invariants(runner_db_url=runner_db, hub_db_url=hub_db).run()
+    # A live operator is always well past any crash-recovery window (D3) — unlike the
+    # crash sweep's own "immediately after a kill" checkpoint.
+    violations = Invariants(runner_db_url=runner_db, hub_db_url=hub_db).run(after_recovery=True)
     if not violations:
         click.echo("invariants hold")
         return

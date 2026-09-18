@@ -1,21 +1,23 @@
 """The coding-harness adapter seam.
 
 Four operations cover every headless-run + persisted-session + resume harness: ``spawn``,
-``resume_with_message``, ``resume_command``, and ``parse_verdict``. Usage translation and
-the transcript source ride alongside them. Provider subscription sampling is a separate,
-provider-selected seam (blizzard#436): see ``blizzard.runner.subscriptions.subscription_sampler``.
-Adapters stay dumb (``bzh:deterministic-shell``): they translate, they never decide."""
+``resume_with_message``, ``resume_command``, and ``parse_verdict``, plus usage translation
+and the transcript source. Provider subscription sampling is a separate, provider-selected
+seam (blizzard#436). Adapters stay dumb (``bzh:deterministic-shell``): they never decide."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
+
+#: Sole-declared default bound on :meth:`PendingWorkerHandle.await_identity`; spawn and selftest both import it.
+DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS = 10.0
 
 
 class HarnessSpawnError(RuntimeError):
@@ -25,12 +27,18 @@ class HarnessSpawnError(RuntimeError):
     rather than an internal adapter (issue #125)."""
 
 
+class WorkerIdentityError(RuntimeError):
+    """``PendingWorkerHandle.await_identity`` could not confirm the launch's session id.
+    Distinct from :class:`HarnessSpawnError`: a real process already exists, so its
+    caller (:class:`~blizzard.runner.loop.spawn.Spawner`) must kill the group it
+    already durably recorded, never treat it as "nothing started"."""
+
+
 @dataclass(frozen=True)
 class WorkerPreamble:
-    """The runner's machine-local preamble prepended to the envelope (issue #17).
-
-    Machine-local execution truth — held environments, lease identity and token, the
-    local-API URL, the spawn cwd, injected capture paths. Never sent to the hub."""
+    """The runner's machine-local preamble prepended to the envelope (issue #17): held
+    environments, lease identity and token, the local-API URL, the spawn cwd, and
+    injected capture paths. Never sent to the hub."""
 
     environments: list[AcquiredEnvironment]
     lease_id: str
@@ -44,11 +52,68 @@ class WorkerPreamble:
 
 @dataclass(frozen=True)
 class WorkerHandle:
-    """What ``spawn`` returns — the facts recorded at spawn-return."""
+    """The facts a launch is authoritative on once identified (D1/D2) — this IS a
+    :class:`PendingWorkerHandle` for any harness that already knows its session id at
+    launch (every binding today): ``await_identity`` is trivially itself. A harness
+    whose identity only arrives later returns a distinct pending type instead."""
 
     session_id: str  # harness-assigned where it self-assigns, else the honored hint
     pid: int
     process_start_time: str  # stable across pid reuse — REAP keys on (pid, start_time)
+    pgid: int  # the owned process group (D3) — every launch gets one; never absent in memory
+    confirm_durable: Callable[[], None] = field(
+        default=lambda: None, compare=False
+    )  # F1's disarm signal; no-op default
+
+    def await_identity(self, timeout: float) -> WorkerHandle:
+        """Already identified at launch — this handle is its own phase two."""
+        return self
+
+
+@dataclass(frozen=True)
+class ResumeHandle:
+    """The OS facts a resume launch is authoritative on (D3): its pid and the REAL
+    process group the launcher recorded for it — never inferred as ``pid`` at the call
+    site. Mirrors :class:`WorkerHandle`'s shape exactly: a resume launches deferred (D4)
+    just like a fresh spawn or a judge, so it carries the same disarm signal and start time."""
+
+    pid: int
+    pgid: int
+    process_start_time: str  # stable across pid reuse — `_wake` records it straight through
+    confirm_durable: Callable[[], None] = field(
+        default=lambda: None, compare=False
+    )  # F1's disarm signal; no-op default
+
+
+class PendingWorkerHandle(Protocol):
+    """``spawn``'s own phase-one return (D1): the launched process's OS facts — pid, start
+    time, and owned group — durable-worthy before any identity is known. A Protocol, not a
+    dataclass, since ``await_identity`` may block or read a stream rather than merely
+    return data already in hand."""
+
+    @property
+    def pid(self) -> int: ...
+
+    @property
+    def process_start_time(self) -> str: ...
+
+    @property
+    def pgid(self) -> int: ...
+
+    def await_identity(self, timeout: float) -> WorkerHandle:
+        """Block up to ``timeout`` seconds for this launch's authoritative session id.
+
+        Raises :class:`WorkerIdentityError` on a timeout, a malformed reply, or the
+        process exiting before identity arrived — never returns an empty session id."""
+        ...
+
+    def confirm_durable(self) -> None:
+        """F1's disarm signal: call once — and only once the caller's own durable record
+        naming this launch's pid/pgid has actually landed. Before that, the daemon's own
+        death (crash or graceful, indistinguishable to the OS) must still kill this launch
+        outright (the execution spec's narrow handshake window); after, neither should, so
+        the recorded generation can be re-adopted rather than orphaned. Idempotent."""
+        ...
 
 
 class IHarnessWorkerLifecycle(Protocol):
@@ -66,12 +131,19 @@ class IHarnessWorkerLifecycle(Protocol):
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> WorkerHandle:
-        """Start a headless worker; return its session id, pid, and start time.
+    ) -> PendingWorkerHandle:
+        """Start a headless worker; return its pending handle (D1) — pid, start time, and
+        process group, before identity is confirmed. ``model``/``effort``/
+        ``compaction_window`` (issue #144, blizzard#343) arrive already resolved; ``model``
+        applies at **mint only**, the other two on **every** invocation. ``resume_from``
+        (#115) continues a session; ``await_identity``'s result is authoritative."""
+        ...
 
-        ``model``/``effort``/``compaction_window`` (issue #144, blizzard#343) arrive already
-        resolved; ``model`` applies at **mint only**, the other two on **every** invocation.
-        ``resume_from`` (#115) continues a session; the returned id is authoritative."""
+    def honors_session_hint(self) -> bool:
+        """True iff a fresh spawn's identified session id always equals ``session_hint``.
+        Claude Code declares ``True`` (preassigned ``--session-id``); a self-assigning
+        harness declares ``False`` — the selftest's spawn gate
+        (``blizzard.runner.selftest.checks.Spawn``) only demands hint-equality where ``True``."""
         ...
 
     def observe_version(self) -> str | None:
@@ -91,12 +163,12 @@ class IHarnessWorkerLifecycle(Protocol):
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
-        """Headless resume-with-message; returns the new pid. Kill first.
-
-        The fire-and-forget resume. ``stdout_path`` is the injected stdout capture; empty
-        inherits stdout. ``preamble``/``chunk_id`` re-supply the per-lease identity
-        ``--resume`` inherits none of. ``compaction_window`` reasserts like ``effort``."""
+    ) -> ResumeHandle:
+        """Headless resume-with-message; returns the new launch's pid and its REAL,
+        launcher-recorded process group (D3), never a caller-inferred ``pgid=pid``. Kill
+        first. ``stdout_path`` is the injected stdout capture; empty inherits stdout.
+        ``preamble``/``chunk_id`` re-supply the per-lease identity ``--resume`` inherits
+        none of. ``compaction_window`` reasserts like ``effort``."""
         ...
 
     def judge(

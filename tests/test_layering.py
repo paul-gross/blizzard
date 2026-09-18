@@ -360,12 +360,15 @@ def test_only_the_composition_roots_import_the_runner_composition_module() -> No
     )
 
 
-_GATED_COMPOSITION_NAMES = ("ClaudeCodeAdapter",)
-_CLAUDE_CODE_FACTORY = _RUNNER_DIR / "harness" / "internal" / "claude_code_registry.py"
+# Each gated concrete adapter class may be imported only by its one approved factory module (D9).
+_GATED_COMPOSITIONS: dict[str, Path] = {
+    "ClaudeCodeAdapter": _RUNNER_DIR / "harness" / "internal" / "harness_registry.py",
+    "OpenCodeAdapter": _RUNNER_DIR / "harness" / "internal" / "opencode_registry.py",
+}
 
 
-def test_claude_code_adapter_stays_in_its_wiring_module() -> None:
-    """L: the harness adapter is named only by the one factory that constructs it —
+def test_gated_harness_adapters_stay_in_their_wiring_module() -> None:
+    """L: each harness adapter is named only by the one factory that constructs it —
     every composition root takes the registry it builds instead."""
     violations: list[str] = []
     for path in sorted(_SRC_DIR.rglob("*.py")):
@@ -373,12 +376,13 @@ def test_claude_code_adapter_stays_in_its_wiring_module() -> None:
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom):
                 continue
-            hit = set(_GATED_COMPOSITION_NAMES) & {alias.name for alias in node.names}
-            if path == _CLAUDE_CODE_FACTORY:
-                hit -= {"ClaudeCodeAdapter"}
-            if hit:
-                violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
-    assert not violations, f"L — ClaudeCodeAdapter escaped its approved wiring module: {violations}"
+            names = {alias.name for alias in node.names}
+            for adapter_name, factory in _GATED_COMPOSITIONS.items():
+                if path == factory:
+                    continue
+                if adapter_name in names:
+                    violations.append(f"{path.relative_to(_REPO_ROOT)} imports {adapter_name!r}")
+    assert not violations, f"L — a gated harness adapter escaped its approved wiring module: {violations}"
 
 
 _TRANSCRIPT_SERVICE_FILE = _RUNNER_DIR / "transcripts" / "service.py"
@@ -390,6 +394,17 @@ def test_transcript_service_imports_no_internal_module() -> None:
     to import any package's ``internal/`` adapter — not even its own."""
     violations = [m for m in sorted(_imported_modules(_TRANSCRIPT_SERVICE_FILE)) if ".internal." in m]
     assert not violations, f"transcripts/service.py must not import an internal/ module: {violations}"
+
+
+_RUNTIME_FILE = _RUNNER_DIR / "runtime.py"
+
+
+def test_runtime_imports_no_harness_internal_module() -> None:
+    """``Runtime.init`` is not one of the seven composition roots, so it takes
+    ``harness/opencode_scaffold.py``, the harness package's own public surface, rather
+    than reaching into ``harness/internal/`` directly."""
+    violations = [m for m in sorted(_imported_modules(_RUNTIME_FILE)) if ".internal." in m]
+    assert not violations, f"runtime.py must not import a harness/internal/ module: {violations}"
 
 
 _HUB_CLI_SESSION_STORE_FILE = _HUB_DIR / "cli" / "sessions" / "internal" / "session_file.py"

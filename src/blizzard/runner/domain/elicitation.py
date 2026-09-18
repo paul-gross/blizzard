@@ -20,6 +20,7 @@ class ElicitationRecord:
     epoch: int
     pid: int | None
     process_start_time: str | None
+    pgid: int | None  # this launch's owned process group (D3); unset with `pid` alike
     output_path: str
     first_launched_at: datetime
     relaunch_count: int
@@ -50,8 +51,12 @@ class IWriteElicitationRepository(IReadElicitationRepository, Protocol):
         land via :meth:`record_elicitation_started` once ``Popen`` returns."""
         ...
 
-    def record_elicitation_started(self, lease_id: str, epoch: int, *, pid: int, process_start_time: str) -> None:
-        """Fill in the launched process's pid and start time on ``Popen`` return."""
+    def record_elicitation_started(
+        self, lease_id: str, epoch: int, *, pid: int, process_start_time: str, pgid: int | None = None
+    ) -> None:
+        """Fill in the launched process's pid, start time, and owned group (D3) on
+        ``Popen`` return — the same group-ownership fact a fresh spawn or resume records,
+        so a lease closing mid-elicitation can group-kill it rather than a bare pid kill."""
         ...
 
     def record_elicitation_relaunch(self, lease_id: str, epoch: int, *, output_path: str) -> None:

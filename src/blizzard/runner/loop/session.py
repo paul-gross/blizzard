@@ -15,7 +15,7 @@ from blizzard.runner.harness.adapter import IHarnessModelResolution
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.wire.envelope import NodeConfig
+from blizzard.wire.envelope import TIER_PREFIX, NodeConfig
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -261,12 +261,14 @@ class HarnessSelector:
 
     def select(self, node: NodeConfig) -> HarnessSelection:
         """The earliest member of ``node.session_harnesses`` this runner can dispatch to, in
-        declared order — a later member resolving an earlier-preferred model still loses to
-        an earlier member resolving a later one. A member the registry cannot serve is
-        skipped and recorded. A single member skips the model check; with two or more, a
-        member resolving none of ``node.session_model`` strictly is skipped the same way."""
+        declared order — a member the registry cannot serve is skipped and recorded. A single
+        member skips the model check only when nothing in ``node.session_model`` is an
+        authored (``blizzard:``-namespaced) tier; an authored tier this harness cannot map is
+        never silently substituted (worker-spawn.md) — skipped like a larger set's own member."""
         members = node.session_harnesses
-        strict = len(members) > 1 and bool(node.session_model)
+        strict = bool(node.session_model) and (
+            len(members) > 1 or any(preference.startswith(TIER_PREFIX) for preference in node.session_model)
+        )
         skipped: list[SkippedHarness] = []
         for harness_id in members:
             try:

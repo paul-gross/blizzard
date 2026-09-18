@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.loop.capability_snapshot import TickCapabilities
 from blizzard.runner.loop.chunk_status_cache import MemoizingChunkViewCache
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import (
@@ -38,7 +39,16 @@ def tick(ctx: LoopContext) -> None:
     # it via the rebound `ctx`, so a chunk read at more than one site this tick costs the
     # hub at most one round-trip. Primed with the ids every reconcile sweep below is about
     # to read anyway, so the common case pays for its reads once, up front.
-    ctx = dataclasses.replace(ctx, chunk_views=MemoizingChunkViewCache(ctx.hub))
+    # This tick's own capability memo alongside it: PULL's registration push and every
+    # FILL claim attempt's peek share one snapshot, so the per-binding binary version
+    # probe building one runs once a tick rather than once per outbound call. `ctx.harness_versions`
+    # (long-lived, not rebound here) is what keeps that one-per-tick probe from recurring
+    # every tick in turn — this memo alone only bounds a single tick's own repeat calls.
+    ctx = dataclasses.replace(
+        ctx,
+        chunk_views=MemoizingChunkViewCache(ctx.hub),
+        capabilities=TickCapabilities(ctx.harnesses, ctx.harness_versions),
+    )
     ctx.chunk_views.prime(_primed_chunk_ids(ctx))
     # The spend-ceiling kill-switch (issue #61b) — first, so it brakes the same tick it fires in.
     SpendCeiling(ctx).run()

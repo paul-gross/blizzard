@@ -80,6 +80,23 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "— cause='spawned', once the pid is durable; the 'created' mint alone leaves the "
         "spawning->running flip unannounced, since the lease is already visible but not yet live.",
     ),
+    "record_provisional_spawn": Silent(
+        _INTERNAL_BOOKKEEPING + " (a two-phase spawn's phase-one launch facts — pid, start "
+        "time, process group — durable before identity is known; the spawning->running flip "
+        "is announced only once record_identified_spawn lands, mirroring record_spawn's own "
+        "single publish at the FULLY spawned point, never a partial one)."
+    ),
+    "record_identified_spawn": Published(
+        LEASE_CHANGED,
+        "Spawner.spawn (runner/loop/spawn.py) — cause='spawned', once a two-phase spawn's "
+        "authoritative session id is durable; the phase-two counterpart of record_spawn's own "
+        "publish, for the fresh-mint path that splits launch from identity (D1/D2).",
+    ),
+    "record_identity_failed": Silent(
+        _INTERNAL_BOOKKEEPING + " (marks a provisional generation's identity as never having "
+        "arrived; the attempt's own failure is what Attempt.fail announces via its usual "
+        "closure/event path, not this write)."
+    ),
     "record_closure": Published(
         LEASE_CHANGED,
         "Attempt.close (runner/loop/attempt.py) — cause=the closure reason itself, which IS "

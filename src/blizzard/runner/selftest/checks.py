@@ -14,7 +14,12 @@ from dataclasses import dataclass, replace
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.adapter import (
+    DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
+    IHarnessLifecycleAndVerdict,
+    WorkerHandle,
+    WorkerPreamble,
+)
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.selftest.model import (
@@ -107,12 +112,19 @@ class Spawn:
     @classmethod
     def of(cls, scratch: Scratch) -> Spawn:
         try:
-            handle = scratch.adapter.spawn(
+            pending = scratch.adapter.spawn(
                 cls._envelope(), cls._preamble(scratch.workdir), session_hint=scratch.session_id
             )
+            pending.confirm_durable()  # F1: no durable record here to threaten — disarm now
+            handle = pending.await_identity(DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS)
         except Exception as exc:  # the adapter is untrusted external-CLI surface
             return cls(SelfTestCheck(SPAWN_SESSION_ID, False, f"spawn raised: {exc}"), None)
-        if handle.session_id != scratch.session_id:
+        # The harness-neutral claim (D1/D2): non-empty and authoritative. Hint-equality is
+        # demanded only where the adapter declares it honors the hint (Claude Code does).
+        if not handle.session_id:
+            detail = "spawn returned an empty session id — never authoritative"
+            return cls(SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle)
+        if scratch.adapter.honors_session_hint() and handle.session_id != scratch.session_id:
             detail = f"expected the pre-assigned session id {scratch.session_id!r}, got {handle.session_id!r}"
             return cls(SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle)
         if not Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time):
@@ -127,6 +139,8 @@ class Spawn:
             environments=[AcquiredEnvironment(environment_id="selftest", workdir=workdir)],
             lease_id="selftest",
             local_api_url="",
+            # Never the bare `""` default: OpenCode's spawn needs a real path to learn its session id from.
+            stdout_path=os.path.join(workdir, ".selftest-spawn-stdout"),
         )
 
     @staticmethod
@@ -168,6 +182,7 @@ class Judge(Check):
             handle = scratch.adapter.judge(scratch.workdir, scratch.session_id, _JUDGEMENT_PROMPT, output_path)
         except Exception as exc:
             return SelfTestCheck(VERDICT_ELICITATION, False, f"judge raised: {exc}")
+        handle.confirm_durable()  # F1: no durable record here to threaten — disarm now
         # The detached launch/collect shape (blizzard#443): the canary waits out the same
         # bounded poll `end_to_end_edit_commit` uses, then reads the reply back itself.
         if not Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time):
@@ -183,15 +198,22 @@ class Resume(Check):
     def run(self) -> SelfTestCheck:
         scratch = self.scratch
         try:
-            pid = scratch.adapter.resume_with_message(scratch.workdir, scratch.session_id, _RESUME_MESSAGE)
+            # Never the bare `""` default: it would inherit the daemon's own stdout.
+            stdout_path = os.path.join(scratch.workdir, ".selftest-resume-stdout")
+            resumed = scratch.adapter.resume_with_message(
+                scratch.workdir, scratch.session_id, _RESUME_MESSAGE, stdout_path=stdout_path
+            )
         except Exception as exc:
             return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message raised: {exc}")
-        if pid <= 0:
-            return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({pid})")
+        resumed.confirm_durable()  # F1: no durable record here to threaten — disarm now
+        if resumed.pid <= 0:
+            return SelfTestCheck(
+                AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({resumed.pid})"
+            )
         # Reaped here so no live process outlives the scratch dir it is cwd'd into
         # (tests/test_runner_selftest.py).
-        Worker(scratch.process, pid).reap()
-        return SelfTestCheck(AUTOMATED_RESUME, True, f"resumed session {scratch.session_id!r} as pid {pid}")
+        Worker(scratch.process, resumed.pid).reap()
+        return SelfTestCheck(AUTOMATED_RESUME, True, f"resumed session {scratch.session_id!r} as pid {resumed.pid}")
 
 
 class ResumeCommand(Check):

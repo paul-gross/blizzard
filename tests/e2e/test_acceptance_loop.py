@@ -421,10 +421,10 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
 
 def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int) -> RunnerConfig:
     """A migrated runner runtime pointed at the fixture workspace and the mock harness.
-
     ``host``/``port`` bind to a free port rather than the base config's default, which
-    can collide with this machine's live dogfood runner (issue #143, Phase 4;
-    see ``AGENTS.local.md``)."""
+    can collide with this machine's live dogfood runner (issue #143, Phase 4). Both mock
+    harness binaries are always wired: ``harness_binary`` keeps meaning Claude Code
+    (harness selection is per-node, never this function), ``opencode_binary`` lets a scenario opt in by naming ``opencode``."""
     base = init_runner_environment(runner_dir)  # scaffolds config + migrates the store
     return dataclasses.replace(
         base,
@@ -437,6 +437,7 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
         # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
         # omitted (``None``).
         harness_permission_mode=None,
+        opencode_binary=str(bin_dir / "mock-opencode"),
         # A path that is never created, so the external-usage sampler's missing-credentials
         # soft failure trips before any request is built (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),

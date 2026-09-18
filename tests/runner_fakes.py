@@ -29,11 +29,19 @@ from blizzard.runner.environments.provider import (
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.adapter import (
+    IHarnessAdapter,
+    PendingWorkerHandle,
+    ResumeHandle,
+    WorkerHandle,
+    WorkerIdentityError,
+    WorkerPreamble,
+)
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.chunk_status_cache import IChunkViews, ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
@@ -638,6 +646,25 @@ class StaticTranscriptRepositoryResolver:
         return self._repository
 
 
+class FailingIdentityHandle:
+    """A genuine :class:`PendingWorkerHandle` (D1/D2) whose identity never arrives — every
+    other fake harness returns an already-identified :class:`WorkerHandle`, so this is the
+    one way a test drives ``Spawner.spawn``'s ``WorkerIdentityError`` branch. OS facts are
+    recorded, never inferred (D3); ``confirm_durable`` counts its own calls."""
+
+    def __init__(self, *, pid: int, process_start_time: str, pgid: int) -> None:
+        self.pid = pid
+        self.process_start_time = process_start_time
+        self.pgid = pgid
+        self.confirm_durable_calls = 0
+
+    def confirm_durable(self) -> None:
+        self.confirm_durable_calls += 1
+
+    def await_identity(self, timeout: float) -> WorkerHandle:
+        raise WorkerIdentityError("fake: identity never arrived")
+
+
 class FakeHarness:
     """A scriptable :class:`IHarnessAdapter`: canned spawn handle + verdict.
 
@@ -656,16 +683,26 @@ class FakeHarness:
         transcript_source: IHarnessTranscriptSource | None = None,
         judge_side_effect: Callable[[], None] | None = None,
         judge_pid: int = 8888,
+        judge_pgid: int | None = None,
         judge_process_start_time: str = "judge-start",
         judge_output: str = "<judged output>",
         judge_output_usable: bool = True,
+        identity_failures: int = 0,
+        resume_process_start_time: str = "resume-start",
     ) -> None:
         self._handle = handle
         self.verdict = verdict
+        # Scripted (D1/D2): the first N `spawn` calls return a `FailingIdentityHandle`
+        # instead of an already-identified one; 0 (default) never fails, unchanged from before.
+        self._identity_failures_remaining = identity_failures
+        self.failing_identity_handles: list[FailingIdentityHandle] = []
         # The detached elicitation's own (pid, start_time) (blizzard#443) — distinct from
         # `handle`'s worker pid by default, so a probe scripted around the worker's liveness
         # never accidentally also governs the elicitation's.
         self._judge_pid = judge_pid
+        # Defaults to `judge_pid` (D3): a real launch's pgid always equals its own pid;
+        # an explicit `judge_pgid=None` opts a test back into the "unset" shape.
+        self._judge_pgid = judge_pgid if judge_pgid is not None else judge_pid
         self._judge_process_start_time = judge_process_start_time
         # What `judge` writes to its `output_path` — content is irrelevant to this fake's
         # own `parse_verdict`/`parse_usage`/`parse_assessment`, which ignore it (they read
@@ -694,6 +731,13 @@ class FakeHarness:
         self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
         self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
         self.resume_pid = 4321
+        # Defaults to `resume_pid` (D3), mirroring `judge_pgid`: an explicit assignment
+        # opts a test into a resume whose real group differs from its pid.
+        self.resume_pgid: int | None = None
+        # F1/F4: a resume launches deferred like a fresh spawn or judge — mirrors
+        # `FailingIdentityHandle`'s own `confirm_durable`-counting shape.
+        self.resume_process_start_time = resume_process_start_time
+        self.resume_confirm_durable_calls = 0
         # The (model, effort) each invocation was handed (issue #144) — one entry per
         # call, for per-call-site assertions.
         self.spawn_model_effort: list[tuple[str | None, str | None]] = []
@@ -714,6 +758,9 @@ class FakeHarness:
         # test can script "resolves nothing strictly, but still has an adapter default" for skip cases.
         self.resolved_model_strict: str | None = "fake-model"
         self.harness_version: str | None = None
+        # Every `observe_version` call, counted: the real probe spawns the harness binary, so
+        # a test can assert a tick hoists it rather than paying it per outbound call.
+        self.version_probes = 0
         # `resolvable_tier_ids`'s scripted reply (blizzard#433); default echoes a single
         # fake tier so a capability-snapshot test sees a non-empty list without opting in.
         self.tier_ids: tuple[str, ...] = ("fake-tier",)
@@ -733,19 +780,32 @@ class FakeHarness:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> WorkerHandle:
+    ) -> PendingWorkerHandle:
         self.spawns.append((envelope, preamble))
         self.resume_froms.append(resume_from)
         self.spawn_model_effort.append((model, effort))
         self.spawn_compaction_windows.append(compaction_window)
+        if self._identity_failures_remaining > 0:
+            self._identity_failures_remaining -= 1
+            failing = FailingIdentityHandle(
+                pid=self._handle.pid, process_start_time=self._handle.process_start_time, pgid=self._handle.pid
+            )
+            self.failing_identity_handles.append(failing)
+            return failing
         # Mirrors the real in-place adapter contract (issue #115): a resume continues
         # under the SAME id given; a fresh spawn keeps the scripted-handle behavior.
         session_id = resume_from if resume_from is not None else self._handle.session_id
+        # A `WorkerHandle` IS a `PendingWorkerHandle` (D1) — already identified, since this
+        # fake, like every real binding today, knows its session id at "launch".
         return WorkerHandle(
             session_id=session_id,
             pid=self._handle.pid,
             process_start_time=self._handle.process_start_time,
+            pgid=self._handle.pid,
         )
+
+    def honors_session_hint(self) -> bool:
+        return True
 
     def judge(
         self,
@@ -774,7 +834,10 @@ class FakeHarness:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(self.judge_output)
         return WorkerHandle(
-            session_id=self._handle.session_id, pid=self._judge_pid, process_start_time=self._judge_process_start_time
+            session_id=self._handle.session_id,
+            pid=self._judge_pid,
+            process_start_time=self._judge_process_start_time,
+            pgid=self._judge_pgid,
         )
 
     def resume_with_message(
@@ -788,14 +851,23 @@ class FakeHarness:
         chunk_id: str = "",
         effort: str | None = None,
         compaction_window: str | None = None,
-    ) -> int:
+    ) -> ResumeHandle:
         self.resumed.append((workdir, session_id, message))
         self.resume_efforts.append(effort)
         self.resume_compaction_windows.append(compaction_window)
         # Captured separately so existing 3-tuple unpackers of `.resumed` keep working while
         # resume-identity assertions can read the preamble/chunk_id the caller supplied.
         self.resumed_identity.append((preamble, chunk_id))
-        return self.resume_pid
+        pgid = self.resume_pgid if self.resume_pgid is not None else self.resume_pid
+        return ResumeHandle(
+            pid=self.resume_pid,
+            pgid=pgid,
+            process_start_time=self.resume_process_start_time,
+            confirm_durable=self._resume_confirm_durable,
+        )
+
+    def _resume_confirm_durable(self) -> None:
+        self.resume_confirm_durable_calls += 1
 
     def resume_command(
         self,
@@ -843,6 +915,7 @@ class FakeHarness:
         return self.tier_ids
 
     def observe_version(self) -> str | None:
+        self.version_probes += 1
         return self.harness_version
 
     def parse_verdict(self, output: str) -> str | None:
@@ -924,13 +997,22 @@ def _conforms_fake_subscription_sampler(x: FakeSubscriptionSampler) -> ISubscrip
 
 
 class FakeProbe:
-    """A scriptable :class:`IProcessProbe`: an explicit set of live (pid, start)."""
+    """A scriptable :class:`IProcessProbe`: an explicit set of live (pid, start), plus an
+    explicit set of process groups still holding a live member (``groups_alive``) — the
+    ``group_alive`` probe a dead-leader-with-live-descendants scenario scripts independently
+    of any single pid's own liveness."""
 
-    def __init__(self, alive: set[tuple[int, str]] | None = None) -> None:
+    def __init__(self, alive: set[tuple[int, str]] | None = None, groups_alive: set[int] | None = None) -> None:
         self.alive = alive if alive is not None else set()
+        self.groups_alive = groups_alive if groups_alive is not None else set()
         self.killed: list[int] = []
+        self.killed_groups: list[int] = []
+        # F14: every call, counted — a test proving a caller never re-probes a launcher's
+        # own already-recorded start time (e.g. `dormant.py::_wake`) reads this directly.
+        self.start_time_calls: list[int] = []
 
     def start_time(self, pid: int) -> str | None:
+        self.start_time_calls.append(pid)
         for p, st in self.alive:
             if p == pid:
                 return st
@@ -939,9 +1021,16 @@ class FakeProbe:
     def is_alive(self, pid: int, process_start_time: str) -> bool:
         return (pid, process_start_time) in self.alive
 
+    def group_alive(self, pgid: int) -> bool:
+        return pgid in self.groups_alive
+
     def kill(self, pid: int) -> None:
         self.killed.append(pid)
         self.alive = {(p, st) for (p, st) in self.alive if p != pid}
+
+    def kill_group(self, pgid: int) -> None:
+        self.killed_groups.append(pgid)
+        self.groups_alive.discard(pgid)
 
 
 class FakeWorktreeGit:
@@ -991,6 +1080,7 @@ def make_context(
     events: EventBroker | None = None,
     subscriptions: tuple[ResolvedSubscription, ...] = (),
     chunk_views: IChunkViews | None = None,
+    harness_versions: HarnessVersionCache | None = None,
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes.
 
@@ -1056,6 +1146,7 @@ def make_context(
         transcripts_wired=_transcripts_wired,
         events=events,
         harnesses=_harnesses,
+        harness_versions=harness_versions,
     )
 
 
@@ -1065,7 +1156,7 @@ def _default_harness_registry(harness: IHarnessAdapter | None) -> HarnessRegistr
     _harness = (
         harness
         if harness is not None
-        else FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None)
+        else FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     )
     return HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness, transcript_source=_harness.transcript_source())}

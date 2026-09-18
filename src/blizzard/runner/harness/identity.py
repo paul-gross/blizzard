@@ -11,6 +11,8 @@ from dataclasses import dataclass
 
 # The immutable owner code every existing production session binds.
 CLAUDE_CODE_HARNESS_ID = "claude_code"
+# The OpenCode binding's own immutable owner code (harness-selection spec).
+OPENCODE_HARNESS_ID = "opencode"
 
 
 @dataclass(frozen=True)

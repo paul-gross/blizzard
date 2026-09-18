@@ -53,7 +53,7 @@ class _SteppingClock(FixedClock):
 
 def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int | None = None):  # type: ignore[no-untyped-def]
     store = make_store("sqlite://")
-    harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"), verdict=None)
+    harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1), verdict=None)
     return make_context(
         store,
         hub=hub,
@@ -156,7 +156,7 @@ def test_drain_run_pumps_then_flushes_a_real_pump_output_to_the_hub_with_shippin
         }
     )
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"),
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1),
         verdict=None,
         transcript_source=source,
     )
@@ -636,7 +636,7 @@ def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
     hub = FakeHub()
     store = make_store("sqlite://")
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"),
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1),
         verdict=None,
         transcript_source=_RaisingTranscriptSource(),
     )

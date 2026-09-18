@@ -27,7 +27,7 @@ pytestmark = pytest.mark.unit
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE_PID = 100
 _HANDLE_START = "start-100"
-_HANDLE = WorkerHandle(session_id="sess-a", pid=_HANDLE_PID, process_start_time=_HANDLE_START)
+_HANDLE = WorkerHandle(session_id="sess-a", pid=_HANDLE_PID, process_start_time=_HANDLE_START, pgid=_HANDLE_PID)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]

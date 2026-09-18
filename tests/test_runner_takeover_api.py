@@ -36,7 +36,7 @@ def _app_with_takeover(
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict=None
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict=None
     )
     resolved_harnesses = (
         harnesses

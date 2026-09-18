@@ -20,7 +20,8 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
-from blizzard.runner.harness.internal.claude_code_registry import build_production_harness_registry
+from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
+from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
 from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -204,6 +205,8 @@ class LoopWiring:
             transcripts_wired=True,
             events=self.events,
             harnesses=harnesses,
+            # Built once here (D4), long-lived across every tick `PeriodicDriver._run` drives on this context.
+            harness_versions=HarnessVersionCache(clock=_clock),
         )
 
     def tick_once(self) -> None:
@@ -285,7 +288,11 @@ class PeriodicDriver:
         right after this returns and must not race a live tick writing the same store. A
         tick cannot run forever — every seam it touches is timeout-bounded, including the
         judgement elicitation itself (blizzard#443): `judge` launches detached and returns
-        immediately rather than blocking a tick on a live model turn."""
+        immediately rather than blocking a tick on a live model turn. One known exception:
+        a fresh OpenCode spawn still blocks the tick synchronously on its own identity
+        handshake, bounded by `DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS` (10s) rather than
+        returning immediately — left open by design, since OpenCode self-mints its session
+        id with nowhere durable to poll it from until that handshake completes."""
         self._stop.set()
         self._thread.join()
 

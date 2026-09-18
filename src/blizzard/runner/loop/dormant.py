@@ -17,6 +17,7 @@ from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
+from blizzard.runner.loop.process import kill_owned_process
 from blizzard.runner.loop.spawn import Spawner
 
 _log = get_logger("blizzard.runner.loop")
@@ -29,10 +30,15 @@ _RESTART_MESSAGE = "# The supervisor restarted; continue your task where you lef
 #: Same inert ``#``-prefixed framing; the exact prose is unpinned.
 _UNPAUSE_MESSAGE = "# The operator resumed this chunk; continue your task where you left off."
 
-# The restart re-attach. Its un-recordable middle (a resume whose pid is not yet durable) is
-# SPAWN's same by-construction gap; recovery re-runs RESUME idempotently.
+# The restart re-attach. `_wake`'s own middle (a resumed process launched but not yet
+# durably recorded) is armed exactly like SPAWN's two-phase mint (D1/D4), below; recovery
+# re-runs RESUME idempotently regardless of which of these four windows a crash lands in.
 _CP_RESUME_AFTER_KILL = crashpoint("resume.after-kill.before-reattach", "survivor killed; session not yet re-attached")
 _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached under the same lease; intent cleared")
+_CP_WAKE_AFTER_LAUNCH = crashpoint(
+    "resume.wake.after-launch.before-record", "resumed process exists; pid not yet durable"
+)
+_CP_WAKE_AFTER_RECORD = crashpoint("resume.wake.after-record", "resumed pid durably recorded; launch not yet disarmed")
 
 
 @dataclass(frozen=True)
@@ -217,8 +223,11 @@ class DormantSession:
                 # closure — no other runner can resume this exact session to re-attach here.
                 return
         now = self.ctx.clock.now()
-        if lease.pid is not None:
-            self.ctx.process.kill(lease.pid)  # kill-first — never two processes on one session
+        # Kill-first — never two processes on one session — via the shared, liveness-checked
+        # kill (D3): a stale/reused pid is never blindly signaled.
+        kill_owned_process(
+            self.ctx.process, pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid
+        )
         _CP_RESUME_AFTER_KILL.reached()  # re-run kills the dead pid (no-op) then re-attaches
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings or lease.session is None or harness is None:
@@ -286,7 +295,7 @@ class DormantSession:
         lease, returning that pid with the instant it was stamped — an omitted ``at`` reads the
         clock *after* the resume returns. ``harness`` is the caller's already-resolved owner
         (:meth:`_resolve_harness`), so this method can never be reached with an unresolvable one.
-        The resume → ``record_spawn`` gap is un-armable: recovery's own input doesn't exist yet."""
+        The resume → ``record_spawn`` gap is armed exactly like a fresh spawn or judge launch (D1/D4)."""
         lease = self.lease
         spawner = Spawner(self.ctx)
         session = lease.session
@@ -294,7 +303,7 @@ class DormantSession:
         # Observed BEFORE the resume, the same as a fresh spawn (spawn.py): a hung or
         # failing probe must never run after the worker is already live and unrecorded.
         version = harness.observe_version()
-        pid = harness.resume_with_message(
+        resumed = harness.resume_with_message(
             bindings[0].workdir,
             session.session_id,
             message,
@@ -306,16 +315,32 @@ class DormantSession:
             # Reasserted, not sticky either (blizzard#343) — mirrors effort's treatment.
             compaction_window=lease.resolved_compaction_window,
         )
+        _CP_WAKE_AFTER_LAUNCH.reached()  # the process exists; nothing about it is durable yet
         stamped = at if at is not None else self.ctx.clock.now()
         assert lease.session is not None
-        self.ctx.stores.liveness.record_spawn(
-            lease.lease_id,
-            pid=pid,
-            process_start_time=self.ctx.process.start_time(pid) or "",
-            session=lease.session,  # unchanged — same concrete session under the same lease
-            spawned_at=stamped,
-            harness_version=version,
-        )
+        try:
+            self.ctx.stores.liveness.record_spawn(
+                lease.lease_id,
+                pid=resumed.pid,
+                # The launcher's own recorded start time (D3) — never re-probed a second
+                # time here, which would race a pid-reuse window opening after it (F14).
+                process_start_time=resumed.process_start_time,
+                # The launcher's own recorded group (D3) — carried through, never inferred
+                # as `pgid=pid` at this call site.
+                pgid=resumed.pgid,
+                session=lease.session,  # unchanged — same concrete session under the same lease
+                spawned_at=stamped,
+                harness_version=version,
+            )
+        except Exception:
+            # F1: a plain raise here never disarms the trampoline on its own — kill it
+            # explicitly instead (`Spawner.spawn`'s own guard, mirrored here).
+            self.ctx.process.kill_group(resumed.pgid)
+            raise
+        _CP_WAKE_AFTER_RECORD.reached()  # ownership durable; not yet disarmed
+        # F1: disarm only now this record is durable — a later REAP/ADVANCE pass can
+        # re-adopt this exact process past here.
+        resumed.confirm_durable()
         if self.ctx.events is not None:
             # Same 'spawned' cause the fresh-spawn path publishes (spawn.py) — a resumed
             # session's own flip back to a live pid is exactly as un-announced otherwise.
@@ -324,4 +349,4 @@ class DormantSession:
                 lease.chunk_id,
                 cause="spawned",
             )
-        return pid, stamped
+        return resumed.pid, stamped

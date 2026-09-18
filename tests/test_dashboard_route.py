@@ -37,7 +37,9 @@ def _app_with_status(
 ) -> tuple[TestClient, object]:  # type: ignore[type-arg]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url or "")
-    harness = FakeHarness(handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1"), verdict=None)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1", pgid=1), verdict=None
+    )
     service = RunnerStatusService(
         make_read_stores(store),
         FixedClock(_NOW),

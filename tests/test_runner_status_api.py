@@ -21,6 +21,7 @@ from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from tests.runner_fakes import FakeHarness, FakeProbe, make_read_stores, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
@@ -39,7 +40,7 @@ def _app_with_status(
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", max_agents=max_agents)
     _harness = harness or FakeHarness(
-        handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1"),
+        handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1", pgid=1),
         verdict=None,
     )
     service = RunnerStatusService(
@@ -446,6 +447,7 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
     ``resume_command`` in a bare terminal must stay at the interactive permission
     default."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    probe = FakeProbe()
     service = RunnerStatusService(
         make_read_stores(store),
         FixedClock(_NOW),
@@ -457,7 +459,12 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
         harnesses=HarnessRegistry(
             {
                 CLAUDE_CODE_HARNESS_ID: HarnessBinding(
-                    adapter=ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions", process=FakeProbe())
+                    adapter=ClaudeCodeAdapter(
+                        binary="claude",
+                        permission_mode="bypassPermissions",
+                        process=probe,
+                        launcher=ProcessLauncher(probe),
+                    )
                 )
             }
         ),

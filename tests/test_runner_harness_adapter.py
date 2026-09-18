@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -18,9 +19,10 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import WorkerPreamble
+from blizzard.runner.harness.adapter import ResumeHandle, WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.wire.envelope import NodeEnvelope
 from tests.conftest import _WORKER_IDENTITY_ENV
@@ -29,10 +31,20 @@ from tests.runner_fakes import FakeProbe, make_envelope
 _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
 
 
+@pytest.fixture(autouse=True)
+def _claude_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A unit test's fake spawn must not depend on whether ``claude`` is really installed
+    on this machine's ``PATH`` — `_ensure_executable`'s `shutil.which` lookup (F1) runs
+    before the faked ``subprocess.Popen`` ever sees the call. Tests proving the
+    absent-from-``PATH`` behavior override this within their own body."""
+    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
+
+
 def _adapter(**kwargs: Any) -> ClaudeCodeAdapter:
-    """A :class:`ClaudeCodeAdapter` construction helper defaulting ``process`` to a fresh
-    :class:`FakeProbe` — most of this file's cases don't care which probe it gets."""
-    kwargs.setdefault("process", FakeProbe())
+    """A :class:`ClaudeCodeAdapter` helper defaulting ``process`` to a fresh :class:`FakeProbe`
+    and ``launcher`` to a real one over it — most cases here don't care which they get."""
+    process = kwargs.setdefault("process", FakeProbe())
+    kwargs.setdefault("launcher", ProcessLauncher(process))
     return ClaudeCodeAdapter(**kwargs)
 
 
@@ -120,6 +132,8 @@ def test_observe_version_times_out_to_none_rather_than_raising(monkeypatch: pyte
     def _hung(*args, **kwargs):  # type: ignore[no-untyped-def]
         raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout", 0))
 
+    # On PATH per `which` — the timeout is subprocess.run's own, not a missing-binary skip.
+    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
     monkeypatch.setattr(subprocess, "run", _hung)
 
     with capture_logs() as logs:
@@ -129,14 +143,38 @@ def test_observe_version_times_out_to_none_rather_than_raising(monkeypatch: pyte
 
 @pytest.mark.unit
 def test_observe_version_missing_binary_reads_none_rather_than_raising(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A binary that resolves on ``PATH`` but fails at exec time (a race, a permission
+    problem) still reads ``None`` and logs — distinct from never being on ``PATH`` at all
+    (below), which skips the subprocess attempt entirely."""
+
     def _missing(*args, **kwargs):  # type: ignore[no-untyped-def]
         raise OSError("no such file or directory: 'claude'")
 
+    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
     monkeypatch.setattr(subprocess, "run", _missing)
 
     with capture_logs() as logs:
         assert _adapter(binary="claude").observe_version() is None
     assert any(entry["event"] == "harness version probe failed" for entry in logs)
+
+
+@pytest.mark.unit
+def test_observe_version_absent_from_path_skips_the_subprocess_and_does_not_warn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host that never installed this binding's binary (a runner configured with only
+    one of several known harnesses) is an expected shape, not a failure — no subprocess
+    attempt, and nothing louder than ``debug`` (blizzard#433)."""
+    monkeypatch.setattr(shutil, "which", lambda binary: None)
+
+    def _unexpected(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("subprocess.run must not be attempted for a binary absent from PATH")
+
+    monkeypatch.setattr(subprocess, "run", _unexpected)
+
+    with capture_logs() as logs:
+        assert _adapter(binary="claude").observe_version() is None
+    assert not any(entry["log_level"] == "warning" for entry in logs)
 
 
 # --------------------------------------------------------------------------- #
@@ -179,7 +217,7 @@ def test_spawn_with_resume_from_emits_resume_flag_and_echoes_its_continuation_id
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture()
 
-    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint", resume_from="prior-sid")
+    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint", resume_from="prior-sid").await_identity(0)
 
     cmd = captured["cmd"]
     assert "--resume" in cmd
@@ -195,7 +233,7 @@ def test_spawn_without_resume_from_is_unchanged(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture()
 
-    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint")
+    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint").await_identity(0)
 
     cmd = captured["cmd"]
     assert "--session-id" in cmd
@@ -210,7 +248,7 @@ def test_spawn_stamps_process_start_time_from_the_injected_probe(monkeypatch: py
     # nothing — proving the stamp came from the injected probe, not a fallback to `/proc`.
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
     probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-start-time-token")})
-    adapter = ClaudeCodeAdapter(binary="claude", process=probe)
+    adapter = ClaudeCodeAdapter(binary="claude", process=probe, launcher=ProcessLauncher(probe))
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
@@ -230,7 +268,7 @@ def test_judge_stamps_process_start_time_from_the_injected_probe(
 ) -> None:
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
     probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-judge-start-time")})
-    adapter = ClaudeCodeAdapter(binary="claude", process=probe)
+    adapter = ClaudeCodeAdapter(binary="claude", process=probe, launcher=ProcessLauncher(probe))
     workdir = tmp_path / "e1"
     workdir.mkdir()
 
@@ -238,6 +276,24 @@ def test_judge_stamps_process_start_time_from_the_injected_probe(
 
     assert handle.pid == _FakeSpawnedProcess.pid
     assert handle.process_start_time == "fake-judge-start-time"
+
+
+@pytest.mark.unit
+def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F4: a resume gets the same D1/D4 ownership a fresh spawn or judge gets — the
+    launcher's own recorded start time (D3), and a real disarm signal, not
+    `ResumeHandle`'s bare no-op default."""
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
+    probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-resume-start-time")})
+    adapter = ClaudeCodeAdapter(binary="claude", process=probe, launcher=ProcessLauncher(probe))
+
+    resumed = adapter.resume_with_message("/ws", "sess-123", "continue")
+
+    assert resumed.pid == _FakeSpawnedProcess.pid
+    assert resumed.process_start_time == "fake-resume-start-time"
+    assert resumed.confirm_durable is not ResumeHandle.__dataclass_fields__["confirm_durable"].default
 
 
 # --------------------------------------------------------------------------- #
@@ -295,6 +351,7 @@ def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
     adapter = _adapter(binary=str(dump_script))
 
     handle = adapter.judge(str(workdir), "sess-1", "assess", str(workdir / "judge-output.json"))
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -322,6 +379,7 @@ def test_judge_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path) 
     handle = adapter.judge(
         str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
     )
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -348,6 +406,7 @@ def test_judge_child_env_carries_the_elicitation_marker_when_given_a_preamble(tm
     handle = adapter.judge(
         str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
     )
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -367,8 +426,9 @@ def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_se
     workdir.mkdir()
     adapter = _adapter(binary=str(dump_script))
 
-    pid = adapter.resume_with_message(str(workdir), "sess-1", "deliver")
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(str(workdir), "sess-1", "deliver")
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert "BZ_HUB_TOKEN" not in dumped
@@ -392,8 +452,9 @@ def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(tm
         lease_token="fresh-resume-token",
     )
 
-    pid = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert dumped["BLIZZARD_LEASE_ID"] == "lease_42"
@@ -416,8 +477,9 @@ def test_resume_with_message_child_env_excludes_the_elicitation_marker(tmp_path:
         local_api_url="http://127.0.0.1:8431",
     )
 
-    pid = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert "BLIZZARD_ELICITATION" not in dumped
@@ -575,11 +637,12 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path) -> None:
         local_api_url="http://127.0.0.1:8431",
     )
 
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-123").await_identity(0)
 
     assert handle.session_id == "sess-123"  # Claude honors the pre-assigned id
     assert handle.pid > 0
     assert handle.process_start_time  # stamped from /proc for pid-reuse-proof liveness
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)  # let the fire-and-forget child finish
     assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")  # ran in the acquired workdir
     assert "--permission-mode" not in (workdir / "argv.txt").read_text()  # omitted when unset
@@ -621,7 +684,9 @@ def test_a_hung_version_probe_reads_none_and_the_spawn_right_after_still_runs(
     """``observe_version``, read immediately BEFORE the spawn, hangs past its own bound and
     reads back ``None`` instead of blocking — the spawn right after it, on the same binary,
     is entirely unaffected."""
-    monkeypatch.setattr("blizzard.runner.harness.internal.claude_code_adapter._VERSION_PROBE_TIMEOUT_SECONDS", 0.2)
+    # `observe_version` is shared verbatim with OpenCode — the bound lives on
+    # `harness_shared`, not on this adapter module.
+    monkeypatch.setattr("blizzard.runner.harness.internal.harness_shared.VERSION_PROBE_TIMEOUT_SECONDS", 0.2)
     script = tmp_path / "hung-version-claude"
     script.write_text(_VERSION_HANGS_HARNESS)
     script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
@@ -638,6 +703,7 @@ def test_a_hung_version_probe_reads_none_and_the_spawn_right_after_still_runs(
     assert adapter.observe_version() is None  # bounded — never waits out the hang
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert handle.pid > 0
@@ -660,6 +726,7 @@ def test_spawn_pins_a_configured_model(tmp_path: Path) -> None:
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert "--model claude-sonnet-5" in (workdir / "argv.txt").read_text()
@@ -681,6 +748,7 @@ def test_spawn_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
@@ -695,6 +763,7 @@ def test_judge_resume_output_parses_to_choice(tmp_path: Path) -> None:
     output_path = str(workdir / "judge-output.json")
 
     handle = adapter.judge(str(workdir), "sess-123", "Assess the build. Reply <Choice>name</Choice>.", output_path)
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     output = Path(output_path).read_text()
@@ -713,6 +782,7 @@ def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
     handle = adapter.judge(
         str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.", str(workdir / "judge-output.json")
     )
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
@@ -728,8 +798,9 @@ def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path) -
     settings = tmp_path / "worker-settings.json"
     adapter = _adapter(binary=binary, settings_path=str(settings))
 
-    pid = adapter.resume_with_message(str(workdir), "sess-123", "continue where you left off")
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(str(workdir), "sess-123", "continue where you left off")
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    os.waitpid(resumed.pid, 0)
 
     assert f"--settings {settings}" in (workdir / "argv.txt").read_text()
 
@@ -744,11 +815,13 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(tmp_path:
     settings = tmp_path / "worker-settings.json"
     adapter = _adapter(binary=binary, settings_path=str(settings), permission_mode="bypassPermissions")
 
-    pid = adapter.resume_with_message(str(workdir), "sess-123", "continue", effort="high")
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(str(workdir), "sess-123", "continue", effort="high")
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    os.waitpid(resumed.pid, 0)
     resumed_prefix, _, resumed_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
     judge_handle = adapter.judge(str(workdir), "sess-123", "assess", str(workdir / "judge-output.json"), effort="high")
+    judge_handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(judge_handle.pid, 0)
     judge_prefix, _, judge_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
@@ -780,6 +853,7 @@ def test_spawn_runs_at_workspace_root_and_prepends_prefix(tmp_path: Path) -> Non
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     # Ran at the workspace root — the marker file the fake writes lands there, not the env dir.
@@ -804,6 +878,7 @@ def test_spawn_falls_back_to_env_workdir_without_a_workspace_root(tmp_path: Path
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     # No prefix and no workspace root: cwd is the env workdir, prompt is the envelope prompt alone.
@@ -1081,6 +1156,7 @@ def test_spawn_redirects_stdout_to_the_injected_stdout_path(tmp_path: Path) -> N
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert stdout_path.exists()
@@ -1105,6 +1181,7 @@ def test_spawn_without_a_stdout_path_still_discards_output(tmp_path: Path) -> No
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
+    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert list(workdir.glob("*.stdout")) == []
@@ -1118,8 +1195,11 @@ def test_resume_with_message_redirects_stdout_to_the_injected_path(tmp_path: Pat
     stdout_path = tmp_path / "lease-1-resume.stdout"
     adapter = _adapter(binary=binary)
 
-    pid = adapter.resume_with_message(str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path))
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(
+        str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
+    )
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    os.waitpid(resumed.pid, 0)
 
     assert stdout_path.exists()
     sample = adapter.parse_usage(stdout_path.read_text(), "resume")
@@ -1137,8 +1217,11 @@ def test_resume_with_message_passes_output_format_json_so_cost_is_real(tmp_path:
     stdout_path = tmp_path / "lease-1-resume-cost.stdout"
     adapter = _adapter(binary=binary)
 
-    pid = adapter.resume_with_message(str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path))
-    os.waitpid(pid, 0)
+    resumed = adapter.resume_with_message(
+        str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
+    )
+    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    os.waitpid(resumed.pid, 0)
 
     sample = adapter.parse_usage(stdout_path.read_text(), "resume")
     assert sample is not None

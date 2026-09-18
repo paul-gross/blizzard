@@ -128,6 +128,8 @@ class LeaseRecord:
     process_start_time: str | None = None
     session_id: str | None = None
     harness_id: str | None = None
+    # The owned process group (D3), recorded alongside `pid`, never inferred from it.
+    pgid: int | None = None
 
     @property
     def session(self) -> SessionReference | None:

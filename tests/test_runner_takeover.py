@@ -50,7 +50,7 @@ from tests.runner_fakes import (
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
@@ -277,6 +277,45 @@ def test_takeover_refuses_a_second_open_takeover(tmp_path) -> None:  # type: ign
 
 # A live worker attempt — 409 without force, superseded with it
 # --------------------------------------------------------------------------- #
+
+
+def test_forced_takeover_skips_the_kill_when_the_recorded_pid_was_reused(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The same pid/pgid-reuse hazard `Attempt._kill_process` guards against: a LIVE pid
+    whose start time no longer matches the recorded one is not this lease's worker any
+    more, and a bare, unchecked kill would hit whoever the OS gave that pid to instead."""
+    store = _store(tmp_path)
+    _seed_lease(store, pid=100)
+    # pid 100 is alive, but under a DIFFERENT start time — the OS recycled it.
+    probe = FakeProbe(alive={(100, "some-other-processes-start-time")})
+
+    opened = _service(store, probe=probe).open(_open_scope(store), force=True)
+
+    assert probe.killed == []
+    assert probe.killed_groups == []
+    # The takeover still opens and hands back a usable command regardless of the skip.
+    assert opened.command == "cd /ws/e1 && claude --resume sess-a"
+
+
+def test_forced_takeover_group_kills_the_worker_when_a_pgid_is_recorded(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A live worker with a durable recorded pgid (D3) is killed by GROUP, never by bare
+    pid — the same preference `Attempt._kill_process` applies, reached here through the
+    same shared, liveness-checked helper."""
+    store = _store(tmp_path)
+    _seed_lease(store, pid=100)
+    store.record_spawn(  # this generation's own group is durable (D3)
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        pgid=100,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    probe = FakeProbe(alive={(100, "start-100")})
+
+    _service(store, probe=probe).open(_open_scope(store), force=True)
+
+    assert probe.killed_groups == [100]
+    assert probe.killed == []  # the group kill covers it — no redundant bare-pid kill
 
 
 def test_takeover_refuses_a_live_worker_without_force(tmp_path) -> None:  # type: ignore[no-untyped-def]

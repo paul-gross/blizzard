@@ -29,7 +29,7 @@ from tests.test_runner_restart_resume import _running_chunk
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _STALE_LATER = _NOW + timedelta(hours=2)  # past HEARTBEAT_STALENESS_THRESHOLD (~1h)
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100")
+_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
@@ -359,7 +359,7 @@ def test_crash_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", resume_process_start_time="start-4321")
     harness.resume_pid = 4321
     probe = FakeProbe(alive={(4321, "start-4321")})
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)

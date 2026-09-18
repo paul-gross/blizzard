@@ -26,6 +26,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
+from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
 from blizzard.runner.store import schema as runner
 
 
@@ -84,6 +85,113 @@ class OneLiveLeasePerChunk(QueryCheck):
         for chunk_id, n in per_chunk.items():
             if n > 1:
                 violations.append(Violation("runner:one-live-lease-per-chunk", f"chunk {chunk_id} has {n} live leases"))
+        return violations
+
+
+class NoUnownedLiveLeaseProcess(QueryCheck):
+    """Once a lease closes, no generation it launched is left ambiguously provisional
+    (D1/D2) — a pid with neither an identified session nor a recorded identity failure.
+    Only CLOSED leases are checked: REAP always resolves a provisional generation, killing
+    its group, before ``Attempt.fail`` closes the lease, so an ambiguous one means a leak."""
+
+    def run(self) -> list[Violation]:
+        closed = select(runner.lease_closures.c.lease_id)
+        stmt = (
+            select(runner.lease_spawns.c.lease_id, runner.lease_spawns.c.id)
+            .where(runner.lease_spawns.c.lease_id.in_(closed))
+            .where(runner.lease_spawns.c.pid.is_not(None))
+            .where(runner.lease_spawns.c.session_id.is_(None))
+            .where(runner.lease_spawns.c.identity_failed_at.is_(None))
+        )
+        return [
+            Violation(
+                "runner:no-unowned-live-lease-process",
+                f"closed lease {row.lease_id} generation {row.id} was never identified or marked failed",
+            )
+            for row in self.conn.execute(stmt)
+        ]
+
+
+@dataclass(frozen=True)
+class ActiveLeaseProcessIsLive(QueryCheck):
+    """:class:`NoUnownedLiveLeaseProcess`'s ACTIVE-lease counterpart (D1/D2): an OPEN
+    lease's still-provisional generation, probed against a real OS process — a recorded
+    pid with nothing running there is the crash-recovery gap RESUME exists to close. Also
+    flags two ACTIVE leases recording the same (pid, start_time), liveness unprobed."""
+
+    process: IProcessProbe
+
+    def run(self) -> list[Violation]:
+        closed = select(runner.lease_closures.c.lease_id)
+        active = runner.leases.c.lease_id.notin_(closed)
+        violations: list[Violation] = []
+        # Bounded to the newest open generation per lease (MAX/GROUP BY, `bzh:sql-portable`),
+        # mirroring `lease_liveness_store._open_provisional_spawn_id`'s own predicate.
+        newest_open_provisional = (
+            select(runner.lease_spawns.c.lease_id, func.max(runner.lease_spawns.c.id).label("spawn_id"))
+            .where(runner.lease_spawns.c.session_id.is_(None))
+            .where(runner.lease_spawns.c.pid.is_not(None))
+            .group_by(runner.lease_spawns.c.lease_id)
+            .subquery()
+        )
+        provisional_stmt = (
+            select(
+                runner.leases.c.lease_id,
+                runner.leases.c.pid,
+                runner.leases.c.process_start_time,
+                runner.lease_spawns.c.identity_failed_at,
+            )
+            .select_from(
+                runner.leases.join(
+                    newest_open_provisional,
+                    newest_open_provisional.c.lease_id == runner.leases.c.lease_id,
+                    isouter=True,  # a hand-seeded `leases` row with no `lease_spawns` row at all
+                    # still reads as "not recorded failed" — never silently exempted (bzh:sql-portable).
+                ).join(
+                    runner.lease_spawns,
+                    runner.lease_spawns.c.id == newest_open_provisional.c.spawn_id,
+                    isouter=True,
+                )
+            )
+            .where(active)
+            .where(runner.leases.c.pid.is_not(None))
+            .where(runner.leases.c.session_id.is_(None))
+        )
+        for row in self.conn.execute(provisional_stmt):
+            if row.identity_failed_at is not None:
+                continue  # known, pending-reconciliation state — REAP hasn't closed it yet
+            pid = int(row.pid)
+            start = str(row.process_start_time or "")
+            if not self.process.is_alive(pid, start):
+                violations.append(
+                    Violation(
+                        "runner:active-lease-process-is-live",
+                        f"active lease {row.lease_id} has a provisional generation recorded at pid "
+                        f"{pid}, but no live process exists there",
+                    )
+                )
+        owner_stmt = (
+            select(runner.leases.c.lease_id, runner.leases.c.pid, runner.leases.c.process_start_time)
+            .where(active)
+            .where(runner.leases.c.pid.is_not(None))
+        )
+        owner_of: dict[tuple[int, str], str] = {}
+        for row in self.conn.execute(owner_stmt):
+            pid = int(row.pid)
+            start = str(row.process_start_time or "")
+            key = (pid, start)
+            prior_owner = owner_of.get(key)
+            if prior_owner is not None:
+                # Liveness is never probed here — the shared record itself is the violation.
+                violations.append(
+                    Violation(
+                        "runner:active-lease-process-is-live",
+                        f"active leases {prior_owner} and {row.lease_id} both record the same "
+                        f"process (pid={pid}) as their own — an unowned/ambiguous claim",
+                    )
+                )
+            else:
+                owner_of[key] = row.lease_id
         return violations
 
 
@@ -699,15 +807,24 @@ class LiveRouteHasToken(FactsCheck):
 
 @dataclass(frozen=True)
 class RunnerInvariants:
-    """The runner store's durable invariants (leases, bindings, outbound buffer)."""
+    """The runner store's durable invariants (leases, bindings, outbound buffer).
+    ``process`` defaults to the real ``/proc`` probe; a crash-sweep or unit test may inject
+    a fake one — this is the only check below that touches a live OS process."""
 
     engine: Engine
+    process: IProcessProbe = field(default_factory=LinuxProcessProbe)
 
-    def run(self) -> list[Violation]:
+    def run(self, *, after_recovery: bool = False) -> list[Violation]:
+        """``after_recovery=True`` additionally runs :class:`ActiveLeaseProcessIsLive` (D3).
+        That check is sound only once a recovery pass has had its chance: a worker dying
+        the instant its daemon does is the CORRECT immediate aftermath of a crash, not a
+        violation, before REAP/RESUME ever reconciles it. A live-system or post-convergence
+        caller passes ``True``; right after a raw kill -9 leaves it ``False``."""
         violations: list[Violation] = []
         with self.engine.connect() as conn:
             checks: tuple[QueryCheck, ...] = (
                 OneLiveLeasePerChunk(conn),
+                NoUnownedLiveLeaseProcess(conn),
                 UniqueEnvBinding(conn),
                 GaplessOutboundSeq(conn),
                 GaplessTranscriptOutboundSeq(conn),
@@ -719,6 +836,8 @@ class RunnerInvariants:
             )
             for check in checks:
                 violations.extend(check.run())
+            if after_recovery:
+                violations.extend(ActiveLeaseProcessIsLive(conn, self.process).run())
             # NOT checked, deliberately: "a pause-parked lease has no closure" (issue #46) — it is
             # false on a legal history; pinned by tests/test_pin_foundation.py.
         return violations
@@ -893,10 +1012,14 @@ class Invariants:
     runner_db_url: str | None = None
     hub_db_url: str | None = None
 
-    def run(self) -> list[Violation]:
+    def run(self, *, after_recovery: bool = False) -> list[Violation]:
+        """``after_recovery`` rides straight through to :meth:`RunnerInvariants.run` —
+        see its own docstring for why that one check needs it."""
         violations: list[Violation] = []
         if self.runner_db_url is not None:
-            violations.extend(RunnerInvariants(create_engine_from_url(self.runner_db_url)).run())
+            violations.extend(
+                RunnerInvariants(create_engine_from_url(self.runner_db_url)).run(after_recovery=after_recovery)
+            )
         if self.hub_db_url is not None:
             violations.extend(HubInvariants(create_engine_from_url(self.hub_db_url)).run())
         return violations

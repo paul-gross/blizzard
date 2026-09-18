@@ -113,7 +113,7 @@ def test_judgement_launch_blocked_by_unresolvable_owner_escalates_in_place(tmp_p
     hub.envelopes["ch_blocked"] = _build_envelope("ch_blocked")
     hub.chunks["ch_done"] = _done_chunk("ch_done")
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     probe = FakeProbe(alive=set())  # exited
     provider = FakeProvider({"e1": "/ws/e1", "e_done": "/ws/e_done"})
@@ -167,7 +167,7 @@ def test_judgement_collect_blocked_by_unresolvable_owner_escalates_in_place(tmp_
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope("ch_1")
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(
@@ -231,7 +231,7 @@ def test_judgement_collect_blocked_by_unresolvable_owner_defers_while_locally_pa
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope("ch_1")
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(
@@ -293,7 +293,7 @@ def test_judgement_collect_blocked_by_unresolvable_owner_abandons_a_detached_chu
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope("ch_1")
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(
@@ -350,7 +350,7 @@ def test_escalate_blocked_by_unresolvable_owner_still_escalates_with_no_takeover
 
     hub = FakeHub()
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), clock=FixedClock(_NOW))
@@ -399,7 +399,7 @@ def test_fail_owner_block_short_circuits_a_retry_the_budget_would_otherwise_allo
 
     hub = FakeHub()
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), clock=FixedClock(_NOW))
@@ -491,7 +491,8 @@ def test_pool_head_owner_unresolvable_at_node_entry_escalates_but_a_sibling_chun
     )
 
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-sibling", pid=200, process_start_time="start-200"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-sibling", pid=200, process_start_time="start-200", pgid=200),
+        verdict="pass",
     )
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), clock=FixedClock(_NOW))
@@ -564,7 +565,8 @@ def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_s
     )
 
     harness = FakeHarness(
-        handle=WorkerHandle(session_id="sess-sibling", pid=200, process_start_time="start-200"), verdict="pass"
+        handle=WorkerHandle(session_id="sess-sibling", pid=200, process_start_time="start-200", pgid=200),
+        verdict="pass",
     )
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), clock=FixedClock(_NOW))
