@@ -484,7 +484,7 @@ class RunnerConfig:
     opencode_binary: str = DEFAULT_OPENCODE_BINARY
     #: OpenCode's tier -> `provider/model` mapping (D6); an unmapped tier skips this binding.
     opencode_model_aliases: tuple[tuple[str, str], ...] = ()
-    #: OpenCode's effort -> `--variant` mapping (D6); unmapped values pass through unchanged.
+    #: OpenCode's effort -> `--variant` mapping (D6); unmapped drops to `None` and logs once.
     opencode_effort_aliases: tuple[tuple[str, str], ...] = ()
     #: The runner-owned OpenCode permission/plugin document's path (D7); `None` predates the binding.
     opencode_worker_config_path: str | None = None

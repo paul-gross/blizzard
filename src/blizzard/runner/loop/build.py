@@ -285,7 +285,11 @@ class PeriodicDriver:
         right after this returns and must not race a live tick writing the same store. A
         tick cannot run forever — every seam it touches is timeout-bounded, including the
         judgement elicitation itself (blizzard#443): `judge` launches detached and returns
-        immediately rather than blocking a tick on a live model turn."""
+        immediately rather than blocking a tick on a live model turn. One known exception:
+        a fresh OpenCode spawn still blocks the tick synchronously on its own identity
+        handshake, bounded by `DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS` (10s) rather than
+        returning immediately — left open by design, since OpenCode self-mints its session
+        id with nowhere durable to poll it from until that handshake completes."""
         self._stop.set()
         self._thread.join()
 
