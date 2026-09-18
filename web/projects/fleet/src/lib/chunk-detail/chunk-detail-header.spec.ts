@@ -267,6 +267,33 @@ describe('ChunkDetailHeader', () => {
     expect(el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.disabled).toBe(false);
   });
 
+  // --- Pending status override (`bzh:frontend-pending-override`) -----------
+
+  it('renders the override status over the real one while it names one', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('overrideStatus', 'paused');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('paused');
+  });
+
+  it('falls back to the real status once the override clears', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('overrideStatus', 'paused');
+    await fixture.whenStable();
+
+    fixture.componentRef.setInput('overrideStatus', null);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe(ROUTED_DETAIL.status);
+  });
+
   it('emits nothing when the operator declines the resume confirm', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', pausedDetail('paused'));

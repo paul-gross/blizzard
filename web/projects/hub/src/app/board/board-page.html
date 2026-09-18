@@ -2,9 +2,9 @@
   <div class="col col-center">
     <fleet-board-shell
       class="board"
-      [chunks]="chunks()"
-      [readyOrder]="readyOrder()"
-      [backlogOrder]="backlogOrder()"
+      [chunks]="boardChunks()"
+      [readyOrder]="readyLaneOrder()"
+      [backlogOrder]="backlogLaneOrder()"
       [state]="boardState()"
       [selectedChunkId]="selected()"
       [canControl]="canControl()"

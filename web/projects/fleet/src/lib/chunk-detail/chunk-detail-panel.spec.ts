@@ -213,6 +213,16 @@ describe('ChunkDetailPanel', () => {
     expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
   });
 
+  it('forwards overrideStatus down to the header, over the real status', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('overrideStatus', 'paused');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('paused');
+  });
+
   it('emits editGraph from the facts column', async () => {
     // `current_node_id: null` is what makes the fixture coherent: a chunk only moves
     // once claimed, so a `not_ready` one stands on no node — and the edit row is gated

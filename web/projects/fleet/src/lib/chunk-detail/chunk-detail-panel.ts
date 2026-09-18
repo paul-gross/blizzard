@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { ChunkDetail } from '../api/hub';
+import type { ChunkDetail, ChunkStatus } from '../api/hub';
 import { ChunkArtifacts } from './chunk-artifacts';
 import {
   type AnswerQuestionEvent,
@@ -115,6 +115,12 @@ export class ChunkDetailPanel {
   /** Whether the resolve-decision mutation is in flight, forwarded to
    * {@link ChunkAwaitingHuman}. */
   readonly resolvePending = input(false);
+
+  /** The chunk's status as a pending Pause/Complete predicts it will read once it
+   * settles, or `null` when nothing overrides `detail().status` — the container's own
+   * computed (`bzh:frontend-pending-override`), forwarded straight to
+   * {@link ChunkDetailHeader.overrideStatus}, which renders it over the status chip. */
+  readonly overrideStatus = input<ChunkStatus | null>(null);
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();

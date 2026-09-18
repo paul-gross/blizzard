@@ -34,7 +34,7 @@
       @if (pointers().length) {
         <span class="sep" aria-hidden="true">·</span>
       }
-      <span class="st" data-testid="detail-status">{{ detail().status }}</span>
+      <span class="st" data-testid="detail-status">{{ renderedStatus() }}</span>
       <!-- Every unmet prerequisite, then every chunk this one still holds up — the
            whole edge set the line can name, not one representative of it. Plain text
            like the pointers beside them: the dependency lists in the column below own

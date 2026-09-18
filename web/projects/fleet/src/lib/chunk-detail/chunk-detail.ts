@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
+import type { ChunkStatus } from '../api/hub';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkWorkItemsQuery } from '../chunks/chunk-work-items.query';
-import { injectCompleteChunkMutation } from '../chunks/complete.mutations';
+import { injectCompleteChunkMutation, type CompleteVars } from '../chunks/complete.mutations';
 import { injectDeleteChunkMutation } from '../chunks/delete.mutations';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
@@ -12,9 +13,11 @@ import {
   injectResolveDecisionMutation,
   readAnswerFailure,
 } from '../chunks/human.mutations';
-import { injectChunkPauseMutation } from '../chunks/pause.mutations';
+import { injectChunkPauseMutation, type ChunkPauseVars } from '../chunks/pause.mutations';
 import { errorMessage } from '../error-message';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { chunkCompleteMutationKey, chunkPauseMutationKey } from '../mutation-keys';
+import { injectPendingMutationVariables, isPendingFor } from '../mutation-pending';
 import { asyncState } from '../query-state';
 import { deriveWorkItemsState, type WorkItemsState } from './work-items-state';
 import {
@@ -113,6 +116,60 @@ export class ChunkDetail {
   /** Whether the delete mutation is in flight for this chunk, threaded to the header's
    * Delete menu item (combined there with {@link ChunkDetailHeader.deleteDisabled}). */
   protected readonly deletePending = computed(() => this.deleteMutation.isPending());
+
+  /** Every chunk id a Pause/Resume mutation is currently pending for, and its own
+   * variables — read through the shared helper (`bzh:frontend-pending-override`)
+   * rather than this component's own `pauseMutation.isPending()` alone, since the
+   * override below needs the fired *direction* (`paused: true` vs. `false`), not just
+   * pending-ness. */
+  private readonly pendingChunkPauses = injectPendingMutationVariables<ChunkPauseVars>(chunkPauseMutationKey);
+
+  /** The same, for Complete. */
+  private readonly pendingChunkCompletes = injectPendingMutationVariables<CompleteVars>(chunkCompleteMutationKey);
+
+  /**
+   * The chunk's status as it will read once a currently pending Pause or Complete
+   * settles, when that outcome is *total* over the currently rendered status
+   * (`bzh:frontend-pending-override`) — `null` while nothing overrides
+   * `detail().status`, computed only from each mutation's own pending variables
+   * (`injectPendingMutationVariables`/`isPendingFor`), never a cache read or write.
+   * Threaded down to {@link ChunkDetailHeader.overrideStatus}, which renders it over
+   * the status chip; every other reader of `detail().status` (admissibility guards,
+   * the facts column) stays on the real server-read value.
+   *
+   * **Complete is total.** `CompleteService` always lands an operator-completion fact,
+   * which the hub's own status derivation (`ChunkFacts.status()`,
+   * `src/blizzard/hub/domain/work.py` — not this app's own `ChunkFacts` component of
+   * the same name) honors over every other status including `stopped` — `done` is
+   * reachable from any non-`done` status (`blizzard-context:/domain/work/statuses.md`),
+   * and the header already withholds Complete once the chunk already reads `done`
+   * ({@link ChunkDetailHeader.completable}), so this never has to guess there.
+   *
+   * **Pause is total only below the human-gated states.** `paused` ranks below
+   * `waiting_on_human`/`needs_human` in the precedence statuses.md owns, so pausing a
+   * chunk parked on either leaves its rendered status exactly where it was — the hub's
+   * `ChunkFacts.status()` branch order checks the human-gated facts before the pause
+   * fact. This reads that case as "no override" instead of guessing `paused`.
+   *
+   * **Resume renders no override at all.** `status` is the *only* status field
+   * `ChunkDetail` carries the pause overlay through — there is no second field naming
+   * what a paused chunk's status would read with the overlay lifted, so nothing here
+   * can predict whether a resumed chunk reads `running`, `delivering`, `ready`, or
+   * `not_ready` without re-deriving the ladder statuses.md already owns in prose,
+   * which the rule forbids. **Detach renders no override either**, for the same
+   * non-total reason {@link ChunkDetailHeader}'s own doc comment on Detach already
+   * states: a detached `needs_human` chunk still derives `needs_human`
+   * (`src/blizzard/hub/domain/detach.py`).
+   */
+  protected readonly overrideStatus = computed<ChunkStatus | null>(() => {
+    const detail = this.detail();
+    if (detail === undefined) return null;
+    const completing = isPendingFor(this.pendingChunkCompletes(), (vars) => vars.chunkId === detail.chunk_id);
+    if (completing) return 'done';
+    const pausing = isPendingFor(this.pendingChunkPauses(), (vars) => vars.chunkId === detail.chunk_id && vars.paused);
+    if (pausing && detail.status !== 'waiting_on_human' && detail.status !== 'needs_human') return 'paused';
+    return null;
+  });
 
   /** Whether the resolve-decision mutation is in flight for this chunk, threaded to the
    * awaiting-human gate's choice chips. */

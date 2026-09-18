@@ -69,6 +69,7 @@ export {
   promoteChunkMutationKey,
   repositionQueueMutationKey,
   repositionBacklogMutationKey,
+  chunkDeleteMutationKey,
 } from './lib/mutation-keys';
 
 export * as hubApi from './lib/api/hub';
