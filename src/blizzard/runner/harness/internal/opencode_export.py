@@ -8,6 +8,8 @@ machinery (that module's own docstring forbids production reuse). Mirrors
 from __future__ import annotations
 
 import subprocess
+import tempfile
+from pathlib import Path
 from typing import Protocol
 
 #: Bounds one ``export`` call — a wedged binary costs one failed read, not a hang.
@@ -40,23 +42,27 @@ class SubprocessOpenCodeExporter:
         self._timeout = timeout
 
     def export(self, session_id: str) -> str:
-        try:
-            result = subprocess.run(
-                [self._binary, "export", session_id],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=self._timeout,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise OpenCodeExportError(f"failed to run {self._binary} export {session_id!r}: {exc}") from exc
-        if result.returncode != 0:
-            tail = result.stderr.strip()[-_STDERR_TAIL_BYTES:]
-            detail = f" — stderr: {tail}" if tail else ""
-            raise OpenCodeExportError(
-                f"{self._binary} export {session_id!r} exited {result.returncode}{detail}"
-            )
-        return result.stdout
+        with tempfile.TemporaryDirectory(prefix="blizzard-opencode-export-") as scratch:
+            out_path = Path(scratch) / "export.json"
+            try:
+                # A real file, never a pipe: `opencode` exits before a piped stdout write drains,
+                # silently truncating a piped capture at the kernel pipe buffer past 64 KiB.
+                with out_path.open("w") as out_file:
+                    result = subprocess.run(
+                        [self._binary, "export", session_id],
+                        stdout=out_file,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False,
+                        timeout=self._timeout,
+                    )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                raise OpenCodeExportError(f"failed to run {self._binary} export {session_id!r}: {exc}") from exc
+            if result.returncode != 0:
+                tail = (result.stderr or "").strip()[-_STDERR_TAIL_BYTES:]
+                detail = f" — stderr: {tail}" if tail else ""
+                raise OpenCodeExportError(f"{self._binary} export {session_id!r} exited {result.returncode}{detail}")
+            return out_path.read_text()
 
 
 # Typecheck-time Protocol conformance sentinel (the exemplar's shape): pyright rejects the

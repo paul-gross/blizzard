@@ -19,7 +19,8 @@ def test_export_returns_stdout_on_success(monkeypatch: pytest.MonkeyPatch) -> No
     def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         captured["cmd"] = cmd
         captured["kwargs"] = kwargs
-        return subprocess.CompletedProcess(cmd, 0, stdout='{"info": {}}', stderr="")
+        kwargs["stdout"].write('{"info": {}}')  # type: ignore[union-attr]  # a real file, per the export seam
+        return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
 
     monkeypatch.setattr(subprocess, "run", _run)
     exporter = SubprocessOpenCodeExporter(binary="opencode")
@@ -30,9 +31,28 @@ def test_export_returns_stdout_on_success(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.unit
+def test_export_captures_stdout_through_a_file_never_a_pipe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The regression this seam exists to prevent: a piped capture silently truncates a real
+    ``opencode export``'s output past the kernel pipe buffer (64 KiB on Linux)."""
+    captured: dict[str, object] = {}
+
+    def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["kwargs"] = kwargs
+        kwargs["stdout"].write("x" * 200_000)  # type: ignore[union-attr]  # past one pipe buffer
+        return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+    exporter = SubprocessOpenCodeExporter(binary="opencode")
+
+    assert len(exporter.export("sess-1")) == 200_000
+    assert "capture_output" not in captured["kwargs"]  # type: ignore[operator]
+    assert captured["kwargs"]["stdout"] is not subprocess.PIPE  # type: ignore[index]
+
+
+@pytest.mark.unit
 def test_export_nonzero_exit_raises_with_a_stderr_tail(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(a[0], 1, stdout="", stderr="session gone")
+        subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(a[0], 1, stdout=None, stderr="session gone")
     )
     exporter = SubprocessOpenCodeExporter(binary="opencode")
 
