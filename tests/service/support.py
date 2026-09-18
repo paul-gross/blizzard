@@ -1,9 +1,13 @@
 """Shared scaffolding for the service tier — the mock-fleet launchers and gate.
 
-Exercises one running daemon's HTTP API from outside the process with its counterpart
-bound to the mock fleet: the runner against the mock hub, the hub against the mock
-runner + forge. Skipped unless ``BLIZZARD_SERVICE=1`` and the sibling ``blizzard-mock``
-worktree is provisioned — see ``verification/blizzard.md`` for the test tiers."""
+A running hub or runner's HTTP API exercised from outside, or an out-of-process
+external-tool binding driven against a mock-fleet binary — seams bound to the mock fleet
+either way: the runner against the mock hub, the hub against the mock runner + forge, and
+a real harness integration's own external-tool CLI against the mock fleet's emitted
+CLI-surface artifact (``bzh:external-cli-fake-is-service-tier`` —
+see ``tests/service/test_opencode_compatibility_service.py``). Skipped unless
+``BLIZZARD_SERVICE=1`` and the sibling ``blizzard-mock`` worktree is provisioned — see
+``verification/blizzard.md`` for the test tiers."""
 
 from __future__ import annotations
 
@@ -66,7 +70,10 @@ SERVICE_ENABLED = os.environ.get("BLIZZARD_SERVICE") == "1"
 
 service_gate = pytest.mark.skipif(
     not SERVICE_ENABLED,
-    reason="service tier needs the mock fleet; set BLIZZARD_SERVICE=1 (see tests/service/support.py)",
+    reason=(
+        "service tier needs the mock fleet — a daemon's HTTP API or a mock-fleet CLI-surface "
+        "binary; set BLIZZARD_SERVICE=1 (see tests/service/support.py)"
+    ),
 )
 
 
@@ -99,6 +106,25 @@ def require_stub_idp() -> Path:
     if bin_dir is None or not (bin_dir / "blizzard-mock-idp").is_file():
         pytest.skip("no provisioned sibling blizzard-mock worktree with the stub IdP (run `winter provision <env>`)")
     return bin_dir
+
+
+def require_opencode_cli_surface(bin_dir: Path) -> Path:
+    """``bin_dir``'s ``mock-opencode`` binary, with the ``emit`` verb live, or skip.
+
+    ``mock-opencode`` itself predates ``emit`` — Phase 2 of ``bzh:external-cli-fake-is-service-tier``
+    added the verb to an already-shipping binary — so this skips on the verb's own absence, not the
+    binary's: an older-provisioned sibling ``blizzard-mock`` worktree might carry ``mock-opencode``
+    from before ``emit`` existed."""
+    mock_opencode = bin_dir / "mock-opencode"
+    if not mock_opencode.is_file():
+        pytest.skip("no provisioned sibling blizzard-mock worktree with mock-opencode (run `winter provision <env>`)")
+    probe = subprocess.run([str(mock_opencode), "emit", "--help"], capture_output=True, text=True)
+    if probe.returncode != 0:
+        pytest.skip(
+            "the provisioned sibling blizzard-mock's mock-opencode predates the emit verb "
+            "(run `winter provision <env>` again)"
+        )
+    return mock_opencode
 
 
 def _mock_daemon_log(name: str, port: int, log_dir: Path | None) -> Path:

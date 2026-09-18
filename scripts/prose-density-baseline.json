@@ -5136,9 +5136,9 @@
   },
   "service/support.py": {
    "comments": 8,
-   "docstrings": 42,
-   "over_cap": 1,
-   "total": 387
+   "docstrings": 52,
+   "over_cap": 3,
+   "total": 413
   },
   "service/test_analytics_events_service.py": {
    "comments": 3,
@@ -5217,6 +5217,12 @@
    "docstrings": 22,
    "over_cap": 0,
    "total": 233
+  },
+  "service/test_opencode_compatibility_service.py": {
+   "comments": 17,
+   "docstrings": 30,
+   "over_cap": 1,
+   "total": 960
   },
   "service/test_parity_guard.py": {
    "comments": 8,
@@ -5307,12 +5313,6 @@
    "docstrings": 163,
    "over_cap": 2,
    "total": 1110
-  },
-  "support_opencode_binary.py": {
-   "comments": 0,
-   "docstrings": 6,
-   "over_cap": 0,
-   "total": 541
   },
   "test_activity_api.py": {
    "comments": 3,
@@ -7361,10 +7361,10 @@
    "total": 1095
   },
   "test_runner_harness_opencode_diagnostic.py": {
-   "comments": 19,
-   "docstrings": 7,
-   "over_cap": 0,
-   "total": 1335
+   "comments": 2,
+   "docstrings": 23,
+   "over_cap": 1,
+   "total": 610
   },
   "test_runner_harness_registry.py": {
    "comments": 0,
