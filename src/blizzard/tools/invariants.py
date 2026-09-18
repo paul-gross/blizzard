@@ -386,6 +386,29 @@ class InvocationBoundaryClosedWhenLeaseClosed(QueryCheck):
         ]
 
 
+class WorkerBoundaryKindExclusivePerGeneration(QueryCheck):
+    """At most one worker-starting boundary — ``spawn``, ``resume``, or ``nudge`` — exists per
+    (lease, generation) (blizzard#437 Phase 4): the exclusivity ``UsageRecorder._worker_boundary``'s
+    try-each-kind lookup depends on. ``judge`` is excluded — it can coexist with one of the
+    other three at the same generation by design."""
+
+    _WORKER_STARTING_KINDS = ("spawn", "resume", "nudge")
+
+    def run(self) -> list[Violation]:
+        stmt = select(runner.invocation_boundaries.c.lease_id, runner.invocation_boundaries.c.generation).where(
+            runner.invocation_boundaries.c.kind.in_(self._WORKER_STARTING_KINDS)
+        )
+        key_count = Counter((row[0], row[1]) for row in self.conn.execute(stmt))
+        return [
+            Violation(
+                "runner:worker-boundary-kind-exclusive-per-generation",
+                f"lease {lease_id} generation {generation} has {n} worker-starting invocation boundaries",
+            )
+            for (lease_id, generation), n in key_count.items()
+            if n > 1
+        ]
+
+
 class NudgeAtMostOnce(QueryCheck):
     """A lease's ``produces``-unmet nudge fires at most once per (lease, epoch) (issue #113)."""
 
@@ -857,6 +880,7 @@ class RunnerInvariants:
                 NudgeAtMostOnce(conn),
                 ChecksRecordedWhenMarked(conn),
                 InvocationBoundaryClosedWhenLeaseClosed(conn),
+                WorkerBoundaryKindExclusivePerGeneration(conn),
             )
             for check in checks:
                 violations.extend(check.run())

@@ -1148,6 +1148,7 @@ def make_context(
             worker_files=_files,
             workspace_root=resolved_config.workspace_root,
             harnesses=_harnesses,
+            invocation_boundaries=store,
             transcripts_wired=_transcripts_wired,
             events=events,
         ),
@@ -1193,6 +1194,7 @@ def make_usage_recorder(
         worker_files=WorkerStdoutFiles("", store),
         workspace_root="",
         harnesses=_default_harness_registry(harness),
+        invocation_boundaries=store,
     )
 
 

@@ -4128,7 +4128,7 @@
    "comments": 27,
    "docstrings": 48,
    "over_cap": 5,
-   "total": 321
+   "total": 322
   },
   "blizzard/runner/loop/capability_snapshot.py": {
    "comments": 1,
@@ -4299,10 +4299,10 @@
    "total": 700
   },
   "blizzard/runner/loop/usage.py": {
-   "comments": 12,
-   "docstrings": 15,
+   "comments": 16,
+   "docstrings": 17,
    "over_cap": 1,
-   "total": 127
+   "total": 154
   },
   "blizzard/runner/loop/worker_stdout.py": {
    "comments": 0,
@@ -4912,9 +4912,9 @@
   },
   "blizzard/tools/invariants.py": {
    "comments": 29,
-   "docstrings": 104,
+   "docstrings": 108,
    "over_cap": 0,
-   "total": 1049
+   "total": 1073
   },
   "blizzard/tools/openapi.py": {
    "comments": 0,
@@ -5378,7 +5378,7 @@
    "comments": 103,
    "docstrings": 108,
    "over_cap": 11,
-   "total": 1288
+   "total": 1290
   },
   "service/__init__.py": {
    "comments": 0,
@@ -6954,9 +6954,9 @@
   },
   "test_invariant_checker.py": {
    "comments": 30,
-   "docstrings": 125,
+   "docstrings": 130,
    "over_cap": 0,
-   "total": 1426
+   "total": 1475
   },
   "test_invocation_boundaries.py": {
    "comments": 11,
@@ -7931,10 +7931,10 @@
    "total": 569
   },
   "test_runner_usage.py": {
-   "comments": 52,
+   "comments": 55,
    "docstrings": 32,
    "over_cap": 0,
-   "total": 599
+   "total": 610
   },
   "test_runner_validate_token.py": {
    "comments": 3,
@@ -8207,10 +8207,16 @@
    "total": 198
   },
   "test_usage_recorder_harness_isolation.py": {
-   "comments": 16,
+   "comments": 18,
    "docstrings": 12,
    "over_cap": 0,
-   "total": 185
+   "total": 200
+  },
+  "test_usage_recorder_range_recovery.py": {
+   "comments": 16,
+   "docstrings": 13,
+   "over_cap": 0,
+   "total": 212
   },
   "test_usage_total_since_window.py": {
    "comments": 0,

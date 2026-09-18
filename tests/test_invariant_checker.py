@@ -634,6 +634,55 @@ def test_an_open_leases_open_invocation_boundary_is_not_a_violation(tmp_path: Pa
     assert RunnerInvariants(engine).run() == []
 
 
+def test_a_single_worker_starting_boundary_per_generation_is_not_a_violation(tmp_path: Path) -> None:
+    """One ``spawn`` boundary at generation 1 is the ordinary, exclusive shape
+    ``UsageRecorder._worker_boundary``'s try-each-kind lookup depends on (blizzard#437 Phase 4)."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
+        )
+        conn.execute(
+            insert(runner.invocation_boundaries).values(
+                lease_id="lease_a",
+                chunk_id="ch_1",
+                node_id="nd",
+                epoch=1,
+                generation=1,
+                kind="spawn",
+                start_position=None,
+                opened_at=_NOW,
+            )
+        )
+    assert RunnerInvariants(engine).run() == []
+
+
+def test_two_worker_starting_boundaries_at_one_generation_is_a_violation(tmp_path: Path) -> None:
+    """A ``resume`` boundary landing at the same generation an already-open ``nudge``
+    boundary owns would corrupt ``_worker_boundary``'s try-in-order lookup silently — the
+    checker names it instead (blizzard#437 Phase 4)."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
+        )
+        for kind in ("nudge", "resume"):
+            conn.execute(
+                insert(runner.invocation_boundaries).values(
+                    lease_id="lease_a",
+                    chunk_id="ch_1",
+                    node_id="nd",
+                    epoch=1,
+                    generation=2,
+                    kind=kind,
+                    start_position=None,
+                    opened_at=_NOW,
+                )
+            )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:worker-boundary-kind-exclusive-per-generation" in slugs
+
+
 def test_duplicate_nudge_fact_for_one_lease_epoch_is_a_violation(tmp_path: Path) -> None:
     """`record_nudge_fired` is an insert never an upsert, gated in code not by a DB
     constraint (issue #113); two rows for the same ``(lease, epoch)`` mean that guard

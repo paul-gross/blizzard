@@ -6,6 +6,11 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.domain.invocation_boundaries import (
+    InvocationBoundaryKind,
+    InvocationBoundaryRecord,
+    IReadInvocationBoundaryRepository,
+)
 from blizzard.runner.domain.leases import IReadLeaseLivenessRepository, LeaseRecord
 from blizzard.runner.domain.usage import IWriteUsageRepository
 from blizzard.runner.environments.repository import EnvBindingRecord
@@ -14,11 +19,15 @@ from blizzard.runner.harness.adapter import IHarnessUsageAccounting
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.loop")
+
+#: Worker-starting boundary kinds, tried in order; `"judge"` excluded — it can coexist (blizzard#437).
+_WORKER_STARTING_KINDS: tuple[InvocationBoundaryKind, ...] = ("spawn", "resume", "nudge")
 
 
 @dataclass(frozen=True)
@@ -33,6 +42,8 @@ class UsageRecorder:
     workspace_root: str
     #: Required; every recorded session's owner resolves through this registry, with no single-harness fallback.
     harnesses: IHarnessRegistry
+    #: The generation's own boundary (blizzard#437) — the range-read fallback's start.
+    invocation_boundaries: IReadInvocationBoundaryRepository
     #: The transcripts lane's on/off switch — ``False`` disables only the envelope-less usage fallback.
     transcripts_wired: bool = False
     #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
@@ -100,6 +111,11 @@ class UsageRecorder:
             return sample
         if not self.transcripts_wired:
             return None
+        boundary = self._worker_boundary(lease.lease_id, generation)
+        if boundary is None:
+            # No durable start for this exact generation: never charge the whole session to
+            # one generation (blizzard#437 Phase 4) — no boundary, no sample.
+            return None
         fallback_workdir = bindings[0].workdir if bindings else None
         spawn_cwd = SpawnCwd(self.workspace_root, fallback_workdir).path
         try:
@@ -113,10 +129,21 @@ class UsageRecorder:
                 detail=str(exc),
             )
             return None
-        lines = source.read_raw_lines(session.session_id, spawn_cwd=spawn_cwd)
+        end = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
+        start = TranscriptPosition(boundary.start_position) if boundary.start_position is not None else None
+        lines = source.read_raw_lines(session.session_id, spawn_cwd=spawn_cwd, start=start, end=end)
         if not lines:
             return None
         return harness.sum_transcript_usage(lines, kind, model=lease.resolved_model)
+
+    def _worker_boundary(self, lease_id: str, generation: int) -> InvocationBoundaryRecord | None:
+        """This generation's own worker-starting boundary — whichever of spawn/resume/nudge
+        actually opened it, since `record_worker`'s usage-kind label doesn't reliably name it."""
+        for kind in _WORKER_STARTING_KINDS:
+            boundary = self.invocation_boundaries.boundary(lease_id, generation, kind)
+            if boundary is not None:
+                return boundary
+        return None
 
     def _resolved_harness(self, session: SessionReference) -> IHarnessUsageAccounting:
         """Resolve ``session``'s recorded owner — may raise ``UnknownHarnessError``/

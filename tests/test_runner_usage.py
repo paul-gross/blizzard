@@ -68,6 +68,12 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", session="sess-a
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
         spawned_at=_NOW,
     )
+    # The generation-1 spawn's own worker-starting boundary (blizzard#437 Phase 4) — the
+    # range-read fallback needs one to recover past its own stdout envelope at all.
+    store.record_boundary_open(
+        lease_id=lease, chunk_id=chunk, node_id="nd_build", epoch=epoch, generation=1, kind="spawn",
+        start_position=None, opened_at=_NOW,
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -189,6 +195,11 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
         process_start_time="start-100",
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
+    )
+    # Generation 2's own resume boundary (blizzard#437 Phase 4) — its recovery range's start.
+    store.record_boundary_open(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", epoch=1, generation=2, kind="resume",
+        start_position=None, opened_at=_NOW,
     )
     stdout_dir = tmp_path / "stdout"
     stdout_dir.mkdir()

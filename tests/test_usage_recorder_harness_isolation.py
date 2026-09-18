@@ -52,6 +52,18 @@ def _seed_lease(store, *, lease_id: str, chunk_id: str, harness_id: str, pid: in
         session=SessionReference(harness_id, _SHARED_SESSION_ID),
         spawned_at=_NOW,
     )
+    # The generation-1 spawn's own worker-starting boundary (blizzard#437 Phase 4) — the
+    # range-read fallback needs one to recover past its own stdout envelope at all.
+    store.record_boundary_open(
+        lease_id=lease_id,
+        chunk_id=chunk_id,
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        kind="spawn",
+        start_position=None,
+        opened_at=_NOW,
+    )
 
 
 def test_envelope_less_fallback_sums_each_harnesss_own_transcript_no_cross_read(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -100,6 +112,7 @@ def test_envelope_less_fallback_sums_each_harnesss_own_transcript_no_cross_read(
         worker_files=WorkerStdoutFiles("", store),  # "" — no envelope ever survives
         workspace_root="",
         harnesses=registry,
+        invocation_boundaries=store,
         transcripts_wired=True,  # the lane's on/off switch alone; reads still dispatch per-owner
     )
 
@@ -146,6 +159,7 @@ def test_envelope_parse_still_records_with_the_transcripts_lane_off(tmp_path) ->
         worker_files=WorkerStdoutFiles(str(stdout_dir), store),
         workspace_root="",
         harnesses=registry,
+        invocation_boundaries=store,
         transcripts_wired=False,  # the lane is off entirely — not this generation's own envelope
     )
 
@@ -175,6 +189,7 @@ def test_transcript_fallback_with_no_transcript_source_records_nothing_rather_th
         worker_files=WorkerStdoutFiles("", store),  # "" — no envelope ever survives
         workspace_root="",
         harnesses=registry,
+        invocation_boundaries=store,
         transcripts_wired=True,  # the lane is ON — the fallback is reached
     )
 
