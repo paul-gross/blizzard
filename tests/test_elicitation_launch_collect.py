@@ -104,6 +104,31 @@ def test_advance_launches_then_collects_across_two_passes(tmp_path):  # type: ig
     assert "completion.submitted" in kinds
 
 
+def test_a_started_record_write_that_raises_kills_the_still_unconfirmed_elicitation(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    """F1's mirror for a judge launch: a plain exception writing the durable
+    ``record_elicitation_started`` row must not leave the trampoline parked forever with
+    nothing durable for `collect` to find — `Judgement._elicit` kills the group itself."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    probe = FakeProbe()
+    ctx = _ctx(store, harness=harness, probe=probe)
+
+    def _raise(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("durable write failed")
+
+    monkeypatch.setattr(store, "record_elicitation_started", _raise)
+
+    with pytest.raises(RuntimeError, match="durable write failed"):
+        Advance(ctx).run()
+
+    assert probe.killed_groups == [8888]  # FakeHarness's default judge pid/pgid
+    elicitation = store.in_flight_elicitation("lease_1", 1)
+    # The launch row landed before the process even started; the failed write is the one
+    # that would have filled in its pid/pgid — never confirmed, so it never does.
+    assert elicitation is not None and elicitation.pid is None
+
+
 def test_collect_passes_over_a_still_running_elicitation(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
