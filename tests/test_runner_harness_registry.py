@@ -11,6 +11,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
+from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.process_launch import _SPAWN_EXECUTOR
 from blizzard.runner.harness.registry import (
     HarnessBinding,
@@ -74,6 +75,18 @@ def test_production_registry_shares_one_process_launcher_across_both_bindings(tm
     claude_launcher = vars(registry.adapter(CLAUDE_CODE_HARNESS_ID))["_launcher"]
     opencode_launcher = vars(registry.adapter(OPENCODE_HARNESS_ID))["_launcher"]
     assert claude_launcher is opencode_launcher
+
+
+@pytest.mark.unit
+def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: Path) -> None:
+    """D9: OpenCode's binding now names a real transcript source on both the adapter and
+    the binding — no longer the ``UnavailableHarnessError`` an unset binding used to raise."""
+    registry = build_production_harness_registry(RunnerConfig(root=tmp_path, db_url="sqlite://"))
+
+    source = registry.transcript_source(OPENCODE_HARNESS_ID)
+    assert isinstance(source, OpenCodeTranscriptSource)
+    adapter_source = vars(registry.adapter(OPENCODE_HARNESS_ID))["_transcript_source"]
+    assert adapter_source is source
 
 
 @pytest.mark.unit
