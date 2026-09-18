@@ -39,10 +39,16 @@ def _lease_generation(conn: Connection, lease_id: str) -> int:
 def _open_provisional_spawn_id(conn: Connection, lease_id: str, *, required: bool = True) -> int | None:
     """The newest ``lease_spawns`` row for ``lease_id`` with no ``session_id`` yet —
     phase one's own row, found by :meth:`~LeaseLivenessStore.record_identified_spawn` and
-    :meth:`~LeaseLivenessStore.record_identity_failed` to close it one way or the other."""
+    :meth:`~LeaseLivenessStore.record_identity_failed` to close it one way or the other.
+    ``session_id IS NULL`` alone can't tell that apart from a pre-two-phase legacy row (an
+    additive migration, no backfill) — requiring ``pid`` non-NULL too is what does."""
     row = conn.execute(
         select(lease_spawns.c.id)
-        .where(lease_spawns.c.lease_id == lease_id, lease_spawns.c.session_id.is_(None))
+        .where(
+            lease_spawns.c.lease_id == lease_id,
+            lease_spawns.c.session_id.is_(None),
+            lease_spawns.c.pid.isnot(None),
+        )
         # `id` breaks no tie here — it IS the ordering fact (`bzh:sql-portable`): insertion
         # order, not a timestamp, is what "newest provisional generation" means.
         .order_by(lease_spawns.c.id.desc())
