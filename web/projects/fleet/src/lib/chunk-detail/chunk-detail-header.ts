@@ -61,8 +61,9 @@ const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
  * mutations those events drive live in the container. The status chip renders
  * {@link renderedStatus} rather than `detail().status` directly, so a pending Pause or
  * Complete can show its predicted outcome before the server confirms it
- * (`bzh:frontend-pending-override`) — see {@link overrideStatus}'s own doc comment for
- * which of the four controls that covers and why the other two do not qualify.
+ * (`bzh:frontend-pending-override`) — the merge itself is the container's
+ * (`chunk-detail.ts`'s `overrideStatus`/`renderedStatus`), which names which of the
+ * four controls that covers and why the other two do not qualify.
  */
 @Component({
   selector: 'fleet-chunk-detail-header',
@@ -74,6 +75,15 @@ const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
 export class ChunkDetailHeader {
   /** The chunk aggregate to render (identity, status, current node, pause, route). */
   readonly detail = input.required<ChunkDetail>();
+
+  /** The chunk's status as the header's own status chip renders it — the container's
+   * already-applied result (`bzh:frontend-pending-override`, `chunk-detail.ts`'s
+   * `overrideStatus`/`renderedStatus`): a currently pending Pause/Complete's predicted
+   * outcome where one overrides, else the real `detail().status`. Never consulted by
+   * {@link pausable}/{@link completable}/{@link deletable}: those gate what the *next*
+   * click is admissible to fire against the server-read status, which an in-flight
+   * mutation's own predicted outcome must not perturb. */
+  readonly renderedStatus = input.required<ChunkStatus>();
 
   /** Whether the current identity may operate Pause/Resume/Detach (`chunk:control` —
    * issue #210). Withholds every one of those controls when `false` so a `guest`
@@ -101,12 +111,6 @@ export class ChunkDetailHeader {
   /** Whether the delete mutation is in flight — combined with {@link deleteDisabled}
    * to disable the Delete menu item. */
   readonly deletePending = input(false);
-
-  /** The chunk's status as a currently pending Pause/Complete predicts it will read
-   * once it settles, or `null` when nothing overrides it — the container's own
-   * computed (`bzh:frontend-pending-override`, `chunk-detail.ts`'s `overrideStatus`),
-   * never re-derived here. `null` for Resume and Detach: see {@link renderedStatus}. */
-  readonly overrideStatus = input<ChunkStatus | null>(null);
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
@@ -141,13 +145,6 @@ export class ChunkDetailHeader {
    * address when the configured binding rendered one (a null `web_url` degrades to
    * plain text, no broken link). */
   protected readonly pointers = computed<readonly WorkRefView[]>(() => this.detail().work_refs ?? []);
-
-  /** The chunk's status as the header's own status chip renders it — the container's
-   * {@link overrideStatus} while it names one, else the real `detail().status`. Never
-   * consulted by {@link pausable}/{@link completable}/{@link deletable}: those gate
-   * what the *next* click is admissible to fire against the server-read status, which
-   * an in-flight mutation's own predicted outcome must not perturb. */
-  protected readonly renderedStatus = computed<ChunkStatus>(() => this.overrideStatus() ?? this.detail().status);
 
   /** The chunk's open operator pause, if any — who set it (issue #46). Read off the
    * detail's `pause` fact, not `status`: a chunk both paused and parked on a question

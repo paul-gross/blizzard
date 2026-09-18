@@ -20,7 +20,17 @@ export interface RelatedRoutineVm {
 export interface ScopePanelVm {
   readonly slug: string;
   readonly description: string;
+  /** The scope's real, unoverridden lifecycle flag — which control renders
+   * (Retire/Re-enable) stays keyed off this, never off {@link renderedRetired}
+   * (`graph-detail-header.ts`'s own `retired`/`renderedRetired` split), so a
+   * pending lifecycle mutation's own predicted outcome can never flip which verb the
+   * next click would fire. */
   readonly retired: boolean;
+  /** The lifecycle badge's rendered value — the container's own applied result
+   * (`bzh:frontend-pending-override`): the `retired` flag a currently pending
+   * Retire/Enable predicts, already merged with the real {@link retired} where
+   * nothing overrides it (`graph-detail-header.ts`'s own `renderedRetired`). */
+  readonly renderedRetired: boolean;
   /** Every routine linked to this scope, each marked whether it defaults here (D4)
    * — `null` while the relation read is still pending. */
   readonly relatedRoutines: readonly RelatedRoutineVm[] | null;

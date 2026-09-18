@@ -327,6 +327,28 @@ describe('ChunkAwaitingHuman', () => {
     }
   });
 
+  it('disables the option chips and the Answer button while the answer mutation is pending, re-enabling once it settles', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    fixture.componentRef.setInput('canAnswer', true);
+    fixture.componentRef.setInput('answerPending', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(true);
+    for (const chip of el.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')) {
+      expect(chip.disabled).toBe(true);
+    }
+
+    fixture.componentRef.setInput('answerPending', false);
+    await fixture.whenStable();
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(false);
+    for (const chip of el.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')) {
+      expect(chip.disabled).toBe(false);
+    }
+  });
+
   it('keeps an answered question visible with its trail instead of dropping it (issue #165)', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', ANSWERED_UNDELIVERED_DETAIL);

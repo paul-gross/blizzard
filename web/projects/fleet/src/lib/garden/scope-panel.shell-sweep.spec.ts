@@ -21,6 +21,7 @@ const VM: ScopePanelVm = {
   slug: 'blizzard',
   description: 'the blizzard monorepo',
   retired: false,
+  renderedRetired: false,
   relatedRoutines: [
     { name: 'nightly', isDefault: true },
     { name: 'a-very-long-routine-name-that-should-wrap-rather-than-overflow-its-list', isDefault: false },

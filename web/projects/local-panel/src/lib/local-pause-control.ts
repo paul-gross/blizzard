@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
-import { errorMessage, KitBadge, KitButton } from 'fleet';
+import { errorMessage, injectPendingMutationVariables, KitBadge, KitButton } from 'fleet';
 
-import { injectLocalPauseMutation, injectRunnerDashboardQuery } from './status.query';
+import { localPauseMutationKey } from './mutation-keys';
+import { injectLocalPauseMutation, injectRunnerDashboardQuery, type LocalPauseVars } from './status.query';
 
 /**
  * The runner top bar's pause/unpause control (issue #133) — the local brake's
@@ -51,24 +52,37 @@ export class LocalPauseControl {
   private readonly dashboardQuery = injectRunnerDashboardQuery();
   private readonly pauseMutation = injectLocalPauseMutation();
 
+  /** This runner's own id — the pause target {@link overridePaused} scopes to,
+   * read off the same dashboard read `chunk-detail.ts`'s own `runnerName` reads.
+   * `''` before the first read resolves; harmless, since the PATCH itself never
+   * carries this id on the wire (only {@link LocalPauseVars}'s local scoping
+   * does) and every mutation this component ever fires is scoped identically. */
+  private readonly runnerId = computed<string>(() => this.dashboardQuery.data()?.runner?.runner_id ?? '');
+
+  /** Every runner id a local-pause mutation is currently pending for, and its own
+   * variables — read through the shared helper (`bzh:frontend-pending-override`)
+   * rather than this mutation's own `.isPending()`/`.variables()` alone, the pattern
+   * every override site is held to (mirrors `graph-detail.ts`'s
+   * `pendingGraphLifecycles`, scoped by `graphId` there and by {@link runnerId} here). */
+  private readonly pendingLocalPauses = injectPendingMutationVariables<LocalPauseVars>(localPauseMutationKey);
+
+  /** This runner's brake as it will read once a currently pending flip settles for
+   * *this* runner, or `null` while nothing overrides it (`bzh:frontend-pending-
+   * override`). Total: this control's own PATCH sets `pause.local` directly and
+   * touches nothing else that could outrank it. Purely computed off the mutation's
+   * own pending variables, never a cache write, so a rejected flip reverts to the
+   * real `pause.local` for free the instant it settles. */
+  protected readonly overridePaused = computed<boolean | null>(() => {
+    const runnerId = this.runnerId();
+    return this.pendingLocalPauses().find((vars) => vars.runnerId === runnerId)?.paused ?? null;
+  });
+
   /** This runner's own brake — "I won't try". `false` before the first read
    * resolves or on a malformed body, matching {@link LocalInfo}'s guard.
-   *
-   * While {@link pauseMutation} is pending, renders the *requested* value instead
-   * (`bzh:frontend-pending-override`), read straight off `pauseMutation.variables()`
-   * — the plain `boolean` this component's own single mutation was last called with,
-   * a signal `injectMutation` exposes directly, no `injectPendingMutationVariables`/
-   * `mutationKey` scoping needed since there is only one mutation instance and no
-   * sibling control sharing it. Total: this control's own PATCH sets `pause.local`
-   * directly and touches nothing else that could outrank it. Purely computed off the
-   * mutation's own variables, never a cache write, so a rejected flip reverts to the
-   * real `pause.local` for free the instant `isPending()` clears. */
+   * {@link overridePaused} while a pending flip names one, else the real
+   * `pause.local`. */
   protected readonly localPaused = computed<boolean>(() => {
-    if (this.pauseMutation.isPending()) {
-      const requested = this.pauseMutation.variables();
-      if (requested !== undefined) return requested;
-    }
-    return this.dashboardQuery.data()?.runner?.pause?.local ?? false;
+    return this.overridePaused() ?? (this.dashboardQuery.data()?.runner?.pause?.local ?? false);
   });
 
   /** The hub's brake, as last mirrored by PULL — untouched by this control. */
@@ -84,8 +98,9 @@ export class LocalPauseControl {
   protected toggle(): void {
     const next = !this.localPaused();
     this.error.set(null);
-    this.pauseMutation.mutate(next, {
-      onError: (error) => this.error.set(errorMessage(error, next ? 'Pause failed.' : 'Resume failed.')),
-    });
+    this.pauseMutation.mutate(
+      { runnerId: this.runnerId(), paused: next },
+      { onError: (error) => this.error.set(errorMessage(error, next ? 'Pause failed.' : 'Resume failed.')) },
+    );
   }
 }

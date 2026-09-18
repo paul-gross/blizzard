@@ -329,30 +329,87 @@ function lineAt(source, index) {
   return source.slice(0, index).split('\n').length;
 }
 
-// A mutation hook's own invalidation, called with its result discarded via `void`, never
-// lets `injectMutation`'s settle machinery await it — the mutation resolves before the
-// query it just changed lands its refetch, so a caller that awaits `mutate()` and then reads
-// the query sees stale data. The fixed form returns the promise (or folds it into a
-// `Promise.all([...])`) instead. Scoped to files that define a mutation hook
-// (`injectMutation(`) — the same call appears deliberately fire-and-forget elsewhere
-// (`live-invalidation-spine.ts`'s SSE-driven bulk invalidation), which is not this rule's
-// concern and carries no `injectMutation(` to trip the pairing.
-const INVALIDATE_DISCARDED = /void\s+queryClient\.invalidateQueries\s*\(/g;
+// A mutation hook's own invalidation, called with its result discarded, never lets
+// `injectMutation`'s settle machinery await it — the mutation resolves before the query it
+// just changed lands its refetch, so a caller that awaits `mutate()` and then reads the query
+// sees stale data. The fixed form returns the promise (or folds it into a `Promise.all([...])`)
+// instead. Scoped to files that define a mutation hook (`injectMutation(`) — the same call
+// appears deliberately fire-and-forget elsewhere (`live-invalidation-spine.ts`'s SSE-driven
+// bulk invalidation), which is not this rule's concern and carries no `injectMutation(` to trip
+// the pairing.
+//
+// Two discard shapes, not one: an explicit `void` (the common style here, unambiguous
+// wherever it sits — a concise arrow body `() => void queryClient.invalidateQueries()` is
+// exactly as discarded when the call is a property value ending in `,` as when it is a
+// statement ending in `;`) and a bare statement with no `void` at all, which only drops the
+// promise when nothing else consumes it. Both matched under any client binding name, not
+// just the literal `queryClient` every hook in this codebase happens to use today.
+const VOID_INVALIDATE_QUERIES = /\bvoid\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\.invalidateQueries\s*\(/g;
+const INVALIDATE_QUERIES_CALL = /([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\.invalidateQueries\s*\(/g;
 
-/**
- * A site that should keep discarding the invalidation promise — a reasoned exemption per
+/** The index just past the paren matching the `(` at `openIndex`, or `-1` if unbalanced. */
+function matchingParenEnd(source, openIndex) {
+  let depth = 0;
+  for (let i = openIndex; i < source.length; i += 1) {
+    if (source[i] === '(') depth += 1;
+    else if (source[i] === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** The nearest non-whitespace character at or after `index`, or `''` past the end. */
+function nextNonSpace(source, index) {
+  let i = index;
+  while (i < source.length && /\s/.test(source[i])) i += 1;
+  return source[i] ?? '';
+}
+
+/** Whether the un-`void`d `.invalidateQueries(` call starting at `callStart` sits at a bare
+ * statement boundary — preceded (skipping whitespace) by `{`, `}`, `;`, `=>`, or the start of
+ * the file, rather than by `return`, `await`, `=`, `(`, `[`, or `,`, each of which means the
+ * call's result is still consumed somewhere upstream (a `return`, an `await`, an assignment,
+ * or an argument/array element — one call among several inside `Promise.all([...])`, this
+ * codebase's own multi-key invalidation idiom, is exactly this last case: each element is
+ * followed by `,`, never a statement-terminating `;`). Also requires the call's closing paren
+ * to be followed by that `;` — the same statement-boundary reasoning at the other end. */
+function isBareDiscardedStatement(source, callStart, parenClose) {
+  if (nextNonSpace(source, parenClose + 1) !== ';') return false;
+  let k = callStart - 1;
+  while (k >= 0 && /\s/.test(source[k])) k -= 1;
+  if (k < 0) return true;
+  const precedingWord = /(\w+)$/.exec(source.slice(0, k + 1))?.[1];
+  if (precedingWord === 'return' || precedingWord === 'await') return false;
+  if (source[k] === '=' || source[k] === '(' || source[k] === '[' || source[k] === ',') return false;
+  if (source[k] === '{' || source[k] === '}' || source[k] === ';') return true;
+  return source.slice(Math.max(0, k - 1), k + 1) === '=>';
+}
+
+/** A site that should keep discarding the invalidation promise — a reasoned exemption per
  * entry, the `REAL_TIMER_EXEMPT_FILES` idiom. Empty for now: every mutation hook found this
- * way is expected to return or await its invalidation instead.
- */
+ * way is expected to return or await its invalidation instead. */
 const INVALIDATE_RETURNED_EXEMPT_FILES = [];
 
-/** The lines of `source` (a mutation-hook file) discarding an invalidation via `void`. */
+/** The lines of `source` (a mutation-hook file) discarding an invalidation — `void`d or bare,
+ * under any client binding name. */
 function discardedInvalidationLines(source) {
   if (!definesMutationHook(source)) return [];
-  INVALIDATE_DISCARDED.lastIndex = 0;
   const lines = [];
+
+  VOID_INVALIDATE_QUERIES.lastIndex = 0;
   let match;
-  while ((match = INVALIDATE_DISCARDED.exec(source)) !== null) lines.push(lineAt(source, match.index));
+  while ((match = VOID_INVALIDATE_QUERIES.exec(source)) !== null) lines.push(lineAt(source, match.index));
+
+  INVALIDATE_QUERIES_CALL.lastIndex = 0;
+  while ((match = INVALIDATE_QUERIES_CALL.exec(source)) !== null) {
+    const parenOpen = match.index + match[0].length - 1;
+    const parenClose = matchingParenEnd(source, parenOpen);
+    if (parenClose === -1) continue;
+    if (isBareDiscardedStatement(source, match.index, parenClose)) lines.push(lineAt(source, match.index));
+  }
+
   return lines;
 }
 
@@ -377,6 +434,27 @@ function assertInvalidateReturnedDetectorWorks() {
         onSettled: () =>   void   queryClient.invalidateQueries(),
       }));
     }`, // ragged whitespace, and the plain-call form
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: x });
+        },
+      }));
+    }`, // bare statement, no `void` at all
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: () => {
+          void client.invalidateQueries({ queryKey: x });
+        },
+      }));
+    }`, // a differently-named client binding, `void`d
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: () => {
+          this.queryClient.invalidateQueries({ queryKey: x });
+        },
+      }));
+    }`, // a differently-named (member-access) client binding, bare
   ];
   for (const source of mustCatch) {
     if (discardedInvalidationLines(source).length === 0) {
@@ -392,9 +470,37 @@ function assertInvalidateReturnedDetectorWorks() {
         },
       }));
     }`, // returned, not discarded
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: async () => {
+          await queryClient.invalidateQueries({ queryKey: x });
+        },
+      }));
+    }`, // awaited, not discarded
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSettled: (_data, _error, vars) =>
+          Promise.all([
+            queryClient.invalidateQueries({ queryKey: a }),
+            queryClient.invalidateQueries({ queryKey: b(vars) }),
+          ]),
+      }));
+    }`, // this codebase's own multi-key idiom — each call is an array element (`,`), not a
+        // statement (`;`), even though neither is individually returned or awaited
+    `export function injectThingMutation() {
+      return injectMutation(() => ({
+        onSuccess: () => {
+          const pending = queryClient.invalidateQueries({ queryKey: x });
+          return pending;
+        },
+      }));
+    }`, // assigned, not discarded
     `export function someUnrelatedHelper() {
       void queryClient.invalidateQueries({ queryKey: x });
     }`, // no injectMutation( at all — not a mutation-hook file
+    `export function someUnrelatedHelper() {
+      queryClient.invalidateQueries({ queryKey: x });
+    }`, // same, for the bare (non-`void`) form
   ];
   for (const source of mustPass) {
     if (discardedInvalidationLines(source).length > 0) {

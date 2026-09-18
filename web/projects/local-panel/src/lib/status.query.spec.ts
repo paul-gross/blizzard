@@ -43,7 +43,7 @@ describe('injectLocalPauseMutation (issue #133)', () => {
     const fixture = TestBed.createComponent(PauseMutationHost);
     fixture.detectChanges();
 
-    await fixture.componentInstance.mutation.mutateAsync(true);
+    await fixture.componentInstance.mutation.mutateAsync({ runnerId: 'runner-1', paused: true });
 
     const calls = stub.forRoute('/api/runner', 'PATCH');
     expect(calls).toHaveLength(1);
@@ -71,7 +71,7 @@ describe('injectLocalPauseMutation (issue #133)', () => {
     const fixture = TestBed.createComponent(PauseMutationHost);
     fixture.detectChanges();
 
-    const flip = fixture.componentInstance.mutation.mutateAsync(true);
+    const flip = fixture.componentInstance.mutation.mutateAsync({ runnerId: 'runner-1', paused: true });
     // Let the stubbed PATCH's own promise chain (fetch → generated client → mutationFn)
     // fully resolve, then flush the signal subscription, before asserting — a macrotask
     // tick is enough since the stub never does real I/O.

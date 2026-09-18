@@ -299,9 +299,7 @@ describe('BoardPage', () => {
    * READY-lane override (`bzh:frontend-pending-override`, below) moves the whole card into
    * READY while its promote is pending, and a card in READY never carries a Promote button
    * at all — a not_ready and a ready card can never both be true of the same card at once, since
-   * both are derived off the same pending list. The disabled-button binding on `BoardCardComponent`
-   * itself is unreachable through this container as a result, and stays only for a caller that
-   * composes `BoardShell` without this override (`board-shell.spec.ts`'s own Part A coverage).
+   * both are derived off the same pending list.
    */
   describe('Promote per-card pending scope (Part A)', () => {
     /** The Promote button on a backlog card, or `undefined` if the card carries none. */
@@ -370,7 +368,15 @@ describe('BoardPage', () => {
     const laneIds = (el: HTMLElement, column: string): string[] =>
       [...el.querySelectorAll(`[data-col="${column}"] [data-testid="chunk-id"]`)].map((n) => n.textContent?.trim());
 
-    it('renders the promoted card at the top of READY, ahead of the real queue order, while its promote is pending', async () => {
+    /**
+     * The hub always assigns a freshly-promoted chunk a **tail** position
+     * (`promote.py::tail_position` — it appends after every currently-ready chunk,
+     * never the head), so the pending override must not predict a top-of-lane rank:
+     * it lands at the *bottom* of READY, behind the real queue order, via
+     * `BoardShell`'s own "unranked id" fallback — the same fallback a promote that
+     * has landed server-side but whose queue read hasn't caught up yet relies on.
+     */
+    it('renders the promoted card at the bottom of READY, behind the real queue order, while its promote is pending', async () => {
       const { el, harness } = await open();
       const queryClient = TestBed.inject(QueryClient);
       let resolveInvalidate!: () => void;
@@ -382,7 +388,7 @@ describe('BoardPage', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       harness.fixture.detectChanges();
 
-      expect(laneIds(el, 'ready')).toEqual([compactRef(BACKLOG), compactRef(READY), compactRef(READY_NEXT)]);
+      expect(laneIds(el, 'ready')).toEqual([compactRef(READY), compactRef(READY_NEXT), compactRef(BACKLOG)]);
       expect(laneIds(el, 'notready')).toEqual([compactRef(BACKLOG_NEXT)]);
 
       resolveInvalidate();

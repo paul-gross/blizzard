@@ -42,6 +42,17 @@ export function injectRunnerDashboardQuery() {
   }));
 }
 
+/** `injectLocalPauseMutation`'s own variables — `runnerId` is carried alongside the
+ * PATCH's real payload (`paused`) purely so {@link LocalPauseControl} can scope its
+ * pending-override read through {@link injectPendingMutationVariables} the same way
+ * every other override site does (`bzh:frontend-pending-override`), even though the
+ * PATCH itself is always this runner pausing itself and never takes a runner id on
+ * the wire (mirrors `chunk-pause.mutations.ts`'s `ChunkPauseVars`). */
+export interface LocalPauseVars {
+  readonly runnerId: string;
+  readonly paused: boolean;
+}
+
 /**
  * `PATCH /api/runner` (issue #133) — the local pause brake's only mutation
  * surface in the web UI, through the generated runner client
@@ -68,8 +79,11 @@ export function injectLocalPauseMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: localPauseMutationKey,
-    mutationFn: async (paused: boolean): Promise<runnerApi.RunnerControlView> => {
-      const { data, error } = await runnerApi.patchRunnerApiRunnerPatch({ body: { paused }, throwOnError: false });
+    mutationFn: async (vars: LocalPauseVars): Promise<runnerApi.RunnerControlView> => {
+      const { data, error } = await runnerApi.patchRunnerApiRunnerPatch({
+        body: { paused: vars.paused },
+        throwOnError: false,
+      });
       if (error) throw error;
       return data!;
     },

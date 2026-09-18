@@ -528,5 +528,26 @@ describe('GardeningFindingsPage', () => {
       await settle(fixture);
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeTruthy();
     });
+
+    it("keeps the row visible on a same-state re-dispatch — Resolve fired again on an already-resolved row under the 'resolved' filter", async () => {
+      // `finding-panel.ts` renders every exit verb regardless of the finding's
+      // current state, so an operator can click Resolve again on a row that is
+      // already `resolved`. Unlike the Reopen case above, that call's own resulting
+      // state (`resolved`) is exactly the currently active filter state — it never
+      // actually leaves the filtered set, so hiding it while pending would be a bare
+      // guess, not a prediction, and the row must stay visible throughout.
+      const { fixture, el } = await mount({ url: '/gardening/findings?state=resolved', routeOverride: withBucket });
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeTruthy();
+
+      const { resolve } = fireResolveFrom(['fnd_12']);
+      await new Promise((r) => setTimeout(r, 0));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeTruthy();
+
+      resolve();
+      await settle(fixture);
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeTruthy();
+    });
   });
 });

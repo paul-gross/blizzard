@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
-import type { ChunkStatus } from '../api/hub';
+import type { ChunkDetail as ChunkDetailAggregate, ChunkStatus } from '../api/hub';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkWorkItemsQuery } from '../chunks/chunk-work-items.query';
@@ -26,6 +26,24 @@ import {
   type EditGraphEvent,
   type ResolveDecisionEvent,
 } from './chunk-detail-panel';
+
+/** Whether a pending Pause's predicted `paused` outcome is total over each status —
+ * exhaustive so a status added to the wire forces a decision here rather than falling
+ * through an inline inequality (mirrors `chunk-lanes.ts`'s `STATUS_LANE` idiom).
+ * `waiting_on_human`/`needs_human` outrank the pause fact in the hub's precedence
+ * ladder (`blizzard-context:/domain/work/statuses.md`), so pausing from either leaves
+ * the rendered status unchanged; every other status is safely predicted `paused`. */
+const PAUSE_OVERRIDE_TOTAL: Record<ChunkStatus, boolean> = {
+  not_ready: true,
+  ready: true,
+  running: true,
+  delivering: true,
+  waiting_on_human: false,
+  needs_human: false,
+  paused: true,
+  stopped: true,
+  done: true,
+};
 
 /**
  * The chunk detail **container** — owns the reactive detail query and the
@@ -133,9 +151,10 @@ export class ChunkDetail {
    * (`bzh:frontend-pending-override`) — `null` while nothing overrides
    * `detail().status`, computed only from each mutation's own pending variables
    * (`injectPendingMutationVariables`/`isPendingFor`), never a cache read or write.
-   * Threaded down to {@link ChunkDetailHeader.overrideStatus}, which renders it over
-   * the status chip; every other reader of `detail().status` (admissibility guards,
-   * the facts column) stays on the real server-read value.
+   * Merged with the real status by {@link renderedStatus}, which threads the result
+   * down to {@link ChunkDetailHeader.renderedStatus}; every other reader of
+   * `detail().status` (admissibility guards, the facts column) stays on the real
+   * server-read value.
    *
    * **Complete is total.** `CompleteService` always lands an operator-completion fact,
    * which the hub's own status derivation (`ChunkFacts.status()`,
@@ -145,11 +164,14 @@ export class ChunkDetail {
    * and the header already withholds Complete once the chunk already reads `done`
    * ({@link ChunkDetailHeader.completable}), so this never has to guess there.
    *
-   * **Pause is total only below the human-gated states.** `paused` ranks below
-   * `waiting_on_human`/`needs_human` in the precedence statuses.md owns, so pausing a
-   * chunk parked on either leaves its rendered status exactly where it was — the hub's
-   * `ChunkFacts.status()` branch order checks the human-gated facts before the pause
-   * fact. This reads that case as "no override" instead of guessing `paused`.
+   * **Pause is total only below the human-gated states**, folded exhaustively by
+   * {@link PAUSE_OVERRIDE_TOTAL} rather than an inline inequality, the same
+   * `Record<ChunkStatus, …>` idiom `chunk-lanes.ts`'s `STATUS_LANE` uses so a status
+   * added later is a compile error here instead of a silently wrong guess. `paused`
+   * ranks below `waiting_on_human`/`needs_human` in the precedence statuses.md owns, so
+   * pausing a chunk parked on either leaves its rendered status exactly where it was —
+   * the hub's `ChunkFacts.status()` branch order checks the human-gated facts before
+   * the pause fact. This reads that case as "no override" instead of guessing `paused`.
    *
    * **Resume renders no override at all.** `status` is the *only* status field
    * `ChunkDetail` carries the pause overlay through — there is no second field naming
@@ -167,13 +189,26 @@ export class ChunkDetail {
     const completing = isPendingFor(this.pendingChunkCompletes(), (vars) => vars.chunkId === detail.chunk_id);
     if (completing) return 'done';
     const pausing = isPendingFor(this.pendingChunkPauses(), (vars) => vars.chunkId === detail.chunk_id && vars.paused);
-    if (pausing && detail.status !== 'waiting_on_human' && detail.status !== 'needs_human') return 'paused';
+    if (pausing && PAUSE_OVERRIDE_TOTAL[detail.status]) return 'paused';
     return null;
   });
+
+  /** The chunk's status as the header's status chip renders it — {@link overrideStatus}
+   * while it names one for this chunk, else the real `detail.status`
+   * (`bzh:frontend-pending-override`'s container-applies-overrides rule: the header
+   * receives only this already-merged result, never the raw override to reconcile
+   * itself). */
+  protected renderedStatus(detail: ChunkDetailAggregate): ChunkStatus {
+    return this.overrideStatus() ?? detail.status;
+  }
 
   /** Whether the resolve-decision mutation is in flight for this chunk, threaded to the
    * awaiting-human gate's choice chips. */
   protected readonly resolvePending = computed(() => this.resolveMutation.isPending());
+
+  /** Whether the answer-question mutation is in flight for this chunk, threaded to the
+   * awaiting-human gate's option chips and Answer button. */
+  protected readonly answerPending = computed(() => this.answerMutation.isPending());
 
   /** The open chunk's last operator-action failure, or `null`. Reset on every new
    * attempt and whenever a different chunk opens (issue #42). Shared by every action
@@ -295,7 +330,7 @@ export class ChunkDetail {
 
   /** Delete an unacquired chunk (D8, issue #364) — withdraws its hub item(s); there is
    * no undo. Unlike every other action here, success dismisses the dock: the chunk this
-   * query is keyed to no longer exists, and `deleteMutation`'s own `onSuccess` already
+   * query is keyed to no longer exists, and `deleteMutation`'s own `onSettled` already
    * invalidates the fleet list, the ready queue, the backlog, and this chunk's own detail
    * query, so leaving the dock open would have it re-read straight into a 404. Emitting
    * `dismiss` before that re-read can render clears the board's selection (`chunkId()`

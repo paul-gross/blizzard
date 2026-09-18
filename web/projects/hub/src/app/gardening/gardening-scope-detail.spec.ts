@@ -185,6 +185,11 @@ describe('GardeningScopeDetail', () => {
     fixture.detectChanges();
 
     expect(el.querySelector('[data-testid="gardening-scope-panel-state"]')?.textContent?.trim()).toBe('retired');
+    // The control choice stays keyed off the real, unoverridden `retired` — the
+    // scope is still enabled until the mutation settles, so Retire (not Re-enable)
+    // is what the next click must fire, never the badge's predicted value.
+    expect(el.querySelector('[data-testid="gardening-scope-panel-retire"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-scope-panel-enable"]')).toBeNull();
 
     resolveInvalidate();
     await settle(fixture);
@@ -219,6 +224,11 @@ describe('GardeningScopeDetail', () => {
     fixture.detectChanges();
 
     expect(el.querySelector('[data-testid="gardening-scope-panel-state"]')?.textContent?.trim()).toBe('enabled');
+    // The control choice stays keyed off the real, unoverridden `retired` — the
+    // scope is still retired until the mutation settles, so Re-enable (not Retire)
+    // is what the next click must fire, never the badge's predicted value.
+    expect(el.querySelector('[data-testid="gardening-scope-panel-enable"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-scope-panel-retire"]')).toBeNull();
 
     resolveInvalidate();
     await settle(fixture);

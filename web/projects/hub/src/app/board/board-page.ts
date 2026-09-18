@@ -22,7 +22,6 @@ import {
   injectPromoteChunkMutation,
   injectRepositionBacklogMutation,
   injectRepositionQueueMutation,
-  isPendingFor,
   promoteChunkMutationKey,
   type PromoteVars,
   type RepositionVars,
@@ -120,20 +119,6 @@ export class BoardPage {
    * would read `true` for every not-ready card while any one of them is promoting. */
   private readonly pendingPromotes = injectPendingMutationVariables<PromoteVars>(promoteChunkMutationKey);
 
-  /** Whether `chunkId`'s own Promote mutation is in flight — the per-card
-   * predicate {@link pendingPromoteChunkIds} below is derived from. */
-  protected readonly isPromotePending = (chunkId: string): boolean =>
-    isPendingFor(this.pendingPromotes(), (vars) => vars.chunkId === chunkId);
-
-  /** {@link pendingPromotes}, as the bare chunk ids {@link BoardShell} folds into
-   * each card's own `promotePending` — the per-card disable that keeps a sibling
-   * card's Promote button enabled while only the one clicked disables. Plain data
-   * rather than {@link isPromotePending} itself threaded down, since every input
-   * in this tree is a value, never a callback. */
-  protected readonly pendingPromoteChunkIds = computed<readonly string[]>(() =>
-    this.pendingPromotes().map((vars) => vars.chunkId),
-  );
-
   /** Every reposition the shared `repositionQueue`/`repositionBacklog` mutations are
    * currently in flight for, scoped by `mutationKey` the same way {@link pendingPromotes}
    * is — {@link readyLaneOrder}/{@link backlogLaneOrder} fold these into the requested
@@ -214,29 +199,22 @@ export class BoardPage {
   });
 
   /**
-   * {@link readyOrder}, with two pending-mutation overrides folded in — fed to
-   * `BoardShell` in {@link readyOrder}'s place:
+   * {@link readyOrder}, with a pending reposition targeting the ready queue folded
+   * in — fed to `BoardShell` in {@link readyOrder}'s place. A pending promote's chunk
+   * id is deliberately left out of this order rather than injected at some predicted
+   * rank: the hub always assigns a freshly-promoted chunk a **tail** position
+   * (`promote.py::tail_position` — it appends after every currently-ready chunk, never
+   * the head), so the card's real landing spot is the *bottom* of READY, which is
+   * exactly what `BoardShell.cards()`'s own "unranked id" fallback (`rankOf`, which
+   * sorts an id absent from `readyOrder` to the bottom of the lane) already yields for
+   * free — {@link boardChunks}' status override alone is what moves the card into the
+   * READY lane, and its id is simply never added to this order to rank there.
    *
-   * - a pending promote's chunk id is placed at the very top, ahead of the hub's own
-   *   dispatch order. This deliberately does *not* rely on `BoardShell.cards()`'s own
-   *   "unranked id" fallback (`rankOf`, which sorts an id absent from `readyOrder` to the
-   *   *bottom* of the lane) — that fallback exists for a different race, a promote that has
-   *   already landed server-side but whose queue read has not caught up yet. This override
-   *   covers a promote that has *not* landed at all, so leaving its id out of the order fed
-   *   here would fall through to that same bottom-of-lane placement for the wrong reason;
-   *   giving it an explicit top-of-lane rank instead keeps the two races visibly distinct.
-   * - a pending reposition targeting the ready queue moves its chunk id to sit immediately
-   *   after its requested anchor ({@link withRequestedPosition}).
-   *
-   * Purely computed off the mutations' own variables; a rejected promote or reposition
+   * Purely computed off the reposition mutation's own variables; a rejected reposition
    * reverts to the real `readyOrder` for free the instant its `isPending()` flips false.
    */
   protected readonly readyLaneOrder = computed<readonly string[]>(() => {
-    const pendingPromoteIds = this.pendingPromoteChunkIds();
-    let order =
-      pendingPromoteIds.length === 0
-        ? this.readyOrder()
-        : [...pendingPromoteIds, ...this.readyOrder().filter((id) => !pendingPromoteIds.includes(id))];
+    let order = this.readyOrder();
     for (const move of this.pendingRepositionQueue()) {
       order = withRequestedPosition(order, move);
     }

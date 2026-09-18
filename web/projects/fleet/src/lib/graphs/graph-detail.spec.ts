@@ -203,4 +203,39 @@ describe('GraphDetail', () => {
       'already enabled somehow',
     );
   });
+
+  it("scopes the override to the pending graph — navigating to a different graph mid-flight shows that graph's own real badge, not the stale prediction", async () => {
+    const fixture = await mount('gr_build_v2', (method, path) => {
+      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
+      if (method === 'GET' && path === '/api/graphs/gr_other') return { ...GRAPH, graph_id: 'gr_other', retired: false };
+      if (method === 'POST' && path === '/api/graphs/gr_build_v2/retire') return {};
+      return {};
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    // Never resolved — this test only cares that a *different* graph's badge stays
+    // unaffected while this one is held pending, not that it eventually settles.
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(new Promise<void>(() => undefined));
+
+    el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('retired');
+
+    // The retire mutation above is still held pending — a `settle()` (or bare
+    // `whenStable()`) would hang on its own never-resolving `invalidateQueries`, so a
+    // macrotask tick + a manual `detectChanges()` stands in, the same idiom the tests
+    // above use for the same reason.
+    fixture.componentRef.setInput('graphId', 'gr_other');
+    for (let i = 0; i < 4; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      fixture.detectChanges();
+    }
+
+    expect(el.querySelector('[data-testid="graph-detail-graph-id"]')?.textContent).toContain('gr_other');
+    expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('enabled');
+  });
 });

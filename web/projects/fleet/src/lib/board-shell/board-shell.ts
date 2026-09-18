@@ -87,14 +87,6 @@ export class BoardShell {
    * (`queue:reorder` — issue #210), forwarded to the ranked {@link BoardColumn}s. */
   readonly canReorder = input(false);
 
-  /** The chunk ids whose Promote mutation the container's shared `promoteChunk`
-   * mutation is currently in flight for (`injectPendingMutationVariables`) — folded
-   * into each card's own {@link BoardCard.promotePending} below rather than threaded
-   * as a second input through `BoardColumn`/`BoardCardComponent`, since
-   * {@link BoardCard} is already the one per-card view object both already forward
-   * whole. */
-  readonly pendingPromoteChunkIds = input<readonly string[]>([]);
-
   protected readonly columns = LANES;
 
   /** Every chunk rendered as a board card, grouped into its status column. */
@@ -103,9 +95,6 @@ export class BoardShell {
     // Every chunk's status by id, so a blocked card can name its blocker's state without
     // a second read — the blocker is itself a chunk on this board.
     const statusById = new Map(this.chunks().map((c) => [c.chunk_id, c.status]));
-    // A `Set` rather than the raw array: this membership test runs once per chunk
-    // below, and the container's pending list is a handful of in-flight ids at most.
-    const pendingPromotes = new Set(this.pendingPromoteChunkIds());
     for (const chunk of this.chunks()) {
       grouped.get(STATUS_LANE[chunk.status])?.push({
         chunkId: chunk.chunk_id,
@@ -127,7 +116,6 @@ export class BoardShell {
         // the board is in it, so no extra read, and a blocker somehow absent from it
         // degrades to naming the ref alone.
         blockedOnStatus: chunk.blocked ? (statusById.get(chunk.blocked.prerequisite_chunk_id) ?? null) : null,
-        promotePending: pendingPromotes.has(chunk.chunk_id),
       });
     }
     // READY is ordered rather than listed: it is a queue, so its rank comes

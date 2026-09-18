@@ -77,6 +77,12 @@ export class MachineDetailHeader {
    * fresh `ChunkDetail.status` (mirrors the hub `PauseService`'s refusal). */
   readonly pausable = input<boolean>(false);
 
+  /** Whether the container's Pause/Resume mutation is in flight — disables
+   * both buttons for the duration so a double click can't fire the request
+   * twice while the first still settles (`bzh:frontend-pending-override`,
+   * mirrors `fleet/chunk-detail/chunk-detail-header.ts`'s own `pausePending`). */
+  readonly pending = input<boolean>(false);
+
   /** Emitted when the operator dismisses the dock via its close button. */
   readonly dismiss = output<void>();
 

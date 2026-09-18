@@ -6,7 +6,7 @@
     [detachPending]="detachPending()"
     [completePending]="completePending()"
     [deletePending]="deletePending()"
-    [overrideStatus]="overrideStatus()"
+    [renderedStatus]="renderedStatus()"
     (dismiss)="dismiss.emit()"
     (detach)="detach.emit($event)"
     (pauseChunk)="pauseChunk.emit($event)"
@@ -39,6 +39,7 @@
         [canAnswer]="canAnswer()"
         [canResolve]="canResolve()"
         [resolvePending]="resolvePending()"
+        [answerPending]="answerPending()"
         (answerQuestion)="answerQuestion.emit($event)"
         (resolveDecision)="resolveDecision.emit($event)"
       />

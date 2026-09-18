@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
 import { KitButton } from '../kit/kit-button';
 import { KitConfirmDialog } from '../kit/kit-confirm-dialog';
@@ -43,23 +43,19 @@ export class GraphDetailHeader {
    * there is only ever one lifecycle mutation in flight for one graph at a time. */
   readonly lifecyclePending = input(false);
 
-  /** The `retired` flag a currently pending retire/enable predicts, or `null` — the
-   * container's own computed (`bzh:frontend-pending-override`, `graph-detail.ts`'s
-   * `overrideRetired`), never re-derived here. Read by {@link renderedRetired} for the
-   * lifecycle badge alone; which of Retire/Enable renders stays keyed off the real
-   * {@link retired} so an in-flight mutation's own predicted outcome cannot flip which
-   * control the next click would fire. */
-  readonly overrideRetired = input<boolean | null>(null);
+  /** The lifecycle badge's rendered value — the container's own applied result
+   * (`bzh:frontend-pending-override`, `graph-detail.ts`'s `renderedRetired`): the
+   * `retired` flag a currently pending retire/enable predicts, already merged with
+   * the real {@link retired} where nothing overrides it. Which of Retire/Enable
+   * renders stays keyed off the real {@link retired} so an in-flight mutation's own
+   * predicted outcome cannot flip which control the next click would fire. */
+  readonly renderedRetired = input.required<boolean>();
 
   /** Emitted with the graph id once the operator confirms Retire. */
   readonly retire = output<string>();
 
   /** Emitted with the graph id once the operator confirms Enable. */
   readonly enable = output<string>();
-
-  /** The lifecycle badge's rendered value — {@link overrideRetired} while it names
-   * one, else the real {@link retired}. */
-  protected readonly renderedRetired = computed<boolean>(() => this.overrideRetired() ?? this.retired());
 
   protected readonly pendingConfirm = signal<{
     readonly heading: string;

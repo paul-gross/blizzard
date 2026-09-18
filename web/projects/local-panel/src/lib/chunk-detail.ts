@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { ageMs, compactRef, formatAge, injectNowSignal, KitPanel, KitPanelHeader, type runnerApi } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
+import { ageMs, compactRef, errorMessage, formatAge, injectNowSignal, KitPanel, KitPanelHeader, type runnerApi } from 'fleet';
 
 import { injectChunkDetailQuery } from './chunk-detail.query';
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
@@ -115,6 +115,29 @@ export class MachineDetail {
    * outputs, once the operator has already confirmed. */
   protected readonly pauseMutation = injectChunkPauseMutation();
 
+  /** Whether the pause/resume mutation is in flight — read straight off the mutation's
+   * own `.isPending()` and threaded to the header's Pause/Resume buttons, so a double
+   * click cannot fire the request twice while the first still settles. This dock shows
+   * exactly one chunk at a time, so there is no sibling row to distinguish pending
+   * mutations by variables (mirrors `fleet/chunk-detail/chunk-detail.ts`'s own
+   * `pausePending`). */
+  protected readonly pausePending = computed<boolean>(() => this.pauseMutation.isPending());
+
+  /** The dock's last Pause/Resume failure, or `null` — reset on every new attempt
+   * (issue #46's "report, don't swallow" requirement, the same shape
+   * {@link LocalPauseControl}'s own `error` follows for the top bar's pause toggle),
+   * and whenever a different chunk is selected (mirrors `fleet/chunk-detail/
+   * chunk-detail.ts`'s own `beginAction`, below), so a stale failure from a chunk
+   * no longer open never lingers into the next one's dock. */
+  protected readonly actionError = signal<string | null>(null);
+
+  constructor() {
+    effect(() => {
+      this.chunkId();
+      this.actionError.set(null);
+    });
+  }
+
   /** This runner's own id, for the header's `pauseCopy`/`resumeCopy` `<runner>` slot
    * (`bzh:claim-vocabulary`) — the same dashboard read every other rail on the panel
    * already polls (`status.query.ts`'s own dedupe note), not a second one. */
@@ -140,4 +163,26 @@ export class MachineDetail {
     const age = ageMs(l.last_heartbeat_at, this.now());
     return age === null ? '—' : formatAge(age);
   });
+
+  /** Pause the given chunk — the header's `pauseChunk` output, once the operator has
+   * already confirmed. Mirrors `fleet/chunk-detail/chunk-detail.ts`'s own `onPause`: a
+   * refusal (already paused, a status the hub's `PauseService` won't pause) is reported
+   * on {@link actionError} rather than swallowed. */
+  protected onPause(chunkId: string): void {
+    this.actionError.set(null);
+    this.pauseMutation.mutate(
+      { chunkId, paused: true },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Pause failed.')) },
+    );
+  }
+
+  /** Resume the given chunk — the header's `resumeChunk` output, once the operator has
+   * already confirmed. Mirrors `fleet/chunk-detail/chunk-detail.ts`'s own `onResume`. */
+  protected onResume(chunkId: string): void {
+    this.actionError.set(null);
+    this.pauseMutation.mutate(
+      { chunkId, paused: false },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Resume failed.')) },
+    );
+  }
 }

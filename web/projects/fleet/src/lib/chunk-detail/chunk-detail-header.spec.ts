@@ -51,6 +51,7 @@ describe('ChunkDetailHeader', () => {
   it('names the chunk and its work item the way the board card does', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -70,7 +71,9 @@ describe('ChunkDetailHeader', () => {
 
   it('surfaces who paused a chunk in the header (issue #46)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', pausedDetail('paused'));
+    const detail = pausedDetail('paused');
+    fixture.componentRef.setInput('detail', detail);
+    fixture.componentRef.setInput('renderedStatus', detail.status);
     fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -81,6 +84,7 @@ describe('ChunkDetailHeader', () => {
   it('shows no chunk-pause-by when the chunk carries no open pause fact', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -91,6 +95,7 @@ describe('ChunkDetailHeader', () => {
   it('emits dismiss when the close button is activated', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     let closed = false;
     fixture.componentInstance.dismiss.subscribe(() => (closed = true));
@@ -106,6 +111,7 @@ describe('ChunkDetailHeader', () => {
   it('shows no claimed-by chip for a chunk with no live route', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -116,6 +122,7 @@ describe('ChunkDetailHeader', () => {
   it('shows the routed runner in a plain "Claimed by" chip, no "Route" label', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -127,6 +134,7 @@ describe('ChunkDetailHeader', () => {
   it('withholds Pause without chunk:control, even with a live route', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -140,6 +148,7 @@ describe('ChunkDetailHeader', () => {
   it('shows Pause — not Resume — for a running chunk carrying no pause fact', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -152,7 +161,8 @@ describe('ChunkDetailHeader', () => {
     for (const status of ['done', 'stopped', 'delivering'] as const) {
       const fixture = TestBed.createComponent(ChunkDetailHeader);
       fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status });
-    fixture.componentRef.setInput('canControl', true);
+      fixture.componentRef.setInput('renderedStatus', status);
+      fixture.componentRef.setInput('canControl', true);
       await fixture.whenStable();
       const el = fixture.nativeElement as HTMLElement;
 
@@ -164,7 +174,8 @@ describe('ChunkDetailHeader', () => {
     for (const status of ['waiting_on_human', 'needs_human'] as const) {
       const fixture = TestBed.createComponent(ChunkDetailHeader);
       fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status });
-    fixture.componentRef.setInput('canControl', true);
+      fixture.componentRef.setInput('renderedStatus', status);
+      fixture.componentRef.setInput('canControl', true);
       await fixture.whenStable();
       const el = fixture.nativeElement as HTMLElement;
 
@@ -174,7 +185,9 @@ describe('ChunkDetailHeader', () => {
 
   it('shows Resume — not Pause — for a paused chunk', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', pausedDetail('paused'));
+    const detail = pausedDetail('paused');
+    fixture.componentRef.setInput('detail', detail);
+    fixture.componentRef.setInput('renderedStatus', detail.status);
     fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -185,7 +198,9 @@ describe('ChunkDetailHeader', () => {
 
   it('offers Resume — not Pause — for a paused chunk whose status reads waiting_on_human (issue #46)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', pausedDetail('waiting_on_human'));
+    const detail = pausedDetail('waiting_on_human');
+    fixture.componentRef.setInput('detail', detail);
+    fixture.componentRef.setInput('renderedStatus', detail.status);
     fixture.componentRef.setInput('canControl', true);
     let resumed: string | undefined;
     fixture.componentInstance.resumeChunk.subscribe((id) => (resumed = id));
@@ -206,6 +221,7 @@ describe('ChunkDetailHeader', () => {
   it('emits pauseChunk with the chunk id once the operator confirms', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     let emitted: string | undefined;
     fixture.componentInstance.pauseChunk.subscribe((id) => (emitted = id));
@@ -222,6 +238,7 @@ describe('ChunkDetailHeader', () => {
   it('emits nothing when the operator declines the pause confirm', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     let emitted = false;
     fixture.componentInstance.pauseChunk.subscribe(() => (emitted = true));
@@ -238,6 +255,7 @@ describe('ChunkDetailHeader', () => {
   it('disables Pause while the pause mutation is pending, re-enabling once it settles', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     fixture.componentRef.setInput('pausePending', true);
     await fixture.whenStable();
@@ -253,7 +271,9 @@ describe('ChunkDetailHeader', () => {
 
   it('disables Resume while the pause mutation is pending, re-enabling once it settles', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', pausedDetail('paused'));
+    const detail = pausedDetail('paused');
+    fixture.componentRef.setInput('detail', detail);
+    fixture.componentRef.setInput('renderedStatus', detail.status);
     fixture.componentRef.setInput('canControl', true);
     fixture.componentRef.setInput('pausePending', true);
     await fixture.whenStable();
@@ -268,26 +288,33 @@ describe('ChunkDetailHeader', () => {
   });
 
   // --- Pending status override (`bzh:frontend-pending-override`) -----------
+  //
+  // The merge itself (`renderedStatus` vs. the real `detail().status`) is the
+  // container's, not this presentational component's — this header only renders
+  // whatever the container already resolved (`chunk-detail.ts`'s `overrideStatus`/
+  // `renderedStatus` own that merge and its own coverage). What this header still
+  // owns: the chip tracks `renderedStatus` even where it disagrees with the real
+  // `detail().status`.
 
-  it('renders the override status over the real one while it names one', async () => {
+  it('renders whatever renderedStatus names, even where it disagrees with the real status', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', 'paused');
     fixture.componentRef.setInput('canControl', true);
-    fixture.componentRef.setInput('overrideStatus', 'paused');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('paused');
   });
 
-  it('falls back to the real status once the override clears', async () => {
+  it('re-renders the chip when renderedStatus changes', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', 'paused');
     fixture.componentRef.setInput('canControl', true);
-    fixture.componentRef.setInput('overrideStatus', 'paused');
     await fixture.whenStable();
 
-    fixture.componentRef.setInput('overrideStatus', null);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -296,7 +323,9 @@ describe('ChunkDetailHeader', () => {
 
   it('emits nothing when the operator declines the resume confirm', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', pausedDetail('paused'));
+    const detail = pausedDetail('paused');
+    fixture.componentRef.setInput('detail', detail);
+    fixture.componentRef.setInput('renderedStatus', detail.status);
     fixture.componentRef.setInput('canControl', true);
     let emitted = false;
     fixture.componentInstance.resumeChunk.subscribe(() => (emitted = true));
@@ -313,6 +342,7 @@ describe('ChunkDetailHeader', () => {
   it('does not claim the claim is given up in the pause confirm copy — that is detach', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -328,6 +358,7 @@ describe('ChunkDetailHeader', () => {
   it('names no edge on the identity line for a chunk carrying none', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -347,6 +378,7 @@ describe('ChunkDetailHeader', () => {
         dependents: [{ chunk_id: 'ch_01dependent0000000000ccc', status: 'not_ready', satisfied: false }],
       },
     });
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -370,6 +402,7 @@ describe('ChunkDetailHeader', () => {
         dependents: [],
       },
     });
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -385,6 +418,7 @@ describe('ChunkDetailHeader', () => {
         dependents: [],
       },
     });
+    fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 

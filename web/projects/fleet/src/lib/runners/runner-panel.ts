@@ -4,7 +4,7 @@ import type { RunnerView } from '../api/hub';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { errorMessage } from '../error-message';
 import { runnerPauseMutationKey } from '../mutation-keys';
-import { injectPendingMutationVariables, isPendingFor } from '../mutation-pending';
+import { injectPendingMutationVariables } from '../mutation-pending';
 import { RunnerPanelView } from './runner-view';
 import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutations';
 import { injectRunnerRows, type RunnerRow } from './runner-rows';
@@ -46,15 +46,11 @@ export class RunnerPanel {
    * `true` for every row while any one of them is pausing/resuming. */
   private readonly pendingPauses = injectPendingMutationVariables<RunnerPauseVars>(runnerPauseMutationKey);
 
-  /** Whether `runnerId`'s own hub pause/resume mutation is in flight. */
-  protected readonly isPausePending = (runnerId: string): boolean =>
-    isPendingFor(this.pendingPauses(), (vars) => vars.runnerId === runnerId);
-
   /** {@link pendingPauses}, as the bare runner ids {@link RunnerPanelView} checks
    * each row against — the per-row disable that keeps a sibling row's toggle
-   * enabled while only the one clicked disables. Plain data rather than
-   * {@link isPausePending} itself threaded down, since every input on that view
-   * is a value, never a callback. */
+   * enabled while only the one clicked disables. Plain data rather than a
+   * per-row predicate threaded down, since every input on that view is a
+   * value, never a callback. */
   protected readonly pendingRunnerIds = computed<readonly string[]>(() =>
     this.pendingPauses().map((vars) => vars.runnerId),
   );

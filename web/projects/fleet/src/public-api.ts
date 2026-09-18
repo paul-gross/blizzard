@@ -69,6 +69,7 @@ export {
   promoteChunkMutationKey,
   repositionQueueMutationKey,
   repositionBacklogMutationKey,
+  runnerPauseMutationKey,
   chunkDeleteMutationKey,
   resolveFindingsMutationKey,
   confirmGoneFindingsMutationKey,

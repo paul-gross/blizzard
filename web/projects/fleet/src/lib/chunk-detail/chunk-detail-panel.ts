@@ -116,11 +116,16 @@ export class ChunkDetailPanel {
    * {@link ChunkAwaitingHuman}. */
   readonly resolvePending = input(false);
 
-  /** The chunk's status as a pending Pause/Complete predicts it will read once it
-   * settles, or `null` when nothing overrides `detail().status` — the container's own
-   * computed (`bzh:frontend-pending-override`), forwarded straight to
-   * {@link ChunkDetailHeader.overrideStatus}, which renders it over the status chip. */
-  readonly overrideStatus = input<ChunkStatus | null>(null);
+  /** Whether the answer-question mutation is in flight, forwarded to
+   * {@link ChunkAwaitingHuman}. */
+  readonly answerPending = input(false);
+
+  /** The chunk's status as the status chip renders it — the container's own
+   * already-applied result (`bzh:frontend-pending-override`), forwarded straight to
+   * {@link ChunkDetailHeader.renderedStatus} with no merge of its own: this panel is
+   * presentational, so it forwards the container's resolved value rather than
+   * reconciling an override against `detail().status` itself. */
+  readonly renderedStatus = input.required<ChunkStatus>();
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();

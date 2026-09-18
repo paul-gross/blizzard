@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { MachineDetail } from './chunk-detail';
@@ -83,12 +83,13 @@ function routes(header: runnerApi.ChunkDetail = HEADER(), pauseResult: unknown =
 async function render(
   leases: readonly runnerApi.LeaseView[],
   header: runnerApi.ChunkDetail = HEADER(),
+  pauseResult: unknown = {},
 ): Promise<{
   el: HTMLElement;
   fixture: ComponentFixture<MachineDetail>;
   stub: RequestClientStub;
 }> {
-  const stub = stubRequestClient(runnerClient, routes(header));
+  const stub = stubRequestClient(runnerClient, routes(header, pauseResult));
   await TestBed.configureTestingModule({
     imports: [MachineDetail],
     providers: [
@@ -258,6 +259,136 @@ describe('MachineDetail header', () => {
 
     expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
     expect(el.querySelector('[data-testid="resume-chunk"]')).toBeNull();
+  });
+});
+
+/**
+ * Pause/Resume's own pending-disable and failure reporting (F6) — brought up to the
+ * standard `fleet/chunk-detail/chunk-detail.ts`'s own `onPause`/`onResume`/
+ * `actionError` set: the button that fired the mutation disables for its duration and
+ * re-enables once it settles, and a rejected mutation renders inline rather than being
+ * swallowed. Every "held pending" assertion spies on `queryClient.invalidateQueries`
+ * and returns a promise it controls rather than letting the stub's fetch settle on its
+ * own, the same idiom `fleet/chunk-detail/chunk-detail.spec.ts`'s own pending-window
+ * specs use — `injectChunkPauseMutation`'s `onSettled` keeps `isPending()` true only
+ * until its own invalidations resolve.
+ */
+describe('MachineDetail Pause/Resume pending + failure', () => {
+  let stub: RequestClientStub;
+
+  afterEach(() => stub.restore());
+
+  it('disables Pause while the mutation is pending, re-enabling once it settles', async () => {
+    const rendered = await render([NEWEST()], HEADER({ status: 'running', pause: null }));
+    stub = rendered.stub;
+    const { el, fixture } = rendered;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    // Held open by the `invalidateQueries` spy above — `settle()`'s own `whenStable()`
+    // would hang on it, so a bare macrotask tick + a manual `detectChanges()` stands in.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(true);
+
+    resolveInvalidate();
+    await settle(fixture);
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(false);
+  });
+
+  it('disables Resume while the mutation is pending, re-enabling once it settles', async () => {
+    const rendered = await render(
+      [NEWEST()],
+      HEADER({ status: 'paused', pause: { by: 'operator', set_at: '2026-07-16T11:00:00.000Z' } }),
+    );
+    stub = rendered.stub;
+    const { el, fixture } = rendered;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLElement>('[data-testid="resume-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.disabled).toBe(true);
+
+    resolveInvalidate();
+    await settle(fixture);
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.disabled).toBe(false);
+  });
+
+  it('surfaces a rejected Pause inline rather than swallowing it', async () => {
+    const rendered = await render(
+      [NEWEST()],
+      HEADER({ status: 'running', pause: null }),
+      stubError(409, { detail: 'chunk is already paused' }),
+    );
+    stub = rendered.stub;
+    const { el, fixture } = rendered;
+
+    el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already paused');
+    // A rejected flip is not a stuck control — the button re-enables.
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(false);
+  });
+
+  it('surfaces a rejected Resume inline rather than swallowing it', async () => {
+    const rendered = await render(
+      [NEWEST()],
+      HEADER({ status: 'paused', pause: { by: 'operator', set_at: '2026-07-16T11:00:00.000Z' } }),
+      stubError(409, { detail: 'chunk is not paused' }),
+    );
+    stub = rendered.stub;
+    const { el, fixture } = rendered;
+
+    el.querySelector<HTMLElement>('[data-testid="resume-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('chunk is not paused');
+  });
+
+  it('clears a stale action error on the next attempt', async () => {
+    const rendered = await render(
+      [NEWEST()],
+      HEADER({ status: 'running', pause: null }),
+      stubError(500, { detail: 'runner store unwired' }),
+    );
+    stub = rendered.stub;
+    const { el, fixture } = rendered;
+
+    el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await settle(fixture);
+    expect(el.querySelector('[data-testid="action-error"]')).not.toBeNull();
+
+    el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute(`/api/chunks/${NEWEST().chunk_id}/pause`, 'POST')).toHaveLength(2);
+    expect(el.querySelector('[data-testid="action-error"]')).not.toBeNull();
   });
 });
 
