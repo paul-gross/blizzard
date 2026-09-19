@@ -152,9 +152,8 @@ class IReadFindingRepository(Protocol):
 
     def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
         """A finding and its whole fact chain, oldest-first, read together in one
-        transaction — the API detail route needs the row and its facts to agree on the
-        same instant, which two independent reads cannot guarantee under a concurrent
-        write between them. `None` for an unknown id, `get`'s own contract."""
+        transaction, so a concurrent write between the two reads can never leave them
+        disagreeing on the same instant. `None` for an unknown id, `get`'s own contract."""
         ...
 
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
