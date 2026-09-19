@@ -1383,10 +1383,10 @@
    "total": 506
   },
   "blizzard/hub/api/runners.py": {
-   "comments": 5,
+   "comments": 3,
    "docstrings": 19,
    "over_cap": 0,
-   "total": 183
+   "total": 161
   },
   "blizzard/hub/api/scopes.py": {
    "comments": 0,
@@ -2596,9 +2596,9 @@
   },
   "blizzard/hub/store/internal/runner_registry_store.py": {
    "comments": 18,
-   "docstrings": 15,
+   "docstrings": 16,
    "over_cap": 1,
-   "total": 350
+   "total": 370
   },
   "blizzard/hub/store/internal/scope_store.py": {
    "comments": 3,
