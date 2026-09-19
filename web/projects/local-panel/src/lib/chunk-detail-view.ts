@@ -25,11 +25,10 @@ export class MachineDetailView {
   /** The open escalation for this chunk, when there is one — carries the resume command. */
   readonly escalation = input<runnerApi.EscalationView | null>(null);
 
-  /** {@link lease}'s compact ref, resolved by the container. */
+  /** {@link lease}'s compact ref. */
   readonly leaseRef = input('');
 
-  /** `-34s` shorthand, or `—` before the first beat / past the skew bound —
-   * the container's own ticking clock. */
+  /** `-34s` shorthand, or `—` before the first beat / past the skew bound. */
   readonly heartbeatLabel = input('—');
 
   /** The execution-facts table's rows — a method, not a stored computed, since the

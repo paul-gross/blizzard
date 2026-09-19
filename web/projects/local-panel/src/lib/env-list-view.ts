@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { KitBeacon } from 'fleet';
 
-/** One resolved row for {@link EnvListView} — every display value the container
- * derives (including {@link heldFor}'s clock-driven text), so the view itself
+/** One resolved row for {@link EnvListView} — every value is already resolved for
+ * display (including {@link heldFor}'s clock-driven text), so the view itself
  * injects nothing. */
 export interface EnvRow {
   readonly environmentId: string;

@@ -20,10 +20,10 @@ export class ChunkRowView {
   /** The chunk's newest lease — the row's execution facts (node, epoch). */
   readonly lease = input.required<runnerApi.LeaseView>();
 
-  /** The derived machine-side status, folded by the container (one owner). */
+  /** The derived machine-side status. */
   readonly status = input.required<MachineChunkStatus>();
 
-  /** Whether the container considers this row the current selection. */
+  /** Whether this row is the current selection. */
   readonly selected = input(false);
 
   /** The severable work-item enrichment (issue #28, decision 1) — resolved by the

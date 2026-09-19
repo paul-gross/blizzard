@@ -13,7 +13,7 @@ import { compactRef, formatAbsolute, formatLocalClockWithDay, type LocalClockWit
   styleUrl: './fact-log-view.css',
 })
 export class FactLogView {
-  /** The newest-first facts to render, resolved by the container. */
+  /** The newest-first facts to render. */
   readonly facts = input<readonly runnerApi.FactView[]>([]);
 
   protected ref(id: string): string {

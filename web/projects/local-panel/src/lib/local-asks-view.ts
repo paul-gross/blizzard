@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-/** One resolved row for {@link LocalAsksView} — every display value the container
- * derives (including {@link askedFor}'s clock-driven text), so the view itself
+/** One resolved row for {@link LocalAsksView} — every value is already resolved for
+ * display (including {@link askedFor}'s clock-driven text), so the view itself
  * injects nothing. */
 export interface AskRow {
   readonly questionId: string;

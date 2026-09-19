@@ -6,7 +6,7 @@ import { injectRunnerDashboardQuery } from './status.query';
 
 /**
  * The local fact log **container** — "runner store": the newest hub-bound facts
- * off the outbound ledger (`GET /api/facts`), newest first. Owns the query and the
+ * off the outbound ledger (`GET /api/dashboard`), newest first. Owns the query and the
  * resolved async-state triad; the presentational {@link FactLogView} owns the row
  * template (`bzh:frontend-container-presentational`).
  */

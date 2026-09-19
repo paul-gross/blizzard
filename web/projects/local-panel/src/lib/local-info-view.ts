@@ -15,11 +15,10 @@ import { type KitFact, KitFactList, type runnerApi } from 'fleet';
   styleUrl: './local-info-view.css',
 })
 export class LocalInfoView {
-  /** The runner's own hub-link facts — resolved and null-guarded by the container. */
+  /** The runner's own hub-link facts. */
   readonly view = input.required<runnerApi.RunnerStatusView>();
 
-  /** The last-known fleet counts, or `null` before the first successful read —
-   * the container's own latch, not TanStack's `data()`. */
+  /** The last-known fleet counts, or `null` before the first successful read. */
   readonly fleet = input<runnerApi.FleetSummaryView | null>(null);
 
   /** The current read's `fleet_summary` slot is `null` (hub unreachable / not
@@ -27,8 +26,7 @@ export class LocalInfoView {
    * last-known state. The rest of the panel is hub-free, so it is unaffected. */
   readonly fleetStale = input(false);
 
-  /** `-34s` since the last successful PULL, or `never` before first contact —
-   * the container's own ticking clock. */
+  /** `-34s` since the last successful PULL, or `never` before first contact. */
   readonly lastFlushLabel = input.required<string>();
 
   readonly lastTickLabel = input.required<string>();

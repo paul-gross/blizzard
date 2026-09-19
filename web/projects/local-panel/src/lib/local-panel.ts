@@ -171,12 +171,8 @@ export class LocalPanel {
 
   /** What is open in the panel, held in the URL's `?chunk=` via the shared
    * {@link injectChunkUrlSelection} — the router coupling lives there, not
-   * here. Carries no `attempt` selection: per-attempt selection lives on the
-   * chunk detail route, whose own `chunk-detail-page.ts` is the single owner
-   * of `?attempt=` — the only site that reads it and the only one that writes
-   * it. This panel neither reads nor clears it; the one link into that route
-   * carries no query params at all (`machine-detail-header.ts`), so a stale
-   * `attempt` cannot reach it either. */
+   * here. Carries no `attempt` selection: this panel neither reads nor
+   * clears an `attempt` query param, and writes none itself. */
   private readonly selection = injectChunkUrlSelection();
 
   /**
