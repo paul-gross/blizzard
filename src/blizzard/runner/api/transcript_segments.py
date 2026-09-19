@@ -3,7 +3,7 @@ D1/D3) — a chunk's segment index and one segment's content by id, mirroring th
 ``/api/chunks/{chunk_id}/transcripts[/{segment_id}]`` path shape (D3, D5). Runner-local only:
 both resolve through :class:`TranscriptService` (D4), never calling the hub; ownership is
 structural — this runner's store only ever holds its own leases' segments. Distinct from
-``transcripts.py``'s lease-keyed ``/api/leases/{lease_id}/transcript``, unchanged by this."""
+``transcripts.py``'s lease-keyed ``/api/leases/{lease_id}/transcript``."""
 
 from __future__ import annotations
 

@@ -40,9 +40,9 @@ class AskResponse(BaseModel):
 def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> AskResponse:
     """Record a worker's ask against its lease, minting the question id.
 
-    Token-authorized like every other worker verb (issue #291) — previously activeness was
-    this route's whole gate, which would have widened admission with no credential behind it
-    once an open takeover's closed reference lease qualified too."""
+    Token-authorized like every other worker verb (issue #291): activeness alone would admit
+    an open takeover's closed reference lease too, so the presented token is the only
+    credential that actually gates this route."""
     lease = authorized_lease(lease_id, request)
     question_id = (
         RunnerWiring.of(request).asks().record_ask(lease, question=request_body.question, options=request_body.options)

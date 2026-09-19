@@ -32,10 +32,10 @@ class IChunkViews(Protocol):
 @dataclass(frozen=True)
 class ReadThroughChunkViews:
     """The default, non-memoizing binding — ``get``/``prime`` each issue a fresh
-    ``hub.chunk_statuses`` call every time, exactly like ``get_chunk`` did per call.
+    ``hub.chunk_statuses`` call every time.
 
     Wraps any ``LoopContext`` not built by ``tick()`` itself, so a step driven directly
-    (e.g. by a test) reads the hub on every ``get()`` unchanged."""
+    (e.g. by a test) reads the hub on every ``get()``."""
 
     hub: IChunkStatusReader
 

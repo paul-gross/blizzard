@@ -98,13 +98,14 @@ class HubProxy:
 
         A ``GET`` retries a transport error or a ``502``/``503``/``504`` with bounded backoff,
         within ``timeout`` when the caller supplies one or ``_HUB_RETRY_CEILING`` otherwise —
-        that whole-forward budget, not ``_HUB_TIMEOUT``, is what ``timeout`` now means for a
+        that whole-forward budget, not ``_HUB_TIMEOUT``, is what ``timeout`` means for a
         retrying call, and each attempt's own timeout is whichever of ``_HUB_TIMEOUT`` and the
         budget remaining is smaller. Every other status mismatching ``expect`` raises verbatim
-        on the first response. A ``POST`` never retries, at exactly today's per-call timeout.
-        ``severity`` names the structlog level the exhausted-forward line logs at — every route
-        keeps today's ``error`` unless it opts into a lower one for a tolerated failure.
-        ``fields`` add a structured subject to that line."""
+        on the first response. A ``POST`` never retries; it runs at exactly the resolved
+        budget (the caller's ``timeout`` or ``_HUB_TIMEOUT``). ``severity`` names the
+        structlog level the exhausted-forward line logs at — every route keeps ``error``
+        unless it opts into a lower one for a tolerated failure. ``fields`` add a structured
+        subject to that line."""
         url = f"{self.config.hub_url.rstrip('/')}{path}"
         retryable = method == "GET"
         budget = timeout if timeout is not None else (_HUB_RETRY_CEILING if retryable else _HUB_TIMEOUT)
@@ -144,11 +145,8 @@ class HubProxy:
     @staticmethod
     def _may_retry(retries: int, budget: float, started: float) -> bool:
         """Whether one more attempt is worth scheduling: under the retry-count cap, and the
-        *whole* backoff before it still lands inside the budget — not merely some slack.
-        Gating on any positive remainder let a backoff committed on a sliver of budget carry
-        the forward's real elapsed time past ``_HUB_RETRY_CEILING`` (and, worst case, past
-        ``READ_TIMEOUT``) before the next attempt ever fired, since the delay itself is not
-        charged against the budget check that authorized it."""
+        *whole* next backoff — not merely some slack — still lands inside the budget, since
+        the delay itself is never charged against the elapsed time it gates."""
         return retries < _MAX_RETRIES and budget - (time.monotonic() - started) > _backoff(retries)
 
     def _log(self) -> structlog.stdlib.BoundLogger:

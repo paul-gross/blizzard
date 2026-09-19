@@ -1,5 +1,5 @@
 """The panel's transcript read model, projected off the harness seam (blizzard#245, widened
-blizzard#248 D1/D2) — no longer narrowing: thinking turns and sidechains carry through.
+blizzard#248 D1/D2) — thinking turns and sidechains carry through unnarrowed.
 
 :data:`MAX_TURNS` bounds only the top-level list, never a sidechain's own turns.
 :data:`MAX_BLOCK_CHARS` degrades only an oversized tool input to a capped raw string."""

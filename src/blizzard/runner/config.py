@@ -332,10 +332,10 @@ class Transcripts:
 
     @property
     def ship(self) -> bool:
-        """Off by default (D5) — a rollout decision, not a discard-sink one:
-        ``#247`` already landed the hub's durable, compressed-at-rest, operator-gated
-        segment store, so a `True` value here would be retained, not wasted bandwidth.
-        The dogfood fleet just has not turned shipping on yet."""
+        """Off by default (D5) — a rollout decision, not a discard-sink one: the hub's
+        durable, compressed-at-rest, operator-gated segment store (``#247``) is ready to
+        receive shipped segments, so a `True` value here is retained, not wasted
+        bandwidth."""
         return self.table.boolean("ship", False)
 
     @property

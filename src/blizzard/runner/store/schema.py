@@ -554,8 +554,8 @@ session_preamble_facts = Table(
 
 # --- External subscription usage samples (issue #218) ------------------------
 # One row per sampling *attempt*: a NULL payload still counts toward the cadence.
-# `slug` joins a row to its declared subscription (blizzard#436) — every pre-slug row is
-# backfilled to the legacy Anthropic slug by the reshape that added the column.
+# `slug` joins a row to its declared subscription (blizzard#436); non-nullable — a row that
+# predates per-provider subscriptions carries the legacy Anthropic slug.
 
 # Retention contract (issue #520): see IWriteUsageRepository.prune_external_usage_samples.
 
@@ -633,8 +633,8 @@ transcript_segments = Table(
     Column("stamped_at", UtcDateTime, nullable=False),
 )
 
-# Replaces the old bare `ix_transcript_segments_chunk_id` (issue #520) — every per-chunk read
-# filters `chunk_id`, orders by `stamped_at, segment_id`; this composite serves both, sort-free.
+# Every per-chunk read filters `chunk_id` and orders by `stamped_at, segment_id` (issue #520);
+# this composite index serves both, sort-free.
 Index(
     "ix_transcript_segments_chunk_id_stamped_at_segment_id",
     transcript_segments.c.chunk_id,

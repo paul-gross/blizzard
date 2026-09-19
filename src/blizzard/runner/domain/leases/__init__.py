@@ -7,8 +7,8 @@ holds the read model, which derives state from facts at read time
 
 The four repository seams (``record``, ``session``, ``liveness``, ``resume_intent``) each
 declare their own read/write Protocol pair in their own module, mirroring the store
-adapters underneath; this package re-exports them so every existing caller keeps importing
-from ``blizzard.runner.domain.leases``."""
+adapters underneath; this package re-exports them as the single import surface at
+``blizzard.runner.domain.leases``."""
 
 from __future__ import annotations
 

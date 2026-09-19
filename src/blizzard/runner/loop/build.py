@@ -201,8 +201,8 @@ class LoopWiring:
                 worker_files=_worker_files,
                 events=self.events,
             ),
-            # `harness_transcript_source` above always resolves (or the registry build
-            # itself already raised) — this composition's transcripts lane is always wired.
+            # The startup guard above already resolved the default harness's transcript
+            # source (or raised) — this composition's transcripts lane is always wired.
             transcripts_wired=True,
             events=self.events,
             harnesses=harnesses,

@@ -33,8 +33,7 @@ def resolved_lease(lease_id: str, request: Request) -> LeaseRecord:
 
     Distinct from :func:`authorized_lease`: no token check, and it spans every lease this
     runner ever minted rather than only the active one. Raises the unknown-lease ``404``
-    for an identifier naming no such lease. Neither route gains or loses a token check
-    here — this resolves identity, it does not authorize."""
+    for an identifier naming no such lease. This resolves identity, it does not authorize."""
     lease = RunnerWiring.of(request).read_stores().lease_record.lease(lease_id)
     if lease is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no lease {lease_id}")

@@ -133,10 +133,9 @@ class ReadyQueue:
         """Pick this runner's entry out of this fill's one peeked snapshot (blizzard#459),
         left in place until ``claim_one()`` knows the outcome and drops it itself (F3) —
         a later ``claim_one()`` this same ``Fill.run()`` must not silently move past an
-        entry whose outcome is still undetermined. Strict holds at a marked head and
-        yields nothing rather than falling through, exactly as before — an idle tick reads
-        the same as an empty queue at this seam. Reach-ahead (the default) scans for the
-        first unmarked entry."""
+        entry whose outcome is still undetermined. Strict holds at a marked head and yields
+        nothing rather than falling through — an idle tick reads the same as an empty queue
+        at this seam. Reach-ahead (the default) scans for the first unmarked entry."""
         if not self._entries:
             return None
         if self.ctx.config.queue_strict:
