@@ -15698,7 +15698,7 @@
     },
     "/api/scopes": {
       "get": {
-        "description": "Every scope, newest first, each marked retired or not \u2014 one bulk `retired_slugs`\nread (`bzh:bulk-reconstitution`).",
+        "description": "Every scope, newest first, each marked retired or not \u2014 one bulk `retired_slugs`\nread.",
         "operationId": "list_scopes_api_scopes_get",
         "responses": {
           "200": {
