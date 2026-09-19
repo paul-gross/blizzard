@@ -109,8 +109,8 @@ class LeaseRecordStore:
         # A preempted attempt was superseded, not spent (issue #370): counting it would carry
         # the node toward exhaustion and escalate the very chunk the operator is rescuing.
         preempted = select(lease_closures.c.lease_id).where(lease_closures.c.reason == _PREEMPTED_REASON)
-        # The mint's own closure reason names it directly — an ordinary exhausted-retries
-        # escalation, spawned or REAP-orphaned alike, closes plain `escalated` and still counts.
+        # A never-spawned escalation-mint lease isn't spent either — its own closure
+        # reason marks it, distinct from an ordinary exhausted-retries `escalated` closure.
         escalation_mints = select(lease_closures.c.lease_id).where(
             lease_closures.c.reason.in_((_ESCALATION_MINT_REASON, _NO_ACCEPTABLE_HARNESS_MINT_REASON))
         )

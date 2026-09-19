@@ -68,12 +68,10 @@ class RouteClaimOutcome:
 
 
 class IChunkStatusReader(Protocol):
-    """The narrow seam :mod:`blizzard.runner.loop.chunk_status_cache`'s two ``IChunkViews``
-    bindings actually call — one method of :class:`IHubClient`'s thirteen (the seam-size
-    ceiling: a new consumer re-types to the capability it calls, not the whole wide client).
-    ``IHubClient`` composes this rather than re-declaring the method (one contract, not two
-    copies free to drift); ``HttpHubClient``/``FakeHub`` satisfy it structurally, with no
-    changes of their own."""
+    """One method of :class:`IHubClient`'s thirteen (the seam-size ceiling: a new consumer
+    re-types to the capability it calls, not the whole wide client). ``IHubClient``
+    composes this rather than re-declaring the method — one contract, not two copies free
+    to drift."""
 
     def chunk_statuses(self, chunk_ids: Iterable[str]) -> dict[str, ChunkStatusView]:
         """``GET /api/fleet/chunk-statuses`` (repeatable ``chunk_id``) — every requested id

@@ -272,9 +272,8 @@ class IHarnessVerdictParsing(Protocol):
         """True when ``output`` carries a well-formed result envelope — independent of
         whether it names a verdict, which a legitimate ask-instead-of-a-choice reply also
         lacks. A process killed mid-write (an OOM, a ``kill -9``) can leave a non-empty but
-        truncated/malformed ``output``; the caller (:meth:`Judgement.collect
-        <blizzard.runner.loop.judgement.Judgement.collect>`) treats that the same as no
-        output at all — lost, not a verdict-less reply that would consume a retry."""
+        truncated/malformed ``output``, which this reports as unusable — indistinguishable
+        from no output at all."""
         ...
 
     def parse_assessment(self, output: str) -> str:
@@ -309,9 +308,8 @@ class IHarnessUsageAccounting(Protocol):
 
 
 class IHarnessLifecycleAndVerdict(IHarnessWorkerLifecycle, IHarnessVerdictParsing, Protocol):
-    """Worker lifecycle plus verdict parsing, shared by the two consumers that call
-    exactly this pair and nothing wider (``bzh:seam-size-ceiling``): the runner loop's
-    own step functions and the selftest canary."""
+    """Worker lifecycle plus verdict parsing, combined into the one slice a consumer
+    needing both takes rather than the full adapter (``bzh:seam-size-ceiling``)."""
 
 
 class IHarnessAdapter(
@@ -323,8 +321,8 @@ class IHarnessAdapter(
 ):
     """The coding-harness seam: its four narrower slices (``bzh:seam-size-ceiling``) plus
     ``transcript_source``, unsliced since no consumer needs it alone. Dumb: translates, never
-    decides. A genuine pass-through — threading the adapter on rather than calling it, today
-    only ``app.py`` — takes this alias; a caller takes the narrowest slice its job needs."""
+    decides. A genuine pass-through — threading the adapter on rather than calling it —
+    takes this alias; a caller takes the narrowest slice its job needs."""
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         """This harness's transcript source (blizzard#245).

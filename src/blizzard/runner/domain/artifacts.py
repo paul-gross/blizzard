@@ -43,6 +43,5 @@ class IWriteGraphArtifactRepository(IReadGraphArtifactRepository, Protocol):
     ) -> None:
         """Pin a mint's graph-scoped declarations, insert-if-absent: a second call
         for the same ``graph_id`` — a second lease against the same mint — writes nothing
-        new. Called by ``Spawner._mint`` before :meth:`record_lease`, so a crash between
-        the two leaves only an orphan row a retry re-writes identically."""
+        new."""
         ...

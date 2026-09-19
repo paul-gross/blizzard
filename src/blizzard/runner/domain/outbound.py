@@ -83,8 +83,8 @@ class IWriteOutboundRepository(IReadOutboundRepository, Protocol):
         ...
 
     def ack_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:
-        """Mark every seq in ``seqs`` delivered, in one transaction — the generic drain's
-        run-flush ack (issue #522), so a crash mid-batch never acks part of one delivered run."""
+        """Mark every seq in ``seqs`` delivered, in one transaction (issue #522), so a
+        crash mid-batch never acks part of one delivered run."""
         ...
 
     def prune_outbound(self, *, now: datetime) -> int:

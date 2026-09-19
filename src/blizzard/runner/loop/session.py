@@ -43,7 +43,8 @@ class ResumedSession:
 
     @property
     def session_id(self) -> str:
-        """The operator-visible raw id for the current Claude Code call boundary."""
+        """The operator-visible raw session id the recorded owner issued, whichever owner
+        that is."""
         return self.session.session_id
 
 
