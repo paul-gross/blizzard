@@ -8,6 +8,10 @@ outage like the fact lane's store-and-forward — a wedged or slow flush never d
 read-side coupling remains: a closing lease's still-open segment is pumped once more before the closure records, bounded
 by a five-second budget checked only between reads — one slow read can push closure past it, a deliberate bounded wait.
 
+Two harnesses produce this lane's content today, each behind its own `IHarnessTranscriptSource`: Claude Code, read from
+its own on-disk JSONL session file, and OpenCode, read via a bounded `opencode export <session-id>` subprocess
+(`OpenCodeTranscriptSource`). Everything below applies to both alike unless stated otherwise.
+
 `[transcripts]` `ship` defaults to false: with no table or `ship` omitted, the runner reads no session content and
 enqueues no non-final record. `ship` gates non-final records alone: every open segment still ships its final record at
 lease closure — the same unconditional close-out facts get — and a segment with no successful read declares the
@@ -68,8 +72,10 @@ imports as one merged segment on the lease it began, not split at resume seams.
 
 Run backfill as the runner's own user, with the runner's environment, daemon stopped — all three load-bearing, only the
 last enforced: it writes the single-writer store, refusing while anything holds the socket and failing closed (a wedged
-daemon counts); with no `transcripts_root`, transcripts read from `$HOME/.claude/projects`, so another user reads every
-session as gone; and the hub token comes from the process environment, without which every flush is refused.
+daemon counts); with no `transcripts_root`, Claude Code sessions read from `$HOME/.claude/projects`, so another user
+reads every session as gone — OpenCode sessions are unaffected, since `OpenCodeTranscriptSource` never reads
+`transcripts_root` at all, shelling `opencode export <session-id>` directly; and the hub token comes from the process
+environment, without which every flush is refused.
 
 `backfill --limit N` bounds one run — on a long history, content past the hub's per-runner daily rate is rejected rather
 than queued; the verb refuses outright while `ship = false`. `backfill --dry-run` classifies without opening or shipping
