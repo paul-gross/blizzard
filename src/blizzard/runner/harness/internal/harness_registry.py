@@ -66,8 +66,6 @@ def build_production_harness_health_probes(config: RunnerConfig) -> dict[str, IH
     health-probe seam, symmetric with :func:`build_production_harness_registry`'s own
     adapter construction — the composition root reaches both only through this module."""
     return {
-        CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(
-            binary=config.harness_binary, credentials_path=config.external_usage_credentials_path
-        ),
+        CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(binary=config.harness_binary),
         OPENCODE_HARNESS_ID: OpenCodeHealthProbe(binary=config.opencode_binary),
     }

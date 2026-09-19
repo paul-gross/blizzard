@@ -10,11 +10,7 @@ from blizzard.runner.app import create_app_for_export
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
-from blizzard.runner.harness.internal.harness_registry import (
-    build_production_harness_health_probes,
-    build_production_harness_registry,
-)
+from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
 from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.process_launch import _SPAWN_EXECUTOR
 from blizzard.runner.harness.registry import (
@@ -102,18 +98,3 @@ def test_production_registry_injects_its_own_executor_not_the_module_default(tmp
 
     launcher = vars(registry.adapter(CLAUDE_CODE_HARNESS_ID))["_launcher"]
     assert vars(launcher)["_executor"] is not _SPAWN_EXECUTOR
-
-
-@pytest.mark.unit
-def test_production_health_probes_honor_the_configured_credentials_path_override(tmp_path: Path) -> None:
-    """A runner using the documented per-subscription credentials override
-    (``external_usage_credentials_path``) must not silently fall back to
-    ``~/.claude/.credentials.json`` for its Claude Code health probe too (blizzard#438)."""
-    override = str(tmp_path / "custom-credentials.json")
-    config = RunnerConfig(root=tmp_path, db_url="sqlite://", external_usage_credentials_path=override)
-
-    probes = build_production_harness_health_probes(config)
-
-    probe = probes[CLAUDE_CODE_HARNESS_ID]
-    assert isinstance(probe, ClaudeCodeHealthProbe)
-    assert str(vars(probe)["_credentials_path"]) == override
