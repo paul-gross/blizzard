@@ -255,19 +255,15 @@ class HarnessSelector:
     is its only caller: a resume or a forced continuation never reaches selection at all."""
 
     harnesses: IHarnessRegistry
-    #: This runner's own cross-tick health cache (blizzard#438) — ``None`` skips the health
-    #: gate entirely (a caller with no health wired, e.g. a test double), never a probe
-    #: :meth:`select` triggers itself: a live dispatch reads the last-computed result only.
+    #: This runner's own cross-tick health cache (blizzard#438); ``None`` skips the health gate entirely.
     health: HarnessHealthCache | None = None
 
     def select(self, node: NodeConfig) -> HarnessSelection:
         """The earliest member of ``node.session_harnesses`` this runner can dispatch to, in
-        declared order — a member the registry cannot serve is skipped and recorded. A single
-        member skips the model check only when nothing in ``node.session_model`` is an
-        authored (``blizzard:``-namespaced) tier; an authored tier this harness cannot map is
-        never silently substituted (worker-spawn.md) — skipped like a larger set's own member.
-        A member health has withdrawn from selection (blizzard#438) is skipped with its own
-        reason, distinct from ``"unavailable"``'s no-binding-at-all meaning."""
+        declared order — a member the registry cannot serve, or one health has withdrawn
+        (blizzard#438), is skipped and recorded. A single member skips the model check only
+        when nothing in ``node.session_model`` is an authored (``blizzard:``-namespaced) tier;
+        an authored tier this harness cannot map is never silently substituted (worker-spawn.md)."""
         members = node.session_harnesses
         strict = bool(node.session_model) and (
             len(members) > 1 or any(preference.startswith(TIER_PREFIX) for preference in node.session_model)

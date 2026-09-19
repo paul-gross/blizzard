@@ -11,8 +11,7 @@ from typing import Literal
 
 SelfTestStatus = Literal["running", "passed", "failed"]
 
-# The seven adapter-drift checks, in the order a run performs them (blizzard#438 added
-# the last two to the original five).
+# The seven adapter-drift checks, in the order a run performs them (blizzard#438 added the last two).
 SPAWN_SESSION_ID = "spawn_session_id"
 END_TO_END_EDIT_COMMIT = "end_to_end_edit_commit"
 VERDICT_ELICITATION = "verdict_elicitation"

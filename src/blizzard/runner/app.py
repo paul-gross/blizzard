@@ -245,9 +245,8 @@ def create_app(
     app.state.workspace_prompts = workspace_prompts or (
         WorkspacePromptService(runner_stores.workspace_prompt, SystemClock()) if runner_stores else None
     )
-    # The adapter-drift canary (issue #54): run state stays process-local, so this is wired
-    # unconditionally even with no store — `results` is the only part that needs one
-    # (blizzard#438), and is simply omitted (no durable outcome) when `runner_stores` is `None`.
+    # The adapter-drift canary (issue #54): wired unconditionally regardless of `runner_stores` —
+    # only `results` needs one, and stays `None` (no durable outcome) without it (blizzard#438).
     app.state.selftests = selftests or SelfTestService(
         harnesses=resolved_harnesses,
         scratch_git=SubprocessScratchGit(),
@@ -255,11 +254,8 @@ def create_app(
         clock=SystemClock(),
         results=runner_stores.selftest_results if runner_stores else None,
     )
-    # The runner's own health diagnostics (blizzard#438) — a composition-root-owned cache
-    # mirroring the loop's own (``loop/build.py``), so a dashboard read never itself
-    # triggers a fresh subprocess/credential probe. Reads the same durable selftest-result
-    # fact the loop's cache does (the shared store, not a shared instance): both converge
-    # on the same computed result independently, each bounded by its own refresh window.
+    # The runner's own health diagnostics (blizzard#438): a separate cache mirroring the loop's
+    # own (``loop/build.py``) so a dashboard read never triggers a fresh probe; both read the same store.
     app.state.harness_health = harness_health or HarnessHealthCache(
         clock=SystemClock(),
         probes=build_production_harness_health_probes(config),

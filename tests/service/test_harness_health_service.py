@@ -1,14 +1,8 @@
-"""``probe_authentication()``'s health-probe seam, service tier (blizzard#438) — bound to the
-mock fleet's real CLI binaries (``bzh:external-cli-fake-is-service-tier``), following
-``test_opencode_compatibility_service.py``'s ``require_mock_fleet()``/
-``require_opencode_cli_surface()`` pattern.
-
-Neither the real OpenCode nor the real Claude Code CLI exposes a subcommand that reports
-provider-authentication status without spending a live turn (blizzard#438's own finding), so
-each probe combines a genuine subprocess invocation of the real binary with a local
-credential-file read. These tests prove the probe genuinely shells out to the real mock
-binary — a binary that cannot be invoked at all reports unauthenticated regardless of the
-credential file — rather than being a pure stub over the filesystem check alone."""
+"""``probe_authentication()``'s health-probe seam, service tier (blizzard#438) — bound to
+the mock fleet's real CLI binaries (``bzh:external-cli-fake-is-service-tier``). Neither
+real CLI exposes a provider-authentication subcommand without spending a live turn, so
+each probe combines a subprocess invocation with a credential-file read — these tests
+prove it genuinely shells out to the real mock binary, not a pure filesystem stub."""
 
 from __future__ import annotations
 

@@ -1,11 +1,9 @@
 """The selftest job resource's in-memory service — the adapter-drift canary (issue #54).
 
 Mints and runs a selftest against a chosen coding harness off the request thread, in a
-throwaway scratch repo the ``IScratchGit`` seam owns. Run *state* stays process-local and
-gone on daemon restart, same as ever; a run's *terminal outcome* also lands as a durable
-per-harness fact (blizzard#438) when a result repository is wired, so daemon-start health
-recalculation can see the last completed run across a restart.
-"""
+throwaway scratch repo the ``IScratchGit`` seam owns. Run *state* stays process-local, gone
+on restart; a run's *terminal outcome* also lands as a durable per-harness fact (blizzard#438)
+when a result repository is wired."""
 
 from __future__ import annotations
 

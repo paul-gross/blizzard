@@ -145,13 +145,9 @@ class FactListResponse(BaseModel):
 
 class HarnessHealthView(BaseModel):
     """One configured harness binding's own computed health (blizzard#438) —
-    ``GET /api/harness-health``, runner-local diagnostics only: no credential or failure
-    detail crosses to the hub, which sees only the wire's boolean ``available`` flag.
-    ``cause`` is one of ``missing_binary``, ``incompatible_version``, ``unknown_version``,
-    ``authentication_failure``, ``unmapped_tier``, ``selftest_failure``, or
-    ``declared_degradation``, ``None`` when available. ``degradations`` are reported
-    regardless of availability — a declared, non-blocking gap never withholds it on its
-    own."""
+    ``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of
+    ``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,
+    ``unmapped_tier``, ``selftest_failure``, or ``declared_degradation``, ``None`` when available."""
 
     harness_id: str
     version: str | None = None

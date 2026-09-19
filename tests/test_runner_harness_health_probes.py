@@ -43,10 +43,8 @@ def test_opencode_health_probe_declares_the_pinned_versions_absences(monkeypatch
     }
     assert all(degradation.summary.strip() for degradation in degradations)
 
-    # The manifest's own diagnostic fixture names the narrower set actually observed
-    # absent for this one live run — a subset of every degradation this binding declares
-    # about itself in general (`usage_cost` was observed there, so it is absent from the
-    # manifest's own narrower list even though the binding still declares it degradable).
+    # The manifest's diagnostic fixture names the narrower set observed absent for this one
+    # run — a subset of what the binding declares degradable in general.
     diagnostic_degraded = set(manifest["live_evidence"]["fixtures"]["diagnostic"]["degraded"])
     assert diagnostic_degraded == {"root_hook", "child_sessions"}
     assert diagnostic_degraded <= {probe.value for probe in declared_probes}

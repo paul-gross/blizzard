@@ -2,8 +2,7 @@
 
 Standalone, mirroring :class:`~blizzard.runner.harness.internal.opencode_health.
 OpenCodeHealthProbe`: a narrow, separately-injected collaborator rather than a slice folded
-onto :class:`~blizzard.runner.harness.internal.claude_code_adapter.ClaudeCodeAdapter` itself.
-Nothing composes it yet (blizzard#438 phase 1)."""
+onto :class:`~blizzard.runner.harness.internal.claude_code_adapter.ClaudeCodeAdapter` itself."""
 
 from __future__ import annotations
 
@@ -32,13 +31,10 @@ class ClaudeCodeHealthProbe:
 
     def probe_authentication(self) -> bool:
         """Claude Code exposes no ``--version``-adjacent auth-status flag either, so this
-        checks the same OAuth credential file the account's own harness login writes and
-        ``AnthropicSubscriptionSampler`` already reads for usage sampling — a bearer token
-        recorded there is the account's own signal that it authenticated, independent of
-        this probe's own binary responding. Token expiry is not checked here (no clock is
-        injected onto this seam, unlike the subscription sampler's own); an expired-but-
-        present token still reads as authenticated. A later phase could inject a clock for
-        that, or a genuine live check."""
+        checks the same OAuth credential file ``AnthropicSubscriptionSampler`` already reads
+        for usage sampling — a token recorded there is the account's own authentication
+        signal, independent of this probe's binary responding. Expiry is not checked: an
+        expired-but-present token still reads as authenticated."""
         if harness_shared.observe_version(self._binary) is None:
             return False
         return self._has_access_token()

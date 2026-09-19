@@ -31,8 +31,7 @@ class _ResolvesModelStrict(Protocol):
 #: How long a version is trusted before re-probing — long enough an idle runner isn't shelling out every tick.
 HARNESS_VERSION_REFRESH_SECONDS = 600.0
 
-#: Distinguishes "never computed" from a real, if coincidentally ``None``-valued, previous
-#: observation — a sentinel a stored ``None`` cannot be confused with.
+#: Distinguishes "never computed" from a genuinely ``None``-valued previous observation.
 _UNSET = object()
 
 
@@ -67,23 +66,16 @@ def _unmapped_tiers(adapter: _ResolvesModelStrict, declared: tuple[tuple[str, st
 
 @dataclass
 class HarnessHealthCache:
-    """Every configured harness binding's last-computed health result (blizzard#438),
-    held across ticks like :class:`HarnessVersionCache` — health evidence includes
-    subprocess and credential probes, so recomputing on every peek would put that cost
-    there instead of on this cache's own bounded refresh window.
-
-    Recomputes when the refresh window elapses, the observed version changes, or a new
-    selftest result lands (the three occasions the plan names) — never merely because a
-    peek asked. The very first call for a harness always computes: an empty cache is
-    always stale, which is what covers "at daemon start" with no separate startup hook."""
+    """Every configured harness binding's last-computed health result (blizzard#438), held
+    across ticks like :class:`HarnessVersionCache` — health evidence includes subprocess
+    and credential probes, so recomputing on every peek would put that cost on the read
+    path instead of this cache's own bounded refresh window."""
 
     clock: IClock
     probes: Mapping[str, IHarnessHealthProbe]
-    #: ``None`` on a store-free composition (the OpenAPI exporter, a unit test) — a
-    #: never-run selftest either way, since neither can have recorded one.
+    #: ``None`` on a store-free composition (the OpenAPI exporter, a unit test) — reads as never-run.
     selftest_results: IReadSelfTestResultRepository | None
-    #: Per-harness declared (tier, native-model) pairs off ``RunnerConfig`` — the tiers
-    #: this runner is configured to resolve *through this harness specifically*.
+    #: Per-harness declared (tier, native-model) pairs this runner resolves through it specifically.
     configured_tiers: Mapping[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
     refresh_seconds: float = HARNESS_VERSION_REFRESH_SECONDS
     _results: dict[str, HarnessHealthResult] = field(default_factory=dict, compare=False)
@@ -95,7 +87,10 @@ class HarnessHealthCache:
         self, harness_id: str, *, adapter: _ResolvesModelStrict, observed_version: str | None
     ) -> HarnessHealthResult | None:
         """Recompute (or reuse) ``harness_id``'s health; ``None`` for a harness this
-        composition wired no health probe for."""
+        composition wired no health probe for. Recomputes when the refresh window elapses,
+        the observed version changes, or a new selftest result lands — never merely because
+        a peek asked; the first call for a harness always computes, since an empty cache is
+        always stale (covering "at daemon start" with no separate startup hook)."""
         probe = self.probes.get(harness_id)
         if probe is None:
             return None

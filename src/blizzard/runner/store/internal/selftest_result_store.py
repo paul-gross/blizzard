@@ -69,9 +69,8 @@ class SelfTestResultStore:
         checks: tuple[SelfTestCheckRecord, ...],
         recorded_at: datetime,
     ) -> None:
-        # One committed transaction for the parent row and its children (blizzard#438): a
-        # crash between the two must never leave a parent row with no children, or the
-        # wrong children, for a later read to see.
+        # One committed transaction (blizzard#438): a crash must never leave the parent row
+        # with no children, or the wrong ones, for a later read to see.
         with self._store.begin() as conn:
             result = conn.execute(
                 selftest_results.insert().values(

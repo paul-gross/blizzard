@@ -1808,7 +1808,7 @@
         "type": "object"
       },
       "HarnessHealthView": {
-        "description": "One configured harness binding's own computed health (blizzard#438) \u2014\n``GET /api/harness-health``, runner-local diagnostics only: no credential or failure\ndetail crosses to the hub, which sees only the wire's boolean ``available`` flag.\n``cause`` is one of ``missing_binary``, ``incompatible_version``, ``unknown_version``,\n``authentication_failure``, ``unmapped_tier``, ``selftest_failure``, or\n``declared_degradation``, ``None`` when available. ``degradations`` are reported\nregardless of availability \u2014 a declared, non-blocking gap never withholds it on its\nown.",
+        "description": "One configured harness binding's own computed health (blizzard#438) \u2014\n``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of\n``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,\n``unmapped_tier``, ``selftest_failure``, or ``declared_degradation``, ``None`` when available.",
         "properties": {
           "available": {
             "title": "Available",

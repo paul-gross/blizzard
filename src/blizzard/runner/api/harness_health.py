@@ -1,10 +1,9 @@
 """The runner-local harness-health diagnostics — ``GET /api/harness-health`` (blizzard#438).
 
 Every configured harness binding's computed availability, its withholding cause when
-unavailable, and every declared degradation regardless — the runner's own view of the
-same evaluation its registration push advertises to the hub as a single boolean. Reads
-the composition root's own cache (``bzh:controller-read-only``): this route never itself
-triggers a fresh subprocess or credential probe."""
+unavailable, and every declared degradation regardless — the same evaluation its
+registration push advertises to the hub as a single boolean. Reads the composition root's
+own cache (``bzh:controller-read-only``), triggering no fresh probe of its own."""
 
 from __future__ import annotations
 

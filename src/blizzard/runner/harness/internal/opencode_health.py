@@ -3,7 +3,7 @@
 Standalone, like :class:`~blizzard.runner.harness.internal.opencode_probe.
 OpenCodeCompatibilityProbe`: the health-probe seam is a narrow, separately-injected
 collaborator rather than a slice folded onto :class:`~blizzard.runner.harness.internal.
-opencode_adapter.OpenCodeAdapter` itself. Nothing composes it yet (blizzard#438 phase 1)."""
+opencode_adapter.OpenCodeAdapter` itself."""
 
 from __future__ import annotations
 
@@ -16,12 +16,7 @@ from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERSION
 
-# The three `compatibility.py::DEGRADABLE_ABSENCES` members OpenCode 1.18.25 is known to
-# leave absent (`contracts/opencode/1.18.25/manifest.json`'s own diagnostic fixture names
-# `root_hook` and `child_sessions` degraded; `usage_cost` is degradable by the same closed
-# policy even where one particular fixture happened to observe it) — declared statically,
-# not re-derived from a live corpus read, since this is what the binding declares about
-# itself independent of any one observation.
+# OpenCode 1.18.25's three known `DEGRADABLE_ABSENCES` members, declared statically rather than re-derived live.
 _OPENCODE_DEGRADATIONS: tuple[DeclaredDegradation, ...] = (
     DeclaredDegradation(
         probe=CompatibilityProbe.ROOT_HOOK,
@@ -70,14 +65,11 @@ class OpenCodeHealthProbe:
         return harness_shared.binary_present(self._binary)
 
     def probe_authentication(self) -> bool:
-        """OpenCode exposes no subcommand that reports provider-authentication status
-        without spending a live turn, so this combines the two free, local signals
-        available instead: the binary must still answer ``--version`` (proving it
-        launches in this environment, not merely that it resolves on ``PATH``), and
-        OpenCode's own credential-discovery path must hold a non-empty document.
-        Neither call reaches a provider, and neither proves a held credential is still
-        valid — a later phase with a live-provider budget should replace this with a
-        genuine round trip."""
+        """OpenCode exposes no provider-authentication subcommand, so this combines two free,
+        local signals: the binary must still answer ``--version`` (it launches in this
+        environment, not merely resolves on ``PATH``), and its credential-discovery path
+        must hold a non-empty document. Neither reaches a provider, so neither proves a
+        held credential is still valid."""
         if harness_shared.observe_version(self._binary) is None:
             return False
         try:

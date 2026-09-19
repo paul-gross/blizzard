@@ -683,9 +683,7 @@ graph_artifacts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
-# --- Selftest results (blizzard#438) ------------------------------------------
-# Latest-wins-per-harness_id: a completed run is a definite occurrence at a definite time,
-# superseded by the next run for the same harness (bzh:facts-not-status).
+# --- Selftest results (blizzard#438) — latest-wins-per-harness_id (bzh:facts-not-status) ---
 
 selftest_results = Table(
     "selftest_results",

@@ -180,8 +180,7 @@ class LoopContext:
     capabilities: TickCapabilities | None = None
     #: The loop's own cross-tick harness-version cache — unlike ``capabilities`` above, never rebound per tick.
     harness_versions: HarnessVersionCache | None = None
-    #: The loop's own cross-tick harness-health cache (blizzard#438) — mirrors
-    #: ``harness_versions``: composition-root-owned, never rebound per tick.
+    #: The loop's own cross-tick harness-health cache (blizzard#438) — mirrors ``harness_versions`` above.
     harness_health: HarnessHealthCache | None = None
 
     def capability_snapshot(self) -> tuple[RunnerCapability, ...]:

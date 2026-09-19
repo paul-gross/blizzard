@@ -3,8 +3,7 @@
 A pure, dependency-free closure over already-collected evidence — no I/O, no subprocess, no
 clock read happens here. The evaluator answers one question, "is this configured harness
 binding actually usable," from facts a probe seam (:class:`~blizzard.runner.harness.adapter.
-IHarnessHealthProbe`) gathered ahead of time. Nothing consumes this module yet: a later phase
-wires it into registration and selection."""
+IHarnessHealthProbe`) gathered ahead of time."""
 
 from __future__ import annotations
 
@@ -51,19 +50,14 @@ class HarnessHealthEvidence:
 
     harness_id: str
     binary_present: bool
-    #: Whether this harness binding declares a supported-version range at all. ``True`` for
-    #: OpenCode (``PINNED_OPENCODE_VERSION``); ``False`` for Claude Code, which declares none —
-    #: an absent declaration is not a failed check, so no version cause ever applies to it.
+    #: Whether this binding declares a supported-version range at all; absent is not itself a failure.
     version_declared: bool
-    #: Only meaningful when ``version_declared`` is ``True``. ``None`` means the observed
-    #: version matched no committed fixture corpus entry, or no version was observed at all.
+    #: Meaningful only when declared; ``None`` means no observed version matched the fixture corpus.
     version_classification: CompatibilityClassification | None
     authenticated: bool
-    #: Non-empty means at least one tier this runner is configured to resolve through this
-    #: harness cannot actually be resolved.
+    #: Non-empty means a tier this runner is configured for that this harness can't actually resolve.
     unmapped_tiers: tuple[str, ...]
-    #: ``None`` means never run — unresolved, NOT a failure. Only a recorded selftest
-    #: *failure* (``True``) withholds availability; ``False`` and ``None`` both pass.
+    #: ``None`` (never run) and ``False`` both pass; only a recorded failure withholds availability.
     selftest_failed: bool | None
     degradations: tuple[DeclaredDegradation, ...] = ()
 
@@ -83,10 +77,9 @@ class HarnessHealthResult:
 def evaluate_harness_health(evidence: HarnessHealthEvidence) -> HarnessHealthResult:
     """Apply the closed priority policy to one binding's already-collected evidence.
 
-    First match wins: a missing binary is reported over every other fault the same
-    evidence might also carry, an incompatible or unknown version over authentication, and
-    so on down the list documented on :class:`HarnessHealthCause`. A declared degradation
-    never makes the result unavailable — it is surfaced only once every prior check passes."""
+    First match wins, in :class:`HarnessHealthCause`'s own declared order: missing binary,
+    then version, then authentication, and so on. A declared degradation never makes the
+    result unavailable, surfaced only once every prior check passes."""
 
     if not evidence.binary_present:
         return _unavailable(evidence, HarnessHealthCause.MISSING_BINARY)

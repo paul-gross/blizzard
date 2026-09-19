@@ -233,14 +233,10 @@ class ResumeCommand(Check):
 
 
 class UsageParsing(Check):
-    """Whether ``parse_usage`` can be handed the resume check's own captured stdout
-    without raising (blizzard#438). A missing usage envelope in that output is a
-    legitimate answer the adapter's own contract allows (a worker killed before
-    producing one, or — as here — a canary harness that never emits real provider
-    usage at all): this check cannot tell that case apart from a genuinely broken
-    parser without a real provider round trip, so it reports only whether the parse
-    path itself stays exception-free against real captured CLI output, not whether a
-    sample was actually found."""
+    """Whether ``parse_usage`` can be handed the resume check's captured stdout without
+    raising (blizzard#438). A missing usage envelope is a legitimate answer here (a canary
+    harness may never emit real provider usage), so this only asserts the parse path stays
+    exception-free — not that a sample was actually found."""
 
     def run(self) -> SelfTestCheck:
         scratch = self.scratch
@@ -262,15 +258,10 @@ class UsageParsing(Check):
 
 
 class TranscriptReadability(Check):
-    """Whether the adapter's transcript source can be queried without raising, only
-    when it claims one at all (mirroring ``honors_session_hint()``'s own
-    required-only-when-declared shape) — a :class:`~blizzard.runner.harness.transcript.
-    NullTranscriptSource` binding means the harness declares no on-disk transcript
-    concept, so the check passes vacuously rather than demanding a read nothing backs.
-    A throwaway canary session may leave no real transcript file behind even for a
-    harness that does claim a source (no provider turn ever truly ran), so an empty or
-    absent read is accepted the same way — only an actual exception, proof the
-    reader itself is broken, fails this check."""
+    """Whether the adapter's transcript source can be queried without raising, only when it
+    claims one at all — a :class:`~blizzard.runner.harness.transcript.NullTranscriptSource`
+    binding passes vacuously. A canary session may leave no real transcript behind, so an
+    empty or absent read passes too; only an actual exception fails this check."""
 
     def run(self) -> SelfTestCheck:
         scratch = self.scratch
