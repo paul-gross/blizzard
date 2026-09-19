@@ -22,10 +22,9 @@ _log = get_logger("blizzard.runner.loop")
 
 @dataclass(frozen=True)
 class ResumeTarget:
-    """A node-entry spawn's resume target, paired with the owner a rotated named pool's
-    replacement must mint under — one resolution, so a caller needing both (``Spawner.enter_node``)
-    never re-runs the pool-head lookup and its rotation-breach check (harness resolution plus
-    up to two transcript reads) a second time to get the one it didn't ask for first."""
+    """A node-entry spawn's resume target — the session to resume (``None`` for a fresh
+    mint), paired with the owner a rotated named pool's replacement must mint under, and,
+    when an existing session's owner cannot be dispatched to, the exception that says why."""
 
     session: SessionReference | None
     #: The breached pool head's own owner to mint its replacement under; unset for a plain resume or no breach.
@@ -71,11 +70,10 @@ class SessionResolver:
         return self._plain_resume(chunk_id, node)
 
     def _plain_resume(self, chunk_id: str, node: NodeConfig) -> ResumeTarget:
-        """A bare, un-pooled resume's latest session, or ``None`` to mint fresh — its
-        own owner checked here too, exactly as a named pool's head is: an unresolvable one is
-        still an existing recorded session no other runner can resume, so it must not just
-        block the mint forever — it takes the same escalate-in-place ``Spawner.enter_node``
-        already gives a named pool's breached head."""
+        """A bare, un-pooled resume's latest session, or ``None`` to mint fresh — its own
+        owner checked here too, exactly as a named pool's head is: an unresolvable owner
+        returns alongside the session as ``ResumeTarget.owner_unresolvable``, rather than
+        silently falling back to a fresh mint."""
         session = self.leases.latest_session(chunk_id, node.session_source)
         if session is None:
             return ResumeTarget(session=None)
@@ -120,8 +118,8 @@ class SessionResolver:
     def _pool_resume(self, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> ResumeTarget:
         """The named pool's head if it is still resumable, else a fresh mint paired with the
         breached head's own owner (``None`` session to mint a new one) — or, when the breach
-        IS that owner failing to resolve, paired with what ``Spawner.enter_node`` needs to
-        escalate the chunk in place instead of minting anything."""
+        IS that owner failing to resolve, ``owner_unresolvable`` set instead of a mint
+        target."""
         pool = node.session_name or ""
         head = self.leases.pool_head(chunk_id, pool)
         if head is None:
@@ -208,18 +206,15 @@ class SessionResolver:
         return None
 
     def _resolved_harness(self, harness_id: str) -> IHarnessModelResolution:
-        """Resolve ``harness_id``, raising on an unknown/unavailable one.
-
-        Callable only where the caller already guaranteed this exact id resolves —
-        :meth:`session_stamps`'s fresh-mint branch, reached only from ``Spawner._mint``
-        after ``Spawner.spawn`` resolved the very same owner via its own guard."""
+        """Resolve ``harness_id``, raising ``UnknownHarnessError``/``UnavailableHarnessError``
+        on an unknown or unavailable one — callable only where the id is already guaranteed
+        to resolve."""
         return self.harnesses.adapter(harness_id)
 
     def _resolve_transcript_source(self, session: SessionReference) -> IHarnessTranscriptSource | None:
         """Resolve ``session``'s transcript source, logging and returning ``None`` — never
-        raising — when it is unknown or unavailable. A capability apart from
-        :meth:`_rotation_breach`'s own inline adapter resolve: a registered owner can bind one without the
-        other, so this is its own resolution, not assumed from that guard's success."""
+        raising — when it is unknown or unavailable. A harness's transcript source resolves
+        independently of its adapter: binding one is no guarantee of the other."""
         try:
             return self.harnesses.transcript_source(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:

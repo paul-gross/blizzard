@@ -482,11 +482,9 @@ class Judgement:
         _log.info("completion buffered", chunk_id=lease.chunk_id, lease_id=lease.lease_id, choice=choice)
 
     def _resolve_harness(self, session: SessionReference, *, via: str) -> IHarnessLifecycleAndVerdict | None:
-        """Resolve this judgement's recorded owner; escalate the chunk in place and return
-        ``None`` — never raising — when it is unknown or unavailable: the same
-        guard :meth:`DormantSession._resolve_harness` gives a blocked wake, so an unresolvable
-        owner blocks only this lease's judging for the tick, never the rest of ``Advance``'s
-        sweep over the other active leases."""
+        """Resolve this judgement's recorded owner; escalate the chunk in place via
+        :meth:`Attempt.escalate_owner_unresolvable` and return ``None`` — never raising —
+        when it is unknown or unavailable."""
         try:
             return self.ctx.adapter_for(session)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:

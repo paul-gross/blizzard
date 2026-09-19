@@ -289,10 +289,9 @@ class Spawner:
         via: str,
     ) -> None:
         """An existing session's owner — a named pool's head, or a plain resume's own latest
-        session — cannot be dispatched to right now: escalate the chunk in place rather than
-        loop the mint blocked forever, never under a substituted default harness. Mints a
-        zero-budget, never-spawned lease purely to give ``Attempt.escalate_owner_unresolvable``
-        an existing lease to close; see `blizzard-context:/architecture/crash-correctness/runner.md`."""
+        session — cannot be dispatched to right now. Mints a zero-budget, never-spawned lease
+        purely to give ``Attempt.escalate_owner_unresolvable`` an existing lease to close; see
+        `blizzard-context:/architecture/crash-correctness/runner.md`."""
         if self.suppressed(via=via, chunk_id=chunk_id):
             return
         if self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id) is not None:
@@ -340,10 +339,9 @@ class Spawner:
 
     def _resolve_harness(self, harness_id: str, *, via: str) -> IHarnessLifecycleAndVerdict | None:
         """Resolve ``harness_id``, logging and returning ``None`` — never raising — when it
-        is unknown or unavailable: the same guard :meth:`DormantSession._resolve_harness`
-        gives a blocked wake, reused here since a resume and a fresh mint resolve the same
-        registry entry. Every owner reaching here was already confirmed resolvable moments
-        earlier this same call; what still fails here is only a same-tick race or a fresh mint's own default."""
+        is unknown or unavailable. Every owner reaching here was already confirmed resolvable
+        moments earlier this same call; what still fails here is only a same-tick race or a
+        fresh mint's own default."""
         try:
             return self.ctx.harnesses.adapter(harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
