@@ -183,6 +183,6 @@ def downgrade() -> None:
     bind = op.get_bind()
     if _column_info(bind) is None:
         return  # already the pre-reshape shape
-    # Markers are left as they are (D3): a stale one only costs a re-derive next pass.
+    # Markers are left as they are (D3).
     with op.batch_alter_table(_SEGMENTS_TABLE) as batch:
         batch.drop_column("content_digest")

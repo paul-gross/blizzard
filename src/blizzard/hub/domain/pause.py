@@ -34,8 +34,8 @@ class PauseService:
     def pause(self, chunk: Chunk, *, facts: ChunkFacts, by: str) -> int:
         """Append ``chunk.paused``; raises :class:`ChunkNotPausable` for done/stopped/delivering.
 
-        Takes the caller's already-loaded ``facts`` (``bzh:domain-takes-objects``) rather than
-        reloading them. No route or lease is touched here. Returns the freshly-written
+        Takes the caller's already-loaded ``facts`` (``bzh:domain-takes-objects``). No
+        route or lease is touched here. Returns the freshly-written
         ``chunk_pause_facts.id``."""
         self._require_pausable(chunk.chunk_id, facts)
         return self._lifecycle.record_pause(chunk.chunk_id, paused=True, by=by, at=self._clock.now())

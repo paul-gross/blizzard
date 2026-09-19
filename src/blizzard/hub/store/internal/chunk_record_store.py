@@ -83,8 +83,7 @@ class ChunkRecordStore:
         """`get`'s batched sibling — every requested id's row plus its work refs, in a
         bounded number of queries per id batch. An id that doesn't exist or is ephemeral
         is silently dropped, the same as `get` returning None for it. Reads each batch's
-        full ``chunks`` rows once, via :func:`ephemeral_ids_in` rather than
-        :func:`graph_id_of_batch`'s narrower shape, which would pay for a second read."""
+        full ``chunks`` rows once, via :func:`ephemeral_ids_in`."""
         if not chunk_ids:
             return {}
         result: dict[str, Chunk] = {}
@@ -205,9 +204,8 @@ class ChunkRecordStore:
 
     def _listed_with_status(self, status: ChunkStatus, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """:meth:`list_all` narrowed by ``statuses`` — the caller's own already-derived
-        fleet statuses, never this seam's own facts read (the queue/backlog peeks read
-        the whole fleet, so cost must not scale with it, issue #421). Reading the listing
-        first excludes a chunk deleted between the two reads, never mistaking it for
+        fleet statuses, never this seam's own facts read. Reading the listing first
+        excludes a chunk deleted between the two reads, never mistaking it for
         unwritten."""
         chunks = self.list_all()
         return [c for c in chunks if statuses.get(c.chunk_id) is status]

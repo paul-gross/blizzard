@@ -1,6 +1,5 @@
 """The usage/cost aggregate fold's one prose home (`bzh:one-prose-home`) — the six
-labeled columns ``UsageTotal.of_grouped_sums`` applies its lower-bound + PARTIAL
-contract to, shared by the chunk-usage seam (``chunk_usage_store.py``) and the
+labeled columns, shared by the chunk-usage seam (``chunk_usage_store.py``) and the
 analytics seam (``analytics_operational_store.py``) rather than restated in each."""
 
 from __future__ import annotations

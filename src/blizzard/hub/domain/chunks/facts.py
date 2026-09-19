@@ -27,17 +27,15 @@ class IReadChunkFactsRepository(Protocol):
         ...
 
     def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
-        """`load_facts`'s batched sibling — every id's :class:`ChunkFacts`, keyed by
-        chunk id, in a bounded number of queries per id batch rather than one query pair
-        per id. An id that doesn't exist or is ephemeral is silently dropped, the same as
-        :meth:`load_facts` returning ``None`` for it."""
+        """`load_facts`'s batched sibling (`bzh:bulk-reconstitution`) — every id's
+        :class:`ChunkFacts`, keyed by chunk id. An id that doesn't exist or is ephemeral
+        is silently dropped, the same as :meth:`load_facts` returning ``None`` for it."""
         ...
 
     def load_all_statuses(self) -> dict[str, ChunkStatus]:
         """Every non-ephemeral chunk's derived :class:`ChunkStatus`, keyed by chunk id —
         `load_all_facts`'s status-only projection, reading only the fact families
-        :meth:`ChunkFacts.status` reaches rather than every family `load_all_facts`
-        loads."""
+        :meth:`ChunkFacts.status` reaches."""
         ...
 
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:

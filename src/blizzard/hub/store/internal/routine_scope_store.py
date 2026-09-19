@@ -2,8 +2,7 @@
 blizzard#488). All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``).
 ``link`` is idempotent over the composite primary key: a duplicate insert hits
 ``IntegrityError`` on the shared ``(routine_id, scope_slug)`` key and is swallowed as
-already-linked, the ``ScopeStore.ensure`` collision shape without the read-back — there
-is nothing to read back when the row is already exactly what was asked for."""
+already-linked."""
 
 from __future__ import annotations
 

@@ -340,10 +340,9 @@ class TranscriptEventStore:
 
     def segment_derivation_inputs(self, segment_ids: Sequence[str]) -> dict[str, SegmentDerivationInput]:
         """See :meth:`~blizzard.hub.domain.analytics.events.IReadTranscriptEvents.segment_derivation_inputs`.
-        Unlike :meth:`segment_derivation_input`, a decode failure here does not raise —
-        it drops that one id from the result. This adapter stays a pure read (no logger:
-        ``bzh:dependency-inversion``), so a caller that needs to observe a dropped id
-        diffs the requested ``segment_ids`` against this result's keys itself."""
+        This adapter stays a pure read (no logger: ``bzh:dependency-inversion``), so a
+        caller that needs to observe a dropped id diffs the requested ``segment_ids``
+        against this result's keys itself."""
         result: dict[str, SegmentDerivationInput] = {}
         if not segment_ids:
             return result

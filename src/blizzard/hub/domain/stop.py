@@ -34,8 +34,8 @@ class StopService:
     def stop(self, chunk: Chunk, *, facts: ChunkFacts, by: str) -> int:
         """Append ``chunk.stopped`` and release the chunk's live route (and any held hub-exec
         slot), atomically. Takes the caller's already-loaded ``facts``
-        (``bzh:domain-takes-objects``) rather than reloading them. Raises
-        :class:`ChunkNotStoppable` for a chunk already done/stopped. Returns the id."""
+        (``bzh:domain-takes-objects``). Raises :class:`ChunkNotStoppable` for a chunk
+        already done/stopped. Returns the id."""
         self._require_stoppable(chunk.chunk_id, facts)
         return self._lifecycle.record_stop(chunk.chunk_id, by=by, at=self._clock.now())
 

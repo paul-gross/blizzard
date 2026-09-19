@@ -65,7 +65,7 @@ class IngestBroadcast:
         elif fact.kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
             self.services.events.publish_runner_changed(self.batch.runner_id, kind="external-usage")
         elif fact.kind == EVENT_RECORDED:
-            pass  # already published by EventLogService.record, ahead of the ack this reads
+            pass  # already published by EventLogService.record
         else:
             chunk_id = fact.payload.get("chunk_id")
             if isinstance(chunk_id, str):

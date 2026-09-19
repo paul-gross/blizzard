@@ -1,11 +1,10 @@
 """Finding routes (blizzard#390; write verbs blizzard#394).
 
 ``GET /api/findings`` is the pass's own bucket read
-(blizzard-product:/delivered/garden/machinery.md §Managing findings and proposals), widened
-to every routine and every scope (blizzard#486): `routine` and `scope` are each
-independently optional, an absent one meaning "every one, not filtered on that
-dimension". The `POST /api/findings/{verb}` routes are the human-driven exit verbs and
-`reopen`, delegating to `FindingExitService`."""
+(blizzard-product:/delivered/garden/machinery.md §Managing findings and proposals):
+`routine` and `scope` are each independently optional, an absent one meaning "every one,
+not filtered on that dimension". The `POST /api/findings/{verb}` routes are the
+human-driven exit verbs and `reopen`, delegating to `FindingExitService`."""
 
 from __future__ import annotations
 

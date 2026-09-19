@@ -57,8 +57,8 @@ class ChunkDecisionsStore:
 
     def decision_for_chunk(self, chunk_id: str) -> DecisionRow | None:
         """The newest not-yet-transitioned decision is live — filtered in SQL via
-        :meth:`_not_closed_clause` rather than loaded-then-filtered in Python, so only
-        the one surviving row (if any) ever gets hydrated."""
+        :meth:`_not_closed_clause`, so only the one surviving row (if any) ever gets
+        hydrated."""
         with self._store.read("decision_for_chunk") as conn:
             row = conn.execute(
                 select(s.decisions)
@@ -70,9 +70,6 @@ class ChunkDecisionsStore:
 
     @staticmethod
     def _not_closed_clause():  # type: ignore[no-untyped-def]
-        """True for a decision row with no matching id in any
-        :data:`_DECISION_CLOSURE_TABLES` — a ``NOT EXISTS`` per table, correlated to the
-        enclosing ``decisions`` row, ANDed together."""
         return and_(
             *(
                 ~select(table.c.decision_id).where(table.c.decision_id == s.decisions.c.decision_id).exists()
@@ -83,11 +80,9 @@ class ChunkDecisionsStore:
     def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
         """See :meth:`~blizzard.hub.domain.chunks.decisions.IReadChunkDecisionsRepository.live_decisions_for`
         (blizzard#521) — set-based throughout, unlike :meth:`_decision_row`'s per-decision
-        docket/choices reads, sharing its closure rule via :meth:`_decision_closure_ids`
-        rather than keeping its own copy. Newest-first per chunk, same "newest
-        not-yet-transitioned" semantics as :meth:`decision_for_chunk`. Batches through
-        :func:`id_batches` on both ``chunk_ids`` and every id set derived from it, so no
-        single ``IN (...)`` grows with the caller's own count."""
+        docket/choices reads, sharing its closure rule via :meth:`_decision_closure_ids`.
+        Newest-first per chunk, same "newest not-yet-transitioned" semantics as
+        :meth:`decision_for_chunk`. Batched (`bzh:bulk-reconstitution`)."""
         ids = list(chunk_ids)
         if not ids:
             return {}
@@ -134,8 +129,7 @@ class ChunkDecisionsStore:
     def _decision_closure_ids(conn: Connection, decision_ids: Sequence[str]) -> set[str]:
         """The ids among ``decision_ids`` closed by a fact in :data:`_DECISION_CLOSURE_TABLES`
         — :meth:`_not_closed_clause`'s own predicate, inverted, so the two closure reads
-        share one rule rather than each encoding it separately. Batches through
-        :func:`id_batches`, one query per batch."""
+        share one rule. Batched (`bzh:bulk-reconstitution`)."""
         if not decision_ids:
             return set()
         closed: set[str] = set()
@@ -151,8 +145,7 @@ class ChunkDecisionsStore:
     def list_open_decisions(self) -> list[DecisionRow]:
         """Unresolved (``resolved_choice is None``) filtered in SQL via a ``NOT EXISTS``
         against ``decision_resolutions``, then hydrated in one batched pass through
-        :meth:`_hydrate` — instead of loading every decision and hydrating each in
-        Python only to drop the resolved ones."""
+        :meth:`_hydrate`."""
         not_resolved = ~(
             select(s.decision_resolutions.c.decision_id)
             .where(s.decision_resolutions.c.decision_id == s.decisions.c.decision_id)

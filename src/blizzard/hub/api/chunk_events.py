@@ -26,8 +26,7 @@ class ChunkChanged:
     @classmethod
     def before(cls, services: HubServices, chunk_id: str) -> ChunkChanged:
         """The chunk's status right now, and the facts it derives from — ``status`` is
-        ``None`` and ``facts`` unset when the chunk does not yet exist. A route's own
-        domain-gate call takes ``facts`` from here instead of reloading it."""
+        ``None`` and ``facts`` unset when the chunk does not yet exist."""
         facts = services.chunks.facts.load_facts(chunk_id)
         return cls(services, chunk_id, None if facts is None else facts.status().value, facts)
 
@@ -45,10 +44,9 @@ class ChunkChanged:
         key: str | None = None,
     ) -> ChunkFacts:
         """Publish the fully enriched frame, loading the post-write facts, chunk, and pinned
-        graph, and return those facts so the caller renders its response from the same read
-        instead of reloading. ``key`` names the durable fact just written, or ``None``. ``by``
-        (delete-route-only) still degrades a gone chunk to a bare ``{chunk_id, status}`` frame
-        rather than raising."""
+        graph, and return those facts. ``key`` names the durable fact just written, or
+        ``None``. ``by`` (delete-route-only) still degrades a gone chunk to a bare
+        ``{chunk_id, status}`` frame rather than raising."""
         facts = ChunkFacts.or_default(self.services.chunks.facts.load_facts(self.chunk_id))
         resolved_status = status if status is not None else facts.status().value
         chunk = self.services.chunks.record.get(self.chunk_id)

@@ -23,8 +23,8 @@ class CompleteService:
     def complete(self, chunk: Chunk, *, facts: ChunkFacts, by: str) -> int | None:
         """Append ``chunk.completed`` and release the chunk's live route (and any held
         hub-exec slot), atomically. Takes the caller's already-loaded ``facts``
-        (``bzh:domain-takes-objects``) rather than reloading them. A no-op on an
-        already-``done`` chunk — returns ``None``; otherwise the fresh ``chunk_completed.id``."""
+        (``bzh:domain-takes-objects``). A no-op on an already-``done`` chunk — returns
+        ``None``; otherwise the fresh ``chunk_completed.id``."""
         if facts.status() is ChunkStatus.DONE:
             return None
         return self._lifecycle.record_completion(chunk.chunk_id, by=by, at=self._clock.now())

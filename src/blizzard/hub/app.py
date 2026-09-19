@@ -85,12 +85,10 @@ DEFAULT_FORGE_BASE_BRANCH = "main"
 #: constant; its own change probe (blizzard#524 D5) skips the pass when nothing changed.
 EVENT_DERIVATION_INTERVAL_SECONDS = 60
 
-#: The delivery-materialization sweep's own interval (blizzard#366 D9) — always started,
-#: not yet gated by a change probe of its own, so every pass today runs in full.
+#: The delivery-materialization sweep's own interval (blizzard#366 D9).
 WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS = 60
 
-#: The close-intent drain sweep's own interval — always started like its two siblings
-#: above; not yet gated by a change probe of its own, so every pass today runs in full.
+#: The close-intent drain sweep's own interval, like its two siblings above.
 CLOSE_DRAIN_INTERVAL_SECONDS = 60
 
 
@@ -358,8 +356,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         OrphanedProviders.of(config, services).check()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
     app = create_app(config, readiness=readiness, services=services)
-    # `host` disposes this on `app.state` (D5) — carried here rather than widening this
-    # function's return type, which existing direct test call sites depend on.
+    # `host` disposes this on `app.state` (D5) — carried here.
     app.state.engine = engine
     return app
 

@@ -1,6 +1,5 @@
 """The runner tick's slim batch status read (blizzard#521) — one bulk-by-id-set call to
-each of the facts/route/decisions seams, in place of the nine per-chunk ``ChunkDetail``
-round-trips the tick loop used to make."""
+each of the facts/route/decisions seams."""
 
 from __future__ import annotations
 

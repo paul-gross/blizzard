@@ -218,9 +218,9 @@ class RequeueService:
 
     def requeue(self, chunk: Chunk, *, facts: ChunkFacts) -> int:
         """Supersede the open escalation and release the route so the chunk re-derives ready.
-        Takes the loaded chunk and its already-loaded ``facts`` (``bzh:domain-takes-objects``)
-        rather than reloading the latter. Raises :class:`NotEscalated` if the chunk is not
-        ``needs_human``. Returns the freshly-written ``requeues.id``."""
+        Takes the loaded chunk and its already-loaded ``facts`` (``bzh:domain-takes-objects``).
+        Raises :class:`NotEscalated` if the chunk is not ``needs_human``. Returns the
+        freshly-written ``requeues.id``."""
         if facts.open_escalation() is None:
             raise NotEscalated(f"chunk {chunk.chunk_id} is not escalated (needs_human)")
         now = self._clock.now()

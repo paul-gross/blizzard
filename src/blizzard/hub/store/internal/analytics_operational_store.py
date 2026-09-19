@@ -152,8 +152,7 @@ def _spend_filtered_stmt(base: Select[Any], criteria: OperationalCriteria) -> Se
 
 def _spend_group_stmt(criteria: OperationalCriteria, *, group_col: Any) -> Select[Any]:
     """Usage/cost summed in SQL, grouped by ``group_col`` (D6) — the aggregate columns
-    ``usage_aggregate_columns`` owns, the sums :meth:`~blizzard.hub.domain.work.UsageTotal.of_grouped_sums`
-    applies the lower-bound + PARTIAL contract to."""
+    ``usage_aggregate_columns`` owns."""
     stmt = select(group_col.label("key"), *usage_aggregate_columns())
     stmt = _spend_filtered_stmt(stmt, criteria)
     return stmt.group_by(group_col).order_by(group_col.asc())
@@ -314,9 +313,8 @@ class AnalyticsOperationalStore:
         return summarize_durations(rows, key="graph")
 
     def _step_durations(self, criteria: OperationalCriteria) -> list[StepDuration]:
-        """No separate group-existence probe — an empty admitted-group set makes both
-        statements below's correlated subquery empty too, so ``fold_step_durations``
-        already returns ``[]`` without a dedicated early-out."""
+        """An empty admitted-group set makes both statements below's correlated subquery
+        empty too, so ``fold_step_durations`` already returns ``[]``."""
         with self._store.read("step_durations") as conn:
             transition_rows = conn.execute(_duration_rows_stmt(criteria)).all()
             lease_rows = conn.execute(_duration_lease_min_stmt(criteria)).all()

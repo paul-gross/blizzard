@@ -91,9 +91,8 @@ class ChunkArtifactsStore:
         """Append one hub-node progress artifact **outside** a transition (#65),
         idempotent per ``(chunk, node, name, epoch)`` — the ``produces:`` re-run skip's
         durable side, and the mid-run marker callback's write. Three guards, all
-        returning False, mirroring ``ChunkHubExecStore.record_hub_step_transition``: the
-        row's existence absorbs a replay, a terminal chunk fact (``chunk_stopped``/
-        ``chunk_completed``) absorbs a still-running ``run:`` list whose chunk was stopped
+        returning False: the row's existence absorbs a replay, a terminal chunk fact
+        (``chunk_stopped``/``chunk_completed``) absorbs a still-running ``run:`` list whose chunk was stopped
         out from under it — regardless of epoch, since stopping mints none — and the
         chunk's CURRENT epoch absorbs a restart that re-aimed it while the ``run:`` list —
         and the mid-run marker callback it can still invoke — kept going

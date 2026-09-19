@@ -53,14 +53,10 @@ _ROUTE_NOT_INJECTED: Final = _RouteNotInjected.TOKEN
 
 
 def pause_view(pause: PauseFact | None) -> PauseView | None:
-    """A chunk's open pause fact, wired (shared with ``ChunkStatusView``'s own builder —
-    the two must always agree, so this is the one place the mapping is written)."""
     return PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None
 
 
 def usage_total_view(usage: UsageTotal) -> ChunkUsageTotalView:
-    """A chunk's summed usage, wired (shared with ``ChunkStatusView``'s own builder — see
-    :func:`pause_view`)."""
     return ChunkUsageTotalView(
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
@@ -85,9 +81,9 @@ _LIVE_HOLDERS_NOT_INJECTED: Final = _LiveHoldersNotInjected.TOKEN
 def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedView | None:
     """A derived marking's wire wrapping (issue #457) — the one home every caller of
     :func:`~blizzard.hub.domain.dependencies.derive_blocked_prerequisites` reaches through,
-    listing routes and ``ChunkView`` alike, rather than each re-declaring the same wrap.
-    Takes the dependent's whole unmet set, in declared order:
-    the marking names its first and counts them all. An absent or empty set is no marking."""
+    listing routes and ``ChunkView`` alike. Takes the dependent's whole unmet set, in
+    declared order: the marking names its first and counts them all. An absent or empty
+    set is no marking."""
     if not unmet_prerequisite_chunk_ids:
         return None
     return BlockedView(
@@ -129,8 +125,8 @@ class ChunkView:
         neighborhood: ChunkNeighborhoodView | None = None,
     ) -> ChunkView:
         """``facts`` lets a caller that already loaded the chunk's own facts for another
-        reason (the detail route's blocked-marking gate, issue #457) hand it in rather
-        than this reloading it a second time; omitted, this loads it as before."""
+        reason hand it in rather than this reloading it a second time; omitted, this
+        loads it as before."""
         return cls(
             services=services,
             chunk=chunk,
@@ -175,9 +171,6 @@ class ChunkView:
         return self.services.chunks.route.route_of(self.chunk.chunk_id)
 
     def _resolved_live_holders(self) -> dict[WorkRef, str]:
-        """Every pointer's live holder: the injected map if one was given, otherwise
-        resolved lazily with one bulk ``IReadChunkWorkRefsRepository.live_holders`` call
-        over this chunk's own pointers — the ``_resolved_route`` pattern."""
         if self.live_holders is not _LIVE_HOLDERS_NOT_INJECTED:
             return self.live_holders
         return self.services.chunks.work_refs.live_holders(self.chunk.work_refs)
@@ -309,11 +302,9 @@ class ChunkView:
         return to_decision_view(decision) if decision is not None else None
 
     def _pending(self) -> PendingView | None:
-        """The only place a whole-fleet or whole-history read still reifies a full
-        :class:`Graph` (issue #421) — the poll policy it needs lives only on a
+        """Reifies a full :class:`Graph` because the poll policy it needs lives only on a
         :class:`Node`, not the :class:`GraphSummary`/name projection :attr:`names`
-        otherwise resolves through, and it's reached only when a hub-node poll is
-        actually pending."""
+        otherwise resolves through."""
         pending = self.facts.hub_node_pending()
         if pending is None:
             return None

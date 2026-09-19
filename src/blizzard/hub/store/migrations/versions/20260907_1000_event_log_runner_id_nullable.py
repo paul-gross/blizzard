@@ -20,9 +20,7 @@ depends_on: str | Sequence[str] | None = None
 _TABLE = "event_log"
 
 # The pre-downgrade sentinel — restated, not imported, from
-# ``blizzard.hub.domain.work_closure._HUB_RUNNER_ID`` (``bzh:frozen-revisions``), the
-# sentinel this revision's ``event_log`` backfill actually restates; the module has
-# since dropped it.
+# ``blizzard.hub.domain.work_closure._HUB_RUNNER_ID`` (``bzh:frozen-revisions``).
 _HUB_RUNNER_ID = "hub"
 
 # The three hub-authored kinds — restated, not imported, from
@@ -49,18 +47,15 @@ def _is_nullable(bind: sa.Connection) -> bool:
 def upgrade() -> None:
     bind = op.get_bind()
     if not _is_nullable(bind):
-        # Default `recreate="auto"` (`bzh:sql-portable`): sqlite has no in-place ALTER
-        # and batch-copies the table; postgres alters the column directly, which
-        # `recreate="always"` would forgo, dropping `id`'s existing SERIAL sequence
-        # in the copy since the postgres DDL compiler's SERIAL branch never inspects
-        # the reflected `server_default` that carries it.
+        # Default `recreate="auto"` (`bzh:sql-portable`): `recreate="always"` would force
+        # a copy on postgres too, dropping `id`'s existing SERIAL sequence in the process.
         with op.batch_alter_table(_TABLE) as batch:
             batch.alter_column("runner_id", nullable=True)
 
-    # Backfill: every existing hub-authored row stops naming the synthetic sentinel,
-    # so live history stops producing the phantom runner filter chip too. Idempotent —
-    # a rerun with no remaining sentinel rows updates nothing. Matched by kind, not by
-    # the ``'hub'`` value alone, so an operator-named runner called "hub" is untouched.
+    # Backfill: every existing hub-authored row stops naming the synthetic sentinel.
+    # Idempotent — a rerun with no remaining sentinel rows updates nothing. Matched by
+    # kind, not by the ``'hub'`` value alone, so an operator-named runner called "hub"
+    # is untouched.
     bind.execute(_EVENT_LOG.update().where(_EVENT_LOG.c.kind.in_(_HUB_AUTHORED_KINDS)).values(runner_id=None))
 
 
@@ -69,8 +64,7 @@ def downgrade() -> None:
     if not _is_nullable(bind):
         return  # already the pre-reshape shape
 
-    # Every stored null-runner row is hub-authored (projected escalations are
-    # synthesized, never written), so this restore is exactly reversible.
+    # Every stored null-runner row is hub-authored, so this restore is exactly reversible.
     bind.execute(_EVENT_LOG.update().where(_EVENT_LOG.c.runner_id.is_(None)).values(runner_id=_HUB_RUNNER_ID))
 
     with op.batch_alter_table(_TABLE) as batch:
