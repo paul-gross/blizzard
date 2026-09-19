@@ -25,10 +25,9 @@ class IReadChunkRouteRepository(Protocol):
 
     def routes_for(self, chunk_ids: Iterable[str]) -> dict[str, Route]:
         """The given chunks' live routes, keyed by chunk id — the by-id-set bulk read
-        the runner tick's slim status batch reaches for (blizzard#521), between
-        :meth:`route_of`'s one-chunk read and :meth:`load_all_routes`'s whole-fleet
-        one. A chunk with no live route is absent from the dict, as :meth:`route_of`
-        returns ``None``."""
+        between :meth:`route_of`'s one-chunk read and :meth:`load_all_routes`'s
+        whole-fleet one (blizzard#521). A chunk with no live route is absent from the
+        dict, as :meth:`route_of` returns ``None``."""
         ...
 
     def runner_high_water(self, runner_id: str) -> int:

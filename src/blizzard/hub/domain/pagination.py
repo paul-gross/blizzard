@@ -10,7 +10,7 @@ import json
 #: The page size a caller gets by omitting `limit`.
 DEFAULT_LIMIT = 200
 
-#: The largest `limit` a caller may request; over-ceiling is refused (422), never silently clamped.
+#: The largest `limit` a caller may request.
 MAX_LIMIT = 1000
 
 

@@ -75,9 +75,8 @@ class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
 
 
 class IEventLogPublisher(Protocol):
-    """The live-broadcast half of recording an event — narrowed to the one operation
-    :class:`~blizzard.hub.domain.event_log.EventLogService` needs.
-    :class:`~blizzard.hub.events.broker.EventBroker` satisfies this structurally."""
+    """The live-broadcast half of recording an event — one operation: broadcasting that
+    an event was logged, live, to whoever is subscribed."""
 
     def publish_event_logged(
         self,

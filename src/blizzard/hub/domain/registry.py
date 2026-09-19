@@ -147,8 +147,8 @@ class LegacySubscriptionUsageView:
 @dataclass(frozen=True)
 class PerSubscriptionUsageView:
     """One subscription's usage, past its own staleness gate, carrying its identity
-    (blizzard#436) — the wire's additive per-subscription collection, beside the
-    single legacy :class:`LegacySubscriptionUsageView`."""
+    (blizzard#436) — the additive per-subscription counterpart to the single legacy
+    :class:`LegacySubscriptionUsageView`."""
 
     slug: str
     name: str
@@ -301,9 +301,9 @@ class FleetService:
 
     def set_paused(self, registration: RunnerRegistration, *, paused: bool, by: str) -> int:
         """Flip the fleet's brake for a registered runner, returning the freshly-written
-        ``runner_pause_facts.id`` (issue #213's activity-feed key). Takes the loaded
-        registration (``bzh:domain-takes-objects``) — the edge resolves ``runner_id`` to
-        it (404 if unknown) before calling this."""
+        ``runner_pause_facts.id`` (issue #213's activity-feed key). Takes the
+        already-resolved registration (``bzh:domain-takes-objects``), not a bare
+        ``runner_id``."""
         fact_id = self._registry.record_pause(registration.runner_id, paused=paused, at=self._clock.now(), by=by)
         _log.info("runner pause set", runner_id=registration.runner_id, paused=paused, by=by)
         return fact_id
@@ -333,9 +333,8 @@ class FleetService:
         _log.info("runner external usage sample landed", runner_id=runner_id, slug=slug, sampled_at=sampled_at)
 
     def get_liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
-        """One runner's derived liveness over its loaded registration
-        (``bzh:domain-takes-objects``) — the edge resolves ``runner_id`` to it (404 if
-        unknown) before calling this."""
+        """One runner's derived liveness over an already-resolved registration
+        (``bzh:domain-takes-objects``), not a bare ``runner_id``."""
         return self._liveness(registration)
 
     def list_with_liveness(self) -> list[RunnerLiveness]:

@@ -260,8 +260,7 @@ class HubServices:
     #: Pass or accept a garden proposal, minting a linked hub work item by default
     #: (blizzard#395).
     garden_proposal_closure: GardenProposalClosureService
-    #: A routine's open garden proposals — closed ones filtered out, the runner-facing
-    #: read.
+    #: A routine's open garden proposals — closed ones filtered out.
     open_garden_proposals: OpenGardenProposalReader
     #: A run's identity — routine, scope, and mode; read-only (``bzh:controller-read-only``).
     run_context: IReadRunContextRepository

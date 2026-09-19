@@ -140,8 +140,8 @@ class PendingCloseIntent:
 
     ``intent_id`` is the backing ``close_intents.id`` (blizzard#524 D7) — the key a
     skipped attempt's own ``close_intent_attempts`` row is recorded against. Excluded from
-    equality so every existing ``(chunk_id, ref)``-keyed comparison keeps working unchanged;
-    it defaults to ``0`` for a test double that only ever cared about the pair."""
+    equality, so two instances compare equal by ``(chunk_id, ref)`` alone; defaults to
+    ``0`` when unset."""
 
     chunk_id: str
     ref: WorkRef
@@ -525,8 +525,7 @@ class EscalationOpen:
 #: Default cap on ``list_events`` — an unbounded read of an append-only table is an unbounded response.
 DEFAULT_EVENT_LIST_LIMIT = 200
 
-#: The closed severity vocabulary's sort order — critical first. The single source both
-#: :class:`EventFeed`'s in-memory sort and the store adapter's SQL ordering derive from
+#: The closed severity vocabulary's sort order — critical first
 #: (``blizzard-context:/domain/operations.md``).
 SEVERITY_RANK: Mapping[EventLogSeverity, int] = {"critical": 0, "warning": 1, "info": 2}
 

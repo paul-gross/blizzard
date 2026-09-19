@@ -135,8 +135,8 @@ class GardenProposalAuthoring:
 
 class OpenGardenProposalReader:
     """A routine's open garden proposals — `list_for_routine`'s own composed reader,
-    filtering out any proposal a closure already exists for. The runner-facing read: a
-    worker sees only proposals still awaiting a person's pass or accept."""
+    filtering out any proposal a closure already exists for. Open means still awaiting a
+    person's pass or accept."""
 
     def __init__(
         self, *, proposals: IReadGardenProposalRepository, closures: IReadGardenProposalClosureRepository

@@ -76,10 +76,7 @@ class HubWorkSource:
 
     def web_url(self, pointer: WorkRef, *, live_holder: str | None) -> str | None:
         """The board's own chunk deep link — relative, since the hub declares no public
-        origin. Non-``None`` exactly while ``live_holder`` is set — from the moment
-        create mints the item's resting chunk (blizzard#359) until that chunk reaches a
-        terminal status (``stopped`` or ``done``), the caller's ``live_holder`` is that
-        chunk id; ``None`` before and after."""
+        origin. ``None`` when ``live_holder`` is ``None``."""
         return f"/board/chunk/{live_holder}" if live_holder is not None else None
 
     def branch_url(self, repo: str, branch_name: str) -> str | None:

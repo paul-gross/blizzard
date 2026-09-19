@@ -729,9 +729,8 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
 
     def any_minted(self, name: str) -> bool:
         """Whether any graph of ``name`` has ever been minted, retired or not (blizzard#524
-        D6) — the cheap existence probe :meth:`~blizzard.hub.domain.graph_authoring.
-        GraphMintService.ensure_default`'s retirement disambiguation needs, in place of a full
-        :meth:`list_all` reification it only ever used to check membership by name."""
+        D6) — a cheap existence probe, in place of a full :meth:`list_all` reification to
+        check membership by name."""
         ...
 
     def newest_definition_yaml(self, name: str) -> str | None:
@@ -768,9 +767,9 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
 
     def load_graph_summaries(self, graph_ids: Sequence[str]) -> dict[str, GraphSummary]:
         """``{graph_id: GraphSummary}`` for every requested id that exists — a narrow
-        projection that never reifies a whole :class:`Graph`, for :class:`GraphNames`'s
-        own batched priming over several ids at once. The entry node rides along on
-        :class:`GraphSummary` itself, so a caller needing it never reifies for that alone."""
+        projection that never reifies a whole :class:`Graph`, for a caller priming several
+        ids' summaries at once. The entry node rides along on :class:`GraphSummary`
+        itself, so a caller needing it never reifies for that alone."""
         ...
 
     def load_node_names(self, graph_ids: Sequence[str]) -> dict[str, dict[str, str]]:

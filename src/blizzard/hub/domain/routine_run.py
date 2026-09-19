@@ -2,11 +2,11 @@
 (blizzard#392): ``blizzard hub routine run <name>``.
 
 Takes an already-resolved routine and an already-resolved, already-related scope
-(``bzh:domain-takes-objects`` — blizzard#399 D1): the API edge resolves the effective
-slug and refuses one no scope row holds before this service is ever called. Settles the
-mode against the pair's recorded baseline, composes the charge, and drives the one-act
-write atomically. A scope outside the routine's own related set, a retired scope, or an
-unresolvable graph refuses rather than defaults (D5)."""
+(``bzh:domain-takes-objects`` — blizzard#399 D1): both must already exist and the scope
+must already relate to the routine. Settles the mode against the pair's recorded
+baseline, composes the charge, and drives the one-act write atomically. A scope outside
+the routine's own related set, a retired scope, or an unresolvable graph refuses rather
+than defaults (D5)."""
 
 from __future__ import annotations
 

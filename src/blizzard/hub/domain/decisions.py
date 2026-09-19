@@ -178,10 +178,10 @@ class DecisionService:
         self, decision: DecisionRow, *, choice: str, resolved_by: str, struck: Sequence[str] = ()
     ) -> ResolutionResult:
         """Record a choice, first-write-wins, striking ``struck``'s proposal ids in the same
-        write. Takes the loaded decision (``bzh:domain-takes-objects``) — the edge resolves
-        ``decision_id`` to it (404 if unknown) before calling this. A struck id outside the
-        chunk's pending, unstruck proposals raises, same as an invalid ``choice`` — except once
-        already resolved, when a retry falls straight through to the CAS instead."""
+        write. Takes the already-resolved decision (``bzh:domain-takes-objects``), not a bare
+        ``decision_id``. A struck id outside the chunk's pending, unstruck proposals raises,
+        same as an invalid ``choice`` — except once already resolved, when a retry falls
+        straight through to the CAS instead."""
         if choice not in {c.name for c in decision.choices}:
             valid = ", ".join(c.name for c in decision.choices)
             raise ValueError(f"`{choice}` is not a choice of this decision (one of: {valid})")

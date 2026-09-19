@@ -15,7 +15,8 @@ from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 
 @dataclass(frozen=True)
 class LiveDecisionStatus:
-    """The decision fields the runner tick reads (blizzard#521) — no choices, no docket."""
+    """A live gate decision's identity and resolution (blizzard#521) — no choices, no
+    docket."""
 
     decision_id: str
     node_id: str
