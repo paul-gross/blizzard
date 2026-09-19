@@ -171,7 +171,9 @@ def _domain_capabilities(capabilities: Sequence[WireRunnerCapability]) -> tuple[
     already applies to a runner's registration snapshot — the matched peek's own request
     (D7) carries the same shape, so it is converted the same way."""
     return tuple(
-        RunnerCapability(harness_id=c.harness_id, version=c.version, tiers=tuple(c.tiers), default=c.default)
+        RunnerCapability(
+            harness_id=c.harness_id, version=c.version, tiers=tuple(c.tiers), default=c.default, available=c.available
+        )
         for c in capabilities
     )
 
