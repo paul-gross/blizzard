@@ -262,6 +262,52 @@ def test_opencode_transcript_is_read_back_through_the_runner_http_api(tmp_path: 
     assert "the mock harness committed the change; checks are green" in asst_turn["text"]
 
 
+def test_opencode_transcript_segment_carries_opencode_provenance_through_the_runners_local_index(
+    tmp_path: Path,
+) -> None:
+    """blizzard#437 D4: a real ``mock-opencode`` session's segment stamps the pre-existing
+    `harness_id` provenance column `"opencode"`, not `"claude_code"` or unset, through the
+    runner's own local segment index."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    transcripts_root = tmp_path / "transcripts"
+    fenced = _tick_env()
+    fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
+
+    hub_port = _free_port()
+    prior_transcripts_root = os.environ.get("BZ_TRANSCRIPTS_ROOT")
+    os.environ["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
+    try:
+        with mock_hub(bin_dir, hub_port) as hub:
+            seeded = hub.post("/_seed/chunk", json=_opencode_transcript_chunk_spec(_WORK_REF_URL))
+            assert seeded.status_code == 201, seeded.text
+            chunk_id = seeded.json()["chunk_id"]
+
+            config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+            config = dataclasses.replace(
+                config, host="127.0.0.1", port=_free_port(), transcripts_root=str(transcripts_root)
+            )
+
+            with _runner_api(config):
+                landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
+                assert landed, f"chunk did not land under OpenCode (status {_status(hub, chunk_id)!r})"
+
+                runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+                try:
+                    index = runner_client.get(f"/api/chunks/{chunk_id}/transcripts")
+                    assert index.status_code == 200, index.text
+                    segments = index.json()["segments"]
+                    assert segments, f"expected at least one shipped segment, got {index.json()!r}"
+                    assert all(entry["harness_id"] == "opencode" for entry in segments), segments
+                finally:
+                    runner_client.close()
+    finally:
+        if prior_transcripts_root is None:
+            os.environ.pop("BZ_TRANSCRIPTS_ROOT", None)
+        else:
+            os.environ["BZ_TRANSCRIPTS_ROOT"] = prior_transcripts_root
+
+
 #: Fires once — a marker file in the acquired worktree, so it survives the crashed lease's
 #: own death and the requeued lease's brand new OpenCode session sees it and skips the crash.
 _OPENCODE_CRASH_MARKER = "crash-recovered-once.marker"

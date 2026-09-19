@@ -116,6 +116,22 @@ def test_index_projection_keeps_harness_identity_distinct_from_its_versions(tmp_
     assert index.normalizer_version == "normalizer/3"
 
 
+def test_index_projection_accepts_an_opencode_harness_id_and_a_missing_one_alike(tmp_path: Path) -> None:
+    """D4: an OpenCode record's `harness_id` survives the round trip untouched, and an
+    older runner's record shipping none lands as unknown origin, not rejected."""
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(hub_store_connections(engine))
+    opencode_record = _record(segment_id="sg_opencode", harness_id="opencode", harness_version="1.18.25")
+    skewed_record = _record(segment_id="sg_skewed", harness_id=None)
+
+    store.insert_accepted(opencode_record, byte_count=10, codec="zlib", at=_NOW)
+    store.insert_accepted(skewed_record, byte_count=10, codec="zlib", at=_NOW)
+
+    by_segment = {row.segment_id: row for row in store.segments_for_chunk(opencode_record.chunk_id)}
+    assert by_segment["sg_opencode"].harness_id == "opencode"
+    assert by_segment["sg_skewed"].harness_id is None
+
+
 def test_every_statement_the_store_executes_compiles_under_both_dialects() -> None:
     for name, stmt in _executed_statements().items():
         for dialect in (postgresql.dialect(), sqlite.dialect()):

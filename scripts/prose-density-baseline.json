@@ -5484,9 +5484,9 @@
   },
   "service/test_opencode_service.py": {
    "comments": 33,
-   "docstrings": 24,
+   "docstrings": 27,
    "over_cap": 10,
-   "total": 421
+   "total": 467
   },
   "service/test_parity_guard.py": {
    "comments": 8,
@@ -8172,9 +8172,9 @@
   },
   "test_transcript_segment_store.py": {
    "comments": 9,
-   "docstrings": 22,
+   "docstrings": 24,
    "over_cap": 0,
-   "total": 380
+   "total": 396
   },
   "test_transcript_segments_api.py": {
    "comments": 20,
