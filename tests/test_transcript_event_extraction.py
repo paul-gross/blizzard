@@ -233,3 +233,111 @@ def test_an_unknown_dialect_derives_zero_events() -> None:
     events = extract_events(turns, normalizer_version="some-other-harness/1")
 
     assert events == []
+
+
+def test_a_future_opencode_version_derives_zero_events() -> None:
+    turns = [_tool_turn(0, "task", {"agent": "explorer"})]
+
+    events = extract_events(turns, normalizer_version="opencode-export/2")
+
+    assert events == []
+
+
+def test_a_malformed_normalizer_version_derives_zero_events() -> None:
+    turns = [_tool_turn(0, "task", {"agent": "explorer"})]
+
+    events = extract_events(turns, normalizer_version="not-a-real-dialect")
+
+    assert events == []
+
+
+# --- OpenCode dialect (blizzard#439) -------------------------------------------
+
+_OPENCODE = "opencode-export/1"
+
+
+def test_opencode_task_call_mints_an_agent_spawn_event() -> None:
+    """OpenCode's own child-agent-spawn tool is ``task``, its argument key
+    ``agent`` (D5, fixture-proven against ``contracts/opencode/1.18.25/child_session.json``)."""
+    turns = [_tool_turn(0, "task", {"agent": "explorer", "prompt": "find X"})]
+
+    events = extract_events(turns, normalizer_version=_OPENCODE)
+
+    assert len(events) == 1
+    assert events[0].kind == KIND_AGENT_SPAWN
+    assert events[0].payload == {"agent_type": "explorer"}
+    assert events[0].subject == "explorer"
+    assert events[0].tool == "task"
+
+
+def test_opencode_task_call_with_no_agent_key_mints_no_event() -> None:
+    turns = [_tool_turn(0, "task", {"prompt": "find X"})]
+
+    events = extract_events(turns, normalizer_version=_OPENCODE)
+
+    assert events == []
+
+
+def test_opencode_has_no_file_read_or_skill_recognition_yet() -> None:
+    """The read and skill rows are a deliberate, visible hole (D5) — no fixture-proven
+    tool name exists for either yet, so OpenCode registers spawn only."""
+    turns = [
+        _tool_turn(0, "read", {"filePath": "a.py"}),
+        _tool_turn(1, "skill", {"name": "wf-commit"}),
+    ]
+
+    events = extract_events(turns, normalizer_version=_OPENCODE)
+
+    assert events == []
+
+
+def test_opencode_linked_child_spawn_carries_nested_depth_and_agent_type() -> None:
+    nested_spawn = _tool_turn(0, "task", {"agent": "coder", "prompt": "implement"})
+    outer_spawn = _tool_turn(
+        0,
+        "task",
+        {"agent": "explorer", "prompt": "find X"},
+        sidechain=SidechainSegmentView(agent_id="a1", agent_type="explorer", link="uuid-chain", turns=[nested_spawn]),
+    )
+
+    events = extract_events([outer_spawn], normalizer_version=_OPENCODE)
+
+    spawns = [e for e in events if e.kind == KIND_AGENT_SPAWN]
+    assert len(spawns) == 2
+    outer = next(e for e in spawns if e.turn_path == "0")
+    nested = next(e for e in spawns if e.turn_path == "0.0")
+    assert outer.depth == 0
+    assert outer.agent_type is None
+    assert nested.depth == 1
+    assert nested.agent_type == "explorer"
+    assert nested.subject == "coder"
+
+
+def test_opencode_unlinked_child_stays_analyzable_with_no_fabricated_spawn() -> None:
+    """D7: an unlinked OpenCode sidechain keeps its own agent type — the child's own,
+    never an ancestor's — and produces no fabricated parent spawn event."""
+    inner = _tool_turn(0, "read", {"filePath": "orphan.py"})
+    outer = _tool_turn(
+        0,
+        "bash",
+        {"command": "echo hi"},
+        sidechain=SidechainSegmentView(agent_id=None, agent_type="explorer", link="unlinked", turns=[inner]),
+    )
+
+    events = extract_events([outer], normalizer_version=_OPENCODE)
+
+    assert events == []
+
+
+def test_claude_code_recognition_is_unchanged_by_the_registry_move() -> None:
+    """Regression: the registry-backed dispatch preserves Claude Code's own behavior."""
+    turns = [
+        _tool_turn(0, "Read", {"file_path": "a.py"}),
+        _tool_turn(1, "Skill", {"skill": "wf-commit"}),
+        _tool_turn(2, "Agent", {"subagent_type": "explorer"}),
+    ]
+
+    events = extract_events(turns, normalizer_version=_DIALECT)
+
+    kinds = {e.kind for e in events}
+    assert kinds == {KIND_FILE_READ, KIND_SKILL_INVOCATION, KIND_AGENT_SPAWN}

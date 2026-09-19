@@ -12,17 +12,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
+from blizzard.hub.domain.analytics.dialects import DIALECTS
 from blizzard.hub.domain.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
 from blizzard.wire.transcript_segment import TurnSegmentView
 
 #: Bumped when recognition changes — the sweep re-derives history, leaving earlier
 #: rows untouched (D5/D9).
 EXTRACTOR_VERSION = "blizzard-analytics/3"
-
-#: The one dialect this build's extractors know (A1) — Claude Code's own normalizer
-#: stamp, mapped to the tool name that dialect uses for an agent spawn (blizzard#327).
-#: A future harness naming it differently is a new dialect entry here, not a rewrite.
-_CLAUDE_CODE_DIALECTS: dict[str, str] = {"claude-code-jsonl/2": "Agent"}
 
 
 @dataclass(frozen=True)
@@ -70,11 +66,12 @@ class FileReadExtractor:
         return path if isinstance(path, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
-        if normalizer_version not in _CLAUDE_CODE_DIALECTS:
+        entry = DIALECTS.get(normalizer_version, {}).get(self.kind)
+        if entry is None:
             return []
-        if turn.kind != "tool" or turn.tool is None or turn.tool.name != "Read":
+        if turn.kind != "tool" or turn.tool is None or turn.tool.name != entry.tool_name:
             return []
-        path = turn.tool.input.get("file_path")
+        path = turn.tool.input.get(entry.argument_key)
         if not isinstance(path, str) or not path:
             return []
         return [{"tool_name": turn.tool.name, "path": path}]
@@ -90,11 +87,12 @@ class SkillInvocationExtractor:
         return skill_name if isinstance(skill_name, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
-        if normalizer_version not in _CLAUDE_CODE_DIALECTS:
+        entry = DIALECTS.get(normalizer_version, {}).get(self.kind)
+        if entry is None:
             return []
-        if turn.kind != "tool" or turn.tool is None or turn.tool.name != "Skill":
+        if turn.kind != "tool" or turn.tool is None or turn.tool.name != entry.tool_name:
             return []
-        skill_name = turn.tool.input.get("skill")
+        skill_name = turn.tool.input.get(entry.argument_key)
         if not isinstance(skill_name, str) or not skill_name:
             return []
         return [{"skill_name": skill_name}]
@@ -102,8 +100,8 @@ class SkillInvocationExtractor:
 
 class AgentSpawnExtractor:
     """A subagent-spawn call naming the subagent type it spawned — which tool name that
-    is comes from the turn's own dialect (``_CLAUDE_CODE_DIALECTS``), since it is not the
-    same across every harness (blizzard#327)."""
+    is comes from the turn's own dialect (:data:`~blizzard.hub.domain.analytics.dialects.DIALECTS`),
+    since it is not the same across every harness (blizzard#327)."""
 
     kind = KIND_AGENT_SPAWN
 
@@ -112,12 +110,12 @@ class AgentSpawnExtractor:
         return agent_type if isinstance(agent_type, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
-        tool_name = _CLAUDE_CODE_DIALECTS.get(normalizer_version)
-        if tool_name is None:
+        entry = DIALECTS.get(normalizer_version, {}).get(self.kind)
+        if entry is None:
             return []
-        if turn.kind != "tool" or turn.tool is None or turn.tool.name != tool_name:
+        if turn.kind != "tool" or turn.tool is None or turn.tool.name != entry.tool_name:
             return []
-        agent_type = turn.tool.input.get("subagent_type")
+        agent_type = turn.tool.input.get(entry.argument_key)
         if not isinstance(agent_type, str) or not agent_type:
             return []
         return [{"agent_type": agent_type}]
