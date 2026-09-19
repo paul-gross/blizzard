@@ -208,8 +208,8 @@ class MigrationTargets:
 @router.get("/queue/peek", response_model=QueuePeekResponse)
 def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
     """The runner's FILL read — the whole ready-queue order: a filling runner needs every
-    ready chunk in one read. Kept as-is for a previous-minor caller (D7, blizzard#433
-    Phase 3); ``POST /queue/peek`` below is the matched counterpart."""
+    ready chunk in one read. Kept as-is for a previous-minor caller (D7, blizzard#433);
+    ``POST /queue/peek`` below is the matched counterpart."""
     statuses = services.chunks.facts.load_all_statuses()
     return queue_api.ReadyQueue.of(services, statuses).view
 

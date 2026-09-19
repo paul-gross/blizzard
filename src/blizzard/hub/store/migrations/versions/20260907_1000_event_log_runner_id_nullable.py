@@ -20,7 +20,7 @@ depends_on: str | Sequence[str] | None = None
 _TABLE = "event_log"
 
 # The pre-downgrade sentinel — restated, not imported, from
-# ``blizzard.hub.domain.work_closure._HUB_RUNNER_ID`` (``bzh:frozen-revisions``).
+# ``blizzard.hub.delivery.hub_node._HUB_RUNNER_ID`` (``bzh:frozen-revisions``).
 _HUB_RUNNER_ID = "hub"
 
 # The three hub-authored kinds — restated, not imported, from
@@ -64,7 +64,8 @@ def downgrade() -> None:
     if not _is_nullable(bind):
         return  # already the pre-reshape shape
 
-    # Every stored null-runner row is hub-authored, so this restore is exactly reversible.
+    # Every stored null-runner row is hub-authored: a projected row (an escalation, say)
+    # lives only in memory and is never written here, so this restore is exactly reversible.
     bind.execute(_EVENT_LOG.update().where(_EVENT_LOG.c.runner_id.is_(None)).values(runner_id=_HUB_RUNNER_ID))
 
     with op.batch_alter_table(_TABLE) as batch:

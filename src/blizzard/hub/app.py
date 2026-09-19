@@ -88,7 +88,7 @@ EVENT_DERIVATION_INTERVAL_SECONDS = 60
 #: The delivery-materialization sweep's own interval (blizzard#366 D9).
 WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS = 60
 
-#: The close-intent drain sweep's own interval, like its two siblings above.
+#: The close-intent drain sweep's own interval.
 CLOSE_DRAIN_INTERVAL_SECONDS = 60
 
 

@@ -313,8 +313,8 @@ class AnalyticsOperationalStore:
         return summarize_durations(rows, key="graph")
 
     def _step_durations(self, criteria: OperationalCriteria) -> list[StepDuration]:
-        """An empty admitted-group set makes both statements below's correlated subquery
-        empty too, so ``fold_step_durations`` already returns ``[]``."""
+        """No dedicated early-out: an empty admitted-group set makes both statements below's
+        correlated subquery empty too, so ``fold_step_durations`` already returns ``[]``."""
         with self._store.read("step_durations") as conn:
             transition_rows = conn.execute(_duration_rows_stmt(criteria)).all()
             lease_rows = conn.execute(_duration_lease_min_stmt(criteria)).all()

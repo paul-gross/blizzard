@@ -80,8 +80,8 @@ class ChunkRecordStore:
             return chunk_row(conn, row)
 
     def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
-        """`get`'s batched sibling — every requested id's row plus its work refs, in a
-        bounded number of queries per id batch. An id that doesn't exist or is ephemeral
+        """`get`'s batched sibling — every requested id's row plus its work refs
+        (`bzh:bulk-reconstitution`). An id that doesn't exist or is ephemeral
         is silently dropped, the same as `get` returning None for it. Reads each batch's
         full ``chunks`` rows once, via :func:`ephemeral_ids_in`."""
         if not chunk_ids:

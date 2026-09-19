@@ -70,6 +70,7 @@ class ChunkDecisionsStore:
 
     @staticmethod
     def _not_closed_clause():  # type: ignore[no-untyped-def]
+        """True when the decision is still live: no closure table holds a row for its id, ANDed across every table."""
         return and_(
             *(
                 ~select(table.c.decision_id).where(table.c.decision_id == s.decisions.c.decision_id).exists()
@@ -129,7 +130,7 @@ class ChunkDecisionsStore:
     def _decision_closure_ids(conn: Connection, decision_ids: Sequence[str]) -> set[str]:
         """The ids among ``decision_ids`` closed by a fact in :data:`_DECISION_CLOSURE_TABLES`
         — :meth:`_not_closed_clause`'s own predicate, inverted, so the two closure reads
-        share one rule. Batched (`bzh:bulk-reconstitution`)."""
+        share one rule."""
         if not decision_ids:
             return set()
         closed: set[str] = set()

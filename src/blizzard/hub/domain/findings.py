@@ -171,7 +171,9 @@ class IReadFindingRepository(Protocol):
 
     def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
         """Every finding across every routine (blizzard#486); `scope_slug=None` reads every
-        scope. Table-scans by construction — blizzard#486 leaves the scale question open."""
+        scope. Table-scans by construction — `ix_findings_routine_scope` and
+        `ix_findings_routine_class` both lead with `routine_name`, which this never filters
+        on, so neither is usable; blizzard#486 leaves the scale question open."""
         ...
 
     def count_by_class(self, routine_name: str, class_: str) -> int:

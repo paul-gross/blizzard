@@ -53,10 +53,14 @@ _ROUTE_NOT_INJECTED: Final = _RouteNotInjected.TOKEN
 
 
 def pause_view(pause: PauseFact | None) -> PauseView | None:
+    """The one place a :class:`PauseFact` becomes a :class:`PauseView` — every wire shape
+    carrying pause state calls through here, so they stay in agreement by construction."""
     return PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None
 
 
 def usage_total_view(usage: UsageTotal) -> ChunkUsageTotalView:
+    """The one place a :class:`UsageTotal` becomes a :class:`ChunkUsageTotalView` — every
+    wire shape carrying totals calls through here, so they stay in agreement by construction."""
     return ChunkUsageTotalView(
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
