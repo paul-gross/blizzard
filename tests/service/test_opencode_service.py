@@ -104,10 +104,7 @@ def test_opencode_build_and_review_resume_the_same_session_to_done(tmp_path: Pat
     )
 
 
-#: A real unified diff, applied by the mock's own ``git apply`` plumbing. Every
-#: ``subprocess.run`` captures its own output (``capture_output=True``) — under OpenCode
-#: the mock reads the first stdout line as the fresh-session identity, so a build script
-#: must never let a child process's stdout reach the real one unfiltered.
+#: A real diff — OpenCode reads the mock's first stdout line as the session id, so no captured child stdout may reach the real one.
 _OPENCODE_TRANSCRIPT_DIFF = (
     "diff --git a/transcript-proof.txt b/transcript-proof.txt\n"
     "new file mode 100644\n"
@@ -120,8 +117,7 @@ _OPENCODE_TRANSCRIPT_DIFF = (
 
 _OPENCODE_TRANSCRIPT_COMMIT_MESSAGE = "feat: mint a transcript-provable commit under OpenCode"
 
-#: Calls the mock's own ``apply_diff``/``commit`` helpers (not raw subprocess) so the run
-#: mints matched ``Edit``/``Bash`` tool turns; repoints ``cwd`` to the repo child dir first.
+#: Calls the mock's own ``apply_diff``/``commit`` helpers so the run mints matched ``Edit``/``Bash`` tool turns.
 _OPENCODE_TRANSCRIPT_BUILD_SCRIPT = (
     "import pathlib, subprocess\n"
     "from blizzard_mock.harness.engine import current_context\n"
@@ -180,10 +176,9 @@ def _opencode_transcript_chunk_spec(work_ref_url: str) -> dict:
 
 
 def test_opencode_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> None:
-    """A real ``mock-opencode`` subprocess mints a genuine session export; read back
-    through the runner's own local HTTP API via :class:`OpenCodeTranscriptSource`. Pins
-    provenance: the Bash turn's tool output carries the real commit sha, cross-checked
-    against the bare origin — the same shape Claude Code's own counterpart proves."""
+    """A real ``mock-opencode`` mints a genuine session export, read back through the
+    runner's own local HTTP API. Pins provenance: the Bash turn's tool output carries the
+    real commit sha, cross-checked against the bare origin."""
     bin_dir = require_mock_fleet()
     workspace, _origins, origin_bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
@@ -191,11 +186,8 @@ def test_opencode_transcript_is_read_back_through_the_runner_http_api(tmp_path: 
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
     hub_port = _free_port()
-    # Real `opencode export` resolves a session id from a global daemon store, so the
-    # production exporter passes no env (`opencode_export.py`'s own comment). The MOCK's
-    # `export` subcommand instead re-derives its root from `BZ_TRANSCRIPTS_ROOT` on every
-    # invocation, so — unlike the ticks-only fencing `_drive` uses — this must stay live in
-    # the real process env for the runner's later, out-of-band transcript read too.
+    # Unlike real `opencode export` (a global daemon store), the MOCK's `export` re-derives its root from
+    # `BZ_TRANSCRIPTS_ROOT` every call, so this must stay live in the real env for the runner's later read too.
     prior_transcripts_root = os.environ.get("BZ_TRANSCRIPTS_ROOT")
     os.environ["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
     try:
@@ -308,18 +300,13 @@ def test_opencode_transcript_segment_carries_opencode_provenance_through_the_run
             os.environ["BZ_TRANSCRIPTS_ROOT"] = prior_transcripts_root
 
 
-#: Fires once — a marker file in the acquired worktree, so it survives the crashed lease's
-#: own death and the requeued lease's brand new OpenCode session sees it and skips the crash.
+#: A worktree marker file, so it survives the crashed lease's death and the requeued retry sees it and skips the crash.
 _OPENCODE_CRASH_MARKER = "crash-recovered-once.marker"
 
-#: The judgement resume's own completion signal — absent, it emits no verdict at all, a
-#: genuinely verdict-less judgement rather than a rubber stamp over uncommitted work.
+#: The judgement resume's completion signal — absent, it emits no verdict, never a rubber stamp over uncommitted work.
 _OPENCODE_CRASH_DONE_MARKER = "build-done.marker"
 
-#: Crashes hard (``os._exit``, no envelope, no ``SessionEnd``) on its very first invocation,
-#: right after recording one real tool call — proving the transcript captured that call
-#: before the process died. A requeued retry's fresh session finds the marker already
-#: written and does the real work instead.
+#: Crashes hard (``os._exit``, no envelope, no ``SessionEnd``) right after one real tool call; the requeued retry's fresh session finds the marker and does the real work instead.
 _OPENCODE_CRASH_BUILD_SCRIPT = (
     "import pathlib, subprocess\n"
     f"marker = pathlib.Path({_OPENCODE_CRASH_MARKER!r})\n"
@@ -350,9 +337,7 @@ _OPENCODE_CRASH_BUILD_SCRIPT = (
     f"pathlib.Path({_OPENCODE_CRASH_DONE_MARKER!r}).write_text('done\\n')\n"
 )
 
-#: Resumed against the crashed session (judged_by=worker fires regardless of how the build's
-#: own turn exited) — a rubber-stamped pass would hide a crash that landed nothing, so this
-#: checks for the real work's own completion marker instead of trusting the exit alone.
+#: Resumed against the crashed session; checks the real work's own completion marker instead of trusting the exit alone.
 _OPENCODE_CRASH_JUDGEMENT_SCRIPT = (
     "import pathlib\n"
     f"if pathlib.Path({_OPENCODE_CRASH_DONE_MARKER!r}).exists():\n"
@@ -413,12 +398,9 @@ def _usage_facts_for_chunk(config: RunnerConfig, chunk_id: str) -> list[dict]:
 
 
 def test_opencode_crash_mid_turn_recovers_with_usage_recorded_exactly_once(tmp_path: Path) -> None:
-    """A real ``mock-opencode`` subprocess dies hard mid-build, right after one recorded
-    tool call — no envelope, no ``SessionEnd``. The runner's own boundary-scoped recovery
-    (blizzard#437 Phase 4) resumes that SAME crashed session for its judgement, finds no
-    completed work, fails the attempt, and requeues a fresh lease that redoes the build
-    clean. The chunk still lands, and no generation's usage is ever recorded twice or
-    double-charged for tokens a prior generation already recorded."""
+    """A real ``mock-opencode`` dies hard mid-build, right after one recorded tool call — no
+    envelope, no ``SessionEnd``. Judgement resumes that SAME crashed session, finds no
+    completed work, fails, and requeues a clean retry — no generation's usage double-charged."""
     bin_dir = require_mock_fleet()
     workspace, _origins, origin_bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
@@ -454,10 +436,8 @@ def test_opencode_crash_mid_turn_recovers_with_usage_recorded_exactly_once(tmp_p
     for row in usage_rows:
         by_lease.setdefault(row["lease_id"], {})[row["kind"]] = row
 
-    # The crashed generation left no completed assistant turn behind — its own worker
-    # invocation earns no usage fact at all (never a fabricated partial sum) — but its
-    # judgement resume genuinely ran (that is what discovered the crash and requeued),
-    # so it earns its own real fact.
+    # The crashed worker invocation earns no usage fact (never a fabricated partial sum);
+    # its judgement resume genuinely ran (that's what discovered the crash) so it earns one.
     assert set(by_lease[crashed_lease_id]) == {"judge"}, by_lease[crashed_lease_id]
     assert by_lease[crashed_lease_id]["judge"]["cost_usd"] is not None
     # The retry's own worker invocation exited clean with a real envelope this time —

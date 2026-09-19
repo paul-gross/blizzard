@@ -25,7 +25,7 @@ def build_opencode_binding(
     :class:`OpenCodeTranscriptSource` into both the adapter and the binding, exactly as
     Claude Code's own binding wires its transcript source."""
     transcript_source = OpenCodeTranscriptSource(
-        SubprocessOpenCodeExporter(binary=config.opencode_binary),
+        SubprocessOpenCodeExporter(binary=config.opencode_binary, env_passthrough=config.worker_env_passthrough),
         TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript")),
     )
     adapter = OpenCodeAdapter(

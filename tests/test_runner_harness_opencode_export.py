@@ -50,6 +50,52 @@ def test_export_captures_stdout_through_a_file_never_a_pipe(monkeypatch: pytest.
 
 
 @pytest.mark.unit
+def test_export_env_excludes_the_hub_token_and_an_unlisted_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`opencode export` is a plugin-capable third-party CLI (blizzard#437 F7) — it gets the
+    same allowlisted env every other harness-binary launch does, never a full `os.environ`
+    copy carrying the runner daemon's own hub credential."""
+    monkeypatch.setenv("BZ_HUB_TOKEN", "super-secret-token")
+    monkeypatch.setenv("MY_UNLISTED_SENTINEL_VAR", "should-not-leak")
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    captured: dict[str, object] = {}
+
+    def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["kwargs"] = kwargs
+        kwargs["stdout"].write("{}")  # type: ignore[union-attr]
+        return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+    exporter = SubprocessOpenCodeExporter(binary="opencode")
+
+    exporter.export("sess-1")
+
+    env = captured["kwargs"]["env"]  # type: ignore[index]
+    assert env is not None
+    assert "BZ_HUB_TOKEN" not in env
+    assert "MY_UNLISTED_SENTINEL_VAR" not in env
+    assert env["PATH"] == "/usr/bin:/bin"
+
+
+@pytest.mark.unit
+def test_export_env_passthrough_admits_an_operator_named_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MY_HARNESS_QUIRK", "needed-by-the-real-binary")
+    captured: dict[str, object] = {}
+
+    def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["kwargs"] = kwargs
+        kwargs["stdout"].write("{}")  # type: ignore[union-attr]
+        return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+    exporter = SubprocessOpenCodeExporter(binary="opencode", env_passthrough=("MY_HARNESS_QUIRK",))
+
+    exporter.export("sess-1")
+
+    env = captured["kwargs"]["env"]  # type: ignore[index]
+    assert env["MY_HARNESS_QUIRK"] == "needed-by-the-real-binary"
+
+
+@pytest.mark.unit
 def test_export_nonzero_exit_raises_with_a_stderr_tail(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(a[0], 1, stdout=None, stderr="session gone")

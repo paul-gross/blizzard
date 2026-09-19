@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import subprocess
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
+
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 
 #: Bounds one ``export`` call — a wedged binary costs one failed read, not a hang.
 DEFAULT_EXPORT_TIMEOUT_SECONDS = 30.0
@@ -37,8 +40,11 @@ class SubprocessOpenCodeExporter:
     """Runs ``<binary> export <session-id>`` once per call, with no cwd — the spec's own
     export resolves a session by id from any working directory."""
 
-    def __init__(self, binary: str, *, timeout: float = DEFAULT_EXPORT_TIMEOUT_SECONDS) -> None:
+    def __init__(
+        self, binary: str, *, env_passthrough: Sequence[str] = (), timeout: float = DEFAULT_EXPORT_TIMEOUT_SECONDS
+    ) -> None:
         self._binary = binary
+        self._env_passthrough = tuple(env_passthrough)
         self._timeout = timeout
 
     def export(self, session_id: str) -> str:
@@ -50,6 +56,9 @@ class SubprocessOpenCodeExporter:
                 with out_path.open("w") as out_file:
                     result = subprocess.run(
                         [self._binary, "export", session_id],
+                        # `bzh:worker-env-allowlist` — never a full `os.environ` copy into
+                        # a plugin-capable third-party CLI.
+                        env=AllowlistedEnv.of(self._env_passthrough).variables,
                         stdout=out_file,
                         stderr=subprocess.PIPE,
                         text=True,

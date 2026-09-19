@@ -570,11 +570,10 @@ class FakeProvider:
 
 
 class FakeTranscriptSource:
-    """A scriptable :class:`IHarnessTranscriptSource`: canned batches, raw lines, tail positions,
-    sizes, and context sizes by session id (blizzard#245). An unscripted session reads as
-    ``not_found`` for turns and as *unmeasurable* for both bounds, so a test only names what it
-    cares about. ``read_raw_lines`` ignores ``start``/``end`` — a test scripting a range-scoped
-    read scripts ``lines_by_session`` with the exact lines it wants that call to return."""
+    """A scriptable :class:`IHarnessTranscriptSource`: canned batches, raw lines, tail
+    positions, sizes, and context sizes by session id (blizzard#245) — unscripted reads as
+    ``not_found``/*unmeasurable*. ``read_raw_lines`` ignores ``start``/``end``; script
+    ``lines_by_session`` with the exact range-scoped lines a call should return."""
 
     def __init__(
         self,
