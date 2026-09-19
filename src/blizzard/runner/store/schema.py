@@ -694,13 +694,3 @@ selftest_results = Table(
     Column("error", Text, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
-
-selftest_result_checks = Table(
-    "selftest_result_checks",
-    metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("selftest_result_id", Integer, nullable=False),
-    Column("name", String, nullable=False),
-    Column("passed", Boolean, nullable=False),
-    Column("detail", Text, nullable=False),
-)

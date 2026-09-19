@@ -12,8 +12,8 @@ from dataclasses import replace
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import SELFTEST_PREFIX, Id
-from blizzard.runner.domain.selftest_result import IWriteSelfTestResultRepository, SelfTestCheckRecord
-from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.domain.selftest_result import IWriteSelfTestResultRepository
+from blizzard.runner.harness.adapter import IHarnessSelfTestSeam
 from blizzard.runner.harness.registry import IHarnessRegistry, UnknownHarnessError
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
@@ -77,7 +77,7 @@ class SelfTestService:
                 return None
             return replace(run, checks=list(run.checks))
 
-    def _execute(self, selftest_id: str, adapter: IHarnessAdapter) -> None:
+    def _execute(self, selftest_id: str, adapter: IHarnessSelfTestSeam) -> None:
         # Joined against the budget in its own thread: an overrun cannot be killed, so it
         # is abandoned as a daemon thread and the run resolves anyway (issue #54).
         outcome: list[tuple[list[SelfTestCheck], str | None]] = []
@@ -119,6 +119,5 @@ class SelfTestService:
                 harness_id=harness,
                 status=status,
                 error=error,
-                checks=tuple(SelfTestCheckRecord(name=c.name, passed=c.passed, detail=c.detail) for c in checks),
                 recorded_at=self._clock.now(),
             )

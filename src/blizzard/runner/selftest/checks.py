@@ -17,11 +17,10 @@ from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import (
     DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
-    IHarnessAdapter,
+    IHarnessSelfTestSeam,
     WorkerHandle,
     WorkerPreamble,
 )
-from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.selftest.model import (
@@ -56,6 +55,8 @@ _JUDGEMENT_PROMPT = (
     "<Choice>pass</Choice> if it did, else <Choice>fail</Choice>."
 )
 _RESUME_MESSAGE = "selftest: automated follow-up resume — no action needed, just acknowledge."
+#: Shared between `Resume` (which writes it) and `UsageParsing` (which reads it back).
+_RESUME_STDOUT_FILENAME = ".selftest-resume-stdout"
 
 
 @dataclass(frozen=True)
@@ -88,7 +89,7 @@ class Scratch:
     """The throwaway repo a run is performed against, the seams its checks drive it
     through, and the session id they drive it under."""
 
-    adapter: IHarnessAdapter
+    adapter: IHarnessSelfTestSeam
     scratch_git: IScratchGit
     process: IProcessProbe
     workdir: str
@@ -203,7 +204,7 @@ class Resume(Check):
         scratch = self.scratch
         try:
             # Never the bare `""` default: it would inherit the daemon's own stdout.
-            stdout_path = os.path.join(scratch.workdir, ".selftest-resume-stdout")
+            stdout_path = os.path.join(scratch.workdir, _RESUME_STDOUT_FILENAME)
             resumed = scratch.adapter.resume_with_message(
                 scratch.workdir, scratch.session_id, _RESUME_MESSAGE, stdout_path=stdout_path
             )
@@ -214,9 +215,15 @@ class Resume(Check):
             return SelfTestCheck(
                 AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({resumed.pid})"
             )
+        worker = Worker(scratch.process, resumed.pid)
+        # Bounded wait first, so a fast-finishing resume actually flushes its own output —
+        # `UsageParsing` reads this same file, and reaping (killing) immediately here left
+        # it always empty, unable to catch a real parse-usage regression (blizzard#438,
+        # review F6). A hung resume still gets killed by `reap()` below, exactly as before.
+        worker.wait_for_exit(resumed.process_start_time)
         # Reaped here so no live process outlives the scratch dir it is cwd'd into
         # (tests/test_runner_selftest.py).
-        Worker(scratch.process, resumed.pid).reap()
+        worker.reap()
         return SelfTestCheck(AUTOMATED_RESUME, True, f"resumed session {scratch.session_id!r} as pid {resumed.pid}")
 
 
@@ -240,7 +247,7 @@ class UsageParsing(Check):
 
     def run(self) -> SelfTestCheck:
         scratch = self.scratch
-        stdout_path = os.path.join(scratch.workdir, ".selftest-resume-stdout")
+        stdout_path = os.path.join(scratch.workdir, _RESUME_STDOUT_FILENAME)
         try:
             output = Path(stdout_path).read_text(encoding="utf-8") if os.path.exists(stdout_path) else ""
         except OSError as exc:
@@ -258,16 +265,15 @@ class UsageParsing(Check):
 
 
 class TranscriptReadability(Check):
-    """Whether the adapter's transcript source can be queried without raising, only when it
-    claims one at all — a :class:`~blizzard.runner.harness.transcript.NullTranscriptSource`
-    binding passes vacuously. A canary session may leave no real transcript behind, so an
-    empty or absent read passes too; only an actual exception fails this check."""
+    """Whether the adapter's transcript source can be queried without raising. No null
+    check of its own: a :class:`~blizzard.runner.harness.transcript.NullTranscriptSource`
+    binding already reads back as an absent-but-healthy transcript by its own contract, and
+    a canary session may leave no real transcript behind either — only an actual exception
+    fails this check, sniffing no concrete source class to decide whether to run it."""
 
     def run(self) -> SelfTestCheck:
         scratch = self.scratch
         source = scratch.adapter.transcript_source()
-        if isinstance(source, NullTranscriptSource):
-            return SelfTestCheck(TRANSCRIPT_READABILITY, True, "adapter declares no transcript source to check")
         try:
             lines = source.read_raw_lines(scratch.session_id, spawn_cwd=scratch.workdir)
             position = source.tail_position(scratch.session_id, spawn_cwd=scratch.workdir)
@@ -281,7 +287,7 @@ class TranscriptReadability(Check):
 class SelfTest:
     """The seven adapter-drift checks against a single throwaway scratch repo."""
 
-    adapter: IHarnessAdapter
+    adapter: IHarnessSelfTestSeam
     scratch_git: IScratchGit
     process: IProcessProbe
 

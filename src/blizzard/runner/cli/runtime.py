@@ -90,7 +90,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # `PeriodicDriver` resolves its prompt files on this thread, not in the loop thread: a
     # configured-but-missing prompt raises here, before any socket binds.
     with click_exception_on(ConfigError):
-        driver = PeriodicDriver(config, interval_seconds=interval, broker=broker)
+        driver = PeriodicDriver(config, interval_seconds=interval, broker=broker, harness_health=hosted.harness_health)
 
     # Two doors onto the one app (issue #43), bound up front so a clash fails startup loudly and
     # served by the single `Server` below, which keeps the shutdown path on one frame.

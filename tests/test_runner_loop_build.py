@@ -26,6 +26,7 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
+from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
@@ -275,6 +276,33 @@ def test_periodic_driver_defaults_to_no_broker(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_periodic_driver_threads_its_harness_health_cache_into_its_own_loop_wiring(tmp_path: Path) -> None:
+    """blizzard#438, F3: the same ``HarnessHealthCache`` instance ``host`` also hands the
+    served app (``HostedApp.harness_health``) must reach the loop's own context too — one
+    shared source of truth, not two independently-refreshing caches that can disagree."""
+    config = RunnerConfig(
+        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+    )
+    health = HarnessHealthCache(clock=FixedClock(_NOW), probes={}, selftest_results=None)
+
+    driver = PeriodicDriver(config, interval_seconds=30.0, harness_health=health)
+
+    assert driver._harness_health is health
+
+
+@pytest.mark.unit
+def test_context_reuses_an_injected_health_cache_rather_than_building_its_own(tmp_path: Path) -> None:
+    config = RunnerConfig(
+        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+    )
+    health = HarnessHealthCache(clock=FixedClock(_NOW), probes={}, selftest_results=None)
+
+    ctx = LoopWiring(config, "", "").context(FakeHub(), health_cache=health)
+
+    assert ctx.harness_health is health
+
+
+@pytest.mark.unit
 def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path) -> None:
     """D2, blizzard#317: the ``host`` verb's broker reaches ``app.state.events`` — the
     seam the stream route (``runner/api/events.py``) reads off the served app."""
@@ -284,6 +312,18 @@ def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path
     app = build_hosted_app(RunnerConfig.load(tmp_path), events=broker).app
 
     assert app.state.events is broker
+
+
+@pytest.mark.unit
+def test_hosted_app_exposes_the_same_harness_health_cache_it_wires_into_create_app(tmp_path: Path) -> None:
+    """blizzard#438, F3: ``HostedApp.harness_health`` is the exact instance ``app.state``
+    carries — the one ``host`` then hands to ``PeriodicDriver`` too, so a dashboard read
+    and the loop's own registered availability read one shared cache, not two."""
+    (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
+
+    hosted = build_hosted_app(RunnerConfig.load(tmp_path))
+
+    assert hosted.app.state.harness_health is hosted.harness_health
 
 
 @pytest.mark.unit

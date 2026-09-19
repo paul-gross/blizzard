@@ -14,10 +14,11 @@ from blizzard.runner.harness.compatibility import CompatibilityClassification, C
 
 
 class HarnessHealthCause(StrEnum):
-    """Every reason a configured harness binding can be withheld from availability,
-    in the priority order :func:`evaluate_harness_health` checks them — the first
-    match wins, so a binding failing several checks at once reports only the
-    highest-priority one."""
+    """Every reason a configured harness binding's health can carry a ``cause`` at all, in
+    the priority order :func:`evaluate_harness_health` checks them — the first match wins,
+    so a binding failing several checks at once reports only the highest-priority one. Every
+    member but ``DECLARED_DEGRADATION`` withholds availability; that one reports precisely
+    when the binding *is* available, but degraded."""
 
     MISSING_BINARY = "missing_binary"
     INCOMPATIBLE_VERSION = "incompatible_version"
@@ -64,9 +65,10 @@ class HarnessHealthEvidence:
 
 @dataclass(frozen=True)
 class HarnessHealthResult:
-    """One evaluation's outcome: whether the binding is available, the single cause when
-    it is not, and every declared degradation regardless — reported informationally even
-    when the binding is otherwise unavailable for an unrelated reason."""
+    """One evaluation's outcome: whether the binding is available, the single cause —
+    ``declared_degradation`` when available but degraded, one of the withholding causes
+    when not, ``None`` when neither — and every declared degradation regardless, reported
+    informationally even when the binding is unavailable for an unrelated reason."""
 
     harness_id: str
     available: bool

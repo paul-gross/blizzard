@@ -7,13 +7,9 @@ from datetime import datetime
 from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.selftest_result import (
-    IWriteSelfTestResultRepository,
-    SelfTestCheckRecord,
-    SelfTestResultRecord,
-)
+from blizzard.runner.domain.selftest_result import IWriteSelfTestResultRepository, SelfTestResultRecord
 from blizzard.runner.store.internal.base import RunnerStoreConnections
-from blizzard.runner.store.schema import selftest_result_checks, selftest_results
+from blizzard.runner.store.schema import selftest_results
 
 _log = get_logger("blizzard.runner.store")
 
@@ -29,7 +25,6 @@ class SelfTestResultStore:
         # — mirrors `LeaseSessionStore.session_preamble_fingerprint`'s own latest-row read.
         rows = self._store.all(
             select(
-                selftest_results.c.id,
                 selftest_results.c.status,
                 selftest_results.c.error,
                 selftest_results.c.recorded_at,
@@ -41,22 +36,10 @@ class SelfTestResultStore:
         if not rows:
             return None
         row = rows[0]
-        check_rows = self._store.all(
-            select(
-                selftest_result_checks.c.name,
-                selftest_result_checks.c.passed,
-                selftest_result_checks.c.detail,
-            )
-            .where(selftest_result_checks.c.selftest_result_id == row.id)
-            .order_by(selftest_result_checks.c.id)
-        )
         return SelfTestResultRecord(
             harness_id=harness_id,
             status=str(row.status),
             error=str(row.error) if row.error is not None else None,
-            checks=tuple(
-                SelfTestCheckRecord(name=str(c.name), passed=bool(c.passed), detail=str(c.detail)) for c in check_rows
-            ),
             recorded_at=row.recorded_at,
         )
 
@@ -66,13 +49,10 @@ class SelfTestResultStore:
         harness_id: str,
         status: str,
         error: str | None,
-        checks: tuple[SelfTestCheckRecord, ...],
         recorded_at: datetime,
     ) -> None:
-        # One committed transaction (blizzard#438): a crash must never leave the parent row
-        # with no children, or the wrong ones, for a later read to see.
         with self._store.begin() as conn:
-            result = conn.execute(
+            conn.execute(
                 selftest_results.insert().values(
                     harness_id=harness_id,
                     status=status,
@@ -80,21 +60,6 @@ class SelfTestResultStore:
                     recorded_at=recorded_at,
                 )
             )
-            key = result.inserted_primary_key
-            result_id = int(key[0]) if key is not None else 0
-            if checks:
-                conn.execute(
-                    selftest_result_checks.insert(),
-                    [
-                        {
-                            "selftest_result_id": result_id,
-                            "name": check.name,
-                            "passed": check.passed,
-                            "detail": check.detail,
-                        }
-                        for check in checks
-                    ],
-                )
         _log.info("selftest result recorded", harness_id=harness_id, status=status)
 
 

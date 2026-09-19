@@ -1,6 +1,11 @@
 """``GET /api/harness-health`` (blizzard#438, component tier) — the runner's own harness
 health diagnostics, proven end-to-end: real route wiring over a real (if unreachable, for
-determinism) harness binary, and an injected cache proving degradations surface too."""
+determinism) harness binary, and an injected cache proving degradations surface too.
+
+The route itself never probes (blizzard#438, F4) — it only reads the last result some
+earlier ``refresh()`` computed, the way the loop's own tick populates the cache it shares
+with the served app (``HostedApp.harness_health``) — so every test here calls ``refresh()``
+on the injected cache itself before reading the route, standing in for that tick."""
 
 from __future__ import annotations
 
@@ -17,6 +22,7 @@ from blizzard.runner.harness.compatibility import CompatibilityProbe
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
@@ -48,7 +54,13 @@ def test_reports_missing_binary_for_an_unresolvable_configured_path(tmp_path: Pa
     probe = LinuxProcessProbe()
     adapter = ClaudeCodeAdapter(binary=config.harness_binary, process=probe, launcher=ProcessLauncher(probe))
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
-    client = TestClient(create_app(config, harnesses=harnesses))
+    health = HarnessHealthCache(
+        clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
+        probes={CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(binary=config.harness_binary)},
+        selftest_results=None,
+    )
+    health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=adapter, observed_version=adapter.observe_version())
+    client = TestClient(create_app(config, harnesses=harnesses, harness_health=health))
 
     resp = client.get("/api/harness-health")
 
@@ -70,6 +82,7 @@ def test_reports_available_with_a_declared_degradation(tmp_path: Path) -> None:
         probes={CLAUDE_CODE_HARNESS_ID: _HealthyWithDegradationProbe()},
         selftest_results=None,
     )
+    health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=adapter, observed_version=None)
     client = TestClient(create_app(config, harnesses=harnesses, harness_health=health))
 
     resp = client.get("/api/harness-health")

@@ -22,7 +22,16 @@ from blizzard.runner.harness.internal.opencode_shapes import parse_session_expor
 
 pytestmark = pytest.mark.unit
 
-_CORPUS_DIR = Path(__file__).resolve().parents[1] / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
+_CORPUS_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "blizzard"
+    / "runner"
+    / "harness"
+    / "contracts"
+    / "opencode"
+    / PINNED_OPENCODE_VERSION
+)
 
 
 def _text_record(message_id: str, part_id: str, text: str) -> CursorRecord:

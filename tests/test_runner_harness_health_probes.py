@@ -17,22 +17,19 @@ from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERS
 
 pytestmark = pytest.mark.component
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_CORPUS_DIR = _REPO_ROOT / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
+_PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
+_CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
 
 
 def _manifest() -> dict:
     return json.loads((_CORPUS_DIR / "manifest.json").read_text())
 
 
-def test_opencode_health_probe_declares_the_pinned_versions_absences(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_opencode_health_probe_declares_the_pinned_versions_absences() -> None:
     probe = OpenCodeHealthProbe("opencode")
-    # An inline stub standing in for binary discovery and version observation only.
-    monkeypatch.setattr(probe, "binary_present", lambda: True)
 
     manifest = _manifest()
     assert probe.supported_version() == manifest["version"] == PINNED_OPENCODE_VERSION
-    assert probe.binary_present() is True
 
     degradations = probe.declared_degradations()
     declared_probes = {degradation.probe for degradation in degradations}
@@ -50,10 +47,8 @@ def test_opencode_health_probe_declares_the_pinned_versions_absences(monkeypatch
     assert diagnostic_degraded <= {probe.value for probe in declared_probes}
 
 
-def test_claude_code_health_probe_declares_no_version_or_degradations(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_claude_code_health_probe_declares_no_version_or_degradations() -> None:
     probe = ClaudeCodeHealthProbe("claude")
-    monkeypatch.setattr(probe, "binary_present", lambda: True)
 
-    assert probe.binary_present() is True
     assert probe.supported_version() is None
     assert probe.declared_degradations() == ()

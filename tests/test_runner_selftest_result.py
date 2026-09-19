@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.domain.selftest_result import SelfTestCheckRecord
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
@@ -22,43 +21,28 @@ from tests.test_runner_selftest import _FixedPidAdapter, _RecordingProcessProbe
 pytestmark = pytest.mark.component
 
 
-def test_recording_a_result_and_reading_it_back_round_trips_its_checks(tmp_path: Path) -> None:
+def test_recording_a_result_and_reading_it_back_round_trips_it(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(instant=datetime(2026, 1, 1, tzinfo=UTC))
 
     assert store.latest_selftest_result("claude_code") is None
 
-    store.record_selftest_result(
-        harness_id="claude_code",
-        status="passed",
-        error=None,
-        checks=(
-            SelfTestCheckRecord(name="spawn_session_id", passed=True, detail="ok"),
-            SelfTestCheckRecord(name="usage_parsing", passed=True, detail="no envelope, not a fault"),
-        ),
-        recorded_at=clock.now(),
-    )
+    store.record_selftest_result(harness_id="claude_code", status="passed", error=None, recorded_at=clock.now())
 
     result = store.latest_selftest_result("claude_code")
     assert result is not None
     assert result.harness_id == "claude_code"
     assert result.status == "passed"
     assert result.error is None
-    assert [c.name for c in result.checks] == ["spawn_session_id", "usage_parsing"]
-    assert all(c.passed for c in result.checks)
 
 
 def test_a_later_result_for_the_same_harness_supersedes_the_earlier_one(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(instant=datetime(2026, 1, 1, tzinfo=UTC))
 
-    store.record_selftest_result(
-        harness_id="claude_code", status="failed", error="boom", checks=(), recorded_at=clock.now()
-    )
+    store.record_selftest_result(harness_id="claude_code", status="failed", error="boom", recorded_at=clock.now())
     clock.advance(timedelta(seconds=1))
-    store.record_selftest_result(
-        harness_id="claude_code", status="passed", error=None, checks=(), recorded_at=clock.now()
-    )
+    store.record_selftest_result(harness_id="claude_code", status="passed", error=None, recorded_at=clock.now())
 
     result = store.latest_selftest_result("claude_code")
     assert result is not None
@@ -70,9 +54,7 @@ def test_a_different_harness_is_never_confused_with_another_ones_result(tmp_path
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(instant=datetime(2026, 1, 1, tzinfo=UTC))
 
-    store.record_selftest_result(
-        harness_id="claude_code", status="passed", error=None, checks=(), recorded_at=clock.now()
-    )
+    store.record_selftest_result(harness_id="claude_code", status="passed", error=None, recorded_at=clock.now())
 
     assert store.latest_selftest_result("opencode") is None
 
@@ -102,5 +84,3 @@ def test_selftest_service_persists_a_completed_runs_outcome_through_a_wired_repo
     recorded = store.latest_selftest_result("claude_code")
     assert recorded is not None
     assert recorded.status == finished.status
-    assert [c.name for c in recorded.checks] == [c.name for c in finished.checks]
-    assert [c.passed for c in recorded.checks] == [c.passed for c in finished.checks]

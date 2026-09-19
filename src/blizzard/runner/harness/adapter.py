@@ -344,6 +344,16 @@ class IHarnessLifecycleAndVerdict(IHarnessWorkerLifecycle, IHarnessVerdictParsin
     needing both takes rather than the full adapter (``bzh:seam-size-ceiling``)."""
 
 
+class IHarnessSelfTestSeam(IHarnessWorkerLifecycle, IHarnessVerdictParsing, IHarnessUsageAccounting, Protocol):
+    """The selftest canary's own composed slice (``bzh:seam-size-ceiling``, blizzard#438):
+    :class:`IHarnessLifecycleAndVerdict`'s pair plus usage accounting, its widened roster's
+    ``UsageParsing``/``TranscriptReadability`` checks needing ``parse_usage`` and
+    ``transcript_source`` too — still narrower than the full adapter, which it takes no
+    model-resolution slice from at all."""
+
+    def transcript_source(self) -> IHarnessTranscriptSource: ...
+
+
 class IHarnessAdapter(
     IHarnessWorkerLifecycle,
     IHarnessModelResolution,

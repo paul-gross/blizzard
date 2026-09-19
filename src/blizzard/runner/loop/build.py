@@ -91,14 +91,20 @@ class LoopWiring:
         """Read the prompt files now, on the calling thread."""
         return cls(config, config.resolved_workspace_prompt(), config.resolved_runner_prompt(), broker)
 
-    def context(self, hub: IHubClient, *, engine: Engine | None = None) -> LoopContext:
+    def context(
+        self, hub: IHubClient, *, engine: Engine | None = None, health_cache: HarnessHealthCache | None = None
+    ) -> LoopContext:
         """Wire a :class:`LoopContext`; the caller owns the ``httpx.Client`` behind ``hub``,
         and the returned context's own ``usage_http_client`` (blizzard#436, hub:95) —
         closed the same way, once the caller is done with the context.
 
         Builds its own engine (kept separate from ``host``'s own, D4) unless ``engine`` is
         given — :class:`PeriodicDriver` passes its own so it can dispose it on thread exit
-        (D5) without threading it through :class:`LoopContext` for a step to see."""
+        (D5) without threading it through :class:`LoopContext` for a step to see.
+        ``health_cache`` is the same exception ``engine`` is (blizzard#438): ``host`` passes
+        the one instance it also gave the served app (``HostedApp.harness_health``), so a
+        dashboard read and the loop's own registered availability read one shared, single
+        source of truth rather than two independently-refreshing caches that can disagree."""
         config = self.config
         if engine is None:
             engine = create_engine_from_url(config.db_url)
@@ -111,7 +117,7 @@ class LoopWiring:
         # harness's own binding to resolve one, not merely to be registered at all.
         harnesses.transcript_source(CLAUDE_CODE_HARNESS_ID)
         _clock = SystemClock()
-        health_cache = HarnessHealthCache(
+        health_cache = health_cache or HarnessHealthCache(
             clock=_clock,
             probes=build_production_harness_health_probes(config),
             selftest_results=stores.selftest_results,
@@ -220,7 +226,7 @@ class LoopWiring:
             harnesses=harnesses,
             # Built once here (D4), long-lived across every tick `PeriodicDriver._run` drives on this context.
             harness_versions=HarnessVersionCache(clock=_clock),
-            # Mirrors `harness_versions` (D4, blizzard#438): built once, long-lived across every tick.
+            # Mirrors `harness_versions` (D4): built once, long-lived across every tick.
             harness_health=health_cache,
         )
 
@@ -284,7 +290,14 @@ class PeriodicDriver:
     Owns its own ``httpx.Client`` for the driver's lifetime. A tick that raises is logged
     and swallowed so one bad pass never kills the daemon."""
 
-    def __init__(self, config: RunnerConfig, *, interval_seconds: float, broker: EventBroker | None = None) -> None:
+    def __init__(
+        self,
+        config: RunnerConfig,
+        *,
+        interval_seconds: float,
+        broker: EventBroker | None = None,
+        harness_health: HarnessHealthCache | None = None,
+    ) -> None:
         # Wired eagerly on the constructing (``host``) thread so a missing prompt file
         # fails startup rather than the loop thread (`tests/test_runner_loop_build.py`).
         self._wiring = LoopWiring.of(config, broker=broker)
@@ -292,6 +305,9 @@ class PeriodicDriver:
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="blizzard-runner-loop", daemon=True)
         self._client: httpx.Client | None = None
+        # `host`'s own shared instance (blizzard#438, `HostedApp.harness_health`), so this
+        # loop's registered availability and the served app's diagnostics read one cache.
+        self._harness_health = harness_health
 
     def start(self) -> None:
         self._thread.start()
@@ -320,7 +336,7 @@ class PeriodicDriver:
         engine = create_engine_from_url(config.db_url)
         ctx: LoopContext | None = None
         try:
-            ctx = self._wiring.context(HttpHubClient(self._client), engine=engine)
+            ctx = self._wiring.context(HttpHubClient(self._client), engine=engine, health_cache=self._harness_health)
             _log.info("reconciliation loop started", runner_id=config.runner_id, interval=self._interval)
             while not self._stop.is_set():
                 try:

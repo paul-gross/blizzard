@@ -70,6 +70,18 @@ def test_unknown_harness_reports_no_result() -> None:
     assert cache.get("unknown") is None
 
 
+def test_observed_version_is_none_before_any_refresh() -> None:
+    cache = HarnessHealthCache(clock=FixedClock(_NOW), probes={}, selftest_results=_FakeSelftestResults())
+    assert cache.observed_version(_HARNESS_ID) is None
+
+
+def test_observed_version_reads_back_what_refresh_was_given() -> None:
+    clock = FixedClock(_NOW)
+    cache = _cache(_FakeProbe(), _FakeSelftestResults(), clock=clock)
+    cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
+    assert cache.observed_version(_HARNESS_ID) == "1.0"
+
+
 def test_first_refresh_computes_and_caches() -> None:
     clock = FixedClock(_NOW)
     probe = _FakeProbe()
@@ -118,9 +130,7 @@ def test_a_new_selftest_result_forces_an_immediate_recompute() -> None:
     results = _FakeSelftestResults()
     cache = _cache(probe, results, clock=clock)
     cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
-    results.record = SelfTestResultRecord(
-        harness_id=_HARNESS_ID, status="failed", error="boom", checks=(), recorded_at=_NOW
-    )
+    results.record = SelfTestResultRecord(harness_id=_HARNESS_ID, status="failed", error="boom", recorded_at=_NOW)
     result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
     assert probe.calls == 2
     assert result is not None

@@ -28,13 +28,11 @@ def list_harness_health(request: Request) -> HarnessHealthListResponse:
 def _harness_health_list(harnesses: IHarnessRegistry, health: HarnessHealthCache) -> HarnessHealthListResponse:
     items: list[HarnessHealthViewWire] = []
     for harness_id in harnesses.known_harnesses:
-        adapter = harnesses.adapter(harness_id)
-        version = adapter.observe_version()
-        result = health.refresh(harness_id, adapter=adapter, observed_version=version)
+        result = health.get(harness_id)
         items.append(
             HarnessHealthViewWire(
                 harness_id=harness_id,
-                version=version,
+                version=health.observed_version(harness_id),
                 available=result.available if result is not None else True,
                 cause=result.cause.value if result is not None and result.cause is not None else None,
                 degradations=[d.summary for d in result.degradations] if result is not None else [],

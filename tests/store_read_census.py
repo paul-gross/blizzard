@@ -107,7 +107,7 @@ from blizzard.runner.domain.leases import (
 from blizzard.runner.domain.outbound import IReadOutboundRepository
 from blizzard.runner.domain.pause import IReadPauseRepository
 from blizzard.runner.domain.requeue import IReadRequeueRepository
-from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository, SelfTestCheckRecord
+from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.domain.takeover import IReadTakeoverRepository
 from blizzard.runner.domain.usage import IReadUsageRepository
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
@@ -537,7 +537,6 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         harness_id=CLAUDE_CODE_HARNESS_ID,
         status="passed",
         error=None,
-        checks=(SelfTestCheckRecord(name="spawn_session_id", passed=True, detail="ok"),),
         recorded_at=_t(87),
     )
 

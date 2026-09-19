@@ -1808,7 +1808,7 @@
         "type": "object"
       },
       "HarnessHealthView": {
-        "description": "One configured harness binding's own computed health (blizzard#438) \u2014\n``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of\n``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,\n``unmapped_tier``, ``selftest_failure``, or ``declared_degradation``, ``None`` when available.",
+        "description": "One configured harness binding's own computed health (blizzard#438) \u2014\n``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of\n``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,\n``unmapped_tier``, or ``selftest_failure`` when unavailable; ``declared_degradation`` when\navailable but degraded; ``None`` only when available with no declared degradation either.",
         "properties": {
           "available": {
             "title": "Available",

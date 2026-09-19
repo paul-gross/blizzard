@@ -1,6 +1,6 @@
 """``classify_offline``'s corpus lookup (blizzard#438) — reads the committed fixture corpus
 rather than running a live probe. Mirrors `test_runner_harness_opencode_compatibility.py`'s
-own `_REPO_ROOT`/corpus-path construction."""
+own `_PACKAGE_ROOT`/corpus-path construction."""
 
 from __future__ import annotations
 
@@ -15,12 +15,12 @@ from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERS
 
 pytestmark = pytest.mark.unit
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_CORPUS_DIR = _REPO_ROOT / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
+_PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
+_CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
 
 
-def test_default_corpus_root_is_the_repos_own_contracts_tree() -> None:
-    assert DEFAULT_CORPUS_ROOT == _REPO_ROOT / "contracts"
+def test_default_corpus_root_is_the_harness_packages_own_contracts_tree() -> None:
+    assert DEFAULT_CORPUS_ROOT == _PACKAGE_ROOT / "contracts"
 
 
 def test_the_pinned_opencode_corpus_classifies_degraded() -> None:

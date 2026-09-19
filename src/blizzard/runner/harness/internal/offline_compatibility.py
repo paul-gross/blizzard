@@ -12,9 +12,10 @@ from pathlib import Path
 
 from blizzard.runner.harness.compatibility import CompatibilityClassification
 
-# Mirrors `tests/test_runner_harness_opencode_compatibility.py`'s own `_REPO_ROOT` construction.
-_REPO_ROOT = Path(__file__).resolve().parents[5]
-DEFAULT_CORPUS_ROOT = _REPO_ROOT / "contracts"
+# Package-relative, not repo-root-relative: the wheel ships only `src/blizzard`
+# (`pyproject.toml`'s `packages`), so the corpus lives under `harness/contracts` and is
+# found the same way in a checkout and an installed wheel alike.
+DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parent.parent / "contracts"
 
 
 def classify_offline(

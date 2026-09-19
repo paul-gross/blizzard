@@ -132,6 +132,13 @@ class HarnessHealthCache:
         which must never itself trigger a probe mid-selection."""
         return self._results.get(harness_id)
 
+    def observed_version(self, harness_id: str) -> str | None:
+        """The version last given to :meth:`refresh` for ``harness_id`` — ``None`` both
+        when refresh has never run and when the observed version genuinely was ``None``,
+        the same ambiguity :meth:`get` already carries for "no result yet"."""
+        value = self._last_version.get(harness_id)
+        return value if isinstance(value, str) else None
+
 
 def default_harness_id(harnesses: IHarnessRegistry) -> str | None:
     """The runner's own default harness (blizzard#433) — the registry's own binding order
