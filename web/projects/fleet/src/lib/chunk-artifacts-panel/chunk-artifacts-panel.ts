@@ -39,7 +39,7 @@ export class ChunkArtifactsPanel {
 
   /** Opt-in phone drill-down presentation. Without a URL selection, render only
    * the list; with one (including a stale key), render only its detail state.
-   * The default retains the desktop and runner list-plus-viewer presentation. */
+   * Defaults to simultaneous list-plus-viewer. */
   readonly drilldown = input(false);
 
   /** Roots every `data-testid` this component renders, the same convention
@@ -55,8 +55,7 @@ export class ChunkArtifactsPanel {
   /** Emitted with a nav row's key when the operator picks it. */
   readonly pickArtifact = output<string>();
 
-  /** Clear the URL-held artifact selection. The mounting page remains the sole
-   * query-param writer. */
+  /** Clear the URL-held artifact selection. */
   readonly clearArtifact = output<void>();
 
   protected readonly sortedArtifacts = computed(() => sortArtifacts(this.artifacts()));

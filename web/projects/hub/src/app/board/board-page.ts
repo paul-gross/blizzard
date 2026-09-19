@@ -56,9 +56,8 @@ function withRequestedPosition(order: readonly string[], move: RepositionVars): 
  *   clicking one opens its chunk in the dock, where it is answered — then
  *   {@link ActivityPanel}'s live feed.
  *
- * The left rail that used to hold the ready queue over the activity feed is gone
- * (issue #137): the READY and BACKLOG lanes are board cards like every other
- * chunk, reordered in place rather than rendered as a second surface.
+ * The READY and BACKLOG lanes are board cards like every other chunk, reordered in
+ * place rather than rendered as a second surface.
  * This page owns the writes those affordances imply, since {@link BoardShell} is
  * presentational: the queue and backlog reads feed each lane's order, and the
  * lane-tagged reposition events route to `POST /api/queue/position` or

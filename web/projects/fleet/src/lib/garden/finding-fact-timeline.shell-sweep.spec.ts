@@ -14,16 +14,12 @@ import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
  * bottom tab bar, so the narrow widths (390px, 320px) are load-bearing, not
  * incidental (`bzh:narrow-viewport-tier-rule`).
  *
- * Mounts the composed `FleetFindingPanel` (review:F11), not the standalone
- * `FleetFindingFactTimeline` this file mounted before: the timeline is never
- * reached on its own in the real app, always inside the panel's own `.fp-timeline`
- * section, and mounting it bare left that section's new `<h4>` heading with no
- * matching CSS rule (F11's own gap) undetected. A typography-only regression isn't
- * something a scrollWidth assertion can catch either way — the value of mounting
- * through the real composition instead is that any *future* layout regression in
- * the composed panel (e.g. the timeline overflowing once real panel chrome
- * constrains its width) is caught where it would actually happen, rather than in
- * an isolation the timeline is never rendered in on its own.
+ * Mounts the composed `FleetFindingPanel`, not the standalone
+ * `FleetFindingFactTimeline`: the timeline is never reached on its own in the real
+ * app, always inside the panel's own `.fp-timeline` section, so mounting through the
+ * real composition catches a future layout regression there (e.g. the timeline
+ * overflowing once real panel chrome constrains its width) where it would actually
+ * happen, rather than in an isolation the timeline is never rendered in on its own.
  *
  * The fixture note (review:F3) is a genuinely unbroken 96-character run with no
  * spaces — the previous fixture was ordinary space-separated prose, which wraps at

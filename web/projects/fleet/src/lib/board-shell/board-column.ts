@@ -30,9 +30,7 @@ export interface BoardReposition {
 
 /**
  * One board column — a lane's engraved head (label, occupancy beacon, count)
- * over its card list. Split out of {@link BoardShell} (issue #137) alongside
- * {@link BoardCardComponent} so that file stays under the
- * `web:lint` line cap once the ranked lanes gained reordering.
+ * over its card list.
  *
  * {@link reorderControls} arms READY and BACKLOG's drag-and-drop branches. Every
  * other lane renders a plain, undraggable list, so `cdkDropList`/`cdkDrag` never

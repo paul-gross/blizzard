@@ -8,8 +8,8 @@ import { type SseHandle, type SseStatus, SseService } from './sse.service';
  * live-update service already injects, plus what makes the spine *its* instance: the
  * stream to open, the event union it carries, and the registry mapping each kind to
  * the query keys it stales. `onFrame`/`onAuthFailed` are the two hooks a daemon's own
- * service still owns directly (`review:F5`) — an activity-feed tee for the hub, the D9
- * session-recovery bounce for the runner — neither of which the spine knows about. */
+ * service still owns directly — invoked on every frame or auth failure, with no
+ * interpretation by the spine itself. */
 export interface LiveInvalidationSpineOptions<TPayload extends object, TType extends string> {
   sse: SseService;
   queryClient: QueryClient;

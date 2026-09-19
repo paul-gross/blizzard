@@ -1,19 +1,14 @@
 :host {
   display: block;
 }
-/* Self-padded on all four sides (matching `graph-diagram-detail.css`'s own
-   `.fields`, the app's other bare fact-list-in-a-panel) since this component is
-   dropped straight into `fleet-kit-panel`'s unpadded body in the general tab
-   (hub and runner alike) with no consumer wrapper of its own — a bottom margin
-   alone does not reliably show up as trailing space on a last child here, so the
-   bottom is real padding too, not left to margin collapse. `--chunk-facts-pad`
-   is the same override-hook shape `KitPanel` itself uses for `--kit-panel-bg`
-   (custom properties cascade through view encapsulation) — `chunk-detail-panel.css`
-   sets it to `0` for the board dock's own `.d-sec`, which already pads that whole
-   column and would otherwise double up. `chunk-token-breakdown.css`'s own
-   `fleet-kit-fact-list` rule reads the same property, so the two tables' padding
-   stays identical regardless of context; their label columns already match with no
-   override needed, since both render through the one shared `KitFactList`. */
+/* Self-padded on all four sides — this component drops straight into
+   `fleet-kit-panel`'s unpadded body in the general tab (hub and runner alike) with no
+   consumer wrapper of its own, and a bottom margin alone does not reliably show up as
+   trailing space on a last child here, so the bottom is real padding too, not left to
+   margin collapse. `--chunk-facts-pad` is an override hook (custom properties cascade
+   through view encapsulation): `chunk-detail-panel.css` overrides it to `0` for the
+   board dock; `chunk-token-breakdown.css` reads the same property, keeping the two
+   tables' padding identical regardless of context. */
 .cf-facts {
   display: block;
   margin: 0 0 8px;

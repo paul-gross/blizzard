@@ -12,9 +12,7 @@ import { deriveFactTimelineRows, type FindingFactRow } from './finding-fact-time
  * ordered read-only list. Row derivation lives in `finding-fact-timeline-rows.ts`
  * (`canon:one-owner`) — this component only renders it.
  *
- * Carries no heading of its own — `finding-panel.html` supplies one around it,
- * `chunk-timeline.ts`'s own `heading` input simplified away: nothing here needs a
- * consumer that would rather this component's heading stayed off.
+ * Carries no heading of its own — a consumer supplies one around it.
  *
  * The empty state (no facts at all) is a defensive rest state, not a designed-for
  * path — a finding always carries at least an `add` fact in practice — so it stays

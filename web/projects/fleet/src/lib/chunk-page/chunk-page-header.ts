@@ -39,12 +39,11 @@ export class ChunkPageHeader {
   /** The chunk's current status, rendered verbatim on the badge. */
   readonly status = input.required<string>();
 
-  /** The derived {@link Tone} the status text colors by — each caller's own
-   * `STATUS_TONE`/`deriveMachineChunkStatus` fold (`bzh:frontend-formatters`). */
+  /** The derived {@link Tone} the status text colors by — resolved by the caller
+   * before this component ever sees the status (`bzh:frontend-formatters`). */
   readonly tone = input.required<Tone>();
 
-  /** The work items this chunk serves, rendered first on the line — the same pointers
-   * the dock's own identity line leads with. */
+  /** The work items this chunk serves, rendered first on the line. */
   readonly pointers = input<readonly WorkRefView[]>([]);
 
   /** Every prerequisite this chunk still waits on, as chunk ids — the whole set, not
@@ -59,8 +58,8 @@ export class ChunkPageHeader {
    * instead ({@link ChunkDetailHeader}'s own `linkBase` follows the same convention). */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
-  /** The status text's own color, resolved off {@link tone} — the badge's color ladder
-   * kept now that the badge itself is gone (`kit-badge.ts` owns the mapping). */
+  /** The status text's own color, resolved off {@link tone} (`kit-badge.ts` owns the
+   * mapping). */
   protected readonly statusColor = computed<string>(() => toneColor(this.tone()));
 
   /** A neighbor's compact ref — every surface that names an entity compactly resolves

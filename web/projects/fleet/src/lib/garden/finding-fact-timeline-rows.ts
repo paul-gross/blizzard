@@ -38,8 +38,7 @@ export const FACT_KIND_LABELS: Record<string, string> = {
  * A finding's whole fact chain (blizzard#487), re-read as timeline rows — a pure map
  * over `facts` in the array's own order (already oldest-first off the wire; never
  * re-sorted here). The single owner of this derivation (`canon:one-owner`,
- * `chunk-timeline-rows.ts`'s own precedent) — {@link FleetFindingFactTimeline} reads
- * it rather than re-deriving it inline.
+ * `chunk-timeline-rows.ts`'s own precedent).
  */
 export function deriveFactTimelineRows(facts: readonly FindingFactView[]): readonly FindingFactRow[] {
   return facts.map((fact, index) => ({

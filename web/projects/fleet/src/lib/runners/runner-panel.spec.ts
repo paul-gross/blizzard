@@ -522,9 +522,8 @@ describe('RunnerPanel external-subscription pace bars (issue #218)', () => {
 });
 
 describe('RunnerPanel per-subscription data model (blizzard#436)', () => {
-  // Data model only — blizzard#478 owns rendering it, so these assert on the
-  // component's `rows` output directly rather than on any DOM the template does not
-  // yet grow.
+  // Data model only, asserted on the component's `rows` output directly — this
+  // template renders no per-subscription grouping.
   let stub: RequestClientStub;
 
   const RUNNERS_WITH_SUBSCRIPTIONS = {

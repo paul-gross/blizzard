@@ -27,8 +27,7 @@ export interface PaceBar {
   readonly elapsedPct: number;
 }
 
-/** One declared subscription's own pace bars, grouped under its slug and name —
- * additive beside the legacy single-subscription {@link PaceBar} list. Two
+/** One declared subscription's own pace bars, grouped under its slug and name. Two
  * subscriptions can share a window label (both report a `"5h"` window), so
  * grouping by slug is what keeps them distinct. */
 export interface SubscriptionPace {
@@ -43,9 +42,8 @@ export interface SubscriptionPace {
  * `paceBars` is empty when the runner has never sampled its external-subscription
  * usage, or the sample is stale — the hub already nulls `external_subscription_usage`
  * in that case, so this row never needs to re-derive staleness itself.
- * `subscriptionPaces` is the per-slug grouping of the same windows, derived from
- * the wire's additive `subscriptions` collection — empty for a runner that has
- * declared none, including one still on the legacy single-subscription shape alone. */
+ * `subscriptionPaces` is the per-slug grouping of the same windows, empty for a
+ * runner that has declared none. */
 export interface RunnerRow extends RunnerView {
   readonly claims: readonly ClaimLine[];
   readonly used: number;
@@ -77,9 +75,8 @@ export function runnerToggleHint(row: RunnerRow): string {
  * to `[0, 100]`: a `resetsAt` more than a full window out (not yet started) reads 0, one
  * already passed (a stale sample) reads 100 rather than overshooting.
  *
- * `nowMs` is the caller's own clock reading (`injectNowSignal()`'s value in the
- * container) — this function does no clock reads of its own, so it stays directly
- * testable against a fixed instant.
+ * `nowMs` is the caller's own clock reading — this function does no clock reads of
+ * its own, so it stays directly testable against a fixed instant.
  */
 export function windowElapsedPct(nowMs: number, resetsAt: string, windowSeconds: number): number {
   const resetsAtMs = Date.parse(resetsAt);

@@ -34,13 +34,13 @@ export interface BoardCard {
    * and for one inside it with no standing edge. Names the immediate prerequisite only. */
   readonly blockedOn: string | null;
   /** How many prerequisites are unmet in total, from `BlockedView.unmet_count` — 0 whenever
-   * {@link blockedOn} is null. Above 1 the card counts them rather than naming the first and
-   * silently dropping the rest; there is no room on a card for a list. */
+   * {@link blockedOn} is null. The count-vs-list choice above 1 is pinned by
+   * `board-card.spec.ts`'s "counts the prerequisites instead of naming the first…" case. */
   readonly blockedCount: number;
   /** The blocking chunk's own derived status, when exactly one chunk blocks this one —
    * null otherwise (nothing blocking, several blocking, or the blocker absent from the
-   * board's own chunk list). Read off the board's existing chunk list, not the wire:
-   * `BlockedView` names the prerequisite but not its status. */
+   * board's own chunk list). Derived from the board's own chunk list rather than carried
+   * on the wire directly. */
   readonly blockedOnStatus: ChunkStatus | null;
 }
 
@@ -53,8 +53,7 @@ export interface BoardCard {
  * since same-instant chunk ids share a 12-char prefix. Nothing else in the
  * board repeats that attribute, so it stays one node per chunk.
  *
- * The same card renders in every lane, READY included: {@link BoardColumn}'s
- * decorative reorder cue stays beside it, so this remains the one card the
+ * The same card renders in every lane, READY included, so this remains the one card the
  * whole board is built from.
  *
  * Presentational only: {@link card} and {@link selected} are plain inputs; every
@@ -116,8 +115,8 @@ export class BoardCardComponent {
   }
 
   /** What the blocked marking names, beside the status: the one unmet prerequisite's compact
-   * ref, or a count once there is more than one. A card has no room to list them, and naming
-   * only the first would read as the whole answer. */
+   * ref, or a count once there is more than one — pinned by `board-card.spec.ts`'s "counts the
+   * prerequisites instead of naming the first…" case. */
   protected blockedLabel(card: BoardCard): string {
     return card.blockedCount > 1 ? `${card.blockedCount} chunks` : compactRef(card.blockedOn ?? '');
   }

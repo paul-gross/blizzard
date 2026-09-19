@@ -35,9 +35,8 @@
         <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
       }
       <!-- The blocked marking (issue #461) reads beside the status, in the status's own
-           engraved style, and names its prerequisite rather than reaching it: a card is
-           already one button that opens this chunk, and a second target inside that row
-           competes with it. The dock and the chunk page own the navigable version. -->
+           engraved style. Non-link pinned by `board-card.spec.ts`'s "references the
+           prerequisite rather than reaching it…" case. -->
       @if (card().blockedOn) {
         <span class="st sep" aria-hidden="true">·</span>
         <span class="st blk" data-testid="chunk-blocked-by" [title]="card().blockedOn">

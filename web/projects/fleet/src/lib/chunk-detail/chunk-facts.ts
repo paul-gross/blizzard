@@ -60,9 +60,8 @@ export class ChunkFacts {
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
   /** The chunk detail route's own path segments, before a neighbor's chunk id — the
-   * Depends on / Blocks rows link each neighbor there. Non-nullable with a default, the
-   * same shape `ChunkDetailHeader.linkBase` carries: unlike `/graphs` both apps have
-   * this route. */
+   * Depends on / Blocks rows link each neighbor there. Non-nullable with a default,
+   * since both apps have this route. */
   readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
 
   /** Emitted when the operator sets a not-ready chunk's graph (issue #27). No
@@ -113,11 +112,10 @@ export class ChunkFacts {
     return unclaimed && !detail.current_node_id;
   });
 
-  /** The chunk's standing dependency edges, each direction its own fact row — the
-   * fact table is where they read best: one shared label column, so the neighbors line
-   * up under the same right-hand edge as Status, Node, and Graph rather than sitting in
-   * a block of their own with its own alignment. A direction with no edges renders no
-   * row at all, the same way Model's retired row simply is not there. */
+  /** The chunk's standing dependency edges, each direction its own fact row. Placement
+   * pinned by `chunk-facts-alignment.shell-sweep.spec.ts`'s "keeps a standing-edge row's
+   * value column…" case; the edge-less-direction-renders-no-row behavior by
+   * `chunk-facts.spec.ts`'s "renders the standing edges…" case. */
   protected readonly prerequisites = computed<readonly ChunkNeighborView[]>(
     () => this.detail().neighborhood?.prerequisites ?? [],
   );
@@ -154,8 +152,7 @@ export class ChunkFacts {
   /** The identity table's rows — a method, not a stored computed, since the Graph,
    * Depends on, and Blocks rows' markup needs the `<ng-template>`s the view declares
    * for them (`KitFactList`'s own templated-row contract). Depends on / Blocks are
-   * appended only when their direction has an edge — a direction with none renders no
-   * row at all, the same way Model's retired row simply is not there. */
+   * appended only when their direction has an edge. */
   protected factRows(
     graphValue: TemplateRef<unknown>,
     dependsOnValue: TemplateRef<unknown>,

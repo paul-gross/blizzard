@@ -230,10 +230,10 @@ describe('the /gardening route subtree', () => {
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
       if (method === 'GET' && path === '/api/runs') return [];
-      // The bucket read has to name fnd_1 too — the widened findings bucket
-      // (blizzard#486) fires unconditionally now, and a route-named finding the
-      // bucket's own rows don't include gets navigated away from
-      // (`gardening-findings-page.ts`'s own selection-agreement effect).
+      // The bucket read has to name fnd_1 too — the findings bucket read fires
+      // unconditionally, and a route-named finding the bucket's own rows don't
+      // include gets navigated away from (`gardening-findings-page.ts`'s own
+      // selection-agreement effect).
       if (method === 'GET' && path === '/api/findings') {
         return {
           findings: [
