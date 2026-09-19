@@ -246,7 +246,7 @@ chunks = Table(
     # `{"mode", "graph_id", "node_name"}` blob, read whole; NULL while no intent is set.
     Column("intended_migration", Text, nullable=True),
 )
-# The activity feed's own bounded read (D6) — chunk.minted's ts/pk tie-break.
+# (minted_at, chunk_id) for newest-first bounded reads since a timestamp (D6).
 Index("ix_chunks_minted_at_chunk_id", chunks.c.minted_at, chunks.c.chunk_id)
 
 chunk_work_refs = Table(
@@ -258,9 +258,8 @@ chunk_work_refs = Table(
     Column("ref", String, nullable=False),
 )
 Index("ix_chunk_work_refs_chunk_id", chunk_work_refs.c.chunk_id)
-# Both real `source`-only readers (`analytics_operational_store.py`,
-# `analytics_event_query_store.py`) are already served by this composite's leading
-# column — no separate single-column `source` index (blizzard#519 D5's own reasoning).
+# (source, ref) also serves a source-only filter via its leading column (blizzard#519
+# D5's own reasoning) — no separate single-column source index.
 Index("ix_chunk_work_refs_source_ref", chunk_work_refs.c.source, chunk_work_refs.c.ref)
 
 # --- Movement record (transition.recorded) ------------------------------------
@@ -281,14 +280,13 @@ transitions = Table(
     Column("runner_id", String, nullable=False),  # reporting author, or the hub coordinator
     Column("recorded_at", UtcDateTime, nullable=False),
 )
-# Supersedes the single-column `ix_transitions_chunk_id` (blizzard#519 D5): a strict
-# superset serving both the plain chunk_id filter and the analytics `(chunk_id, epoch)`
-# join, at no extra write cost.
+# (chunk_id, epoch) serves both a plain chunk_id filter and a per-attempt (chunk_id,
+# epoch) join, at no extra write cost over a single-column index.
 Index("ix_transitions_chunk_id_epoch", transitions.c.chunk_id, transitions.c.epoch)
 
-# The activity feed's bounded read (issue #213, D6) — supersedes the single-column
-# `ix_transitions_recorded_at`: the composite also covers `_bounded`'s `transition_id`
-# tie-break, and ``transitions`` is the one high-volume source among the feed's.
+# (recorded_at, transition_id) for newest-first bounded reads since a timestamp (D6,
+# issue #213) — this table is the one high-volume source among the tables such a read
+# spans.
 Index("ix_transitions_recorded_at_transition_id", transitions.c.recorded_at, transitions.c.transition_id)
 
 # The delivery-materialization sweep's own candidate read (blizzard#366) — every pass
@@ -317,7 +315,7 @@ chunk_migrations = Table(
     Column("source", String, nullable=True),
 )
 Index("ix_chunk_migrations_chunk_id", chunk_migrations.c.chunk_id)
-# The activity feed's own bounded read (D6) — chunk_migrations's ts/pk tie-break.
+# (recorded_at, migration_id) for newest-first bounded reads since a timestamp (D6).
 Index("ix_chunk_migrations_recorded_at_migration_id", chunk_migrations.c.recorded_at, chunk_migrations.c.migration_id)
 
 # --- Artifacts (the chunk artifact store) --------------------------------------
@@ -337,8 +335,9 @@ artifacts = Table(
     Column("forge", String, nullable=True),  # git_commit only (issue #143); null = legacy row
     Column("produced_at", UtcDateTime, nullable=False),
 )
-# `ChunkDetail` inlines artifacts by chunk (blizzard#519); `node_id`/`epoch` trail so the
-# same index still serves a chunk-only lookup as its leading-column prefix.
+# (chunk_id, node_id, epoch): a chunk's artifacts inlined by chunk (blizzard#519);
+# node_id/epoch trail so the same index still serves a chunk-only lookup as its
+# leading-column prefix.
 Index("ix_artifacts_chunk_id_node_id_epoch", artifacts.c.chunk_id, artifacts.c.node_id, artifacts.c.epoch)
 
 # --- Findings and finding sets (blizzard#390) -----------------------------------
@@ -563,9 +562,8 @@ lease_facts = Table(
     Column("runner_id", String, nullable=False),
     Column("minted_at", UtcDateTime, nullable=False),
 )
-# Supersedes the single-column `ix_lease_facts_chunk_id` (blizzard#519 D5): a strict
-# superset serving both the plain chunk_id filter and the analytics `(chunk_id, epoch)`
-# join, at no extra write cost.
+# (chunk_id, epoch) serves both a plain chunk_id filter and a per-attempt (chunk_id,
+# epoch) join, at no extra write cost over a single-column index.
 Index("ix_lease_facts_chunk_id_epoch", lease_facts.c.chunk_id, lease_facts.c.epoch)
 
 # --- Routes (route.created / route.released) ----------------------------------
@@ -583,7 +581,7 @@ route_created = Table(
     Column("seq", Integer, nullable=False),
 )
 Index("ix_route_created_chunk_id", route_created.c.chunk_id)
-# The activity feed's own bounded read (D6) — route_created's ts/pk tie-break.
+# (created_at, route_id) for newest-first bounded reads since a timestamp (D6).
 Index("ix_route_created_created_at_route_id", route_created.c.created_at, route_created.c.route_id)
 
 route_environments = Table(
@@ -605,8 +603,9 @@ route_released = Table(
     Column("seq", Integer, nullable=False),
 )
 Index("ix_route_released_chunk_id", route_released.c.chunk_id)
-# The activity feed's own bounded read (D6) — released_at/id, portable across sqlite and
-# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+# (released_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
+# rowid as a tie-break).
 Index("ix_route_released_released_at_id", route_released.c.released_at, route_released.c.id)
 
 # --- Route capability tokens (route_token_minted — issue #84a) ----------------
@@ -674,8 +673,8 @@ close_intents = Table(
     Column("retired_at", UtcDateTime, nullable=True),  # null = pending; set when the drainer retires it
     UniqueConstraint("chunk_id", "source", "ref", name="uq_close_intents_chunk_source_ref"),
 )
-# `pending_close_intents` filters `retired_at IS NULL` — sqlite indexes NULLs too, so a
-# plain index still serves the filter (blizzard#519).
+# A pending-intents filter on `retired_at IS NULL` — sqlite indexes NULLs too, so a
+# plain index still serves it (blizzard#519).
 Index("ix_close_intents_pending", close_intents.c.retired_at)
 
 # --- Close-intent drain attempts (close_intent_attempts, blizzard#524 D7) ------------
@@ -704,9 +703,8 @@ chunk_bounces = Table(
     Column("envelope", Text, nullable=False),  # JSON kick-back payload
     Column("recorded_at", UtcDateTime, nullable=False),
 )
-# Supersedes the single-column `ix_chunk_bounces_chunk_id` (blizzard#519 D5): a strict
-# superset serving both the plain chunk_id filter and the analytics `(chunk_id, epoch)`
-# anti-join, at no extra write cost.
+# (chunk_id, epoch) serves both a plain chunk_id filter and a per-attempt (chunk_id,
+# epoch) anti-join, at no extra write cost over a single-column index.
 Index("ix_chunk_bounces_chunk_id_epoch", chunk_bounces.c.chunk_id, chunk_bounces.c.epoch)
 
 # --- Open-PR delivery facts (pr.opened / pr.closed) ---------------------------
@@ -778,8 +776,9 @@ chunk_promoted = Table(
     Column("promoted_at", UtcDateTime, nullable=False),  # not_ready -> ready
 )
 Index("ix_chunk_promoted_chunk_id", chunk_promoted.c.chunk_id)
-# The activity feed's own bounded read (D6) — promoted_at/id, portable across sqlite and
-# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+# (promoted_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
+# rowid as a tie-break).
 Index("ix_chunk_promoted_promoted_at_id", chunk_promoted.c.promoted_at, chunk_promoted.c.id)
 
 # --- Facts that make the derivation precedence correct (shaped) -------------
@@ -794,8 +793,9 @@ chunk_stopped = Table(
     Column("stopped_by", String, nullable=True),
 )
 Index("ix_chunk_stopped_chunk_id", chunk_stopped.c.chunk_id)
-# The activity feed's own bounded read (D6) — stopped_at/id, portable across sqlite and
-# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+# (stopped_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
+# rowid as a tie-break).
 Index("ix_chunk_stopped_stopped_at_id", chunk_stopped.c.stopped_at, chunk_stopped.c.id)
 
 # An operator's manual completion (issue #294) — outranks a ``chunk_stopped`` row recorded
@@ -809,8 +809,9 @@ chunk_completed = Table(
     Column("completed_by", String, nullable=False),
 )
 Index("ix_chunk_completed_chunk_id", chunk_completed.c.chunk_id)
-# The activity feed's own bounded read (D6) — completed_at/id, portable across sqlite
-# and postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+# (completed_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
+# rowid as a tie-break).
 Index("ix_chunk_completed_completed_at_id", chunk_completed.c.completed_at, chunk_completed.c.id)
 
 # The fact that makes an unacquired chunk ephemeral by deletion (issue #364) — a
@@ -823,8 +824,9 @@ chunk_deleted = Table(
     Column("deleted_at", UtcDateTime, nullable=False),
     Column("deleted_by", String, nullable=False),
 )
-# The activity feed's own bounded read (D6) — deleted_at/id, portable across sqlite and
-# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+# (deleted_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
+# rowid as a tie-break).
 Index("ix_chunk_deleted_deleted_at_id", chunk_deleted.c.deleted_at, chunk_deleted.c.id)
 
 # --- Chunk dependency edges (issue #456) --------------------------------------
@@ -860,8 +862,9 @@ escalations = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_escalations_chunk_id", escalations.c.chunk_id)
-# The activity feed's own bounded read (D6) — recorded_at/id, portable across sqlite and
-# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+# (recorded_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
+# rowid as a tie-break).
 Index("ix_escalations_recorded_at_id", escalations.c.recorded_at, escalations.c.id)
 
 # --- Usage facts (usage.recorded — issue #59) --------------------------------
@@ -909,7 +912,7 @@ questions = Table(
     Column("asked_at", UtcDateTime, nullable=False),  # reap clock stops for the chunk from here
 )
 Index("ix_questions_chunk_id", questions.c.chunk_id)
-# The activity feed's own bounded read (D6) — questions's ts/pk tie-break.
+# (asked_at, question_id) for newest-first bounded reads since a timestamp (D6).
 Index("ix_questions_asked_at_question_id", questions.c.asked_at, questions.c.question_id)
 
 question_answers = Table(
@@ -922,8 +925,8 @@ question_answers = Table(
     Column("answered_by", String, nullable=False),  # who won the CAS
     Column("answered_at", UtcDateTime, nullable=False),
 )
-# The activity feed's own bounded read (D6) — question_answers's ts/pk tie-break; the PK
-# IS the question id, so it also serves as the row's own tie-break column.
+# (answered_at, question_id) for newest-first bounded reads since a timestamp (D6); the
+# PK IS the question id, so it also serves as the row's own tie-break column.
 Index("ix_question_answers_answered_at_question_id", question_answers.c.answered_at, question_answers.c.question_id)
 
 answer_deliveries = Table(
@@ -952,7 +955,7 @@ decisions = Table(
     Column("submitted_at", UtcDateTime, nullable=False),
 )
 Index("ix_decisions_chunk_id", decisions.c.chunk_id)
-# The activity feed's own bounded read (D6) — decisions's ts/pk tie-break.
+# (submitted_at, decision_id) for newest-first bounded reads since a timestamp (D6).
 Index("ix_decisions_submitted_at_decision_id", decisions.c.submitted_at, decisions.c.decision_id)
 
 decision_resolutions = Table(
@@ -965,8 +968,8 @@ decision_resolutions = Table(
     Column("resolved_by", String, nullable=False),
     Column("resolved_at", UtcDateTime, nullable=False),
 )
-# The activity feed's own bounded read (D6) — the PK IS the decision id, so it also
-# serves as the row's own tie-break column.
+# (resolved_at, decision_id) for newest-first bounded reads since a timestamp (D6); the
+# PK IS the decision id, so it also serves as the row's own tie-break column.
 Index(
     "ix_decision_resolutions_resolved_at_decision_id",
     decision_resolutions.c.resolved_at,
@@ -984,8 +987,9 @@ requeues = Table(
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
 )
 Index("ix_requeues_chunk_id", requeues.c.chunk_id)
-# The activity feed's own bounded read (D6) — requeued_at/id, portable across sqlite and
-# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+# (requeued_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
+# rowid as a tie-break).
 Index("ix_requeues_requeued_at_id", requeues.c.requeued_at, requeues.c.id)
 
 # An operator's forced move of a chunk onto a node, now (issue #370) — a movement fact of
@@ -1010,8 +1014,9 @@ chunk_restarts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_chunk_restarts_chunk_id", chunk_restarts.c.chunk_id)
-# The activity feed's own bounded read (D6) — recorded_at/id, portable across sqlite and
-# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+# (recorded_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
+# rowid as a tie-break).
 Index("ix_chunk_restarts_recorded_at_id", chunk_restarts.c.recorded_at, chunk_restarts.c.id)
 
 # --- Chunk pause facts (chunk.paused / chunk.resumed — issue #46) -----------
@@ -1027,8 +1032,9 @@ chunk_pause_facts = Table(
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
 )
 Index("ix_chunk_pause_facts_chunk_id", chunk_pause_facts.c.chunk_id)
-# The activity feed's own bounded read (D6) — set_at/id, portable across sqlite and
-# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+# (set_at, id) for newest-first bounded reads since a timestamp (D6), portable across
+# sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as
+# a tie-break).
 Index("ix_chunk_pause_facts_set_at_id", chunk_pause_facts.c.set_at, chunk_pause_facts.c.id)
 
 # --- Store-and-forward high-water mark (per-runner idempotency) ---------------
@@ -1065,8 +1071,9 @@ chunk_grouped = Table(
     Column("grouped_into", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the survivor
     Column("grouped_at", UtcDateTime, nullable=False),
 )
-# The activity feed's own bounded read (D6) — grouped_at/id, portable across sqlite and
-# postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as a tie-break).
+# (grouped_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
+# rowid as a tie-break).
 Index("ix_chunk_grouped_grouped_at_id", chunk_grouped.c.grouped_at, chunk_grouped.c.id)
 
 # --- The fleet registry (runner.registered / paused / resumed) ----------------
@@ -1285,7 +1292,7 @@ transcript_segments = Table(
     Column("harness_version", String, nullable=True),
     # The runner's OWN cap declaration, distinct from `rejected` above; nullable, no backfill.
     Column("record_truncated", Boolean, nullable=True),
-    # Re-ship only: the segment this replaces, which `_records_for_lease_stmt` then drops.
+    # Re-ship only: the segment this replaces — dropped from a bounded per-lease read.
     Column("supersedes", String, nullable=True),
     # Hub-stamped receipt instant — the D3 rolling 24h window anchors here, never on the runner's.
     Column("received_at", UtcDateTime, nullable=False),
@@ -1298,11 +1305,11 @@ transcript_segments = Table(
 Index("ix_transcript_segments_chunk_id", transcript_segments.c.chunk_id)
 Index("ix_transcript_segments_runner_received_at", transcript_segments.c.runner_id, transcript_segments.c.received_at)
 Index("ix_transcript_segments_segment_id", transcript_segments.c.segment_id)
-# `_visible_segment_ids_stmt`'s `NOT IN (SELECT supersedes ...)` subquery (blizzard#519).
+# A visible-segment read's `NOT IN (SELECT supersedes ...)` anti-join (blizzard#519).
 Index("ix_transcript_segments_supersedes", transcript_segments.c.supersedes)
-# `_visible_segment_ids_stmt`'s outer `WHERE final = TRUE`, `final` leading because it is
-# the more selective predicate; `chunk_id` second lets the `IN (chunks)` probe and the
-# `DISTINCT` ride the same index (blizzard#519).
+# (final, chunk_id): a visible-segment read's outer `WHERE final = TRUE`, `final`
+# leading because it is the more selective predicate; `chunk_id` second lets an `IN
+# (chunks)` probe and a `DISTINCT` ride the same index (blizzard#519).
 Index("ix_transcript_segments_final_chunk_id", transcript_segments.c.final, transcript_segments.c.chunk_id)
 
 # --- Transcript lane high-water mark (D7 — own table, not runner_high_water) --------
@@ -1365,7 +1372,8 @@ Index("ix_transcript_events_chunk_id", transcript_events.c.chunk_id)
 Index("ix_transcript_events_segment_id", transcript_events.c.segment_id)
 Index("ix_transcript_events_subject", transcript_events.c.subject)
 Index("ix_transcript_events_tool", transcript_events.c.tool)
-# `_events_stmt`'s `extractor_version = ? AND id > cursor ORDER BY id` (blizzard#519).
+# (extractor_version, id) for a per-extractor cursor read: `extractor_version = ? AND
+# id > cursor ORDER BY id` (blizzard#519).
 Index("ix_transcript_events_extractor_version_id", transcript_events.c.extractor_version, transcript_events.c.id)
 
 # --- Per-segment derivation marker (D6) — replaced, never appended: what a segment's ---
