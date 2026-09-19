@@ -70,7 +70,12 @@ def test_a_later_generations_recovery_range_excludes_an_earlier_generations_toke
     _seed_lease(store)
     source = FakeTranscriptSource(lines_by_session={_SESSION_ID: ["a usage-bearing line"]})
     sample = UsageSample(
-        kind="spawn", model="m", input_tokens=1, output_tokens=1, cache_read_tokens=0, cache_create_tokens=0,
+        kind="spawn",
+        model="m",
+        input_tokens=1,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
         cost_usd=None,
     )
     handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)
@@ -80,12 +85,21 @@ def test_a_later_generations_recovery_range_excludes_an_earlier_generations_toke
 
     # Generation 1: a fresh session's spawn boundary opens on the beginning sentinel.
     store.record_spawn(
-        "lease_a", pid=1, process_start_time="start-1", session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
+        "lease_a",
+        pid=1,
+        process_start_time="start-1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
         spawned_at=_NOW,
     )
     store.record_boundary_open(
-        lease_id="lease_a", chunk_id=_CHUNK_ID, node_id=_NODE_ID, epoch=1, generation=1, kind="spawn",
-        start_position=None, opened_at=_NOW,
+        lease_id="lease_a",
+        chunk_id=_CHUNK_ID,
+        node_id=_NODE_ID,
+        epoch=1,
+        generation=1,
+        kind="spawn",
+        start_position=None,
+        opened_at=_NOW,
     )
     source._tail_positions[_SESSION_ID] = TranscriptPosition("tail-after-gen-1")
     lease_a = store.active_lease("lease_a")
@@ -95,12 +109,21 @@ def test_a_later_generations_recovery_range_excludes_an_earlier_generations_toke
     # Generation 2: a resume opened its own boundary at generation 1's own tail — the
     # range this generation's recovery must be scoped to.
     store.record_spawn(
-        "lease_a", pid=2, process_start_time="start-2", session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
+        "lease_a",
+        pid=2,
+        process_start_time="start-2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
         spawned_at=_NOW,
     )
     store.record_boundary_open(
-        lease_id="lease_a", chunk_id=_CHUNK_ID, node_id=_NODE_ID, epoch=1, generation=2, kind="resume",
-        start_position="tail-after-gen-1", opened_at=_NOW,
+        lease_id="lease_a",
+        chunk_id=_CHUNK_ID,
+        node_id=_NODE_ID,
+        epoch=1,
+        generation=2,
+        kind="resume",
+        start_position="tail-after-gen-1",
+        opened_at=_NOW,
     )
     source._tail_positions[_SESSION_ID] = TranscriptPosition("tail-after-gen-2")
     lease_a = store.active_lease("lease_a")
@@ -122,7 +145,10 @@ def test_no_boundary_for_this_generation_records_no_sample_and_reads_no_transcri
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
     store.record_spawn(
-        "lease_a", pid=1, process_start_time="start-1", session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
+        "lease_a",
+        pid=1,
+        process_start_time="start-1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
         spawned_at=_NOW,
     )
     # No `record_boundary_open` call at all — the pre-Phase-2 shape.
@@ -146,19 +172,33 @@ def test_a_boundary_with_no_start_position_reads_from_the_beginning(tmp_path) ->
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
     store.record_spawn(
-        "lease_a", pid=1, process_start_time="start-1", session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
+        "lease_a",
+        pid=1,
+        process_start_time="start-1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
         spawned_at=_NOW,
     )
     store.record_boundary_open(
-        lease_id="lease_a", chunk_id=_CHUNK_ID, node_id=_NODE_ID, epoch=1, generation=1, kind="spawn",
-        start_position=None, opened_at=_NOW,
+        lease_id="lease_a",
+        chunk_id=_CHUNK_ID,
+        node_id=_NODE_ID,
+        epoch=1,
+        generation=1,
+        kind="spawn",
+        start_position=None,
+        opened_at=_NOW,
     )
     source = FakeTranscriptSource(
         lines_by_session={_SESSION_ID: ["a line"]},
         tail_positions_by_session={_SESSION_ID: TranscriptPosition("tail-1")},
     )
     sample = UsageSample(
-        kind="spawn", model="m", input_tokens=7, output_tokens=1, cache_read_tokens=0, cache_create_tokens=0,
+        kind="spawn",
+        model="m",
+        input_tokens=7,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
         cost_usd=None,
     )
     handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)
@@ -186,15 +226,26 @@ def test_a_nudge_opened_boundary_still_recovers_a_resume_labeled_generation(tmp_
     store.record_spawn("lease_a", pid=1, process_start_time="start-1", session=session, spawned_at=_NOW)
     store.record_spawn("lease_a", pid=2, process_start_time="start-2", session=session, spawned_at=_NOW)
     store.record_boundary_open(
-        lease_id="lease_a", chunk_id=_CHUNK_ID, node_id=_NODE_ID, epoch=1, generation=2, kind="nudge",
-        start_position="tail-after-gen-1", opened_at=_NOW,
+        lease_id="lease_a",
+        chunk_id=_CHUNK_ID,
+        node_id=_NODE_ID,
+        epoch=1,
+        generation=2,
+        kind="nudge",
+        start_position="tail-after-gen-1",
+        opened_at=_NOW,
     )
     source = FakeTranscriptSource(
         lines_by_session={_SESSION_ID: ["a line"]},
         tail_positions_by_session={_SESSION_ID: TranscriptPosition("tail-after-gen-2")},
     )
     sample = UsageSample(
-        kind="resume", model="m", input_tokens=42, output_tokens=1, cache_read_tokens=0, cache_create_tokens=0,
+        kind="resume",
+        model="m",
+        input_tokens=42,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
         cost_usd=None,
     )
     handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)

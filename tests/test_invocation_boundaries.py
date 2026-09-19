@@ -76,9 +76,16 @@ def test_fresh_spawn_opens_a_spawn_boundary_at_generation_one(tmp_path: Path) ->
     env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
-    harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass")
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
+    )
     ctx = make_context(
-        store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe(), clock=FixedClock(_NOW)
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
     )
 
     Fill(ctx).run()
@@ -99,7 +106,9 @@ def test_graceful_restart_resume_opens_a_resume_boundary_from_the_tail(tmp_path:
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkStatusView(chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
+    )
     tail = TranscriptPosition(token='{"main": 4096, "sidecars": {}}')
     transcript_source = FakeTranscriptSource(tail_positions_by_session={"sess-a": tail})
     harness = FakeHarness(
@@ -109,7 +118,9 @@ def test_graceful_restart_resume_opens_a_resume_boundary_from_the_tail(tmp_path:
     )
     harness.resume_pid = 4321
     probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
-    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe, clock=FixedClock(_NOW))
+    ctx = make_context(
+        store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe, clock=FixedClock(_NOW)
+    )
 
     Resume(ctx).run()
 
@@ -137,8 +148,13 @@ def test_nudge_opens_a_nudge_boundary_not_a_resume_boundary(tmp_path: Path) -> N
         transcript_source=transcript_source,
     )
     ctx = make_context(
-        store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe(),
-        worktree_git=FakeWorktreeGit(), clock=FixedClock(_NOW),
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        worktree_git=FakeWorktreeGit(),
+        clock=FixedClock(_NOW),
     )
 
     Advance(ctx).run()
@@ -167,8 +183,13 @@ def test_judgement_launch_opens_a_judge_boundary_at_the_current_generation(tmp_p
         transcript_source=transcript_source,
     )
     ctx = make_context(
-        store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe(),
-        worktree_git=FakeWorktreeGit(), clock=FixedClock(_NOW),
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        worktree_git=FakeWorktreeGit(),
+        clock=FixedClock(_NOW),
     )
 
     Advance(ctx).run()  # launches the detached elicitation
@@ -186,13 +207,21 @@ def test_closing_a_lease_closes_every_boundary_it_opened(tmp_path: Path) -> None
         store,
         hub=FakeHub(),
         provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"),
+        harness=FakeHarness(
+            handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
+        ),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
     )
     ctx.stores.invocation_boundaries.record_boundary_open(
-        lease_id="lease_r", chunk_id="ch_1", node_id="nd_build", epoch=1, generation=1, kind="spawn",
-        start_position=None, opened_at=_NOW,
+        lease_id="lease_r",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        kind="spawn",
+        start_position=None,
+        opened_at=_NOW,
     )
     lease = store.active_lease("lease_r")
     assert lease is not None

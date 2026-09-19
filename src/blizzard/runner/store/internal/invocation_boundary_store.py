@@ -57,9 +57,7 @@ class InvocationBoundaryStore:
     def open_boundaries_for_lease(self, lease_id: str) -> list[InvocationBoundaryRecord]:
         rows = self._store.all(
             select(invocation_boundaries)
-            .where(
-                and_(invocation_boundaries.c.lease_id == lease_id, invocation_boundaries.c.closed_at.is_(None))
-            )
+            .where(and_(invocation_boundaries.c.lease_id == lease_id, invocation_boundaries.c.closed_at.is_(None)))
             .order_by(invocation_boundaries.c.opened_at, invocation_boundaries.c.id)
         )
         return [_record(r) for r in rows]
@@ -104,9 +102,7 @@ class InvocationBoundaryStore:
                     closed_reason=None,
                 )
             )
-        _log.info(
-            "invocation boundary opened", lease_id=lease_id, generation=generation, kind=kind, chunk_id=chunk_id
-        )
+        _log.info("invocation boundary opened", lease_id=lease_id, generation=generation, kind=kind, chunk_id=chunk_id)
 
     def close_boundaries_for_lease(self, lease_id: str, *, reason: str, at: datetime) -> None:
         # An UPDATE over `closed_at IS NULL` — naturally idempotent under a crash-and-retry

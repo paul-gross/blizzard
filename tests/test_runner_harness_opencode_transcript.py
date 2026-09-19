@@ -308,7 +308,13 @@ def test_a_child_export_whose_parent_id_mismatches_does_not_link_or_unlink() -> 
                 "m-asst",
                 [
                     _tool_part(
-                        "root-1", "m-asst", "p-task", call_id="call-task", tool="task", output="done", metadata={"sessionID": "child-1"}
+                        "root-1",
+                        "m-asst",
+                        "p-task",
+                        call_id="call-task",
+                        tool="task",
+                        output="done",
+                        metadata={"sessionID": "child-1"},
                     )
                 ],
             )
@@ -336,7 +342,13 @@ def test_a_child_export_that_fails_to_fetch_does_not_link_or_unlink_but_logs_rec
                 "m-asst",
                 [
                     _tool_part(
-                        "root-1", "m-asst", "p-task", call_id="call-task", tool="task", output="done", metadata={"sessionID": "child-1"}
+                        "root-1",
+                        "m-asst",
+                        "p-task",
+                        call_id="call-task",
+                        tool="task",
+                        output="done",
+                        metadata={"sessionID": "child-1"},
                     )
                 ],
             )
@@ -381,9 +393,7 @@ def test_read_raw_lines_returns_the_range_and_round_trips_through_the_adapter() 
             _user_message("sess-1", "m-u1", [_text_part("sess-1", "m-u1", "p-u1", "go")]),
             _assistant_message("sess-1", "m-a1", [_step_finish_part("sess-1", "m-a1", "p-fin1", input_tokens=10)]),
             _user_message("sess-1", "m-u2", [_text_part("sess-1", "m-u2", "p-u2", "again")]),
-            _assistant_message(
-                "sess-1", "m-a2", [_step_finish_part("sess-1", "m-a2", "p-fin2", input_tokens=20)]
-            ),
+            _assistant_message("sess-1", "m-a2", [_step_finish_part("sess-1", "m-a2", "p-fin2", input_tokens=20)]),
         ],
     )
     end = source.tail_position("sess-1", spawn_cwd=None)

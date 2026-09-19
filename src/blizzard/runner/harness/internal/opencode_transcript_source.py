@@ -171,9 +171,7 @@ class OpenCodeTranscriptSource:
                 self._errors.from_io(exc, message, session_id=session_id)
             return None
 
-    def _resolve_sidechain(
-        self, *, parent_session_id: str, candidate: ChildCandidate
-    ) -> SidechainConversation | None:
+    def _resolve_sidechain(self, *, parent_session_id: str, candidate: ChildCandidate) -> SidechainConversation | None:
         try:
             raw = self._exporter.export(candidate.session_id)
             child_export = parse_session_export(json.loads(raw))
