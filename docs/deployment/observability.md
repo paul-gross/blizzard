@@ -27,9 +27,13 @@ escalation still takes one of the supersessions below.
 
 `no-acceptable-harness` (critical): distinct from `owner-unresolvable` above in reaching only a fresh mint, with no
 existing session to name — every member of the node's acceptable harness set ([worker-spawn.md](./worker-spawn.md)
-owns that set and its resolution) is unknown, unavailable, or resolves none of the session's model preference. The
-chunk escalates in place rather than minting under the runner's default harness; with no session ever spawned, the
-escalation carries no takeover command either.
+owns that set and its resolution) is unknown, unavailable, **unhealthy**, or resolves none of the session's model
+preference. **Unhealthy** (blizzard#438) is distinct from unavailable: a bound harness with every capability wired can
+still fail its own computed health — a missing binary, an incompatible or unknown observed version, failed
+authentication, an unmapped configured tier, or a recorded selftest failure, all visible with their cause in this
+runner's own `GET /api/harness-health` diagnostics, never in this escalation. The chunk escalates in place rather than
+minting under the runner's default harness; with no session ever spawned, the escalation carries no takeover command
+either.
 
 Escalations appear in the same feed as a needs-human event kind — one row, one surface; a row leaves when its escalation
 is superseded by any of a requeue, an operator `chunk restart`, the next attempt's lease, or the chunk ending `stopped`

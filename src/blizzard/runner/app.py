@@ -42,6 +42,7 @@ from blizzard.runner.api.finding import router as finding_router
 from blizzard.runner.api.fleet_summary import router as fleet_summary_router
 from blizzard.runner.api.garden import router as garden_router
 from blizzard.runner.api.git_commits import router as git_commits_router
+from blizzard.runner.api.harness_health import router as harness_health_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.history import router as history_router
@@ -80,10 +81,15 @@ from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
+from blizzard.runner.harness.internal.harness_registry import (
+    build_production_harness_health_probes,
+    build_production_harness_registry,
+)
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.loop.build import ResumeMarking
+from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
@@ -144,6 +150,7 @@ _HUMAN = (
     escalations_router,
     facts_router,
     takeovers_router,
+    harness_health_router,
     dashboard_router,
     requeues_router,
     events_router,
@@ -174,6 +181,7 @@ def create_app(
     takeover: TakeoverService | None = None,
     requeue: RequeueService | None = None,
     selftests: SelfTestService | None = None,
+    harness_health: HarnessHealthCache | None = None,
     attachments: AttachmentService | None = None,
     git_commit_declarations: GitCommitDeclarationService | None = None,
     asks: AskService | None = None,
@@ -246,6 +254,20 @@ def create_app(
         process=LinuxProcessProbe(),
         clock=SystemClock(),
         results=runner_stores.selftest_results if runner_stores else None,
+    )
+    # The runner's own health diagnostics (blizzard#438) — a composition-root-owned cache
+    # mirroring the loop's own (``loop/build.py``), so a dashboard read never itself
+    # triggers a fresh subprocess/credential probe. Reads the same durable selftest-result
+    # fact the loop's cache does (the shared store, not a shared instance): both converge
+    # on the same computed result independently, each bounded by its own refresh window.
+    app.state.harness_health = harness_health or HarnessHealthCache(
+        clock=SystemClock(),
+        probes=build_production_harness_health_probes(config),
+        selftest_results=runner_stores.selftest_results if runner_stores else None,
+        configured_tiers={
+            CLAUDE_CODE_HARNESS_ID: config.model_aliases,
+            OPENCODE_HARNESS_ID: config.opencode_model_aliases,
+        },
     )
     # This default must **not** reach the network (issue #95) — pinned by
     # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url

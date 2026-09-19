@@ -79,7 +79,9 @@ class HarnessHealthCache:
 
     clock: IClock
     probes: Mapping[str, IHarnessHealthProbe]
-    selftest_results: IReadSelfTestResultRepository
+    #: ``None`` on a store-free composition (the OpenAPI exporter, a unit test) — a
+    #: never-run selftest either way, since neither can have recorded one.
+    selftest_results: IReadSelfTestResultRepository | None
     #: Per-harness declared (tier, native-model) pairs off ``RunnerConfig`` — the tiers
     #: this runner is configured to resolve *through this harness specifically*.
     configured_tiers: Mapping[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
@@ -97,7 +99,7 @@ class HarnessHealthCache:
         probe = self.probes.get(harness_id)
         if probe is None:
             return None
-        latest = self.selftest_results.latest_selftest_result(harness_id)
+        latest = self.selftest_results.latest_selftest_result(harness_id) if self.selftest_results is not None else None
         selftest_marker = (latest.status, latest.recorded_at) if latest is not None else None
         now = self.clock.now()
         computed_at = self._computed_at.get(harness_id)

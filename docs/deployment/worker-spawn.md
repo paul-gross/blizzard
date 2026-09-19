@@ -140,11 +140,15 @@ OpenCode's own knobs sit in `[opencode]`, parallel to `[worker]`'s Claude Code t
 two harnesses' bindings are independent, and no deployed `blizzard-runner.toml` needs an edit to keep working when this
 table is absent (its scaffolded default binds `opencode` on `PATH`). `binary` names the OpenCode executable, exactly as
 `harness_binary` does for Claude Code — and, exactly as for Claude Code, naming one that does not exist or is not
-executable is never probed at registration or at selection time: `HarnessSelector` sees the binding as bound and
-selects it for any node whose acceptable set includes `opencode`, and the missing binary only surfaces the first time
-that selection tries to spawn under it, as an ordinary spawn failure, on every attempt. A host with no such binary on
-`PATH` does not leave `opencode` unavailable in the sense selection understands the word — it leaves every node
-requiring `opencode` failing at spawn instead of falling back to another acceptable harness in the set. `[opencode.models.aliases]` and `[opencode.effort.aliases]` mirror `[models.aliases]`/
+executable is caught by the runner's own health evaluation (blizzard#438) rather than surfacing only at spawn: health
+recalculates at daemon start, after an operator-triggered selftest, and when the observed binary version changes, and a
+binding that fails any required check — missing binary, an incompatible or unknown observed version, failed
+authentication, an unmapped configured tier, or a recorded selftest failure — is marked unavailable. `HarnessSelector`
+skips an unavailable member with its own `"unhealthy"` reason ([observability.md](./observability.md)) rather than
+selecting it, so a node whose acceptable set includes `opencode` falls back to another member instead of failing at
+spawn, and escalates only once every member is exhausted. The binding stays visible, with its cause, in this runner's
+own `GET /api/harness-health` diagnostics; the hub sees only the boolean flag, never the cause.
+`[opencode.models.aliases]` and `[opencode.effort.aliases]` mirror `[models.aliases]`/
 `[effort.aliases]` in shape but not in defaults — see "Model and effort tiers" above for why OpenCode's own table
 carries the whole mapping rather than overrides to a built-in one. `worker_config_path` names the runner-owned
 permission/plugin document `blizzard runner init` scaffolds beside `worker-settings.json` (never inside a project

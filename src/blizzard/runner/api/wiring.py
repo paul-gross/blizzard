@@ -30,7 +30,9 @@ from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.events.publisher import IRunnerEventPublisher
+from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
+from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.stores import RunnerReadStores
 from blizzard.runner.transcripts.service import TranscriptService
@@ -114,6 +116,17 @@ class RunnerWiring:
     def selftests(self) -> SelfTestService:
         service: SelfTestService | None = getattr(self.state, "selftests", None)
         return service if service is not None else self._refuse("selftest service")
+
+    def harnesses(self) -> IHarnessRegistry:
+        registry: IHarnessRegistry | None = getattr(self.state, "harnesses", None)
+        return registry if registry is not None else self._refuse("harness registry")
+
+    def harness_health(self) -> HarnessHealthCache:
+        """The runner's own health cache (blizzard#438) — always wired, like
+        :meth:`selftests`; its own ``selftest_results`` is what degrades on a store-free
+        composition, not this accessor."""
+        cache: HarnessHealthCache | None = getattr(self.state, "harness_health", None)
+        return cache if cache is not None else self._refuse("harness health cache")
 
     def asks(self) -> AskService:
         service: AskService | None = getattr(self.state, "asks", None)

@@ -978,7 +978,7 @@
         "type": "object"
       },
       "DashboardView": {
-        "description": "``GET /api/dashboard`` \u2014 seven status reads composed into one response.\n``fleet_summary`` alone is a hub pass-through and the only nullable section \u2014\n``None`` on a hub failure or an unwired runner, while the six local sections\nstill populate.",
+        "description": "``GET /api/dashboard`` \u2014 eight status reads composed into one response.\n``fleet_summary`` alone is a hub pass-through and the only nullable section \u2014\n``None`` on a hub failure or an unwired runner, while the seven local sections\nstill populate.",
         "properties": {
           "asks": {
             "$ref": "#/components/schemas/AskListResponse"
@@ -1002,6 +1002,9 @@
               }
             ]
           },
+          "harness_health": {
+            "$ref": "#/components/schemas/HarnessHealthListResponse"
+          },
           "runner": {
             "$ref": "#/components/schemas/RunnerStatusView"
           },
@@ -1016,6 +1019,7 @@
           "escalations",
           "takeovers",
           "facts",
+          "harness_health",
           "fleet_summary"
         ],
         "title": "DashboardView",
@@ -1786,6 +1790,70 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HarnessHealthListResponse": {
+        "description": "Every configured harness binding's own computed health.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HarnessHealthView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "HarnessHealthListResponse",
+        "type": "object"
+      },
+      "HarnessHealthView": {
+        "description": "One configured harness binding's own computed health (blizzard#438) \u2014\n``GET /api/harness-health``, runner-local diagnostics only: no credential or failure\ndetail crosses to the hub, which sees only the wire's boolean ``available`` flag.\n``cause`` is one of ``missing_binary``, ``incompatible_version``, ``unknown_version``,\n``authentication_failure``, ``unmapped_tier``, ``selftest_failure``, or\n``declared_degradation``, ``None`` when available. ``degradations`` are reported\nregardless of availability \u2014 a declared, non-blocking gap never withholds it on its\nown.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
+          "degradations": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Degradations",
+            "type": "array"
+          },
+          "harness_id": {
+            "title": "Harness Id",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "harness_id",
+          "available"
+        ],
+        "title": "HarnessHealthView",
         "type": "object"
       },
       "HeartbeatRequest": {
@@ -4650,7 +4718,7 @@
     },
     "/api/dashboard": {
       "get": {
-        "description": "The panel's seven reads composed into one \u2014 the six local sections always\npopulate; ``fleet_summary`` is ``None`` on a hub outage or an unwired runner.",
+        "description": "The panel's eight reads composed into one \u2014 the seven local sections always\npopulate; ``fleet_summary`` is ``None`` on a hub outage or an unwired runner.",
         "operationId": "get_dashboard_api_dashboard_get",
         "responses": {
           "200": {
@@ -4777,6 +4845,28 @@
           }
         },
         "summary": "Get Fleet Summary",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/harness-health": {
+      "get": {
+        "description": "Every configured harness binding's own computed health.",
+        "operationId": "list_harness_health_api_harness_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessHealthListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Harness Health",
         "tags": [
           "runner"
         ]
