@@ -73,10 +73,9 @@ def test_every_root_is_scanned() -> None:
 
 
 def test_login_and_logout_keep_session_service_off_the_recorded_surface() -> None:
-    """``SessionServiceCommand`` (``hub/cli/command.py``) hands ``login``/``logout`` the
-    session service through ``ctx.params`` rather than a declared click option, so it
-    never becomes a recorded parameter — this is the decision ``SessionServiceCommand``'s
-    docstring now points at instead of restating."""
+    """``session_service`` reaches ``login``/``logout`` through ``ctx.params``, never as
+    a declared click option — the recorded-surface half of ``SessionServiceCommand``'s
+    decision (``command.py``)."""
     hub_tree = build("hub", dict(ROOTS)["hub"])
     for name in ("login", "logout"):
         param_names = {p["name"] for p in hub_tree["commands"][name]["params"]}

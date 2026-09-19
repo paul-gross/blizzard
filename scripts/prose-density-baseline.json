@@ -1605,28 +1605,28 @@
    "total": 44
   },
   "blizzard/hub/cli/__init__.py": {
-   "comments": 4,
+   "comments": 5,
    "docstrings": 3,
    "over_cap": 1,
-   "total": 64
+   "total": 65
   },
   "blizzard/hub/cli/analytics.py": {
    "comments": 11,
-   "docstrings": 23,
+   "docstrings": 21,
    "over_cap": 3,
-   "total": 438
+   "total": 436
   },
   "blizzard/hub/cli/auth.py": {
    "comments": 0,
-   "docstrings": 14,
+   "docstrings": 13,
    "over_cap": 0,
-   "total": 64
+   "total": 63
   },
   "blizzard/hub/cli/chunk.py": {
    "comments": 3,
-   "docstrings": 80,
+   "docstrings": 79,
    "over_cap": 1,
-   "total": 549
+   "total": 548
   },
   "blizzard/hub/cli/command.py": {
    "comments": 1,
@@ -1648,21 +1648,21 @@
   },
   "blizzard/hub/cli/finding.py": {
    "comments": 0,
-   "docstrings": 15,
+   "docstrings": 12,
    "over_cap": 0,
-   "total": 170
+   "total": 167
   },
   "blizzard/hub/cli/garden_proposal.py": {
    "comments": 1,
-   "docstrings": 16,
+   "docstrings": 15,
    "over_cap": 1,
-   "total": 150
+   "total": 140
   },
   "blizzard/hub/cli/garden_run.py": {
    "comments": 2,
-   "docstrings": 11,
+   "docstrings": 10,
    "over_cap": 0,
-   "total": 102
+   "total": 101
   },
   "blizzard/hub/cli/graph.py": {
    "comments": 0,
@@ -1670,11 +1670,17 @@
    "over_cap": 0,
    "total": 181
   },
+  "blizzard/hub/cli/inputs.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 17
+  },
   "blizzard/hub/cli/item.py": {
    "comments": 0,
-   "docstrings": 11,
+   "docstrings": 10,
    "over_cap": 0,
-   "total": 138
+   "total": 127
   },
   "blizzard/hub/cli/login.py": {
    "comments": 3,
@@ -3586,15 +3592,15 @@
   },
   "blizzard/runner/cli/finding.py": {
    "comments": 0,
-   "docstrings": 13,
-   "over_cap": 1,
-   "total": 40
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 36
   },
   "blizzard/runner/cli/garden.py": {
    "comments": 0,
-   "docstrings": 13,
+   "docstrings": 8,
    "over_cap": 0,
-   "total": 37
+   "total": 32
   },
   "blizzard/runner/cli/opencode.py": {
    "comments": 0,
@@ -3622,9 +3628,9 @@
   },
   "blizzard/runner/cli/worker.py": {
    "comments": 0,
-   "docstrings": 30,
+   "docstrings": 25,
    "over_cap": 0,
-   "total": 110
+   "total": 105
   },
   "blizzard/runner/cli/worker_call.py": {
    "comments": 3,
@@ -6054,9 +6060,9 @@
   },
   "test_cli_surface_contract.py": {
    "comments": 1,
-   "docstrings": 12,
+   "docstrings": 15,
    "over_cap": 1,
-   "total": 72
+   "total": 82
   },
   "test_cli_workspace_prompt.py": {
    "comments": 3,
@@ -7676,7 +7682,7 @@
    "comments": 21,
    "docstrings": 28,
    "over_cap": 0,
-   "total": 657
+   "total": 667
   },
   "test_runner_harness_opencode_worker_config.py": {
    "comments": 2,
@@ -8174,7 +8180,7 @@
    "comments": 8,
    "docstrings": 12,
    "over_cap": 0,
-   "total": 233
+   "total": 235
   },
   "test_transcript_pump_owner_guard.py": {
    "comments": 9,

@@ -86,7 +86,7 @@ def transcript_reship(segment_id: str, directory: str) -> None:
         # is true and the counts are zero because nothing shipped, not because nothing existed.
         click.echo(
             f"warning: shipping is stopped for this chunk ({report.shipping_stopped_reason}) — "
-            "the re-ship sent NOTHING; a re-ship spends the 64 MB per-chunk budget a second time",
+            "the re-ship sent NOTHING; a re-ship spends the per-chunk budget a second time",
             err=True,
         )
     if not report.complete:

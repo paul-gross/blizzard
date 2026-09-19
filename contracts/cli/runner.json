@@ -264,7 +264,7 @@
           "short_help": "Worker: read this chunk's own transition history as kind-discriminated JSON (issue #237) \u2014 the merged, oldest-first timeline, one row per accepted transition, cross-graph migration, or delivery bounce, each carrying its own ``kind``."
         }
       },
-      "help": "Worker: read facts about the chunk this node-step belongs to.\n\nThe lease binding is ambient, like ``artifact``: every verb in this group acts on the worker's\nown lease, resolved from the spawn environment, so none takes a flag by which a worker could\nname another chunk.",
+      "help": "Worker: read facts about the chunk this node-step belongs to.",
       "params": [],
       "path": "runner chunk",
       "short_help": "Worker: read facts about the chunk this node-step belongs to."
@@ -272,7 +272,7 @@
     "external-usage": {
       "commands": {
         "probe": {
-          "help": "Sample one declared subscription's rate-limit usage, by SLUG, and print it.\n\nRead-only, through the same sampler seam the loop uses \u2014 no store write, no tick.\nSLUG defaults to the legacy ``anthropic`` declaration every runner still carries.",
+          "help": "Sample one declared subscription's rate-limit usage, by SLUG, and print it.\n\nRead-only, writes nothing. SLUG defaults to the legacy ``anthropic`` declaration\nevery runner still carries.",
           "params": [
             {
               "hidden": false,
@@ -333,7 +333,7 @@
           "short_help": "Worker: list the findings this chunk's own accepted, minted garden proposal answers, as JSON."
         }
       },
-      "help": "Worker: read the findings this chunk's own accepted, minted garden proposal\nanswers.\n\nThe lease binding is ambient, like ``artifact``: every verb acts on the worker's own\nlease, resolved from the spawn environment \u2014 no verb takes a flag naming another\nchunk, routine, or scope.",
+      "help": "Worker: read the findings this chunk's own accepted, minted garden proposal\nanswers.",
       "params": [],
       "path": "runner finding",
       "short_help": "Worker: read the findings this chunk's own accepted, minted garden proposal answers."
@@ -341,22 +341,22 @@
     "garden": {
       "commands": {
         "findings": {
-          "help": "Worker: list this run's live finding bucket as JSON. The routine and the scope\nare derived server-side from this lease's own chunk \u2014 nothing here names either, so\na worker cannot point this read at another routine's bucket.",
+          "help": "Worker: list this run's live finding bucket as JSON.",
           "params": [],
           "path": "runner garden findings",
           "short_help": "Worker: list this run's live finding bucket as JSON."
         },
         "proposals": {
-          "help": "Worker: list this run's own routine's open garden proposals as JSON, closed ones\nexcluded. The routine is derived server-side from this lease's own chunk \u2014 nothing\nhere names it, so a worker cannot point this read at another routine's proposals.",
+          "help": "Worker: list this run's own routine's open garden proposals as JSON, closed ones\nexcluded.",
           "params": [],
           "path": "runner garden proposals",
           "short_help": "Worker: list this run's own routine's open garden proposals as JSON, closed ones excluded."
         }
       },
-      "help": "Worker: read this run's own garden machinery.\n\nThe lease binding is ambient, like ``artifact``: every verb acts on the worker's own\nlease, resolved from the spawn environment \u2014 none takes a flag naming another routine\nor scope.",
+      "help": "Worker: read this run's own garden machinery \u2014 the routine and scope are both\nderived server-side from the worker's own lease, so no verb here takes a flag\nnaming either.",
       "params": [],
       "path": "runner garden",
-      "short_help": "Worker: read this run's own garden machinery."
+      "short_help": "Worker: read this run's own garden machinery \u2014 the routine and scope are both derived server-side from the worker's own lease, so no verb here takes a flag naming either."
     },
     "heartbeat": {
       "help": "Worker hook: record a lease heartbeat (identity from the environment).\n\nFails **soft**: a hook must never break the worker's tool call, so a missing identity or an\nunreachable runner is reported to stderr and this still exits 0.",
@@ -791,7 +791,7 @@
       "short_help": "Adapter-drift canary before an unattended period (issue #54): exercises CODING_HARNESS against a throwaway scratch repo \u2014 spawn with a pre-assigned session id, a trivial edit+commit, verdict elicitation, an automated follow-up resume, and resume-command composition \u2014 touching no chunk, lease, environment, or hub."
     },
     "session-end": {
-      "help": "Worker hook: record the session's exit (identity from the environment) \u2014 the worker's\n\"declared done\" signal.\n\nFails **soft**, like the heartbeat: a hook must never break the worker's exit, so a failure\nis reported to stderr and this still exits 0.",
+      "help": "Worker hook: record the session's exit (identity from the environment) \u2014 the worker's\n\"declared done\" signal.\n\nFails **soft**, like the heartbeat.",
       "params": [],
       "path": "runner session-end",
       "short_help": "Worker hook: record the session's exit (identity from the environment) \u2014 the worker's \"declared done\" signal."
@@ -866,7 +866,7 @@
       "short_help": "The machine-local view: capacities, held environments, open asks, escalations, open takeovers (issue #51)."
     },
     "takeover": {
-      "help": "Take over a parked chunk: exec the interactive resume command in this terminal (issue #52). The\ntakeover fact is recorded before anything else runs, so no loop step can respawn or judge the\nsession while it is open; the lease token travels only in the response body and the exec, never\nprinted. ``--force`` supersedes a live worker attempt instead of refusing. The end-PATCH runs in a\n``finally`` around the child, so a stranded open takeover cannot outlive an interrupted session.",
+      "help": "Take over a parked chunk: exec the interactive resume command in this terminal (issue #52). The\ntakeover fact is recorded before anything else runs, so no loop step can respawn or judge the\nsession while it is open; the lease token travels only in the response body and the exec, never\nprinted. ``--force`` supersedes a live worker attempt instead of refusing. An interrupted session\nstill closes the takeover.",
       "params": [
         {
           "hidden": false,

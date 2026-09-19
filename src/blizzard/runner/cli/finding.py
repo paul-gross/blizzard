@@ -13,11 +13,7 @@ from blizzard.runner.cli.worker_call import WorkerCall
 @click.group("finding")
 def finding_group() -> None:
     """Worker: read the findings this chunk's own accepted, minted garden proposal
-    answers.
-
-    The lease binding is ambient, like ``artifact``: every verb acts on the worker's own
-    lease, resolved from the spawn environment — no verb takes a flag naming another
-    chunk, routine, or scope."""
+    answers."""
 
 
 @finding_group.command("list")
