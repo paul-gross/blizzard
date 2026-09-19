@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
@@ -304,6 +305,37 @@ class IHarnessUsageAccounting(Protocol):
         The envelope-less fallback, for a worker killed before it produced a result
         envelope: token counts with ``cost_usd=None``, since a transcript carries no dollar
         figure. ``model`` is the same attribution fallback :meth:`parse_usage` takes."""
+        ...
+
+
+class IHarnessHealthProbe(Protocol):
+    """The evidence a harness-health evaluation needs that no other adapter seam supplies —
+    binary discovery, provider authentication, the binding's supported-version declaration,
+    and its declared degradations. Narrow and separate from IHarnessWorkerLifecycle: the
+    evaluator (runner/harness/health.py) is this seam's only consumer."""
+
+    def binary_present(self) -> bool:
+        """Whether the configured binary resolves right now — bounded and non-raising,
+        the standalone half of :meth:`IHarnessWorkerLifecycle.observe_version`'s own
+        presence check, for a caller that needs presence without paying for a version probe."""
+        ...
+
+    def probe_authentication(self) -> bool:
+        """Whether this binding's provider credentials are present and usable, observed
+        right now — bounded and non-raising, never a network round trip that could delay
+        a health check indefinitely."""
+        ...
+
+    def supported_version(self) -> str | None:
+        """This binding's declared supported version, or ``None`` when it declares no
+        supported-version range at all (Claude Code) — distinct from
+        :meth:`IHarnessWorkerLifecycle.observe_version`'s live observation, which this
+        pins against instead."""
+        ...
+
+    def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
+        """Every known, non-blocking compatibility gap this binding declares about
+        itself — reported diagnostics only, never a spawn-time decision."""
         ...
 
 
