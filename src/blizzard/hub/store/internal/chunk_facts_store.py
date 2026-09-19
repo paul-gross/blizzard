@@ -131,9 +131,9 @@ class ChunkFactsStore:
 
     def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts`'s batched sibling — every id's
-        :class:`ChunkFacts` in a bounded number of queries per id batch rather than one
-        query pair per id. An id that doesn't exist or is ephemeral is silently dropped,
-        the same as :meth:`load_facts` returning ``None`` for it."""
+        :class:`ChunkFacts` (`bzh:bulk-reconstitution`). An id that doesn't exist or is
+        ephemeral is silently dropped, the same as :meth:`load_facts` returning ``None``
+        for it."""
         if not chunk_ids:
             return {}
         with self._store.read("load_facts_for") as conn:
@@ -141,10 +141,9 @@ class ChunkFactsStore:
 
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts_for`'s status-only sibling — every id's :class:`ChunkFacts`, keyed
-        by chunk id, reading only :attr:`_STATUS_FAMILIES` plus ``usage`` (the families a
-        :class:`~blizzard.wire.chunk.ChunkStatusView` actually reaches, across
-        :meth:`~blizzard.hub.domain.work.ChunkFacts.status`, ``open_pause``,
-        ``latest_epoch``, ``restarts``, and ``usage_total``) rather than every family
+        by chunk id, reading only :attr:`_STATUS_FAMILIES` plus ``usage`` — the families
+        behind :meth:`~blizzard.hub.domain.work.ChunkFacts.status`, ``open_pause``,
+        ``latest_epoch``, ``restarts``, and ``usage_total`` — rather than every family
         :meth:`load_facts_for` loads. An id that doesn't exist or is ephemeral is silently
         dropped, the same as :meth:`load_facts_for`."""
         if not chunk_ids:

@@ -252,11 +252,9 @@ def ephemeral_ids_in(conn, batch: Sequence[str]) -> set[str]:  # type: ignore[no
 
 
 def graph_id_of_batch(conn, batch: Sequence[str] | None) -> dict[str, str]:  # type: ignore[no-untyped-def]
-    """A selection's chunk id -> graph id pins, ephemeral ids excluded — lifted out of
-    ``ChunkFactsStore`` so ``ChunkRecordStore``'s own batch reads share this exclusion
-    rather than re-deriving it. ``None`` (the whole live fleet) keeps
-    :func:`ephemeral_ids`'s own single unfiltered scan; a bounded batch delegates to
-    :func:`ephemeral_ids_in`."""
+    """A selection's chunk id -> graph id pins, ephemeral ids excluded. ``None`` (the
+    whole live fleet) keeps :func:`ephemeral_ids`'s own single unfiltered scan; a bounded
+    batch delegates to :func:`ephemeral_ids_in`."""
     if batch is None:
         ephemeral = ephemeral_ids(conn)
         rows = conn.execute(select(s.chunks.c.chunk_id, s.chunks.c.graph_id)).all()

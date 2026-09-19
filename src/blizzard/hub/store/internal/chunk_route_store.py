@@ -59,9 +59,8 @@ class ChunkRouteStore:
 
     def _routes(self, conn, chunk_ids: list[str] | None) -> dict[str, Route]:  # type: ignore[no-untyped-def]
         """:meth:`load_all_routes`/:meth:`routes_for`'s shared entry — ``chunk_ids=None``
-        reads fleet-wide in one pass; otherwise batches through :func:`id_batches` so no
-        single ``IN (...)`` grows with the caller's own id count (``batching.py``'s
-        mandatory cap, the same discipline :meth:`~ChunkFactsStore._load` follows)."""
+        reads fleet-wide in one pass; otherwise batches through :func:`id_batches`
+        (`bzh:bulk-reconstitution`)."""
         if chunk_ids is None:
             return self._routes_batch(conn, None)
         result: dict[str, Route] = {}

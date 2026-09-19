@@ -214,7 +214,7 @@ class ClaimService:
                 raise ClaimDeniedIncompatible(chunk_id=chunk.chunk_id, runner_id=runner_id)
 
         # The claim carries the current epoch (0 before the first lease report) and mints
-        # no lease of its own; the fence consumes the runner's reported epoch, not this.
+        # no lease of its own.
         epoch = facts.latest_epoch() or 0 if facts is not None else 0
         now = self._clock.now()
 

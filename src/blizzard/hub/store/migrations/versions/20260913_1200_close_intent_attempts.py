@@ -1,5 +1,5 @@
-"""close_intent_attempts — the close-drain sweep's backoff ledger (blizzard#524 D7). One
-new table, no backfill: an empty table starts every pending intent immediately due.
+"""close_intent_attempts — one row per close-intent drain attempt, appended with its outcome
+(blizzard#524 D7). One new table, no backfill: an empty table starts every pending intent immediately due.
 
 Revision ID: 20260913_1200_close_intent_attempts
 Revises: 20260913_1000_transcript_segments_content_digest

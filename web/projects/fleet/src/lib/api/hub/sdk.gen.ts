@@ -915,10 +915,9 @@ export const getQuestionApiFleetQuestionsQuestionIdGet = <ThrowOnError extends b
 /**
  * Peek Queue
  *
- * The runner's FILL read — the whole ready-queue order, unlike the now-paginated
- * ``GET /api/queue``: a filling runner needs every ready chunk in one read. Kept as-is
- * for a previous-minor caller (D7, blizzard#433 Phase 3); ``POST /queue/peek`` below is
- * the matched counterpart.
+ * The runner's FILL read — the whole ready-queue order: a filling runner needs every
+ * ready chunk in one read. Kept as-is for a previous-minor caller (D7, blizzard#433);
+ * ``POST /queue/peek`` below is the matched counterpart.
  */
 export const peekQueueApiFleetQueuePeekGet = <ThrowOnError extends boolean = false>(options?: Options<PeekQueueApiFleetQueuePeekGetData, ThrowOnError>): RequestResult<PeekQueueApiFleetQueuePeekGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<PeekQueueApiFleetQueuePeekGetResponses, unknown, ThrowOnError>({ url: '/api/fleet/queue/peek', ...options });
 
@@ -1465,8 +1464,8 @@ export const runDeltaApiRunsChunkIdGet = <ThrowOnError extends boolean = false>(
 /**
  * List Scopes
  *
- * Every scope, newest first, each marked retired or not — one bulk
- * `retired_slugs` read rather than one `is_retired` call per scope.
+ * Every scope, newest first, each marked retired or not — retirement resolved in one
+ * bulk read.
  */
 export const listScopesApiScopesGet = <ThrowOnError extends boolean = false>(options?: Options<ListScopesApiScopesGetData, ThrowOnError>): RequestResult<ListScopesApiScopesGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListScopesApiScopesGetResponses, unknown, ThrowOnError>({ url: '/api/scopes', ...options });
 

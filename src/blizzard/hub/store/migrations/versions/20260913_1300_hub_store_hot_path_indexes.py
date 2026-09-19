@@ -20,9 +20,9 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 # (index name, table, columns) — blizzard#519's hot-path predicates, plus
-# blizzard#517's `usage_facts.recorded_at`, plus one `(ts, pk)` index per
-# `activity_facts_since` source (D6), matching its `_bounded` ordering — portable
-# across sqlite and postgres alike (`bzh:sql-portable`).
+# blizzard#517's `usage_facts.recorded_at`, plus one `(ts, pk)` index per table needing
+# a newest-first bounded read since a timestamp (D6) — portable across sqlite and
+# postgres alike (`bzh:sql-portable`).
 _CREATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("ix_artifacts_chunk_id_node_id_epoch", "artifacts", ("chunk_id", "node_id", "epoch")),
     ("ix_graph_nodes_graph_id", "graph_nodes", ("graph_id",)),
@@ -73,7 +73,7 @@ _CREATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 
 # Superseded by a composite created above — dropped in the same migration (net-neutral
 # on write cost, strictly better on reads). `ix_transitions_recorded_at` is superseded by
-# `ix_transitions_recorded_at_transition_id`; no test names it (D5/D6).
+# `ix_transitions_recorded_at_transition_id`.
 _DROPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("ix_transitions_chunk_id", "transitions", ("chunk_id",)),
     ("ix_lease_facts_chunk_id", "lease_facts", ("chunk_id",)),

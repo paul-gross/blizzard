@@ -1294,9 +1294,9 @@ class IReadWorkItemRepository(Protocol):
         ...
 
     def get_many(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, WorkItemRecord]:
-        """``get``'s batched sibling — every requested pointer's item, keyed by pointer,
-        in a bounded number of queries per id batch rather than one query per pointer. A
-        pointer naming no item is absent, the same as ``get`` returning ``None`` for it."""
+        """``get``'s batched sibling (`bzh:bulk-reconstitution`) — every requested
+        pointer's item, keyed by pointer. A pointer naming no item is absent, the same
+        as ``get`` returning ``None`` for it."""
         ...
 
 

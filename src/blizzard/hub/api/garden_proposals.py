@@ -54,9 +54,8 @@ def closure_view(closure: GardenProposalClosure) -> GardenProposalClosureView:
 
 
 def garden_proposal_view(proposal: GardenProposal, closure: GardenProposalClosure | None) -> GardenProposalView:
-    """The one ``GardenProposal`` -> ``GardenProposalView`` projection — reused as-is by
-    the runner-facing fleet route (``blizzard.hub.api.fleet``) rather than restated
-    there, the ``finding_view`` shape."""
+    """The one ``GardenProposal`` -> ``GardenProposalView`` projection — the
+    ``finding_view`` shape."""
     # `class_`'s alias is the Python keyword `class` — constructed by alias via
     # `model_validate`, the `finding_view` shape.
     return GardenProposalView.model_validate(

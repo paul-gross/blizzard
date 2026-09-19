@@ -52,7 +52,7 @@ class PromoteService:
         transaction. A complete no-op on an already-promoted chunk; otherwise stamps
         :func:`tail_position`, read *before* the write, and returns the fresh
         ``chunk_promoted.id``. Takes the chunk, its facts, and the caller's own
-        already-derived ``statuses`` (``bzh:domain-takes-objects``) rather than reloading."""
+        already-derived ``statuses`` (``bzh:domain-takes-objects``)."""
         if facts.promoted:
             return None
         tail = tail_position(self._record, self._queue, statuses=statuses)

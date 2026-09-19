@@ -303,10 +303,9 @@ class GardenRunService:
 
     def list_runs(self, *, since: datetime, until: datetime) -> list[RunRow]:
         """One bulk `get_many` and one bulk `load_facts_for` resolve every window run's
-        chunk and chunk facts, rather than one `get`/`load_facts` pair per run —
-        `records` is already the window's own bounded set (`runs_in_window`'s own SQL
-        `WHERE`), so the batch cost tracks runs in the window, not `list_all`'s whole-store
-        cost."""
+        chunk and chunk facts (`bzh:bulk-reconstitution`) — `records` is already the
+        window's own bounded set (`runs_in_window`'s own SQL `WHERE`), so the batch cost
+        tracks runs in the window."""
         records = self._repo.runs_in_window(since=since, until=until)
         chunk_ids = [record.identity.chunk_id for record in records]
         chunks_by_id = self._chunk_records.get_many(chunk_ids)

@@ -93,7 +93,7 @@ def _replace(
     """Resolve ``chunk_ids`` against ``list_``'s current order and replace it — the body
     ``PUT /api/queue`` and ``PUT /api/backlog`` share, differing only in which list they
     rank (``bzh:ranking-is-per-list``). ``statuses`` is the caller's one-per-request
-    derivation, threaded through rather than re-derived."""
+    derivation, threaded through."""
     if len(set(chunk_ids)) != len(chunk_ids):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="chunk_ids must not repeat")
     current = services.queue.ordered(list_, statuses=statuses)
@@ -119,8 +119,7 @@ def _reposition(
     """Resolve ``chunk_id``/``after_chunk_id`` against ``list_``'s current order and
     reposition — the body ``POST /api/queue/position`` and ``POST /api/backlog/position``
     share, differing only in which list they rank (``bzh:ranking-is-per-list``).
-    ``statuses`` is the caller's one-per-request derivation, threaded through rather
-    than re-derived."""
+    ``statuses`` is the caller's one-per-request derivation, threaded through."""
     if after_chunk_id == chunk_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="after_chunk_id must not equal chunk_id"

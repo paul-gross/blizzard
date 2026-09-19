@@ -71,8 +71,7 @@ class WorkItemStore:
     def get_many(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, WorkItemRecord]:
         """``get``'s batched sibling — ``work_items`` carries no cross-source uniqueness
         on ``ref`` alone, so pointers are grouped by ``source`` first and each source's
-        refs batched through a plain single-column ``IN`` (``bzh:sql-portable``), the same
-        shape ``chunk_work_refs_store.py``'s ``live_holders`` uses."""
+        refs batched through a plain single-column ``IN`` (``bzh:sql-portable``)."""
         if not pointers:
             return {}
         refs_by_source: dict[str, list[str]] = defaultdict(list)

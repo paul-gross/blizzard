@@ -15,7 +15,8 @@ import structlog
 from blizzard.auth_core import Role
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
-from blizzard.hub.auth.models import Identity
+from blizzard.hub.auth.models import Identity, User
+from blizzard.hub.store.internal import batching as batching_module
 from tests.support import HubHarness, build_hub, count_queries, hub_store_connections, seed_session, seed_user
 
 pytestmark = pytest.mark.component
@@ -25,8 +26,9 @@ def _cookie(token: str) -> dict[str, str]:
     return {"Cookie": f"bz_session={token}"}
 
 
-def _seed_users_with_identities(hub: HubHarness, n: int) -> None:
+def _seed_users_with_identities(hub: HubHarness, n: int) -> list[User]:
     identities = IdentityRepository(hub_store_connections(hub.engine), RepoErrorFactory(structlog.get_logger("test")))
+    users = []
     for i in range(n):
         user = seed_user(hub, username=f"user{i}", role=Role.GUEST)
         identities.link(
@@ -38,6 +40,8 @@ def _seed_users_with_identities(hub: HubHarness, n: int) -> None:
                 created_at=hub.clock.now(),
             )
         )
+        users.append(user)
+    return users
 
 
 # --- gating -----------------------------------------------------------------
@@ -109,6 +113,29 @@ def test_list_users_query_count_is_independent_of_user_count(tmp_path: Path) -> 
     small_count = count_queries(small.engine, lambda: call(small, small_token))
     large_count = count_queries(large.engine, lambda: call(large, large_token))
     assert small_count == large_count
+
+
+def test_list_users_identities_are_batched_across_a_lowered_batch_size_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``list_for_users`` batches through :func:`id_batches` (``bzh:bulk-reconstitution``) —
+    proves the identity read costs one query per batch, and that each row's identities
+    still match ``list_for_user``'s own read, across a lowered ``BATCH_SIZE`` boundary."""
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="admin", role=Role.ADMIN)
+    token = seed_session(hub, admin)
+    users = [admin, *_seed_users_with_identities(hub, 7)]  # 8 users total: batches of 3, 3, 2
+
+    identities = IdentityRepository(hub_store_connections(hub.engine), RepoErrorFactory(structlog.get_logger("test")))
+    user_ids = [u.user_id for u in users]
+    assert count_queries(hub.engine, lambda: identities.list_for_users(user_ids)) == 3
+
+    resp = hub.client.get("/api/users", headers=_cookie(token))
+    assert resp.status_code == 200, resp.text
+    for row in resp.json():
+        expected = [(i.provider_name, i.handle) for i in identities.list_for_user(row["user_id"])]
+        assert [(i["provider_name"], i["handle"]) for i in row["identities"]] == expected
 
 
 # --- role assignment -----------------------------------------------------------

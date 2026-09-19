@@ -54,8 +54,7 @@ class IReadChunkDecisionsRepository(Protocol):
     def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
         """Each given chunk's newest not-yet-transitioned decision, lean (blizzard#521) —
         the by-id-set bulk counterpart to :meth:`decision_for_chunk`, set-based
-        throughout rather than :meth:`get_decision`'s per-decision docket/choices work.
-        A chunk with no live decision is absent from the dict."""
+        throughout. A chunk with no live decision is absent from the dict."""
         ...
 
 
