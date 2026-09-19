@@ -1,7 +1,8 @@
 """Garden-proposal wire shapes (blizzard#390) — the submitted candidate and the read
 view. Named `GardenProposal*` throughout — never the bare `Proposal` a work-item
 proposal already claims (D1). `closure`/`item_outcome` type on the domain's own enums,
-request and response alike (blizzard#395, the `status: ChunkStatus` precedent)."""
+request and response alike (blizzard#395) — see ``blizzard.wire.work_source``'s module
+docstring for the convention."""
 
 from __future__ import annotations
 

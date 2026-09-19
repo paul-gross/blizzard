@@ -84,8 +84,7 @@ class FactChangedPayload(SseFramePayload):
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "lease_id"})
 
 
-#: Keyed by the broker's own event-type constants, duplicated here as literals rather than
-#: imported, since importing back would cycle (mirrors ``blizzard.wire.sse.SSE_FRAME_MODELS``).
+#: Mirrors ``blizzard.wire.sse.SSE_FRAME_MODELS``.
 RUNNER_SSE_FRAME_MODELS: dict[str, type[SseFramePayload]] = {
     "lease-changed": LeaseChangedPayload,
     "ask-changed": AskChangedPayload,

@@ -126,8 +126,9 @@ class EventLoggedPayload(SseFramePayload):
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "runner_id"})
 
 
-#: Keyed by the broker's own event-type constants, duplicated here as literals rather than
-#: imported, since importing back would cycle.
+#: Keyed by the broker's own event-type constants, duplicated here as literals. The key
+#: set is pinned against those constants by
+#: ``tests/test_sse_contract.py::TestCorpusClosure``.
 SSE_FRAME_MODELS: dict[str, type[SseFramePayload]] = {
     "chunk-changed": ChunkChangedPayload,
     "question-asked": QuestionAskedPayload,

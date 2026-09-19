@@ -214,9 +214,8 @@ export type AttachmentResponse = {
  * ``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.
  * Carried beside ``status``, never a status of its own; names the immediate prerequisite only, with
  * no transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at
- * once, ``prerequisite_chunk_id`` names the earliest-declared one and ``unmet_count`` says how many
- * there are in total, so a surface too narrow to list them can say *how many* instead of naming one
- * and silently dropping the rest. Never below 1: the marking is absent when nothing is unmet.
+ * once, ``prerequisite_chunk_id`` names the earliest-declared one. The marking is absent when
+ * nothing is unmet.
  */
 export type BlockedView = {
     /**
@@ -225,6 +224,8 @@ export type BlockedView = {
     prerequisite_chunk_id: string;
     /**
      * Unmet Count
+     *
+     * The count of unmet prerequisites, never below 1.
      */
     unmet_count?: number;
 };

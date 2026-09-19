@@ -25,8 +25,7 @@ class QueuePeekEntry(BaseModel):
 
 
 class QueuePeekResponse(BaseModel):
-    """The ready queue's whole order, unpaginated — a write verb's caller needs it in
-    full to confirm against, not one page (blizzard#526 D3)."""
+    """The ready queue's whole order, unpaginated."""
 
     entries: list[QueuePeekEntry] = []
 
@@ -80,8 +79,7 @@ class BacklogPeekEntry(BaseModel):
 
 
 class BacklogPeekResponse(BaseModel):
-    """The ``not_ready`` list's whole order, unpaginated — a write verb's caller needs
-    it in full to confirm against, not one page (blizzard#526 D3)."""
+    """The ``not_ready`` list's whole order, unpaginated."""
 
     entries: list[BacklogPeekEntry] = []
 

@@ -593,8 +593,7 @@ export type BacklogPeekEntry = {
 /**
  * BacklogPeekResponse
  *
- * The ``not_ready`` list's whole order, unpaginated — a write verb's caller needs
- * it in full to confirm against, not one page (blizzard#526 D3).
+ * The ``not_ready`` list's whole order, unpaginated.
  */
 export type BacklogPeekResponse = {
     /**
@@ -644,9 +643,8 @@ export type BacklogReplaceRequest = {
  * ``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.
  * Carried beside ``status``, never a status of its own; names the immediate prerequisite only, with
  * no transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at
- * once, ``prerequisite_chunk_id`` names the earliest-declared one and ``unmet_count`` says how many
- * there are in total, so a surface too narrow to list them can say *how many* instead of naming one
- * and silently dropping the rest. Never below 1: the marking is absent when nothing is unmet.
+ * once, ``prerequisite_chunk_id`` names the earliest-declared one. The marking is absent when
+ * nothing is unmet.
  */
 export type BlockedView = {
     /**
@@ -655,6 +653,8 @@ export type BlockedView = {
     prerequisite_chunk_id: string;
     /**
      * Unmet Count
+     *
+     * The count of unmet prerequisites, never below 1.
      */
     unmet_count?: number;
 };
@@ -714,8 +714,8 @@ export type ChunkCompleteRequest = {
 /**
  * ChunkDecisionStatusView
  *
- * The slice of a live gate decision the runner tick reads (blizzard#521) — no
- * ``choices``, no ``docket``: those drive a person's own read, not the loop's.
+ * A live gate decision's identity and resolution (blizzard#521) — no ``choices``,
+ * no ``docket``.
  */
 export type ChunkDecisionStatusView = {
     /**
@@ -1165,9 +1165,8 @@ export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'wa
 /**
  * ChunkStatusView
  *
- * One chunk's tick-relevant status (blizzard#521) — the slim batch projection
- * ``GET /api/fleet/chunk-statuses`` returns. Not ``ChunkSummary``: a narrower, runner-facing
- * status read rather than a fleet-wide listing projection.
+ * One chunk's status, pause, latest epoch, restart epochs, cost, and open decision
+ * (blizzard#521) — the slim batch projection ``GET /api/fleet/chunk-statuses`` returns.
  */
 export type ChunkStatusView = {
     /**
@@ -3531,8 +3530,7 @@ export type QueuePeekRequest = {
 /**
  * QueuePeekResponse
  *
- * The ready queue's whole order, unpaginated — a write verb's caller needs it in
- * full to confirm against, not one page (blizzard#526 D3).
+ * The ready queue's whole order, unpaginated.
  */
 export type QueuePeekResponse = {
     /**

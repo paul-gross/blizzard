@@ -412,12 +412,11 @@ class BlockedView(BaseModel):
     ``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.
     Carried beside ``status``, never a status of its own; names the immediate prerequisite only, with
     no transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at
-    once, ``prerequisite_chunk_id`` names the earliest-declared one and ``unmet_count`` says how many
-    there are in total, so a surface too narrow to list them can say *how many* instead of naming one
-    and silently dropping the rest. Never below 1: the marking is absent when nothing is unmet."""
+    once, ``prerequisite_chunk_id`` names the earliest-declared one. The marking is absent when
+    nothing is unmet."""
 
     prerequisite_chunk_id: str
-    unmet_count: int = 1
+    unmet_count: int = Field(default=1, description="The count of unmet prerequisites, never below 1.")
 
 
 class ChunkNeighborView(BaseModel):
@@ -510,8 +509,8 @@ class ChunkDetail(BaseModel):
 
 
 class ChunkDecisionStatusView(BaseModel):
-    """The slice of a live gate decision the runner tick reads (blizzard#521) — no
-    ``choices``, no ``docket``: those drive a person's own read, not the loop's."""
+    """A live gate decision's identity and resolution (blizzard#521) — no ``choices``,
+    no ``docket``."""
 
     decision_id: str
     node_id: str
@@ -521,9 +520,8 @@ class ChunkDecisionStatusView(BaseModel):
 
 
 class ChunkStatusView(BaseModel):
-    """One chunk's tick-relevant status (blizzard#521) — the slim batch projection
-    ``GET /api/fleet/chunk-statuses`` returns. Not ``ChunkSummary``: a narrower, runner-facing
-    status read rather than a fleet-wide listing projection."""
+    """One chunk's status, pause, latest epoch, restart epochs, cost, and open decision
+    (blizzard#521) — the slim batch projection ``GET /api/fleet/chunk-statuses`` returns."""
 
     chunk_id: str
     status: ChunkStatus
@@ -531,7 +529,7 @@ class ChunkStatusView(BaseModel):
     pause: PauseView | None = None
     latest_epoch: int | None = None
     # The chunk's operator restarts' epochs (issue #370), oldest first — mirrors
-    # ``ChunkDetail.restarts``, narrowed to the one field ``Fenced.out`` reads.
+    # ``ChunkDetail.restarts``, narrowed to the one field.
     restart_epochs: list[int] = []
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     decision: ChunkDecisionStatusView | None = None

@@ -900,7 +900,7 @@
         "type": "object"
       },
       "BacklogPeekResponse": {
-        "description": "The ``not_ready`` list's whole order, unpaginated \u2014 a write verb's caller needs\nit in full to confirm against, not one page (blizzard#526 D3).",
+        "description": "The ``not_ready`` list's whole order, unpaginated.",
         "properties": {
           "entries": {
             "default": [],
@@ -958,7 +958,7 @@
         "type": "object"
       },
       "BlockedView": {
-        "description": "A chunk's blocked marking (issue #457) \u2014 present iff a pre-claim dependent (``not_ready`` or\n``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.\nCarried beside ``status``, never a status of its own; names the immediate prerequisite only, with\nno transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at\nonce, ``prerequisite_chunk_id`` names the earliest-declared one and ``unmet_count`` says how many\nthere are in total, so a surface too narrow to list them can say *how many* instead of naming one\nand silently dropping the rest. Never below 1: the marking is absent when nothing is unmet.",
+        "description": "A chunk's blocked marking (issue #457) \u2014 present iff a pre-claim dependent (``not_ready`` or\n``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.\nCarried beside ``status``, never a status of its own; names the immediate prerequisite only, with\nno transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at\nonce, ``prerequisite_chunk_id`` names the earliest-declared one. The marking is absent when\nnothing is unmet.",
         "properties": {
           "prerequisite_chunk_id": {
             "title": "Prerequisite Chunk Id",
@@ -966,6 +966,7 @@
           },
           "unmet_count": {
             "default": 1,
+            "description": "The count of unmet prerequisites, never below 1.",
             "title": "Unmet Count",
             "type": "integer"
           }
@@ -1032,7 +1033,7 @@
         "type": "object"
       },
       "ChunkDecisionStatusView": {
-        "description": "The slice of a live gate decision the runner tick reads (blizzard#521) \u2014 no\n``choices``, no ``docket``: those drive a person's own read, not the loop's.",
+        "description": "A live gate decision's identity and resolution (blizzard#521) \u2014 no ``choices``,\nno ``docket``.",
         "properties": {
           "decision_id": {
             "title": "Decision Id",
@@ -1798,7 +1799,7 @@
         "type": "string"
       },
       "ChunkStatusView": {
-        "description": "One chunk's tick-relevant status (blizzard#521) \u2014 the slim batch projection\n``GET /api/fleet/chunk-statuses`` returns. Not ``ChunkSummary``: a narrower, runner-facing\nstatus read rather than a fleet-wide listing projection.",
+        "description": "One chunk's status, pause, latest epoch, restart epochs, cost, and open decision\n(blizzard#521) \u2014 the slim batch projection ``GET /api/fleet/chunk-statuses`` returns.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -5501,7 +5502,7 @@
         "type": "object"
       },
       "QueuePeekResponse": {
-        "description": "The ready queue's whole order, unpaginated \u2014 a write verb's caller needs it in\nfull to confirm against, not one page (blizzard#526 D3).",
+        "description": "The ready queue's whole order, unpaginated.",
         "properties": {
           "entries": {
             "default": [],
