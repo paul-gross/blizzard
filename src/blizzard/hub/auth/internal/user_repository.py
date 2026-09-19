@@ -50,8 +50,8 @@ class UserRepository:
             return row is not None
 
     def get_many(self, user_ids: Sequence[str]) -> dict[str, User]:
-        """`get`'s batched sibling — one query for every id in `user_ids` rather than
-        one per row, a missing id simply absent from the result."""
+        """`get`'s batched sibling (`bzh:bulk-reconstitution`), a missing id simply
+        absent from the result."""
         if not user_ids:
             return {}
         result: dict[str, User] = {}

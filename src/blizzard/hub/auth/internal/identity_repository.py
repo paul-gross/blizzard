@@ -45,8 +45,8 @@ class IdentityRepository:
             return [self._identity(row) for row in rows]
 
     def list_for_users(self, user_ids: Sequence[str]) -> dict[str, list[Identity]]:
-        """`list_for_user`'s batched sibling — one query for every id in `user_ids`
-        rather than one per user, grouped by `user_id` in `list_for_user`'s own order."""
+        """`list_for_user`'s batched sibling (`bzh:bulk-reconstitution`), grouped by
+        `user_id` in `list_for_user`'s own order."""
         if not user_ids:
             return {}
         grouped: dict[str, list[Identity]] = {}
